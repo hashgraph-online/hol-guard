@@ -53,7 +53,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
 
       - name: "Publish features to GHCR"
-        uses: devcontainers/action@1082abd5d2bf3a11abccba70eef98df068277772
+        uses: devcontainers/action@bef2cf2d1a019b00b45e184f83035e01bd1972f3
         with:
           publish-features: "true"
           base-path-to-features: "devcontainer-features"

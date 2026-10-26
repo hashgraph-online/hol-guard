@@ -187,10 +187,20 @@ def test_non_mapping_or_unreadable_workflow_fails_closed(tmp_path: Path, text: s
 @pytest.mark.parametrize(
     ("filename", "job", "permissions"),
     [
-        ("finish-extension-authority-stability.yml", "finish", {"contents": "write"}),
         (
             "guarded-repository.yml",
             "scan",
+            {
+                "contents": "read",
+                "id-token": "write",
+                "attestations": "write",
+                "artifact-metadata": "write",
+                "security-events": "write",
+            },
+        ),
+        (
+            "plugin-release.yml",
+            "release",
             {
                 "contents": "read",
                 "id-token": "write",

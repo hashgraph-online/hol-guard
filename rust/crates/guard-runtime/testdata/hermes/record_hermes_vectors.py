@@ -1,0 +1,182 @@
+#!/usr/bin/env python3
+"""Record Hermes detection vectors from the ORIGINAL Python implementation.
+
+Run against a checkout that still holds `HermesHarnessAdapter.detect` with its
+Python skill, YAML and MCP discovery (the base of the commit that introduced
+the native `hermes_detect` runner-authority kind), never from Rust output:
+
+    cd <base-worktree>
+    HOL_GUARD_NATIVE_BINARY=<release hol-guard-runtime> \\
+        PYTHONPATH=$PWD/src python3 <this-file> <output vectors.json>
+
+Each case materializes a fixture tree under a temporary root, runs the
+original `detect` over it and records the artifacts, config paths and
+warnings plus the arguments the native facade sends. `<ROOT>` stands for the
+fixture root.
+"""
+
+from __future__ import annotations
+
+import dataclasses
+import json
+import os
+import shutil
+import sys
+import tempfile
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from hermes_vector_cases import HOME, cases
+
+from codex_plugin_scanner.guard.adapters import hermes
+from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.models import GuardArtifact
+
+if not hasattr(hermes.HermesHarnessAdapter, "_scan_skills_dir"):
+    sys.exit("refusing to record: the original Python Hermes discovery is gone")
+if not os.environ.get("HOL_GUARD_NATIVE_BINARY"):
+    sys.exit("set HOL_GUARD_NATIVE_BINARY to a release hol-guard-runtime")
+
+ENV_KEYS = ("HOME", "HERMES_HOME", "HERMES_HOST_HOME")
+
+
+def provision_native(guard_home: Path) -> None:
+    from codex_plugin_scanner.guard import native_context
+    from codex_plugin_scanner.guard.native_policy_snapshot import provision_native_policy_verifier_key
+    from codex_plugin_scanner.guard.runtime import approval_context
+
+    (guard_home / "native-runtime").mkdir(mode=0o700, parents=True)
+    provision_native_policy_verifier_key(guard_home, b"\x07" * 32)
+    os.environ.update(
+        {
+            "HOL_GUARD_NATIVE": "force",
+            "HOL_GUARD_TEST_MODE": "1",
+            "HOL_GUARD_NATIVE_DIAGNOSTIC": "1",
+            "HOL_GUARD_RESIDENT_TEST_SEAMS": "1",
+        }
+    )
+    native_context.context_digest_guard_home = lambda: guard_home
+    approval_context._context_digest_guard_home = lambda _home: guard_home
+    probe = native_context.native_context_digest(
+        "launch_argv_digest", {"argv": ["guard-context-warmup"]}, guard_home=guard_home
+    )
+    if not probe:
+        sys.exit("native resident did not answer; refusing to record unbound hashes")
+
+
+def artifact_dict(artifact: GuardArtifact) -> dict:
+    payload = dataclasses.asdict(artifact)
+    payload.pop("runtime_private_metadata", None)
+    payload["args"] = list(artifact.args)
+    return payload
+
+
+def materialize(root: Path, spec: dict) -> None:
+    (root / HOME).mkdir(parents=True)
+    locked: list[tuple[Path, int]] = []
+    for entry in spec["files"]:
+        target = root / entry["path"]
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if "hex" in entry:
+            target.write_bytes(bytes.fromhex(entry["hex"]))
+        else:
+            target.write_text(entry["text"], encoding="utf-8")
+        locked.append((target, entry["mode"]))
+    for relative in spec["dirs"]:
+        (root / relative).mkdir(parents=True, exist_ok=True)
+    for entry in spec["symlinks"]:
+        target = root / entry["path"]
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.symlink_to(entry["target"].replace("<ROOT>", str(root)))
+    for path, mode in locked:
+        path.chmod(mode)
+    for relative, mode in spec["dir_modes"].items():
+        (root / relative).chmod(mode)
+
+
+def release(root: Path) -> None:
+    for path in sorted(root.rglob("*"), reverse=True):
+        if not path.is_symlink():
+            path.chmod(0o755)
+    shutil.rmtree(root, ignore_errors=True)
+
+
+def scrub(value: object, root: Path) -> object:
+    return json.loads(json.dumps(value, ensure_ascii=False).replace(str(root), "<ROOT>"))
+
+
+def case_insensitive(directory: Path) -> bool:
+    probe = directory / "CaseProbe"
+    probe.touch()
+    try:
+        return (directory / "caseprobe").exists()
+    finally:
+        probe.unlink()
+
+
+def run_case(spec: dict) -> dict:
+    root = Path(tempfile.mkdtemp(prefix="hermes-vec-")).resolve()
+    saved = {key: os.environ.get(key) for key in ENV_KEYS}
+    os.environ["HOME"] = str(root / "uhome")
+    os.environ.pop("HERMES_HOST_HOME", None)
+    os.environ.pop("HERMES_HOME", None)
+    if spec.get("hermes_home"):
+        padded = "  " if spec.get("padded_home") else ""
+        os.environ["HERMES_HOME"] = f"{padded}{root / spec['hermes_home']}{padded}"
+    if spec.get("host_home"):
+        os.environ["HERMES_HOST_HOME"] = str(root / spec["host_home"])
+    try:
+        materialize(root, spec)
+        context = HarnessContext(home_dir=root / HOME, workspace_dir=root / "work", guard_home=root / "guard-home")
+        hermes_home = hermes._hermes_home(context)
+        host_home = hermes._hermes_host_home(context)
+        args = {
+            "harness": "hermes",
+            "hermes_home": str(hermes_home),
+            "host_home": None if host_home is None else str(host_home),
+            "managed_names": list(hermes._read_managed_server_names(context)),
+            "manifest_path": str(hermes._managed_root(context) / "manifest.json"),
+        }
+        try:
+            detection = hermes.HermesHarnessAdapter().detect(context)
+            outcome: dict = {
+                "artifacts": [artifact_dict(item) for item in detection.artifacts],
+                "found_paths": list(detection.config_paths),
+                "warnings": list(detection.warnings),
+            }
+        except (ValueError, RecursionError, OSError):
+            outcome = {"refused": True}
+        record = {key: spec[key] for key in ("name", "files", "symlinks", "dirs", "dir_modes")}
+        if spec.get("requires_case_insensitive_fs"):
+            if not case_insensitive(root):
+                sys.exit(f"{spec['name']} must be recorded on a case-insensitive volume")
+            record["requires_case_insensitive_fs"] = True
+        record["args"] = scrub(args, root)
+        record.update(scrub(outcome, root))
+        return record
+    finally:
+        for key, value in saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        release(root)
+
+
+def main() -> None:
+    destination = Path(sys.argv[1])
+    guard_home = Path(tempfile.mkdtemp(prefix="hermes-guard-home-")).resolve()
+    provision_native(guard_home)
+    recorded = [run_case(spec) for spec in cases()]
+    from codex_plugin_scanner.guard.native_resident_client import close_native_residents
+
+    close_native_residents(guard_home)
+    shutil.rmtree(guard_home, ignore_errors=True)
+    document = {"schema": "guard-hermes-vectors.v1", "cases": recorded}
+    destination.write_text(json.dumps(document, indent=1, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+    print(f"recorded {len(recorded)} cases")
+
+
+if __name__ == "__main__":
+    main()

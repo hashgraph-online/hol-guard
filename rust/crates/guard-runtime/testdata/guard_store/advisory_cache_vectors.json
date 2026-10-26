@@ -1,0 +1,697 @@
+{
+ "order_by": {
+  "publisher_cache": "publisher_key"
+ },
+ "scenarios": [
+  {
+   "name": "cache_keys",
+   "seed": {
+    "publisher_cache": []
+   },
+   "steps": [
+    {
+     "after": {
+      "publisher_cache": []
+     },
+     "label": "nothing to cache",
+     "method": "cache_advisories",
+     "result": 0,
+     "wire_args": {
+      "now": "2026-10-01T00:00:00+00:00",
+      "payloads": []
+     }
+    },
+    {
+     "after": {
+      "publisher_cache": [
+       {
+        "payload_json": "{\"id\": \"ADV-1\", \"severity\": \"high\", \"publisher\": \"acme\"}",
+        "publisher_key": "ADV-1",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"id\": \"  ADV-2 \\u001f\\u2003\", \"severity\": \"low\"}",
+        "publisher_key": "ADV-2",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"id\": \"   \", \"title\": \"blank id\"}",
+        "publisher_key": "anonymous:0f3c928b550a90e912b9817b960cb8ebdd0a4ba10d9f4fd76dfc730589bae05a",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"title\": \"quote \\\" and \\\\ and \\n\"}",
+        "publisher_key": "anonymous:308c532ed49ce1c88767d49408a637b14d67c7ed39224c39d71e24485f295504",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"id\": 7, \"title\": \"numeric id\"}",
+        "publisher_key": "anonymous:7e11e496c27c66481d9bd927b2eec235c10627e5cbfd880b56aaf9689e02c013",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"id\": null, \"title\": \"null id\"}",
+        "publisher_key": "anonymous:81a1029af8514a5e49518cc78cde359b3ee74e9ccf16d1264d8165fb5a9b8530",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"title\": \"no id\", \"z\": {\"b\": [1, 2.5, 1e-07, 1000000000000000000000000000000], \"a\": true}, \"\\u00e9\": \"caf\\u00e9 \\ud83d\\ude00\"}",
+        "publisher_key": "anonymous:b9d0a8f38b739e6fb3a519cf176dcc3fc41b5bdc808133f48b08278b02ab65d7",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"b\": 1.0, \"a\": -0.0, \"c\": 1.2345678901234568e+29}",
+        "publisher_key": "anonymous:d780452a4b5252a1cdba2d542f670659ea922624be2dfcc5d7419d51c33bd309",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       }
+      ]
+     },
+     "label": "ids, stripped ids and anonymous digests",
+     "method": "cache_advisories",
+     "result": 8,
+     "wire_args": {
+      "now": "2026-10-01T00:00:00+00:00",
+      "payloads": [
+       "{\"id\": \"ADV-1\", \"severity\": \"high\", \"publisher\": \"acme\"}",
+       "{\"id\": \"  ADV-2 \\u001f\\u2003\", \"severity\": \"low\"}",
+       "{\"id\": \"   \", \"title\": \"blank id\"}",
+       "{\"id\": 7, \"title\": \"numeric id\"}",
+       "{\"id\": null, \"title\": \"null id\"}",
+       "{\"title\": \"no id\", \"z\": {\"b\": [1, 2.5, 1e-07, 1000000000000000000000000000000], \"a\": true}, \"\\u00e9\": \"caf\\u00e9 \\ud83d\\ude00\"}",
+       "{\"b\": 1.0, \"a\": -0.0, \"c\": 1.2345678901234568e+29}",
+       "{\"title\": \"quote \\\" and \\\\ and \\n\"}"
+      ]
+     }
+    },
+    {
+     "after": {
+      "publisher_cache": [
+       {
+        "payload_json": "{\"id\": \"ADV-1\", \"severity\": \"medium\"}",
+        "publisher_key": "ADV-1",
+        "updated_at": "2026-10-02T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"id\": \"  ADV-2 \\u001f\\u2003\", \"severity\": \"low\"}",
+        "publisher_key": "ADV-2",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"id\": \"   \", \"title\": \"blank id\"}",
+        "publisher_key": "anonymous:0f3c928b550a90e912b9817b960cb8ebdd0a4ba10d9f4fd76dfc730589bae05a",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"title\": \"quote \\\" and \\\\ and \\n\"}",
+        "publisher_key": "anonymous:308c532ed49ce1c88767d49408a637b14d67c7ed39224c39d71e24485f295504",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"id\": 7, \"title\": \"numeric id\"}",
+        "publisher_key": "anonymous:7e11e496c27c66481d9bd927b2eec235c10627e5cbfd880b56aaf9689e02c013",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"id\": null, \"title\": \"null id\"}",
+        "publisher_key": "anonymous:81a1029af8514a5e49518cc78cde359b3ee74e9ccf16d1264d8165fb5a9b8530",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"title\": \"no id\", \"z\": {\"b\": [1, 2.5, 1e-07, 1000000000000000000000000000000], \"a\": true}, \"\\u00e9\": \"caf\\u00e9 \\ud83d\\ude00\"}",
+        "publisher_key": "anonymous:b9d0a8f38b739e6fb3a519cf176dcc3fc41b5bdc808133f48b08278b02ab65d7",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"b\": 1.0, \"a\": -0.0, \"c\": 1.2345678901234568e+29}",
+        "publisher_key": "anonymous:d780452a4b5252a1cdba2d542f670659ea922624be2dfcc5d7419d51c33bd309",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       }
+      ]
+     },
+     "label": "upsert replaces payload and time",
+     "method": "cache_advisories",
+     "result": 2,
+     "wire_args": {
+      "now": "2026-10-02T00:00:00+00:00",
+      "payloads": [
+       "{\"id\": \"ADV-1\", \"severity\": \"critical\"}",
+       "{\"id\": \"ADV-1\", \"severity\": \"medium\"}"
+      ]
+     }
+    },
+    {
+     "after": {
+      "publisher_cache": [
+       {
+        "payload_json": "{\"id\": \"ADV-1\", \"severity\": \"medium\"}",
+        "publisher_key": "ADV-1",
+        "updated_at": "2026-10-02T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"id\": \"  ADV-2 \\u001f\\u2003\", \"severity\": \"low\"}",
+        "publisher_key": "ADV-2",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"id\": \"   \", \"title\": \"blank id\"}",
+        "publisher_key": "anonymous:0f3c928b550a90e912b9817b960cb8ebdd0a4ba10d9f4fd76dfc730589bae05a",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"title\": \"quote \\\" and \\\\ and \\n\"}",
+        "publisher_key": "anonymous:308c532ed49ce1c88767d49408a637b14d67c7ed39224c39d71e24485f295504",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"id\": 7, \"title\": \"numeric id\"}",
+        "publisher_key": "anonymous:7e11e496c27c66481d9bd927b2eec235c10627e5cbfd880b56aaf9689e02c013",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"id\": null, \"title\": \"null id\"}",
+        "publisher_key": "anonymous:81a1029af8514a5e49518cc78cde359b3ee74e9ccf16d1264d8165fb5a9b8530",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"title\": \"no id\", \"z\": {\"b\": [1, 2.5, 1e-07, 1000000000000000000000000000000], \"a\": true}, \"\\u00e9\": \"caf\\u00e9 \\ud83d\\ude00\"}",
+        "publisher_key": "anonymous:b9d0a8f38b739e6fb3a519cf176dcc3fc41b5bdc808133f48b08278b02ab65d7",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"b\": 1.0, \"a\": -0.0, \"c\": 1.2345678901234568e+29}",
+        "publisher_key": "anonymous:d780452a4b5252a1cdba2d542f670659ea922624be2dfcc5d7419d51c33bd309",
+        "updated_at": "2026-10-03T00:00:00+00:00"
+       }
+      ]
+     },
+     "label": "same anonymous body maps to the same key",
+     "method": "cache_advisories",
+     "result": 1,
+     "wire_args": {
+      "now": "2026-10-03T00:00:00+00:00",
+      "payloads": [
+       "{\"b\": 1.0, \"a\": -0.0, \"c\": 1.2345678901234568e+29}"
+      ]
+     }
+    },
+    {
+     "after": {
+      "publisher_cache": [
+       {
+        "payload_json": "{\"id\": \"ADV-1\", \"severity\": \"medium\"}",
+        "publisher_key": "ADV-1",
+        "updated_at": "2026-10-02T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"id\": \"  ADV-2 \\u001f\\u2003\", \"severity\": \"low\"}",
+        "publisher_key": "ADV-2",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"id\": \"   \", \"title\": \"blank id\"}",
+        "publisher_key": "anonymous:0f3c928b550a90e912b9817b960cb8ebdd0a4ba10d9f4fd76dfc730589bae05a",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"title\": \"quote \\\" and \\\\ and \\n\"}",
+        "publisher_key": "anonymous:308c532ed49ce1c88767d49408a637b14d67c7ed39224c39d71e24485f295504",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"id\": 7, \"title\": \"numeric id\"}",
+        "publisher_key": "anonymous:7e11e496c27c66481d9bd927b2eec235c10627e5cbfd880b56aaf9689e02c013",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"id\": null, \"title\": \"null id\"}",
+        "publisher_key": "anonymous:81a1029af8514a5e49518cc78cde359b3ee74e9ccf16d1264d8165fb5a9b8530",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"title\": \"no id\", \"z\": {\"b\": [1, 2.5, 1e-07, 1000000000000000000000000000000], \"a\": true}, \"\\u00e9\": \"caf\\u00e9 \\ud83d\\ude00\"}",
+        "publisher_key": "anonymous:b9d0a8f38b739e6fb3a519cf176dcc3fc41b5bdc808133f48b08278b02ab65d7",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"b\": 1.0, \"a\": -0.0, \"c\": 1.2345678901234568e+29}",
+        "publisher_key": "anonymous:d780452a4b5252a1cdba2d542f670659ea922624be2dfcc5d7419d51c33bd309",
+        "updated_at": "2026-10-03T00:00:00+00:00"
+       }
+      ]
+     },
+     "label": "default limit",
+     "method": "list_cached_advisories",
+     "result": [
+      {
+       "a": -0.0,
+       "b": 1.0,
+       "c": 1.2345678901234568e+29,
+       "cache_key": "anonymous:d780452a4b5252a1cdba2d542f670659ea922624be2dfcc5d7419d51c33bd309",
+       "updated_at": "2026-10-03T00:00:00+00:00"
+      },
+      {
+       "cache_key": "ADV-1",
+       "id": "ADV-1",
+       "severity": "medium",
+       "updated_at": "2026-10-02T00:00:00+00:00"
+      },
+      {
+       "cache_key": "ADV-2",
+       "id": "  ADV-2 \u001f\u2003",
+       "severity": "low",
+       "updated_at": "2026-10-01T00:00:00+00:00"
+      },
+      {
+       "cache_key": "anonymous:0f3c928b550a90e912b9817b960cb8ebdd0a4ba10d9f4fd76dfc730589bae05a",
+       "id": "   ",
+       "title": "blank id",
+       "updated_at": "2026-10-01T00:00:00+00:00"
+      },
+      {
+       "cache_key": "anonymous:7e11e496c27c66481d9bd927b2eec235c10627e5cbfd880b56aaf9689e02c013",
+       "id": 7,
+       "title": "numeric id",
+       "updated_at": "2026-10-01T00:00:00+00:00"
+      },
+      {
+       "cache_key": "anonymous:81a1029af8514a5e49518cc78cde359b3ee74e9ccf16d1264d8165fb5a9b8530",
+       "id": null,
+       "title": "null id",
+       "updated_at": "2026-10-01T00:00:00+00:00"
+      },
+      {
+       "cache_key": "anonymous:b9d0a8f38b739e6fb3a519cf176dcc3fc41b5bdc808133f48b08278b02ab65d7",
+       "title": "no id",
+       "updated_at": "2026-10-01T00:00:00+00:00",
+       "z": {
+        "a": true,
+        "b": [
+         1,
+         2.5,
+         1e-07,
+         1000000000000000000000000000000
+        ]
+       },
+       "\u00e9": "caf\u00e9 \ud83d\ude00"
+      },
+      {
+       "cache_key": "anonymous:308c532ed49ce1c88767d49408a637b14d67c7ed39224c39d71e24485f295504",
+       "title": "quote \" and \\ and \n",
+       "updated_at": "2026-10-01T00:00:00+00:00"
+      }
+     ],
+     "wire_args": {
+      "limit": 100
+     }
+    }
+   ]
+  },
+  {
+   "name": "list_rows",
+   "seed": {
+    "publisher_cache": []
+   },
+   "steps": [
+    {
+     "after": {
+      "publisher_cache": [
+       {
+        "payload_json": "{\"id\": \"a\", \"n\": 1}",
+        "publisher_key": "a",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "payload_json": "[1, 2]",
+        "publisher_key": "b",
+        "updated_at": "2026-10-02T00:00:00+00:00"
+       },
+       {
+        "payload_json": "\"text\"",
+        "publisher_key": "c",
+        "updated_at": "2026-10-03T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"cache_key\": \"inner\", \"updated_at\": \"inner\", \"x\": null}",
+        "publisher_key": "d",
+        "updated_at": "2026-10-04T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"z\": 1, \"a\": {\"y\": 2, \"b\": 3}}",
+        "publisher_key": "e",
+        "updated_at": "2026-09-30T00:00:00+00:00"
+       }
+      ]
+     },
+     "label": "",
+     "method": "sql",
+     "result": null,
+     "sql": [
+      [
+       "insert into publisher_cache (publisher_key, payload_json, updated_at) values (?, ?, ?)",
+       [
+        "a",
+        "{\"id\": \"a\", \"n\": 1}",
+        "2026-10-01T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into publisher_cache (publisher_key, payload_json, updated_at) values (?, ?, ?)",
+       [
+        "b",
+        "[1, 2]",
+        "2026-10-02T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into publisher_cache (publisher_key, payload_json, updated_at) values (?, ?, ?)",
+       [
+        "c",
+        "\"text\"",
+        "2026-10-03T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into publisher_cache (publisher_key, payload_json, updated_at) values (?, ?, ?)",
+       [
+        "d",
+        "{\"cache_key\": \"inner\", \"updated_at\": \"inner\", \"x\": null}",
+        "2026-10-04T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into publisher_cache (publisher_key, payload_json, updated_at) values (?, ?, ?)",
+       [
+        "e",
+        "{\"z\": 1, \"a\": {\"y\": 2, \"b\": 3}}",
+        "2026-09-30T00:00:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "after": {
+      "publisher_cache": [
+       {
+        "payload_json": "{\"id\": \"a\", \"n\": 1}",
+        "publisher_key": "a",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "payload_json": "[1, 2]",
+        "publisher_key": "b",
+        "updated_at": "2026-10-02T00:00:00+00:00"
+       },
+       {
+        "payload_json": "\"text\"",
+        "publisher_key": "c",
+        "updated_at": "2026-10-03T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"cache_key\": \"inner\", \"updated_at\": \"inner\", \"x\": null}",
+        "publisher_key": "d",
+        "updated_at": "2026-10-04T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"z\": 1, \"a\": {\"y\": 2, \"b\": 3}}",
+        "publisher_key": "e",
+        "updated_at": "2026-09-30T00:00:00+00:00"
+       }
+      ]
+     },
+     "label": "default limit",
+     "method": "list_cached_advisories",
+     "result": [
+      {
+       "cache_key": "inner",
+       "updated_at": "inner",
+       "x": null
+      },
+      {
+       "cache_key": "a",
+       "id": "a",
+       "n": 1,
+       "updated_at": "2026-10-01T00:00:00+00:00"
+      },
+      {
+       "a": {
+        "b": 3,
+        "y": 2
+       },
+       "cache_key": "e",
+       "updated_at": "2026-09-30T00:00:00+00:00",
+       "z": 1
+      }
+     ],
+     "wire_args": {
+      "limit": 100
+     }
+    },
+    {
+     "after": {
+      "publisher_cache": [
+       {
+        "payload_json": "{\"id\": \"a\", \"n\": 1}",
+        "publisher_key": "a",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "payload_json": "[1, 2]",
+        "publisher_key": "b",
+        "updated_at": "2026-10-02T00:00:00+00:00"
+       },
+       {
+        "payload_json": "\"text\"",
+        "publisher_key": "c",
+        "updated_at": "2026-10-03T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"cache_key\": \"inner\", \"updated_at\": \"inner\", \"x\": null}",
+        "publisher_key": "d",
+        "updated_at": "2026-10-04T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"z\": 1, \"a\": {\"y\": 2, \"b\": 3}}",
+        "publisher_key": "e",
+        "updated_at": "2026-09-30T00:00:00+00:00"
+       }
+      ]
+     },
+     "label": "no limit",
+     "method": "list_cached_advisories",
+     "result": [
+      {
+       "cache_key": "inner",
+       "updated_at": "inner",
+       "x": null
+      },
+      {
+       "cache_key": "a",
+       "id": "a",
+       "n": 1,
+       "updated_at": "2026-10-01T00:00:00+00:00"
+      },
+      {
+       "a": {
+        "b": 3,
+        "y": 2
+       },
+       "cache_key": "e",
+       "updated_at": "2026-09-30T00:00:00+00:00",
+       "z": 1
+      }
+     ],
+     "wire_args": {
+      "limit": null
+     }
+    },
+    {
+     "after": {
+      "publisher_cache": [
+       {
+        "payload_json": "{\"id\": \"a\", \"n\": 1}",
+        "publisher_key": "a",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "payload_json": "[1, 2]",
+        "publisher_key": "b",
+        "updated_at": "2026-10-02T00:00:00+00:00"
+       },
+       {
+        "payload_json": "\"text\"",
+        "publisher_key": "c",
+        "updated_at": "2026-10-03T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"cache_key\": \"inner\", \"updated_at\": \"inner\", \"x\": null}",
+        "publisher_key": "d",
+        "updated_at": "2026-10-04T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"z\": 1, \"a\": {\"y\": 2, \"b\": 3}}",
+        "publisher_key": "e",
+        "updated_at": "2026-09-30T00:00:00+00:00"
+       }
+      ]
+     },
+     "label": "limit three",
+     "method": "list_cached_advisories",
+     "result": [
+      {
+       "cache_key": "inner",
+       "updated_at": "inner",
+       "x": null
+      }
+     ],
+     "wire_args": {
+      "limit": 3
+     }
+    },
+    {
+     "after": {
+      "publisher_cache": [
+       {
+        "payload_json": "{\"id\": \"a\", \"n\": 1}",
+        "publisher_key": "a",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "payload_json": "[1, 2]",
+        "publisher_key": "b",
+        "updated_at": "2026-10-02T00:00:00+00:00"
+       },
+       {
+        "payload_json": "\"text\"",
+        "publisher_key": "c",
+        "updated_at": "2026-10-03T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"cache_key\": \"inner\", \"updated_at\": \"inner\", \"x\": null}",
+        "publisher_key": "d",
+        "updated_at": "2026-10-04T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"z\": 1, \"a\": {\"y\": 2, \"b\": 3}}",
+        "publisher_key": "e",
+        "updated_at": "2026-09-30T00:00:00+00:00"
+       }
+      ]
+     },
+     "label": "limit one",
+     "method": "list_cached_advisories",
+     "result": [
+      {
+       "cache_key": "inner",
+       "updated_at": "inner",
+       "x": null
+      }
+     ],
+     "wire_args": {
+      "limit": 1
+     }
+    },
+    {
+     "after": {
+      "publisher_cache": [
+       {
+        "payload_json": "{\"id\": \"a\", \"n\": 1}",
+        "publisher_key": "a",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "payload_json": "[1, 2]",
+        "publisher_key": "b",
+        "updated_at": "2026-10-02T00:00:00+00:00"
+       },
+       {
+        "payload_json": "\"text\"",
+        "publisher_key": "c",
+        "updated_at": "2026-10-03T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"cache_key\": \"inner\", \"updated_at\": \"inner\", \"x\": null}",
+        "publisher_key": "d",
+        "updated_at": "2026-10-04T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"z\": 1, \"a\": {\"y\": 2, \"b\": 3}}",
+        "publisher_key": "e",
+        "updated_at": "2026-09-30T00:00:00+00:00"
+       }
+      ]
+     },
+     "label": "limit zero",
+     "method": "list_cached_advisories",
+     "result": [],
+     "wire_args": {
+      "limit": 0
+     }
+    },
+    {
+     "after": {
+      "publisher_cache": [
+       {
+        "payload_json": "{\"id\": \"a\", \"n\": 1}",
+        "publisher_key": "a",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "payload_json": "[1, 2]",
+        "publisher_key": "b",
+        "updated_at": "2026-10-02T00:00:00+00:00"
+       },
+       {
+        "payload_json": "\"text\"",
+        "publisher_key": "c",
+        "updated_at": "2026-10-03T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"cache_key\": \"inner\", \"updated_at\": \"inner\", \"x\": null}",
+        "publisher_key": "d",
+        "updated_at": "2026-10-04T00:00:00+00:00"
+       },
+       {
+        "payload_json": "{\"z\": 1, \"a\": {\"y\": 2, \"b\": 3}}",
+        "publisher_key": "e",
+        "updated_at": "2026-09-30T00:00:00+00:00"
+       }
+      ]
+     },
+     "label": "negative limit is unbounded",
+     "method": "list_cached_advisories",
+     "result": [
+      {
+       "cache_key": "inner",
+       "updated_at": "inner",
+       "x": null
+      },
+      {
+       "cache_key": "a",
+       "id": "a",
+       "n": 1,
+       "updated_at": "2026-10-01T00:00:00+00:00"
+      },
+      {
+       "a": {
+        "b": 3,
+        "y": 2
+       },
+       "cache_key": "e",
+       "updated_at": "2026-09-30T00:00:00+00:00",
+       "z": 1
+      }
+     ],
+     "wire_args": {
+      "limit": -1
+     }
+    }
+   ]
+  }
+ ],
+ "schema": "guard-store-advisory-cache-vectors.v1",
+ "schema_sql": [
+  "CREATE TABLE publisher_cache (\n              publisher_key text primary key,\n              payload_json text not null,\n              updated_at text not null\n            )"
+ ],
+ "source": "guard"
+}

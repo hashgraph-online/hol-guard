@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "command.agenticjobs",
+  "tagline": "Reviews AgenticJobs listing posts and publishes, application submits and applicant decisions.",
+  "summary": "Reviews the AgenticJobs CLI commands that change a job board's state: posting or publishing a listing, submitting an application, and deciding on an applicant. Searching, reading drafts and listing applications are not claimed.",
+  "category": "other",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "Other state-changing commands such as edit, close, employer delete, resume publish and news post are not claimed.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ],
+  "documentationUrl": "https://github.com/profullstack/agenticjobs#readme",
+  "tags": ["job-board", "agents"],
+  "contributors": [
+    {"githubId": "27381", "githubLogin": "ralyodio", "roles": ["author"]}
+  ],
+  "originalContributions": [],
+  "upstream": {"name": "AgenticJobs", "url": "https://github.com/profullstack/agenticjobs"},
+  "maintainerGithubIds": ["27381"]
+}

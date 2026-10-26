@@ -11,7 +11,9 @@ import {
 } from "react-icons/hi2";
 import { ActionButton, SectionLabel, Tag } from "./approval-center-primitives";
 import { formatRelativeTime } from "./approval-center-utils";
-import type { GuardManagedInstall, GuardRuntimeSnapshot } from "./guard-types";
+import type { GuardReceipt, GuardRuntimeSnapshot } from "./guard-types";
+import { isPackageBlockReceipt } from "./supply-chain-evidence-rail";
+import { collectPackageBlockReceipts } from "./supply-chain-protection-stats";
 
 export type HomeProtectionStatus = "protected" | "partial" | "staged" | "unprotected" | "unknown";
 
@@ -30,12 +32,11 @@ export function resolveHomeProtectionStatus(
   return "unprotected";
 }
 
-export function resolveLastBlockedInstall(
-  managedInstalls: GuardManagedInstall[],
-): GuardManagedInstall | null {
-  const inactive = managedInstalls.filter((i) => !i.active);
-  if (inactive.length === 0) return null;
-  return inactive.sort((a, b) => +new Date(b.updated_at) - +new Date(a.updated_at))[0] ?? null;
+/** The newest package install Guard stopped, or null when none is on record. */
+export function resolveLastBlockedInstall(receipts: GuardReceipt[]): GuardReceipt | null {
+  const blocked = receipts.filter(isPackageBlockReceipt);
+  if (blocked.length === 0) return null;
+  return blocked.sort((a, b) => Date.parse(b.timestamp) - Date.parse(a.timestamp))[0] ?? null;
 }
 
 export function resolveIntelStaleness(
@@ -80,19 +81,22 @@ function ProtectedManagerRow({ manager, protected: isProtected }: ProtectedManag
 
 type HomeProtectionModuleProps = {
   snapshot: GuardRuntimeSnapshot;
-  managedInstalls: GuardManagedInstall[];
+  receipts?: readonly GuardReceipt[];
   onOpenFleet: () => void;
   onOpenSupplyChain?: () => void;
 };
 
 export function HomeProtectionModule({
   snapshot,
-  managedInstalls,
+  receipts,
   onOpenFleet,
   onOpenSupplyChain,
 }: HomeProtectionModuleProps) {
   const status = useMemo(() => resolveHomeProtectionStatus(snapshot), [snapshot]);
-  const lastBlocked = useMemo(() => resolveLastBlockedInstall(managedInstalls), [managedInstalls]);
+  const lastBlocked = useMemo(
+    () => resolveLastBlockedInstall(collectPackageBlockReceipts(snapshot, receipts)),
+    [snapshot, receipts],
+  );
   const intelState = useMemo(() => resolveIntelStaleness(snapshot), [snapshot]);
   const protection = snapshot.supply_chain?.package_manager_protection;
 
@@ -227,8 +231,10 @@ export function HomeProtectionModule({
                   {lastBlocked && (
                     <span className="text-xs text-slate-500">
                       Last blocked{" "}
-                      <span className="font-medium text-brand-dark">{lastBlocked.harness}</span>{" "}
-                      {formatRelativeTime(lastBlocked.updated_at)}
+                      <span className="font-medium text-brand-dark">
+                        {lastBlocked.artifact_name ?? lastBlocked.artifact_id}
+                      </span>{" "}
+                      {formatRelativeTime(lastBlocked.timestamp)}
                     </span>
                   )}
                 </div>

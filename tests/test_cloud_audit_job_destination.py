@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+from pathlib import Path
 from unittest.mock import Mock
 from urllib.parse import parse_qs, urlsplit
 
@@ -13,6 +14,8 @@ from codex_plugin_scanner.guard import local_supply_chain
 from codex_plugin_scanner.guard.cloud_audit_request import build_cloud_workspace_audit_request
 from codex_plugin_scanner.guard.mdm import network_transport
 from codex_plugin_scanner.guard.mdm.contracts import ManagedNetworkPolicy
+from codex_plugin_scanner.guard.native_package_audit_projection import native_batch_url
+from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.no_redirect import RejectRedirects
 
 
@@ -36,13 +39,11 @@ from codex_plugin_scanner.no_redirect import RejectRedirects
 )
 @pytest.mark.parametrize("origin", ["https://hol.org", "https://staging.hol.org"])
 def test_server_job_id_cannot_change_request_or_credential_origin(
-    monkeypatch: pytest.MonkeyPatch, job_id: str, origin: str
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, job_id: str, origin: str
 ) -> None:
     monkeypatch.delenv("HOL_GUARD_STAGING_ORIGIN", raising=False)
     context = {"sync_url": origin + "/api/guard/receipts/sync", "access_token": "fixture-token"}
-    url = local_supply_chain._normalized_supply_chain_batch_job_url(
-        str(context["sync_url"]), "workspace", job_id, page_size=20
-    )
+    url = native_batch_url(GuardStore(tmp_path), str(context["sync_url"]), "workspace", job_id=job_id, page_size=20)
     header_builder = Mock(return_value={"Authorization": "Bearer fixture-token"})
     request = build_cloud_workspace_audit_request(
         auth_context=context, request_url=url, method="GET", payload=None, build_headers=header_builder
@@ -81,7 +82,9 @@ def test_authenticated_audit_transport_does_not_follow_redirects(
     opener.open.assert_called_once_with(request, timeout=5)
 
 
-def test_polling_passes_only_same_origin_job_url_to_live_request_boundary(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_polling_passes_only_same_origin_job_url_to_live_request_boundary(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     context = {"sync_url": "https://hol.org/api/guard/receipts/sync"}
     header_builder = Mock(return_value={"Authorization": "Bearer fixture-token"})
     transport = Mock(side_effect=lambda *_args, **_kwargs: io.StringIO(json.dumps({"status": "completed"})))
@@ -89,7 +92,7 @@ def test_polling_passes_only_same_origin_job_url_to_live_request_boundary(monkey
     monkeypatch.setattr(runner, "_guard_sync_headers", header_builder)
     monkeypatch.setattr(local_supply_chain, "managed_urlopen", transport)
     result = local_supply_chain._poll_cloud_workspace_audit_job(
-        auth_context=context, workspace_id="workspace", job_id="//attacker.invalid/x"
+        store=GuardStore(tmp_path), auth_context=context, workspace_id="workspace", job_id="//attacker.invalid/x"
     )
     assert result["status"] == "completed"
     request = transport.call_args.args[0]

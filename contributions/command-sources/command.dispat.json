@@ -1,0 +1,143 @@
+{
+  "extension": {
+    "action_classes": [
+      "Dispat release command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews Dispat release starts while leaving status previews quiet.",
+    "ecosystem_ids": [
+      "dispat"
+    ],
+    "executables": [
+      "dispat",
+      "dispat.cmd",
+      "dispat.exe"
+    ],
+    "extension_id": "command.dispat",
+    "homepage": "https://dispat.dev/",
+    "icon": {
+      "kind": "none"
+    },
+    "license": "MIT",
+    "name": "Dispat release protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "Dispat release command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies explicit `dispat release` starts, which execute configured version, build and publish stages and may create commits, push tags and publish GitHub releases. Bare `dispat` invocations and other commands still receive Guard's review floor.",
+        "example_command": "dispat release",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "Dispat release start",
+        "permission_id": "command.dispat.permission.release",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Run dispat status with the same selection flags and review the plan before releasing."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "display_name": "Community",
+      "id": "community.dispat",
+      "url": "https://github.com/yohimik/dispat"
+    },
+    "reference_urls": [
+      "https://github.com/yohimik/dispat",
+      "https://dispat.dev/"
+    ],
+    "required": false,
+    "risk_classes": [
+      "execution",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "Dispat release command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies explicit `dispat release` starts, which execute configured version, build and publish stages and may create commits, push tags and publish GitHub releases. Bare `dispat` invocations and other commands still receive Guard's review floor.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "executables": [
+                  "dispat",
+                  "dispat.cmd",
+                  "dispat.exe"
+                ],
+                "forbidden_flags_before_delimiter": [
+                  "--help",
+                  "-h",
+                  "--version"
+                ],
+                "options_with_values": [
+                  "--api-url",
+                  "--concurrency",
+                  "--config",
+                  "--env-file",
+                  "--group",
+                  "--log-format",
+                  "--log-level",
+                  "--owner",
+                  "--package",
+                  "--repo",
+                  "--root",
+                  "--space",
+                  "--token-env",
+                  "-g",
+                  "-p",
+                  "-s"
+                ],
+                "required_flags_anywhere": [],
+                "subcommands": [
+                  "release"
+                ]
+              },
+              "op": "leading-subcommand.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.dispat.permission.release",
+        "risk_classes": [
+          "execution",
+          "network_egress"
+        ],
+        "rule_id": "command.dispat.release",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Run dispat status with the same selection flags and review the plan before releasing."
+        ],
+        "severity": "high",
+        "title": "Dispat release start"
+      }
+    ],
+    "safer_alternatives": [
+      "Run dispat status with the same selection flags before releasing."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

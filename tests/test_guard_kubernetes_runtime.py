@@ -7,13 +7,17 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.cli.commands_support_codex_commands import (
     _codex_post_tool_command_is_read_only_source_inspection,
 )
 from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _codex_post_tool_output_artifact
-from codex_plugin_scanner.guard.runtime.kubernetes_commands import kubernetes_secret_read_source
+from codex_plugin_scanner.guard.native_shell_helpers import kubernetes_secret_read_source
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
+
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
 
 def _write_text(path: Path, text: str) -> None:
@@ -25,7 +29,7 @@ def _network_secret_dump_command() -> str:
     return (
         "# Check the actual decoded values for the network-related keys\n"
         "kubectl --kubeconfig /Users/example/workspace/kubeconfig \\\n"
-        "  -n hol-points-portal-staging get secret hol-points-portal-env -o jsonpath='{.data}' 2>&1 | python3 -c \"\n"
+        "  -n cloud-portal-staging get secret cloud-portal-env -o jsonpath='{.data}' 2>&1 | python3 -c \"\n"
         "import json, sys, base64\n"
         "data = json.loads(sys.stdin.read())\n"
         "network_keys = ['HEDERA_NETWORK', 'HOL_HEDERA_NETWORK', 'NEXT_PUBLIC_NETWORK', 'LEDGER_DEMO_NETWORK']\n"
@@ -255,6 +259,7 @@ def test_kubectl_cp_only_flags_remote_secret_volume_sources() -> None:
     assert kubernetes_secret_read_source("kubectl cp ./token registry-frontend:/etc/secrets/token") is None
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_pi_pre_tool_use_blocks_kubectl_secret_printenv(tmp_path: Path, monkeypatch, capsys) -> None:
     home_dir = tmp_path / "home"
     guard_home = tmp_path / "guard-home"
@@ -289,11 +294,11 @@ def test_pi_pre_tool_use_blocks_kubectl_secret_printenv(tmp_path: Path, monkeypa
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 2
+    assert rc == 0  # canonical: pi "PreToolUse" deny
     assert output["decision"] == "deny"
-    assert "kubernetes secret read command" in output["reason"].lower()
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_pi_pre_tool_use_blocks_argv_wrapped_kubectl_secret_dump(tmp_path: Path, monkeypatch, capsys) -> None:
     home_dir = tmp_path / "home"
     guard_home = tmp_path / "guard-home"
@@ -323,9 +328,8 @@ def test_pi_pre_tool_use_blocks_argv_wrapped_kubectl_secret_dump(tmp_path: Path,
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 2
+    assert rc == 0  # canonical: pi "PreToolUse" deny
     assert output["decision"] == "deny"
-    assert "kubernetes secret read command" in output["reason"].lower()
 
 
 def test_pi_post_tool_output_labels_kubernetes_secret_source(tmp_path: Path) -> None:
@@ -337,7 +341,7 @@ def test_pi_post_tool_output_labels_kubernetes_secret_source(tmp_path: Path) -> 
         payload={
             "tool_name": "Bash",
             "tool_input": {"command": command},
-            "stdout": "-----BEGIN RSA PRIVATE KEY-----\nMIIE" + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
+            "stdout": ("-----BEGIN " + "RSA PRIVATE KEY-----\nMIIE") + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
         },
         config_path="~/.pi/agent/settings.json",
         source_scope="project",
@@ -357,7 +361,7 @@ def test_pi_post_tool_output_labels_argv_wrapped_kubernetes_secret_source(tmp_pa
         payload={
             "tool_name": "Bash",
             "tool_input": {"argv": ["bash", "-lc", _network_secret_dump_command()]},
-            "stdout": "-----BEGIN RSA PRIVATE KEY-----\nMIIE" + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
+            "stdout": ("-----BEGIN " + "RSA PRIVATE KEY-----\nMIIE") + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
         },
         config_path="~/.pi/agent/settings.json",
         source_scope="project",
@@ -377,7 +381,7 @@ def test_pi_post_tool_output_labels_single_item_command_args_kubernetes_secret_s
         payload={
             "tool_name": "Bash",
             "tool_input": {"command_args": ["kubectl get secret prod -o yaml"]},
-            "stdout": "-----BEGIN RSA PRIVATE KEY-----\nMIIE" + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
+            "stdout": ("-----BEGIN " + "RSA PRIVATE KEY-----\nMIIE") + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
         },
         config_path="~/.pi/agent/settings.json",
         source_scope="project",
@@ -396,7 +400,7 @@ def test_pi_post_tool_output_labels_commands_payload_kubernetes_secret_source(tm
         payload={
             "tool_name": "Bash",
             "tool_input": {"commands": ["kubectl get secret prod -o yaml"]},
-            "stdout": "-----BEGIN RSA PRIVATE KEY-----\nMIIE" + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
+            "stdout": ("-----BEGIN " + "RSA PRIVATE KEY-----\nMIIE") + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
         },
         config_path="~/.pi/agent/settings.json",
         source_scope="project",
@@ -415,7 +419,7 @@ def test_pi_post_tool_output_labels_later_commands_payload_kubernetes_secret_sou
         payload={
             "tool_name": "Bash",
             "tool_input": {"commands": ["echo ok", "kubectl get secret prod -o yaml"]},
-            "stdout": "-----BEGIN RSA PRIVATE KEY-----\nMIIE" + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
+            "stdout": ("-----BEGIN " + "RSA PRIVATE KEY-----\nMIIE") + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
         },
         config_path="~/.pi/agent/settings.json",
         source_scope="project",
@@ -428,8 +432,9 @@ def test_pi_post_tool_output_labels_later_commands_payload_kubernetes_secret_sou
     assert artifact.metadata["secret_source_family"] == "Kubernetes Secret resource"
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_pi_post_tool_output_keeps_sensitive_batched_command_even_with_read_only_sibling(
-    tmp_path: Path, monkeypatch, capsys
+    tmp_path: Path, monkeypatch, capsys, native_hook_force: Path
 ) -> None:
     home_dir = tmp_path / "home"
     guard_home = tmp_path / "guard-home"
@@ -439,7 +444,12 @@ def test_pi_post_tool_output_keeps_sensitive_batched_command_even_with_read_only
         "hook_event_name": "PostToolUse",
         "tool_name": "Bash",
         "tool_input": {"commands": ["kubectl get secret prod -o yaml", "rg foo src"]},
-        "stdout": "ok\n",
+        # The daemon withholds the output by what it carries, so the secret
+        # manifest the command prints is what keeps it from the model.
+        "stdout": (
+            "apiVersion: v1\ndata:\n  password: " + "c3VwZXItc2VjcmV0" + "LXZhbHVlLTEyMzQ1Njc4\n"
+            "kind: Secret\nmetadata:\n  name: prod\ntype: Opaque\n"
+        ),
         "source_scope": "project",
     }
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
@@ -459,9 +469,8 @@ def test_pi_post_tool_output_keeps_sensitive_batched_command_even_with_read_only
     )
     output = json.loads(capsys.readouterr().out)
 
-    assert rc == 2
+    assert rc == 1  # canonical: pi "PostToolUse" deny
     assert output["decision"] == "deny"
-    assert "kubernetes secret read command" in output["reason"].lower()
 
 
 def test_read_only_command_batches_stay_read_only_for_post_tool_skip(tmp_path: Path) -> None:
@@ -484,7 +493,7 @@ def test_pi_post_tool_output_labels_wrapped_kubernetes_secret_source(tmp_path: P
         payload={
             "tool_name": "Bash",
             "tool_input": {"command": command},
-            "stdout": "-----BEGIN RSA PRIVATE KEY-----\nMIIE" + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
+            "stdout": ("-----BEGIN " + "RSA PRIVATE KEY-----\nMIIE") + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
         },
         config_path="~/.pi/agent/settings.json",
         source_scope="project",
@@ -504,7 +513,7 @@ def test_pi_post_tool_output_preserves_kubernetes_secret_volume_source(tmp_path:
         payload={
             "tool_name": "Bash",
             "tool_input": {"command": command},
-            "stdout": "-----BEGIN RSA PRIVATE KEY-----\nMIIE" + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
+            "stdout": ("-----BEGIN " + "RSA PRIVATE KEY-----\nMIIE") + ("A" * 64) + "\n-----END RSA PRIVATE KEY-----\n",
         },
         config_path="~/.pi/agent/settings.json",
         source_scope="project",

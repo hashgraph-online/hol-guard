@@ -1,6 +1,6 @@
 # GuardPolicy v1alpha1 semantics
 
-`GuardPolicy` is the portable semantic source. Portal graph state is editor metadata; signed Cloud bundles and local SQLite rows are compiled projections. A projection MUST reject a rule it cannot represent without changing meaning.
+`GuardPolicy` is the portable semantic source. Guard Cloud's Policy Studio stores and edits `GuardPolicy` documents directly, and `guard policy import` reads the same format locally; signed Cloud bundles and local SQLite rows are compiled projections. A projection MUST reject a rule it cannot represent without changing meaning.
 
 ## Action compatibility
 

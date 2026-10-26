@@ -7,17 +7,18 @@ import subprocess
 import sys
 from collections.abc import Mapping
 from pathlib import Path
-from typing import cast
+
+import pytest
 
 from codex_plugin_scanner.guard.cli.commands_support_hook_payload import (
     _action_envelope_json,
     _hook_action_envelope,
 )
 from codex_plugin_scanner.guard.codex_live_decision_revalidation import revalidate_codex_live_allow
-from codex_plugin_scanner.guard.daemon.hook_process_entrypoint import (
-    _run_resident_hook_request,  # pyright: ignore[reportPrivateUsage]
-)
+from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.store import GuardStore
+
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
 
 def test_daemon_server_import_is_order_independent() -> None:
@@ -74,6 +75,22 @@ def test_fresh_allow_requires_the_exact_original_action(tmp_path: Path) -> None:
         reviewer=lambda _payload, _workspace, _claimed_hash, _request_id: {
             "hookSpecificOutput": {"hookEventName": "PreToolUse"}
         },
+    )
+
+    assert authorized is False
+
+
+def test_fresh_allow_rejects_a_reviewer_that_raises(tmp_path: Path) -> None:
+    request, hook_payload, home_dir = _fixture(tmp_path)
+
+    def raise_review(*_args: object) -> dict[str, object]:
+        raise RuntimeError("native edge unavailable")
+
+    authorized = revalidate_codex_live_allow(
+        request,
+        {"hook_input": json.dumps(hook_payload)},
+        home_dir=home_dir,
+        reviewer=raise_review,
     )
 
     assert authorized is False
@@ -191,34 +208,54 @@ def test_explicit_home_is_part_of_exact_action_binding(tmp_path: Path) -> None:
     assert wrong_home is False
 
 
-def test_first_exact_live_allow_revalidates_through_resident_worker(tmp_path: Path) -> None:
+@pytest.fixture
+def acknowledged_live_policy(tmp_path: Path, native_hook_force):
+    home = tmp_path / "home"
+    workspace = tmp_path / "workspace"
+    home.mkdir()
+    workspace.mkdir()
+    store = GuardStore(tmp_path / "guard-home")
+    owner = HookWorker(store=store)
+    try:
+        # The daemon publishes and ACKs workspace policy before handing an
+        # action to the non-publishing resident worker under test.
+        snapshot = owner.prepare_workspace_policy(workspace)
+        assert snapshot is not None, owner.policy_snapshot_publisher.last_error
+        yield store
+    finally:
+        assert owner.close()
+
+
+def test_first_exact_live_allow_revalidates_through_resident_worker(
+    tmp_path: Path, acknowledged_live_policy: GuardStore
+) -> None:
     home_dir = tmp_path / "home"
     guard_home = tmp_path / "guard-home"
     workspace = tmp_path / "workspace"
-    workspace.mkdir()
     payload: dict[str, object] = {
         "hook_event_name": "PreToolUse",
         "tool_name": "Read",
         "tool_input": {"file_path": str(workspace / ".npmrc")},
         "cwd": str(workspace),
     }
-    request: dict[str, object] = {
-        "payload": payload,
-        "harness": "codex",
-        "home_dir": str(home_dir),
-        "guard_home": str(guard_home),
-        "workspace": str(workspace),
-    }
-    stores: dict[str, GuardStore] = {}
-    first = _run_resident_hook_request(
-        request,
-        stores=stores,
-        hook_workers={},
-        configured_guard_home=str(guard_home),
-    )
-    assert first["reason_code"] is None
-    store = stores[str(guard_home)]
-    approval = store.list_approval_requests(limit=1)[0]
+    store = acknowledged_live_policy
+    worker = HookWorker(store=store, wait_for_native_policy=False, publish_native_policy=False)
+
+    def review(**claims: object) -> dict[str, object]:
+        return worker.review_http_payload(
+            payload=dict(payload),
+            params={"runtime-harness": ["codex"]},
+            default_harness="codex",
+            home_dir=home_dir,
+            guard_home=guard_home,
+            workspace=workspace,
+            **claims,  # type: ignore[arg-type]
+        )
+
+    first = review()
+    approvals = store.list_approval_requests(limit=1)
+    assert len(approvals) == 1, first
+    approval = approvals[0]
     request_id = str(approval["request_id"])
     artifact_hash = str(approval["artifact_hash"])
     assert store.resolve_one_request_only(
@@ -246,21 +283,11 @@ def test_first_exact_live_allow_revalidates_through_resident_worker(tmp_path: Pa
         claimed_hash: str | None,
         claimed_request_id: str | None,
     ) -> Mapping[str, object] | None:
-        second = _run_resident_hook_request(
-            {
-                **request,
-                "claim_saved_approval": False,
-                "claimed_saved_allow_hash": claimed_hash,
-                "claimed_trusted_request_override": True,
-                "claimed_approval_request_id": claimed_request_id,
-            },
-            stores=stores,
-            hook_workers={},
-            configured_guard_home=str(guard_home),
+        return review(
+            claim_saved_approval=False,
+            claimed_saved_allow_hash=claimed_hash,
+            claimed_approval_request_id=claimed_request_id,
         )
-        assert second["reason_code"] is None
-        second_payload = second["payload"]
-        return cast(Mapping[str, object], second_payload) if isinstance(second_payload, Mapping) else None
 
     authorized = revalidate_codex_live_allow(
         {**approval, "resolution_action": "allow"},

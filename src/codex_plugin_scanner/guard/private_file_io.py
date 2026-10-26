@@ -7,27 +7,6 @@ import stat
 from pathlib import Path
 
 
-def private_regular_file_is_valid(
-    path: Path,
-    *,
-    require_private_parent: bool = False,
-) -> bool:
-    """Return whether a path names an owner-only regular file.
-
-    Parent validation is optional because some legacy authority files live in a
-    user-owned directory whose privacy is established elsewhere.
-    """
-
-    try:
-        parent_metadata = path.parent.lstat() if require_private_parent else None
-        metadata = path.lstat()
-    except OSError:
-        return False
-    if parent_metadata is not None and not _private_directory_metadata_is_valid(parent_metadata):
-        return False
-    return _private_file_metadata_is_valid(metadata)
-
-
 def read_private_regular_bytes(
     path: Path,
     *,
@@ -160,7 +139,6 @@ def _stable_directory_metadata(
 
 
 __all__ = [
-    "private_regular_file_is_valid",
     "read_private_regular_bytes",
     "read_private_regular_text",
 ]

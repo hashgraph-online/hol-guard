@@ -20,7 +20,6 @@ from codex_plugin_scanner.guard.runtime.command_activity_privacy import (
     StrongHarnessIdentifier,
     derive_correlation_handle,
     validate_activity_schema_privacy,
-    validate_cloud_payload,
 )
 
 
@@ -63,23 +62,6 @@ def test_cloud_aggregate_requires_explicit_opt_in_and_exact_allowlist() -> None:
         "count": 10,
         "schema_version": COMMAND_ACTIVITY_CLOUD_SCHEMA_VERSION,
     }
-    validate_cloud_payload(payload)
-    with pytest.raises(ValueError, match="exact flat aggregate allowlist"):
-        validate_cloud_payload({**payload, "activity_id": "activity:01"})
-    with pytest.raises(ValueError, match="exact flat aggregate allowlist"):
-        validate_cloud_payload({**payload, "dimension_value": {"nested": "value"}})
-    with pytest.raises(ValueError, match="invalid scalar types"):
-        validate_cloud_payload(
-            {
-                "day": "raw-secret",
-                "dimension": "anything",
-                "dimension_value": "secret",
-                "count": 0,
-                "schema_version": "x",
-            }
-        )
-    with pytest.raises(ValueError, match="rare cloud aggregate"):
-        validate_cloud_payload({**payload, "count": MIN_CLOUD_AGGREGATE_COUNT - 1})
 
 
 def test_cloud_aggregate_suppresses_rare_cells_and_arbitrary_dimension_tuples() -> None:

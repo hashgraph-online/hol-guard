@@ -75,11 +75,11 @@ def test_platform_target_supports_macos_arm64_and_linux_x64(monkeypatch: pytest.
     assert update_desktop_core.platform_target() == "aarch64-apple-darwin"
 
 
-def test_linux_desktop_core_updates_stay_on_stable(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(update_desktop_core, "platform_target", lambda: "x86_64-unknown-linux-gnu")
-    assert update_desktop_core.desktop_core_uses_alpha_channel("3.0.1", requested_alpha=True) is False
-    monkeypatch.setattr(update_desktop_core, "platform_target", lambda: "aarch64-apple-darwin")
+@pytest.mark.parametrize("target", ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin"])
+def test_desktop_core_alpha_requires_explicit_opt_in(monkeypatch: pytest.MonkeyPatch, target: str) -> None:
+    monkeypatch.setattr(update_desktop_core, "platform_target", lambda: target)
     assert update_desktop_core.desktop_core_uses_alpha_channel("3.0.1", requested_alpha=True) is True
+    assert update_desktop_core.desktop_core_uses_alpha_channel("3.0.1a1", requested_alpha=False) is False
 
 
 def test_apply_desktop_core_update_installs_verified_sidecar(
@@ -95,6 +95,8 @@ def test_apply_desktop_core_update_installs_verified_sidecar(
 
     def fetch_bytes(url: str, limit: int) -> bytes:
         _ = limit
+        if ".onedir." in url:
+            raise update_desktop_core.DesktopCoreUpdateError("desktop_core_asset_missing")
         if url.endswith(".json"):
             return json.dumps(manifest).encode("utf-8")
         return binary
@@ -123,6 +125,8 @@ def test_apply_desktop_core_update_rejects_integrity_mismatch(
 
     def fetch_bytes(url: str, limit: int) -> bytes:
         _ = limit
+        if ".onedir." in url:
+            raise update_desktop_core.DesktopCoreUpdateError("desktop_core_asset_missing")
         if url.endswith(".json"):
             return json.dumps(manifest).encode("utf-8")
         return b"nope"
@@ -146,6 +150,8 @@ def test_apply_rejects_missing_minimum_desktop_version(
 
     def fetch_bytes(url: str, limit: int) -> bytes:
         _ = limit
+        if ".onedir." in url:
+            raise update_desktop_core.DesktopCoreUpdateError("desktop_core_asset_missing")
         if url.endswith(".json"):
             return json.dumps(manifest).encode("utf-8")
         return b"core"
@@ -169,6 +175,8 @@ def test_apply_rejects_older_desktop_when_version_is_known(
 
     def fetch_bytes(url: str, limit: int) -> bytes:
         _ = limit
+        if ".onedir." in url:
+            raise update_desktop_core.DesktopCoreUpdateError("desktop_core_asset_missing")
         if url.endswith(".json"):
             return json.dumps(manifest).encode("utf-8")
         return b"core"
@@ -202,6 +210,8 @@ def test_install_rejects_symlink_version_dir(
 
     def fetch_bytes(url: str, limit: int) -> bytes:
         _ = limit
+        if ".onedir." in url:
+            raise update_desktop_core.DesktopCoreUpdateError("desktop_core_asset_missing")
         if url.endswith(".json"):
             return json.dumps(manifest).encode("utf-8")
         return binary
@@ -256,6 +266,7 @@ def test_frozen_desktop_path_without_env_uses_desktop_installer(
 def test_frozen_desktop_status_stays_blocked_on_unsupported_platform(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(update_commands, "load_guard_config", lambda _home: SimpleNamespace(update_channel="stable"))
     monkeypatch.setattr(update_desktop_core, "is_frozen_runtime", lambda: True)
     monkeypatch.setattr(update_commands, "_is_frozen_runtime", lambda: True)
     monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")

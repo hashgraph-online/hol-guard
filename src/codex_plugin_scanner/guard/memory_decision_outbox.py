@@ -25,10 +25,15 @@ from .memory_decision_event import (
     MemoryDecisionSource,
     build_memory_decision_event,
     event_to_cloud_payload,
+    is_approval_wrapper,
 )
 from .receipts.manager import build_receipt
 
 _LOGGER = logging.getLogger(__name__)
+
+# The user approved once, but the agent's retry could not reuse that approval,
+# so the action stayed blocked. The dashboard reads this value.
+APPROVAL_RETRY_BLOCKED_OVERRIDE = "approval-approved-retry-blocked"
 
 
 def enqueue_memory_decision_event(
@@ -39,6 +44,7 @@ def enqueue_memory_decision_event(
     scope: str,
     resolved_at: str,
     source: MemoryDecisionSource = "local_approval_center",
+    retry_blocked: bool = False,
 ) -> bool:
     """Build and enqueue a memory decision event. Returns True if enqueued.
 
@@ -74,6 +80,7 @@ def enqueue_memory_decision_event(
             enriched_request,
             decision_action=event.decision_action,
             scope=scope,
+            retry_blocked=retry_blocked,
         )
         if source_receipt_id is None:
             return False
@@ -141,6 +148,7 @@ def _ensure_source_receipt_id(
     *,
     decision_action: str,
     scope: str,
+    retry_blocked: bool = False,
 ) -> str | None:
     for key in ("source_receipt_id", "sourceReceiptId", "receipt_id", "receiptId"):
         value = request.get(key)
@@ -171,7 +179,11 @@ def _ensure_source_receipt_id(
     add_receipt = getattr(store, "add_receipt", None)
     if not callable(add_receipt):
         return None
+    # A tool call has no command text, and review_command then holds only the
+    # "hol-guard approvals approve <id>" wrapper, which is not the action.
     raw_command = _request_string(request, "raw_command_text", "review_command")
+    if raw_command is not None and is_approval_wrapper(raw_command):
+        raw_command = None
     artifact_id = _request_string(request, "artifact_id") or f"approval-request:{request_id}"
     artifact_identity = raw_command or artifact_id
     artifact_hash = _request_string(request, "artifact_hash") or (
@@ -187,6 +199,14 @@ def _ensure_source_receipt_id(
         provenance_summary="Guard approval decision",
         artifact_name=_request_string(request, "artifact_name"),
         source_scope=scope,
+        # A person made this decision; without an override the receipt reads
+        # as "Guard allowed it automatically". A one-time approval the agent's
+        # retry cannot reuse records the decision but the action stays blocked.
+        user_override=(
+            APPROVAL_RETRY_BLOCKED_OVERRIDE
+            if retry_blocked and decision_action == "approved"
+            else f"approval-{decision_action}"
+        ),
         approval_source="memory_decision",
         approval_request_id=request_id,
         raw_command_text=raw_command,

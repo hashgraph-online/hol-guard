@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "mcp.musiccontext",
+  "tagline": "Opt-in coverage for MusicContext, an MCP server that plans, generates and mixes soundtracks for video.",
+  "summary": "Reviews MusicContext MCP tool calls: inspection, video analysis, search, library lookups, providers and artifact reads keep inherited policy, while planning, recommendations, offline generation, sync and FFmpeg artifact writes require review because they plan or write new outputs.",
+  "category": "specialized-tools",
+  "limitations": [
+    "Coverage is limited to the reviewed MusicContext MCP tools and the surrounding Guard policy.",
+    "Matching uses the musiccontext executable basename for stdio launches; basename recognition is not executable authentication.",
+    "A publisher profile or badge is not a security certification or an endorsement by HOL."
+  ],
+  "documentationUrl": "https://github.com/AAGAM17/MusicContext/blob/main/docs/agents/mcp.md",
+  "tags": ["mcp", "video", "music", "ffmpeg", "local-first"],
+  "contributors": [
+    {"githubId": "69311837", "githubLogin": "AAGAM17", "roles": ["author"]}
+  ],
+  "originalContributions": [
+    {"kind": "pull-request", "url": "https://github.com/hashgraph-online/hol-guard/pull/3683"}
+  ],
+  "upstream": {"name": "MusicContext", "url": "https://github.com/AAGAM17/MusicContext"},
+  "maintainerGithubIds": ["69311837"]
+}

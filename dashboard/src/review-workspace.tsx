@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BusinessQueueReadNotice, useBusinessQueueReadFailure } from "./business-review-queue-status";
 import { HiMiniChevronDown } from "react-icons/hi2";
 import { useRequestReadState } from "./request-read-state";
 import type {
@@ -23,6 +24,7 @@ import {
   REVIEW_SEMANTIC_GROUPS,
   type QueueCategory,
   type QueueCategoryId,
+  type QueueGroup,
   type QueueSortDirection,
   type SemanticGroupId,
 } from "./queue-state";
@@ -38,6 +40,9 @@ import { useQueueBulkApprove } from "./use-queue-bulk-approve";
 import { ReviewDecisionCard } from "./review-decision-card";
 import { ReviewHeader, ReviewQueueList } from "./review-queue-list";
 import { ReviewEmptyState } from "./review-states";
+import { ConnectorSetupCards, useConnectorSetupClis } from "./connector-setup-card";
+import { buildConnectorSetupGroups, connectorSetupIdentityKey, isConnectorSetupItem } from "./connector-setup-groups";
+import { queuePageSyncTarget } from "./review-queue-page-sync";
 
 export type ReviewViewModel = {
   item: GuardApprovalRequest;
@@ -50,6 +55,9 @@ export type ReviewWorkspaceProps = {
   requests: GuardApprovalRequest[];
   activeRequestId: string | null;
   detail: ReviewViewModel | null;
+  detailError?: string | null;
+  detailLoading?: boolean;
+  onRetryDetail?: () => void;
   runtime: GuardRuntimeSnapshot | null;
   resolutionMessage: string | null;
   codexResume: GuardCodexResumeResult | null;
@@ -70,10 +78,12 @@ export type ReviewWorkspaceProps = {
   }) => Promise<void> | void;
   onGoHome: () => void;
   onBulkApprove?: (ids: string[], gateCredentials?: BulkGateCredentials) => void | Promise<void>;
+  onBulkBlock?: (groups: QueueGroup[]) => Promise<void>;
 };
 
 const QUEUE_PAGE_SIZE = 10;
 export function ReviewWorkspace(props: ReviewWorkspaceProps) {
+  const businessQueueReadFailed = useBusinessQueueReadFailure();
   const { requests, activeRequestId, detail } = props;
   const readState = useRequestReadState();
   const queueRef = useRef<HTMLDivElement>(null);
@@ -81,10 +91,13 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
   const [categoryFilter, setCategoryFilter] = useState<QueueCategoryId | "all">("all");
   const [sortDirection, setSortDirection] = useState<QueueSortDirection>("newest");
   const [semanticFilter, setSemanticFilter] = useState<SemanticGroupId>("all");
+  const [setupFilter, setSetupFilter] = useState(false);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [mobileQueueOpen, setMobileQueueOpen] = useState(false);
   const [page, setPage] = useState(1);
+  // Request opened from a setup card; it stays active while the queue page or filters exclude it.
+  const [setupPinnedRequestId, setSetupPinnedRequestId] = useState<string | null>(null);
 
   const selectRequest = useCallback((id: string) => {
     props.onOpenRequest(id);
@@ -92,16 +105,32 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
   }, [props.onOpenRequest]);
 
   const handleOpenRequest = useCallback((id: string) => {
+    setSetupPinnedRequestId(null);
     selectRequest(id);
     readState.markRead(id);
   }, [selectRequest, readState]);
+
+  const handleOpenSetupEvidence = useCallback((id: string) => {
+    setSetupPinnedRequestId(id);
+    selectRequest(id);
+    readState.markRead(id);
+  }, [selectRequest, readState]);
+
+  const handlePageChange = useCallback((nextPage: number) => {
+    setSetupPinnedRequestId(null);
+    setPage(nextPage);
+  }, []);
 
   const handleToggleMobileQueue = useCallback(() => {
     setMobileQueueOpen((v) => !v);
   }, []);
 
+  const setupIdentityKey = useMemo(() => connectorSetupIdentityKey(requests), [requests]);
+  const setupClis = useConnectorSetupClis(setupIdentityKey);
+  const setupGroups = useMemo(() => buildConnectorSetupGroups(requests, setupClis), [requests, setupClis]);
+
   const filteredRequests = useMemo(() => {
-    let items = requests;
+    let items = setupFilter ? requests.filter(isConnectorSetupItem) : requests;
     if (semanticFilter !== "all") {
       const group = REVIEW_SEMANTIC_GROUPS.find((g) => g.id === semanticFilter);
       if (group && group.matches.length > 0) {
@@ -113,11 +142,12 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
     items = filterQueueByDateRange(items, { from: dateFrom, to: dateTo });
     const searched = searchQueue(items, searchTerm);
     return sortQueue(searched, sortDirection);
-  }, [categoryFilter, dateFrom, dateTo, requests, searchTerm, sortDirection, semanticFilter]);
+  }, [categoryFilter, dateFrom, dateTo, requests, searchTerm, setupFilter, sortDirection, semanticFilter]);
 
   useEffect(() => {
+    setSetupPinnedRequestId(null);
     setPage(1);
-  }, [searchTerm, categoryFilter, sortDirection, semanticFilter, dateFrom, dateTo]);
+  }, [searchTerm, categoryFilter, sortDirection, semanticFilter, setupFilter, dateFrom, dateTo]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRequests.length / QUEUE_PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -181,19 +211,20 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
   }, [activeRequestId, requests, filteredRequests, detail?.item.request_id, selectRequest]);
 
   useEffect(() => {
-    if (pagedRequests.length === 0) return;
-    const activeOnPage =
-      pagedRequests.some((item) => item.request_id === activeRequestId) ||
-      detail?.item.request_id === activeRequestId;
-    if (!activeOnPage) {
-      selectRequest(pagedRequests[0].request_id);
-    }
-  }, [currentPage, pagedRequests, activeRequestId, detail?.item.request_id, selectRequest]);
+    const target = queuePageSyncTarget({
+      pagedRequests,
+      activeRequestId,
+      detailRequestId: detail?.item.request_id ?? null,
+      pinnedRequestId: setupPinnedRequestId,
+    });
+    if (target !== null) selectRequest(target);
+  }, [currentPage, pagedRequests, activeRequestId, detail?.item.request_id, setupPinnedRequestId, selectRequest]);
 
   const bulkApprove = useQueueBulkApprove({
     items: filteredRequests,
     approvalGate: props.approvalGate ?? null,
     onBulkApprove: props.onBulkApprove,
+    onBulkBlock: props.onBulkBlock,
     settingsHref: guardAwareHref("/settings"),
   });
 
@@ -240,7 +271,12 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
   ]);
 
   if (requests.length === 0) {
-    return <ReviewEmptyState runtime={props.runtime} resolutionMessage={props.resolutionMessage} codexResume={props.codexResume} onRetryResume={props.onRetryResume} />;
+    return <div className="space-y-6">
+      {businessQueueReadFailed && <BusinessQueueReadNotice />}
+      <ReviewEmptyState runtime={props.runtime} resolutionMessage={props.resolutionMessage}
+        codexResume={props.codexResume} onRetryResume={props.onRetryResume}
+        queueReadIncomplete={businessQueueReadFailed} />
+    </div>;
   }
 
   const activeItem = activeRequest ?? filteredRequests[0] ?? requests[0];
@@ -253,6 +289,7 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
 
   return (
     <div className="space-y-6">
+      {businessQueueReadFailed && <BusinessQueueReadNotice />}
       <ReviewHeader
         count={requests.length}
         filteredCount={filteredRequests.length}
@@ -272,15 +309,22 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
       <QueueBulkStickyBar {...bulkApprove.stickyBar} />
       {bulkApprove.bulkSelection.selectionMode && (
         <span aria-live="polite" className="sr-only">
-          {bulkApprove.bulkSelection.selectedActionCount} of {filteredRequests.length} reads selected for bulk approval.
+          {bulkApprove.bulkSelection.selectedActionCount} of {filteredRequests.length} requests selected.
         </span>
       )}
       <QueueBulkDrawer {...bulkApprove.drawer} />
 
+      <ConnectorSetupCards
+        groups={setupGroups}
+        approvalGate={props.approvalGate ?? null}
+        activeRequestId={activeItem.request_id}
+        onOpenRequest={handleOpenSetupEvidence}
+      />
+
       <div className="md:hidden">
         <button
           onClick={handleToggleMobileQueue}
-          className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-brand-dark"
+          className="flex min-h-11 w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm font-medium text-brand-dark"
         >
           <span>Queue ({filteredRequests.length})</span>
           <HiMiniChevronDown className={`h-4 w-4 transition-transform ${mobileQueueOpen ? "rotate-180" : ""}`} />
@@ -301,6 +345,8 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
             searchTerm={searchTerm}
             sortDirection={sortDirection}
             semanticFilter={semanticFilter}
+            setupFilter={setupFilter}
+            setupGroupCount={setupGroups.length}
             dateFrom={dateFrom}
             dateTo={dateTo}
             page={currentPage}
@@ -309,9 +355,10 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
             onSearchTermChange={setSearchTerm}
             onSortDirectionChange={setSortDirection}
             onSemanticFilterChange={setSemanticFilter}
+            onSetupFilterChange={setSetupFilter}
             onDateFromChange={setDateFrom}
             onDateToChange={setDateTo}
-            onPageChange={setPage}
+            onPageChange={handlePageChange}
             onOpenRequest={handleOpenRequest}
             selectionMode={bulkApprove.bulkSelection.selectionMode}
             isBulkSelectable={bulkApprove.bulkSelection.isSelectable}
@@ -324,6 +371,9 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
         </div>
         <ReviewDecisionCard
           detail={detail}
+          detailError={props.detailError}
+          detailLoading={props.detailLoading}
+          onRetryDetail={props.onRetryDetail}
           onResolve={props.onResolve}
           onGoHome={props.onGoHome}
           approvalGate={props.approvalGate ?? null}

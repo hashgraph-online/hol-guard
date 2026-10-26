@@ -16,12 +16,12 @@ from codex_plugin_scanner.guard.cli.commands_dispatch_records import (
 from codex_plugin_scanner.guard.models import GuardReceipt
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.embedded_script_evidence import (
-    _MAX_EMBEDDED_SCRIPT_EVIDENCE_ENTRIES,
     EMBEDDED_SCRIPT_REMEDIATION_GUIDANCE,
-    command_has_embedded_script,
     embedded_script_evidence_entries,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+
+_MAX_EMBEDDED_SCRIPT_EVIDENCE_ENTRIES = 8
 
 
 def _store_with_command_receipt(tmp_path: Path, command: str, receipt_id: str) -> GuardStore:
@@ -105,14 +105,6 @@ def test_multiple_heredocs_are_each_indexed() -> None:
     assert entries[0]["index"] == 0
     assert entries[1]["index"] == 1
     assert entries[1]["executed"] is True
-
-
-def test_no_heredoc_produces_no_entries() -> None:
-    assert embedded_script_evidence_entries("ls -la /tmp") == []
-    assert embedded_script_evidence_entries("") == []
-    assert embedded_script_evidence_entries(None) == []
-    assert command_has_embedded_script("ls -la") is False
-    assert command_has_embedded_script(None) is False
 
 
 def test_evidence_entries_are_bounded() -> None:

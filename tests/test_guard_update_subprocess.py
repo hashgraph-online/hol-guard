@@ -26,6 +26,7 @@ from codex_plugin_scanner.guard.cli.update_subprocess import (
     UpdateSubprocessError,
     build_trusted_update_context,
 )
+from tests.windows_descendant_support import assert_descendant_contained, windows_descendant_parent_script
 
 
 def _write_executable(path: Path, body: str = "raise SystemExit(0)\n") -> Path:
@@ -83,9 +84,22 @@ def _build_manager_context(
     guard_home: Path | None = None,
     source_url: str | None = None,
 ) -> tuple[TrustedUpdateContext, Path]:
+    trusted_python_import_paths = update_subprocess_module._trusted_python_import_paths()
     prefix, manager_bin = _manager_layout(tmp_path, installer_kind)
-    manager_path = manager or _write_executable(manager_bin / installer_kind)
+    if os.name == "nt":
+        profile = tmp_path / "windows-profile"
+        manager_bin = profile / ".local" / "bin"
+        manager_bin.mkdir(parents=True)
+        monkeypatch.setattr(update_subprocess_module, "trusted_windows_user_profile", lambda: profile)
+        manager_path = manager or Path(shutil.copy2(sys.executable, manager_bin / f"{installer_kind}.exe"))
+    else:
+        manager_path = manager or _write_executable(manager_bin / installer_kind)
     monkeypatch.setattr(update_subprocess_module.sys, "prefix", str(prefix))
+    monkeypatch.setattr(
+        update_subprocess_module,
+        "_trusted_python_import_paths",
+        lambda: trusted_python_import_paths,
+    )
     entries = path_entries or (manager_path.parent, Path(sys.executable).resolve().parent)
     monkeypatch.setenv("PATH", _path_value(*entries))
     context = build_trusted_update_context(
@@ -100,37 +114,6 @@ def _build_manager_context(
 
 def _error_reason(error: pytest.ExceptionInfo[UpdateSubprocessError]) -> str:
     return error.value.reason_code
-
-
-def _windows_descendant_parent_script(mode: str) -> str:
-    descendant_script = (
-        "import sys,time; "
-        "from pathlib import Path; "
-        "time.sleep(float(sys.argv[1])); "
-        "Path(sys.argv[2]).write_text('escaped', encoding='utf-8')"
-    )
-    lines = [
-        "import subprocess",
-        "import sys",
-        "import time",
-        "from pathlib import Path",
-        f"descendant_script = {descendant_script!r}",
-        "subprocess.Popen([sys.executable, '-I', '-S', '-c', descendant_script, sys.argv[1], sys.argv[2]])",
-        "Path(sys.argv[3]).write_text('spawned', encoding='utf-8')",
-    ]
-    if mode == "timeout":
-        lines.append("time.sleep(30)")
-    elif mode == "overflow":
-        lines.extend(
-            [
-                "sys.stdout.write('x' * (1024 * 1024))",
-                "sys.stdout.flush()",
-                "time.sleep(30)",
-            ]
-        )
-    elif mode != "parent_exit":
-        raise ValueError(f"unsupported process-tree test mode: {mode}")
-    return "\n".join(lines)
 
 
 def test_update_context_scrubs_hostile_ambient_environment(
@@ -696,6 +679,13 @@ def test_manager_recovery_pip_uses_authenticated_python_and_pinned_source(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    trusted_import_root = tmp_path / "trusted-python-import"
+    trusted_import_root.mkdir()
+    monkeypatch.setattr(
+        update_subprocess_module,
+        "_trusted_python_import_paths",
+        lambda: (trusted_import_root,),
+    )
     context, _manager = _build_manager_context(
         tmp_path,
         monkeypatch,
@@ -849,6 +839,26 @@ def test_pipx_runpip_execution_is_source_pinned(
     ]
 
 
+@pytest.mark.parametrize("flags", [[], ["--force-reinstall", "--no-deps"]])
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="uses an extensionless POSIX shebang executable as the pipx manager fixture",
+)
+def test_pipx_runpip_accepts_local_wheel_shapes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    flags: list[str],
+) -> None:
+    context, manager = _build_manager_context(tmp_path, monkeypatch, "pipx")
+    wheel = str(tmp_path / "hol_guard-3.0.0-py3-none-win_arm64.whl")
+
+    command = context.build_installer_command(["pipx", "runpip", "hol-guard", "install", *flags, wheel])
+
+    assert command[:4] == [str(manager), "runpip", "hol-guard", "install"]
+    assert command[4:-3] == [*flags, "--no-cache-dir"]
+    assert command[-3] == wheel
+
+
 @pytest.mark.parametrize(
     "display",
     [
@@ -856,6 +866,7 @@ def test_pipx_runpip_execution_is_source_pinned(
         ["pipx", "runpip", "hol-guard", "uninstall", "hol-guard"],
         ["pipx", "runpip", "hol-guard", "install", "--index-url", "https://example.test", "hol-guard"],
         ["pipx", "runpip", "hol-guard", "install", "--force-reinstall"],
+        ["pipx", "runpip", "hol-guard", "install", "--no-deps", "hol-guard==3.0.0"],
     ],
 )
 @pytest.mark.skipif(
@@ -1781,12 +1792,13 @@ def test_windows_job_timeout_terminates_delayed_descendant(
     context = _build_pip_context(tmp_path, monkeypatch)
     descendant_marker = tmp_path / "timeout-descendant-escaped"
     spawned_marker = tmp_path / "timeout-descendant-spawned"
+    release_marker = tmp_path / "timeout-descendant-release"
 
     with pytest.raises(UpdateSubprocessError) as error:
         context.run(
             context.python_command(
-                _windows_descendant_parent_script("timeout"),
-                "1.25",
+                windows_descendant_parent_script("timeout"),
+                str(release_marker),
                 str(descendant_marker),
                 str(spawned_marker),
             ),
@@ -1794,9 +1806,11 @@ def test_windows_job_timeout_terminates_delayed_descendant(
         )
 
     assert _error_reason(error) == "update_installer_timeout"
-    assert spawned_marker.read_text(encoding="utf-8") == "spawned"
-    time.sleep(0.75)
-    assert descendant_marker.exists() is False
+    assert_descendant_contained(
+        spawned_marker=spawned_marker,
+        escape_marker=descendant_marker,
+        release_marker=release_marker,
+    )
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows Job Object process-tree regression")
@@ -1807,11 +1821,12 @@ def test_windows_job_output_overflow_terminates_delayed_descendant(
     context = _build_pip_context(tmp_path, monkeypatch)
     descendant_marker = tmp_path / "overflow-descendant-escaped"
     spawned_marker = tmp_path / "overflow-descendant-spawned"
+    release_marker = tmp_path / "overflow-descendant-release"
 
     result = context.run(
         context.python_command(
-            _windows_descendant_parent_script("overflow"),
-            "0.75",
+            windows_descendant_parent_script("overflow"),
+            str(release_marker),
             str(descendant_marker),
             str(spawned_marker),
         ),
@@ -1821,9 +1836,11 @@ def test_windows_job_output_overflow_terminates_delayed_descendant(
 
     assert result.returncode != 0
     assert result.output_limited is True
-    assert spawned_marker.read_text(encoding="utf-8") == "spawned"
-    time.sleep(1.0)
-    assert descendant_marker.exists() is False
+    assert_descendant_contained(
+        spawned_marker=spawned_marker,
+        escape_marker=descendant_marker,
+        release_marker=release_marker,
+    )
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows Job Object process-tree regression")
@@ -1834,11 +1851,12 @@ def test_windows_job_reaps_descendant_pipe_after_direct_parent_exit(
     context = _build_pip_context(tmp_path, monkeypatch)
     descendant_marker = tmp_path / "pipe-descendant-escaped"
     spawned_marker = tmp_path / "pipe-descendant-spawned"
+    release_marker = tmp_path / "pipe-descendant-release"
 
     result = context.run(
         context.python_command(
-            _windows_descendant_parent_script("parent_exit"),
-            "0.75",
+            windows_descendant_parent_script("parent_exit"),
+            str(release_marker),
             str(descendant_marker),
             str(spawned_marker),
         ),
@@ -1846,9 +1864,11 @@ def test_windows_job_reaps_descendant_pipe_after_direct_parent_exit(
     )
 
     assert result.returncode == 0
-    assert spawned_marker.read_text(encoding="utf-8") == "spawned"
-    time.sleep(1.0)
-    assert descendant_marker.exists() is False
+    assert_descendant_contained(
+        spawned_marker=spawned_marker,
+        escape_marker=descendant_marker,
+        release_marker=release_marker,
+    )
 
 
 def _context_with_distribution_result(

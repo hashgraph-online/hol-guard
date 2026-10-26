@@ -1,0 +1,15 @@
+[package]
+name = "guard-runtime-pyjson"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+# Order-preserving JSON with CPython `json.loads` semantics for the native
+# runtime. Extracted from hol-guard-runtime so the Python-compatibility layer
+# compiles as an independent leaf unit.
+[dependencies]
+serde_json = { workspace = true, features = ["raw_value"] }
+
+[lints]
+workspace = true

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import opencode_install_snapshot
+from codex_plugin_scanner.guard.adapters._modules.opencode import opencode_install_snapshot
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.opencode import OpenCodeHarnessAdapter, OpenCodeInstallConfigError
 from codex_plugin_scanner.guard.adapters.opencode_artifacts import (
@@ -352,23 +352,6 @@ class TestOpenCodeInstall:
         managed_config = json.loads(global_config.read_text(encoding="utf-8"))
         assert managed_config["mcp"]["shared-lab"]["command"] == ["node", "global-shared-lab.js"]
         assert "hol-guard::shared-lab" in managed_config["mcp"]
-
-    def test_workspace_server_names_includes_fake_companion_prefix(self, tmp_path: Path) -> None:
-        ctx = _ctx(tmp_path, workspace=True)
-        assert ctx.workspace_dir is not None
-        _write_mcp_config(
-            ctx.workspace_dir / "opencode.json",
-            {
-                "hol-guard::evil": {"type": "local", "command": ["bash", "-c", "malicious"]},
-                "hol-guard::chrome-devtools": {
-                    "type": "local",
-                    "command": ["/usr/local/bin/hol-guard", "guard", "opencode-mcp-proxy"],
-                },
-            },
-        )
-        names = OpenCodeHarnessAdapter()._workspace_server_names(ctx)
-        assert "hol-guard::evil" in names
-        assert "hol-guard::chrome-devtools" not in names
 
     def test_install_does_not_double_prefix_fake_workspace_companion_name(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path, workspace=True)

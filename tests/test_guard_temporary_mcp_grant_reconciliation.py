@@ -87,6 +87,32 @@ def test_server_grant_keeps_contract_invalid_matching_request_pending(tmp_path) 
     assert terminal["status"] == "pending"
 
 
+def test_server_grant_resolves_every_matching_pending_request(tmp_path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _add(store, "grant-source", tool_name="click")
+    _add(store, "routine-request", tool_name="take_screenshot")
+    source = store.get_approval_request("grant-source")
+    assert source is not None
+    browser_intent = source["browser_intent"]
+    assert isinstance(browser_intent, dict)
+    identity_hash = str(browser_intent["mcp_server_identity_hash"])
+
+    result = _grant(store, "grant-source")
+
+    assert result["resolved"] is True
+    for request_id in ("grant-source", "routine-request"):
+        row = store.get_approval_request(request_id)
+        assert row is not None
+        assert row["status"] == "resolved"
+    lookup = store.resolve_policy_decision_lookup(
+        "codex",
+        temporary_mcp_grant_selector(identity_hash),
+        now="2026-07-21T12:02:00+00:00",
+        consume_one_shot=False,
+    )
+    assert lookup["decision"] is not None
+
+
 def test_raced_source_resolution_does_not_create_grant_or_clear_matching_request(tmp_path, monkeypatch) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _add(store, "grant-source", tool_name="click")

@@ -16,12 +16,15 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
 
-import codex_plugin_scanner.guard.runtime.supply_chain_package_eval as evaluator_module
+import codex_plugin_scanner.guard.native_supply_chain_eval as evaluator_module
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
-from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.conftest import guard_commands_module
+from tests.package_review_settings import prove_npm_install
+
+pytestmark = [pytest.mark.usefixtures("approval_questionnaire_mode"), pytest.mark.usefixtures("bundle_first_cloud")]
 
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
@@ -55,8 +58,6 @@ def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-to
     }
 
 
-pytestmark = pytest.mark.usefixtures("bundle_first_cloud")
-
 WORKSPACE_ID = "workspace-alpha"
 EVALUATION_NOW = datetime(2026, 5, 19, tzinfo=timezone.utc)
 
@@ -77,6 +78,11 @@ def _freeze_package_evaluator_clock(monkeypatch: pytest.MonkeyPatch) -> None:
             return fixed.astimezone(tz)
 
     monkeypatch.setattr(evaluator_module, "datetime", _FixedDateTime)
+
+
+@pytest.fixture(autouse=True)
+def _prove_npm_install(monkeypatch: pytest.MonkeyPatch) -> None:
+    prove_npm_install(monkeypatch)
 
 
 def _generate_key_pair() -> tuple[bytes, bytes]:
@@ -234,6 +240,11 @@ def _run_guard_hook(
     return main(argv), json.loads(capsys.readouterr().out)
 
 
+# The daemon's harness renderers exit nonzero to stop these harnesses; the
+# others read the decision from stdout.
+_PACKAGE_REVIEW_EXIT_CODES = {"gemini": 1, "opencode": 1, "hermes": 2}
+
+
 def _offline_daemon(home_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     (home_dir / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
@@ -286,7 +297,8 @@ def _seed_block_bundle(home_dir: Path) -> GuardStore:
     "harness",
     ["codex", "claude-code", "opencode", "copilot", "gemini", "hermes", "openclaw"],
 )
-def test_phase14_guard_hook_enriches_package_contract_for_managed_harnesses(
+@pytest.mark.usefixtures("native_hook_force")
+def test_phase14_guard_hook_queues_package_review_for_managed_harnesses(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -308,27 +320,26 @@ def test_phase14_guard_hook_enriches_package_contract_for_managed_harnesses(
     )
 
     pending = store.list_approval_requests(limit=5)
-    native = harness == "hermes"
-    assert rc == (2 if native else 1)
-    if native:
+    assert rc == _PACKAGE_REVIEW_EXIT_CODES.get(harness, 0)
+    assert len(pending) == 1
+    if harness == "hermes":
+        # Hermes reads one flat decision document, as from its bridge.
         assert output["decision"] == "block"
     else:
-        assert output["artifact_type"] == "package_request"
-        assert output["policy_action"] == "require-reapproval"
-        assert output["supply_chain_evaluation"]["decision"] == "ask"
-        assert output["supply_chain_evaluation"]["matched_rule_id"] == "policy-review-1"
-        assert output["approval_requests"]
-        assert output.get("terminal") is not True
-        assert output.get("terminal_action") is None
-    assert pending
-    assert pending[0]["artifact_type"] == "package_request"
-    assert pending[0]["action_envelope_json"]["package_manager"] == "npm"
-    assert pending[0]["action_envelope_json"]["package_name"] == "minimist"
-    assert pending[0]["action_envelope_json"]["package_intent_kind"] == "install"
-    assert pending[0]["action_envelope_json"]["package_targets"] == ["minimist@1.2.8"]
-    assert pending[0]["action_envelope_json"]["pre_execution_result"] == "require-reapproval"
+        assert output["policy_action"] == "review"
+        assert output["reason_code"] == "native_package_review"
+        assert output.get("prompted") is True
+        assert [item["request_id"] for item in output["approval_requests"]] == [pending[0]["request_id"]]
+    envelope = pending[0]["action_envelope_json"]
+    assert envelope["command"] == "npm install minimist@1.2.8"
+    assert envelope["package_manager"] == "npm"
+    assert envelope["package_name"] == "minimist"
+    assert envelope["package_intent_kind"] == "install"
+    assert envelope["package_targets"] == ["minimist@1.2.8"]
+    assert envelope["pre_execution_result"] == "review"
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_phase14_package_hook_retry_after_block_reuses_saved_decision(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -339,7 +350,11 @@ def test_phase14_package_hook_retry_after_block_reuses_saved_decision(
     workspace_dir.mkdir(parents=True, exist_ok=True)
     store = _seed_review_bundle(home_dir, harness_selector="codex")
     _offline_daemon(home_dir, monkeypatch)
+    (home_dir / "config.toml").write_text(
+        'approval_wait_timeout_seconds = 0\nblocked_request_mode = "ask"\n', encoding="utf-8"
+    )
     event = _event_for_harness("codex", "npm install minimist@1.2.8", workspace_dir)
+    event["permission_mode"] = "default"
 
     first_rc, first_output = _run_guard_hook(
         home_dir=home_dir,
@@ -368,14 +383,16 @@ def test_phase14_package_hook_retry_after_block_reuses_saved_decision(
         monkeypatch=monkeypatch,
     )
 
-    assert first_rc == 1
-    assert first_output["policy_action"] == "require-reapproval"
-    assert second_rc == 1
+    assert first_rc == 0
+    assert first_output["policy_action"] == "review"
+    assert second_rc == 0
     assert second_output["policy_action"] == "block"
+    assert second_output["reason_code"] == "native_review_user_block"
     assert second_output.get("approval_requests") in (None, [])
     assert store.count_approval_requests(status="pending") == 0
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_phase14_package_hook_evidence_includes_source_details(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -399,7 +416,7 @@ def test_phase14_package_hook_evidence_includes_source_details(
     evidence = store.list_evidence()
     details = evidence[0]["details"]
 
-    assert rc == 1
+    assert rc == 0
     assert details["harness"] == "codex"
     assert details["agent_app"] == "codex"
     assert details["workspace_fingerprint"]
@@ -410,6 +427,7 @@ def test_phase14_package_hook_evidence_includes_source_details(
     "harness",
     ["codex", "claude-code", "opencode", "copilot", "gemini", "hermes", "openclaw"],
 )
+@pytest.mark.usefixtures("native_hook_force")
 def test_phase14_package_hook_block_copy_stays_consistent_across_harnesses(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -431,29 +449,33 @@ def test_phase14_package_hook_block_copy_stays_consistent_across_harnesses(
         monkeypatch=monkeypatch,
     )
 
-    native = harness == "hermes"
-    message = str(output["reason"] if native else output["decision_v2_json"]["harness_message"])
-    assert rc == (2 if native else 1)
-    if native:
+    assert rc == _PACKAGE_REVIEW_EXIT_CODES.get(harness, 0)
+    if harness == "hermes":
+        # Hermes reads one flat decision document, as from its bridge.
+        assert set(output) == {"decision", "reason"}
         assert output["decision"] == "block"
-    else:
-        assert output["decision_v2_json"]["user_title"] == "Critical install blocked"
-        assert output["policy_action"] == "block"
-        assert output["terminal_action"] == "block"
-        assert output["terminal"] is True
-        assert output["operation_status"] == "blocked"
-        assert output["approval_requests"] == []
-        assert output["decision_v2_json"].get("retry_instruction") is None
-    assert message.startswith("HOL Guard blocked")
-    assert "Reason:" in message
-    assert "Fix: install `npm install minimist@1.2.9` or choose a team exception." in message
+        assert "minimist@1.2.8" in str(output["reason"])
+        assert store.count_approval_requests(status="pending") == 0
+        return
+    hook_output = output["hookSpecificOutput"]
+    assert isinstance(hook_output, dict)
+    message = str(hook_output["permissionDecisionReason"])
+    # Copilot sends its command in `toolArgs`; the resident's plan reads it,
+    # so the bundle's block reaches Copilot as a terminal block too.
+    assert output["policy_action"] == "block"
+    assert output["reason_code"] == "native_package_review"
+    assert output["prompted"] is False
+    assert hook_output["permissionDecision"] == "deny"
+    assert message == "Cached bundle flagged minimist@1.2.8 from advisory intelligence."
+    assert output.get("approval_requests") is None
     assert store.count_approval_requests(status="pending") == 0
-    assert "/requests/" not in message
-    assert "Review this request in HOL Guard, then retry." not in message
-    assert "guard/inbox" not in message
 
 
-def test_phase14_claude_compatibility_hook_enforces_package_install_without_node(tmp_path: Path) -> None:
+@pytest.mark.usefixtures("native_hook_force")
+def test_phase14_claude_compatibility_hook_enforces_package_install_without_node(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Claude compatibility hooks must not depend on Node for supply-chain enforcement."""
     from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
 
@@ -467,7 +489,24 @@ def test_phase14_claude_compatibility_hook_enforces_package_install_without_node
         guard_home=guard_home,
     )
     _seed_review_bundle(guard_home, harness_selector="claude-code")
-    (guard_home / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")
+    (guard_home / "config.toml").write_text(
+        'approval_wait_timeout_seconds = 0\nblocked_request_mode = "ask"\n', encoding="utf-8"
+    )
+    # The fallback runs in a child process, so carry the test-only auth fault
+    # across the process boundary via the env override rather than a Python
+    # monkeypatch (the resident subprocess never executes injected code).
+    # `{"error": "authorization_expired"}` surfaces as
+    # `GuardSyncAuthorizationExpiredError` on the Python path and as
+    # `EvalError::Validation` → `cloud_auth_error` on the resident path.
+    monkeypatch.setenv(
+        "HOL_GUARD_TEST_SYNC_AUTH_CONTEXT_JSON",
+        json.dumps({"error": "authorization_expired"}, separators=(",", ":")),
+    )
+    # This surface models a signed-in account whose sign-in expired, not an
+    # explicitly unpaid one, so drop the module-wide unpaid/unreachable Cloud
+    # seams that `bundle_first_cloud` exports for the resident.
+    monkeypatch.delenv("HOL_GUARD_TEST_PACKAGE_ENTITLEMENT_JSON", raising=False)
+    monkeypatch.delenv("HOL_GUARD_TEST_CLOUD_UNREACHABLE_URL", raising=False)
 
     adapter = ClaudeCodeHarnessAdapter()
     command = adapter._daemon_hook_command_parts(context)
@@ -492,9 +531,12 @@ def test_phase14_claude_compatibility_hook_enforces_package_install_without_node
     payload = json.loads(result.stdout)
 
     assert result.returncode == 0
-    assert result.stderr == ""
-    assert "minimist@1.2.8" in result.stdout
     assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
-    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "minimist@1.2.8" in payload["hookSpecificOutput"]["permissionDecisionReason"]
-    assert "authorization expired" in payload["hookSpecificOutput"]["permissionDecisionReason"]
+    # `blocked_request_mode="ask"` opts this surface into prompting, so the
+    # install reaches Claude as an `ask` backed by a queued package review.
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
+    assert payload["policy_action"] == "review"
+    assert payload["reason_code"] == "native_package_review"
+    assert payload["approval_requests"]
+    reason = payload["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "requires review before this package or script command can execute" in reason

@@ -1,0 +1,92 @@
+// Benchmark-only prototype for the v2 catalog codec comparison (ADR 0014).
+// Not a production schema: it mirrors the JSON index and permission pages
+// field for field so both encodings carry identical semantic data.
+syntax = "proto3";
+
+package holguard.catalogbench.v1;
+
+message Icon {
+  string kind = 1;
+  optional string name = 2;
+  optional string background = 3;
+}
+
+message Publisher {
+  string id = 1;
+  string display_name = 2;
+  optional string url = 3;
+}
+
+message CatalogDefaults {
+  bool enabled = 1;
+  string activation = 2;
+}
+
+message ExtensionSummary {
+  string extension_id = 1;
+  Icon icon = 2;
+  string name = 3;
+  int64 permission_count = 4;
+  Publisher publisher = 5;
+  bool required = 6;
+  repeated string risk_classes = 7;
+  int64 rule_count = 8;
+  string source = 9;
+  string trust_class = 10;
+  string version = 11;
+  optional string surface = 12;
+  CatalogDefaults catalog_defaults = 13;
+  string content_revision = 14;
+  repeated string action_classes = 15;
+  repeated string aliases = 16;
+  string description = 17;
+  repeated string ecosystem_ids = 18;
+  repeated string executables = 19;
+}
+
+message Permission {
+  repeated string action_classes = 1;
+  string baseline_floor = 2;
+  bool configurable = 3;
+  repeated string conflicts = 4;
+  bool default_enabled = 5;
+  repeated string dependencies = 6;
+  bool deprecated = 7;
+  string description = 8;
+  string example_command = 9;
+  string extension_id = 10;
+  optional string family = 11;
+  optional string fixed_reason = 12;
+  string implementation_version = 13;
+  repeated string implied_permissions = 14;
+  string introduced_version = 15;
+  string label = 16;
+  string permission_id = 17;
+  optional string replacement_permission_id = 18;
+  string risk_tier = 19;
+  repeated string rule_ids = 20;
+  repeated string safer_guidance = 21;
+  int64 schema_version = 22;
+  repeated string typed_capabilities = 23;
+}
+
+message IndexPage {
+  string snapshot_id = 1;
+  string native_catalog_digest = 2;
+  int64 total_count = 3;
+  repeated ExtensionSummary items = 4;
+  optional string next_cursor = 5;
+  string schema_version = 6;
+  int64 limit = 7;
+}
+
+message PermissionPage {
+  string snapshot_id = 1;
+  string native_catalog_digest = 2;
+  int64 total_count = 3;
+  repeated Permission items = 4;
+  optional string next_cursor = 5;
+  string schema_version = 6;
+  int64 limit = 7;
+  string extension_id = 8;
+}

@@ -25,10 +25,12 @@ import {
   exportSettings,
   fetchRuntimeSnapshot,
   fetchSettings,
+  guardAwareHref,
   importSettings,
   resetSettings,
   type ApprovalGateWriteProof,
   type GuardApprovalGateTotpEnrollment,
+  type GuardSettingsUpdate,
   updateSettings,
   clearPolicy,
   repairApprovalCenter,
@@ -36,13 +38,23 @@ import {
   verifyApprovalGateTotp,
   revokeApprovalGateCooldown,
 } from "./guard-api";
+import { commitDashboardLocation } from "./dashboard-location";
 import { approvalGateCooldownLabel } from "./approval-gate-utils";
+import { GuardHookRemovalPanel } from "./guard-hook-removal-panel";
+import { GuardRepairControl } from "./guard-repair-control";
 import { humanizeList } from "./approval-center-utils";
 import { resolveProtectionLevelCopy } from "./runtime-overview";
 import { RISK_CONTROL_CONSEQUENCES, filterSettingsBySearch } from "./apps/app-catalog";
 import { WorkspacePageHeader } from "./workspace-page-header";
 import { ProtectionPosturePanel } from "./protection-posture-panel";
 import { WatchProtectionBanner } from "./watch-protection-banner";
+import { HarnessPostureManager, HarnessPostureSummaryCard } from "./harness-posture-card";
+import {
+  clearHarnessWatchOverrides,
+  normalizeHarnessPostures,
+  settingsWatchBannerModel,
+  withHarnessPosturePatch,
+} from "./harness-posture-ui";
 import {
   deriveProtectionPosture,
   isProtectionPosture,
@@ -261,6 +273,13 @@ const riskControls = [
   { key: "guard_bypass", label: "Guard bypass", description: "Attempts to disable Guard hooks, policies, or approval flow.", consequence: RISK_CONTROL_CONSEQUENCES["guard_bypass"] },
   { key: "cloud_advisory", label: "Cloud advisories", description: "Team and Cloud guidance for known risky patterns.", consequence: RISK_CONTROL_CONSEQUENCES["cloud_advisory"] },
   { key: "encoded_exfiltration", label: "Encoded exfiltration", description: "Encoded payloads that hide secret extraction and network transfer.", consequence: RISK_CONTROL_CONSEQUENCES["encoded_exfiltration"] },
+  { key: "package_unknown", label: "Unrecognized packages", description: "Packages Guard cannot identify or find reputation for.", consequence: RISK_CONTROL_CONSEQUENCES["package_unknown"] },
+  { key: "package_lockfile_drift", label: "Lockfile bumps", description: "Manifest dependencies the lockfile does not pin yet.", consequence: RISK_CONTROL_CONSEQUENCES["package_lockfile_drift"] },
+  { key: "package_direct_source", label: "Direct package sources", description: "Git, URL, archive, local-path and replaced sources instead of the registry.", consequence: RISK_CONTROL_CONSEQUENCES["package_direct_source"] },
+  { key: "package_custom_registry", label: "Custom registries", description: "Installs that use a non-default package index or registry.", consequence: RISK_CONTROL_CONSEQUENCES["package_custom_registry"] },
+  { key: "package_install", label: "Every package install", description: "Every package install or update, even with no risk signal.", consequence: RISK_CONTROL_CONSEQUENCES["package_install"] },
+  { key: "low_trust_artifact", label: "Low trust scores", description: "Skills, MCP servers, and plugins scoring below 80 in the HOL Registry.", consequence: RISK_CONTROL_CONSEQUENCES["low_trust_artifact"] },
+  { key: "runtime_known_vulnerable", label: "Vulnerable runtimes", description: "Node.js builds with a known high or critical advisory, checked before launch.", consequence: RISK_CONTROL_CONSEQUENCES["runtime_known_vulnerable"] },
 ] as const;
 
 type RiskKey = (typeof riskControls)[number]["key"];
@@ -280,7 +299,14 @@ const riskProfileActions: Record<"relaxed" | "balanced" | "strict" | "custom", R
     persistence: "warn",
     guard_bypass: "warn",
     cloud_advisory: "allow",
-    encoded_exfiltration: "warn"
+    encoded_exfiltration: "warn",
+    package_unknown: "allow",
+    package_lockfile_drift: "allow",
+    package_direct_source: "allow",
+    package_custom_registry: "allow",
+    package_install: "allow",
+    low_trust_artifact: "warn",
+    runtime_known_vulnerable: "warn"
   },
   balanced: {
     local_secret_read: "require-reapproval",
@@ -296,7 +322,14 @@ const riskProfileActions: Record<"relaxed" | "balanced" | "strict" | "custom", R
     persistence: "require-reapproval",
     guard_bypass: "block",
     cloud_advisory: "warn",
-    encoded_exfiltration: "require-reapproval"
+    encoded_exfiltration: "require-reapproval",
+    package_unknown: "allow",
+    package_lockfile_drift: "allow",
+    package_direct_source: "allow",
+    package_custom_registry: "allow",
+    package_install: "allow",
+    low_trust_artifact: "require-reapproval",
+    runtime_known_vulnerable: "require-reapproval"
   },
   strict: {
     local_secret_read: "require-reapproval",
@@ -312,7 +345,14 @@ const riskProfileActions: Record<"relaxed" | "balanced" | "strict" | "custom", R
     persistence: "block",
     guard_bypass: "block",
     cloud_advisory: "require-reapproval",
-    encoded_exfiltration: "block"
+    encoded_exfiltration: "block",
+    package_unknown: "block",
+    package_lockfile_drift: "require-reapproval",
+    package_direct_source: "require-reapproval",
+    package_custom_registry: "allow",
+    package_install: "allow",
+    low_trust_artifact: "require-reapproval",
+    runtime_known_vulnerable: "block"
   },
   custom: {
     local_secret_read: "require-reapproval",
@@ -328,7 +368,14 @@ const riskProfileActions: Record<"relaxed" | "balanced" | "strict" | "custom", R
     persistence: "require-reapproval",
     guard_bypass: "block",
     cloud_advisory: "warn",
-    encoded_exfiltration: "require-reapproval"
+    encoded_exfiltration: "require-reapproval",
+    package_unknown: "allow",
+    package_lockfile_drift: "allow",
+    package_direct_source: "allow",
+    package_custom_registry: "allow",
+    package_install: "allow",
+    low_trust_artifact: "require-reapproval",
+    runtime_known_vulnerable: "require-reapproval"
   }
 };
 
@@ -354,7 +401,8 @@ function normalizeGuardSettings(settings: GuardSettings): GuardSettings {
     security_level: securityLevel,
     risk_actions: effectiveRiskActions,
     risk_action_overrides: explicitOverrides,
-    harness_risk_actions: settings.harness_risk_actions ?? {}
+    harness_risk_actions: settings.harness_risk_actions ?? {},
+    harness_postures: normalizeHarnessPostures(settings.harness_postures)
   };
 }
 
@@ -414,7 +462,7 @@ function buildConsequenceSummary(settings: GuardSettings): string {
     const postureLabel = PROTECTION_POSTURE_COPY[posture].label;
     return `Using custom rules on top of ${postureLabel}.`;
   }
-  return "Guard stops dangerous actions automatically and asks once about new or unknown work.";
+  return "Guard stops dangerous actions automatically. Choose how blocked requests are handled in Approval gate.";
 }
 
 export function hasUnsavedChanges(saved: GuardSettings | null, draft: GuardSettings | null): boolean {
@@ -431,19 +479,30 @@ export function applyApprovalGateDraft(
   }
 ): GuardSettings {
   const gate = settings.approval_gate;
+  if (gate !== undefined) {
+    return {
+      ...settings,
+      approval_gate: {
+        ...gate,
+        enabled: updates.enabled,
+        cooldown_seconds: updates.cooldown_seconds,
+        strict_all_decisions: updates.strict_all_decisions ?? gate.strict_all_decisions,
+      },
+    };
+  }
   return {
     ...settings,
     approval_gate: {
       enabled: updates.enabled,
-      configured: gate?.configured ?? false,
+      configured: false,
       cooldown_seconds: updates.cooldown_seconds,
-      cooldown_active: gate?.cooldown_active ?? false,
-      cooldown_expires_at: gate?.cooldown_expires_at ?? null,
-      locked_until: gate?.locked_until ?? null,
-      fail_closed: gate?.fail_closed ?? false,
-      strict_all_decisions: updates.strict_all_decisions ?? gate?.strict_all_decisions ?? false,
-      totp_enabled: gate?.totp_enabled ?? false,
-      totp_pending: gate?.totp_pending ?? false,
+      cooldown_active: false,
+      cooldown_expires_at: null,
+      locked_until: null,
+      fail_closed: false,
+      strict_all_decisions: updates.strict_all_decisions ?? false,
+      totp_enabled: false,
+      totp_pending: false,
     },
   };
 }
@@ -460,6 +519,8 @@ type SettingsWorkspaceProps = {
 };
 
 export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspaceProps) {
+  const [returnToExtensions] = useState(() => new URLSearchParams(window.location.search).get("returnTo") === "extensions");
+  const approvalSetupRef = useRef<HTMLDivElement>(null);
   const [state, setState] = useState<SettingsState>({ kind: "loading" });
   const [draft, setDraft] = useState<GuardSettings | null>(null);
   const [saving, setSaving] = useState(false);
@@ -479,12 +540,18 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   const [pendingPosture, setPendingPosture] = useState<ProtectionPosture | null>(null);
   const [activeTab, setActiveTab] = useState<LocalSettingsTabKey>(() => resolveInitialSettingsTab(window.location.search));
   const [searchQuery, setSearchQuery] = useState("");
+  useEffect(() => {
+    if (!returnToExtensions || activeTab !== "approval" || state.kind !== "ready") return;
+    approvalSetupRef.current?.focus();
+    approvalSetupRef.current?.scrollIntoView({ block: "start" });
+  }, [returnToExtensions, activeTab, state.kind]);
   const [importingSettings, setImportingSettings] = useState(false);
   const [resettingSettings, setResettingSettings] = useState(false);
   const [exportingSettings, setExportingSettings] = useState(false);
   const settingsImportInputRef = useRef<HTMLInputElement>(null);
   const saveSuccessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedSettingsRef = useRef<GuardSettings | null>(null);
+  const setupGateRevertRef = useRef<{ enabled: boolean; gate: GuardSettings["approval_gate"] } | null>(null);
   const [approvalGateEnabled, setApprovalGateEnabled] = useState(false);
   const [approvalGateTotpCode, setApprovalGateTotpCode] = useState("");
   const [approvalGateTotpDeviceLabel, setApprovalGateTotpDeviceLabel] = useState("local-device");
@@ -588,7 +655,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   }, []);
 
   const handleStringChange = useCallback(
-    (key: keyof GuardSettings) => (event: ChangeEvent<HTMLSelectElement>) => {
+    (key: keyof GuardSettings) => (event: ChangeEvent<HTMLSelectElement | HTMLInputElement>) => {
       setDraft((value) => value === null ? value : { ...value, [key]: event.target.value });
       setSaveError(null);
     },
@@ -670,6 +737,11 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     setSaveError(null);
   }, []);
 
+  const setDraftSettings = useCallback((settings: GuardSettings) => {
+    setDraft(settings);
+    setSaveError(null);
+  }, []);
+
   const handleProtectionPostureChange = useCallback((posture: ProtectionPosture) => {
     if (posture === "watch") {
       setPendingPosture(posture);
@@ -679,8 +751,13 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   }, [applyDraftPosture]);
 
   const handleTurnProtectionOn = useCallback(() => {
-    applyDraftPosture("protected");
-  }, [applyDraftPosture]);
+    setDraft((value) => {
+      if (value === null) return value;
+      const cleared = clearHarnessWatchOverrides(value);
+      return currentProtectionPosture(cleared) === "watch" ? applyProtectionPosture(cleared, "protected") : cleared;
+    });
+    setSaveError(null);
+  }, []);
 
   const handleWatchAutoRevertToggle = useCallback((checked: boolean) => {
     setDraft((value) => value === null ? value : { ...value, watch_auto_revert_hours: checked ? 24 : 0 });
@@ -825,10 +902,16 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
     if (proofModalPending) {
       return;
     }
+    const revertGate = setupGateRevertRef.current;
+    if (proofModalMode === "setup-gate" && revertGate !== null) {
+      setApprovalGateEnabled(revertGate.enabled);
+      setDraft((value) => value === null ? value : { ...value, approval_gate: revertGate.gate });
+    }
+    setupGateRevertRef.current = null;
     setProofModalOpen(false);
     setPendingProofAction(null);
     setProofModalError(null);
-  }, [proofModalPending]);
+  }, [proofModalPending, proofModalMode, approvalGateCooldown, approvalGateStrictAllDecisions]);
 
   const executeSave = useCallback(async (proof?: SettingsSaveProofCredentials, scope: SettingsSaveScope = "all") => {
     if (draft === null) {
@@ -862,7 +945,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
         ...(proof?.confirmPassword ? { confirm_password: proof.confirmPassword } : {}),
         ...(proof?.totpCode ? { totp_code: proof.totpCode } : {}),
       };
-      let settingsToSave: Partial<GuardSettings>;
+      let settingsToSave: GuardSettingsUpdate;
       if (scope === "approval-gate") {
         settingsToSave = { approval_gate: approvalGateUpdate };
       } else {
@@ -874,7 +957,11 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
           settingsToSave = presentationOnlyPayload;
         } else {
           settingsToSave = {
-            ...buildSettingsUpdatePayload(draft, savedSettingsRef.current),
+            ...withHarnessPosturePatch(
+              buildSettingsUpdatePayload(draft, savedSettingsRef.current),
+              draft,
+              savedSettingsRef.current,
+            ),
             risk_actions: draft.security_level === "custom" ? draft.risk_actions : draft.risk_action_overrides,
             approval_gate: approvalGateUpdate,
           };
@@ -1066,6 +1153,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
       } else {
         await executeMaintenanceWithProof(pendingProofAction.action, proof);
       }
+      setupGateRevertRef.current = null;
       setProofModalOpen(false);
       setPendingProofAction(null);
     } catch (error) {
@@ -1096,8 +1184,23 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   }, [approvalGateEnabled, draft, executeSave, openProofModal]);
 
   const handleOpenPasswordChangeModal = useCallback((mode: "change-password" | "setup-gate" = "change-password") => {
+    if (mode === "setup-gate") {
+      // The gate can only store a password while it is on, so first-time
+      // setup marks the draft enabled; the saved result turns the toggle on.
+      setupGateRevertRef.current = { enabled: approvalGateEnabled, gate: draft?.approval_gate };
+      setApprovalGateEnabled(true);
+      setDraft((value) =>
+        value === null
+          ? value
+          : applyApprovalGateDraft(value, {
+            enabled: true,
+            cooldown_seconds: approvalGateCooldown,
+            strict_all_decisions: approvalGateStrictAllDecisions,
+          })
+      );
+    }
     openProofModal(mode, { kind: "save", scope: mode === "setup-gate" ? "approval-gate" : "all" });
-  }, [openProofModal]);
+  }, [openProofModal, approvalGateEnabled, approvalGateCooldown, approvalGateStrictAllDecisions, draft]);
 
   const handleRequestRevokeCooldown = useCallback(() => {
     openProofModal("maintenance", { kind: "maintenance", action: "revoke-cooldown" });
@@ -1426,6 +1529,7 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
   const protectionCapabilities: GuardProtectionCapability[] = state.kind === "ready"
     ? (state.payload.protection_capabilities ?? [])
     : [];
+  const watchBanner = settingsWatchBannerModel(draft, protectionCapabilities);
   const searchMatches = filterSettingsBySearch(searchQuery);
   const hasSearch = searchQuery.trim().length > 0;
   const riskSearchMatches = searchMatches.filter((m) => m.section === "risk");
@@ -1438,10 +1542,10 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
       <WorkspacePageHeader
         eyebrow="This machine"
         title="Protection"
-        description="Guard stops dangerous actions automatically and asks once about new or unknown work."
+        description="Guard stops dangerous actions automatically. Choose how blocked requests are handled in Approval gate."
       />
-      {selectedPosture === "watch" ? (
-        <WatchProtectionBanner onTurnProtectionOn={handleTurnProtectionOn} />
+      {watchBanner !== null ? (
+        <WatchProtectionBanner model={watchBanner} onTurnProtectionOn={handleTurnProtectionOn} />
       ) : null}
 
       <div className="relative">
@@ -1461,6 +1565,21 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
       {hasSearch && searchMatches.length === 0 && (
         <p className="text-sm text-slate-500">No settings match your search.</p>
       )}
+
+      {hasSearch && searchMatches.some((match) => match.key === "harness_postures") ? (
+        <button
+          type="button"
+          onClick={() => {
+            setSearchQuery("");
+            handleTabChange("apps");
+          }}
+          data-testid="settings-search-open-apps"
+          className="flex min-h-11 w-full items-center justify-between rounded-xl border border-slate-100 bg-white px-4 py-3 text-left text-sm font-medium text-brand-dark hover:border-brand-blue/30"
+        >
+          Protection by app
+          <span className="text-xs font-semibold text-brand-blue">Open the Apps tab</span>
+        </button>
+      ) : null}
 
       {hasSearch && riskSearchMatches.length > 0 && (
         <div className="rounded-xl border border-slate-100 p-4">
@@ -1521,6 +1640,19 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
                 onPostureChange={handleProtectionPostureChange}
               />
             </SettingsFormSection>
+
+            {protectionCapabilities.length > 0 ? (
+              <SettingsFormSection
+                title="Protection by app"
+                description="Apps follow the machine setting unless you choose otherwise."
+              >
+                <HarnessPostureSummaryCard
+                  settings={draft}
+                  capabilities={protectionCapabilities}
+                  onOpenApps={() => handleTabChange("apps")}
+                />
+              </SettingsFormSection>
+            ) : null}
 
             <SettingsFormSection title="Timing and features">
               <div className="space-y-4 py-3">
@@ -1592,44 +1724,44 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
           </div>
         )}
 
+        {activeTab === "apps" && (
+          <div className="flex min-h-0 flex-1 flex-col space-y-6">
+            {protectionCapabilities.length > 0 ? (
+              <SettingsFormSection
+                title="Protection by app"
+                description="Choose the level each app runs at. Watch records instead of stopping, so use it only while debugging one app."
+              >
+                <HarnessPostureManager
+                  settings={draft}
+                  capabilities={protectionCapabilities}
+                  onSettingsChange={setDraftSettings}
+                  onChangeTab={handleTabChange}
+                />
+              </SettingsFormSection>
+            ) : (
+              <EmptyState
+                title="No apps to protect yet"
+                body="Guard lists your apps here once it detects them. Run an app such as Codex, Claude Code, or Cursor and come back."
+                tone="teach"
+              />
+            )}
+          </div>
+        )}
+
         {activeTab === "approval" && (
           <div className="flex min-h-0 flex-1 flex-col space-y-4">
-            {!approvalGateEnabled ? (
-              <div className="rounded-xl border border-brand-blue/10 bg-brand-blue/[0.03] px-4 py-3">
-                <p className="text-sm text-brand-dark">
-                  Add a password or phone app code before allow or trust changes stick.
-                </p>
+            <div ref={approvalSetupRef} role="region" tabIndex={-1} aria-label="Local approval setup" className="scroll-mt-24 rounded-xl focus-visible:outline-2 focus-visible:outline-brand-blue sm:scroll-mt-4">
+            {returnToExtensions ? <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold text-brand-dark">Local approval</h2>
+                <p className="mt-1 text-sm text-slate-600">{hasUnsavedChanges(savedSettingsRef.current, draft)
+                  ? "Save your changes before returning to Extensions."
+                  : savedSettingsRef.current?.approval_gate?.enabled && savedSettingsRef.current?.approval_gate?.configured
+                    ? "Local approval is ready. Return to Extensions to finish setup."
+                    : "Set a password here, then return to Extensions. Guard Cloud is not required."}</p>
               </div>
-            ) : null}
-            <SettingsFormSection
-              title="Where Guard asks"
-              description="This only chooses the surface for Ask once. It does not change what Guard stops."
-            >
-              <div className="space-y-4 py-3">
-                <SettingsSelectRow
-                  label="Ask surface"
-                  description="In the app when possible, always in Guard, or never open a browser."
-                  value={draft.approval_surface_policy}
-                  onChange={handleStringChange("approval_surface_policy")}
-                  options={surfacePolicyOptions}
-                />
-                {draft.approval_surface_policy === "attention-aware" ? (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="block">
-                      <span className="text-sm font-medium text-brand-dark">Browser delay (seconds)</span>
-                      <input
-                        type="number"
-                        min={0}
-                        max={120}
-                        value={draft.approval_browser_delay_seconds}
-                        onChange={handleNumberChange("approval_browser_delay_seconds")}
-                        className="mt-2 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
-                      />
-                    </label>
-                  </div>
-                ) : null}
-              </div>
-            </SettingsFormSection>
+              <ActionButton variant="outline" disabled={saving || proofModalPending || hasUnsavedChanges(savedSettingsRef.current, draft)} onClick={() => commitDashboardLocation(guardAwareHref("/extensions"))}>Back to Extensions</ActionButton>
+            </div> : null}
             <ApprovalGateCard
               enabled={approvalGateEnabled}
               gateConfig={draft.approval_gate ?? null}
@@ -1658,6 +1790,63 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
               onDisableTotp={handleDisableTotp}
               onRevokeCooldown={handleRequestRevokeCooldown}
             />
+            </div>
+            <SettingsFormSection
+              title="When Guard blocks a request"
+              description="Applies to every harness. Blocked actions stay blocked in either mode."
+            >
+              <fieldset className="space-y-3 py-3">
+                <legend className="sr-only">Blocked request behavior</legend>
+                {[
+                  { value: "safe-alternative", label: "Find a safe alternative (default)", description: "The agent receives the block reason and continues with a permitted approach. No approval prompt opens. Guard still saves the block in the inbox." },
+                  { value: "ask", label: "Ask me for approval", description: "Pause for an approval questionnaire in the harness or Guard. Decisions that require review can be approved; hard blocks stay blocked." },
+                ].map((option) => (
+                  <label key={option.value} className="flex cursor-pointer items-start gap-3 rounded-lg px-2 py-2 hover:bg-slate-50 focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand-blue">
+                    <input
+                      type="radio"
+                      name="blocked-request-mode"
+                      value={option.value}
+                      checked={(draft.blocked_request_mode ?? "safe-alternative") === option.value}
+                      onChange={handleStringChange("blocked_request_mode")}
+                      className="mt-1 h-4 w-4 shrink-0 accent-brand-blue"
+                    />
+                    <span>
+                      <span className="block text-sm font-medium text-brand-dark">{option.label}</span>
+                      <span className="mt-1 block text-sm text-slate-600">{option.description}</span>
+                    </span>
+                  </label>
+                ))}
+              </fieldset>
+            </SettingsFormSection>
+            {draft.blocked_request_mode === "ask" && <SettingsFormSection
+              title="Where Guard asks"
+              description="This only chooses the surface for Ask once. It does not change what Guard stops."
+            >
+              <div className="space-y-4 py-3">
+                <SettingsSelectRow
+                  label="Ask surface"
+                  description="In the app when possible, always in Guard, or never open a browser."
+                  value={draft.approval_surface_policy}
+                  onChange={handleStringChange("approval_surface_policy")}
+                  options={surfacePolicyOptions}
+                />
+                {draft.approval_surface_policy === "attention-aware" && (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="text-sm font-medium text-brand-dark">Browser delay (seconds)</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={120}
+                        value={draft.approval_browser_delay_seconds}
+                        onChange={handleNumberChange("approval_browser_delay_seconds")}
+                        className="mt-2 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                      />
+                    </label>
+                  </div>
+                )}
+              </div>
+            </SettingsFormSection>}
           </div>
         )}
 
@@ -1839,6 +2028,13 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
                           {repairing ? "Repairing…" : "Repair"}
                         </ActionButton>
                       </div>
+                    </div>
+                    <div id="guard-repair">
+                      <p className="text-sm font-semibold text-brand-dark">Repair Guard</p>
+                      <GuardRepairControl description="Fixes the background service, app hooks, and stale local state when hooks time out or an app stays blocked." />
+                    </div>
+                    <div id="guard-hook-removal">
+                      <GuardHookRemovalPanel />
                     </div>
                   </div>
                 </div>
@@ -2187,13 +2383,7 @@ type ApprovalGateCardProps = {
 
 function ApprovalGateCard(props: ApprovalGateCardProps) {
   const wasConfigured = props.savedGateConfig?.configured === true;
-  const gateSettingsChanged = hasApprovalGateSettingsChanged(
-    props.savedGateConfig,
-    props.enabled,
-    props.cooldownSeconds,
-    props.strictAllDecisions,
-  );
-  const showGateDetails = props.enabled || gateSettingsChanged;
+  const gateActiveOnDevice = props.savedGateConfig?.enabled === true;
   const cooldownActive = props.gateConfig?.cooldown_active === true;
   const cooldownExpiresAt = props.gateConfig?.cooldown_expires_at ?? null;
   const totpEnabled = props.gateConfig?.totp_enabled === true;
@@ -2228,147 +2418,153 @@ function ApprovalGateCard(props: ApprovalGateCardProps) {
         </div>
       )}
 
-      {showGateDetails ? (
-        <div className="space-y-3">
-          <ApprovalPasswordSection
-            wasConfigured={wasConfigured}
-            enabled={props.enabled}
-            onOpenPasswordChangeModal={props.onOpenPasswordChangeModal}
-          />
+      <div className="space-y-3">
+        <ApprovalPasswordSection
+          wasConfigured={wasConfigured}
+          enabled={props.enabled}
+          gateActive={gateActiveOnDevice}
+          onOpenPasswordChangeModal={props.onOpenPasswordChangeModal}
+        />
 
-          <div className="rounded-xl border border-slate-100 bg-white p-4">
-            <SectionLabel>Extra checks</SectionLabel>
-            <div className="mt-3 space-y-3">
-              <SettingToggle
-                id="settings-approval-gate-strict"
-                label="Also ask before block decisions"
-                checked={props.strictAllDecisions}
-                onChange={props.onStrictAllDecisionsChange}
-              />
-              <label className="block">
-                <span className="text-xs font-medium text-slate-500">Cooldown after approval</span>
-                <select
-                  id="settings-approval-gate-cooldown"
-                  value={String(effectiveCooldownSeconds)}
-                  onChange={props.onCooldownChange}
-                  disabled={totpEnabled}
-                  aria-describedby={totpEnabled ? "settings-approval-gate-cooldown-help" : undefined}
-                  className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
-                >
-                  {cooldownOptions.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-                {totpEnabled ? (
-                  <span id="settings-approval-gate-cooldown-help" className="mt-1 block text-xs leading-5 text-slate-500">
-                    Authenticator approvals do not use the password cooldown. Your saved password cooldown applies when Authenticator is off.
-                  </span>
-                ) : null}
-              </label>
+        <div className="rounded-xl border border-slate-100 bg-white p-4">
+          <SectionLabel>Extra checks</SectionLabel>
+          <div className="mt-3 space-y-3">
+            <SettingToggle
+              id="settings-approval-gate-strict"
+              label="Also ask before block decisions"
+              checked={props.strictAllDecisions}
+              onChange={props.onStrictAllDecisionsChange}
+            />
+            <label className="block">
+              <span className="text-xs font-medium text-slate-500">Cooldown after approval</span>
+              <select
+                id="settings-approval-gate-cooldown"
+                value={String(effectiveCooldownSeconds)}
+                onChange={props.onCooldownChange}
+                disabled={totpEnabled}
+                aria-describedby={totpEnabled ? "settings-approval-gate-cooldown-help" : undefined}
+                className="mt-1 min-h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+              >
+                {cooldownOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+              {totpEnabled ? (
+                <span id="settings-approval-gate-cooldown-help" className="mt-1 block text-xs leading-5 text-slate-500">
+                  Authenticator approvals do not use the password cooldown. Your saved password cooldown applies when Authenticator is off.
+                </span>
+              ) : null}
+            </label>
+          </div>
+        </div>
+
+        <div className="overflow-hidden rounded-xl border border-brand-blue/15 bg-white">
+          <div className="flex items-center justify-between gap-2">
+            <div className="px-4 py-3">
+              <SectionLabel>Authenticator app</SectionLabel>
+              <p className="mt-1 max-w-xl text-xs leading-5 text-slate-500">
+                Add a six-digit code from Google Authenticator, 1Password, Authy, or iCloud Passwords for high-risk approvals.
+              </p>
+            </div>
+            <div className="px-4">
+              <Tag tone={totpEnabled ? "green" : totpPending ? "blue" : "slate"}>
+                {totpEnabled ? "Enabled" : totpPending ? "Pending verification" : "Not connected"}
+              </Tag>
             </div>
           </div>
-
-          <div className="overflow-hidden rounded-xl border border-brand-blue/15 bg-white">
-            <div className="flex items-center justify-between gap-2">
-              <div className="px-4 py-3">
-                <SectionLabel>Authenticator app</SectionLabel>
-                <p className="mt-1 max-w-xl text-xs leading-5 text-slate-500">
-                  Add a six-digit code from Google Authenticator, 1Password, Authy, or iCloud Passwords for high-risk approvals.
-                </p>
-              </div>
-              <div className="px-4">
-                <Tag tone={totpEnabled ? "green" : totpPending ? "blue" : "slate"}>
-                  {totpEnabled ? "Enabled" : totpPending ? "Pending verification" : "Not connected"}
-                </Tag>
-              </div>
-            </div>
-            <div className="border-t border-slate-100 bg-slate-50/50 px-4 py-3">
-              {!totpEnabled && !totpPending && (
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="max-w-xl space-y-1">
-                    <p className="text-sm font-medium text-brand-dark">Add a second factor for high-risk approvals.</p>
-                    <p className="text-xs text-slate-500">
-                      Setup opens a guided flow for password confirmation, then QR scan.
-                    </p>
-                  </div>
-                  <ActionButton
-                    onClick={props.onOpenTotpSetup}
-                    disabled={props.totpActionPending !== null}
-                    variant="outline"
-                  >
-                    Set up authenticator
-                  </ActionButton>
-                </div>
-              )}
-              {totpPending && (
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="max-w-xl space-y-1">
-                    <p className="text-sm font-medium text-brand-dark">Finish connecting your authenticator app.</p>
-                    <p className="text-xs text-slate-500">
-                      Open setup to scan the QR code and enter a live six-digit code.
-                    </p>
-                  </div>
-                  <ActionButton
-                    onClick={props.onOpenTotpSetup}
-                    disabled={props.totpActionPending !== null}
-                    variant="outline"
-                  >
-                    Continue setup
-                  </ActionButton>
-                </div>
-              )}
-              {totpEnabled && (
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="max-w-xl text-xs text-slate-500">
-                    Disconnecting removes the app code requirement from future high-risk approvals.
-                  </p>
-                  <ActionButton
-                    onClick={props.onDisableTotp}
-                    disabled={props.totpActionPending !== null}
-                    variant="outline"
-                  >
-                    {props.totpActionPending === "disable" ? "Disconnecting..." : "Disconnect authenticator"}
-                  </ActionButton>
-                </div>
-              )}
-              {props.totpActionError !== null && !props.totpSetupOpen && (
-                <p className="mt-2 rounded-lg border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2 text-xs text-brand-dark">
-                  {props.totpActionError}
-                </p>
-              )}
-            </div>
-            {props.totpSetupOpen && (
-              <TotpSetupModal
-                step={props.totpSetupStep}
-                enrollment={props.totpEnrollment}
-                deviceLabel={props.totpDeviceLabel}
-                actionPassword={props.totpActionPassword}
-                totpCode={props.totpCode}
-                pending={props.totpActionPending}
-                error={props.totpActionError}
-                onActionPasswordChange={props.onTotpActionPasswordChange}
-                onDeviceLabelChange={props.onTotpDeviceLabelChange}
-                onTotpCodeChange={props.onTotpCodeChange}
-                onConfirmPassword={props.onStartTotpEnrollment}
-                onVerify={props.onVerifyTotpEnrollment}
-                onClose={props.onCloseTotpSetup}
-              />
+          <div className="border-t border-slate-100 bg-slate-50/50 px-4 py-3">
+            {!gateActiveOnDevice && (
+              <p className="max-w-xl text-xs leading-5 text-slate-500">
+                {wasConfigured
+                  ? "Turn on Ask for proof to manage your authenticator."
+                  : "Set an approval password first, then connect an authenticator app for high-risk approvals."}
+              </p>
             )}
-          </div>
-
-          {cooldownActive && cooldownLabel !== null && (
-            <div className="rounded-xl border border-brand-blue/15 bg-brand-blue/[0.04] p-4">
-              <SectionLabel>Active cooldown</SectionLabel>
-              <p className="mt-1 text-xs text-brand-dark">Cooldown active until {cooldownLabel}</p>
-              <div className="mt-3">
-                <ActionButton onClick={props.onRevokeCooldown} variant="outline">
-                  Revoke cooldown
+            {gateActiveOnDevice && !totpEnabled && !totpPending && (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="max-w-xl space-y-1">
+                  <p className="text-sm font-medium text-brand-dark">Add a second factor for high-risk approvals.</p>
+                  <p className="text-xs text-slate-500">
+                    Setup opens a guided flow for password confirmation, then QR scan.
+                  </p>
+                </div>
+                <ActionButton
+                  onClick={props.onOpenTotpSetup}
+                  disabled={props.totpActionPending !== null}
+                  variant="outline"
+                >
+                  Set up authenticator
                 </ActionButton>
               </div>
-            </div>
+            )}
+            {gateActiveOnDevice && totpPending && (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="max-w-xl space-y-1">
+                  <p className="text-sm font-medium text-brand-dark">Finish connecting your authenticator app.</p>
+                  <p className="text-xs text-slate-500">
+                    Open setup to scan the QR code and enter a live six-digit code.
+                  </p>
+                </div>
+                <ActionButton
+                  onClick={props.onOpenTotpSetup}
+                  disabled={props.totpActionPending !== null}
+                  variant="outline"
+                >
+                  Continue setup
+                </ActionButton>
+              </div>
+            )}
+            {gateActiveOnDevice && totpEnabled && (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="max-w-xl text-xs text-slate-500">
+                  Disconnecting removes the app code requirement from future high-risk approvals.
+                </p>
+                <ActionButton
+                  onClick={props.onDisableTotp}
+                  disabled={props.totpActionPending !== null}
+                  variant="outline"
+                >
+                  {props.totpActionPending === "disable" ? "Disconnecting..." : "Disconnect authenticator"}
+                </ActionButton>
+              </div>
+            )}
+            {props.totpActionError !== null && !props.totpSetupOpen && (
+              <p className="mt-2 rounded-lg border border-brand-attention/20 bg-brand-attention/[0.04] px-3 py-2 text-xs text-brand-dark">
+                {props.totpActionError}
+              </p>
+            )}
+          </div>
+          {props.totpSetupOpen && (
+            <TotpSetupModal
+              step={props.totpSetupStep}
+              enrollment={props.totpEnrollment}
+              deviceLabel={props.totpDeviceLabel}
+              actionPassword={props.totpActionPassword}
+              totpCode={props.totpCode}
+              pending={props.totpActionPending}
+              error={props.totpActionError}
+              onActionPasswordChange={props.onTotpActionPasswordChange}
+              onDeviceLabelChange={props.onTotpDeviceLabelChange}
+              onTotpCodeChange={props.onTotpCodeChange}
+              onConfirmPassword={props.onStartTotpEnrollment}
+              onVerify={props.onVerifyTotpEnrollment}
+              onClose={props.onCloseTotpSetup}
+            />
           )}
         </div>
-      ) : null}
+
+        {cooldownActive && cooldownLabel !== null && (
+          <div className="rounded-xl border border-brand-blue/15 bg-brand-blue/[0.04] p-4">
+            <SectionLabel>Active cooldown</SectionLabel>
+            <p className="mt-1 text-xs text-brand-dark">Cooldown active until {cooldownLabel}</p>
+            <div className="mt-3">
+              <ActionButton onClick={props.onRevokeCooldown} variant="outline">
+                Revoke cooldown
+              </ActionButton>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

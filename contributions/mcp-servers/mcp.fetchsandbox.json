@@ -1,0 +1,87 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.fetchsandbox",
+  "version": "1.0.0",
+  "name": "FetchSandbox MCP",
+  "description": "Reviews the FetchSandbox tools that upload a workspace for remote analysis or publish evidence to a shareable receipt, and leaves catalog and run listing automatic.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "fetchsandbox.com",
+    "displayName": "FetchSandbox",
+    "url": "https://fetchsandbox.com"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCube",
+    "background": "#111827"
+  },
+  "homepage": "https://fetchsandbox.com",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://fetchsandbox.com/mcp/v1",
+    "serverNames": [
+      "fetchsandbox",
+      "fetchsandbox-mcp"
+    ]
+  },
+  "riskClasses": [
+    "external-source-upload",
+    "external-public-publication"
+  ],
+  "tools": [
+    {
+      "name": "find_bugs",
+      "state": "review"
+    },
+    {
+      "name": "fix_bug",
+      "state": "review"
+    },
+    {
+      "name": "prove_fix",
+      "state": "review"
+    },
+    {
+      "name": "submit_proof",
+      "state": "review"
+    },
+    {
+      "name": "import_spec",
+      "state": "review"
+    },
+    {
+      "name": "list_specs",
+      "state": "inherit"
+    },
+    {
+      "name": "list_runs",
+      "state": "inherit"
+    },
+    {
+      "name": "list_workflows",
+      "state": "inherit"
+    },
+    {
+      "name": "list_scenarios",
+      "state": "inherit"
+    },
+    {
+      "name": "guide",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "inherit"
+    }
+  ],
+  "referenceUrls": [
+    "https://fetchsandbox.com",
+    "https://github.com/fetchsandbox/mcp",
+    "https://www.npmjs.com/package/fetchsandbox-mcp"
+  ],
+  "saferAlternatives": [
+    "Use quickrun, run_workflow, list_scenarios and set_scenario to exercise an integration against a sandboxed API twin and inject failures; these never read the local filesystem and never publish evidence.",
+    "Use list_specs, list_workflows and list_runs to inspect the catalog and prior runs without sending anything."
+  ]
+}

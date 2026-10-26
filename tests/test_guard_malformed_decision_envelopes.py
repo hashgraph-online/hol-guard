@@ -19,6 +19,8 @@ from codex_plugin_scanner.guard.runtime.decisions import (
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
+pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
+
 _MALFORMED_BLOCK_ENVELOPE = '{"pre_execution_result":"block"'
 
 

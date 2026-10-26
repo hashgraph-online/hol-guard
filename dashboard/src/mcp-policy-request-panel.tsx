@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import type { ChangeEvent } from "react";
 import {
   HiMiniCheckCircle,
@@ -13,6 +13,7 @@ import {
 } from "react-icons/hi2";
 import {
   fetchMcpPolicyRequest,
+  GuardHarnessActionError,
   resolveMcpPolicyRequest,
   type McpPolicyDecisionResult,
   type McpPolicyRequest,
@@ -30,6 +31,13 @@ import {
   isApprovalProofSubmitDisabled,
 } from "./approval-proof-inline";
 import type { GuardApprovalGatePublicConfig } from "./guard-types";
+import { RECOVERY_SOURCE_ERRORS, inspectBusinessPolicy, recoverBusinessPolicy, type BusinessRecoveryInspection } from "./business-policy-recovery-api";
+import { STATUS_LABELS, FAILURE_CODE_LABELS, resolveOutcomeMessage, statusTone, isActable, truncateDigest, formatTimestamp } from "./mcp-policy-request-copy";
+import { SummaryField, PlanCountCard } from "./mcp-policy-request-fields";
+
+const BusinessPolicyRecoveryPanel = lazy(() => import("./business-policy-recovery-panel").then(
+  (module) => ({ default: module.BusinessPolicyRecoveryPanel }),
+));
 
 export type McpPolicyRequestPanelState =
   | { kind: "loading" }
@@ -42,81 +50,6 @@ type ResolveOutcome =
   | { kind: "resolved"; result: McpPolicyDecisionResult }
   | { kind: "failed"; message: string };
 
-const STATUS_LABELS: Record<McpPolicyRequest["status"], string> = {
-  pending: "Pending review",
-  applied: "Applied",
-  declined: "Declined",
-  expired: "Expired",
-  failed: "Failed",
-};
-
-const FAILURE_CODE_LABELS: Record<string, string> = {
-  policy_write_failed: "Guard could not write the policy file.",
-  approval_already_resolved: "This request was already resolved.",
-  approval_gate_required: "Approval gate authentication is required.",
-  missing_required_fields: "Required fields were missing from the request.",
-  invalid_arguments: "The request contained invalid arguments.",
-};
-
-function resolveOutcomeMessage(result: McpPolicyDecisionResult): string {
-  switch (result.status) {
-    case "applied":
-      return "Policy applied.";
-    case "declined":
-      return "Request declined.";
-    default:
-      return `Request is now ${STATUS_LABELS[result.status].toLowerCase()}.`;
-  }
-}
-
-function planToneClass(tone: "emerald" | "amber" | "rose"): string {
-  switch (tone) {
-    case "emerald":
-      return "border-emerald-200 bg-emerald-50 text-emerald-700";
-    case "amber":
-      return "border-amber-200 bg-amber-50 text-amber-700";
-    case "rose":
-      return "border-rose-200 bg-rose-50 text-rose-700";
-  }
-}
-
-function statusTone(status: McpPolicyRequest["status"]): BadgeProps["tone"] {
-  switch (status) {
-    case "applied":
-      return "success";
-    case "declined":
-      return "default";
-    case "expired":
-      return "warning";
-    case "failed":
-      return "destructive";
-    default:
-      return "info";
-  }
-}
-
-function isActable(request: McpPolicyRequest): boolean {
-  return !request.isTerminal && !request.isExpired;
-}
-
-function truncateDigest(digest: string): string {
-  if (digest.length <= 16) return digest;
-  return `${digest.slice(0, 12)}…${digest.slice(-4)}`;
-}
-
-function formatTimestamp(iso: string): string {
-  if (!iso) return "—";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 export interface McpPolicyRequestPanelProps {
   requestId: string;
   approvalGate?: GuardApprovalGatePublicConfig | null;
@@ -128,10 +61,18 @@ export function McpPolicyRequestPanel(props: McpPolicyRequestPanelProps) {
   const [outcome, setOutcome] = useState<ResolveOutcome | null>(null);
   const [approvalPassword, setApprovalPassword] = useState("");
   const [approvalTotpCode, setApprovalTotpCode] = useState("");
+  const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
+  const [installationRecovered, setInstallationRecovered] = useState(false);
+  const [inspection, setInspection] = useState<BusinessRecoveryInspection | null>(null);
+  const [inspectionError, setInspectionError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setState({ kind: "loading" });
     setOutcome(null);
+    setRecoveryCode(null);
+    setInstallationRecovered(false);
+    setInspection(null);
+    setInspectionError(null);
     setApprovalPassword("");
     setApprovalTotpCode("");
     try {
@@ -139,6 +80,13 @@ export function McpPolicyRequestPanel(props: McpPolicyRequestPanelProps) {
       if (request === null) {
         setState({ kind: "not-found" });
         return;
+      }
+      try {
+        const inspected = await inspectBusinessPolicy(request.requestId, request.candidateDigest);
+        setInspection(inspected);
+        setInstallationRecovered(inspected.state === "installed");
+      } catch {
+        setInspectionError("Saved installation state could not be verified. Refresh before approving; you can still decline this request.");
       }
       setState({ kind: "ready", request });
     } catch (error) {
@@ -185,11 +133,17 @@ export function McpPolicyRequestPanel(props: McpPolicyRequestPanelProps) {
         }
         props.onResolved?.();
       } catch (error) {
+        setRecoveryCode(error instanceof GuardHarnessActionError ? error.payload?.error ?? null : null);
         const message =
           error instanceof Error && error.message
             ? error.message
             : `Unable to ${action} this request.`;
         setOutcome({ kind: "failed", message });
+        try {
+          const inspected = await inspectBusinessPolicy(request.requestId, request.candidateDigest);
+          setInspection(inspected);
+          setInstallationRecovered(inspected.state === "installed");
+        } catch { setInspection(null); }
         setState({ kind: "ready", request });
       }
     },
@@ -253,11 +207,20 @@ export function McpPolicyRequestPanel(props: McpPolicyRequestPanelProps) {
   }
 
   const request = state.request;
+  const recoveryRequired = inspection?.state === "interrupted" || RECOVERY_SOURCE_ERRORS.has(recoveryCode ?? request.failureCode ?? "");
+  const requestRecovered = inspection?.requestRecovered === true;
+  let failureMessage = "";
+  if (outcome?.kind === "failed") failureMessage = outcome.message;
+  if (recoveryRequired) failureMessage = "Policy installation needs attention. Review the saved policy below before approving recovery.";
   const actable = isActable(request);
   const resolving = state.kind === "resolving";
   const approving = resolving && state.action === "approve";
   const declining = resolving && state.action === "decline";
   const approveDisabled =
+    recoveryRequired ||
+    installationRecovered ||
+    requestRecovered ||
+    inspectionError !== null ||
     !actable ||
     resolving ||
     isApprovalProofSubmitDisabled(
@@ -304,13 +267,13 @@ export function McpPolicyRequestPanel(props: McpPolicyRequestPanelProps) {
           ) : (
             <span className="inline-flex items-center gap-2">
               <HiMiniExclamationTriangle className="h-4 w-4" aria-hidden="true" />
-              {outcome.message}
+              {failureMessage}
             </span>
           )}
         </div>
       ) : null}
 
-      {request.activeEnforcementWarning ? (
+      {request.activeEnforcementWarning && !recoveryRequired ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           <span className="inline-flex items-center gap-2">
             <HiMiniExclamationTriangle className="h-4 w-4" aria-hidden="true" />
@@ -319,7 +282,7 @@ export function McpPolicyRequestPanel(props: McpPolicyRequestPanelProps) {
         </div>
       ) : null}
 
-      {request.failureCode !== null && request.failureCode.length > 0 ? (
+      {request.failureCode !== null && request.failureCode.length > 0 && !recoveryRequired ? (
         <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
           <p className="font-semibold">Policy write failed</p>
           <p className="mt-1">
@@ -424,6 +387,17 @@ export function McpPolicyRequestPanel(props: McpPolicyRequestPanelProps) {
         ) : null}
       </section>
 
+      {recoveryRequired || installationRecovered || requestRecovered ? (
+        <Suspense fallback={<p role="status" className="text-sm text-slate-600">Loading saved policy review…</p>}>
+        <BusinessPolicyRecoveryPanel key={request.requestId} requestId={request.requestId}
+          candidateDigest={request.candidateDigest} approvalGate={props.approvalGate}
+          policy={inspection?.policy} installed={installationRecovered}
+          requestRecovered={requestRecovered}
+          recoverPolicy={recoverBusinessPolicy}
+          onRecovered={() => { setInstallationRecovered(true); setOutcome(null); props.onResolved?.(); }} />
+        </Suspense>
+      ) : null}
+
       {request.isTerminal || request.isExpired ? (
         <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
           <span className="inline-flex items-center gap-2">
@@ -435,7 +409,8 @@ export function McpPolicyRequestPanel(props: McpPolicyRequestPanelProps) {
 
       <section aria-labelledby="mcp-policy-actions" className="space-y-3">
         <SectionLabel>Actions</SectionLabel>
-        {actable ? (
+        {inspectionError ? <p role="alert" className="text-sm text-slate-600">{inspectionError}</p> : null}
+        {actable && !installationRecovered && !recoveryRequired && !requestRecovered && !inspectionError ? (
           <div className="max-w-md rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] p-4">
             <p className="mb-3 text-sm text-slate-600">
               Approval requires your local proof. It is sent once and never stored.
@@ -478,54 +453,6 @@ export function McpPolicyRequestPanel(props: McpPolicyRequestPanelProps) {
           Actions are authenticated with your dashboard session and are safe to retry.
         </p>
       </section>
-    </div>
-  );
-}
-
-type BadgeProps = {
-  tone?: "default" | "success" | "warning" | "info" | "destructive" | "attention";
-};
-
-function SummaryField(props: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="bg-white px-4 py-3">
-      <dt className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
-        {props.label}
-      </dt>
-      <dd className="mt-1 min-w-0">{props.children}</dd>
-    </div>
-  );
-}
-
-function PlanCountCard(props: {
-  label: string;
-  count: number;
-  items: readonly string[];
-  tone: "emerald" | "amber" | "rose";
-  icon: React.ReactNode;
-}) {
-  const toneClass = planToneClass(props.tone);
-  return (
-    <div className={`rounded-xl border px-4 py-3 ${toneClass}`}>
-      <div className="flex items-center justify-between">
-        <span className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider">
-          {props.icon}
-          {props.label}
-        </span>
-        <span className="text-lg font-semibold">{props.count}</span>
-      </div>
-      {props.items.length > 0 ? (
-        <ul className="mt-2 space-y-1 text-[13px] leading-5 text-slate-700">
-          {props.items.slice(0, 8).map((item, index) => (
-            <li key={`${props.label}-${index}-${item}`} className="break-all">
-              {item}
-            </li>
-          ))}
-          {props.items.length > 8 ? (
-            <li className="text-slate-400">+{props.items.length - 8} more</li>
-          ) : null}
-        </ul>
-      ) : null}
     </div>
   );
 }

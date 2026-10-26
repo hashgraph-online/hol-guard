@@ -65,8 +65,11 @@ fn normalized(mut result: PreToolResultV1) -> PreToolResultV1 {
 }
 
 pub fn compare_programs(bytes: &[u8]) -> Result<Value, &'static str> {
-    let request: Request = serde_json::from_value(json::decode(bytes)?)
-        .map_err(|_| "command_source_parity_contract_invalid")?;
+    let request: Request = serde_json::from_value(json::decode_with_object_members(
+        bytes,
+        json::MAX_PROGRAM_OBJECT_MEMBERS,
+    )?)
+    .map_err(|_| "command_source_parity_contract_invalid")?;
     if request.schema != "guard.command-extension-parity.v1"
         || request.cases.is_empty()
         || request.cases.len() > 256

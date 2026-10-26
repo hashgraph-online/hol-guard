@@ -15,7 +15,22 @@ pub const CONTEXT_CHARS: usize = 8192;
 pub const REVIEWED_EXCERPT_CHARS: usize = 1024 * 1024;
 
 pub const OUTPUT_TEXT_KEYS: &[&str] = &[
-    "stdout", "stderr", "output", "content", "result", "message", "text",
+    "stdout",
+    "stderr",
+    "output",
+    "content",
+    "result",
+    "message",
+    "text",
+    "originalFile",
+    "original_file",
+    "oldString",
+    "old_string",
+    "newString",
+    "new_string",
+    "structuredPatch",
+    "structured_patch",
+    "lines",
 ];
 pub const PAYLOAD_OUTPUT_KEYS: &[&str] = &[
     "tool_response",
@@ -64,7 +79,7 @@ pub const REASON_CODES: &[&str] = &[
 
 const RULE_MATERIAL: &str = concat!(
     "hook-content-v1\nsource-paths-v1\nsource-read-fast-v1\n",
-    "github-token|aws-access-key|openai-api-key|anthropic-api-key|hedera-private-key|pem-private-key|npm-auth-token|generic-bearer-token|credential-marker|credential-assignment\n",
+    "github-token|aws-access-key|openai-api-key|anthropic-api-key|hedera-private-key|pem-private-key|npm-auth-token|generic-bearer-token|credential-marker|credential-assignment|url-credential\n",
     ".env|.npmrc|.pypirc|.netrc|.git-credentials|.aws/credentials|.aws/config|.docker/config.json|.kube/config|.ssh|.gnupg|terraform.tfvars|private-key\n",
     "depth=24|items=24|keys=24|max=5242880|matches=16|context=8192"
 );
@@ -88,5 +103,18 @@ mod tests {
         let digest = rule_digest();
         assert_eq!(digest.len(), 64);
         assert!(digest.bytes().all(|b| b.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn rule_material_starts_with_every_version() {
+        let versions: Vec<&str> = RULE_MATERIAL.lines().take(3).collect();
+        assert_eq!(
+            versions,
+            [
+                SCANNER_VERSION,
+                SOURCE_CLASSIFIER_VERSION,
+                SOURCE_READ_VERSION
+            ]
+        );
     }
 }

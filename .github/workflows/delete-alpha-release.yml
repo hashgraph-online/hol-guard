@@ -1,0 +1,145 @@
+name: Delete alpha release
+
+# Retracts an optional test alpha cut from main. Deleting the prerelease and its
+# alpha/v<version> tag removes the Desktop Core sidecars and stops
+# `hol-guard update --alpha` and Desktop's Alpha channel from offering it.
+# PyPI never allows a version to be reused; yank it there by hand if needed.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Alpha version to delete, for example 3.43.0a1
+        type: string
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: delete-alpha-release-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  delete:
+    name: Delete alpha prerelease, tag and container image
+    if: github.repository == 'hashgraph-online/hol-guard'
+    runs-on: ubuntu-latest
+    # Leaves room for a rate-limit retry to wait out one quota reset.
+    timeout-minutes: 75
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Require an authorized maintainer and a main alpha version
+        env:
+          ACTOR_ID: ${{ github.actor_id }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [[ "$ACTOR_ID" != "6068672" && "$ACTOR_ID" != "301892678" ]]; then
+            echo "Alpha releases may only be deleted by an authorized maintainer" >&2
+            exit 1
+          fi
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.0a[1-9][0-9]*$ ]]; then
+            echo "Only main alphas (X.Y.0aN) can be deleted here" >&2
+            exit 1
+          fi
+          echo "### Alpha ${VERSION} retraction" >>"$GITHUB_STEP_SUMMARY"
+
+      - name: Check out release API token tooling
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+          path: .release-api-token
+          sparse-checkout: .github/actions/release-api-token
+          sparse-checkout-cone-mode: false
+      - name: Select release API token
+        id: release-token
+        uses: ./.release-api-token/.github/actions/release-api-token
+        with:
+          client-id: ${{ vars.HOL_RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.HOL_RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+
+      - name: Confirm the tag is a prerelease cut from main
+        env:
+          GH_TOKEN: ${{ steps.release-token.outputs.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          tag="alpha/v${VERSION}"
+          # Release-train alphas share the X.Y.0aN shape, so only main ancestry identifies a main alpha.
+          if ! source_sha=$(gh api "repos/${GITHUB_REPOSITORY}/commits/tags/${tag}" --jq .sha 2>lookup_error); then
+            cat lookup_error >&2
+            echo "No readable tag ${tag}; nothing verifiable to delete" >&2
+            exit 1
+          fi
+          status=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${source_sha}...main" --jq .status)
+          if [[ "$status" != "ahead" && "$status" != "identical" ]]; then
+            echo "Refusing to delete ${tag}: ${source_sha} is not on main (${status})" >&2
+            exit 1
+          fi
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isPrerelease --jq .isPrerelease >is_prerelease 2>release_error; then
+            if [[ "$(cat is_prerelease)" != "true" ]]; then
+              echo "Refusing to delete ${tag}: it is not a prerelease" >&2
+              exit 1
+            fi
+          elif ! grep -q "release not found" release_error; then
+            cat release_error >&2
+            exit 1
+          fi
+
+      # The image goes first so a rerun after a partial failure still finds the tag to verify.
+      - name: Delete the alpha container image tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          owner="${GITHUB_REPOSITORY%%/*}"
+          package="${GITHUB_REPOSITORY#*/}"
+          if ! ids=$(gh api --paginate "orgs/${owner}/packages/container/${package}/versions" \
+            --jq ".[] | select(.metadata.container.tags | index(\"${VERSION}\")) | .id" 2>lookup_error); then
+            if grep -q "HTTP 404" lookup_error; then
+              echo "- No container package ${package}" >>"$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            cat lookup_error >&2
+            exit 1
+          fi
+          if [[ -z "$ids" ]]; then
+            echo "- No container image tagged ${VERSION}" >>"$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          for id in $ids; do
+            gh api -X DELETE "orgs/${owner}/packages/container/${package}/versions/${id}"
+            echo "- Deleted container image version ${id} (${VERSION})" >>"$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Delete the GitHub prerelease and tag
+        env:
+          GH_TOKEN: ${{ steps.release-token.outputs.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          tag="alpha/v${VERSION}"
+          if [[ "$(cat is_prerelease 2>/dev/null)" == "true" ]]; then
+            gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
+            echo "- Deleted prerelease ${tag}, its Desktop Core sidecars and its tag" >>"$GITHUB_STEP_SUMMARY"
+          else
+            gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/${tag}"
+            echo "- Deleted orphaned tag ${tag} (no release existed)" >>"$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Explain the PyPI follow-up
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          {
+            echo
+            echo "Guard and Desktop alpha updates no longer offer ${VERSION}."
+            echo
+            echo "PyPI keeps hol-guard ${VERSION} because published versions cannot be deleted or reused."
+            echo "pip and uv already skip it unless --pre is set. To hide it from explicit pins too, yank it at"
+            echo "https://pypi.org/manage/project/hol-guard/release/${VERSION}/"
+          } >>"$GITHUB_STEP_SUMMARY"

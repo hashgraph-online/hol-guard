@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import csv
 import hashlib
+import inspect
 import io
 import json
 import os
@@ -103,11 +104,13 @@ def _write_runtime(tmp_path: Path) -> Path:
     return path
 
 
-def _write_source_compiler(tmp_path: Path) -> Path:
-    path = tmp_path / "guard-command-source"
-    path.write_bytes(b"native-source-compiler-fixture-v1")
-    path.chmod(0o755)
-    return path
+def _write_packaged_program_wheel(tmp_path: Path) -> Path:
+    return _write_source_wheel(
+        tmp_path,
+        extra_entries={
+            _NATIVE_PROGRAM_PATH: json.dumps({"program_digest": _RULE_DIGEST}, separators=(",", ":")).encode()
+        },
+    )
 
 
 def _record_digest(content: bytes) -> str:
@@ -120,19 +123,12 @@ def _build(
     *,
     wheel: Path | None = None,
     runtime: Path | None = None,
-    source_compiler: Path | None = None,
     implementation_digest: str | None = None,
     base_program_digest: str | None = None,
+    max_runtime_bytes: int | None = None,
 ) -> Path:
-    if wheel is None and source_compiler is not None:
-        wheel = _write_source_wheel(
-            tmp_path,
-            extra_entries={
-                _NATIVE_PROGRAM_PATH: json.dumps(
-                    {"program_digest": _RULE_DIGEST}, separators=(",", ":")
-                ).encode()
-            },
-        )
+    if wheel is None and implementation_digest is not None:
+        wheel = _write_packaged_program_wheel(tmp_path)
     return build_native_wheel(
         source_wheel=wheel or _write_source_wheel(tmp_path),
         runtime=runtime or _write_runtime(tmp_path),
@@ -142,9 +138,9 @@ def _build(
         target=_TARGET,
         source_sha=_SOURCE_SHA,
         rule_digest=_RULE_DIGEST,
-        source_compiler=source_compiler,
         implementation_digest=implementation_digest,
         base_program_digest=base_program_digest,
+        **({} if max_runtime_bytes is None else {"max_runtime_bytes": max_runtime_bytes}),
     )
 
 
@@ -201,46 +197,6 @@ def test_stop_native_resident_retries_one_transient_unavailable_result(
     assert result
     assert attempts == ["stop", "backoff", "stop", "close"]
     assert result.diagnostic["status"] == "contained"
-
-
-def test_adapter_session_stops_before_broadcasting_worker_client_close(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    events: list[str] = []
-    runner = SimpleNamespace(close_native_resident_clients=lambda: events.append("close") or True)
-    daemon = _DaemonStub(SimpleNamespace(hook_process_runner=runner))
-    session = object.__new__(AdapterSession)
-    session.daemon = daemon
-    session.runtime = tmp_path / "runtime"
-    session.guard_home = tmp_path / "home"
-
-    monkeypatch.setattr(
-        native_slo_session,
-        "stop_native_resident",
-        lambda _runtime, _guard_home, *, preserve_clients=False: events.append("stop") or True,
-    )
-
-    assert session.stop_resident()
-    assert events == ["stop", "close"]
-
-
-def test_adapter_session_keeps_containment_when_worker_client_cleanup_fails(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    runner = SimpleNamespace(close_native_resident_clients=lambda: False)
-    daemon = _DaemonStub(SimpleNamespace(hook_process_runner=runner))
-    session = object.__new__(AdapterSession)
-    session.daemon = daemon
-    session.runtime = tmp_path / "runtime"
-    session.guard_home = tmp_path / "home"
-    contained = native_slo_session.NativeStopResult(True, {"status": "contained"})
-
-    monkeypatch.setattr(native_slo_session, "stop_native_resident", lambda *_args, preserve_clients=False: contained)
-
-    assert session.stop_resident()
-    assert session.last_stop_diagnostic["status"] == "contained_client_cleanup_failed"
 
 
 def test_adapter_session_close_stops_resident_before_daemon_shutdown(
@@ -410,39 +366,41 @@ def test_native_wheel_injects_runtime_manifest_and_valid_record(tmp_path: Path) 
 
 
 def test_native_wheel_injects_verified_source_compiler_manifest(tmp_path: Path) -> None:
-    compiler = _write_source_compiler(tmp_path)
     implementation_digest = "c" * 64
     base_program_digest = _RULE_DIGEST
+    runtime = _write_runtime(tmp_path)
     output = _build(
         tmp_path,
-        source_compiler=compiler,
+        runtime=runtime,
         implementation_digest=implementation_digest,
         base_program_digest=base_program_digest,
     )
 
     with zipfile.ZipFile(output) as archive:
-        compiler_path = "codex_plugin_scanner/_native/guard-command-source"
+        # The runtime hosts the source compiler, so the wheel ships no second
+        # executable and the manifest binds the compiler to the runtime bytes.
+        assert "codex_plugin_scanner/_native/guard-command-source" not in archive.namelist()
         manifest_path = "codex_plugin_scanner/_native/source-compiler-manifest.json"
-        assert archive.read(compiler_path) == compiler.read_bytes()
         assert json.loads(archive.read(manifest_path)) == {
-            "compiler_sha256": hashlib.sha256(compiler.read_bytes()).hexdigest(),
-            "compiler_size": compiler.stat().st_size,
+            "compiler_sha256": hashlib.sha256(runtime.read_bytes()).hexdigest(),
+            "compiler_size": runtime.stat().st_size,
+            "executable": "hol-guard-runtime",
             "base_program_digest": base_program_digest,
             "implementation_digest": implementation_digest,
             "package_version": _VERSION,
             "platform_tag": _PLATFORM_TAG,
             "protocol_version": 1,
-            "schema": "hol-guard-native-source-compiler.v1",
+            "schema": "hol-guard-native-source-compiler.v2",
             "source_sha": _SOURCE_SHA,
             "target": _TARGET,
         }
-        compiler_mode = stat.S_IMODE(archive.getinfo(compiler_path).external_attr >> 16)
-        assert compiler_mode == 0o755
+        manifest_mode = stat.S_IMODE(archive.getinfo(manifest_path).external_attr >> 16)
+        assert manifest_mode == 0o644
 
 
 def test_native_wheel_requires_source_compiler_identity_pair(tmp_path: Path) -> None:
     with pytest.raises(NativeWheelError, match="supplied together"):
-        _build(tmp_path, source_compiler=_write_source_compiler(tmp_path))
+        _build(tmp_path, implementation_digest="c" * 64)
     with pytest.raises(NativeWheelError, match="supplied together"):
         _build(tmp_path, base_program_digest=_RULE_DIGEST)
 
@@ -451,7 +409,6 @@ def test_native_wheel_rejects_source_compiler_program_identity_mismatch(tmp_path
     with pytest.raises(NativeWheelError, match="match the packaged native command program"):
         _build(
             tmp_path,
-            source_compiler=_write_source_compiler(tmp_path),
             implementation_digest="c" * 64,
             base_program_digest="d" * 64,
         )
@@ -462,7 +419,6 @@ def test_native_wheel_requires_packaged_program_for_source_compiler(tmp_path: Pa
         _build(
             tmp_path,
             wheel=_write_source_wheel(tmp_path),
-            source_compiler=_write_source_compiler(tmp_path),
             implementation_digest="c" * 64,
             base_program_digest=_RULE_DIGEST,
         )
@@ -576,3 +532,60 @@ def test_builder_rejects_symlink_runtime(tmp_path: Path) -> None:
     link.symlink_to(target)
     with pytest.raises(NativeWheelError, match="regular non-symlink"):
         _build(tmp_path, runtime=link)
+
+
+def test_builder_keeps_the_shipped_runtime_bound_by_default() -> None:
+    default = inspect.signature(build_native_wheel).parameters["max_runtime_bytes"].default
+    assert default == wheel_builder._MAX_RUNTIME_BYTES == 128 * 1024 * 1024
+
+
+def test_builder_reports_the_runtime_size_it_refused(tmp_path: Path) -> None:
+    runtime = _write_runtime(tmp_path)
+    size = runtime.stat().st_size
+    with pytest.raises(NativeWheelError, match=f"runtime size {size} is outside the accepted bound of 8 bytes"):
+        _build(tmp_path, runtime=runtime, max_runtime_bytes=8)
+
+
+def test_builder_accepts_a_runtime_within_a_raised_bound(tmp_path: Path) -> None:
+    runtime = _write_runtime(tmp_path)
+    output = _build(tmp_path, runtime=runtime, max_runtime_bytes=runtime.stat().st_size)
+    assert output.is_file()
+    with zipfile.ZipFile(output) as archive:
+        assert archive.read(f"{wheel_builder._NATIVE_DIR}/hol-guard-runtime") == runtime.read_bytes()
+
+
+@pytest.mark.parametrize("bound", [0, -1, wheel_builder._MAX_UNPUBLISHED_RUNTIME_BYTES + 1])
+def test_builder_rejects_a_runtime_bound_outside_the_accepted_range(tmp_path: Path, bound: int) -> None:
+    with pytest.raises(NativeWheelError, match="runtime bound must be between"):
+        _build(tmp_path, max_runtime_bytes=bound)
+
+
+def test_builder_cli_carries_the_runtime_bound_through(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    runtime = _write_runtime(tmp_path)
+    wheel = _write_source_wheel(tmp_path)
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "build_native_hol_guard_wheel.py",
+            "--wheel",
+            str(wheel),
+            "--runtime",
+            str(runtime),
+            "--output-dir",
+            str(tmp_path / "native"),
+            "--version",
+            _VERSION,
+            "--platform-tag",
+            _PLATFORM_TAG,
+            "--target",
+            _TARGET,
+            "--source-sha",
+            _SOURCE_SHA,
+            "--rule-digest",
+            _RULE_DIGEST,
+            "--max-runtime-bytes",
+            "8",
+        ],
+    )
+    with pytest.raises(NativeWheelError, match="is outside the accepted bound of 8 bytes"):
+        wheel_builder.main()

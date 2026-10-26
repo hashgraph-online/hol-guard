@@ -1,4 +1,4 @@
-"""Generated Cursor hook must allow when Guard is watch/observe-only."""
+"""Generated Cursor permissions follow evaluator decisions instead of raw local mode."""
 
 from __future__ import annotations
 
@@ -34,13 +34,13 @@ def _cursor_permission(tmp_path: Path, config_text: str) -> Callable[..., object
     return permission
 
 
-def test_generated_cursor_hook_allows_block_in_watch(tmp_path: Path) -> None:
+def test_generated_cursor_hook_preserves_block_and_review_in_local_watch(tmp_path: Path) -> None:
     permission = _cursor_permission(
         tmp_path,
         'mode = "observe"\nprotection_posture = "watch"\n',
     )
-    assert permission("block", {}) == "allow"
-    assert permission("review", {}) == "allow"
+    assert permission("block", {}) == "deny"
+    assert permission("review", {}) == "ask"
 
 
 def test_generated_cursor_hook_still_denies_block_when_protected(tmp_path: Path) -> None:
@@ -95,7 +95,7 @@ def test_generated_cursor_watch_after_shell_exception_prints_empty(
     assert capsys.readouterr().out.strip() == "{}"
 
 
-def test_empty_stdin_before_read_allows_when_event_is_baked(
+def test_empty_stdin_before_read_denies_without_mode_authority(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -117,8 +117,10 @@ def test_empty_stdin_before_read_allows_when_event_is_baked(
     monkeypatch.setattr(sys, "stdin", io.StringIO(""))
     main = script_globals["main"]
     assert callable(main)
-    assert main() == 0
-    assert json.loads(capsys.readouterr().out) == {"permission": "allow"}
+    assert main() == 2
+    response = json.loads(capsys.readouterr().out)
+    assert response["permission"] == "deny"
+    assert "repair Guard from a terminal" in response["user_message"]
 
 
 def test_empty_stdin_before_shell_pauses_when_event_is_baked(
@@ -172,7 +174,7 @@ def test_generated_cursor_hook_ignores_stale_allow_on_completed_block(tmp_path: 
                 "hookSpecificOutput": {"permissionDecision": "deny"},
             },
         )
-        == "allow"
+        == "deny"
     )
 
 
@@ -190,9 +192,7 @@ def test_generated_cursor_hook_write_overrides_conflicting_tool_name(tmp_path: P
     exec(compile(source, "hol-guard-cursor-hook.py", "exec"), script_globals)
     prepare = script_globals["_prepare_cursor_hook_payload"]
     assert callable(prepare)
-    mapped = prepare(
-        {"hook_event_name": "beforeWriteFile", "file_path": "src/app.ts", "tool_name": "Read"}
-    )
+    mapped = prepare({"hook_event_name": "beforeWriteFile", "file_path": "src/app.ts", "tool_name": "Read"})
     assert isinstance(mapped, dict)
     assert mapped["tool_name"] == "Write"
 
@@ -226,15 +226,17 @@ def test_generated_availability_denies_blocking_when_policy_import_fails(
         hook_event_name="beforeShellExecution",
         workspace=None,
     )
-    assert deny == {"permission": "deny"}
+    assert deny["permission"] == "deny"
+    assert "terminal" in deny["user_message"]
     assert deny_code == 2
     allow, allow_code = availability(
         {"hook_event_name": "beforeReadFile"},
         hook_event_name="beforeReadFile",
         workspace=None,
     )
-    assert allow == {"permission": "allow"}
-    assert allow_code == 0
+    assert allow["permission"] == "deny"
+    assert "terminal" in allow["user_message"]
+    assert allow_code == 2
 
 
 def test_generated_fallback_uses_guard_cli_when_isolated_runtime_missing(
@@ -246,7 +248,7 @@ def test_generated_fallback_uses_guard_cli_when_isolated_runtime_missing(
     guard_home.mkdir()
     fake_cli = tmp_path / "fake-guard.py"
     fake_cli.write_text(
-        "import sys\nprint('{\"policy_action\":\"block\"}')\nraise SystemExit(2)\n",
+        'import sys\nprint(\'{"policy_action":"block"}\')\nraise SystemExit(2)\n',
         encoding="utf-8",
     )
     source = cursor_hook_script_source(

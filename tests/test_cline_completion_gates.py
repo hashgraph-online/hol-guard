@@ -19,11 +19,9 @@ from codex_plugin_scanner.guard.adapters.cline_plugin import _plugin_source, cli
 from codex_plugin_scanner.guard.adapters.contracts import contract_for
 from codex_plugin_scanner.guard.cli.commands_support_interaction import _apps_disconnect_confirm_command
 from codex_plugin_scanner.guard.cli.install_commands import build_harness_verification
-from codex_plugin_scanner.guard.product_model import (
-    CANONICAL_HARNESS_VALUES,
-    SUPPORTED_HARNESS_VALUES,
-    export_product_model_v1,
-)
+from codex_plugin_scanner.guard.product_model import CANONICAL_HARNESS_VALUES, SUPPORTED_HARNESS_VALUES
+
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -101,18 +99,6 @@ def test_cline_is_in_static_supported_contracts() -> None:
     assert contract.surface_capabilities == ("auto", "hooks", "plugin", "cli", "all")
     assert "cline" in CANONICAL_HARNESS_VALUES
     assert "cline" in SUPPORTED_HARNESS_VALUES
-
-
-def test_checked_product_schema_matches_exported_cline_membership() -> None:
-    schema_path = (
-        Path(__file__).parents[1] / "src" / "codex_plugin_scanner" / "guard" / "schemas" / "guard_product_model_v1.json"
-    )
-    schema = json.loads(schema_path.read_text(encoding="utf-8"))
-    exported = export_product_model_v1()
-    assert schema["canonical_harnesses"] == exported["canonical_harnesses"]
-    assert schema["supported_harnesses"] == exported["supported_harnesses"]
-    assert "cline" in schema["canonical_harnesses"]
-    assert "cline" in schema["supported_harnesses"]
 
 
 def test_apps_parser_accepts_every_cline_transport_surface() -> None:
@@ -275,7 +261,8 @@ def test_plugin_ready_requires_block_and_replacement_proofs(tmp_path: Path) -> N
     assert state["ready"] is True
 
 
-def test_real_guard_policy_requires_review_for_cline_env_read(tmp_path: Path) -> None:
+@pytest.mark.usefixtures("native_hook_force")
+def test_real_guard_policy_blocks_cline_env_read_without_prompt_by_default(tmp_path: Path) -> None:
     context = _context(tmp_path)
     secret_path = context.workspace_dir / ".env"
     secret_name = "OPENAI_" + "API_KEY"
@@ -316,13 +303,17 @@ def test_real_guard_policy_requires_review_for_cline_env_read(tmp_path: Path) ->
         timeout=30,
         check=False,
     )
-    assert result.returncode == 1, result.stdout + result.stderr
+    assert result.returncode == 0, result.stdout + result.stderr
     response = json.loads(result.stdout)
-    assert response["policy_action"] == "require-reapproval"
-    assert response["artifact_id"].startswith("cline:project:file-read:")
-    assert response["policy_composition"]["current_config_action"] == "require-reapproval"
+    assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert response["policy_action"] == "block"
+    assert response["reason_code"] == "native_policy_reapproval_required"
+    assert response["blocked_request_mode"] == "safe-alternative"
+    assert response["prompted"] is False
+    assert secret_value not in result.stdout
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_real_guard_policy_withholds_cline_credential_output(tmp_path: Path) -> None:
     context = _context(tmp_path)
     source_path = context.workspace_dir / "public.txt"
@@ -361,11 +352,9 @@ def test_real_guard_policy_withholds_cline_credential_output(tmp_path: Path) -> 
         timeout=30,
         check=False,
     )
-    assert result.returncode == 1, result.stdout + result.stderr
+    assert result.returncode == 0, result.stdout + result.stderr
     response = json.loads(result.stdout)
-    assert response["policy_action"] == "require-reapproval"
-    assert ":tool-output:" in response["artifact_id"]
-    assert response["policy_composition"]["current_config_action"] == "require-reapproval"
+    assert response == {"decision": "deny", "model_output_action": "block", "policy_action": "block"}
     serialized = json.dumps(response)
     assert credential not in serialized
 

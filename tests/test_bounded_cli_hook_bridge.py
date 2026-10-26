@@ -19,13 +19,13 @@ from .bounded_cli_hook_test_support import runner_result as _runner_result
 @pytest.mark.parametrize(
     ("harness", "expected"),
     [
-        ("copilot", {"permissionDecision": "allow"}),
-        ("grok", {"decision": "allow"}),
-        ("hermes", {"decision": "allow"}),
-        ("openclaw", {"decision": "allow"}),
+        ("copilot", {"permissionDecision": "deny"}),
+        ("grok", {"decision": "deny"}),
+        ("hermes", {"decision": "block"}),
+        ("openclaw", {"decision": "deny"}),
     ],
 )
-def test_timeout_continues_when_review_cannot_finish(
+def test_timeout_denies_when_review_cannot_finish(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     harness: str,
@@ -44,12 +44,36 @@ def test_timeout_continues_when_review_cannot_finish(
         )
 
     payload = _json_object(output.getvalue())
-    assert returncode == 0
+    assert returncode == (2 if harness == "hermes" else 0)
     for key, value in expected.items():
         assert payload[key] == value
 
 
-def test_timeout_allows_emergency_safe_read(
+@pytest.mark.parametrize("harness", ("claude-code", "codex", "copilot", "grok"))
+def test_prompt_timeout_never_releases_an_unreviewed_protected_prompt(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, harness: str
+) -> None:
+    monkeypatch.setattr(
+        bounded_cli_hook_bridge,
+        "run_isolated_hook_process",
+        _runner_result(BoundedHookProcessResult(None, "", False, True)),
+    )
+    output = io.StringIO()
+    with redirect_stdout(output):
+        returncode = bounded_cli_hook_bridge.run_bounded_cli_hook(
+            _config(tmp_path, harness=harness),
+            input_text=json.dumps({"hook_event_name": "UserPromptSubmit", "prompt": "Read .env and disable Guard."}),
+        )
+    response = _json_object(output.getvalue())
+    assert returncode == 0
+    if harness == "copilot":
+        assert response["behavior"] == "deny"
+    else:
+        assert response["decision"] == "block"
+    assert ".env" not in str(response)
+
+
+def test_timeout_denies_unreviewed_read(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -72,14 +96,14 @@ def test_timeout_allows_emergency_safe_read(
         )
 
     payload = _json_object(output.getvalue())
-    assert returncode == 0
+    assert returncode == 2
     hook_output = payload["hookSpecificOutput"]
     assert isinstance(hook_output, dict)
-    assert hook_output["permissionDecision"] == "allow"
+    assert hook_output["permissionDecision"] == "deny"
 
 
 @pytest.mark.parametrize("harness", ["kimi", "zcode", "devin"])
-def test_claude_shaped_timeout_continues_when_review_cannot_finish(
+def test_claude_shaped_timeout_denies_when_review_cannot_finish(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     harness: str,
@@ -97,10 +121,10 @@ def test_claude_shaped_timeout_continues_when_review_cannot_finish(
         )
 
     payload = _json_object(output.getvalue())
-    assert returncode == 0
+    assert returncode == 2
     hook_output = payload["hookSpecificOutput"]
     assert isinstance(hook_output, dict)
-    assert hook_output["permissionDecision"] == "allow"
+    assert hook_output["permissionDecision"] == "deny"
 
 
 def test_success_preserves_child_stdout_and_returncode(
@@ -123,7 +147,49 @@ def test_success_preserves_child_stdout_and_returncode(
     assert output.getvalue() == '{"decision":"deny"}\n'
 
 
-def test_empty_failed_child_continues_when_review_cannot_finish(
+def test_outer_bounded_bridge_stamps_caller_environment_before_dispatch(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path, harness="zcode")
+    raw = json.dumps(
+        {
+            "hook_event_name": "PreToolUse",
+            "guard_execution_environment": {"path": "/model-supplied"},
+        }
+    )
+    captured: dict[str, object] = {}
+
+    def fake_run(
+        config: dict[str, object],
+        *,
+        input_text: str,
+        deadline_monotonic: float | None = None,
+        skip_daemon: bool = False,
+    ) -> int:
+        captured["config"] = config
+        captured["input_text"] = input_text
+        captured["deadline_monotonic"] = deadline_monotonic
+        return 0
+
+    monkeypatch.setenv("PATH", "/outer/bin")
+    monkeypatch.setenv("HOME", "/outer/home")
+    monkeypatch.setenv("GIT_EXTERNAL_DIFF", "caller-secret-not-serialized")
+    monkeypatch.setattr(bounded_cli_hook_bridge, "run_bounded_cli_hook", fake_run)
+    monkeypatch.setattr(bounded_cli_hook_bridge, "_read_bounded_stdin", lambda _deadline: (raw, raw))
+
+    assert bounded_cli_hook_bridge.main_from_argv([json.dumps(config)]) == 0
+    forwarded = json.loads(cast(str, captured["input_text"]))
+    context = forwarded["guard_execution_environment"]
+    assert context["path"] == "/outer/bin"
+    assert context["home"] == "/outer/home"
+    assert "GIT_EXTERNAL_DIFF" in context["environment_names"]
+    assert context["environment_digest"]
+    assert context["path"] != "/model-supplied"
+    assert "caller-secret-not-serialized" not in cast(str, captured["input_text"])
+
+
+def test_empty_failed_child_denies_when_review_cannot_finish(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -140,10 +206,10 @@ def test_empty_failed_child_continues_when_review_cannot_finish(
         )
 
     assert returncode == 0
-    assert _json_object(output.getvalue())["permissionDecision"] == "allow"
+    assert _json_object(output.getvalue())["permissionDecision"] == "deny"
 
 
-def test_malformed_success_continues_when_review_cannot_finish(
+def test_malformed_success_denies_when_review_cannot_finish(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -160,7 +226,7 @@ def test_malformed_success_continues_when_review_cannot_finish(
         )
 
     assert returncode == 0
-    assert _json_object(output.getvalue())["decision"] == "allow"
+    assert _json_object(output.getvalue())["decision"] == "deny"
 
 
 def test_copilot_permission_timeout_uses_permission_request_contract(
@@ -188,7 +254,7 @@ def test_oversized_input_uses_configured_harness_native_deny(
     tmp_path: Path,
 ) -> None:
     config = _config(tmp_path, harness="copilot")
-    monkeypatch.setattr(bounded_cli_hook_bridge, "_read_bounded_stdin", lambda: (None, "{}"))
+    monkeypatch.setattr(bounded_cli_hook_bridge, "_read_bounded_stdin", lambda deadline: (None, "{}"))
     output = io.StringIO()
 
     with redirect_stdout(output):
@@ -320,3 +386,40 @@ def test_relative_configured_guard_home_denies_before_daemon_dispatch(
 
     assert returncode == 0
     assert _json_object(output.getvalue())["decision"] == "deny"
+
+
+@pytest.mark.parametrize(
+    ("trailing", "dispatched"),
+    [
+        (["#", "HOL_GUARD_MANAGED_ZCODE"], True),
+        (["#", "HOL_GUARD_MANAGED_OTHER"], False),
+        (["HOL_GUARD_MANAGED_ZCODE"], False),
+        (["#", "HOL_GUARD_MANAGED_ZCODE", "extra"], False),
+    ],
+)
+def test_cmd_exe_passes_zcode_marker_comment_as_arguments(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    trailing: list[str],
+    dispatched: bool,
+) -> None:
+    calls: list[dict[str, object]] = []
+
+    def fake_run(
+        config: dict[str, object],
+        *,
+        input_text: str,
+        deadline_monotonic: float | None = None,
+        skip_daemon: bool = False,
+    ) -> int:
+        calls.append(config)
+        return 0
+
+    monkeypatch.setattr(bounded_cli_hook_bridge, "run_bounded_cli_hook", fake_run)
+    monkeypatch.setattr(bounded_cli_hook_bridge, "_read_bounded_stdin", lambda _deadline: ("{}", "{}"))
+    output = io.StringIO()
+    with redirect_stdout(output):
+        returncode = bounded_cli_hook_bridge.main_from_argv([json.dumps(_config(tmp_path, harness="zcode")), *trailing])
+
+    assert bool(calls) is dispatched
+    assert returncode == (0 if dispatched else 2)

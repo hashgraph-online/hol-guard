@@ -8,8 +8,12 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TypedDict, TypeGuard
 
+import pytest
+
 from codex_plugin_scanner.guard.runtime import local_request_snapshots
 from codex_plugin_scanner.guard.store import GuardStore
+
+pytestmark = pytest.mark.usefixtures("native_approval_reuse_runtime")
 
 
 class SnapshotPayload(TypedDict):

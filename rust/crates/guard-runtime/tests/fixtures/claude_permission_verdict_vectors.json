@@ -1,0 +1,1305 @@
+[
+ {
+  "artifact_policy": null,
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": false
+  },
+  "verdict": {
+   "artifact_action": null,
+   "offers_approval": false,
+   "policy_action": null,
+   "reason": null,
+   "reason_from_artifact": false,
+   "verdict": "passthrough"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "allow",
+   "package_action": null
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": null,
+   "offers_approval": false,
+   "policy_action": null,
+   "reason": null,
+   "reason_from_artifact": false,
+   "verdict": "passthrough"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "allow",
+   "package_action": "allow"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": null,
+   "offers_approval": false,
+   "policy_action": null,
+   "reason": null,
+   "reason_from_artifact": false,
+   "verdict": "passthrough"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "allow",
+   "package_action": "warn"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": null,
+   "offers_approval": false,
+   "policy_action": null,
+   "reason": null,
+   "reason_from_artifact": false,
+   "verdict": "passthrough"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "allow",
+   "package_action": "review"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "review",
+   "offers_approval": true,
+   "policy_action": "require-reapproval",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "review"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "allow",
+   "package_action": "require-reapproval"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "require-reapproval",
+   "offers_approval": true,
+   "policy_action": "require-reapproval",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "review"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "allow",
+   "package_action": "sandbox-required"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "sandbox-required",
+   "offers_approval": false,
+   "policy_action": "sandbox-required",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "deny"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "allow",
+   "package_action": "block"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "block",
+   "offers_approval": false,
+   "policy_action": "block",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "deny"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "allow",
+   "package_action": "ask"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "review",
+   "offers_approval": true,
+   "policy_action": "require-reapproval",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "review"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "allow",
+   "package_action": "bogus"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "review",
+   "offers_approval": true,
+   "policy_action": "require-reapproval",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "review"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "warn",
+   "package_action": null
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": null,
+   "offers_approval": false,
+   "policy_action": null,
+   "reason": null,
+   "reason_from_artifact": false,
+   "verdict": "passthrough"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "warn",
+   "package_action": "allow"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": null,
+   "offers_approval": false,
+   "policy_action": null,
+   "reason": null,
+   "reason_from_artifact": false,
+   "verdict": "passthrough"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "warn",
+   "package_action": "warn"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": null,
+   "offers_approval": false,
+   "policy_action": null,
+   "reason": null,
+   "reason_from_artifact": false,
+   "verdict": "passthrough"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "warn",
+   "package_action": "review"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "review",
+   "offers_approval": true,
+   "policy_action": "require-reapproval",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "review"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "warn",
+   "package_action": "require-reapproval"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "require-reapproval",
+   "offers_approval": true,
+   "policy_action": "require-reapproval",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "review"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "warn",
+   "package_action": "sandbox-required"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "sandbox-required",
+   "offers_approval": false,
+   "policy_action": "sandbox-required",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "deny"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "warn",
+   "package_action": "block"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "block",
+   "offers_approval": false,
+   "policy_action": "block",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "deny"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "warn",
+   "package_action": "ask"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "review",
+   "offers_approval": true,
+   "policy_action": "require-reapproval",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "review"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "warn",
+   "package_action": "bogus"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "review",
+   "offers_approval": true,
+   "policy_action": "require-reapproval",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "review"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "review",
+   "package_action": null
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "review",
+   "offers_approval": true,
+   "policy_action": "require-reapproval",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "review"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "review",
+   "package_action": "allow"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "review",
+   "offers_approval": true,
+   "policy_action": "require-reapproval",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "review"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "review",
+   "package_action": "warn"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "review",
+   "offers_approval": true,
+   "policy_action": "require-reapproval",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "review"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "review",
+   "package_action": "review"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "review",
+   "offers_approval": true,
+   "policy_action": "require-reapproval",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "review"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "review",
+   "package_action": "require-reapproval"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "require-reapproval",
+   "offers_approval": true,
+   "policy_action": "require-reapproval",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "review"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "review",
+   "package_action": "sandbox-required"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "sandbox-required",
+   "offers_approval": false,
+   "policy_action": "sandbox-required",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "deny"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "review",
+   "package_action": "block"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "block",
+   "offers_approval": false,
+   "policy_action": "block",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "deny"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "review",
+   "package_action": "ask"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "review",
+   "offers_approval": true,
+   "policy_action": "require-reapproval",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "review"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "review",
+   "package_action": "bogus"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "review",
+   "offers_approval": true,
+   "policy_action": "require-reapproval",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "review"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "require-reapproval",
+   "package_action": null
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "require-reapproval",
+   "offers_approval": true,
+   "policy_action": "require-reapproval",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "review"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "require-reapproval",
+   "package_action": "allow"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "require-reapproval",
+   "offers_approval": true,
+   "policy_action": "require-reapproval",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "review"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "require-reapproval",
+   "package_action": "warn"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "require-reapproval",
+   "offers_approval": true,
+   "policy_action": "require-reapproval",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "review"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "require-reapproval",
+   "package_action": "review"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "require-reapproval",
+   "offers_approval": true,
+   "policy_action": "require-reapproval",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "review"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "require-reapproval",
+   "package_action": "require-reapproval"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "require-reapproval",
+   "offers_approval": true,
+   "policy_action": "require-reapproval",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "review"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "require-reapproval",
+   "package_action": "sandbox-required"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "sandbox-required",
+   "offers_approval": false,
+   "policy_action": "sandbox-required",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "deny"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "require-reapproval",
+   "package_action": "block"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "block",
+   "offers_approval": false,
+   "policy_action": "block",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "deny"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "require-reapproval",
+   "package_action": "ask"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "require-reapproval",
+   "offers_approval": true,
+   "policy_action": "require-reapproval",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "review"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "require-reapproval",
+   "package_action": "bogus"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "require-reapproval",
+   "offers_approval": true,
+   "policy_action": "require-reapproval",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "review"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "sandbox-required",
+   "package_action": null
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "sandbox-required",
+   "offers_approval": false,
+   "policy_action": "sandbox-required",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "deny"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "sandbox-required",
+   "package_action": "allow"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "sandbox-required",
+   "offers_approval": false,
+   "policy_action": "sandbox-required",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "deny"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "sandbox-required",
+   "package_action": "warn"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "sandbox-required",
+   "offers_approval": false,
+   "policy_action": "sandbox-required",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "deny"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "sandbox-required",
+   "package_action": "review"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "sandbox-required",
+   "offers_approval": false,
+   "policy_action": "sandbox-required",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "deny"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "sandbox-required",
+   "package_action": "require-reapproval"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "sandbox-required",
+   "offers_approval": false,
+   "policy_action": "sandbox-required",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "deny"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "sandbox-required",
+   "package_action": "sandbox-required"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "sandbox-required",
+   "offers_approval": false,
+   "policy_action": "sandbox-required",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "deny"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "sandbox-required",
+   "package_action": "block"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "block",
+   "offers_approval": false,
+   "policy_action": "block",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "deny"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "sandbox-required",
+   "package_action": "ask"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "sandbox-required",
+   "offers_approval": false,
+   "policy_action": "sandbox-required",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "deny"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "sandbox-required",
+   "package_action": "bogus"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "sandbox-required",
+   "offers_approval": false,
+   "policy_action": "sandbox-required",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "deny"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "block",
+   "package_action": null
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "block",
+   "offers_approval": false,
+   "policy_action": "block",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "deny"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "block",
+   "package_action": "allow"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "block",
+   "offers_approval": false,
+   "policy_action": "block",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "deny"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "block",
+   "package_action": "warn"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "block",
+   "offers_approval": false,
+   "policy_action": "block",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "deny"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "block",
+   "package_action": "review"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "block",
+   "offers_approval": false,
+   "policy_action": "block",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "deny"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "block",
+   "package_action": "require-reapproval"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "block",
+   "offers_approval": false,
+   "policy_action": "block",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "deny"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "block",
+   "package_action": "sandbox-required"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "block",
+   "offers_approval": false,
+   "policy_action": "block",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "deny"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "block",
+   "package_action": "block"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "block",
+   "offers_approval": false,
+   "policy_action": "block",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "deny"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "block",
+   "package_action": "ask"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "block",
+   "offers_approval": false,
+   "policy_action": "block",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "deny"
+  }
+ },
+ {
+  "artifact_policy": {
+   "config_action": "block",
+   "package_action": "bogus"
+  },
+  "inputs": {
+   "notice": null,
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": "block",
+   "offers_approval": false,
+   "policy_action": "block",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": true,
+   "verdict": "deny"
+  }
+ },
+ {
+  "artifact_policy": null,
+  "inputs": {
+   "notice": {},
+   "runtime_artifact_present": false
+  },
+  "verdict": {
+   "artifact_action": null,
+   "offers_approval": true,
+   "policy_action": "block",
+   "reason": "HOL Guard is routing this approval through AskUserQuestion.",
+   "reason_from_artifact": false,
+   "verdict": "guard_question"
+  }
+ },
+ {
+  "artifact_policy": null,
+  "inputs": {
+   "notice": {},
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": null,
+   "offers_approval": true,
+   "policy_action": "block",
+   "reason": "HOL Guard is routing this approval through AskUserQuestion.",
+   "reason_from_artifact": false,
+   "verdict": "guard_question"
+  }
+ },
+ {
+  "artifact_policy": null,
+  "inputs": {
+   "notice": {
+    "artifact_type": "tool_action_request",
+    "reason": "Guard is reviewing this shell command."
+   },
+   "runtime_artifact_present": false
+  },
+  "verdict": {
+   "artifact_action": null,
+   "offers_approval": true,
+   "policy_action": "block",
+   "reason": "HOL Guard is routing this approval through AskUserQuestion.",
+   "reason_from_artifact": false,
+   "verdict": "guard_question"
+  }
+ },
+ {
+  "artifact_policy": null,
+  "inputs": {
+   "notice": {
+    "artifact_type": "tool_action_request",
+    "reason": "Guard is reviewing this shell command."
+   },
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": null,
+   "offers_approval": true,
+   "policy_action": "block",
+   "reason": "HOL Guard is routing this approval through AskUserQuestion.",
+   "reason_from_artifact": false,
+   "verdict": "guard_question"
+  }
+ },
+ {
+  "artifact_policy": null,
+  "inputs": {
+   "notice": {
+    "artifact_type": "package_request",
+    "reason": "Guard is reviewing this package install."
+   },
+   "runtime_artifact_present": false
+  },
+  "verdict": {
+   "artifact_action": null,
+   "offers_approval": true,
+   "policy_action": "require-reapproval",
+   "reason": "Guard is reviewing this package install.",
+   "reason_from_artifact": false,
+   "verdict": "review"
+  }
+ },
+ {
+  "artifact_policy": null,
+  "inputs": {
+   "notice": {
+    "artifact_type": "package_request",
+    "reason": "Guard is reviewing this package install."
+   },
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": null,
+   "offers_approval": true,
+   "policy_action": "require-reapproval",
+   "reason": "Guard is reviewing this package install.",
+   "reason_from_artifact": false,
+   "verdict": "review"
+  }
+ },
+ {
+  "artifact_policy": null,
+  "inputs": {
+   "notice": {
+    "artifact_type": " package_request ",
+    "reason": "  Padded package reason.  "
+   },
+   "runtime_artifact_present": false
+  },
+  "verdict": {
+   "artifact_action": null,
+   "offers_approval": true,
+   "policy_action": "require-reapproval",
+   "reason": "Padded package reason.",
+   "reason_from_artifact": false,
+   "verdict": "review"
+  }
+ },
+ {
+  "artifact_policy": null,
+  "inputs": {
+   "notice": {
+    "artifact_type": " package_request ",
+    "reason": "  Padded package reason.  "
+   },
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": null,
+   "offers_approval": true,
+   "policy_action": "require-reapproval",
+   "reason": "Padded package reason.",
+   "reason_from_artifact": false,
+   "verdict": "review"
+  }
+ },
+ {
+  "artifact_policy": null,
+  "inputs": {
+   "notice": {
+    "artifact_type": "package_request",
+    "reason": "   "
+   },
+   "runtime_artifact_present": false
+  },
+  "verdict": {
+   "artifact_action": null,
+   "offers_approval": true,
+   "policy_action": "require-reapproval",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": false,
+   "verdict": "review"
+  }
+ },
+ {
+  "artifact_policy": null,
+  "inputs": {
+   "notice": {
+    "artifact_type": "package_request",
+    "reason": "   "
+   },
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": null,
+   "offers_approval": true,
+   "policy_action": "require-reapproval",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": false,
+   "verdict": "review"
+  }
+ },
+ {
+  "artifact_policy": null,
+  "inputs": {
+   "notice": {
+    "artifact_type": "package_request"
+   },
+   "runtime_artifact_present": false
+  },
+  "verdict": {
+   "artifact_action": null,
+   "offers_approval": true,
+   "policy_action": "require-reapproval",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": false,
+   "verdict": "review"
+  }
+ },
+ {
+  "artifact_policy": null,
+  "inputs": {
+   "notice": {
+    "artifact_type": "package_request"
+   },
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": null,
+   "offers_approval": true,
+   "policy_action": "require-reapproval",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": false,
+   "verdict": "review"
+  }
+ },
+ {
+  "artifact_policy": null,
+  "inputs": {
+   "notice": {
+    "artifact_type": "package_request",
+    "reason": 7
+   },
+   "runtime_artifact_present": false
+  },
+  "verdict": {
+   "artifact_action": null,
+   "offers_approval": true,
+   "policy_action": "require-reapproval",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": false,
+   "verdict": "review"
+  }
+ },
+ {
+  "artifact_policy": null,
+  "inputs": {
+   "notice": {
+    "artifact_type": "package_request",
+    "reason": 7
+   },
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": null,
+   "offers_approval": true,
+   "policy_action": "require-reapproval",
+   "reason": "HOL Guard is reviewing this Claude approval prompt.",
+   "reason_from_artifact": false,
+   "verdict": "review"
+  }
+ },
+ {
+  "artifact_policy": null,
+  "inputs": {
+   "notice": {
+    "artifact_type": 5,
+    "reason": "Non-string artifact type."
+   },
+   "runtime_artifact_present": false
+  },
+  "verdict": {
+   "artifact_action": null,
+   "offers_approval": true,
+   "policy_action": "block",
+   "reason": "HOL Guard is routing this approval through AskUserQuestion.",
+   "reason_from_artifact": false,
+   "verdict": "guard_question"
+  }
+ },
+ {
+  "artifact_policy": null,
+  "inputs": {
+   "notice": {
+    "artifact_type": 5,
+    "reason": "Non-string artifact type."
+   },
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": null,
+   "offers_approval": true,
+   "policy_action": "block",
+   "reason": "HOL Guard is routing this approval through AskUserQuestion.",
+   "reason_from_artifact": false,
+   "verdict": "guard_question"
+  }
+ },
+ {
+  "artifact_policy": null,
+  "inputs": {
+   "notice": {
+    "artifact_type": "PACKAGE_REQUEST",
+    "reason": "Upper-case artifact type."
+   },
+   "runtime_artifact_present": false
+  },
+  "verdict": {
+   "artifact_action": null,
+   "offers_approval": true,
+   "policy_action": "block",
+   "reason": "HOL Guard is routing this approval through AskUserQuestion.",
+   "reason_from_artifact": false,
+   "verdict": "guard_question"
+  }
+ },
+ {
+  "artifact_policy": null,
+  "inputs": {
+   "notice": {
+    "artifact_type": "PACKAGE_REQUEST",
+    "reason": "Upper-case artifact type."
+   },
+   "runtime_artifact_present": true
+  },
+  "verdict": {
+   "artifact_action": null,
+   "offers_approval": true,
+   "policy_action": "block",
+   "reason": "HOL Guard is routing this approval through AskUserQuestion.",
+   "reason_from_artifact": false,
+   "verdict": "guard_question"
+  }
+ }
+]

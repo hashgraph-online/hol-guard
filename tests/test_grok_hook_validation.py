@@ -6,6 +6,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -21,7 +22,10 @@ from codex_plugin_scanner.guard.cli.native_install_checks import (
 def _command(tmp_path: Path) -> tuple[str, ...]:
     """Use the real generator so validation remains compatible with installed hooks."""
     context = HarnessContext(tmp_path / "home", tmp_path / "workspace", tmp_path / "guard")
-    return GrokHarnessAdapter._hook_command_parts(context)
+    with patch(
+        "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.isolated_cursor_hook_python", return_value=None
+    ):
+        return GrokHarnessAdapter._hook_command_parts(context)
 
 
 def test_generated_grok_bridge_is_recognized(tmp_path: Path) -> None:
@@ -66,9 +70,10 @@ def test_frozen_generated_grok_bridge_is_recognized(tmp_path: Path, monkeypatch:
     assert is_grok_hook_command(_shell_command(_command(tmp_path))) is True
 
 
-def test_isolated_frozen_grok_client_is_recognized(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Frozen Core prefers the stdlib client that posts to the running daemon."""
-    monkeypatch.setattr(sys, "frozen", True, raising=False)
+@pytest.mark.parametrize("frozen", [False, True])
+def test_isolated_grok_client_is_recognized(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, frozen: bool) -> None:
+    """Wheel and frozen installs validate the same trusted managed client."""
+    monkeypatch.setattr(sys, "frozen", frozen, raising=False)
     monkeypatch.delenv("HOL_GUARD_DESKTOP", raising=False)
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge.isolated_cursor_hook_python",
@@ -144,7 +149,7 @@ def test_unreadable_grok_managed_config_returns_repair_warning(
     """Unreadable settings degrade readiness rather than breaking status/repair callers."""
     context = HarnessContext(tmp_path / "home", None, tmp_path / "guard")
     monkeypatch.delenv("GROK_HOME", raising=False)
-    path = context.home_dir / ".grok/managed_config.toml"
+    path = context.home_dir / ".grok/config.toml"
     path.parent.mkdir(parents=True)
     path.write_bytes(b"\xff")
     original = Path.read_text

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import ssl
 import sys
 from contextlib import suppress
@@ -96,4 +97,35 @@ def build_managed_ssl_context(ca_bundle_path: str | None) -> ssl.SSLContext:
     return context
 
 
-__all__ = ["ManagedTrustError", "build_managed_ssl_context"]
+def export_managed_trust_roots(context: ssl.SSLContext) -> list[bytes]:
+    """Materialize platform capath roots before exporting trust to native TLS.
+
+    OpenSSL loads hashed-directory roots lazily. Use the same compiled default
+    directory as managed trust, ignoring shell CA overrides and unrelated files.
+    """
+    if sys.platform != "win32":
+        directory = ssl.get_default_verify_paths().openssl_capath
+        if directory and Path(directory).is_dir():
+            try:
+                with os.scandir(directory) as entries:
+                    for index, entry in enumerate(entries):
+                        if index >= 4096:
+                            raise ManagedTrustError("managed_system_trust_invalid")
+                        if re.fullmatch(r"[0-9a-fA-F]{8}\.[0-9]+", entry.name) is None:
+                            continue
+                        with open(entry.path, "rb") as certificate:
+                            data = certificate.read(128 * 1024 + 1)
+                        if len(data) > 128 * 1024:
+                            raise ManagedTrustError("managed_system_trust_invalid")
+                        context.load_verify_locations(
+                            cadata=data.decode("ascii") if b"-----BEGIN CERTIFICATE-----" in data else data
+                        )
+            except (OSError, ssl.SSLError, UnicodeError) as exc:
+                raise ManagedTrustError("managed_system_trust_invalid") from exc
+    roots = context.get_ca_certs(binary_form=True)
+    if len(roots) > 1024 or any(len(root) > 16 * 1024 for root in roots):
+        raise ManagedTrustError("managed_system_trust_invalid")
+    return roots
+
+
+__all__ = ["ManagedTrustError", "build_managed_ssl_context", "export_managed_trust_roots"]

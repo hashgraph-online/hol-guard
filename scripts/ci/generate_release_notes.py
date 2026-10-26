@@ -45,7 +45,18 @@ BULLETED_SECTIONS = {"feat", "fix"}
 
 MAX_SUMMARY_BULLETS = 3
 MAX_BULLET_CHARS = 220
-MAX_RENDERED_CHANGES = 80
+# GitHub rejects release bodies over 125,000 characters. The change list gets
+# most of that; the rest leaves room for the install block, the readiness notes
+# appended after generation and the contributor thanks.
+MAX_CHANGE_LIST_CHARS = 100_000
+MAX_BODY_CHARS = 125_000
+# The publication workflow appends a readiness paragraph to the generated body,
+# so the generator spends less than the whole limit.
+RESERVED_BODY_CHARS = 1_000
+# A release with an unusually wide contributor list still credits people, but
+# the thanks paragraph cannot grow without bound at the change list's expense.
+MAX_CREDITED_CONTRIBUTORS = 100
+_CHANGE_LIST_SLOT = "\x00change-list\x00"
 
 
 @dataclass
@@ -162,12 +173,15 @@ def parse_version_tag(tag: str) -> tuple | None:
 
 
 def channel_tags(tags: Iterable[str], channel: str) -> list[str]:
-    pattern = STABLE_TAG_PATTERN if channel == "stable" else ALPHA_TAG_PATTERN
-    return [tag for tag in tags if pattern.match(tag)]
+    if channel == "stable":
+        return [tag for tag in tags if STABLE_TAG_PATTERN.match(tag)]
+    # Alphas cut from main describe changes since whichever release came last,
+    # so an earlier stable release is as valid a predecessor as an older alpha.
+    return [tag for tag in tags if ALPHA_TAG_PATTERN.match(tag) or STABLE_TAG_PATTERN.match(tag)]
 
 
 def select_previous_tag(tags: Iterable[str], current_version: str, channel: str) -> str | None:
-    """Pick the closest same-channel tag strictly below ``current_version``."""
+    """Pick the closest tag strictly below ``current_version`` that the channel may follow."""
     current = version_sort_key(current_version)
     if current is None:
         return None
@@ -179,7 +193,7 @@ def select_previous_tag(tags: Iterable[str], current_version: str, channel: str)
     return max(candidates)[1] if candidates else None
 
 
-def resolve_previous_release(repo: str, tag: str) -> "PreviousRelease":
+def resolve_previous_release(repo: str, tag: str) -> PreviousRelease:
     """Authoritative per-tag lookup via the GitHub CLI.
 
     One API call, no pagination window: asking about the specific candidate
@@ -207,11 +221,7 @@ def resolve_previous_release(repo: str, tag: str) -> "PreviousRelease":
         payload = json.loads(result.stdout)
     except json.JSONDecodeError:
         return PreviousRelease(status="unavailable")
-    if (
-        isinstance(payload, dict)
-        and payload.get("tag_name") == tag
-        and payload.get("draft") is not True
-    ):
+    if isinstance(payload, dict) and payload.get("tag_name") == tag and payload.get("draft") is not True:
         return PreviousRelease(
             status="published",
             tag=tag,
@@ -284,9 +294,7 @@ def load_changes(end_ref: str, start_ref: str | None, cwd: str | None = None) ->
         sha, subject, author = line.split("\x1f", maxsplit=2)
         if subject.startswith("Merge ") and not MERGE_COMMIT_PATTERN.match(subject):
             continue
-        changes.append(
-            Change(sha=sha, subject=subject, author=author, type="internal", description=subject)
-        )
+        changes.append(Change(sha=sha, subject=subject, author=author, type="internal", description=subject))
     for change in changes:
         parsed = parse_subject(change.pr_title or change.subject)
         if parsed:
@@ -417,7 +425,7 @@ def entry_line(change: Change, repo: str) -> str:
     return f"- {description} ({link}){breaking}"
 
 
-def render_sections(changes: Sequence[Change], repo: str) -> str:
+def render_sections(changes: Sequence[Change], repo: str, *, with_bullets: bool = True) -> str:
     blocks: list[str] = []
     for section in SECTION_ORDER:
         entries = [change for change in changes if change.section == section]
@@ -426,7 +434,7 @@ def render_sections(changes: Sequence[Change], repo: str) -> str:
         lines = [f"## {SECTION_TITLES.get(section, 'Internal')}", ""]
         for change in entries:
             lines.append(entry_line(change, repo))
-            if section in BULLETED_SECTIONS:
+            if with_bullets and section in BULLETED_SECTIONS:
                 for bullet in change.summary_bullets:
                     lines.append(f"  - {bullet}")
         blocks.append("\n".join(lines))
@@ -434,11 +442,10 @@ def render_sections(changes: Sequence[Change], repo: str) -> str:
 
 
 def render_condensed_sections(changes: Sequence[Change], repo: str) -> str:
-    """Summarize very large histories (no previous tag) instead of listing every entry.
+    """Summarize a history too large to list as per-section counts plus a link.
 
-    GitHub caps release bodies at 125,000 characters; a first-of-channel release
-    covering the full project history would exceed that, so render per-section
-    counts plus a link into the commit history.
+    Only reached when even the bare change list exceeds the body budget, such
+    as a first-of-channel release covering the full project history.
     """
     counts: list[tuple[str, int]] = []
     for section in SECTION_ORDER:
@@ -448,8 +455,38 @@ def render_condensed_sections(changes: Sequence[Change], repo: str) -> str:
     lines = ["## Changes by category", ""]
     lines.extend(f"- **{title}**: {count}" for title, count in counts)
     lines.append("")
-    lines.append(f"This release spans too many changes to list; browse the [full commit history](https://github.com/{repo}/commits/{changes[0].sha}).")
+    lines.append(
+        f"This release spans too many changes to list; browse the [full commit history](https://github.com/{repo}/commits/{changes[0].sha})."
+    )
     return "\n".join(lines)
+
+
+def render_change_list(changes: Sequence[Change], repo: str, available: int | None = None) -> str:
+    """List every change, shedding detail only when the list would not fit.
+
+    A large release still names each change: the PR summary bullets go first,
+    and the list falls back to per-section counts only when the bare entries
+    alone exceed the budget. ``available`` is what the rest of the body leaves
+    for the list; the list never spends more than ``MAX_CHANGE_LIST_CHARS``
+    either way.
+    """
+    budget = MAX_CHANGE_LIST_CHARS if available is None else min(available, MAX_CHANGE_LIST_CHARS)
+    full = render_sections(changes, repo)
+    if len(full) <= budget:
+        return full
+    bare = render_sections(changes, repo, with_bullets=False)
+    if len(bare) <= budget:
+        return bare
+    return render_condensed_sections(changes, repo)
+
+
+def render_thanks(contributors: Sequence[tuple[str, bool]]) -> str:
+    """Credit contributors by name, naming the rest by count once the list is wide."""
+    credited = [f"@{name}" if is_login else name for name, is_login in contributors[:MAX_CREDITED_CONTRIBUTORS]]
+    remainder = len(contributors) - len(credited)
+    if remainder:
+        credited.append(f"and {remainder} more")
+    return f"Thanks {', '.join(credited)}!"
 
 
 def render_notes(
@@ -462,6 +499,7 @@ def render_notes(
     previous_tag: str | None,
     source_sha: str,
     previous_release: PreviousRelease | None = None,
+    pypi_deferred: bool = False,
 ) -> str:
     """Render the full release-notes body for one Guard release.
 
@@ -506,39 +544,43 @@ def render_notes(
             since = f" since tag `{previous_tag}` (previous tag has no published release)"
         lines.append(f"**{' • '.join(heading_stats)}**{since}." if heading_stats else f"Released{since}.")
     elif heading_stats:
-        scope_note = (
-            " — the first release on this channel, covering the full history to this point"
-            if changes
-            else ""
-        )
+        scope_note = " — the first release on this channel, covering the full history to this point" if changes else ""
         lines.append(f"**{' • '.join(heading_stats)}**{scope_note}.")
     lines.append("")
 
-    if len(changes) > MAX_RENDERED_CHANGES:
-        lines.append(render_condensed_sections(changes, repo))
-        lines.append("")
-    else:
-        sections = render_sections(changes, repo)
-        if sections:
-            lines.append(sections)
-            lines.append("")
-        else:
-            lines.append("This release ships no user-facing changes; it refreshes release artifacts only.")
-            lines.append("")
+    lines.append(_CHANGE_LIST_SLOT)
+    lines.append("")
 
     lines.append("## Install")
     lines.append("")
-    lines.append("Install this release:")
-    lines.append("")
-    lines.append("```bash")
-    lines.append(f'uv tool install "hol-guard[cisco]=={version}"')
-    lines.append("```")
+    if pypi_deferred:
+        lines.append(
+            "PyPI publication is pending quota availability. Download the verified wheel "
+            f"from the [GitHub release assets](https://github.com/{repo}/releases/tag/{tag}) and install it locally:"
+        )
+        lines.append("")
+        lines.append("```bash")
+        lines.append(f'uv tool install "./hol_guard-{version}-py3-none-any.whl[cisco]"')
+        lines.append("```")
+    elif channel == "alpha":
+        lines.append(
+            "Install the native alpha with `hol-guard update --alpha`, or with the platform wheel "
+            f"attached to [this prerelease](https://github.com/{repo}/releases/tag/{tag}). "
+            "The PyPI upload is the pure wheel only and does not include the native runtime."
+        )
+        lines.append("")
+        lines.append("```bash")
+        lines.append("hol-guard update --alpha")
+        lines.append("```")
+    else:
+        lines.append("Install this release:")
+        lines.append("")
+        lines.append("```bash")
+        lines.append(f'uv tool install "hol-guard[cisco]=={version}"')
+        lines.append("```")
     lines.append("")
     if previous_tag:
-        comparison = (
-            f"[{previous_tag}...{tag}]"
-            f"(https://github.com/{repo}/compare/{previous_tag}...{tag})"
-        )
+        comparison = f"[{previous_tag}...{tag}](https://github.com/{repo}/compare/{previous_tag}...{tag})"
         if published_release:
             lines.append(f"**Full changelog**: {comparison}")
         elif previous_release is not None and previous_release.status == "unavailable":
@@ -555,10 +597,17 @@ def render_notes(
             )
         lines.append("")
     if contributors:
-        credited = [f"@{name}" if is_login else name for name, is_login in contributors]
-        lines.append(f"Thanks {', '.join(credited)}!")
+        lines.append(render_thanks(contributors))
         lines.append("")
-    return "\n".join(lines).rstrip() + "\n"
+    body = "\n".join(lines).rstrip() + "\n"
+
+    # Everything but the change list is already rendered, so what is left of the
+    # body limit is exactly what the list may spend.
+    available = MAX_BODY_CHARS - RESERVED_BODY_CHARS - (len(body) - len(_CHANGE_LIST_SLOT))
+    sections = render_change_list(changes, repo, available) if changes else ""
+    if not sections:
+        sections = "This release ships no user-facing changes; it refreshes release artifacts only."
+    return body.replace(_CHANGE_LIST_SLOT, sections)
 
 
 def main() -> int:
@@ -571,6 +620,11 @@ def main() -> int:
     parser.add_argument("--source-sha", default=None, help="Release commit; defaults to resolving --tag")
     parser.add_argument("--end-ref", default=None, help="Git ref covering the release commits (default: tag/sha)")
     parser.add_argument("--output", default=None, help="Write notes here instead of stdout")
+    parser.add_argument(
+        "--pypi-deferred",
+        action="store_true",
+        help="Render local GitHub-asset installation instructions while PyPI publication is pending",
+    )
     parser.add_argument(
         "--skip-pr-metadata",
         action="store_true",
@@ -624,6 +678,7 @@ def main() -> int:
         previous_tag=previous_tag,
         source_sha=source_sha,
         previous_release=previous_release,
+        pypi_deferred=args.pypi_deferred,
     )
     if args.output:
         with open(args.output, "w", encoding="utf-8") as handle:

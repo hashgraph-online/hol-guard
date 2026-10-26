@@ -5,27 +5,28 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from ...safe_output import write_text_atomic_no_follow
-from ..models import GuardArtifact, HarnessDetection
-from ..shims import install_guard_shim, remove_guard_shim
+from ...safe_output import _normalized_output_path
+from ..aibom_detection import native_adapter_detection
+from ..models import HarnessDetection
+from ..shims import prepare_guard_shim, remove_guard_shim
 from .base import (
     HarnessAdapter,
     HarnessContext,
+    PreparedHarnessInstall,
     _command_available,
     _ensure_path_within_root,
     _json_payload,
     _run_command_probe,
+    detection_request,
 )
 from .cloud_identity import cloud_agent_identity_environment, cloud_agent_identity_hints
 from .openclaw_config import load_config
 from .openclaw_support import (
-    config_artifacts,
     config_path,
     install_state,
     managed_root,
     overlay_payload,
     pretool_payload,
-    skill_artifacts,
 )
 
 _OPENCLAW_MANAGED_APPROVAL_TIER = "native-or-center"
@@ -88,29 +89,36 @@ class OpenClawHarnessAdapter(HarnessAdapter):
 
     def detect(self, context: HarnessContext) -> HarnessDetection:
         path = config_path(context)
-        payload = load_config(path)
-        found_paths: list[str] = []
-        artifacts: list[GuardArtifact] = []
-        if payload:
-            found_paths.append(str(path))
-            artifacts.extend(config_artifacts(context, path, payload))
-        artifacts.extend(skill_artifacts(context, payload, found_paths))
+        request = {
+            **detection_request(self.harness, context),
+            "config_path": str(path),
+            "payload": json.dumps(load_config(path)),
+        }
+        artifacts, found_paths = native_adapter_detection("openclaw_detect", request)
         return HarnessDetection(
             harness=self.harness,
             installed=bool(found_paths) or _command_available(self.executable),
             command_available=_command_available(self.executable),
-            config_paths=tuple(found_paths),
-            artifacts=tuple(artifacts),
+            config_paths=found_paths,
+            artifacts=artifacts,
         )
 
-    def install(self, context: HarnessContext) -> dict[str, object]:
-        shim_manifest = install_guard_shim(self.harness, context)
+    def prepare_install(self, context: HarnessContext) -> PreparedHarnessInstall:
+        from ..codex_hook_recovery import _snapshot
+        from ..runtime_transition import TransitionFile
+
+        prepared_shim = prepare_guard_shim(self.harness, context)
+        shim_manifest = prepared_shim.manifest
         root = managed_root(context)
         manifest_path = root / "manifest.json"
         overlay_path = root / "overlay.json"
         pretool_path = root / "pretool-hook.json"
-        root.mkdir(parents=True, exist_ok=True)
-        existing_manifest = _openclaw_manifest(context)
+        targets = (overlay_path, pretool_path, manifest_path)
+        normalized = [_normalized_output_path(path) for path in targets]
+        before = [_snapshot(path) for path in normalized]
+        existing_manifest = json.loads(before[2].decode("utf-8")) if before[2] is not None else {}
+        if not isinstance(existing_manifest, dict):
+            raise ValueError("OpenClaw managed manifest must be a JSON object.")
         state = install_state(
             existing_manifest=existing_manifest,
             overlay_path=overlay_path,
@@ -118,14 +126,12 @@ class OpenClawHarnessAdapter(HarnessAdapter):
         )
         detection = self.detect(context)
         cloud_identity = cloud_agent_identity_hints(context, runtime=self.harness)
-        write_text_atomic_no_follow(overlay_path, json.dumps(overlay_payload(detection), indent=2) + "\n")
-        write_text_atomic_no_follow(pretool_path, json.dumps(pretool_payload(context=context), indent=2) + "\n")
         raw_notes = shim_manifest.get("notes")
         shim_notes = (
             [str(note) for note in raw_notes if isinstance(note, str)] if isinstance(raw_notes, (list, tuple)) else []
         )
         notes = ["Guard generated an OpenClaw overlay bundle for gateway posture and pre-tool protection.", *shim_notes]
-        manifest = {
+        manifest: dict[str, object] = {
             "harness": self.harness,
             "active": True,
             "config_path": str(overlay_path),
@@ -147,8 +153,32 @@ class OpenClawHarnessAdapter(HarnessAdapter):
         }
         if cloud_identity is not None:
             manifest["cloud_agent_identity"] = cloud_identity
-        write_text_atomic_no_follow(manifest_path, json.dumps(manifest, indent=2) + "\n")
-        return manifest
+        files = list(prepared_shim.files)
+        for path, snapshot, payload in zip(
+            normalized,
+            before,
+            (
+                overlay_payload(detection),
+                pretool_payload(context=context),
+                manifest,
+            ),
+            strict=True,
+        ):
+            mode = path.stat().st_mode & 0o777 if snapshot is not None else 0o600
+            change = TransitionFile(
+                path.resolve(strict=False),
+                snapshot,
+                (json.dumps(payload, indent=2) + "\n").encode("utf-8"),
+                before_mode=mode,
+                after_mode=0o600,
+                no_follow=True,
+            )
+            change.payload()
+            files.append(change)
+        return PreparedHarnessInstall(tuple(files), manifest)
+
+    def install(self, context: HarnessContext) -> dict[str, object]:
+        return self.prepare_install(context).publish(context.guard_home)
 
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
         shim_manifest = remove_guard_shim(self.harness, context)

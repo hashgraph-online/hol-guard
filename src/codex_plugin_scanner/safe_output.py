@@ -62,7 +62,7 @@ def _normalized_output_path(path: Path) -> Path:
     return current / absolute.name
 
 
-def _write_bytes_descriptor_relative(path: Path, payload: bytes) -> None:
+def _write_bytes_descriptor_relative(path: Path, payload: bytes, *, mode: int = 0o600) -> None:
     normalized = _normalized_output_path(path)
     directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
     directory = os.open(normalized.anchor, directory_flags)
@@ -80,11 +80,12 @@ def _write_bytes_descriptor_relative(path: Path, payload: bytes) -> None:
         descriptor = os.open(
             temporary_name,
             os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
-            0o600,
+            mode,
             dir_fd=directory,
         )
         try:
             with os.fdopen(descriptor, "wb") as handle:
+                os.fchmod(handle.fileno(), mode)
                 handle.write(payload)
                 handle.flush()
                 os.fsync(handle.fileno())
@@ -95,6 +96,7 @@ def _write_bytes_descriptor_relative(path: Path, payload: bytes) -> None:
                 src_dir_fd=directory,
                 dst_dir_fd=directory,
             )
+            os.fsync(directory)
         finally:
             if descriptor >= 0:
                 os.close(descriptor)
@@ -104,10 +106,10 @@ def _write_bytes_descriptor_relative(path: Path, payload: bytes) -> None:
         os.close(directory)
 
 
-def write_bytes_atomic_no_follow(path: Path, payload: bytes) -> None:
+def write_bytes_atomic_no_follow(path: Path, payload: bytes, *, mode: int = 0o600) -> None:
     """Atomically replace an output path without following its final symlink."""
     if os.name == "posix":
-        _write_bytes_descriptor_relative(path, payload)
+        _write_bytes_descriptor_relative(path, payload, mode=mode)
         return
     if os.name == "nt":
         from .safe_output_windows import write_bytes_atomic_no_follow_windows
@@ -122,6 +124,8 @@ def write_bytes_atomic_no_follow(path: Path, payload: bytes) -> None:
     temporary = Path(temporary_name)
     try:
         with os.fdopen(descriptor, "wb") as handle:
+            if hasattr(os, "fchmod"):
+                os.fchmod(handle.fileno(), mode)
             handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
@@ -129,6 +133,35 @@ def write_bytes_atomic_no_follow(path: Path, payload: bytes) -> None:
     except BaseException:
         temporary.unlink(missing_ok=True)
         raise
+
+
+def remove_file_no_follow(path: Path) -> None:
+    """Remove exactly one file without traversing untrusted directory links."""
+    if os.name == "nt":
+        from .safe_output_windows import remove_file_no_follow_windows
+
+        remove_file_no_follow_windows(path)
+        return
+    normalized = _normalized_output_path(path)
+    if os.name != "posix":
+        _reject_untrusted_parent_symlinks(normalized)
+        normalized.unlink(missing_ok=True)
+        return
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    directory = os.open(normalized.anchor, flags)
+    try:
+        for part in normalized.parent.parts[1:]:
+            try:
+                child = os.open(part, flags, dir_fd=directory)
+            except FileNotFoundError:
+                return
+            os.close(directory)
+            directory = child
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(normalized.name, dir_fd=directory)
+            os.fsync(directory)
+    finally:
+        os.close(directory)
 
 
 def write_text_atomic_no_follow(path: Path, payload: str, *, encoding: str = "utf-8") -> None:

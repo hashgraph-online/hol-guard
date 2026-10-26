@@ -1,0 +1,3358 @@
+{
+ "order_by": {
+  "artifact_capabilities": "artifact_id, harness",
+  "artifact_diffs": "diff_id",
+  "artifact_hashes": "rowid",
+  "artifact_inventory": "artifact_id, harness",
+  "artifact_snapshots": "artifact_id, harness",
+  "provenance_cache": "artifact_hash",
+  "sync_state": "state_key"
+ },
+ "scenarios": [
+  {
+   "name": "snapshots",
+   "seed": {
+    "artifact_capabilities": [],
+    "artifact_diffs": [],
+    "artifact_hashes": [],
+    "artifact_inventory": [],
+    "artifact_snapshots": [],
+    "provenance_cache": [],
+    "sync_state": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "missing",
+     "method": "get_artifact_snapshot",
+     "native_payload": null,
+     "post_changed": {},
+     "result": null,
+     "wire_args": {
+      "artifact_id": "a1",
+      "harness": "codex"
+     }
+    },
+    {
+     "error": null,
+     "label": "first",
+     "method": "save_artifact_snapshot",
+     "native_payload": null,
+     "post_changed": {
+      "artifact_hashes": [
+       {
+        "artifact_hash": "h1",
+        "artifact_id": "a1",
+        "harness": "codex",
+        "recorded_at": "2026-07-18T20:00:00+00:00"
+       }
+      ],
+      "artifact_snapshots": [
+       {
+        "artifact_hash": "h1",
+        "artifact_id": "a1",
+        "harness": "codex",
+        "recorded_at": "2026-07-18T20:00:00+00:00",
+        "snapshot_json": "{\"b\": 1, \"a\": [1, 2.5, null], \"n\": \"caf\\u00e9\"}"
+       }
+      ]
+     },
+     "result": null,
+     "wire_args": {
+      "artifact_hash": "h1",
+      "artifact_id": "a1",
+      "harness": "codex",
+      "now": "2026-07-18T20:00:00+00:00",
+      "snapshot_json": "{\"b\": 1, \"a\": [1, 2.5, null], \"n\": \"caf\\u00e9\"}"
+     }
+    },
+    {
+     "error": null,
+     "label": "present",
+     "method": "get_artifact_snapshot",
+     "native_payload": {
+      "snapshot_json": "{\"b\": 1, \"a\": [1, 2.5, null], \"n\": \"caf\\u00e9\"}"
+     },
+     "post_changed": {},
+     "result": {
+      "a": [
+       1,
+       2.5,
+       null
+      ],
+      "b": 1,
+      "n": "caf\u00e9"
+     },
+     "wire_args": {
+      "artifact_id": "a1",
+      "harness": "codex"
+     }
+    },
+    {
+     "error": null,
+     "label": "other artifact",
+     "method": "save_artifact_snapshot",
+     "native_payload": null,
+     "post_changed": {
+      "artifact_hashes": [
+       {
+        "artifact_hash": "h1",
+        "artifact_id": "a1",
+        "harness": "codex",
+        "recorded_at": "2026-07-18T20:00:00+00:00"
+       },
+       {
+        "artifact_hash": "h2",
+        "artifact_id": "a2",
+        "harness": "codex",
+        "recorded_at": "2026-07-18T20:00:00+00:00"
+       }
+      ],
+      "artifact_snapshots": [
+       {
+        "artifact_hash": "h1",
+        "artifact_id": "a1",
+        "harness": "codex",
+        "recorded_at": "2026-07-18T20:00:00+00:00",
+        "snapshot_json": "{\"b\": 1, \"a\": [1, 2.5, null], \"n\": \"caf\\u00e9\"}"
+       },
+       {
+        "artifact_hash": "h2",
+        "artifact_id": "a2",
+        "harness": "codex",
+        "recorded_at": "2026-07-18T20:00:00+00:00",
+        "snapshot_json": "{\"x\": true}"
+       }
+      ]
+     },
+     "result": null,
+     "wire_args": {
+      "artifact_hash": "h2",
+      "artifact_id": "a2",
+      "harness": "codex",
+      "now": "2026-07-18T20:00:00+00:00",
+      "snapshot_json": "{\"x\": true}"
+     }
+    },
+    {
+     "error": null,
+     "label": "other harness",
+     "method": "save_artifact_snapshot",
+     "native_payload": null,
+     "post_changed": {
+      "artifact_hashes": [
+       {
+        "artifact_hash": "h1",
+        "artifact_id": "a1",
+        "harness": "codex",
+        "recorded_at": "2026-07-18T20:00:00+00:00"
+       },
+       {
+        "artifact_hash": "h2",
+        "artifact_id": "a2",
+        "harness": "codex",
+        "recorded_at": "2026-07-18T20:00:00+00:00"
+       },
+       {
+        "artifact_hash": "h3",
+        "artifact_id": "a1",
+        "harness": "claude-code",
+        "recorded_at": "2026-07-18T20:00:00+00:00"
+       }
+      ],
+      "artifact_snapshots": [
+       {
+        "artifact_hash": "h3",
+        "artifact_id": "a1",
+        "harness": "claude-code",
+        "recorded_at": "2026-07-18T20:00:00+00:00",
+        "snapshot_json": "{\"y\": 2}"
+       },
+       {
+        "artifact_hash": "h1",
+        "artifact_id": "a1",
+        "harness": "codex",
+        "recorded_at": "2026-07-18T20:00:00+00:00",
+        "snapshot_json": "{\"b\": 1, \"a\": [1, 2.5, null], \"n\": \"caf\\u00e9\"}"
+       },
+       {
+        "artifact_hash": "h2",
+        "artifact_id": "a2",
+        "harness": "codex",
+        "recorded_at": "2026-07-18T20:00:00+00:00",
+        "snapshot_json": "{\"x\": true}"
+       }
+      ]
+     },
+     "result": null,
+     "wire_args": {
+      "artifact_hash": "h3",
+      "artifact_id": "a1",
+      "harness": "claude-code",
+      "now": "2026-07-18T20:00:00+00:00",
+      "snapshot_json": "{\"y\": 2}"
+     }
+    },
+    {
+     "error": null,
+     "label": "overwrite",
+     "method": "save_artifact_snapshot",
+     "native_payload": null,
+     "post_changed": {
+      "artifact_hashes": [
+       {
+        "artifact_hash": "h1",
+        "artifact_id": "a1",
+        "harness": "codex",
+        "recorded_at": "2026-07-18T20:00:00+00:00"
+       },
+       {
+        "artifact_hash": "h2",
+        "artifact_id": "a2",
+        "harness": "codex",
+        "recorded_at": "2026-07-18T20:00:00+00:00"
+       },
+       {
+        "artifact_hash": "h3",
+        "artifact_id": "a1",
+        "harness": "claude-code",
+        "recorded_at": "2026-07-18T20:00:00+00:00"
+       },
+       {
+        "artifact_hash": "h4",
+        "artifact_id": "a1",
+        "harness": "codex",
+        "recorded_at": "2026-07-18T20:05:00+00:00"
+       }
+      ],
+      "artifact_snapshots": [
+       {
+        "artifact_hash": "h3",
+        "artifact_id": "a1",
+        "harness": "claude-code",
+        "recorded_at": "2026-07-18T20:00:00+00:00",
+        "snapshot_json": "{\"y\": 2}"
+       },
+       {
+        "artifact_hash": "h4",
+        "artifact_id": "a1",
+        "harness": "codex",
+        "recorded_at": "2026-07-18T20:05:00+00:00",
+        "snapshot_json": "{\"b\": 2}"
+       },
+       {
+        "artifact_hash": "h2",
+        "artifact_id": "a2",
+        "harness": "codex",
+        "recorded_at": "2026-07-18T20:00:00+00:00",
+        "snapshot_json": "{\"x\": true}"
+       }
+      ]
+     },
+     "result": null,
+     "wire_args": {
+      "artifact_hash": "h4",
+      "artifact_id": "a1",
+      "harness": "codex",
+      "now": "2026-07-18T20:05:00+00:00",
+      "snapshot_json": "{\"b\": 2}"
+     }
+    },
+    {
+     "error": null,
+     "label": "after overwrite",
+     "method": "get_artifact_snapshot",
+     "native_payload": {
+      "snapshot_json": "{\"b\": 2}"
+     },
+     "post_changed": {},
+     "result": {
+      "b": 2
+     },
+     "wire_args": {
+      "artifact_id": "a1",
+      "harness": "codex"
+     }
+    },
+    {
+     "error": null,
+     "label": "codex",
+     "method": "list_artifact_snapshots",
+     "native_payload": [
+      {
+       "artifact_id": "a1",
+       "snapshot_json": "{\"b\": 2}"
+      },
+      {
+       "artifact_id": "a2",
+       "snapshot_json": "{\"x\": true}"
+      }
+     ],
+     "post_changed": {},
+     "result": {
+      "a1": {
+       "b": 2
+      },
+      "a2": {
+       "x": true
+      }
+     },
+     "wire_args": {
+      "harness": "codex"
+     }
+    },
+    {
+     "error": null,
+     "label": "none",
+     "method": "list_artifact_snapshots",
+     "native_payload": [],
+     "post_changed": {},
+     "result": {},
+     "wire_args": {
+      "harness": "unknown"
+     }
+    },
+    {
+     "error": null,
+     "label": "delete",
+     "method": "delete_artifact_snapshot",
+     "native_payload": null,
+     "post_changed": {
+      "artifact_snapshots": [
+       {
+        "artifact_hash": "h3",
+        "artifact_id": "a1",
+        "harness": "claude-code",
+        "recorded_at": "2026-07-18T20:00:00+00:00",
+        "snapshot_json": "{\"y\": 2}"
+       },
+       {
+        "artifact_hash": "h2",
+        "artifact_id": "a2",
+        "harness": "codex",
+        "recorded_at": "2026-07-18T20:00:00+00:00",
+        "snapshot_json": "{\"x\": true}"
+       }
+      ]
+     },
+     "result": null,
+     "wire_args": {
+      "artifact_id": "a1",
+      "harness": "codex"
+     }
+    },
+    {
+     "error": null,
+     "label": "delete again",
+     "method": "delete_artifact_snapshot",
+     "native_payload": null,
+     "post_changed": {},
+     "result": null,
+     "wire_args": {
+      "artifact_id": "a1",
+      "harness": "codex"
+     }
+    },
+    {
+     "error": null,
+     "label": "after delete",
+     "method": "list_artifact_snapshots",
+     "native_payload": [
+      {
+       "artifact_id": "a2",
+       "snapshot_json": "{\"x\": true}"
+      }
+     ],
+     "post_changed": {},
+     "result": {
+      "a2": {
+       "x": true
+      }
+     },
+     "wire_args": {
+      "harness": "codex"
+     }
+    },
+    {
+     "error": null,
+     "label": "scalar snapshot",
+     "method": "save_artifact_snapshot",
+     "native_payload": null,
+     "post_changed": {
+      "artifact_hashes": [
+       {
+        "artifact_hash": "h1",
+        "artifact_id": "a1",
+        "harness": "codex",
+        "recorded_at": "2026-07-18T20:00:00+00:00"
+       },
+       {
+        "artifact_hash": "h2",
+        "artifact_id": "a2",
+        "harness": "codex",
+        "recorded_at": "2026-07-18T20:00:00+00:00"
+       },
+       {
+        "artifact_hash": "h3",
+        "artifact_id": "a1",
+        "harness": "claude-code",
+        "recorded_at": "2026-07-18T20:00:00+00:00"
+       },
+       {
+        "artifact_hash": "h4",
+        "artifact_id": "a1",
+        "harness": "codex",
+        "recorded_at": "2026-07-18T20:05:00+00:00"
+       },
+       {
+        "artifact_hash": "h5",
+        "artifact_id": "a3",
+        "harness": "codex",
+        "recorded_at": "2026-07-18T20:10:00+00:00"
+       }
+      ],
+      "artifact_snapshots": [
+       {
+        "artifact_hash": "h3",
+        "artifact_id": "a1",
+        "harness": "claude-code",
+        "recorded_at": "2026-07-18T20:00:00+00:00",
+        "snapshot_json": "{\"y\": 2}"
+       },
+       {
+        "artifact_hash": "h2",
+        "artifact_id": "a2",
+        "harness": "codex",
+        "recorded_at": "2026-07-18T20:00:00+00:00",
+        "snapshot_json": "{\"x\": true}"
+       },
+       {
+        "artifact_hash": "h5",
+        "artifact_id": "a3",
+        "harness": "codex",
+        "recorded_at": "2026-07-18T20:10:00+00:00",
+        "snapshot_json": "[1, 2]"
+       }
+      ]
+     },
+     "result": null,
+     "wire_args": {
+      "artifact_hash": "h5",
+      "artifact_id": "a3",
+      "harness": "codex",
+      "now": "2026-07-18T20:10:00+00:00",
+      "snapshot_json": "[1, 2]"
+     }
+    },
+    {
+     "error": null,
+     "label": "list snapshot",
+     "method": "get_artifact_snapshot",
+     "native_payload": {
+      "snapshot_json": "[1, 2]"
+     },
+     "post_changed": {},
+     "result": [
+      1,
+      2
+     ],
+     "wire_args": {
+      "artifact_id": "a3",
+      "harness": "codex"
+     }
+    }
+   ]
+  },
+  {
+   "name": "diffs",
+   "seed": {
+    "artifact_capabilities": [],
+    "artifact_diffs": [],
+    "artifact_hashes": [],
+    "artifact_inventory": [],
+    "artifact_snapshots": [],
+    "provenance_cache": [],
+    "sync_state": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "with previous",
+     "method": "record_artifact_diff",
+     "native_payload": null,
+     "post_changed": {
+      "artifact_diffs": [
+       {
+        "artifact_id": "a1",
+        "changed_fields_json": "[\"command\", \"args\"]",
+        "current_hash": "new",
+        "diff_id": 1,
+        "harness": "codex",
+        "previous_hash": "old",
+        "recorded_at": "2026-07-18T20:00:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "wire_args": {
+      "artifact_id": "a1",
+      "changed_fields_json": "[\"command\", \"args\"]",
+      "current_hash": "new",
+      "harness": "codex",
+      "now": "2026-07-18T20:00:00+00:00",
+      "previous_hash": "old"
+     }
+    },
+    {
+     "error": null,
+     "label": "no previous",
+     "method": "record_artifact_diff",
+     "native_payload": null,
+     "post_changed": {
+      "artifact_diffs": [
+       {
+        "artifact_id": "a1",
+        "changed_fields_json": "[\"command\", \"args\"]",
+        "current_hash": "new",
+        "diff_id": 1,
+        "harness": "codex",
+        "previous_hash": "old",
+        "recorded_at": "2026-07-18T20:00:00+00:00"
+       },
+       {
+        "artifact_id": "a1",
+        "changed_fields_json": "[]",
+        "current_hash": "new2",
+        "diff_id": 2,
+        "harness": "codex",
+        "previous_hash": null,
+        "recorded_at": "2026-07-18T20:05:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "wire_args": {
+      "artifact_id": "a1",
+      "changed_fields_json": "[]",
+      "current_hash": "new2",
+      "harness": "codex",
+      "now": "2026-07-18T20:05:00+00:00",
+      "previous_hash": null
+     }
+    },
+    {
+     "error": null,
+     "label": "unicode field",
+     "method": "record_artifact_diff",
+     "native_payload": null,
+     "post_changed": {
+      "artifact_diffs": [
+       {
+        "artifact_id": "a1",
+        "changed_fields_json": "[\"command\", \"args\"]",
+        "current_hash": "new",
+        "diff_id": 1,
+        "harness": "codex",
+        "previous_hash": "old",
+        "recorded_at": "2026-07-18T20:00:00+00:00"
+       },
+       {
+        "artifact_id": "a1",
+        "changed_fields_json": "[]",
+        "current_hash": "new2",
+        "diff_id": 2,
+        "harness": "codex",
+        "previous_hash": null,
+        "recorded_at": "2026-07-18T20:05:00+00:00"
+       },
+       {
+        "artifact_id": "a2",
+        "changed_fields_json": "[\"caf\\u00e9\"]",
+        "current_hash": "new3",
+        "diff_id": 3,
+        "harness": "claude-code",
+        "previous_hash": "new2",
+        "recorded_at": "2026-07-18T20:10:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "wire_args": {
+      "artifact_id": "a2",
+      "changed_fields_json": "[\"caf\\u00e9\"]",
+      "current_hash": "new3",
+      "harness": "claude-code",
+      "now": "2026-07-18T20:10:00+00:00",
+      "previous_hash": "new2"
+     }
+    }
+   ]
+  },
+  {
+   "name": "inventory",
+   "seed": {
+    "artifact_capabilities": [],
+    "artifact_diffs": [],
+    "artifact_hashes": [],
+    "artifact_inventory": [],
+    "artifact_snapshots": [],
+    "provenance_cache": [],
+    "sync_state": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "empty",
+     "method": "list_artifact_inventory",
+     "native_payload": [],
+     "post_changed": {},
+     "result": [],
+     "wire_args": {
+      "harness": null
+     }
+    },
+    {
+     "error": null,
+     "label": "missing",
+     "method": "find_artifact_inventory_item",
+     "native_payload": null,
+     "post_changed": {},
+     "result": null,
+     "wire_args": {
+      "artifact_id": "a1"
+     }
+    },
+    {
+     "error": null,
+     "label": "record a1 allow",
+     "method": "record_inventory_artifact",
+     "native_payload": null,
+     "post_changed": {
+      "artifact_inventory": [
+       {
+        "artifact_hash": "hash-a1-20:00",
+        "artifact_id": "a1",
+        "artifact_name": "name-a1",
+        "artifact_type": "mcp_server",
+        "config_path": "/work/space/.mcp.json",
+        "first_seen_at": "2026-07-18T20:00:00+00:00",
+        "harness": "codex",
+        "last_approved_at": null,
+        "last_changed_at": null,
+        "last_policy_action": "allow",
+        "last_seen_at": "2026-07-18T20:00:00+00:00",
+        "launch_command": "npx -y pkg caf\u00e9",
+        "origin_url": null,
+        "present": 1,
+        "publisher": "acme",
+        "removed_at": null,
+        "source_scope": "project",
+        "transport": "stdio"
+       }
+      ]
+     },
+     "result": null,
+     "wire_args": {
+      "approved": false,
+      "artifact_hash": "hash-a1-20:00",
+      "artifact_id": "a1",
+      "artifact_name": "name-a1",
+      "artifact_type": "mcp_server",
+      "changed": false,
+      "config_path": "/work/space/.mcp.json",
+      "harness": "codex",
+      "launch_command": "npx -y pkg caf\u00e9",
+      "now": "2026-07-18T20:00:00+00:00",
+      "origin_url": null,
+      "policy_action": "allow",
+      "publisher": "acme",
+      "source_scope": "project",
+      "transport": "stdio"
+     }
+    },
+    {
+     "error": null,
+     "label": "record a1 allow",
+     "method": "record_inventory_artifact",
+     "native_payload": null,
+     "post_changed": {
+      "artifact_inventory": [
+       {
+        "artifact_hash": "hash-a1-20:05",
+        "artifact_id": "a1",
+        "artifact_name": "name-a1",
+        "artifact_type": "mcp_server",
+        "config_path": "/work/space/.mcp.json",
+        "first_seen_at": "2026-07-18T20:00:00+00:00",
+        "harness": "codex",
+        "last_approved_at": "2026-07-18T20:05:00+00:00",
+        "last_changed_at": "2026-07-18T20:05:00+00:00",
+        "last_policy_action": "allow",
+        "last_seen_at": "2026-07-18T20:05:00+00:00",
+        "launch_command": "npx -y pkg caf\u00e9",
+        "origin_url": null,
+        "present": 1,
+        "publisher": "acme",
+        "removed_at": null,
+        "source_scope": "project",
+        "transport": "stdio"
+       }
+      ]
+     },
+     "result": null,
+     "wire_args": {
+      "approved": true,
+      "artifact_hash": "hash-a1-20:05",
+      "artifact_id": "a1",
+      "artifact_name": "name-a1",
+      "artifact_type": "mcp_server",
+      "changed": true,
+      "config_path": "/work/space/.mcp.json",
+      "harness": "codex",
+      "launch_command": "npx -y pkg caf\u00e9",
+      "now": "2026-07-18T20:05:00+00:00",
+      "origin_url": null,
+      "policy_action": "allow",
+      "publisher": "acme",
+      "source_scope": "project",
+      "transport": "stdio"
+     }
+    },
+    {
+     "error": null,
+     "label": "record a2 warn",
+     "method": "record_inventory_artifact",
+     "native_payload": null,
+     "post_changed": {
+      "artifact_inventory": [
+       {
+        "artifact_hash": "hash-a1-20:05",
+        "artifact_id": "a1",
+        "artifact_name": "name-a1",
+        "artifact_type": "mcp_server",
+        "config_path": "/work/space/.mcp.json",
+        "first_seen_at": "2026-07-18T20:00:00+00:00",
+        "harness": "codex",
+        "last_approved_at": "2026-07-18T20:05:00+00:00",
+        "last_changed_at": "2026-07-18T20:05:00+00:00",
+        "last_policy_action": "allow",
+        "last_seen_at": "2026-07-18T20:05:00+00:00",
+        "launch_command": "npx -y pkg caf\u00e9",
+        "origin_url": null,
+        "present": 1,
+        "publisher": "acme",
+        "removed_at": null,
+        "source_scope": "project",
+        "transport": "stdio"
+       },
+       {
+        "artifact_hash": "hash-a2-20:05",
+        "artifact_id": "a2",
+        "artifact_name": "alpha",
+        "artifact_type": "mcp_server",
+        "config_path": "/work/space/.mcp.json",
+        "first_seen_at": "2026-07-18T20:05:00+00:00",
+        "harness": "codex",
+        "last_approved_at": "2026-07-18T20:05:00+00:00",
+        "last_changed_at": null,
+        "last_policy_action": "warn",
+        "last_seen_at": "2026-07-18T20:05:00+00:00",
+        "launch_command": "npx -y pkg caf\u00e9",
+        "origin_url": null,
+        "present": 1,
+        "publisher": "acme",
+        "removed_at": null,
+        "source_scope": "project",
+        "transport": "stdio"
+       }
+      ]
+     },
+     "result": null,
+     "wire_args": {
+      "approved": true,
+      "artifact_hash": "hash-a2-20:05",
+      "artifact_id": "a2",
+      "artifact_name": "alpha",
+      "artifact_type": "mcp_server",
+      "changed": false,
+      "config_path": "/work/space/.mcp.json",
+      "harness": "codex",
+      "launch_command": "npx -y pkg caf\u00e9",
+      "now": "2026-07-18T20:05:00+00:00",
+      "origin_url": null,
+      "policy_action": "warn",
+      "publisher": "acme",
+      "source_scope": "project",
+      "transport": "stdio"
+     }
+    },
+    {
+     "error": null,
+     "label": "record a1 review",
+     "method": "record_inventory_artifact",
+     "native_payload": null,
+     "post_changed": {
+      "artifact_inventory": [
+       {
+        "artifact_hash": "hash-a1-20:10",
+        "artifact_id": "a1",
+        "artifact_name": "name-a1",
+        "artifact_type": "mcp_server",
+        "config_path": "/work/space/.mcp.json",
+        "first_seen_at": "2026-07-18T20:10:00+00:00",
+        "harness": "claude-code",
+        "last_approved_at": null,
+        "last_changed_at": null,
+        "last_policy_action": "review",
+        "last_seen_at": "2026-07-18T20:10:00+00:00",
+        "launch_command": null,
+        "origin_url": null,
+        "present": 1,
+        "publisher": "acme",
+        "removed_at": null,
+        "source_scope": "project",
+        "transport": "stdio"
+       },
+       {
+        "artifact_hash": "hash-a1-20:05",
+        "artifact_id": "a1",
+        "artifact_name": "name-a1",
+        "artifact_type": "mcp_server",
+        "config_path": "/work/space/.mcp.json",
+        "first_seen_at": "2026-07-18T20:00:00+00:00",
+        "harness": "codex",
+        "last_approved_at": "2026-07-18T20:05:00+00:00",
+        "last_changed_at": "2026-07-18T20:05:00+00:00",
+        "last_policy_action": "allow",
+        "last_seen_at": "2026-07-18T20:05:00+00:00",
+        "launch_command": "npx -y pkg caf\u00e9",
+        "origin_url": null,
+        "present": 1,
+        "publisher": "acme",
+        "removed_at": null,
+        "source_scope": "project",
+        "transport": "stdio"
+       },
+       {
+        "artifact_hash": "hash-a2-20:05",
+        "artifact_id": "a2",
+        "artifact_name": "alpha",
+        "artifact_type": "mcp_server",
+        "config_path": "/work/space/.mcp.json",
+        "first_seen_at": "2026-07-18T20:05:00+00:00",
+        "harness": "codex",
+        "last_approved_at": "2026-07-18T20:05:00+00:00",
+        "last_changed_at": null,
+        "last_policy_action": "warn",
+        "last_seen_at": "2026-07-18T20:05:00+00:00",
+        "launch_command": "npx -y pkg caf\u00e9",
+        "origin_url": null,
+        "present": 1,
+        "publisher": "acme",
+        "removed_at": null,
+        "source_scope": "project",
+        "transport": "stdio"
+       }
+      ]
+     },
+     "result": null,
+     "wire_args": {
+      "approved": false,
+      "artifact_hash": "hash-a1-20:10",
+      "artifact_id": "a1",
+      "artifact_name": "name-a1",
+      "artifact_type": "mcp_server",
+      "changed": false,
+      "config_path": "/work/space/.mcp.json",
+      "harness": "claude-code",
+      "launch_command": null,
+      "now": "2026-07-18T20:10:00+00:00",
+      "origin_url": null,
+      "policy_action": "review",
+      "publisher": "acme",
+      "source_scope": "project",
+      "transport": "stdio"
+     }
+    },
+    {
+     "error": null,
+     "label": "record a3 ask",
+     "method": "record_inventory_artifact",
+     "native_payload": null,
+     "post_changed": {
+      "artifact_inventory": [
+       {
+        "artifact_hash": "hash-a1-20:10",
+        "artifact_id": "a1",
+        "artifact_name": "name-a1",
+        "artifact_type": "mcp_server",
+        "config_path": "/work/space/.mcp.json",
+        "first_seen_at": "2026-07-18T20:10:00+00:00",
+        "harness": "claude-code",
+        "last_approved_at": null,
+        "last_changed_at": null,
+        "last_policy_action": "review",
+        "last_seen_at": "2026-07-18T20:10:00+00:00",
+        "launch_command": null,
+        "origin_url": null,
+        "present": 1,
+        "publisher": "acme",
+        "removed_at": null,
+        "source_scope": "project",
+        "transport": "stdio"
+       },
+       {
+        "artifact_hash": "hash-a1-20:05",
+        "artifact_id": "a1",
+        "artifact_name": "name-a1",
+        "artifact_type": "mcp_server",
+        "config_path": "/work/space/.mcp.json",
+        "first_seen_at": "2026-07-18T20:00:00+00:00",
+        "harness": "codex",
+        "last_approved_at": "2026-07-18T20:05:00+00:00",
+        "last_changed_at": "2026-07-18T20:05:00+00:00",
+        "last_policy_action": "allow",
+        "last_seen_at": "2026-07-18T20:05:00+00:00",
+        "launch_command": "npx -y pkg caf\u00e9",
+        "origin_url": null,
+        "present": 1,
+        "publisher": "acme",
+        "removed_at": null,
+        "source_scope": "project",
+        "transport": "stdio"
+       },
+       {
+        "artifact_hash": "hash-a2-20:05",
+        "artifact_id": "a2",
+        "artifact_name": "alpha",
+        "artifact_type": "mcp_server",
+        "config_path": "/work/space/.mcp.json",
+        "first_seen_at": "2026-07-18T20:05:00+00:00",
+        "harness": "codex",
+        "last_approved_at": "2026-07-18T20:05:00+00:00",
+        "last_changed_at": null,
+        "last_policy_action": "warn",
+        "last_seen_at": "2026-07-18T20:05:00+00:00",
+        "launch_command": "npx -y pkg caf\u00e9",
+        "origin_url": null,
+        "present": 1,
+        "publisher": "acme",
+        "removed_at": null,
+        "source_scope": "project",
+        "transport": "stdio"
+       },
+       {
+        "artifact_hash": "hash-a3-20:05",
+        "artifact_id": "a3",
+        "artifact_name": "Beta",
+        "artifact_type": "mcp_server",
+        "config_path": "/work/space/.mcp.json",
+        "first_seen_at": "2026-07-18T20:05:00+00:00",
+        "harness": "codex",
+        "last_approved_at": null,
+        "last_changed_at": null,
+        "last_policy_action": "review",
+        "last_seen_at": "2026-07-18T20:05:00+00:00",
+        "launch_command": "uvx -y pkg caf\u00e9",
+        "origin_url": "https://x.example/m",
+        "present": 1,
+        "publisher": "acme",
+        "removed_at": null,
+        "source_scope": "project",
+        "transport": "stdio"
+       }
+      ]
+     },
+     "result": null,
+     "wire_args": {
+      "approved": false,
+      "artifact_hash": "hash-a3-20:05",
+      "artifact_id": "a3",
+      "artifact_name": "Beta",
+      "artifact_type": "mcp_server",
+      "changed": false,
+      "config_path": "/work/space/.mcp.json",
+      "harness": "codex",
+      "launch_command": "uvx -y pkg caf\u00e9",
+      "now": "2026-07-18T20:05:00+00:00",
+      "origin_url": "https://x.example/m",
+      "policy_action": "ask",
+      "publisher": "acme",
+      "source_scope": "project",
+      "transport": "stdio"
+     }
+    },
+    {
+     "error": null,
+     "label": "all",
+     "method": "list_artifact_inventory",
+     "native_payload": [
+      {
+       "artifact_hash": "hash-a1-20:10",
+       "artifact_id": "a1",
+       "artifact_name": "name-a1",
+       "artifact_type": "mcp_server",
+       "config_path": "/work/space/.mcp.json",
+       "first_seen_at": "2026-07-18T20:10:00+00:00",
+       "harness": "claude-code",
+       "last_approved_at": null,
+       "last_changed_at": null,
+       "last_policy_action": "review",
+       "last_seen_at": "2026-07-18T20:10:00+00:00",
+       "launch_command": null,
+       "origin_url": null,
+       "present": true,
+       "publisher": "acme",
+       "removed_at": null,
+       "source_scope": "project",
+       "transport": "stdio"
+      },
+      {
+       "artifact_hash": "hash-a3-20:05",
+       "artifact_id": "a3",
+       "artifact_name": "Beta",
+       "artifact_type": "mcp_server",
+       "config_path": "/work/space/.mcp.json",
+       "first_seen_at": "2026-07-18T20:05:00+00:00",
+       "harness": "codex",
+       "last_approved_at": null,
+       "last_changed_at": null,
+       "last_policy_action": "review",
+       "last_seen_at": "2026-07-18T20:05:00+00:00",
+       "launch_command": "uvx -y pkg caf\u00e9",
+       "origin_url": "https://x.example/m",
+       "present": true,
+       "publisher": "acme",
+       "removed_at": null,
+       "source_scope": "project",
+       "transport": "stdio"
+      },
+      {
+       "artifact_hash": "hash-a2-20:05",
+       "artifact_id": "a2",
+       "artifact_name": "alpha",
+       "artifact_type": "mcp_server",
+       "config_path": "/work/space/.mcp.json",
+       "first_seen_at": "2026-07-18T20:05:00+00:00",
+       "harness": "codex",
+       "last_approved_at": "2026-07-18T20:05:00+00:00",
+       "last_changed_at": null,
+       "last_policy_action": "warn",
+       "last_seen_at": "2026-07-18T20:05:00+00:00",
+       "launch_command": "npx -y pkg caf\u00e9",
+       "origin_url": null,
+       "present": true,
+       "publisher": "acme",
+       "removed_at": null,
+       "source_scope": "project",
+       "transport": "stdio"
+      },
+      {
+       "artifact_hash": "hash-a1-20:05",
+       "artifact_id": "a1",
+       "artifact_name": "name-a1",
+       "artifact_type": "mcp_server",
+       "config_path": "/work/space/.mcp.json",
+       "first_seen_at": "2026-07-18T20:00:00+00:00",
+       "harness": "codex",
+       "last_approved_at": "2026-07-18T20:05:00+00:00",
+       "last_changed_at": "2026-07-18T20:05:00+00:00",
+       "last_policy_action": "allow",
+       "last_seen_at": "2026-07-18T20:05:00+00:00",
+       "launch_command": "npx -y pkg caf\u00e9",
+       "origin_url": null,
+       "present": true,
+       "publisher": "acme",
+       "removed_at": null,
+       "source_scope": "project",
+       "transport": "stdio"
+      }
+     ],
+     "post_changed": {},
+     "result": [
+      {
+       "artifact_hash": "hash-a1-20:10",
+       "artifact_id": "a1",
+       "artifact_name": "name-a1",
+       "artifact_type": "mcp_server",
+       "config_path": "/work/space/.mcp.json",
+       "first_seen_at": "2026-07-18T20:10:00+00:00",
+       "harness": "claude-code",
+       "last_approved_at": null,
+       "last_changed_at": null,
+       "last_policy_action": "review",
+       "last_seen_at": "2026-07-18T20:10:00+00:00",
+       "launch_command": null,
+       "origin_url": null,
+       "present": true,
+       "publisher": "acme",
+       "removed_at": null,
+       "source_scope": "project",
+       "transport": "stdio"
+      },
+      {
+       "artifact_hash": "hash-a3-20:05",
+       "artifact_id": "a3",
+       "artifact_name": "Beta",
+       "artifact_type": "mcp_server",
+       "config_path": "/work/space/.mcp.json",
+       "first_seen_at": "2026-07-18T20:05:00+00:00",
+       "harness": "codex",
+       "last_approved_at": null,
+       "last_changed_at": null,
+       "last_policy_action": "review",
+       "last_seen_at": "2026-07-18T20:05:00+00:00",
+       "launch_command": "uvx -y pkg caf\u00e9",
+       "origin_url": "https://x.example/m",
+       "present": true,
+       "publisher": "acme",
+       "removed_at": null,
+       "source_scope": "project",
+       "transport": "stdio"
+      },
+      {
+       "artifact_hash": "hash-a2-20:05",
+       "artifact_id": "a2",
+       "artifact_name": "alpha",
+       "artifact_type": "mcp_server",
+       "config_path": "/work/space/.mcp.json",
+       "first_seen_at": "2026-07-18T20:05:00+00:00",
+       "harness": "codex",
+       "last_approved_at": "2026-07-18T20:05:00+00:00",
+       "last_changed_at": null,
+       "last_policy_action": "warn",
+       "last_seen_at": "2026-07-18T20:05:00+00:00",
+       "launch_command": "npx -y pkg caf\u00e9",
+       "origin_url": null,
+       "present": true,
+       "publisher": "acme",
+       "removed_at": null,
+       "source_scope": "project",
+       "transport": "stdio"
+      },
+      {
+       "artifact_hash": "hash-a1-20:05",
+       "artifact_id": "a1",
+       "artifact_name": "name-a1",
+       "artifact_type": "mcp_server",
+       "config_path": "/work/space/.mcp.json",
+       "first_seen_at": "2026-07-18T20:00:00+00:00",
+       "harness": "codex",
+       "last_approved_at": "2026-07-18T20:05:00+00:00",
+       "last_changed_at": "2026-07-18T20:05:00+00:00",
+       "last_policy_action": "allow",
+       "last_seen_at": "2026-07-18T20:05:00+00:00",
+       "launch_command": "npx -y pkg caf\u00e9",
+       "origin_url": null,
+       "present": true,
+       "publisher": "acme",
+       "removed_at": null,
+       "source_scope": "project",
+       "transport": "stdio"
+      }
+     ],
+     "wire_args": {
+      "harness": null
+     }
+    },
+    {
+     "error": null,
+     "label": "codex only",
+     "method": "list_artifact_inventory",
+     "native_payload": [
+      {
+       "artifact_hash": "hash-a3-20:05",
+       "artifact_id": "a3",
+       "artifact_name": "Beta",
+       "artifact_type": "mcp_server",
+       "config_path": "/work/space/.mcp.json",
+       "first_seen_at": "2026-07-18T20:05:00+00:00",
+       "harness": "codex",
+       "last_approved_at": null,
+       "last_changed_at": null,
+       "last_policy_action": "review",
+       "last_seen_at": "2026-07-18T20:05:00+00:00",
+       "launch_command": "uvx -y pkg caf\u00e9",
+       "origin_url": "https://x.example/m",
+       "present": true,
+       "publisher": "acme",
+       "removed_at": null,
+       "source_scope": "project",
+       "transport": "stdio"
+      },
+      {
+       "artifact_hash": "hash-a2-20:05",
+       "artifact_id": "a2",
+       "artifact_name": "alpha",
+       "artifact_type": "mcp_server",
+       "config_path": "/work/space/.mcp.json",
+       "first_seen_at": "2026-07-18T20:05:00+00:00",
+       "harness": "codex",
+       "last_approved_at": "2026-07-18T20:05:00+00:00",
+       "last_changed_at": null,
+       "last_policy_action": "warn",
+       "last_seen_at": "2026-07-18T20:05:00+00:00",
+       "launch_command": "npx -y pkg caf\u00e9",
+       "origin_url": null,
+       "present": true,
+       "publisher": "acme",
+       "removed_at": null,
+       "source_scope": "project",
+       "transport": "stdio"
+      },
+      {
+       "artifact_hash": "hash-a1-20:05",
+       "artifact_id": "a1",
+       "artifact_name": "name-a1",
+       "artifact_type": "mcp_server",
+       "config_path": "/work/space/.mcp.json",
+       "first_seen_at": "2026-07-18T20:00:00+00:00",
+       "harness": "codex",
+       "last_approved_at": "2026-07-18T20:05:00+00:00",
+       "last_changed_at": "2026-07-18T20:05:00+00:00",
+       "last_policy_action": "allow",
+       "last_seen_at": "2026-07-18T20:05:00+00:00",
+       "launch_command": "npx -y pkg caf\u00e9",
+       "origin_url": null,
+       "present": true,
+       "publisher": "acme",
+       "removed_at": null,
+       "source_scope": "project",
+       "transport": "stdio"
+      }
+     ],
+     "post_changed": {},
+     "result": [
+      {
+       "artifact_hash": "hash-a3-20:05",
+       "artifact_id": "a3",
+       "artifact_name": "Beta",
+       "artifact_type": "mcp_server",
+       "config_path": "/work/space/.mcp.json",
+       "first_seen_at": "2026-07-18T20:05:00+00:00",
+       "harness": "codex",
+       "last_approved_at": null,
+       "last_changed_at": null,
+       "last_policy_action": "review",
+       "last_seen_at": "2026-07-18T20:05:00+00:00",
+       "launch_command": "uvx -y pkg caf\u00e9",
+       "origin_url": "https://x.example/m",
+       "present": true,
+       "publisher": "acme",
+       "removed_at": null,
+       "source_scope": "project",
+       "transport": "stdio"
+      },
+      {
+       "artifact_hash": "hash-a2-20:05",
+       "artifact_id": "a2",
+       "artifact_name": "alpha",
+       "artifact_type": "mcp_server",
+       "config_path": "/work/space/.mcp.json",
+       "first_seen_at": "2026-07-18T20:05:00+00:00",
+       "harness": "codex",
+       "last_approved_at": "2026-07-18T20:05:00+00:00",
+       "last_changed_at": null,
+       "last_policy_action": "warn",
+       "last_seen_at": "2026-07-18T20:05:00+00:00",
+       "launch_command": "npx -y pkg caf\u00e9",
+       "origin_url": null,
+       "present": true,
+       "publisher": "acme",
+       "removed_at": null,
+       "source_scope": "project",
+       "transport": "stdio"
+      },
+      {
+       "artifact_hash": "hash-a1-20:05",
+       "artifact_id": "a1",
+       "artifact_name": "name-a1",
+       "artifact_type": "mcp_server",
+       "config_path": "/work/space/.mcp.json",
+       "first_seen_at": "2026-07-18T20:00:00+00:00",
+       "harness": "codex",
+       "last_approved_at": "2026-07-18T20:05:00+00:00",
+       "last_changed_at": "2026-07-18T20:05:00+00:00",
+       "last_policy_action": "allow",
+       "last_seen_at": "2026-07-18T20:05:00+00:00",
+       "launch_command": "npx -y pkg caf\u00e9",
+       "origin_url": null,
+       "present": true,
+       "publisher": "acme",
+       "removed_at": null,
+       "source_scope": "project",
+       "transport": "stdio"
+      }
+     ],
+     "wire_args": {
+      "harness": "codex"
+     }
+    },
+    {
+     "error": null,
+     "label": "latest of two harnesses",
+     "method": "find_artifact_inventory_item",
+     "native_payload": {
+      "artifact_hash": "hash-a1-20:10",
+      "artifact_id": "a1",
+      "artifact_name": "name-a1",
+      "artifact_type": "mcp_server",
+      "config_path": "/work/space/.mcp.json",
+      "first_seen_at": "2026-07-18T20:10:00+00:00",
+      "harness": "claude-code",
+      "last_approved_at": null,
+      "last_changed_at": null,
+      "last_policy_action": "review",
+      "last_seen_at": "2026-07-18T20:10:00+00:00",
+      "launch_command": null,
+      "origin_url": null,
+      "present": true,
+      "publisher": "acme",
+      "removed_at": null,
+      "source_scope": "project",
+      "transport": "stdio"
+     },
+     "post_changed": {},
+     "result": {
+      "artifact_hash": "hash-a1-20:10",
+      "artifact_id": "a1",
+      "artifact_name": "name-a1",
+      "artifact_type": "mcp_server",
+      "config_path": "/work/space/.mcp.json",
+      "first_seen_at": "2026-07-18T20:10:00+00:00",
+      "harness": "claude-code",
+      "last_approved_at": null,
+      "last_changed_at": null,
+      "last_policy_action": "review",
+      "last_seen_at": "2026-07-18T20:10:00+00:00",
+      "launch_command": null,
+      "origin_url": null,
+      "present": true,
+      "publisher": "acme",
+      "removed_at": null,
+      "source_scope": "project",
+      "transport": "stdio"
+     },
+     "wire_args": {
+      "artifact_id": "a1"
+     }
+    },
+    {
+     "error": {
+      "message": "authoritative_decision_inconsistent",
+      "message_exact": true,
+      "type": "ValueError"
+     },
+     "label": "record a1 block",
+     "method": "record_inventory_artifact",
+     "native_payload": null,
+     "post_changed": {},
+     "result": null,
+     "wire_args": {
+      "approved": true,
+      "artifact_hash": "hash-a1-20:10",
+      "artifact_id": "a1",
+      "artifact_name": "name-a1",
+      "artifact_type": "mcp_server",
+      "changed": false,
+      "config_path": "/work/space/.mcp.json",
+      "harness": "codex",
+      "launch_command": "npx -y pkg caf\u00e9",
+      "now": "2026-07-18T20:10:00+00:00",
+      "origin_url": null,
+      "policy_action": "block",
+      "publisher": "acme",
+      "source_scope": "project",
+      "transport": "stdio"
+     }
+    },
+    {
+     "error": {
+      "message": "authoritative_decision_inconsistent",
+      "message_exact": true,
+      "type": "ValueError"
+     },
+     "label": "record a1 bogus",
+     "method": "record_inventory_artifact",
+     "native_payload": null,
+     "post_changed": {},
+     "result": null,
+     "wire_args": {
+      "approved": false,
+      "artifact_hash": "hash-a1-20:10",
+      "artifact_id": "a1",
+      "artifact_name": "name-a1",
+      "artifact_type": "mcp_server",
+      "changed": false,
+      "config_path": "/work/space/.mcp.json",
+      "harness": "codex",
+      "launch_command": "npx -y pkg caf\u00e9",
+      "now": "2026-07-18T20:10:00+00:00",
+      "origin_url": null,
+      "policy_action": "bogus",
+      "publisher": "acme",
+      "source_scope": "project",
+      "transport": "stdio"
+     }
+    },
+    {
+     "error": {
+      "message": "authoritative_decision_inconsistent",
+      "message_exact": true,
+      "type": "ValueError"
+     },
+     "label": "record a1 None",
+     "method": "record_inventory_artifact",
+     "native_payload": null,
+     "post_changed": {},
+     "result": null,
+     "wire_args": {
+      "approved": false,
+      "artifact_hash": "hash-a1-20:10",
+      "artifact_id": "a1",
+      "artifact_name": "name-a1",
+      "artifact_type": "mcp_server",
+      "changed": false,
+      "config_path": "/work/space/.mcp.json",
+      "harness": "codex",
+      "launch_command": "npx -y pkg caf\u00e9",
+      "now": "2026-07-18T20:10:00+00:00",
+      "origin_url": null,
+      "policy_action": null,
+      "publisher": "acme",
+      "source_scope": "project",
+      "transport": "stdio"
+     }
+    },
+    {
+     "error": {
+      "message": "authoritative_decision_inconsistent",
+      "message_exact": true,
+      "type": "ValueError"
+     },
+     "label": "record a1 5",
+     "method": "record_inventory_artifact",
+     "native_payload": null,
+     "post_changed": {},
+     "result": null,
+     "wire_args": {
+      "approved": false,
+      "artifact_hash": "hash-a1-20:10",
+      "artifact_id": "a1",
+      "artifact_name": "name-a1",
+      "artifact_type": "mcp_server",
+      "changed": false,
+      "config_path": "/work/space/.mcp.json",
+      "harness": "codex",
+      "launch_command": "npx -y pkg caf\u00e9",
+      "now": "2026-07-18T20:10:00+00:00",
+      "origin_url": null,
+      "policy_action": 5,
+      "publisher": "acme",
+      "source_scope": "project",
+      "transport": "stdio"
+     }
+    },
+    {
+     "error": {
+      "message": "authoritative_decision_inconsistent",
+      "message_exact": true,
+      "type": "ValueError"
+     },
+     "label": "record a1 review",
+     "method": "record_inventory_artifact",
+     "native_payload": null,
+     "post_changed": {},
+     "result": null,
+     "wire_args": {
+      "approved": true,
+      "artifact_hash": "hash-a1-20:10",
+      "artifact_id": "a1",
+      "artifact_name": "name-a1",
+      "artifact_type": "mcp_server",
+      "changed": false,
+      "config_path": "/work/space/.mcp.json",
+      "harness": "codex",
+      "launch_command": "npx -y pkg caf\u00e9",
+      "now": "2026-07-18T20:10:00+00:00",
+      "origin_url": null,
+      "policy_action": "review",
+      "publisher": "acme",
+      "source_scope": "project",
+      "transport": "stdio"
+     }
+    },
+    {
+     "error": null,
+     "label": "block",
+     "method": "mark_inventory_removed",
+     "native_payload": null,
+     "post_changed": {
+      "artifact_inventory": [
+       {
+        "artifact_hash": "hash-a1-20:10",
+        "artifact_id": "a1",
+        "artifact_name": "name-a1",
+        "artifact_type": "mcp_server",
+        "config_path": "/work/space/.mcp.json",
+        "first_seen_at": "2026-07-18T20:10:00+00:00",
+        "harness": "claude-code",
+        "last_approved_at": null,
+        "last_changed_at": null,
+        "last_policy_action": "review",
+        "last_seen_at": "2026-07-18T20:10:00+00:00",
+        "launch_command": null,
+        "origin_url": null,
+        "present": 1,
+        "publisher": "acme",
+        "removed_at": null,
+        "source_scope": "project",
+        "transport": "stdio"
+       },
+       {
+        "artifact_hash": "gone",
+        "artifact_id": "a1",
+        "artifact_name": "name-a1",
+        "artifact_type": "mcp_server",
+        "config_path": "/work/space/.mcp.json",
+        "first_seen_at": "2026-07-18T20:00:00+00:00",
+        "harness": "codex",
+        "last_approved_at": null,
+        "last_changed_at": "2026-07-18T20:10:00+00:00",
+        "last_policy_action": "block",
+        "last_seen_at": "2026-07-18T20:10:00+00:00",
+        "launch_command": "npx -y pkg caf\u00e9",
+        "origin_url": null,
+        "present": 0,
+        "publisher": "acme",
+        "removed_at": "2026-07-18T20:10:00+00:00",
+        "source_scope": "project",
+        "transport": "stdio"
+       },
+       {
+        "artifact_hash": "hash-a2-20:05",
+        "artifact_id": "a2",
+        "artifact_name": "alpha",
+        "artifact_type": "mcp_server",
+        "config_path": "/work/space/.mcp.json",
+        "first_seen_at": "2026-07-18T20:05:00+00:00",
+        "harness": "codex",
+        "last_approved_at": "2026-07-18T20:05:00+00:00",
+        "last_changed_at": null,
+        "last_policy_action": "warn",
+        "last_seen_at": "2026-07-18T20:05:00+00:00",
+        "launch_command": "npx -y pkg caf\u00e9",
+        "origin_url": null,
+        "present": 1,
+        "publisher": "acme",
+        "removed_at": null,
+        "source_scope": "project",
+        "transport": "stdio"
+       },
+       {
+        "artifact_hash": "hash-a3-20:05",
+        "artifact_id": "a3",
+        "artifact_name": "Beta",
+        "artifact_type": "mcp_server",
+        "config_path": "/work/space/.mcp.json",
+        "first_seen_at": "2026-07-18T20:05:00+00:00",
+        "harness": "codex",
+        "last_approved_at": null,
+        "last_changed_at": null,
+        "last_policy_action": "review",
+        "last_seen_at": "2026-07-18T20:05:00+00:00",
+        "launch_command": "uvx -y pkg caf\u00e9",
+        "origin_url": "https://x.example/m",
+        "present": 1,
+        "publisher": "acme",
+        "removed_at": null,
+        "source_scope": "project",
+        "transport": "stdio"
+       }
+      ]
+     },
+     "result": null,
+     "wire_args": {
+      "artifact_hash": "gone",
+      "artifact_id": "a1",
+      "harness": "codex",
+      "now": "2026-07-18T20:10:00+00:00",
+      "policy_action": "block"
+     }
+    },
+    {
+     "error": null,
+     "label": "keeps approval for allow",
+     "method": "mark_inventory_removed",
+     "native_payload": null,
+     "post_changed": {
+      "artifact_inventory": [
+       {
+        "artifact_hash": "hash-a1-20:10",
+        "artifact_id": "a1",
+        "artifact_name": "name-a1",
+        "artifact_type": "mcp_server",
+        "config_path": "/work/space/.mcp.json",
+        "first_seen_at": "2026-07-18T20:10:00+00:00",
+        "harness": "claude-code",
+        "last_approved_at": null,
+        "last_changed_at": null,
+        "last_policy_action": "review",
+        "last_seen_at": "2026-07-18T20:10:00+00:00",
+        "launch_command": null,
+        "origin_url": null,
+        "present": 1,
+        "publisher": "acme",
+        "removed_at": null,
+        "source_scope": "project",
+        "transport": "stdio"
+       },
+       {
+        "artifact_hash": "gone",
+        "artifact_id": "a1",
+        "artifact_name": "name-a1",
+        "artifact_type": "mcp_server",
+        "config_path": "/work/space/.mcp.json",
+        "first_seen_at": "2026-07-18T20:00:00+00:00",
+        "harness": "codex",
+        "last_approved_at": null,
+        "last_changed_at": "2026-07-18T20:10:00+00:00",
+        "last_policy_action": "block",
+        "last_seen_at": "2026-07-18T20:10:00+00:00",
+        "launch_command": "npx -y pkg caf\u00e9",
+        "origin_url": null,
+        "present": 0,
+        "publisher": "acme",
+        "removed_at": "2026-07-18T20:10:00+00:00",
+        "source_scope": "project",
+        "transport": "stdio"
+       },
+       {
+        "artifact_hash": "gone2",
+        "artifact_id": "a2",
+        "artifact_name": "alpha",
+        "artifact_type": "mcp_server",
+        "config_path": "/work/space/.mcp.json",
+        "first_seen_at": "2026-07-18T20:05:00+00:00",
+        "harness": "codex",
+        "last_approved_at": "2026-07-18T20:05:00+00:00",
+        "last_changed_at": "2026-07-18T20:10:00+00:00",
+        "last_policy_action": "allow",
+        "last_seen_at": "2026-07-18T20:10:00+00:00",
+        "launch_command": "npx -y pkg caf\u00e9",
+        "origin_url": null,
+        "present": 0,
+        "publisher": "acme",
+        "removed_at": "2026-07-18T20:10:00+00:00",
+        "source_scope": "project",
+        "transport": "stdio"
+       },
+       {
+        "artifact_hash": "hash-a3-20:05",
+        "artifact_id": "a3",
+        "artifact_name": "Beta",
+        "artifact_type": "mcp_server",
+        "config_path": "/work/space/.mcp.json",
+        "first_seen_at": "2026-07-18T20:05:00+00:00",
+        "harness": "codex",
+        "last_approved_at": null,
+        "last_changed_at": null,
+        "last_policy_action": "review",
+        "last_seen_at": "2026-07-18T20:05:00+00:00",
+        "launch_command": "uvx -y pkg caf\u00e9",
+        "origin_url": "https://x.example/m",
+        "present": 1,
+        "publisher": "acme",
+        "removed_at": null,
+        "source_scope": "project",
+        "transport": "stdio"
+       }
+      ]
+     },
+     "result": null,
+     "wire_args": {
+      "artifact_hash": "gone2",
+      "artifact_id": "a2",
+      "harness": "codex",
+      "now": "2026-07-18T20:10:00+00:00",
+      "policy_action": "allow"
+     }
+    },
+    {
+     "error": null,
+     "label": "unknown id",
+     "method": "mark_inventory_removed",
+     "native_payload": null,
+     "post_changed": {},
+     "result": null,
+     "wire_args": {
+      "artifact_hash": "x",
+      "artifact_id": "zz",
+      "harness": "codex",
+      "now": "2026-07-18T20:10:00+00:00",
+      "policy_action": "allow"
+     }
+    },
+    {
+     "error": {
+      "message": "authoritative_decision_inconsistent",
+      "message_exact": true,
+      "type": "ValueError"
+     },
+     "label": "bad action",
+     "method": "mark_inventory_removed",
+     "native_payload": null,
+     "post_changed": {},
+     "result": null,
+     "wire_args": {
+      "artifact_hash": "x",
+      "artifact_id": "a1",
+      "harness": "codex",
+      "now": "2026-07-18T20:10:00+00:00",
+      "policy_action": "nonsense"
+     }
+    },
+    {
+     "error": null,
+     "label": "after removal",
+     "method": "list_artifact_inventory",
+     "native_payload": [
+      {
+       "artifact_hash": "hash-a1-20:10",
+       "artifact_id": "a1",
+       "artifact_name": "name-a1",
+       "artifact_type": "mcp_server",
+       "config_path": "/work/space/.mcp.json",
+       "first_seen_at": "2026-07-18T20:10:00+00:00",
+       "harness": "claude-code",
+       "last_approved_at": null,
+       "last_changed_at": null,
+       "last_policy_action": "review",
+       "last_seen_at": "2026-07-18T20:10:00+00:00",
+       "launch_command": null,
+       "origin_url": null,
+       "present": true,
+       "publisher": "acme",
+       "removed_at": null,
+       "source_scope": "project",
+       "transport": "stdio"
+      },
+      {
+       "artifact_hash": "hash-a3-20:05",
+       "artifact_id": "a3",
+       "artifact_name": "Beta",
+       "artifact_type": "mcp_server",
+       "config_path": "/work/space/.mcp.json",
+       "first_seen_at": "2026-07-18T20:05:00+00:00",
+       "harness": "codex",
+       "last_approved_at": null,
+       "last_changed_at": null,
+       "last_policy_action": "review",
+       "last_seen_at": "2026-07-18T20:05:00+00:00",
+       "launch_command": "uvx -y pkg caf\u00e9",
+       "origin_url": "https://x.example/m",
+       "present": true,
+       "publisher": "acme",
+       "removed_at": null,
+       "source_scope": "project",
+       "transport": "stdio"
+      },
+      {
+       "artifact_hash": "gone2",
+       "artifact_id": "a2",
+       "artifact_name": "alpha",
+       "artifact_type": "mcp_server",
+       "config_path": "/work/space/.mcp.json",
+       "first_seen_at": "2026-07-18T20:05:00+00:00",
+       "harness": "codex",
+       "last_approved_at": "2026-07-18T20:05:00+00:00",
+       "last_changed_at": "2026-07-18T20:10:00+00:00",
+       "last_policy_action": "allow",
+       "last_seen_at": "2026-07-18T20:10:00+00:00",
+       "launch_command": "npx -y pkg caf\u00e9",
+       "origin_url": null,
+       "present": false,
+       "publisher": "acme",
+       "removed_at": "2026-07-18T20:10:00+00:00",
+       "source_scope": "project",
+       "transport": "stdio"
+      },
+      {
+       "artifact_hash": "gone",
+       "artifact_id": "a1",
+       "artifact_name": "name-a1",
+       "artifact_type": "mcp_server",
+       "config_path": "/work/space/.mcp.json",
+       "first_seen_at": "2026-07-18T20:00:00+00:00",
+       "harness": "codex",
+       "last_approved_at": null,
+       "last_changed_at": "2026-07-18T20:10:00+00:00",
+       "last_policy_action": "block",
+       "last_seen_at": "2026-07-18T20:10:00+00:00",
+       "launch_command": "npx -y pkg caf\u00e9",
+       "origin_url": null,
+       "present": false,
+       "publisher": "acme",
+       "removed_at": "2026-07-18T20:10:00+00:00",
+       "source_scope": "project",
+       "transport": "stdio"
+      }
+     ],
+     "post_changed": {},
+     "result": [
+      {
+       "artifact_hash": "hash-a1-20:10",
+       "artifact_id": "a1",
+       "artifact_name": "name-a1",
+       "artifact_type": "mcp_server",
+       "config_path": "/work/space/.mcp.json",
+       "first_seen_at": "2026-07-18T20:10:00+00:00",
+       "harness": "claude-code",
+       "last_approved_at": null,
+       "last_changed_at": null,
+       "last_policy_action": "review",
+       "last_seen_at": "2026-07-18T20:10:00+00:00",
+       "launch_command": null,
+       "origin_url": null,
+       "present": true,
+       "publisher": "acme",
+       "removed_at": null,
+       "source_scope": "project",
+       "transport": "stdio"
+      },
+      {
+       "artifact_hash": "hash-a3-20:05",
+       "artifact_id": "a3",
+       "artifact_name": "Beta",
+       "artifact_type": "mcp_server",
+       "config_path": "/work/space/.mcp.json",
+       "first_seen_at": "2026-07-18T20:05:00+00:00",
+       "harness": "codex",
+       "last_approved_at": null,
+       "last_changed_at": null,
+       "last_policy_action": "review",
+       "last_seen_at": "2026-07-18T20:05:00+00:00",
+       "launch_command": "uvx -y pkg caf\u00e9",
+       "origin_url": "https://x.example/m",
+       "present": true,
+       "publisher": "acme",
+       "removed_at": null,
+       "source_scope": "project",
+       "transport": "stdio"
+      },
+      {
+       "artifact_hash": "gone2",
+       "artifact_id": "a2",
+       "artifact_name": "alpha",
+       "artifact_type": "mcp_server",
+       "config_path": "/work/space/.mcp.json",
+       "first_seen_at": "2026-07-18T20:05:00+00:00",
+       "harness": "codex",
+       "last_approved_at": "2026-07-18T20:05:00+00:00",
+       "last_changed_at": "2026-07-18T20:10:00+00:00",
+       "last_policy_action": "allow",
+       "last_seen_at": "2026-07-18T20:10:00+00:00",
+       "launch_command": "npx -y pkg caf\u00e9",
+       "origin_url": null,
+       "present": false,
+       "publisher": "acme",
+       "removed_at": "2026-07-18T20:10:00+00:00",
+       "source_scope": "project",
+       "transport": "stdio"
+      },
+      {
+       "artifact_hash": "gone",
+       "artifact_id": "a1",
+       "artifact_name": "name-a1",
+       "artifact_type": "mcp_server",
+       "config_path": "/work/space/.mcp.json",
+       "first_seen_at": "2026-07-18T20:00:00+00:00",
+       "harness": "codex",
+       "last_approved_at": null,
+       "last_changed_at": "2026-07-18T20:10:00+00:00",
+       "last_policy_action": "block",
+       "last_seen_at": "2026-07-18T20:10:00+00:00",
+       "launch_command": "npx -y pkg caf\u00e9",
+       "origin_url": null,
+       "present": false,
+       "publisher": "acme",
+       "removed_at": "2026-07-18T20:10:00+00:00",
+       "source_scope": "project",
+       "transport": "stdio"
+      }
+     ],
+     "wire_args": {
+      "harness": null
+     }
+    },
+    {
+     "error": null,
+     "label": "record a1 allow",
+     "method": "record_inventory_artifact",
+     "native_payload": null,
+     "post_changed": {
+      "artifact_inventory": [
+       {
+        "artifact_hash": "hash-a1-20:10",
+        "artifact_id": "a1",
+        "artifact_name": "name-a1",
+        "artifact_type": "mcp_server",
+        "config_path": "/work/space/.mcp.json",
+        "first_seen_at": "2026-07-18T20:10:00+00:00",
+        "harness": "claude-code",
+        "last_approved_at": null,
+        "last_changed_at": null,
+        "last_policy_action": "review",
+        "last_seen_at": "2026-07-18T20:10:00+00:00",
+        "launch_command": null,
+        "origin_url": null,
+        "present": 1,
+        "publisher": "acme",
+        "removed_at": null,
+        "source_scope": "project",
+        "transport": "stdio"
+       },
+       {
+        "artifact_hash": "back",
+        "artifact_id": "a1",
+        "artifact_name": "name-a1",
+        "artifact_type": "mcp_server",
+        "config_path": "/work/space/.mcp.json",
+        "first_seen_at": "2026-07-18T20:00:00+00:00",
+        "harness": "codex",
+        "last_approved_at": "2026-07-18T20:10:00+00:00",
+        "last_changed_at": "2026-07-18T20:10:00+00:00",
+        "last_policy_action": "allow",
+        "last_seen_at": "2026-07-18T20:10:00+00:00",
+        "launch_command": "npx -y pkg caf\u00e9",
+        "origin_url": null,
+        "present": 1,
+        "publisher": "acme",
+        "removed_at": null,
+        "source_scope": "project",
+        "transport": "stdio"
+       },
+       {
+        "artifact_hash": "gone2",
+        "artifact_id": "a2",
+        "artifact_name": "alpha",
+        "artifact_type": "mcp_server",
+        "config_path": "/work/space/.mcp.json",
+        "first_seen_at": "2026-07-18T20:05:00+00:00",
+        "harness": "codex",
+        "last_approved_at": "2026-07-18T20:05:00+00:00",
+        "last_changed_at": "2026-07-18T20:10:00+00:00",
+        "last_policy_action": "allow",
+        "last_seen_at": "2026-07-18T20:10:00+00:00",
+        "launch_command": "npx -y pkg caf\u00e9",
+        "origin_url": null,
+        "present": 0,
+        "publisher": "acme",
+        "removed_at": "2026-07-18T20:10:00+00:00",
+        "source_scope": "project",
+        "transport": "stdio"
+       },
+       {
+        "artifact_hash": "hash-a3-20:05",
+        "artifact_id": "a3",
+        "artifact_name": "Beta",
+        "artifact_type": "mcp_server",
+        "config_path": "/work/space/.mcp.json",
+        "first_seen_at": "2026-07-18T20:05:00+00:00",
+        "harness": "codex",
+        "last_approved_at": null,
+        "last_changed_at": null,
+        "last_policy_action": "review",
+        "last_seen_at": "2026-07-18T20:05:00+00:00",
+        "launch_command": "uvx -y pkg caf\u00e9",
+        "origin_url": "https://x.example/m",
+        "present": 1,
+        "publisher": "acme",
+        "removed_at": null,
+        "source_scope": "project",
+        "transport": "stdio"
+       }
+      ]
+     },
+     "result": null,
+     "wire_args": {
+      "approved": true,
+      "artifact_hash": "back",
+      "artifact_id": "a1",
+      "artifact_name": "name-a1",
+      "artifact_type": "mcp_server",
+      "changed": false,
+      "config_path": "/work/space/.mcp.json",
+      "harness": "codex",
+      "launch_command": "npx -y pkg caf\u00e9",
+      "now": "2026-07-18T20:10:00+00:00",
+      "origin_url": null,
+      "policy_action": "allow",
+      "publisher": "acme",
+      "source_scope": "project",
+      "transport": "stdio"
+     }
+    },
+    {
+     "error": null,
+     "label": "revived",
+     "method": "find_artifact_inventory_item",
+     "native_payload": {
+      "artifact_hash": "hash-a1-20:10",
+      "artifact_id": "a1",
+      "artifact_name": "name-a1",
+      "artifact_type": "mcp_server",
+      "config_path": "/work/space/.mcp.json",
+      "first_seen_at": "2026-07-18T20:10:00+00:00",
+      "harness": "claude-code",
+      "last_approved_at": null,
+      "last_changed_at": null,
+      "last_policy_action": "review",
+      "last_seen_at": "2026-07-18T20:10:00+00:00",
+      "launch_command": null,
+      "origin_url": null,
+      "present": true,
+      "publisher": "acme",
+      "removed_at": null,
+      "source_scope": "project",
+      "transport": "stdio"
+     },
+     "post_changed": {},
+     "result": {
+      "artifact_hash": "hash-a1-20:10",
+      "artifact_id": "a1",
+      "artifact_name": "name-a1",
+      "artifact_type": "mcp_server",
+      "config_path": "/work/space/.mcp.json",
+      "first_seen_at": "2026-07-18T20:10:00+00:00",
+      "harness": "claude-code",
+      "last_approved_at": null,
+      "last_changed_at": null,
+      "last_policy_action": "review",
+      "last_seen_at": "2026-07-18T20:10:00+00:00",
+      "launch_command": null,
+      "origin_url": null,
+      "present": true,
+      "publisher": "acme",
+      "removed_at": null,
+      "source_scope": "project",
+      "transport": "stdio"
+     },
+     "wire_args": {
+      "artifact_id": "a1"
+     }
+    }
+   ]
+  },
+  {
+   "name": "inventory_stored_actions",
+   "seed": {
+    "artifact_capabilities": [],
+    "artifact_diffs": [],
+    "artifact_hashes": [],
+    "artifact_inventory": [],
+    "artifact_snapshots": [],
+    "provenance_cache": [],
+    "sync_state": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "seed rows with legacy, unknown and missing actions",
+     "method": "sql",
+     "post_changed": {
+      "artifact_inventory": [
+       {
+        "artifact_hash": "h",
+        "artifact_id": "s1",
+        "artifact_name": "one",
+        "artifact_type": "mcp_server",
+        "config_path": "/p",
+        "first_seen_at": "2026-07-18T20:00:00+00:00",
+        "harness": "codex",
+        "last_approved_at": "2026-07-18T20:00:00+00:00",
+        "last_changed_at": null,
+        "last_policy_action": "allow",
+        "last_seen_at": "2026-07-18T20:05:00+00:00",
+        "launch_command": null,
+        "origin_url": null,
+        "present": 1,
+        "publisher": null,
+        "removed_at": null,
+        "source_scope": "project",
+        "transport": null
+       },
+       {
+        "artifact_hash": "h",
+        "artifact_id": "s2",
+        "artifact_name": "two",
+        "artifact_type": "mcp_server",
+        "config_path": "/p",
+        "first_seen_at": "2026-07-18T20:00:00+00:00",
+        "harness": "codex",
+        "last_approved_at": "2026-07-18T20:00:00+00:00",
+        "last_changed_at": null,
+        "last_policy_action": "ask",
+        "last_seen_at": "2026-07-18T20:05:00+00:00",
+        "launch_command": null,
+        "origin_url": null,
+        "present": 1,
+        "publisher": null,
+        "removed_at": null,
+        "source_scope": "project",
+        "transport": null
+       },
+       {
+        "artifact_hash": "h",
+        "artifact_id": "s3",
+        "artifact_name": "three",
+        "artifact_type": "mcp_server",
+        "config_path": "/p",
+        "first_seen_at": "2026-07-18T20:00:00+00:00",
+        "harness": "codex",
+        "last_approved_at": "2026-07-18T20:00:00+00:00",
+        "last_changed_at": null,
+        "last_policy_action": "garbage",
+        "last_seen_at": "2026-07-18T20:05:00+00:00",
+        "launch_command": null,
+        "origin_url": null,
+        "present": 1,
+        "publisher": null,
+        "removed_at": null,
+        "source_scope": "project",
+        "transport": null
+       },
+       {
+        "artifact_hash": "h",
+        "artifact_id": "s4",
+        "artifact_name": "four",
+        "artifact_type": "mcp_server",
+        "config_path": "/p",
+        "first_seen_at": "2026-07-18T20:00:00+00:00",
+        "harness": "codex",
+        "last_approved_at": "2026-07-18T20:00:00+00:00",
+        "last_changed_at": null,
+        "last_policy_action": "",
+        "last_seen_at": "2026-07-18T20:05:00+00:00",
+        "launch_command": null,
+        "origin_url": null,
+        "present": 1,
+        "publisher": null,
+        "removed_at": null,
+        "source_scope": "project",
+        "transport": null
+       },
+       {
+        "artifact_hash": "h",
+        "artifact_id": "s5",
+        "artifact_name": "five",
+        "artifact_type": "mcp_server",
+        "config_path": "/p",
+        "first_seen_at": "2026-07-18T20:00:00+00:00",
+        "harness": "codex",
+        "last_approved_at": "2026-07-18T20:00:00+00:00",
+        "last_changed_at": null,
+        "last_policy_action": "block",
+        "last_seen_at": "2026-07-18T20:05:00+00:00",
+        "launch_command": null,
+        "origin_url": null,
+        "present": 1,
+        "publisher": null,
+        "removed_at": null,
+        "source_scope": "project",
+        "transport": null
+       },
+       {
+        "artifact_hash": "h",
+        "artifact_id": "s6",
+        "artifact_name": "six",
+        "artifact_type": "mcp_server",
+        "config_path": "/p",
+        "first_seen_at": "2026-07-18T20:00:00+00:00",
+        "harness": "codex",
+        "last_approved_at": "2026-07-18T20:00:00+00:00",
+        "last_changed_at": null,
+        "last_policy_action": "sandbox-required",
+        "last_seen_at": "2026-07-18T20:05:00+00:00",
+        "launch_command": null,
+        "origin_url": null,
+        "present": 1,
+        "publisher": null,
+        "removed_at": null,
+        "source_scope": "project",
+        "transport": null
+       },
+       {
+        "artifact_hash": "h",
+        "artifact_id": "s7",
+        "artifact_name": "seven",
+        "artifact_type": "mcp_server",
+        "config_path": "/p",
+        "first_seen_at": "2026-07-18T20:00:00+00:00",
+        "harness": "codex",
+        "last_approved_at": "2026-07-18T20:00:00+00:00",
+        "last_changed_at": null,
+        "last_policy_action": "warn",
+        "last_seen_at": "2026-07-18T20:05:00+00:00",
+        "launch_command": null,
+        "origin_url": null,
+        "present": 1,
+        "publisher": null,
+        "removed_at": null,
+        "source_scope": "project",
+        "transport": null
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "insert into artifact_inventory (artifact_id, harness, artifact_name, artifact_type, source_scope, config_path, publisher, origin_url, launch_command, transport, first_seen_at, last_seen_at, last_changed_at, last_approved_at, removed_at, present, last_policy_action, artifact_hash) values (?, ?, ?, 'mcp_server', 'project', '/p', null, null, null, null, ?, ?, null, ?, null, 1, ?, 'h')",
+       [
+        "s1",
+        "codex",
+        "one",
+        "2026-07-18T20:00:00+00:00",
+        "2026-07-18T20:05:00+00:00",
+        "2026-07-18T20:00:00+00:00",
+        "allow"
+       ]
+      ],
+      [
+       "insert into artifact_inventory (artifact_id, harness, artifact_name, artifact_type, source_scope, config_path, publisher, origin_url, launch_command, transport, first_seen_at, last_seen_at, last_changed_at, last_approved_at, removed_at, present, last_policy_action, artifact_hash) values (?, ?, ?, 'mcp_server', 'project', '/p', null, null, null, null, ?, ?, null, ?, null, 1, ?, 'h')",
+       [
+        "s2",
+        "codex",
+        "two",
+        "2026-07-18T20:00:00+00:00",
+        "2026-07-18T20:05:00+00:00",
+        "2026-07-18T20:00:00+00:00",
+        "ask"
+       ]
+      ],
+      [
+       "insert into artifact_inventory (artifact_id, harness, artifact_name, artifact_type, source_scope, config_path, publisher, origin_url, launch_command, transport, first_seen_at, last_seen_at, last_changed_at, last_approved_at, removed_at, present, last_policy_action, artifact_hash) values (?, ?, ?, 'mcp_server', 'project', '/p', null, null, null, null, ?, ?, null, ?, null, 1, ?, 'h')",
+       [
+        "s3",
+        "codex",
+        "three",
+        "2026-07-18T20:00:00+00:00",
+        "2026-07-18T20:05:00+00:00",
+        "2026-07-18T20:00:00+00:00",
+        "garbage"
+       ]
+      ],
+      [
+       "insert into artifact_inventory (artifact_id, harness, artifact_name, artifact_type, source_scope, config_path, publisher, origin_url, launch_command, transport, first_seen_at, last_seen_at, last_changed_at, last_approved_at, removed_at, present, last_policy_action, artifact_hash) values (?, ?, ?, 'mcp_server', 'project', '/p', null, null, null, null, ?, ?, null, ?, null, 1, ?, 'h')",
+       [
+        "s4",
+        "codex",
+        "four",
+        "2026-07-18T20:00:00+00:00",
+        "2026-07-18T20:05:00+00:00",
+        "2026-07-18T20:00:00+00:00",
+        ""
+       ]
+      ],
+      [
+       "insert into artifact_inventory (artifact_id, harness, artifact_name, artifact_type, source_scope, config_path, publisher, origin_url, launch_command, transport, first_seen_at, last_seen_at, last_changed_at, last_approved_at, removed_at, present, last_policy_action, artifact_hash) values (?, ?, ?, 'mcp_server', 'project', '/p', null, null, null, null, ?, ?, null, ?, null, 1, ?, 'h')",
+       [
+        "s5",
+        "codex",
+        "five",
+        "2026-07-18T20:00:00+00:00",
+        "2026-07-18T20:05:00+00:00",
+        "2026-07-18T20:00:00+00:00",
+        "block"
+       ]
+      ],
+      [
+       "insert into artifact_inventory (artifact_id, harness, artifact_name, artifact_type, source_scope, config_path, publisher, origin_url, launch_command, transport, first_seen_at, last_seen_at, last_changed_at, last_approved_at, removed_at, present, last_policy_action, artifact_hash) values (?, ?, ?, 'mcp_server', 'project', '/p', null, null, null, null, ?, ?, null, ?, null, 1, ?, 'h')",
+       [
+        "s6",
+        "codex",
+        "six",
+        "2026-07-18T20:00:00+00:00",
+        "2026-07-18T20:05:00+00:00",
+        "2026-07-18T20:00:00+00:00",
+        "sandbox-required"
+       ]
+      ],
+      [
+       "insert into artifact_inventory (artifact_id, harness, artifact_name, artifact_type, source_scope, config_path, publisher, origin_url, launch_command, transport, first_seen_at, last_seen_at, last_changed_at, last_approved_at, removed_at, present, last_policy_action, artifact_hash) values (?, ?, ?, 'mcp_server', 'project', '/p', null, null, null, null, ?, ?, null, ?, null, 1, ?, 'h')",
+       [
+        "s7",
+        "codex",
+        "seven",
+        "2026-07-18T20:00:00+00:00",
+        "2026-07-18T20:05:00+00:00",
+        "2026-07-18T20:00:00+00:00",
+        "warn"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "all",
+     "method": "list_artifact_inventory",
+     "native_payload": [
+      {
+       "artifact_hash": "h",
+       "artifact_id": "s5",
+       "artifact_name": "five",
+       "artifact_type": "mcp_server",
+       "config_path": "/p",
+       "first_seen_at": "2026-07-18T20:00:00+00:00",
+       "harness": "codex",
+       "last_approved_at": null,
+       "last_changed_at": null,
+       "last_policy_action": "block",
+       "last_seen_at": "2026-07-18T20:05:00+00:00",
+       "launch_command": null,
+       "origin_url": null,
+       "present": true,
+       "publisher": null,
+       "removed_at": null,
+       "source_scope": "project",
+       "transport": null
+      },
+      {
+       "artifact_hash": "h",
+       "artifact_id": "s4",
+       "artifact_name": "four",
+       "artifact_type": "mcp_server",
+       "config_path": "/p",
+       "decision_contract_error": "authoritative_decision_inconsistent",
+       "first_seen_at": "2026-07-18T20:00:00+00:00",
+       "harness": "codex",
+       "last_approved_at": null,
+       "last_changed_at": null,
+       "last_policy_action": "require-reapproval",
+       "last_seen_at": "2026-07-18T20:05:00+00:00",
+       "launch_command": null,
+       "origin_url": null,
+       "present": true,
+       "publisher": null,
+       "removed_at": null,
+       "source_scope": "project",
+       "transport": null
+      },
+      {
+       "artifact_hash": "h",
+       "artifact_id": "s1",
+       "artifact_name": "one",
+       "artifact_type": "mcp_server",
+       "config_path": "/p",
+       "first_seen_at": "2026-07-18T20:00:00+00:00",
+       "harness": "codex",
+       "last_approved_at": "2026-07-18T20:00:00+00:00",
+       "last_changed_at": null,
+       "last_policy_action": "allow",
+       "last_seen_at": "2026-07-18T20:05:00+00:00",
+       "launch_command": null,
+       "origin_url": null,
+       "present": true,
+       "publisher": null,
+       "removed_at": null,
+       "source_scope": "project",
+       "transport": null
+      },
+      {
+       "artifact_hash": "h",
+       "artifact_id": "s7",
+       "artifact_name": "seven",
+       "artifact_type": "mcp_server",
+       "config_path": "/p",
+       "first_seen_at": "2026-07-18T20:00:00+00:00",
+       "harness": "codex",
+       "last_approved_at": "2026-07-18T20:00:00+00:00",
+       "last_changed_at": null,
+       "last_policy_action": "warn",
+       "last_seen_at": "2026-07-18T20:05:00+00:00",
+       "launch_command": null,
+       "origin_url": null,
+       "present": true,
+       "publisher": null,
+       "removed_at": null,
+       "source_scope": "project",
+       "transport": null
+      },
+      {
+       "artifact_hash": "h",
+       "artifact_id": "s6",
+       "artifact_name": "six",
+       "artifact_type": "mcp_server",
+       "config_path": "/p",
+       "first_seen_at": "2026-07-18T20:00:00+00:00",
+       "harness": "codex",
+       "last_approved_at": null,
+       "last_changed_at": null,
+       "last_policy_action": "sandbox-required",
+       "last_seen_at": "2026-07-18T20:05:00+00:00",
+       "launch_command": null,
+       "origin_url": null,
+       "present": true,
+       "publisher": null,
+       "removed_at": null,
+       "source_scope": "project",
+       "transport": null
+      },
+      {
+       "artifact_hash": "h",
+       "artifact_id": "s3",
+       "artifact_name": "three",
+       "artifact_type": "mcp_server",
+       "config_path": "/p",
+       "decision_contract_error": "authoritative_decision_inconsistent",
+       "first_seen_at": "2026-07-18T20:00:00+00:00",
+       "harness": "codex",
+       "last_approved_at": null,
+       "last_changed_at": null,
+       "last_policy_action": "require-reapproval",
+       "last_seen_at": "2026-07-18T20:05:00+00:00",
+       "launch_command": null,
+       "origin_url": null,
+       "present": true,
+       "publisher": null,
+       "removed_at": null,
+       "source_scope": "project",
+       "transport": null
+      },
+      {
+       "artifact_hash": "h",
+       "artifact_id": "s2",
+       "artifact_name": "two",
+       "artifact_type": "mcp_server",
+       "config_path": "/p",
+       "first_seen_at": "2026-07-18T20:00:00+00:00",
+       "harness": "codex",
+       "last_approved_at": null,
+       "last_changed_at": null,
+       "last_policy_action": "review",
+       "last_seen_at": "2026-07-18T20:05:00+00:00",
+       "launch_command": null,
+       "origin_url": null,
+       "present": true,
+       "publisher": null,
+       "removed_at": null,
+       "source_scope": "project",
+       "transport": null
+      }
+     ],
+     "post_changed": {},
+     "result": [
+      {
+       "artifact_hash": "h",
+       "artifact_id": "s5",
+       "artifact_name": "five",
+       "artifact_type": "mcp_server",
+       "config_path": "/p",
+       "first_seen_at": "2026-07-18T20:00:00+00:00",
+       "harness": "codex",
+       "last_approved_at": null,
+       "last_changed_at": null,
+       "last_policy_action": "block",
+       "last_seen_at": "2026-07-18T20:05:00+00:00",
+       "launch_command": null,
+       "origin_url": null,
+       "present": true,
+       "publisher": null,
+       "removed_at": null,
+       "source_scope": "project",
+       "transport": null
+      },
+      {
+       "artifact_hash": "h",
+       "artifact_id": "s4",
+       "artifact_name": "four",
+       "artifact_type": "mcp_server",
+       "config_path": "/p",
+       "decision_contract_error": "authoritative_decision_inconsistent",
+       "first_seen_at": "2026-07-18T20:00:00+00:00",
+       "harness": "codex",
+       "last_approved_at": null,
+       "last_changed_at": null,
+       "last_policy_action": "require-reapproval",
+       "last_seen_at": "2026-07-18T20:05:00+00:00",
+       "launch_command": null,
+       "origin_url": null,
+       "present": true,
+       "publisher": null,
+       "removed_at": null,
+       "source_scope": "project",
+       "transport": null
+      },
+      {
+       "artifact_hash": "h",
+       "artifact_id": "s1",
+       "artifact_name": "one",
+       "artifact_type": "mcp_server",
+       "config_path": "/p",
+       "first_seen_at": "2026-07-18T20:00:00+00:00",
+       "harness": "codex",
+       "last_approved_at": "2026-07-18T20:00:00+00:00",
+       "last_changed_at": null,
+       "last_policy_action": "allow",
+       "last_seen_at": "2026-07-18T20:05:00+00:00",
+       "launch_command": null,
+       "origin_url": null,
+       "present": true,
+       "publisher": null,
+       "removed_at": null,
+       "source_scope": "project",
+       "transport": null
+      },
+      {
+       "artifact_hash": "h",
+       "artifact_id": "s7",
+       "artifact_name": "seven",
+       "artifact_type": "mcp_server",
+       "config_path": "/p",
+       "first_seen_at": "2026-07-18T20:00:00+00:00",
+       "harness": "codex",
+       "last_approved_at": "2026-07-18T20:00:00+00:00",
+       "last_changed_at": null,
+       "last_policy_action": "warn",
+       "last_seen_at": "2026-07-18T20:05:00+00:00",
+       "launch_command": null,
+       "origin_url": null,
+       "present": true,
+       "publisher": null,
+       "removed_at": null,
+       "source_scope": "project",
+       "transport": null
+      },
+      {
+       "artifact_hash": "h",
+       "artifact_id": "s6",
+       "artifact_name": "six",
+       "artifact_type": "mcp_server",
+       "config_path": "/p",
+       "first_seen_at": "2026-07-18T20:00:00+00:00",
+       "harness": "codex",
+       "last_approved_at": null,
+       "last_changed_at": null,
+       "last_policy_action": "sandbox-required",
+       "last_seen_at": "2026-07-18T20:05:00+00:00",
+       "launch_command": null,
+       "origin_url": null,
+       "present": true,
+       "publisher": null,
+       "removed_at": null,
+       "source_scope": "project",
+       "transport": null
+      },
+      {
+       "artifact_hash": "h",
+       "artifact_id": "s3",
+       "artifact_name": "three",
+       "artifact_type": "mcp_server",
+       "config_path": "/p",
+       "decision_contract_error": "authoritative_decision_inconsistent",
+       "first_seen_at": "2026-07-18T20:00:00+00:00",
+       "harness": "codex",
+       "last_approved_at": null,
+       "last_changed_at": null,
+       "last_policy_action": "require-reapproval",
+       "last_seen_at": "2026-07-18T20:05:00+00:00",
+       "launch_command": null,
+       "origin_url": null,
+       "present": true,
+       "publisher": null,
+       "removed_at": null,
+       "source_scope": "project",
+       "transport": null
+      },
+      {
+       "artifact_hash": "h",
+       "artifact_id": "s2",
+       "artifact_name": "two",
+       "artifact_type": "mcp_server",
+       "config_path": "/p",
+       "first_seen_at": "2026-07-18T20:00:00+00:00",
+       "harness": "codex",
+       "last_approved_at": null,
+       "last_changed_at": null,
+       "last_policy_action": "review",
+       "last_seen_at": "2026-07-18T20:05:00+00:00",
+       "launch_command": null,
+       "origin_url": null,
+       "present": true,
+       "publisher": null,
+       "removed_at": null,
+       "source_scope": "project",
+       "transport": null
+      }
+     ],
+     "wire_args": {
+      "harness": null
+     }
+    },
+    {
+     "error": null,
+     "label": "legacy ask",
+     "method": "find_artifact_inventory_item",
+     "native_payload": {
+      "artifact_hash": "h",
+      "artifact_id": "s2",
+      "artifact_name": "two",
+      "artifact_type": "mcp_server",
+      "config_path": "/p",
+      "first_seen_at": "2026-07-18T20:00:00+00:00",
+      "harness": "codex",
+      "last_approved_at": null,
+      "last_changed_at": null,
+      "last_policy_action": "review",
+      "last_seen_at": "2026-07-18T20:05:00+00:00",
+      "launch_command": null,
+      "origin_url": null,
+      "present": true,
+      "publisher": null,
+      "removed_at": null,
+      "source_scope": "project",
+      "transport": null
+     },
+     "post_changed": {},
+     "result": {
+      "artifact_hash": "h",
+      "artifact_id": "s2",
+      "artifact_name": "two",
+      "artifact_type": "mcp_server",
+      "config_path": "/p",
+      "first_seen_at": "2026-07-18T20:00:00+00:00",
+      "harness": "codex",
+      "last_approved_at": null,
+      "last_changed_at": null,
+      "last_policy_action": "review",
+      "last_seen_at": "2026-07-18T20:05:00+00:00",
+      "launch_command": null,
+      "origin_url": null,
+      "present": true,
+      "publisher": null,
+      "removed_at": null,
+      "source_scope": "project",
+      "transport": null
+     },
+     "wire_args": {
+      "artifact_id": "s2"
+     }
+    },
+    {
+     "error": null,
+     "label": "garbage",
+     "method": "find_artifact_inventory_item",
+     "native_payload": {
+      "artifact_hash": "h",
+      "artifact_id": "s3",
+      "artifact_name": "three",
+      "artifact_type": "mcp_server",
+      "config_path": "/p",
+      "decision_contract_error": "authoritative_decision_inconsistent",
+      "first_seen_at": "2026-07-18T20:00:00+00:00",
+      "harness": "codex",
+      "last_approved_at": null,
+      "last_changed_at": null,
+      "last_policy_action": "require-reapproval",
+      "last_seen_at": "2026-07-18T20:05:00+00:00",
+      "launch_command": null,
+      "origin_url": null,
+      "present": true,
+      "publisher": null,
+      "removed_at": null,
+      "source_scope": "project",
+      "transport": null
+     },
+     "post_changed": {},
+     "result": {
+      "artifact_hash": "h",
+      "artifact_id": "s3",
+      "artifact_name": "three",
+      "artifact_type": "mcp_server",
+      "config_path": "/p",
+      "decision_contract_error": "authoritative_decision_inconsistent",
+      "first_seen_at": "2026-07-18T20:00:00+00:00",
+      "harness": "codex",
+      "last_approved_at": null,
+      "last_changed_at": null,
+      "last_policy_action": "require-reapproval",
+      "last_seen_at": "2026-07-18T20:05:00+00:00",
+      "launch_command": null,
+      "origin_url": null,
+      "present": true,
+      "publisher": null,
+      "removed_at": null,
+      "source_scope": "project",
+      "transport": null
+     },
+     "wire_args": {
+      "artifact_id": "s3"
+     }
+    },
+    {
+     "error": null,
+     "label": "null",
+     "method": "find_artifact_inventory_item",
+     "native_payload": {
+      "artifact_hash": "h",
+      "artifact_id": "s4",
+      "artifact_name": "four",
+      "artifact_type": "mcp_server",
+      "config_path": "/p",
+      "decision_contract_error": "authoritative_decision_inconsistent",
+      "first_seen_at": "2026-07-18T20:00:00+00:00",
+      "harness": "codex",
+      "last_approved_at": null,
+      "last_changed_at": null,
+      "last_policy_action": "require-reapproval",
+      "last_seen_at": "2026-07-18T20:05:00+00:00",
+      "launch_command": null,
+      "origin_url": null,
+      "present": true,
+      "publisher": null,
+      "removed_at": null,
+      "source_scope": "project",
+      "transport": null
+     },
+     "post_changed": {},
+     "result": {
+      "artifact_hash": "h",
+      "artifact_id": "s4",
+      "artifact_name": "four",
+      "artifact_type": "mcp_server",
+      "config_path": "/p",
+      "decision_contract_error": "authoritative_decision_inconsistent",
+      "first_seen_at": "2026-07-18T20:00:00+00:00",
+      "harness": "codex",
+      "last_approved_at": null,
+      "last_changed_at": null,
+      "last_policy_action": "require-reapproval",
+      "last_seen_at": "2026-07-18T20:05:00+00:00",
+      "launch_command": null,
+      "origin_url": null,
+      "present": true,
+      "publisher": null,
+      "removed_at": null,
+      "source_scope": "project",
+      "transport": null
+     },
+     "wire_args": {
+      "artifact_id": "s4"
+     }
+    }
+   ]
+  },
+  {
+   "name": "capabilities",
+   "seed": {
+    "artifact_capabilities": [],
+    "artifact_diffs": [],
+    "artifact_hashes": [],
+    "artifact_inventory": [],
+    "artifact_snapshots": [],
+    "provenance_cache": [],
+    "sync_state": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "missing",
+     "method": "get_artifact_capability",
+     "native_payload": null,
+     "post_changed": {},
+     "result": null,
+     "wire_args": {
+      "artifact_id": "a1",
+      "harness": "codex"
+     }
+    },
+    {
+     "error": null,
+     "label": "full",
+     "method": "save_artifact_capability",
+     "native_payload": null,
+     "post_changed": {
+      "artifact_capabilities": [
+       {
+        "artifact_id": "a1",
+        "capability_json": "{\"network_hosts\": [\"a.example\", 3, \"b.example\"], \"network_schemes\": [\"https\"], \"filesystem_paths\": [\"/tmp\"], \"secret_classes\": [\"token\"], \"subprocess_invocation\": true, \"interpreters\": [\"python\"], \"shell_wrappers\": [\"bash\"], \"publisher\": \"acme\", \"transport\": \"stdio\"}",
+        "harness": "codex",
+        "updated_at": "2026-07-18T20:00:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "wire_args": {
+      "artifact_id": "a1",
+      "capability_json": "{\"network_hosts\": [\"a.example\", 3, \"b.example\"], \"network_schemes\": [\"https\"], \"filesystem_paths\": [\"/tmp\"], \"secret_classes\": [\"token\"], \"subprocess_invocation\": true, \"interpreters\": [\"python\"], \"shell_wrappers\": [\"bash\"], \"publisher\": \"acme\", \"transport\": \"stdio\"}",
+      "harness": "codex",
+      "now": "2026-07-18T20:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "full",
+     "method": "get_artifact_capability",
+     "native_payload": {
+      "capability_json": "{\"network_hosts\": [\"a.example\", 3, \"b.example\"], \"network_schemes\": [\"https\"], \"filesystem_paths\": [\"/tmp\"], \"secret_classes\": [\"token\"], \"subprocess_invocation\": true, \"interpreters\": [\"python\"], \"shell_wrappers\": [\"bash\"], \"publisher\": \"acme\", \"transport\": \"stdio\"}"
+     },
+     "post_changed": {},
+     "result": {
+      "filesystem_paths": [
+       "/tmp"
+      ],
+      "interpreters": [
+       "python"
+      ],
+      "network_hosts": [
+       "a.example",
+       "b.example"
+      ],
+      "network_schemes": [
+       "https"
+      ],
+      "publisher": "acme",
+      "secret_classes": [
+       "token"
+      ],
+      "shell_wrappers": [
+       "bash"
+      ],
+      "subprocess_invocation": true,
+      "transport": "local"
+     },
+     "wire_args": {
+      "artifact_id": "a1",
+      "harness": "codex"
+     }
+    },
+    {
+     "error": null,
+     "label": "sparse overwrite",
+     "method": "save_artifact_capability",
+     "native_payload": null,
+     "post_changed": {
+      "artifact_capabilities": [
+       {
+        "artifact_id": "a1",
+        "capability_json": "{\"publisher\": 7, \"transport\": \"carrier-pigeon\"}",
+        "harness": "codex",
+        "updated_at": "2026-07-18T20:05:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "wire_args": {
+      "artifact_id": "a1",
+      "capability_json": "{\"publisher\": 7, \"transport\": \"carrier-pigeon\"}",
+      "harness": "codex",
+      "now": "2026-07-18T20:05:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "sparse",
+     "method": "get_artifact_capability",
+     "native_payload": {
+      "capability_json": "{\"publisher\": 7, \"transport\": \"carrier-pigeon\"}"
+     },
+     "post_changed": {},
+     "result": {
+      "filesystem_paths": [],
+      "interpreters": [],
+      "network_hosts": [],
+      "network_schemes": [],
+      "publisher": null,
+      "secret_classes": [],
+      "shell_wrappers": [],
+      "subprocess_invocation": false,
+      "transport": "local"
+     },
+     "wire_args": {
+      "artifact_id": "a1",
+      "harness": "codex"
+     }
+    },
+    {
+     "error": null,
+     "label": "non-dict row",
+     "method": "sql",
+     "post_changed": {
+      "artifact_capabilities": [
+       {
+        "artifact_id": "a1",
+        "capability_json": "{\"publisher\": 7, \"transport\": \"carrier-pigeon\"}",
+        "harness": "codex",
+        "updated_at": "2026-07-18T20:05:00+00:00"
+       },
+       {
+        "artifact_id": "n1",
+        "capability_json": "[1, 2]",
+        "harness": "codex",
+        "updated_at": "t"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "insert into artifact_capabilities (artifact_id, harness, capability_json, updated_at) values ('n1', 'codex', '[1, 2]', 't')",
+       []
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "non-dict payload",
+     "method": "get_artifact_capability",
+     "native_payload": {
+      "capability_json": "[1, 2]"
+     },
+     "post_changed": {},
+     "result": null,
+     "wire_args": {
+      "artifact_id": "n1",
+      "harness": "codex"
+     }
+    }
+   ]
+  },
+  {
+   "name": "provenance_cache",
+   "seed": {
+    "artifact_capabilities": [],
+    "artifact_diffs": [],
+    "artifact_hashes": [],
+    "artifact_inventory": [],
+    "artifact_snapshots": [],
+    "provenance_cache": [],
+    "sync_state": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "insert",
+     "method": "upsert_provenance_cache",
+     "native_payload": null,
+     "post_changed": {
+      "provenance_cache": [
+       {
+        "artifact_hash": "h1",
+        "payload_json": "{\"k\": [1, 2], \"u\": \"caf\\u00e9\"}",
+        "updated_at": "2026-07-18T20:00:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "wire_args": {
+      "artifact_hash": "h1",
+      "now": "2026-07-18T20:00:00+00:00",
+      "payload_json": "{\"k\": [1, 2], \"u\": \"caf\\u00e9\"}"
+     }
+    },
+    {
+     "error": null,
+     "label": "overwrite",
+     "method": "upsert_provenance_cache",
+     "native_payload": null,
+     "post_changed": {
+      "provenance_cache": [
+       {
+        "artifact_hash": "h1",
+        "payload_json": "{\"k\": []}",
+        "updated_at": "2026-07-18T20:05:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "wire_args": {
+      "artifact_hash": "h1",
+      "now": "2026-07-18T20:05:00+00:00",
+      "payload_json": "{\"k\": []}"
+     }
+    },
+    {
+     "error": null,
+     "label": "second hash",
+     "method": "upsert_provenance_cache",
+     "native_payload": null,
+     "post_changed": {
+      "provenance_cache": [
+       {
+        "artifact_hash": "h1",
+        "payload_json": "{\"k\": []}",
+        "updated_at": "2026-07-18T20:05:00+00:00"
+       },
+       {
+        "artifact_hash": "h2",
+        "payload_json": "{}",
+        "updated_at": "2026-07-18T20:10:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "wire_args": {
+      "artifact_hash": "h2",
+      "now": "2026-07-18T20:10:00+00:00",
+      "payload_json": "{}"
+     }
+    }
+   ]
+  },
+  {
+   "name": "attestation_sequence",
+   "seed": {
+    "artifact_capabilities": [],
+    "artifact_diffs": [],
+    "artifact_hashes": [],
+    "artifact_inventory": [],
+    "artifact_snapshots": [],
+    "provenance_cache": [],
+    "sync_state": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "first",
+     "method": "next_aibom_trust_attestation_sequence",
+     "native_payload": 1,
+     "post_changed": {
+      "sync_state": [
+       {
+        "payload_json": "{\"sequence\": 1}",
+        "state_key": "aibom_trust_attestation_sequence",
+        "updated_at": "2026-07-18T20:00:00+00:00"
+       }
+      ]
+     },
+     "result": 1,
+     "wire_args": {
+      "now": "2026-07-18T20:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "second",
+     "method": "next_aibom_trust_attestation_sequence",
+     "native_payload": 2,
+     "post_changed": {
+      "sync_state": [
+       {
+        "payload_json": "{\"sequence\": 2}",
+        "state_key": "aibom_trust_attestation_sequence",
+        "updated_at": "2026-07-18T20:05:00+00:00"
+       }
+      ]
+     },
+     "result": 2,
+     "wire_args": {
+      "now": "2026-07-18T20:05:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "string digits",
+     "method": "sql",
+     "post_changed": {
+      "sync_state": [
+       {
+        "payload_json": "{\"sequence\": \"7\"}",
+        "state_key": "aibom_trust_attestation_sequence",
+        "updated_at": "2026-07-18T20:05:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "update sync_state set payload_json = '{\"sequence\": \"7\"}' where state_key = 'aibom_trust_attestation_sequence'",
+       []
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "from string",
+     "method": "next_aibom_trust_attestation_sequence",
+     "native_payload": 8,
+     "post_changed": {
+      "sync_state": [
+       {
+        "payload_json": "{\"sequence\": 8}",
+        "state_key": "aibom_trust_attestation_sequence",
+        "updated_at": "2026-07-18T20:10:00+00:00"
+       }
+      ]
+     },
+     "result": 8,
+     "wire_args": {
+      "now": "2026-07-18T20:10:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "negative",
+     "method": "sql",
+     "post_changed": {
+      "sync_state": [
+       {
+        "payload_json": "{\"sequence\": -3}",
+        "state_key": "aibom_trust_attestation_sequence",
+        "updated_at": "2026-07-18T20:10:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "update sync_state set payload_json = '{\"sequence\": -3}' where state_key = 'aibom_trust_attestation_sequence'",
+       []
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "from negative",
+     "method": "next_aibom_trust_attestation_sequence",
+     "native_payload": 1,
+     "post_changed": {
+      "sync_state": [
+       {
+        "payload_json": "{\"sequence\": 1}",
+        "state_key": "aibom_trust_attestation_sequence",
+        "updated_at": "2026-07-18T20:10:00+00:00"
+       }
+      ]
+     },
+     "result": 1,
+     "wire_args": {
+      "now": "2026-07-18T20:10:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "boolean",
+     "method": "sql",
+     "post_changed": {
+      "sync_state": [
+       {
+        "payload_json": "{\"sequence\": true}",
+        "state_key": "aibom_trust_attestation_sequence",
+        "updated_at": "2026-07-18T20:10:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "update sync_state set payload_json = '{\"sequence\": true}' where state_key = 'aibom_trust_attestation_sequence'",
+       []
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "from boolean",
+     "method": "next_aibom_trust_attestation_sequence",
+     "native_payload": 2,
+     "post_changed": {
+      "sync_state": [
+       {
+        "payload_json": "{\"sequence\": 2}",
+        "state_key": "aibom_trust_attestation_sequence",
+        "updated_at": "2026-07-18T20:10:00+00:00"
+       }
+      ]
+     },
+     "result": 2,
+     "wire_args": {
+      "now": "2026-07-18T20:10:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "float",
+     "method": "sql",
+     "post_changed": {
+      "sync_state": [
+       {
+        "payload_json": "{\"sequence\": 2.0}",
+        "state_key": "aibom_trust_attestation_sequence",
+        "updated_at": "2026-07-18T20:10:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "update sync_state set payload_json = '{\"sequence\": 2.0}' where state_key = 'aibom_trust_attestation_sequence'",
+       []
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "from float",
+     "method": "next_aibom_trust_attestation_sequence",
+     "native_payload": 1,
+     "post_changed": {
+      "sync_state": [
+       {
+        "payload_json": "{\"sequence\": 1}",
+        "state_key": "aibom_trust_attestation_sequence",
+        "updated_at": "2026-07-18T20:10:00+00:00"
+       }
+      ]
+     },
+     "result": 1,
+     "wire_args": {
+      "now": "2026-07-18T20:10:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "not json",
+     "method": "sql",
+     "post_changed": {
+      "sync_state": [
+       {
+        "payload_json": "{oops",
+        "state_key": "aibom_trust_attestation_sequence",
+        "updated_at": "2026-07-18T20:10:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "update sync_state set payload_json = '{oops' where state_key = 'aibom_trust_attestation_sequence'",
+       []
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "from garbage",
+     "method": "next_aibom_trust_attestation_sequence",
+     "native_payload": 1,
+     "post_changed": {
+      "sync_state": [
+       {
+        "payload_json": "{\"sequence\": 1}",
+        "state_key": "aibom_trust_attestation_sequence",
+        "updated_at": "2026-07-18T20:10:00+00:00"
+       }
+      ]
+     },
+     "result": 1,
+     "wire_args": {
+      "now": "2026-07-18T20:10:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "not an object",
+     "method": "sql",
+     "post_changed": {
+      "sync_state": [
+       {
+        "payload_json": "[5]",
+        "state_key": "aibom_trust_attestation_sequence",
+        "updated_at": "2026-07-18T20:10:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "update sync_state set payload_json = '[5]' where state_key = 'aibom_trust_attestation_sequence'",
+       []
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "from list",
+     "method": "next_aibom_trust_attestation_sequence",
+     "native_payload": 1,
+     "post_changed": {
+      "sync_state": [
+       {
+        "payload_json": "{\"sequence\": 1}",
+        "state_key": "aibom_trust_attestation_sequence",
+        "updated_at": "2026-07-18T20:10:00+00:00"
+       }
+      ]
+     },
+     "result": 1,
+     "wire_args": {
+      "now": "2026-07-18T20:10:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "empty string",
+     "method": "sql",
+     "post_changed": {
+      "sync_state": [
+       {
+        "payload_json": "{\"sequence\": \"\"}",
+        "state_key": "aibom_trust_attestation_sequence",
+        "updated_at": "2026-07-18T20:10:00+00:00"
+       }
+      ]
+     },
+     "result": null,
+     "sql": [
+      [
+       "update sync_state set payload_json = '{\"sequence\": \"\"}' where state_key = 'aibom_trust_attestation_sequence'",
+       []
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "from empty string",
+     "method": "next_aibom_trust_attestation_sequence",
+     "native_payload": 1,
+     "post_changed": {
+      "sync_state": [
+       {
+        "payload_json": "{\"sequence\": 1}",
+        "state_key": "aibom_trust_attestation_sequence",
+        "updated_at": "2026-07-18T20:10:00+00:00"
+       }
+      ]
+     },
+     "result": 1,
+     "wire_args": {
+      "now": "2026-07-18T20:10:00+00:00"
+     }
+    }
+   ]
+  }
+ ],
+ "schema": "guard-store-inventory-vectors.v1",
+ "schema_sql": [
+  "CREATE TABLE artifact_snapshots (\n              artifact_id text not null,\n              harness text not null,\n              snapshot_json text not null,\n              artifact_hash text not null,\n              recorded_at text not null,\n              primary key (artifact_id, harness)\n            )",
+  "CREATE TABLE artifact_hashes (\n              artifact_id text not null,\n              harness text not null,\n              artifact_hash text not null,\n              recorded_at text not null\n            )",
+  "CREATE TABLE artifact_diffs (\n              diff_id integer primary key autoincrement,\n              artifact_id text not null,\n              harness text not null,\n              changed_fields_json text not null,\n              previous_hash text,\n              current_hash text not null,\n              recorded_at text not null\n            )",
+  "CREATE TABLE artifact_capabilities (\n              artifact_id text not null,\n              harness text not null,\n              capability_json text not null,\n              updated_at text not null,\n              primary key (artifact_id, harness)\n            )",
+  "CREATE TABLE provenance_cache (\n              artifact_hash text primary key,\n              payload_json text not null,\n              updated_at text not null\n            )",
+  "CREATE TABLE artifact_inventory (\n              artifact_id text not null,\n              harness text not null,\n              artifact_name text not null,\n              artifact_type text not null,\n              source_scope text not null,\n              config_path text not null,\n              publisher text,\n              origin_url text,\n              launch_command text,\n              transport text,\n              first_seen_at text not null,\n              last_seen_at text not null,\n              last_changed_at text,\n              last_approved_at text,\n              removed_at text,\n              present integer not null default 1,\n              last_policy_action text not null,\n              artifact_hash text not null,\n              primary key (artifact_id, harness)\n            )",
+  "CREATE TABLE sync_state (\n              state_key text primary key,\n              payload_json text not null,\n              updated_at text not null\n            )"
+ ],
+ "source": "guard",
+ "where": {
+  "sync_state": "state_key = 'aibom_trust_attestation_sequence'"
+ }
+}

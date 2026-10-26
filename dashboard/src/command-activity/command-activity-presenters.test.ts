@@ -119,4 +119,18 @@ assert(
 assert(homeCommandActivityModel({ ...analytics, commands_checked: 0 }) === null, "home card stays absent without activity");
 assert(homeCommandActivityModel(analytics)?.health?.includes("incomplete") === true, "home model carries degraded health");
 assert(commandHealthCopy(analytics)?.includes("incomplete") === true, "degraded health is explicit");
+assert(
+  commandHealthCopy({ ...analytics, health: { ...analytics.health, last_error_class: "pre_record_failed" } }) ===
+    "Counts may be incomplete. Last recorded problem: Guard could not save some command checks.",
+  "degraded health names the recorded cause",
+);
+assert(
+  commandHealthCopy({ ...analytics, health: { ...analytics.health, last_error_class: "constructor" } }) ===
+    "Counts may be incomplete. Last recorded problem: Guard could not save some command evidence.",
+  "unknown error classes fall back to generic copy without prototype lookups",
+);
+assert(
+  commandHealthCopy({ ...analytics, health: { ...analytics.health, status: "healthy" } }) === null,
+  "healthy evidence shows no notice",
+);
 assert(!Object.values(commandMetricSummary(analytics)).some((value) => Number.isNaN(value)), "zero denominators are unnecessary");

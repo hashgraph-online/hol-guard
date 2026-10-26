@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -21,6 +22,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     ExtensionControlAuthorityView,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.extension_control_records import authenticated_record
 
 _ROOT = Path(__file__).resolve().parents[1]
 _VECTOR = json.loads(
@@ -33,6 +35,25 @@ CAPABILITIES = frozenset(
         MANAGED_CONTROLS_ATOMIC_APPLY_CAPABILITY,
     }
 )
+
+
+def managed_revision_state(revision: int, *, authority_key: bytes) -> dict[str, object]:
+    """An authenticated managed publication epoch, as the resident seals it."""
+
+    encoded, digest, mac = authenticated_record(
+        {"revision": revision}, key=authority_key, purpose="managed-controls.revision"
+    )
+    return {"revision": revision, "authentication": {"record": encoded, "digest": digest, "mac": mac}}
+
+
+def activation_projection_digest(value: dict[str, object]) -> str:
+    """The activation acknowledgement digest the resident binds when sealing."""
+
+    projection = {
+        key: item for key, item in value.items() if key not in {"acknowledgement", "authentication", "complete"}
+    }
+    canonical = json.dumps(projection, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def managed_bundle() -> dict[str, object]:

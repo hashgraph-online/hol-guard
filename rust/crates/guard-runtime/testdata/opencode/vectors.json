@@ -1,0 +1,3264 @@
+{
+ "cases": [
+  {
+   "args": {
+    "config_dir": null,
+    "configs": [],
+    "harness": "opencode",
+    "home": "<ROOT>/home",
+    "skip_verified_mcp_companions": true,
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [],
+   "found_paths": [],
+   "home": "home",
+   "name": "nothing",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": null,
+    "configs": [
+     {
+      "path": "<ROOT>/home/.config/opencode/opencode.json",
+      "payload": "{\"mcp\": {\"list_command\": {\"command\": [\"node\", \"server.js\", 3, \"--flag\"], \"args\": [\"ignored\"]}, \"empty_list\": {\"command\": [1, null]}, \"str_command\": {\"command\": \"uvx\", \"args\": [\"tool\", 2, \"x\"], \"environment\": {\"A\": \"1\", \"B\": 2, \"C\": null}}, \"args_not_list\": {\"command\": \"uvx\", \"args\": \"abc\", \"environment\": [\"x\"]}, \"no_command\": {\"command\": 7, \"url\": 5}, \"remote\": {\"type\": \"remote\", \"url\": \"https://mcp.example/x\", \"enabled\": false}, \"url_only\": {\"url\": \"https://mcp.example/y\", \"enabled\": 0}, \"blank_type\": {\"type\": \"\", \"command\": \"c\", \"enabled\": \"\"}, \"type_local\": {\"type\": \"local\", \"command\": [\"c\"], \"enabled\": [1]}, \"enabled_null\": {\"command\": \"c\", \"enabled\": null}, \"hol-guard::companion\": {\"command\": [\"hol-guard\", \"opencode-mcp-proxy\", \"--server\", \"x\"]}, \"hol-guard::plain\": {\"command\": \"node\"}, \"guard_proxy\": {\"command\": \"/usr/bin/hol-guard\", \"args\": [\"opencode-mcp-proxy\"]}, \"module_proxy\": {\"command\": \"python\", \"args\": [\"-m\", \"codex_plugin_scanner.cli\", \"guard\", \"mcp-proxy\"]}, \"not_dict\": \"x\", \"list_config\": [\"y\"]}, \"plugin\": [\"plain-plugin\", \"@acme/scoped\", \"@noslash\", [\"with-options\", {\"b\": 1, \"a\": [1.5, true, null], \"nested\": {\"z\": \"q\"}}], [\"bad-options\", \"x\"], [1, {}], [\"too\", {}, \"long\"], 5, null], \"plugins\": [\"first-list\"], \"command\": {\"review\": {\"template\": \"Review $ARGUMENTS\", \"description\": \"d\", \"agent\": \"build\", \"model\": null, \"subtask\": true}, \"numbers\": {\"template\": \" t \", \"description\": 3, \"model\": [1, \"m\"], \"agent\": {\"k\": \"v\"}}, \"blank\": {\"template\": \"   \"}, \"no_template\": {\"description\": \"x\"}, \"bad_template\": {\"template\": 4}, \"not_dict\": \"x\"}}",
+      "scope": "global"
+     }
+    ],
+    "harness": "opencode",
+    "home": "<ROOT>/home",
+    "skip_verified_mcp_companions": true,
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [
+      "server.js",
+      "--flag"
+     ],
+     "artifact_id": "opencode:global:list_command",
+     "artifact_type": "mcp_server",
+     "command": "node",
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "list_command",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:empty_list",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "empty_list",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [
+      "tool",
+      "x"
+     ],
+     "artifact_id": "opencode:global:str_command",
+     "artifact_type": "mcp_server",
+     "command": "uvx",
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {
+       "A": "1"
+      },
+      "guard_managed_proxy": false
+     },
+     "name": "str_command",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:args_not_list",
+     "artifact_type": "mcp_server",
+     "command": "uvx",
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "args_not_list",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:no_command",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "no_command",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:remote",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": false,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "remote",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "remote",
+     "url": "https://mcp.example/x"
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:url_only",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": false,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "url_only",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "remote",
+     "url": "https://mcp.example/y"
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:blank_type",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": false,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "blank_type",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:type_local",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "type_local",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "local",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:enabled_null",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": false,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "enabled_null",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:hol-guard::plain",
+     "artifact_type": "mcp_server",
+     "command": "node",
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "hol-guard::plain",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [
+      "opencode-mcp-proxy"
+     ],
+     "artifact_id": "opencode:global:guard_proxy",
+     "artifact_type": "mcp_server",
+     "command": "/usr/bin/hol-guard",
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {},
+      "guard_managed_proxy": true
+     },
+     "name": "guard_proxy",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [
+      "-m",
+      "codex_plugin_scanner.cli",
+      "guard",
+      "mcp-proxy"
+     ],
+     "artifact_id": "opencode:global:module_proxy",
+     "artifact_type": "mcp_server",
+     "command": "python",
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {},
+      "guard_managed_proxy": true
+     },
+     "name": "module_proxy",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:plugin:first-list",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {},
+     "name": "first-list",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:plugin:plain-plugin",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {},
+     "name": "plain-plugin",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:plugin:@acme/scoped",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {},
+     "name": "@acme/scoped",
+     "publisher": "acme",
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:plugin:@noslash",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {},
+     "name": "@noslash",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:plugin:with-options",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "a": [
+       1.5,
+       true,
+       null
+      ],
+      "b": 1,
+      "nested": {
+       "z": "q"
+      }
+     },
+     "name": "with-options",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:config-command:review",
+     "artifact_type": "command",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "agent": "build",
+      "description": "d",
+      "subtask": true,
+      "template": "Review $ARGUMENTS"
+     },
+     "name": "review",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:config-command:numbers",
+     "artifact_type": "command",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "agent": {
+       "k": "v"
+      },
+      "description": 3,
+      "model": [
+       1,
+       "m"
+      ],
+      "template": " t "
+     },
+     "name": "numbers",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/opencode.json",
+     "text": "{\"mcp\": {\"list_command\": {\"command\": [\"node\", \"server.js\", 3, \"--flag\"], \"args\": [\"ignored\"]}, \"empty_list\": {\"command\": [1, null]}, \"str_command\": {\"command\": \"uvx\", \"args\": [\"tool\", 2, \"x\"], \"environment\": {\"A\": \"1\", \"B\": 2, \"C\": null}}, \"args_not_list\": {\"command\": \"uvx\", \"args\": \"abc\", \"environment\": [\"x\"]}, \"no_command\": {\"command\": 7, \"url\": 5}, \"remote\": {\"type\": \"remote\", \"url\": \"https://mcp.example/x\", \"enabled\": false}, \"url_only\": {\"url\": \"https://mcp.example/y\", \"enabled\": 0}, \"blank_type\": {\"type\": \"\", \"command\": \"c\", \"enabled\": \"\"}, \"type_local\": {\"type\": \"local\", \"command\": [\"c\"], \"enabled\": [1]}, \"enabled_null\": {\"command\": \"c\", \"enabled\": null}, \"hol-guard::companion\": {\"command\": [\"hol-guard\", \"opencode-mcp-proxy\", \"--server\", \"x\"]}, \"hol-guard::plain\": {\"command\": \"node\"}, \"guard_proxy\": {\"command\": \"/usr/bin/hol-guard\", \"args\": [\"opencode-mcp-proxy\"]}, \"module_proxy\": {\"command\": \"python\", \"args\": [\"-m\", \"codex_plugin_scanner.cli\", \"guard\", \"mcp-proxy\"]}, \"not_dict\": \"x\", \"list_config\": [\"y\"]}, \"plugin\": [\"plain-plugin\", \"@acme/scoped\", \"@noslash\", [\"with-options\", {\"b\": 1, \"a\": [1.5, true, null], \"nested\": {\"z\": \"q\"}}], [\"bad-options\", \"x\"], [1, {}], [\"too\", {}, \"long\"], 5, null], \"plugins\": [\"first-list\"], \"command\": {\"review\": {\"template\": \"Review $ARGUMENTS\", \"description\": \"d\", \"agent\": \"build\", \"model\": null, \"subtask\": true}, \"numbers\": {\"template\": \" t \", \"description\": 3, \"model\": [1, \"m\"], \"agent\": {\"k\": \"v\"}}, \"blank\": {\"template\": \"   \"}, \"no_template\": {\"description\": \"x\"}, \"bad_template\": {\"template\": 4}, \"not_dict\": \"x\"}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/opencode/opencode.json"
+   ],
+   "home": "home",
+   "name": "global_config",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": null,
+    "configs": [
+     {
+      "path": "<ROOT>/home/.config/opencode/opencode.json",
+      "payload": "{\"mcp\": {\"list_command\": {\"command\": [\"node\", \"server.js\", 3, \"--flag\"], \"args\": [\"ignored\"]}, \"empty_list\": {\"command\": [1, null]}, \"str_command\": {\"command\": \"uvx\", \"args\": [\"tool\", 2, \"x\"], \"environment\": {\"A\": \"1\", \"B\": 2, \"C\": null}}, \"args_not_list\": {\"command\": \"uvx\", \"args\": \"abc\", \"environment\": [\"x\"]}, \"no_command\": {\"command\": 7, \"url\": 5}, \"remote\": {\"type\": \"remote\", \"url\": \"https://mcp.example/x\", \"enabled\": false}, \"url_only\": {\"url\": \"https://mcp.example/y\", \"enabled\": 0}, \"blank_type\": {\"type\": \"\", \"command\": \"c\", \"enabled\": \"\"}, \"type_local\": {\"type\": \"local\", \"command\": [\"c\"], \"enabled\": [1]}, \"enabled_null\": {\"command\": \"c\", \"enabled\": null}, \"hol-guard::companion\": {\"command\": [\"hol-guard\", \"opencode-mcp-proxy\", \"--server\", \"x\"]}, \"hol-guard::plain\": {\"command\": \"node\"}, \"guard_proxy\": {\"command\": \"/usr/bin/hol-guard\", \"args\": [\"opencode-mcp-proxy\"]}, \"module_proxy\": {\"command\": \"python\", \"args\": [\"-m\", \"codex_plugin_scanner.cli\", \"guard\", \"mcp-proxy\"]}, \"not_dict\": \"x\", \"list_config\": [\"y\"]}, \"plugin\": [\"plain-plugin\", \"@acme/scoped\", \"@noslash\", [\"with-options\", {\"b\": 1, \"a\": [1.5, true, null], \"nested\": {\"z\": \"q\"}}], [\"bad-options\", \"x\"], [1, {}], [\"too\", {}, \"long\"], 5, null], \"plugins\": [\"first-list\"], \"command\": {\"review\": {\"template\": \"Review $ARGUMENTS\", \"description\": \"d\", \"agent\": \"build\", \"model\": null, \"subtask\": true}, \"numbers\": {\"template\": \" t \", \"description\": 3, \"model\": [1, \"m\"], \"agent\": {\"k\": \"v\"}}, \"blank\": {\"template\": \"   \"}, \"no_template\": {\"description\": \"x\"}, \"bad_template\": {\"template\": 4}, \"not_dict\": \"x\"}}",
+      "scope": "global"
+     }
+    ],
+    "harness": "opencode",
+    "home": "<ROOT>/home",
+    "skip_verified_mcp_companions": true,
+    "workspace": null
+   },
+   "artifacts": [
+    {
+     "args": [
+      "server.js",
+      "--flag"
+     ],
+     "artifact_id": "opencode:global:list_command",
+     "artifact_type": "mcp_server",
+     "command": "node",
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "list_command",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:empty_list",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "empty_list",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [
+      "tool",
+      "x"
+     ],
+     "artifact_id": "opencode:global:str_command",
+     "artifact_type": "mcp_server",
+     "command": "uvx",
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {
+       "A": "1"
+      },
+      "guard_managed_proxy": false
+     },
+     "name": "str_command",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:args_not_list",
+     "artifact_type": "mcp_server",
+     "command": "uvx",
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "args_not_list",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:no_command",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "no_command",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:remote",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": false,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "remote",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "remote",
+     "url": "https://mcp.example/x"
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:url_only",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": false,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "url_only",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "remote",
+     "url": "https://mcp.example/y"
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:blank_type",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": false,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "blank_type",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:type_local",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "type_local",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "local",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:enabled_null",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": false,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "enabled_null",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:hol-guard::plain",
+     "artifact_type": "mcp_server",
+     "command": "node",
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "hol-guard::plain",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [
+      "opencode-mcp-proxy"
+     ],
+     "artifact_id": "opencode:global:guard_proxy",
+     "artifact_type": "mcp_server",
+     "command": "/usr/bin/hol-guard",
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {},
+      "guard_managed_proxy": true
+     },
+     "name": "guard_proxy",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [
+      "-m",
+      "codex_plugin_scanner.cli",
+      "guard",
+      "mcp-proxy"
+     ],
+     "artifact_id": "opencode:global:module_proxy",
+     "artifact_type": "mcp_server",
+     "command": "python",
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {},
+      "guard_managed_proxy": true
+     },
+     "name": "module_proxy",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:plugin:first-list",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {},
+     "name": "first-list",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:plugin:plain-plugin",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {},
+     "name": "plain-plugin",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:plugin:@acme/scoped",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {},
+     "name": "@acme/scoped",
+     "publisher": "acme",
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:plugin:@noslash",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {},
+     "name": "@noslash",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:plugin:with-options",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "a": [
+       1.5,
+       true,
+       null
+      ],
+      "b": 1,
+      "nested": {
+       "z": "q"
+      }
+     },
+     "name": "with-options",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:config-command:review",
+     "artifact_type": "command",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "agent": "build",
+      "description": "d",
+      "subtask": true,
+      "template": "Review $ARGUMENTS"
+     },
+     "name": "review",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:config-command:numbers",
+     "artifact_type": "command",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "agent": {
+       "k": "v"
+      },
+      "description": 3,
+      "model": [
+       1,
+       "m"
+      ],
+      "template": " t "
+     },
+     "name": "numbers",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/opencode.json",
+     "text": "{\"mcp\": {\"list_command\": {\"command\": [\"node\", \"server.js\", 3, \"--flag\"], \"args\": [\"ignored\"]}, \"empty_list\": {\"command\": [1, null]}, \"str_command\": {\"command\": \"uvx\", \"args\": [\"tool\", 2, \"x\"], \"environment\": {\"A\": \"1\", \"B\": 2, \"C\": null}}, \"args_not_list\": {\"command\": \"uvx\", \"args\": \"abc\", \"environment\": [\"x\"]}, \"no_command\": {\"command\": 7, \"url\": 5}, \"remote\": {\"type\": \"remote\", \"url\": \"https://mcp.example/x\", \"enabled\": false}, \"url_only\": {\"url\": \"https://mcp.example/y\", \"enabled\": 0}, \"blank_type\": {\"type\": \"\", \"command\": \"c\", \"enabled\": \"\"}, \"type_local\": {\"type\": \"local\", \"command\": [\"c\"], \"enabled\": [1]}, \"enabled_null\": {\"command\": \"c\", \"enabled\": null}, \"hol-guard::companion\": {\"command\": [\"hol-guard\", \"opencode-mcp-proxy\", \"--server\", \"x\"]}, \"hol-guard::plain\": {\"command\": \"node\"}, \"guard_proxy\": {\"command\": \"/usr/bin/hol-guard\", \"args\": [\"opencode-mcp-proxy\"]}, \"module_proxy\": {\"command\": \"python\", \"args\": [\"-m\", \"codex_plugin_scanner.cli\", \"guard\", \"mcp-proxy\"]}, \"not_dict\": \"x\", \"list_config\": [\"y\"]}, \"plugin\": [\"plain-plugin\", \"@acme/scoped\", \"@noslash\", [\"with-options\", {\"b\": 1, \"a\": [1.5, true, null], \"nested\": {\"z\": \"q\"}}], [\"bad-options\", \"x\"], [1, {}], [\"too\", {}, \"long\"], 5, null], \"plugins\": [\"first-list\"], \"command\": {\"review\": {\"template\": \"Review $ARGUMENTS\", \"description\": \"d\", \"agent\": \"build\", \"model\": null, \"subtask\": true}, \"numbers\": {\"template\": \" t \", \"description\": 3, \"model\": [1, \"m\"], \"agent\": {\"k\": \"v\"}}, \"blank\": {\"template\": \"   \"}, \"no_template\": {\"description\": \"x\"}, \"bad_template\": {\"template\": 4}, \"not_dict\": \"x\"}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/opencode/opencode.json"
+   ],
+   "home": "home",
+   "name": "no_workspace",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": null
+  },
+  {
+   "args": {
+    "config_dir": null,
+    "configs": [
+     {
+      "path": "<ROOT>/work/opencode.json",
+      "payload": "{\"mcp\": {\"w\": {\"command\": \"w\"}}}",
+      "scope": "project"
+     }
+    ],
+    "harness": "opencode",
+    "home": "<ROOT>/home",
+    "skip_verified_mcp_companions": true,
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "opencode:project:w",
+     "artifact_type": "mcp_server",
+     "command": "w",
+     "config_path": "<ROOT>/work/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "w",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/opencode.json",
+     "text": "{\"mcp\": {\"w\": {\"command\": \"w\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/work/opencode.json"
+   ],
+   "home": "home",
+   "name": "workspace_config",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": null,
+    "configs": [
+     {
+      "path": "<ROOT>/home/.config/opencode/opencode.jsonc",
+      "payload": "{\"mcp\": {\"commented\": {\"command\": [\"node\"]}}, \"plugin\": [\"jsonc-plugin\"]}",
+      "scope": "global"
+     },
+     {
+      "path": "<ROOT>/work/opencode.json",
+      "payload": "{\"plugin\": [\"x\"]}",
+      "scope": "project"
+     }
+    ],
+    "harness": "opencode",
+    "home": "<ROOT>/home",
+    "skip_verified_mcp_companions": true,
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "opencode:global:commented",
+     "artifact_type": "mcp_server",
+     "command": "node",
+     "config_path": "<ROOT>/home/.config/opencode/opencode.jsonc",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "commented",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:plugin:jsonc-plugin",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.jsonc",
+     "harness": "opencode",
+     "metadata": {},
+     "name": "jsonc-plugin",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:project:plugin:x",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/work/opencode.json",
+     "harness": "opencode",
+     "metadata": {},
+     "name": "x",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/opencode.jsonc",
+     "text": "{\n  // a comment\n  \"mcp\": {\"commented\": {\"command\": [\"node\"]}},\n  /* block */\n  \"plugin\": [\"jsonc-plugin\"]\n}\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/opencode.json",
+     "text": "{\"plugin\": [\"x\"]} // tail\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/opencode/opencode.jsonc",
+    "<ROOT>/work/opencode.json"
+   ],
+   "home": "home",
+   "name": "jsonc_files",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": null,
+    "configs": [],
+    "harness": "opencode",
+    "home": "<ROOT>/home",
+    "skip_verified_mcp_companions": true,
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/opencode.json",
+     "text": "{not json"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/opencode.jsonc",
+     "text": "{}"
+    },
+    {
+     "mode": 420,
+     "path": "work/opencode.json",
+     "text": "[\"list\"]"
+    },
+    {
+     "mode": 420,
+     "path": "work/opencode.jsonc",
+     "text": ""
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "skipped_configs",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": null,
+    "configs": [
+     {
+      "path": "<ROOT>/home/.config/opencode/opencode.json",
+      "payload": "{\"mcp\": [\"x\"], \"plugin\": {\"a\": 1}, \"plugins\": \"p\", \"command\": [\"c\"]}",
+      "scope": "global"
+     }
+    ],
+    "harness": "opencode",
+    "home": "<ROOT>/home",
+    "skip_verified_mcp_companions": true,
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/opencode.json",
+     "text": "{\"mcp\": [\"x\"], \"plugin\": {\"a\": 1}, \"plugins\": \"p\", \"command\": [\"c\"]}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/opencode/opencode.json"
+   ],
+   "home": "home",
+   "name": "non_dict_sections",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": null,
+    "configs": [
+     {
+      "path": "<ROOT>/home/.config/opencode/opencode.json",
+      "payload": "{\"mcp\": {\"plugin:dup\": {\"command\": \"a\"}}, \"plugin\": [\"dup\", \"other\"], \"plugins\": [\"other\"]}",
+      "scope": "global"
+     },
+     {
+      "path": "<ROOT>/home/.config/opencode/opencode.jsonc",
+      "payload": "{\"mcp\": {\"plugin:dup\": {\"command\": \"b\"}}}",
+      "scope": "global"
+     }
+    ],
+    "harness": "opencode",
+    "home": "<ROOT>/home",
+    "skip_verified_mcp_companions": true,
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "opencode:global:plugin:dup",
+     "artifact_type": "mcp_server",
+     "command": "b",
+     "config_path": "<ROOT>/home/.config/opencode/opencode.jsonc",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "plugin:dup",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:plugin:other",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {},
+     "name": "other",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/opencode.json",
+     "text": "{\"mcp\": {\"plugin:dup\": {\"command\": \"a\"}}, \"plugin\": [\"dup\", \"other\"], \"plugins\": [\"other\"]}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/opencode.jsonc",
+     "text": "{\"mcp\": {\"plugin:dup\": {\"command\": \"b\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/opencode/opencode.json",
+    "<ROOT>/home/.config/opencode/opencode.jsonc"
+   ],
+   "home": "home",
+   "name": "duplicate_ids",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": null,
+    "configs": [
+     {
+      "path": "<ROOT>/work/custom/oc.json",
+      "payload": "{\"mcp\": {\"env\": {\"command\": \"e\"}}}",
+      "scope": "project"
+     }
+    ],
+    "harness": "opencode",
+    "home": "<ROOT>/home",
+    "skip_verified_mcp_companions": true,
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "opencode:project:env",
+     "artifact_type": "mcp_server",
+     "command": "e",
+     "config_path": "<ROOT>/work/custom/oc.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "env",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/custom/oc.json",
+     "text": "{\"mcp\": {\"env\": {\"command\": \"e\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/work/custom/oc.json"
+   ],
+   "home": "home",
+   "name": "config_env_relative",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": null,
+    "configs": [
+     {
+      "path": "<ROOT>/elsewhere/oc.json",
+      "payload": "{\"plugin\": [\"abs\"]}",
+      "scope": "global"
+     }
+    ],
+    "harness": "opencode",
+    "home": "<ROOT>/home",
+    "skip_verified_mcp_companions": true,
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "opencode:global:plugin:abs",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/elsewhere/oc.json",
+     "harness": "opencode",
+     "metadata": {},
+     "name": "abs",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "elsewhere/oc.json",
+     "text": "{\"plugin\": [\"abs\"]}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/elsewhere/oc.json"
+   ],
+   "home": "home",
+   "name": "config_env_absolute",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": null,
+    "configs": [
+     {
+      "path": "<ROOT>/home/.config/opencode/opencode.json",
+      "payload": "{\"plugin\": [\"dup-path\"]}",
+      "scope": "global"
+     }
+    ],
+    "harness": "opencode",
+    "home": "<ROOT>/home",
+    "skip_verified_mcp_companions": true,
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "opencode:global:plugin:dup-path",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {},
+     "name": "dup-path",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/opencode.json",
+     "text": "{\"plugin\": [\"dup-path\"]}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/opencode/opencode.json"
+   ],
+   "home": "home",
+   "name": "config_env_duplicates_home",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": null,
+    "configs": [],
+    "harness": "opencode",
+    "home": "<ROOT>/home",
+    "skip_verified_mcp_companions": true,
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "opencode:global:command:Z",
+     "artifact_type": "command",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/commands/Z.md",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "Z",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:command:a",
+     "artifact_type": "command",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/commands/a.md",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "a",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:command:broken",
+     "artifact_type": "command",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/commands/broken.md",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest_unavailable": true
+     },
+     "name": "broken",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:command:linked",
+     "artifact_type": "command",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/commands/linked.md",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "2272bea616a05ae194c58b63752b39924a7beed67597c20dcb5586d1ee517290"
+     },
+     "name": "linked",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:command:top",
+     "artifact_type": "command",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/commands/top.md",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "28720365c5e7476a011e4f43ac003ee5f16247a263b9d623aa85ed311d73bf39"
+     },
+     "name": "top",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:command:two.dots",
+     "artifact_type": "command",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/commands/two.dots.md",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "two.dots",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:command:nested/deep/inner",
+     "artifact_type": "command",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/commands/nested/deep/inner.md",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "33bf6fbd7cd8379785a21e233d8e09f824e7bab459168a96312c1c882c1d7e1f"
+     },
+     "name": "nested/deep/inner",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:plugin-file:plugins/a.ts",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/plugins/a.ts",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "44ad63f60af0f6db6fdde6d5186ef78176367df261fa06be3079b6c80c8adba4"
+     },
+     "name": "plugins/a.ts",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:plugin-file:plugins/b.js",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/plugins/b.js",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "plugins/b.js",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:plugin-file:plugins/c.mjs",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/plugins/c.mjs",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "plugins/c.mjs",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:plugin-file:plugins/d.cjs",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/plugins/d.cjs",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "plugins/d.cjs",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:plugin-file:plugins/hol-guard-pretool.ts",
+     "artifact_type": "daemon_plugin",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/plugins/hol-guard-pretool.ts",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "a9d4034da07d8ef31db1cd4119b6a4552fdfbd19787e2848e71c8ee3b47703a7"
+     },
+     "name": "plugins/hol-guard-pretool.ts",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:plugin-file:plugins/sub/hol-guard-pretool.ts",
+     "artifact_type": "daemon_plugin",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/plugins/sub/hol-guard-pretool.ts",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "c0c322ddeba543be07d30cf2bb76d941b7560069ed9acb77a731e520dd3d96dc"
+     },
+     "name": "plugins/sub/hol-guard-pretool.ts",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:plugin-file:plugin/legacy.js",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/plugin/legacy.js",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "plugin/legacy.js",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:project:command:proj",
+     "artifact_type": "command",
+     "command": null,
+     "config_path": "<ROOT>/work/.opencode/commands/proj.md",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "proj",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:project:plugin-file:plugins/proj.ts",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/work/.opencode/plugins/proj.ts",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "plugins/proj.ts",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:project:plugin-file:plugin/old.cjs",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/work/.opencode/plugin/old.cjs",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "plugin/old.cjs",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/commands/top.md",
+     "text": "top"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/commands/nested/deep/inner.md",
+     "text": "inner"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/commands/notes.txt",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/commands/.md",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/commands/two.dots.md",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/commands/Z.md",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/commands/a.md",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/plugins/a.ts",
+     "text": "ts"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/plugins/b.js",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/plugins/c.mjs",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/plugins/d.cjs",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/plugins/e.tsx",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/plugins/.ts",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/plugins/hol-guard-pretool.ts",
+     "text": "guard"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/plugins/sub/hol-guard-pretool.ts",
+     "text": "nested guard"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/plugin/legacy.js",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "work/.opencode/commands/proj.md",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "work/.opencode/plugins/proj.ts",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "work/.opencode/plugin/old.cjs",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "outside/linked.md",
+     "text": "linked"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/opencode/commands/Z.md",
+    "<ROOT>/home/.config/opencode/commands/a.md",
+    "<ROOT>/home/.config/opencode/commands/broken.md",
+    "<ROOT>/home/.config/opencode/commands/linked.md",
+    "<ROOT>/home/.config/opencode/commands/top.md",
+    "<ROOT>/home/.config/opencode/commands/two.dots.md",
+    "<ROOT>/home/.config/opencode/commands/nested/deep/inner.md",
+    "<ROOT>/home/.config/opencode/plugins/a.ts",
+    "<ROOT>/home/.config/opencode/plugins/b.js",
+    "<ROOT>/home/.config/opencode/plugins/c.mjs",
+    "<ROOT>/home/.config/opencode/plugins/d.cjs",
+    "<ROOT>/home/.config/opencode/plugins/hol-guard-pretool.ts",
+    "<ROOT>/home/.config/opencode/plugins/sub/hol-guard-pretool.ts",
+    "<ROOT>/home/.config/opencode/plugin/legacy.js",
+    "<ROOT>/work/.opencode/commands/proj.md",
+    "<ROOT>/work/.opencode/plugins/proj.ts",
+    "<ROOT>/work/.opencode/plugin/old.cjs"
+   ],
+   "home": "home",
+   "name": "directories",
+   "relative": false,
+   "symlinks": [
+    {
+     "path": "home/.config/opencode/commands/linked-dir",
+     "target": "<ROOT>/outside"
+    },
+    {
+     "path": "home/.config/opencode/commands/linked.md",
+     "target": "<ROOT>/outside/linked.md"
+    },
+    {
+     "path": "home/.config/opencode/commands/broken.md",
+     "target": "<ROOT>/missing.md"
+    }
+   ],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": null,
+    "configs": [],
+    "harness": "opencode",
+    "home": "<ROOT>/home",
+    "skip_verified_mcp_companions": true,
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "opencode:global:command:viadir",
+     "artifact_type": "command",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/commands/viadir.md",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "4c94485e0c21ae6c41ce1dfe7b6bfaceea5ab68e40a2476f50208e526f506080"
+     },
+     "name": "viadir",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "outside/cmds/viadir.md",
+     "text": "v"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/opencode/commands/viadir.md"
+   ],
+   "home": "home",
+   "name": "directory_is_symlink",
+   "relative": false,
+   "symlinks": [
+    {
+     "path": "home/.config/opencode/commands",
+     "target": "<ROOT>/outside/cmds"
+    }
+   ],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": null,
+    "configs": [],
+    "harness": "opencode",
+    "home": "<ROOT>/home",
+    "skip_verified_mcp_companions": true,
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/commands",
+     "text": "not a dir"
+    },
+    {
+     "mode": 420,
+     "path": "work/.opencode/plugins",
+     "text": "nope"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "directory_is_file",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": null,
+    "configs": [],
+    "harness": "opencode",
+    "home": "<ROOT>/home",
+    "skip_verified_mcp_companions": true,
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "opencode:global:command:locked",
+     "artifact_type": "command",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/commands/locked.md",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest_unavailable": true
+     },
+     "name": "locked",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:command:open",
+     "artifact_type": "command",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/commands/open.md",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "open",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {
+    "home/.config/opencode/commands/closed": 0
+   },
+   "dirs": [],
+   "files": [
+    {
+     "mode": 0,
+     "path": "home/.config/opencode/commands/locked.md",
+     "text": "secret"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/commands/closed/inside.md",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/commands/open.md",
+     "text": "x"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/opencode/commands/locked.md",
+    "<ROOT>/home/.config/opencode/commands/open.md"
+   ],
+   "home": "home",
+   "name": "unreadable_entries",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/work/conf",
+    "configs": [],
+    "harness": "opencode",
+    "home": "<ROOT>/home",
+    "skip_verified_mcp_companions": true,
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "opencode:project:command:c",
+     "artifact_type": "command",
+     "command": null,
+     "config_path": "<ROOT>/work/conf/commands/c.md",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "c",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:project:plugin-file:plugins/p.ts",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/work/conf/plugins/p.ts",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "plugins/p.ts",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:project:plugin-file:plugin/q.js",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/work/conf/plugin/q.js",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "plugin/q.js",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/conf/commands/c.md",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "work/conf/plugins/p.ts",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "work/conf/plugin/q.js",
+     "text": "x"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/work/conf/commands/c.md",
+    "<ROOT>/work/conf/plugins/p.ts",
+    "<ROOT>/work/conf/plugin/q.js"
+   ],
+   "home": "home",
+   "name": "config_dir_project",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/cfg",
+    "configs": [],
+    "harness": "opencode",
+    "home": "<ROOT>/home",
+    "skip_verified_mcp_companions": true,
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "opencode:global:command:c",
+     "artifact_type": "command",
+     "command": null,
+     "config_path": "<ROOT>/cfg/commands/c.md",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "c",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:plugin-file:plugins/p.ts",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/cfg/plugins/p.ts",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "plugins/p.ts",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "cfg/commands/c.md",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "cfg/plugins/p.ts",
+     "text": "x"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/cfg/commands/c.md",
+    "<ROOT>/cfg/plugins/p.ts"
+   ],
+   "home": "home",
+   "name": "config_dir_global",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": "<ROOT>/work/.opencode",
+    "configs": [],
+    "harness": "opencode",
+    "home": "<ROOT>/home",
+    "skip_verified_mcp_companions": true,
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "opencode:project:command:same",
+     "artifact_type": "command",
+     "command": null,
+     "config_path": "<ROOT>/work/.opencode/commands/same.md",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "043a718774c572bd8a25adbeb1bfcd5c0256ae11cecf9f9c3f925d0e52beaf89"
+     },
+     "name": "same",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:project:plugin-file:plugins/same.ts",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/work/.opencode/plugins/same.ts",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "plugins/same.ts",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.opencode/commands/same.md",
+     "text": "s"
+    },
+    {
+     "mode": 420,
+     "path": "work/.opencode/plugins/same.ts",
+     "text": "x"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/work/.opencode/commands/same.md",
+    "<ROOT>/work/.opencode/plugins/same.ts"
+   ],
+   "home": "home",
+   "name": "config_dir_duplicates_workspace",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": null,
+    "configs": [],
+    "harness": "opencode",
+    "home": "<ROOT>/home",
+    "skip_verified_mcp_companions": true,
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "opencode:global:skill:opencode:skills/.",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/skills/SKILL.md",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "skill_source": "opencode"
+     },
+     "name": "skills/.",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:skill:opencode:skills/alpha",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/skills/alpha/SKILL.md",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "skill_source": "opencode"
+     },
+     "name": "skills/alpha",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:skill:opencode:skills/group/beta",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/skills/group/beta/SKILL.md",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "skill_source": "opencode"
+     },
+     "name": "skills/group/beta",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:skill:opencode:skill/legacy",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/skill/legacy/SKILL.md",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "skill_source": "opencode"
+     },
+     "name": "skill/legacy",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:skill:claude:skills/c",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.claude/skills/c/SKILL.md",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "skill_source": "claude"
+     },
+     "name": "skills/c",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:skill:agents:skills/a",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.agents/skills/a/SKILL.md",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "skill_source": "agents"
+     },
+     "name": "skills/a",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:project:skill:opencode:skills/p",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.opencode/skills/p/SKILL.md",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "skill_source": "opencode"
+     },
+     "name": "skills/p",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:project:skill:opencode:skill/q",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.opencode/skill/q/SKILL.md",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "skill_source": "opencode"
+     },
+     "name": "skill/q",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:project:skill:claude:skills/c",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.claude/skills/c/SKILL.md",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "skill_source": "claude"
+     },
+     "name": "skills/c",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:project:skill:agents:skills/a",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.agents/skills/a/SKILL.md",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest_unavailable": true,
+      "skill_source": "agents"
+     },
+     "name": "skills/a",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/skills/alpha/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/skills/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/skills/group/beta/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/skills/alpha/notes.md",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/skill/legacy/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.claude/skills/c/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.agents/skills/a/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.agents/skills/lower/skill.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.opencode/skills/p/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.opencode/skill/q/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.claude/skills/c/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 0,
+     "path": "work/.agents/skills/a/SKILL.md",
+     "text": "x"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/opencode/skills/SKILL.md",
+    "<ROOT>/home/.config/opencode/skills/alpha/SKILL.md",
+    "<ROOT>/home/.config/opencode/skills/group/beta/SKILL.md",
+    "<ROOT>/home/.config/opencode/skill/legacy/SKILL.md",
+    "<ROOT>/home/.claude/skills/c/SKILL.md",
+    "<ROOT>/home/.agents/skills/a/SKILL.md",
+    "<ROOT>/work/.opencode/skills/p/SKILL.md",
+    "<ROOT>/work/.opencode/skill/q/SKILL.md",
+    "<ROOT>/work/.claude/skills/c/SKILL.md",
+    "<ROOT>/work/.agents/skills/a/SKILL.md"
+   ],
+   "home": "home",
+   "name": "skills",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": null,
+    "configs": [],
+    "harness": "opencode",
+    "home": "<ROOT>/home",
+    "skip_verified_mcp_companions": true,
+    "workspace": null
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "opencode:global:skill:opencode:skills/alpha",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/skills/alpha/SKILL.md",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "skill_source": "opencode"
+     },
+     "name": "skills/alpha",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/skills/alpha/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.opencode/skills/p/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/opencode/skills/alpha/SKILL.md"
+   ],
+   "home": "home",
+   "name": "skills_no_workspace",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": null
+  },
+  {
+   "args": {
+    "config_dir": null,
+    "configs": [],
+    "harness": "opencode",
+    "home": "<ROOT>/home",
+    "skip_verified_mcp_companions": true,
+    "workspace": "<ROOT>/home/proj"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "opencode:global:skill:claude:skills/y",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.claude/skills/y/SKILL.md",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "skill_source": "claude"
+     },
+     "name": "skills/y",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:project:skill:claude:skills/x",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/proj/.claude/skills/x/SKILL.md",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "skill_source": "claude"
+     },
+     "name": "skills/x",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/proj/.claude/skills/x/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.claude/skills/y/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.claude/skills/y/SKILL.md",
+    "<ROOT>/home/proj/.claude/skills/x/SKILL.md"
+   ],
+   "home": "home",
+   "name": "workspace_inside_home",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "home/proj"
+  },
+  {
+   "args": {
+    "config_dir": null,
+    "configs": [
+     {
+      "path": "home/.config/opencode/opencode.json",
+      "payload": "{\"plugin\": [\"rel\"]}",
+      "scope": "global"
+     }
+    ],
+    "cwd": "<ROOT>",
+    "harness": "opencode",
+    "home": "home",
+    "skip_verified_mcp_companions": true,
+    "workspace": "work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "opencode:global:plugin:rel",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {},
+     "name": "rel",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:command:r",
+     "artifact_type": "command",
+     "command": null,
+     "config_path": "home/.config/opencode/commands/r.md",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "r",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:project:skill:opencode:skills/s",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "work/.opencode/skills/s/SKILL.md",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "skill_source": "opencode"
+     },
+     "name": "skills/s",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/opencode.json",
+     "text": "{\"plugin\": [\"rel\"]}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/commands/r.md",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "work/.opencode/skills/s/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    }
+   ],
+   "found_paths": [
+    "home/.config/opencode/opencode.json",
+    "home/.config/opencode/commands/r.md",
+    "work/.opencode/skills/s/SKILL.md"
+   ],
+   "home": "home",
+   "name": "relative_paths",
+   "relative": true,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": null,
+    "configs": [
+     {
+      "path": "<ROOT>/home/.config/opencode/opencode.json",
+      "payload": "{\"mcp\": {\"bad\\ud800\": {\"command\": \"x\"}}}",
+      "scope": "global"
+     }
+    ],
+    "harness": "opencode",
+    "home": "<ROOT>/home",
+    "skip_verified_mcp_companions": true,
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/opencode.json",
+     "text": "{\"mcp\": {\"bad\\ud800\": {\"command\": \"x\"}}}"
+    }
+   ],
+   "home": "home",
+   "name": "lone_surrogate_name",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": null,
+    "configs": [
+     {
+      "path": "<ROOT>/home/.config/opencode/opencode.json",
+      "payload": "{\"mcp\": {\"\\u00c4Server\": {\"command\": \"\\u00fc\"}}, \"plugin\": [\"@\\u00e4cme/p\"]}",
+      "scope": "global"
+     }
+    ],
+    "harness": "opencode",
+    "home": "<ROOT>/home",
+    "skip_verified_mcp_companions": true,
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "opencode:global:ÄServer",
+     "artifact_type": "mcp_server",
+     "command": "ü",
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "ÄServer",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:plugin:@äcme/p",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {},
+     "name": "@äcme/p",
+     "publisher": "äcme",
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:command:e",
+     "artifact_type": "command",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/commands/e.md",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "e",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:command:é",
+     "artifact_type": "command",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/commands/é.md",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "é",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/opencode.json",
+     "text": "{\"mcp\": {\"\\u00c4Server\": {\"command\": \"\\u00fc\"}}, \"plugin\": [\"@\\u00e4cme/p\"]}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/commands/é.md",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/commands/e.md",
+     "text": "x"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/opencode/opencode.json",
+    "<ROOT>/home/.config/opencode/commands/e.md",
+    "<ROOT>/home/.config/opencode/commands/é.md"
+   ],
+   "home": "home",
+   "name": "unicode_names",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": null,
+    "configs": [
+     {
+      "path": "<ROOT>/home/.config/opencode/opencode.json",
+      "payload": "{\"mcp\": {\"hol-guard::companion\": {\"command\": [\"hol-guard\", \"opencode-mcp-proxy\", \"--server\", \"x\"]}, \"plain\": {\"command\": \"p\"}}}",
+      "scope": "global"
+     }
+    ],
+    "harness": "opencode",
+    "home": "<ROOT>/home",
+    "skip_verified_mcp_companions": false,
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [
+      "opencode-mcp-proxy",
+      "--server",
+      "x"
+     ],
+     "artifact_id": "opencode:global:hol-guard::companion",
+     "artifact_type": "mcp_server",
+     "command": "hol-guard",
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {},
+      "guard_managed_proxy": true
+     },
+     "name": "hol-guard::companion",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:plain",
+     "artifact_type": "mcp_server",
+     "command": "p",
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "plain",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/opencode.json",
+     "text": "{\"mcp\": {\"hol-guard::companion\": {\"command\": [\"hol-guard\", \"opencode-mcp-proxy\", \"--server\", \"x\"]}, \"plain\": {\"command\": \"p\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/opencode/opencode.json"
+   ],
+   "home": "home",
+   "name": "snapshot_companions",
+   "relative": false,
+   "snapshot": true,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "config_dir": null,
+    "configs": [
+     {
+      "path": "<ROOT>/home/.config/opencode/opencode.json",
+      "payload": "{\"mcp\": {\"list_command\": {\"command\": [\"node\", \"server.js\", 3, \"--flag\"], \"args\": [\"ignored\"]}, \"empty_list\": {\"command\": [1, null]}, \"str_command\": {\"command\": \"uvx\", \"args\": [\"tool\", 2, \"x\"], \"environment\": {\"A\": \"1\", \"B\": 2, \"C\": null}}, \"args_not_list\": {\"command\": \"uvx\", \"args\": \"abc\", \"environment\": [\"x\"]}, \"no_command\": {\"command\": 7, \"url\": 5}, \"remote\": {\"type\": \"remote\", \"url\": \"https://mcp.example/x\", \"enabled\": false}, \"url_only\": {\"url\": \"https://mcp.example/y\", \"enabled\": 0}, \"blank_type\": {\"type\": \"\", \"command\": \"c\", \"enabled\": \"\"}, \"type_local\": {\"type\": \"local\", \"command\": [\"c\"], \"enabled\": [1]}, \"enabled_null\": {\"command\": \"c\", \"enabled\": null}, \"hol-guard::companion\": {\"command\": [\"hol-guard\", \"opencode-mcp-proxy\", \"--server\", \"x\"]}, \"hol-guard::plain\": {\"command\": \"node\"}, \"guard_proxy\": {\"command\": \"/usr/bin/hol-guard\", \"args\": [\"opencode-mcp-proxy\"]}, \"module_proxy\": {\"command\": \"python\", \"args\": [\"-m\", \"codex_plugin_scanner.cli\", \"guard\", \"mcp-proxy\"]}}, \"plugin\": [\"plain-plugin\", \"@acme/scoped\", \"@noslash\", [\"with-options\", {\"b\": 1, \"a\": [1.5, true, null], \"nested\": {\"z\": \"q\"}}], [\"bad-options\", \"x\"], [1, {}], [\"too\", {}, \"long\"], 5, null], \"plugins\": [\"first-list\"], \"command\": {\"review\": {\"template\": \"Review $ARGUMENTS\", \"description\": \"d\", \"agent\": \"build\", \"model\": null, \"subtask\": true}, \"numbers\": {\"template\": \" t \", \"description\": 3, \"model\": [1, \"m\"], \"agent\": {\"k\": \"v\"}}, \"blank\": {\"template\": \"   \"}, \"no_template\": {\"description\": \"x\"}, \"bad_template\": {\"template\": 4}, \"not_dict\": \"x\"}}",
+      "scope": "global"
+     }
+    ],
+    "harness": "opencode",
+    "home": "<ROOT>/home",
+    "skip_verified_mcp_companions": false,
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [
+      "server.js",
+      "--flag"
+     ],
+     "artifact_id": "opencode:global:list_command",
+     "artifact_type": "mcp_server",
+     "command": "node",
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "list_command",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:empty_list",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "empty_list",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [
+      "tool",
+      "x"
+     ],
+     "artifact_id": "opencode:global:str_command",
+     "artifact_type": "mcp_server",
+     "command": "uvx",
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {
+       "A": "1"
+      },
+      "guard_managed_proxy": false
+     },
+     "name": "str_command",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:args_not_list",
+     "artifact_type": "mcp_server",
+     "command": "uvx",
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "args_not_list",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:no_command",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "no_command",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:remote",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": false,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "remote",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "remote",
+     "url": "https://mcp.example/x"
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:url_only",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": false,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "url_only",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "remote",
+     "url": "https://mcp.example/y"
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:blank_type",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": false,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "blank_type",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:type_local",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "type_local",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "local",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:enabled_null",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": false,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "enabled_null",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [
+      "opencode-mcp-proxy",
+      "--server",
+      "x"
+     ],
+     "artifact_id": "opencode:global:hol-guard::companion",
+     "artifact_type": "mcp_server",
+     "command": "hol-guard",
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {},
+      "guard_managed_proxy": true
+     },
+     "name": "hol-guard::companion",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:hol-guard::plain",
+     "artifact_type": "mcp_server",
+     "command": "node",
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {},
+      "guard_managed_proxy": false
+     },
+     "name": "hol-guard::plain",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [
+      "opencode-mcp-proxy"
+     ],
+     "artifact_id": "opencode:global:guard_proxy",
+     "artifact_type": "mcp_server",
+     "command": "/usr/bin/hol-guard",
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {},
+      "guard_managed_proxy": true
+     },
+     "name": "guard_proxy",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [
+      "-m",
+      "codex_plugin_scanner.cli",
+      "guard",
+      "mcp-proxy"
+     ],
+     "artifact_id": "opencode:global:module_proxy",
+     "artifact_type": "mcp_server",
+     "command": "python",
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "enabled": true,
+      "env": {},
+      "guard_managed_proxy": true
+     },
+     "name": "module_proxy",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:plugin:first-list",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {},
+     "name": "first-list",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:plugin:plain-plugin",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {},
+     "name": "plain-plugin",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:plugin:@acme/scoped",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {},
+     "name": "@acme/scoped",
+     "publisher": "acme",
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:plugin:@noslash",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {},
+     "name": "@noslash",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:plugin:with-options",
+     "artifact_type": "plugin",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "a": [
+       1.5,
+       true,
+       null
+      ],
+      "b": 1,
+      "nested": {
+       "z": "q"
+      }
+     },
+     "name": "with-options",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:config-command:review",
+     "artifact_type": "command",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "agent": "build",
+      "description": "d",
+      "subtask": true,
+      "template": "Review $ARGUMENTS"
+     },
+     "name": "review",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:config-command:numbers",
+     "artifact_type": "command",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/opencode.json",
+     "harness": "opencode",
+     "metadata": {
+      "agent": {
+       "k": "v"
+      },
+      "description": 3,
+      "model": [
+       1,
+       "m"
+      ],
+      "template": " t "
+     },
+     "name": "numbers",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "opencode:global:command:s",
+     "artifact_type": "command",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/opencode/commands/s.md",
+     "harness": "opencode",
+     "metadata": {
+      "content_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881"
+     },
+     "name": "s",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/opencode.json",
+     "text": "{\"mcp\": {\"list_command\": {\"command\": [\"node\", \"server.js\", 3, \"--flag\"], \"args\": [\"ignored\"]}, \"empty_list\": {\"command\": [1, null]}, \"str_command\": {\"command\": \"uvx\", \"args\": [\"tool\", 2, \"x\"], \"environment\": {\"A\": \"1\", \"B\": 2, \"C\": null}}, \"args_not_list\": {\"command\": \"uvx\", \"args\": \"abc\", \"environment\": [\"x\"]}, \"no_command\": {\"command\": 7, \"url\": 5}, \"remote\": {\"type\": \"remote\", \"url\": \"https://mcp.example/x\", \"enabled\": false}, \"url_only\": {\"url\": \"https://mcp.example/y\", \"enabled\": 0}, \"blank_type\": {\"type\": \"\", \"command\": \"c\", \"enabled\": \"\"}, \"type_local\": {\"type\": \"local\", \"command\": [\"c\"], \"enabled\": [1]}, \"enabled_null\": {\"command\": \"c\", \"enabled\": null}, \"hol-guard::companion\": {\"command\": [\"hol-guard\", \"opencode-mcp-proxy\", \"--server\", \"x\"]}, \"hol-guard::plain\": {\"command\": \"node\"}, \"guard_proxy\": {\"command\": \"/usr/bin/hol-guard\", \"args\": [\"opencode-mcp-proxy\"]}, \"module_proxy\": {\"command\": \"python\", \"args\": [\"-m\", \"codex_plugin_scanner.cli\", \"guard\", \"mcp-proxy\"]}, \"not_dict\": \"x\", \"list_config\": [\"y\"]}, \"plugin\": [\"plain-plugin\", \"@acme/scoped\", \"@noslash\", [\"with-options\", {\"b\": 1, \"a\": [1.5, true, null], \"nested\": {\"z\": \"q\"}}], [\"bad-options\", \"x\"], [1, {}], [\"too\", {}, \"long\"], 5, null], \"plugins\": [\"first-list\"], \"command\": {\"review\": {\"template\": \"Review $ARGUMENTS\", \"description\": \"d\", \"agent\": \"build\", \"model\": null, \"subtask\": true}, \"numbers\": {\"template\": \" t \", \"description\": 3, \"model\": [1, \"m\"], \"agent\": {\"k\": \"v\"}}, \"blank\": {\"template\": \"   \"}, \"no_template\": {\"description\": \"x\"}, \"bad_template\": {\"template\": 4}, \"not_dict\": \"x\"}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/opencode/commands/s.md",
+     "text": "x"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/opencode/opencode.json",
+    "<ROOT>/home/.config/opencode/commands/s.md"
+   ],
+   "home": "home",
+   "name": "snapshot_full",
+   "relative": false,
+   "snapshot": true,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  }
+ ],
+ "schema": "guard-opencode-vectors.v1"
+}

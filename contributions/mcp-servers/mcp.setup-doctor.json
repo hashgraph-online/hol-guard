@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.setup-doctor",
+  "version": "1.0.0",
+  "name": "Setup Doctor MCP",
+  "description": "Read-only audit and usage-summary tools for AI coding agent setups (CLAUDE.md, skills, MCP servers, session logs). Never writes files or sends data over the network. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.saxenakapil",
+    "displayName": "Kapil Saxena",
+    "url": "https://github.com/saxenakapil/setup-doctor"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCommandLine", "background": "#0B0F14" },
+  "homepage": "https://github.com/saxenakapil/setup-doctor",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "setup-doctor"
+  },
+  "riskClasses": ["external-filesystem-read"],
+  "tools": [
+    { "name": "doctor", "state": "inherit" },
+    { "name": "wrapped", "state": "inherit" },
+    { "name": "other", "state": "inherit" }
+  ],
+  "referenceUrls": [
+    "https://github.com/saxenakapil/setup-doctor",
+    "https://github.com/saxenakapil/setup-doctor#readme"
+  ],
+  "saferAlternatives": [
+    "Both tools are read-only by design (readOnlyHint: true) and never write files or make network calls, so no stricter default is needed."
+  ]
+}

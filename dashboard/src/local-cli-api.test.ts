@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import {
   addedCustomExtensions,
+  connectorWorkspaceItems,
   filterExtensionSuggestions,
   applyBulkCommandState,
   bulkCommandState,
@@ -10,6 +11,7 @@ import {
   isLocalCliId,
   normalizeLocalCliItem,
   normalizeLocalCliList,
+  readJson,
   preferredPackageScriptExtension,
   seenSuggestionMeta,
   suggestedCustomExtensions,
@@ -19,11 +21,43 @@ import {
   suggestedHarnessExtensions,
   suggestedPackageScriptExtensions,
   suggestedSeenExtensions,
+  waitForMcpDiscoveryJob,
+  fetchMcpProviderActions,
+  unreviewedToolChangeCount,
 } from "./local-cli-api";
+import { keepChoicesCopy } from "./protection-center/local-cli-panel-copy";
+import { packageScriptQueryFrom } from "./protection-center/add-custom-extension-project";
 import { parseProtectionRoute, localCliHref, addCustomExtensionHref } from "./local-cli-links";
+import { fetchLocalCliApi } from "./guard-api";
 
 assert.equal(isLocalCliId("local-cli.cwv-py-abcdef12"), true);
 assert.equal(isLocalCliId("command.git"), false);
+
+for (const [error, guidance] of [
+  ["mcp_launch_failed", "configured executable and dependencies"],
+  ["mcp_transport_failed", "executable, dependencies, and server logs"],
+  ["mcp_initialize_failed", "starts in the host app and uses stdio MCP"],
+  ["mcp_protocol_unsupported", "protocol version Guard does not support"],
+  ["mcp_capability_rejected", "rejected Guard's discovery capabilities"],
+]) {
+  await assert.rejects(waitForMcpDiscoveryJob("local-cli.fixture", {
+    job_id: "a".repeat(32), cli_id: "local-cli.fixture", state: "failed", error,
+  }, new AbortController().signal), (caught: unknown) => caught instanceof Error
+    && caught.message.includes(guidance) && caught.message.includes("Known tools and choices were kept"));
+}
+
+{
+  const receipt = { state: "acknowledged", revision: 3, generation: 8, policy_digest: "a".repeat(64) };
+  const list = (native_publication: unknown) => normalizeLocalCliList({
+    schema_version: "guard.daemon.local-clis.v1", revision: 3, items: [], native_publication,
+  });
+  assert.deepEqual(list(receipt).native_publication, { state: "acknowledged", revision: 3, generation: 8 });
+  for (const invalid of [
+    { ...receipt, revision: 2 }, { ...receipt, generation: true },
+    { ...receipt, generation: 0 }, { ...receipt, policy_digest: "bad" },
+  ]) assert.equal(list(invalid).native_publication, undefined);
+  assert.deepEqual(list({ state: "pending", revision: 3 }).native_publication, { state: "pending", revision: 3 });
+}
 
 const item = normalizeLocalCliItem({
   cli_id: "local-cli.cwv-py-abcdef12",
@@ -79,6 +113,8 @@ const mcpItem = normalizeLocalCliItem({
 });
 assert.equal(mcpItem.surface, "mcp");
 assert.equal(mcpItem.server_identity_hash, "b".repeat(64));
+assert.equal(mcpItem.shares_enrolled_server, undefined);
+assert.equal(normalizeLocalCliItem({ ...mcpItem, shares_enrolled_server: true }).shares_enrolled_server, true);
 assert.equal(
   normalizeLocalCliItem({ ...mcpItem, source_label: "Codex, Claude Code" }).source_label,
   "Codex, Claude Code",
@@ -273,6 +309,11 @@ assert.deepEqual(
   filterPackageScriptCommands(packageScripts.commands, "guard:audit").map((entry) => entry.name),
   ["guard:reddit-targeting:audit"],
 );
+assert.equal(packageScriptQueryFrom("guard:reddit", packageScripts.commands), "guard:reddit");
+assert.equal(packageScriptQueryFrom("no-such-script", packageScripts.commands), "");
+assert.equal(packageScriptQueryFrom("guard:audit", packageScripts.commands), "");
+assert.equal(packageScriptQueryFrom("npm run", packageScripts.commands), "");
+assert.equal(packageScriptQueryFrom("  ", packageScripts.commands), "");
 assert.deepEqual(
   filterPackageScriptCommands(packageScripts.commands, "npm run").map((entry) => entry.name),
   ["guard:reddit-targeting:audit", "build"],
@@ -328,3 +369,114 @@ const mixedValidity = normalizeLocalCliList({
 });
 assert.deepEqual(mixedValidity.items.map((entry) => entry.cli_id), [item.cli_id, blockedItem.cli_id]);
 assert.equal(addedCustomExtensions(mixedValidity.items).length, 2);
+
+{
+  const observed = { ...item, cli_id: "local-cli.mcp-observed", name: "Observed connector", surface: "mcp" as const,
+    source_label: "Synthetic host", state: "unset" as const, suggestable: true, last_seen_at: "2026-09-27T12:00:00Z" };
+  const hidden = { ...observed, cli_id: "local-cli.hidden", surface: "cli" as const, suggestable: false };
+  const before = JSON.stringify([item, observed, hidden]);
+  const workspace = connectorWorkspaceItems([item, observed, hidden]);
+  assert.equal(workspace[0]?.cli_id, observed.cli_id);
+  assert.equal(workspace.some((entry) => entry.cli_id === hidden.cli_id), false);
+  assert.deepEqual(connectorWorkspaceItems(workspace, "synthetic host").map((entry) => entry.cli_id), [observed.cli_id]);
+  assert.equal(JSON.stringify([item, observed, hidden]), before);
+  assert.equal(observed.state, "unset");
+}
+
+{
+  // Forget must pass the dashboard's local-CLI path allowlist (issue 3819).
+  const realFetch = globalThis.fetch;
+  const storage = { getItem: () => null, setItem: () => undefined, removeItem: () => undefined };
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: {
+      location: { origin: "http://127.0.0.1:4174", pathname: "/", search: "", hash: "" },
+      sessionStorage: storage,
+      localStorage: storage,
+    },
+  });
+  let requested = "";
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    requested = String(input);
+    return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+  try {
+    await fetchLocalCliApi("/v1/local-clis/forget", { method: "POST", body: "{}" });
+  } finally {
+    globalThis.fetch = realFetch;
+    Reflect.deleteProperty(globalThis, "window");
+  }
+  assert.match(requested, /\/v1\/local-clis\/forget$/);
+  await assert.rejects(fetchLocalCliApi("/v1/local-clis/forget-all"), /Invalid local CLI API path/);
+}
+
+{
+  const failure = (status: number, body: unknown) => readJson(new Response(JSON.stringify(body), { status }));
+  await assert.rejects(failure(401, { error: "unauthorized" }), /could not confirm this dashboard session\. Reload this page/);
+  await assert.rejects(failure(401, { error: "unauthorized", message: " " }), /could not confirm this dashboard session/);
+  await assert.rejects(failure(409, { error: "revision_conflict", message: "Reload first." }), /Reload first\./);
+  await assert.rejects(failure(500, { error: "internal" }), /could not update this custom extension/);
+}
+
+{
+  // New and changed tools count until a saved choice reviews them; removed and
+  // stale ones do not ask for a choice.
+  const changes = { added: ["read", "write"], changed: ["delete"], removed: ["old"], stale: ["slow"] };
+  const listed = { ...item, surface: "mcp" as const, mcp_catalog: { ...item.mcp_catalog, changes } } as typeof item;
+  assert.equal(unreviewedToolChangeCount(listed), 3);
+  const reviewed = { ...listed, mcp_catalog: { ...listed.mcp_catalog, changes: { added: [], changed: [], removed: ["old"], stale: [] } } } as typeof item;
+  assert.equal(unreviewedToolChangeCount(reviewed), 0);
+  assert.equal(unreviewedToolChangeCount({ ...item, mcp_catalog: undefined } as typeof item), 0);
+  assert.equal(keepChoicesCopy(1), "1 tool is new or changed since you last saved. Keep the choices shown to mark them reviewed.");
+  assert.equal(keepChoicesCopy(55), "55 tools are new or changed since you last saved. Keep the choices shown to mark them reviewed.");
+}
+
+{
+  // A provider page the runtime shortened to stay under its byte budget still
+  // pages: next_offset lands past the current offset but no further than the
+  // page the dashboard asked for.
+  const realFetch = globalThis.fetch;
+  const storage = { getItem: () => null, setItem: () => undefined, removeItem: () => undefined };
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: {
+      location: { origin: "http://127.0.0.1:4174", pathname: "/", search: "", hash: "" },
+      sessionStorage: storage,
+      localStorage: storage,
+    },
+  });
+  const token = "a".repeat(64);
+  const action = {
+    tool_slug: "read_file", toolkit: "files", description: "Read a file.", full_schema: true,
+    permission_state: "review", allow_supported: false, account_binding: "unverified",
+    revision: 1, updated_at: "2026-10-26T00:00:00Z",
+  };
+  const page = (nextOffset: unknown) => ({
+    cli_id: "local-cli.cwv-py-abcdef12", coverage: "discovery-subset",
+    actions: [action, action, action], next_offset: nextOffset, catalog_token: token,
+  });
+  const serve = (body: unknown) => {
+    globalThis.fetch = (async () => new Response(JSON.stringify(body), {
+      status: 200, headers: { "content-type": "application/json" },
+    })) as typeof fetch;
+  };
+  const read = (offset: number) =>
+    fetchMcpProviderActions("local-cli.cwv-py-abcdef12", { search: "", offset });
+  try {
+    serve(page(103));
+    assert.equal((await read(100)).nextOffset, 103);
+    serve(page(150));
+    assert.equal((await read(100)).nextOffset, 150);
+    serve(page(null));
+    assert.equal((await read(100)).nextOffset, null);
+    serve(page(100));
+    await assert.rejects(read(100), /Invalid provider inventory page/);
+    serve(page(99));
+    await assert.rejects(read(100), /Invalid provider inventory page/);
+    serve(page(151));
+    await assert.rejects(read(100), /Invalid provider inventory page/);
+  } finally {
+    globalThis.fetch = realFetch;
+    Reflect.deleteProperty(globalThis, "window");
+  }
+}

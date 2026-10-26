@@ -2,32 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from pathlib import Path
-
-from .hook_availability_floor import (
-    EMERGENCY_SAFE_REASON,
-    EMERGENCY_SAFE_REASON_CODE,
-    hook_action_is_emergency_safe,
-)
-
-_CURSOR_UNAVAILABLE_MESSAGE = (
-    "HOL Guard paused this action because native review was unavailable "
-    "and the action is outside the emergency-safe inspection floor."
-)
-_CURSOR_UNAVAILABLE_DENY: dict[str, object] = {
-    "permission": "deny",
-    "user_message": _CURSOR_UNAVAILABLE_MESSAGE,
-    "agent_message": _CURSOR_UNAVAILABLE_MESSAGE,
-}
-
-# Native review covers PreToolUse and PostToolUse. Lifecycle events are inventory
-# only: fail-closing them freezes the conversation without adding an enforcement
-# boundary. When native review cannot complete, PreToolUse and PostToolUse continue
-# so the session stays moving. Completed policy and secret blocks still protect.
-LIFECYCLE_OBSERVE_EVENTS = frozenset(
+# Native review covers tool events and supported prompt callbacks. Other
+# lifecycle events remain inventory-only: failing them closed freezes a turn
+# without adding enforcement. Unreviewable prompts pause protected hosts;
+# acknowledged Watch and monitor-only prompt callbacks continue without enforcement.
+_LIFECYCLE_OBSERVE_EVENTS = frozenset(
     {
-        "UserPromptSubmit",
         "SessionStart",
         "SessionEnd",
         "SubagentStart",
@@ -47,56 +27,34 @@ def _compact_hook_event_name(event_name: str) -> str:
 
 
 _LIFECYCLE_CANONICAL_BY_COMPACT = {
-    **{_compact_hook_event_name(name): name for name in LIFECYCLE_OBSERVE_EVENTS},
+    **{_compact_hook_event_name(name): name for name in _LIFECYCLE_OBSERVE_EVENTS},
+    "userpromptsubmit": "UserPromptSubmit",
     "userpromptsubmitted": "UserPromptSubmit",
     "subagentend": "SubagentStop",
 }
 
 
-def lifecycle_event_is_observe_only(event_name: str) -> bool:
-    return _compact_hook_event_name(event_name) in _LIFECYCLE_CANONICAL_BY_COMPACT
-
-
 def hook_event_pauses_when_unavailable(event_name: str) -> bool:
-    """True when native miss must pause the harness instead of continuing the turn."""
+    """True when native miss must pause the harness instead of continuing the turn.
+
+    This answer cannot come from the resident: it is the policy for the turns
+    where the resident is the thing that could not be reached.
+    """
 
     compact = _compact_hook_event_name(event_name)
+    if compact in {"userpromptsubmit", "userpromptsubmitted"}:
+        return True
     if compact in _LIFECYCLE_CANONICAL_BY_COMPACT:
         return False
-    if compact in {"posttooluse", "posttool"} or compact.startswith("after"):
-        return False
+    # The tool already ran, so pausing the turn protects nothing.
     return compact not in {"posttooluse", "posttool"} and not compact.startswith("after")
 
 
-def hook_review_is_recording_only(
-    *,
-    guard_home: Path | None = None,
-    workspace: Path | None = None,
-    recording_only: bool = False,
-) -> bool:
-    """True when Watch/observe must record without stopping the harness."""
-
-    if recording_only:
-        return True
-    if guard_home is None:
-        return False
-    try:
-        from ..config import load_guard_config
-        from ..protection_posture import protection_is_off
-
-        config = load_guard_config(guard_home, workspace=workspace)
-    except (OSError, RuntimeError, TypeError, ValueError):
-        return False
-    return protection_is_off(posture=config.protection_posture, mode=config.mode)
-
-
-_DECISION_HOOK_HARNESSES = frozenset({"grok", "hermes", "openclaw", "pi", "omp"})
 _PERMISSION_REQUEST_EVENTS = frozenset({"permissionrequest", "permissionrequestv2", "copilotpermissionrequest"})
 _REVIEW_CANNOT_FINISH_REASON_CODES = frozenset(
     {
-        "native_hook_disabled",
-        "native_shadow_diagnostic_disabled",
         "native_policy_not_ready",
+        "native_policy_update_in_progress",
         "native_hook_event_unavailable",
         "native_pre_tool_unavailable",
         "native_post_tool_unavailable",
@@ -120,7 +78,6 @@ _REVIEW_CANNOT_FINISH_REASON_CODES = frozenset(
         "daemon_hook_process_guard_home_mismatch",
         "daemon_worker_exception",
         "harness_not_managed",
-        "native_degraded_emergency_safe",
     }
 )
 _INTEGRITY_FAIL_CLOSED_REASON_CODES = frozenset(
@@ -144,143 +101,63 @@ def hook_reason_continues_session(reason_code: str) -> bool:
     return code in _REVIEW_CANNOT_FINISH_REASON_CODES
 
 
-def recording_only_pre_tool_response(
-    harness: str,
-    *,
-    reason_code: str,
-    reason: str,
-) -> dict[str, object]:
-    """Continue PreToolUse when native review cannot finish."""
-
-    from .hook_worker_responses import harness_json_from_native_pre_tool
-
-    if harness.strip().lower().replace("_", "-") in _DECISION_HOOK_HARNESSES:
-        return {
-            "decision": "allow",
-            "policy_action": "warn",
-            "reason_code": reason_code,
-            "reason": reason,
-        }
-    return harness_json_from_native_pre_tool(
-        harness,
-        {
-            "decision": "allow",
-            "minimum_action": "warn",
-            "policy_action": "warn",
-            "reason_code": reason_code,
-            "reason": reason,
-        },
-    )
-
-
 def availability_harness_response(
-    payload: Mapping[str, object],
     *,
     harness: str,
     event_name: str,
     reason_code: str,
     reason: str,
-    workspace: Path | None = None,
-    home_dir: Path | None = None,
-    guard_home: Path | None = None,
-    recording_only: bool = False,
+    prompt_reason: str | None = None,
 ) -> dict[str, object]:
-    """Render a schema-valid harness result when native review is unavailable."""
+    """Fixed harness result when native review is unavailable.
 
-    from .hook_launcher_recovery import hook_action_is_launcher_recovery_safe
-    from .hook_worker_responses import observe_lifecycle_fail_safe_response
+    A missing resident never authorizes the tool. Watch recording continues
+    only through the resident renderer, which the caller applies after this
+    deny. Integrity failures stay denied as well.
+    """
 
-    del guard_home, recording_only
-    canonical_lifecycle = _LIFECYCLE_CANONICAL_BY_COMPACT.get(_compact_hook_event_name(event_name))
-    if canonical_lifecycle is not None:
-        return observe_lifecycle_fail_safe_response(
-            harness,
-            event_name=canonical_lifecycle,
-            reason_code=reason_code,
-        )
-    if hook_event_is_permission_request(event_name):
-        from .hook_worker_responses import permission_unavailable_response
+    from .hook_fail_closed import fail_closed_response
 
-        return permission_unavailable_response(
-            harness,
-            event_name=event_name,
-            reason=reason,
-            reason_code=reason_code,
-        )
-    compact = _compact_hook_event_name(event_name)
-    pre_tool_event = compact in {"pretooluse", "pretool"} or compact.startswith("before")
-    if pre_tool_event and reason_code.strip() in _INTEGRITY_FAIL_CLOSED_REASON_CODES:
-        from .hook_worker_responses import integrity_fail_closed_pre_tool_response
-
-        if hook_action_is_launcher_recovery_safe(payload, workspace=workspace, home_dir=home_dir):
-            return recording_only_pre_tool_response(
-                harness,
-                reason_code=reason_code,
-                reason=reason,
-            )
-        return integrity_fail_closed_pre_tool_response(
-            harness,
-            reason=reason,
-            reason_code=reason_code,
-        )
-    if pre_tool_event:
-        return recording_only_pre_tool_response(
-            harness,
-            reason_code=reason_code,
-            reason=reason,
-        )
-    return observe_lifecycle_fail_safe_response(
-        harness,
-        event_name=event_name,
-        reason_code=reason_code,
+    return fail_closed_response(
+        harness, event_name, reason=reason, reason_code=reason_code, prompt_reason=prompt_reason
     )
 
 
-def cursor_fallback_permission(
-    payload: Mapping[str, object],
-    *,
-    hook_event_name: str,
-    workspace: Path | None = None,
-    home_dir: Path | None = None,
-    guard_home: Path | None = None,
-    recording_only: bool = False,
-) -> tuple[dict[str, object], int]:
-    """Return Cursor hook stdout when daemon or native review cannot complete."""
+def cursor_fallback_permission(*, hook_event_name: str) -> tuple[dict[str, object], int]:
+    """Deny protected Cursor actions when no evaluator supplies a decision.
 
-    del payload, workspace, home_dir, guard_home, recording_only
-    compact = hook_event_name.strip().lower().replace("_", "").replace("-", "")
-    if compact in {"aftershellexecution", "aftermcpexecution"}:
-        return {}, 0
-    return {"permission": "allow"}, 0
-
-
-def cursor_unparseable_input_permission(
-    hook_event_name: str,
-    *,
-    recording_only: bool = False,
-) -> tuple[dict[str, object], int]:
-    """Keep Cursor moving when stdin is empty or invalid but the event is known."""
+    A hook script written by an older release still passes the payload and
+    mode keywords; the call fails, and that script denies with the same reply.
+    """
 
     compact = hook_event_name.strip().lower().replace("_", "").replace("-", "")
     if compact in {"aftershellexecution", "aftermcpexecution"}:
         return {}, 0
-    if recording_only or compact in {"", "beforereadfile"}:
-        return {"permission": "allow"}, 0
-    return dict(_CURSOR_UNAVAILABLE_DENY), 2
+    reason = "Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal."
+    return {
+        "permission": "deny",
+        "user_message": reason,
+        "agent_message": reason,
+    }, 2
+
+
+def cursor_unparseable_input_permission(hook_event_name: str) -> tuple[dict[str, object], int]:
+    """Deny unparsed actions: unparsed input carries no acknowledged mode authority."""
+
+    compact = hook_event_name.strip().lower().replace("_", "").replace("-", "")
+    if compact in {"aftershellexecution", "aftermcpexecution"}:
+        return {}, 0
+    return {
+        "permission": "deny",
+        "user_message": "Guard could not process this hook request safely. Retry or repair Guard from a terminal.",
+    }, 2
 
 
 __all__ = [
-    "EMERGENCY_SAFE_REASON",
-    "EMERGENCY_SAFE_REASON_CODE",
-    "LIFECYCLE_OBSERVE_EVENTS",
     "availability_harness_response",
     "cursor_fallback_permission",
     "cursor_unparseable_input_permission",
-    "hook_action_is_emergency_safe",
     "hook_event_is_permission_request",
     "hook_event_pauses_when_unavailable",
     "hook_reason_continues_session",
-    "hook_review_is_recording_only",
-    "lifecycle_event_is_observe_only",
-    "recording_only_pre_tool_response",
 ]

@@ -1,0 +1,180 @@
+"""Shared presentation policy for requests that need approval."""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from pathlib import Path
+
+SAFE_ALTERNATIVE_GUIDANCE = (
+    "This action remains blocked. Continue with a safe, permitted alternative that respects "
+    "the same protection. Do not retry an equivalent command, bypass Guard, or seek permission "
+    "to run it. If no safe alternative can complete the task, explain the limitation."
+)
+
+
+def approval_wait_hint(request_id: str, *, guard_home: Path, home_dir: Path | None = None) -> str:
+    """Transport the resident's read-only notification for this queued request."""
+    from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+
+    try:
+        result = native_runner_authority(
+            "approval_wait_hint",
+            {"request_id": request_id, "guard_home": str(guard_home), "home_dir": str(home_dir or Path.home())},
+            guard_home=guard_home,
+        )
+    except NativeRunnerAuthorityError:
+        return ""
+    hint = result.get("hint")
+    return hint if isinstance(hint, str) else ""
+
+
+def asks_for_approval(config: object) -> bool:
+    """Prompt only after the operator explicitly opts in."""
+    return getattr(config, "blocked_request_mode", None) == "ask"
+
+
+_APPROVAL_WAIT = (
+    "It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`). "
+    "Do not retry the same action until it is approved; continue with other work meanwhile."
+)
+# A queued row whose retry cannot reuse a one-time approval (no retry binding):
+# telling the agent to wait for approval sends it into a retry that is blocked again.
+_APPROVAL_ALWAYS_ONLY = (
+    "It is waiting in the HOL Guard inbox (`hol-guard approvals`), but approving it just once will not "
+    'let you run it; only "Always allow exact action" will. Do not retry it unless the user says they '
+    "chose that; continue with other work meanwhile."
+)
+_APPROVAL_CANNOT_UNBLOCK = (
+    "It is recorded in the HOL Guard inbox, but approving it there will not let you run it. "
+    "Do not retry this exact command. Tell the user exactly what is blocked so they can run it themselves, "
+    "or continue with a permitted alternative."
+)
+_NOT_QUEUED = (
+    "No approval is waiting in HOL Guard for this action. Do not retry the same action or work around the block; "
+    "continue with a permitted alternative or tell the user what is blocked."
+)
+
+# A connector setup review of an MCP server: one decision for the server, not an approval of this action.
+_CONNECTOR_SETUP_WAIT = (
+    "Setting it up is a one-time decision for the user in the HOL Guard inbox (`hol-guard approvals`), "
+    "not an approval of this action. Do not retry it, in this or another spelling, until it is set up; "
+    "continue with other work meanwhile."
+)
+# A local CLI or script Guard has not been set up for is an ordinary review: the user's Allow once or
+# Always allow in the inbox is what lets the agent's retry run (`docs/guard/approval-invariant.md`).
+_CONNECTOR_APPROVAL_WAIT = (
+    "It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`), where "
+    "Allow once or Always allow lets it run. Do not retry the same action until it is approved; "
+    "continue with other work meanwhile."
+)
+_CONNECTOR_SURFACE_LABELS = {"cli": "local CLI", "package-scripts": "package script", "mcp": "MCP server"}
+# Connector surfaces whose setup review is an ordinary approvable review.
+LOCAL_CONNECTOR_SURFACES = frozenset({"cli", "package-scripts"})
+CONNECTOR_SETUP_REASON_PREFIX = "HOL Guard has not been set up for `"
+
+
+def connector_setup_reason(
+    name: str, surface: str, *, ask: bool, permitted: Sequence[str] = (), approvable: bool = True
+) -> str:
+    """Agent text for a review held only because Guard was never set up for the connector.
+
+    A local CLI or script whose review ``approvable`` (the inbox row's Allow once or
+    Always allow can let the retry run) says so in either mode, and the caller adds
+    the link. Otherwise, and for an MCP server, the default mode adds the computed
+    redirect (``permitted``: alternatives this device already allows; none are named
+    when there are none) and ``SAFE_ALTERNATIVE_GUIDANCE``, with no link or request to
+    ask the user; ``ask`` mode says it waits in the inbox, and the caller adds the link.
+    Mirrored byte-for-byte by `blocked_request_mode::connector_setup_reason` in Rust.
+    """
+    label = _CONNECTOR_SURFACE_LABELS.get(surface, surface)
+    reason = f"{CONNECTOR_SETUP_REASON_PREFIX}{name}` ({label}) on this device."
+    if approvable and surface in LOCAL_CONNECTOR_SURFACES:
+        return f"{reason} {_CONNECTOR_APPROVAL_WAIT}"
+    if ask:
+        return f"{reason} {_CONNECTOR_SETUP_WAIT}"
+    names = ", ".join(f"`{item}`" for item in permitted if item)
+    redirect = f"Permitted on this device: {names}." if names else ""
+    return " ".join(part for part in (reason, redirect, SAFE_ALTERNATIVE_GUIDANCE) if part)
+
+
+def is_unlinked_connector_setup_reason(text: object) -> bool:
+    """Whether ``text`` carries a default-mode connector setup reason.
+
+    Harness renderers add no approval link and no approval step to it.
+    """
+    return isinstance(text, str) and CONNECTOR_SETUP_REASON_PREFIX in text and SAFE_ALTERNATIVE_GUIDANCE in text
+
+
+# Plain-language next steps keyed by the reason code Rust already returned.
+_REASON_CODE_HINTS = {
+    "native_destructive_command": (
+        "This command deletes or overwrites data. Use `git worktree remove` for a worktree, "
+        "or target one specific path."
+    ),
+    "native_package_review": (
+        "Package installs download code from a registry, so Guard reviews them. An install that "
+        "only restores the committed lockfile and runs no scripts (`bun install --frozen-lockfile "
+        "--ignore-scripts`, `pnpm install --frozen-lockfile --ignore-scripts` or `npm ci "
+        "--ignore-scripts`) can proceed once Guard has checked the lockfile and settings. If this "
+        "was already that form, reuse dependencies that are already installed where you can."
+    ),
+    "native_network_review": "This makes a network request that Guard has not seen before.",
+    "native_file_read_review": (
+        "This reads a file outside what Guard treats as safe to read. A search is checked "
+        "against every file it can reach, so search a narrower folder or one file, use `rg` "
+        "with a `-g` file filter, or find files by name with `find` or `glob`."
+    ),
+    "native_pre_tool_unknown_review": "Guard cannot check what this tool call will do before it runs.",
+    "native_command_review_required": (
+        "Guard could not prove this exact command is read-only. Use a simpler built-in tool where one fits. "
+        "If it chains several steps, run each step as its own command; Guard checks each one on its own."
+    ),
+}
+
+# A package review of a build or test (`cargo test`) says why in its own text;
+# the install advice above does not apply to it.
+_BUILD_REVIEW_PREFIX = "HOL Guard requires review before this build or test command"
+
+# A review of a direct read of one path says why in its own text; the advice for
+# narrowing a search does not apply to it.
+_READ_REVIEW_PREFIX = "HOL Guard requires review before this file read"
+
+
+# The native review text offers inbox approval. When no approval can let the
+# action run, that offer contradicts the note that follows, so it is dropped.
+_INBOX_APPROVAL_OFFER = (
+    " Approve it in the HOL Guard inbox (choose Always for a repeated read-only command),"
+    " or split it into simpler commands."
+)
+
+
+def safe_alternative_reason(
+    reason: str,
+    *,
+    reason_code: str | None = None,
+    approval_queued: bool | None = None,
+    retry_reuses_approval: bool = True,
+    exact_action_allowable: bool = False,
+) -> str:
+    """Format deny text; the verdict and reason code come from the native decision.
+
+    ``retry_reuses_approval`` is False when the queued row has no retry binding, so a
+    one-time approval cannot let the agent's retry run. ``exact_action_allowable``
+    says whether "Always allow exact action" can.
+    """
+    if reason_code is None and approval_queued is None:
+        return f"{reason.strip()} {SAFE_ALTERNATIVE_GUIDANCE}".strip()
+    own_text = reason.lstrip().startswith((_BUILD_REVIEW_PREFIX, _READ_REVIEW_PREFIX))
+    hint = "" if own_text else _REASON_CODE_HINTS.get(reason_code or "", "")
+    if not approval_queued:
+        wait = _NOT_QUEUED
+    elif retry_reuses_approval:
+        wait = _APPROVAL_WAIT
+    elif exact_action_allowable:
+        wait = _APPROVAL_ALWAYS_ONLY
+    else:
+        wait = _APPROVAL_CANNOT_UNBLOCK
+    reason = reason.strip()
+    if wait in (_NOT_QUEUED, _APPROVAL_CANNOT_UNBLOCK):
+        reason = reason.replace(_INBOX_APPROVAL_OFFER, "")
+    return " ".join(part for part in (reason, hint, wait) if part)

@@ -7,7 +7,9 @@ import base64
 import csv
 import hashlib
 import importlib.metadata
+import importlib.util
 import json
+import marshal
 import os
 import re
 import sys
@@ -29,6 +31,15 @@ _SHA256: Final = re.compile(r"[0-9a-f]{64}")
 
 class InstalledCanaryError(RuntimeError):
     pass
+
+
+def add_installed_canary_arguments(parser: argparse.ArgumentParser) -> None:
+    """Use the same immutable-subject contract for installed qualification runners."""
+    _ = parser.add_argument("--subject", type=Path, required=True)
+    _ = parser.add_argument("--version", required=True)
+    _ = parser.add_argument("--source-sha", required=True)
+    _ = parser.add_argument("--repo-root", type=Path, required=True)
+    _ = parser.add_argument("--output", type=Path, required=True)
 
 
 def sha256_file(path: Path) -> str:
@@ -148,10 +159,32 @@ def _regular_file_set(root: Path, installation_root: Path, *, label: str) -> set
         if path.is_symlink():
             raise InstalledCanaryError(f"Installed {label} contains a symbolic link")
         if path.is_file():
-            files.add(path.relative_to(installation_root).as_posix())
+            relative_path = path.relative_to(installation_root).as_posix()
+            if path.parent.name == "__pycache__" and path.suffix == ".pyc" and _source_cache_matches(path):
+                continue
+            files.add(relative_path)
         elif not path.is_dir():
             raise InstalledCanaryError(f"Installed {label} contains a non-regular filesystem node")
     return files
+
+
+def _source_cache_matches(path: Path) -> bool:
+    source = path.parent.parent / f"{path.name.split('.', 1)[0]}.py"
+    if not source.is_file() or source.is_symlink():
+        return False
+    if path != Path(importlib.util.cache_from_source(str(source))):
+        return False
+    if source.stat().st_size > 4_194_304 or path.stat().st_size > 16_777_216:
+        return False
+    try:
+        payload = path.read_bytes()
+        if len(payload) < 16 or payload[:4] != importlib.util.MAGIC_NUMBER:
+            return False
+        # Match code to source, not just a mutable cache filename or timestamp.
+        expected = compile(source.read_bytes(), str(source), "exec", dont_inherit=True, optimize=sys.flags.optimize)
+        return marshal.loads(payload[16:]) == expected
+    except (OSError, ValueError, EOFError, TypeError, SyntaxError):
+        return False
 
 
 def _record_path(distribution: importlib.metadata.Distribution) -> Path:

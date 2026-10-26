@@ -33,11 +33,15 @@ WINDOWS_PLATFORM = "win_amd64"
 MANIFEST_PATH = "codex_plugin_scanner/_native/runtime-manifest.json"
 RUNTIME_PATH = "codex_plugin_scanner/_native/hol-guard-runtime"
 WINDOWS_RUNTIME_PATH = f"{RUNTIME_PATH}.exe"
+BUNDLE_ROOT_PATH = (
+    "codex_plugin_scanner/guard/contracts/data/extensions/command-pack-bundle/command-pack-bundle.v1.json"
+)
 _SHA40 = re.compile(r"[0-9a-f]{40}\Z")
 _SHA64 = re.compile(r"[0-9a-f]{64}\Z")
 _MAX_WHEEL_BYTES = 256 * 1024 * 1024
 _MAX_RUNTIME_BYTES = 128 * 1024 * 1024
 _MAX_MANIFEST_BYTES = 64 * 1024
+_MAX_BUNDLE_ROOT_BYTES = 64 * 1024
 _MAX_ARCHIVE_ENTRIES = 16_384
 _MAX_ARCHIVE_UNCOMPRESSED_BYTES = 512 * 1024 * 1024
 _SAFE_WAIVER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._:/-]{0,159}\Z")
@@ -170,6 +174,11 @@ def _native_manifest(wheel: Path, platform: str, version: str, source_sha: str, 
             _validate_archive(archive)
             manifest_bytes = _read_zip_member(archive, MANIFEST_PATH, _MAX_MANIFEST_BYTES)
             runtime = _read_zip_member(archive, runtime_name, _MAX_RUNTIME_BYTES)
+            bundle_root = (
+                _read_zip_member(archive, BUNDLE_ROOT_PATH, _MAX_BUNDLE_ROOT_BYTES)
+                if BUNDLE_ROOT_PATH in archive.namelist()
+                else None
+            )
     except (OSError, zipfile.BadZipFile) as error:
         raise ReleaseArtifactError(f"wheel could not be read: {wheel.name}") from error
     try:
@@ -187,8 +196,11 @@ def _native_manifest(wheel: Path, platform: str, version: str, source_sha: str, 
         "runtime_sha256",
         "runtime_size",
     }
+    if isinstance(manifest, dict) and "command_pack_bundle" in manifest:
+        expected_keys.add("command_pack_bundle")
     if not isinstance(manifest, dict) or set(manifest) != expected_keys:
         raise ReleaseArtifactError("native runtime manifest has an unexpected shape")
+    _bundle_binding(manifest.get("command_pack_bundle"), bundle_root, source_sha=source_sha, wheel=wheel)
     if (
         manifest["schema"] != "hol-guard-native-runtime.v1"
         or manifest["protocol_version"] != 1
@@ -201,6 +213,26 @@ def _native_manifest(wheel: Path, platform: str, version: str, source_sha: str, 
         or manifest["runtime_sha256"] != hashlib.sha256(runtime).hexdigest()
     ):
         raise ReleaseArtifactError(f"native runtime manifest identity mismatch: {wheel.name}")
+
+
+def _bundle_binding(descriptor: object, bundle_root: bytes | None, *, source_sha: str, wheel: Path) -> None:
+    """Bind the optional installed command pack bundle to the root the wheel carries."""
+
+    if descriptor is None and bundle_root is None:
+        return
+    if (
+        not isinstance(descriptor, dict)
+        or bundle_root is None
+        or set(descriptor) != {"schema", "path", "sha256", "length", "source_sha", "engine"}
+        or descriptor["schema"] != "guard.command-pack-bundle.v1"
+        or descriptor["path"] != BUNDLE_ROOT_PATH
+        or descriptor["sha256"] != hashlib.sha256(bundle_root).hexdigest()
+        or descriptor["length"] != len(bundle_root)
+        or descriptor["source_sha"] != source_sha
+        or not isinstance(descriptor["engine"], str)
+        or _SHA64.fullmatch(descriptor["engine"]) is None
+    ):
+        raise ReleaseArtifactError(f"native command pack bundle does not match its embedded root: {wheel.name}")
 
 
 def _validate_pure_wheel(path: Path, version: str) -> None:

@@ -7,7 +7,15 @@
 
 from __future__ import annotations
 
+import logging
+import re
+import sqlite3
+import sys
+from collections.abc import Mapping
 from typing import TYPE_CHECKING
+
+from ..native_hook_adapter import UnsupportedHarnessError
+from ..native_hook_render import native_evaluation_has_terminal_policy_action
 
 
 def _coalesce_string(*values: object | None) -> str:
@@ -22,37 +30,39 @@ def _coalesce_string(*values: object | None) -> str:
 def _canonical_harness_name(value: str) -> str:
     """Resolve harness aliases lazily to avoid the CLI support import cycle."""
 
-    from .commands_support_runtime_resolution import _canonical_harness_name as resolve
+    from .commands_support_runtime_resolution import (
+        _canonical_harness_name as resolve_canonical_harness_name,
+    )
 
-    return resolve(value)
+    return resolve_canonical_harness_name(value)
 
 
 def _managed_install_for(store: GuardStore, harness: str) -> dict[str, object] | None:
     """Resolve managed-install state lazily to avoid the CLI support import cycle."""
 
-    from .commands_support_runtime_resolution import _managed_install_for as resolve
+    from .commands_support_runtime_resolution import _managed_install_for as resolve_managed_install_for
 
-    return resolve(store, harness)
+    return resolve_managed_install_for(store, harness)
 
 
 def _hook_event_name(payload: dict[str, object]) -> str | None:
     """Read hook event names lazily to avoid the CLI support import cycle."""
 
-    from .commands_support_runtime_artifacts import _hook_event_name as resolve
+    from .commands_support_runtime_artifacts import _hook_event_name as resolve_hook_event_name
 
-    return resolve(payload)
+    return resolve_hook_event_name(payload)
 
 
 def _write_json_line(payload: dict[str, object], *, output_stream: TextIO | None = None) -> None:
     """Resolve hook output lazily without reintroducing the prompt import cycle."""
 
-    from .commands_support_prompts import _write_json_line as resolve
+    from .commands_support_prompts import _write_json_line as resolve_write_json_line
 
-    resolve(payload, output_stream=output_stream)
+    resolve_write_json_line(payload, output_stream=output_stream)
 
 if TYPE_CHECKING:
     from ..store import GuardStore
-    from ._commands_shared import _GUARD_CLIENT_VERSION, _HOOK_DAEMON_UNREACHABLE_REASON_MARKER, _now
+    from ._commands_shared import _GUARD_CLIENT_VERSION, _now
     from .commands_support_interaction import _attach_primary_approval_link, _preferred_approval_review_url
     from .commands_support_runtime_policy import _approval_delivery_payload, _localize_pending_approval_copy
 
@@ -84,143 +94,74 @@ def _load_hook_payload(
         harness=harness,
         normalize=False,
     )
-    if normalize:
-        from ..runtime.hook_payload_reference import hydrate_hook_payload_reference
-        payload = hydrate_hook_payload_reference(payload)
-        return _normalize_hook_payload(payload, harness=harness)
     return payload
 
-def _emit_native_hook_response(
+_BLOCKING_ACTIONS = frozenset({"review", "require-reapproval", "sandbox-required", "block"})
+
+
+_GUARD_TOKEN_URL_VALUE = re.compile(r"guard-token=([A-Za-z0-9._~%+-]+)")
+_GUARD_TOKEN_SENTINEL = re.compile(r"hgdfrag=efgh(\d+)")
+
+
+def _protect_ephemeral_approval_tokens(value: object, tokens: list[str]) -> object:
+    """Swap signed dashboard-session fragments for a redaction-safe sentinel."""
+    if isinstance(value, str):
+        def _replace(match: re.Match[str]) -> str:
+            tokens.append(match.group(1))
+            return f"hgdfrag=efgh{len(tokens) - 1}"
+
+        return _GUARD_TOKEN_URL_VALUE.sub(_replace, value)
+    if isinstance(value, dict):
+        return {key: _protect_ephemeral_approval_tokens(item, tokens) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_protect_ephemeral_approval_tokens(item, tokens) for item in value]
+    return value
+
+
+def _restore_ephemeral_approval_tokens(value: object, tokens: list[str]) -> object:
+    """Restore the deliberately user-facing signed approval link after redaction."""
+    if isinstance(value, str):
+        if "hgdfrag=efgh" in value:
+            def _replace(match: re.Match[str]) -> str:
+                index = int(match.group(1))
+                return f"guard-token={tokens[index]}" if index < len(tokens) else match.group(0)
+
+            return _GUARD_TOKEN_SENTINEL.sub(_replace, value)
+        return value
+    if isinstance(value, dict):
+        return {key: _restore_ephemeral_approval_tokens(item, tokens) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_restore_ephemeral_approval_tokens(item, tokens) for item in value]
+    return value
+
+
+def _emit_native_hook_json_document(
+    payload: dict[str, object],
     *,
-    harness: str,
-    policy_action: str,
-    reason: str,
-    event_name: str = "PreToolUse",
-    additional_context: str | None = None,
-    system_message: str | None = None,
+    compact: bool = False,
     output_stream: TextIO | None = None,
 ) -> None:
-    payload: dict[str, object] = {}
-    if isinstance(system_message, str) and system_message.strip():
-        payload["systemMessage"] = system_message.strip()
-    if event_name == "UserPromptSubmit":
-        if policy_action in {"review", "require-reapproval", "sandbox-required", "block"} and not additional_context:
-            payload["decision"] = "block"
-            payload["reason"] = reason
-            if _canonical_harness_name(harness) == "codex":
-                payload["continue"] = False
-                payload["stopReason"] = reason
-                payload["hookSpecificOutput"] = {
-                    "hookEventName": event_name,
-                    "additionalContext": reason,
-                }
-        elif additional_context:
-            payload["hookSpecificOutput"] = {
-                "hookEventName": event_name,
-                "additionalContext": additional_context,
-            }
-        elif _canonical_harness_name(harness) in {"claude-code", "codex"}:
-            payload["hookSpecificOutput"] = {"hookEventName": event_name}
-        if payload:
-            _write_json_line(payload, output_stream=output_stream)
-        return
-    if event_name in {"Notification", "PermissionRequest"}:
-        if event_name == "PermissionRequest" and policy_action in {"block", "sandbox-required"}:
-            decision: dict[str, object] = {
-                "behavior": "deny",
-                "message": additional_context or reason,
-            }
-            if _canonical_harness_name(harness) != "codex":
-                decision["interrupt"] = False
-            payload["hookSpecificOutput"] = {
-                "hookEventName": event_name,
-                "decision": decision,
-            }
-            _write_json_line(payload, output_stream=output_stream)
-            return
-        if event_name == "PermissionRequest" and _canonical_harness_name(harness) == "codex":
-            if policy_action in {"review", "require-reapproval"}:
-                payload["systemMessage"] = (
-                    "HOL Guard is reviewing this Codex approval request. Codex will show its normal approval prompt; "
-                    "choose allow only if you trust the exact tool action."
-                )
-            if payload:
-                _write_json_line(payload, output_stream=output_stream)
-            return
-        if event_name == "PermissionRequest" and _canonical_harness_name(harness) == "claude-code":
-            message = system_message or reason
-            if message:
-                payload["systemMessage"] = message
-            if additional_context:
-                payload["hookSpecificOutput"] = {
-                    "hookEventName": event_name,
-                    "additionalContext": additional_context,
-                }
-            elif message:
-                payload["hookSpecificOutput"] = {"hookEventName": event_name}
-            if payload:
-                _write_json_line(payload, output_stream=output_stream)
-            return
-        if additional_context:
-            payload["hookSpecificOutput"] = {
-                "hookEventName": event_name,
-                "additionalContext": additional_context,
-            }
-        if payload:
-            _write_json_line(payload, output_stream=output_stream)
-        return
-    if event_name == "PostToolUse" and policy_action in {"review", "require-reapproval", "sandbox-required", "block"}:
-        payload.update({"decision": "block", "reason": reason, "continue": True, "stopReason": reason})
-        _write_json_line(payload, output_stream=output_stream)
-        return
-    permission_decision = _native_hook_permission_decision(policy_action, harness=harness)
-    if harness == "codex" and event_name == "PreToolUse" and permission_decision is None:
-        return
-    hook_specific_output: dict[str, object] = {"hookEventName": event_name}
-    if permission_decision is not None:
-        hook_specific_output["permissionDecision"] = permission_decision
-        if permission_decision != "allow" or _HOOK_DAEMON_UNREACHABLE_REASON_MARKER in reason.lower():
-            hook_specific_output["permissionDecisionReason"] = reason
-    payload["hookSpecificOutput"] = hook_specific_output
-    _write_json_line(
-        _hermes_native_or_payload(harness, policy_action, reason, payload),
-        output_stream=output_stream,
+    """Write a native protocol document, redacting everything except the
+    ephemeral signed approval link that the operator is meant to click."""
+    from .render import _redact_payload, _render_redacted_json_payload
+
+    tokens: list[str] = []
+    protected = _protect_ephemeral_approval_tokens(payload, tokens)
+    masked = _redact_payload(protected, command="hook")
+    restored = _restore_ephemeral_approval_tokens(masked, tokens)
+    rendered = (
+        json.dumps(restored, separators=(",", ":"))
+        if compact
+        else _render_redacted_json_payload(restored)
     )
-
-def _hermes_native_or_payload(
-    harness: str,
-    policy_action: str,
-    reason: str,
-    payload: dict[str, object],
-) -> dict[str, object]:
-    if _canonical_harness_name(harness) != "hermes":
-        return payload
-    from ..adapters.hermes_runtime_hooks import hermes_native_decision
-    return hermes_native_decision(policy_action=policy_action, reason=reason)
-
-
-def _emit_native_hook_block_stderr(reason: str) -> None:
-    print(reason, file=sys.stderr)
-
-def _emit_native_hook_notification_stderr(reason: str) -> None:
-    print(reason, file=sys.stderr)
-
-def _native_hook_permission_decision(policy_action: str, *, harness: str) -> str | None:
-    canonical = _canonical_harness_name(harness)
-    if policy_action in {"block", "sandbox-required"}:
-        return "deny"
-    if policy_action in {"review", "require-reapproval"}:
-        if canonical in {"codex", "kimi", "grok", "zcode", "devin"}:
-            return "deny"
-        return "ask"
-    if canonical == "codex":
-        return None
-    return "allow"
-
-def _copilot_hook_permission_decision(policy_action: str) -> str:
-    if policy_action in {"review", "require-reapproval", "sandbox-required", "block"}:
-        return "deny"
-    return "allow"
+    if output_stream is None:
+        # stdout is the harness delivery channel; the ephemeral approval
+        # link must reach the operator intact.
+        sys.stdout.write(rendered)  # codeql[py/clear-text-logging-sensitive-data]
+        sys.stdout.write("\n")
+    else:
+        output_stream.write(rendered)  # codeql[py/clear-text-logging-sensitive-data]
+        output_stream.write("\n")
 
 
 def _object_list(value: object | None) -> list[object]:
@@ -234,6 +175,14 @@ def _mapping_list(value: object | None) -> list[Mapping[str, object]]:
         return []
     return [item for item in value if isinstance(item, Mapping)]
 
+
+def _daemon_failure_reason(error: RuntimeError) -> str:
+    """Preserve the daemon-failure category and, when present, its message."""
+    message = str(error)
+    if message:
+        return f"{type(error).__name__}: {message}"
+    return type(error).__name__
+
 def _headless_approval_resolver(
     *,
     args: argparse.Namespace,
@@ -244,7 +193,14 @@ def _headless_approval_resolver(
     should_wait_for_approvals = not bool(getattr(args, "json", False))
 
     def resolve(detection, payload):
-        if evaluation_has_terminal_policy_action(payload):
+        # A block or sandbox-required answer is not a question to put to a
+        # user, and the resident that produced the evaluation decides that. A
+        # resident that cannot answer leaves the verdict standing rather than
+        # opening an approval flow that could only reach the wrong outcome.
+        terminal = native_evaluation_has_terminal_policy_action(
+            args.harness, payload, guard_home=context.guard_home
+        )
+        if terminal is None or terminal:
             return payload
         managed_install = _managed_install_for(store, args.harness)
         approval_flow = approval_prompt_flow(args.harness, managed_install=managed_install)
@@ -253,14 +209,16 @@ def _headless_approval_resolver(
             home_dir=context.home_dir,
         )
 
-        def apply_delivery_and_wait(payload, queued):
+        def apply_delivery_and_wait(payload, queued, *, complete=True):
             """Attach delivery copy and either record the pending wait or block on approvals.
 
-            Returns the wait result, or None when no wait was performed.
+            Returns the wait result, or None when no wait was performed. An
+            incomplete queue never waits: approving the requests that were
+            written must not resume a launch whose other findings have none.
             """
             payload["approval_delivery"] = _approval_delivery_payload(args.harness, managed_install=managed_install)
             _localize_pending_approval_copy(payload, harness=args.harness)
-            if str(approval_flow["tier"]) != "native-or-center" or not should_wait_for_approvals:
+            if str(approval_flow["tier"]) != "native-or-center" or not should_wait_for_approvals or not complete:
                 payload["approval_wait"] = {
                     "resolved": False,
                     "pending_request_ids": [str(item["request_id"]) for item in queued if "request_id" in item],
@@ -276,14 +234,26 @@ def _headless_approval_resolver(
             return wait_result
 
         def resolve_from_local_queue():
-            queued = queue_blocked_approvals(
-                redaction_level=config.receipt_redaction_level,
-                detection=detection,
-                evaluation=payload,
-                store=store,
-                approval_center_url=approval_center_url,
-                now=_now(),
-            )
+            try:
+                queued = queue_blocked_approvals(
+                    redaction_level=config.receipt_redaction_level,
+                    detection=detection,
+                    evaluation=payload,
+                    store=store,
+                    approval_center_url=approval_center_url,
+                    now=_now(),
+                )
+            except (sqlite3.Error, OSError) as queue_error:
+                # A fatal store/IO error (e.g. a quarantined SQLite store) must
+                # not abort the deny path: still emit an explicit, empty approval
+                # queue so callers always find the key and the action stays
+                # blocked pending manual resolution. Programming errors
+                # (TypeError/ValueError/AttributeError) still propagate.
+                logging.getLogger(__name__).warning(
+                    "Guard approval queue unavailable: %s", queue_error, exc_info=True
+                )
+                queued = approvals_queued_before(queue_error)
+                payload["approval_queue_unavailable"] = type(queue_error).__name__
             payload["approval_requests"] = queued
             _attach_primary_approval_link(
                 payload,
@@ -298,7 +268,9 @@ def _headless_approval_resolver(
                 queued=queued,
                 review_url=_preferred_approval_review_url(payload, harness=args.harness),
             )
-            wait_result = apply_delivery_and_wait(payload, queued)
+            wait_result = apply_delivery_and_wait(
+                payload, queued, complete="approval_queue_unavailable" not in payload
+            )
             if wait_result is None:
                 return payload
             if bool(wait_result.get("resolved")):
@@ -317,7 +289,11 @@ def _headless_approval_resolver(
 
         try:
             daemon_client = load_guard_surface_daemon_client(context.guard_home)
-        except RuntimeError:
+        except RuntimeError as daemon_load_error:
+            # Preserve the daemon-failure category and message through the
+            # local-queue fallback so the unresolved launch-validation reason
+            # is evidence, not a silently absorbed error.
+            payload["daemon_queue_unavailable"] = _daemon_failure_reason(daemon_load_error)
             return resolve_from_local_queue()
         try:
             session = daemon_client.start_session(
@@ -344,7 +320,8 @@ def _headless_approval_resolver(
                 open_key=None,
                 redaction_level=config.receipt_redaction_level,
             )
-        except RuntimeError:
+        except RuntimeError as daemon_operation_error:
+            payload["daemon_queue_unavailable"] = _daemon_failure_reason(daemon_operation_error)
             return resolve_from_local_queue()
         operation = blocked_operation["operation"] if isinstance(blocked_operation.get("operation"), dict) else {}
         queued = (
@@ -474,40 +451,40 @@ def _approval_surface_policy_for_flow(config_policy: str, approval_flow: dict[st
         return "never-auto-open"
     return config_policy
 
-_ACTION_ENVELOPE_HARNESSES = frozenset(
-    {
-        "codex", "cline", "claude-code", "opencode", "copilot", "gemini", "hermes",
-        "openclaw", "cursor", "grok", "kimi", "pi", "omp", "zcode", "devin",
-    }
-)
-
 def _hook_action_envelope(
     *,
     harness: str,
     payload: dict[str, object],
     home_dir: Path,
     workspace: Path | None,
+    guard_home: Path | None = None,
 ) -> GuardActionEnvelope | None:
-    canonical_harness = _canonical_harness_name(harness)
-    if canonical_harness not in _ACTION_ENVELOPE_HARNESSES:
+    try:
+        return normalize_harness_payload(
+            _canonical_harness_name(harness),
+            _hook_event_name(payload) or "PreToolUse",
+            payload,
+            workspace=workspace,
+            home_dir=home_dir,
+            guard_home=guard_home,
+        )
+    except UnsupportedHarnessError:
+        # Which harnesses have an action adapter is the resident's registry.
+        # A second list here would quietly withhold the envelope from a
+        # harness the adapter had learned, so the answer comes from asking.
         return None
-    return normalize_harness_payload(
-        canonical_harness,
-        _hook_event_name(payload) or "PreToolUse",
-        payload,
-        workspace=workspace,
-        home_dir=home_dir,
-    )
 
 def _action_envelope_json(envelope: GuardActionEnvelope | None) -> dict[str, object] | None:
     return envelope.to_dict() if envelope is not None else None
 
 __all__ = [
-    "_ACTION_ENVELOPE_HARNESSES", "_action_envelope_json", "_approval_center_browser_url",
+    "_action_envelope_json",
+    "_approval_center_browser_url",
     "_approval_surface_policy_for_flow", "_browser_url_with_guard_params", "_coalesce_string",
-    "_copilot_hook_permission_decision", "_emit_native_hook_block_stderr",
-    "_emit_native_hook_notification_stderr", "_emit_native_hook_response", "_first_hook_tool_call",
-    "_headless_approval_resolver", "_hook_action_envelope", "_load_hook_payload",
-    "_native_hook_permission_decision", "_normalize_hook_argument_value", "_normalize_hook_arguments",
+    "_first_hook_tool_call",
+    "_headless_approval_resolver", "_hook_action_envelope",
+    "_load_hook_payload",
+    "_normalize_hook_argument_value",
+    "_normalize_hook_arguments",
     "_normalize_hook_payload", "_open_approval_center", "_public_approval_center_url",
 ]

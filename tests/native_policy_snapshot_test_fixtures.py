@@ -52,8 +52,39 @@ def _status() -> SimpleNamespace:
     )
 
 
-def _ack(payload: bytes, *, resident_generation: int = 1) -> bytes:
+def _resident_generation_for_home(guard_home: object) -> int | None:
+    """Return the live resident generation recorded under ``guard_home``.
+
+    The publish path materializes a real managed resident (``generation-<ms>.json``)
+    under ``<guard_home>/native-runtime/resident-v3-*`` when native commit/mutation
+    hooks run. A fabricated ACK must echo that resident's generation or the
+    publisher's post-ACK fingerprint check correctly flags a stale responder.
+    """
+
+    if guard_home is None:
+        return None
+    state_dir = Path(str(guard_home)) / "native-runtime"
+    generations: list[int] = []
+    try:
+        candidates = list(state_dir.glob("resident-v3-*/generation-*.json"))
+    except (OSError, RuntimeError):
+        return None
+    for candidate in candidates:
+        raw = candidate.name[len("generation-") : -len(".json")]
+        if raw.isdigit():
+            generations.append(int(raw))
+    return max(generations) if generations else None
+
+
+def _ack(
+    payload: bytes,
+    *,
+    resident_generation: int | None = None,
+    guard_home: object = None,
+) -> bytes:
     snapshot = json.loads(payload)["request"]["snapshot"]
+    if resident_generation is None:
+        resident_generation = _resident_generation_for_home(guard_home) or 1
     return json.dumps(
         {
             "status": "accepted",

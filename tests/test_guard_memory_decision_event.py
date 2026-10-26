@@ -9,17 +9,33 @@ from codex_plugin_scanner.guard.memory_decision_event import (
     build_memory_decision_event,
     event_to_cloud_payload,
 )
-from codex_plugin_scanner.guard.memory_pattern_fingerprint import (
-    build_memory_pattern_fingerprint,
-)
+from codex_plugin_scanner.guard.native_memory_pattern import MemoryPattern, memory_pattern_verdict
+
+
+def _native_fingerprint(
+    *,
+    command: str | None,
+    artifact_type: str | None = None,
+    artifact_id: str | None = None,
+    artifact_name: str | None = None,
+    harness: str | None = None,
+) -> MemoryPattern | None:
+    return memory_pattern_verdict(
+        command=command,
+        artifact_type=artifact_type,
+        artifact_id=artifact_id,
+        artifact_name=artifact_name,
+        harness=harness,
+    ).pattern
+
 
 # ── Pattern fingerprint ──────────────────────────────────────────────────────
 
 
 class TestMemoryPatternFingerprint:
     def test_package_install_groups_equivalent_commands(self) -> None:
-        npm_install = build_memory_pattern_fingerprint(command="npm install lodash")
-        npm_i = build_memory_pattern_fingerprint(command="npm i lodash")
+        npm_install = _native_fingerprint(command="npm install lodash")
+        npm_i = _native_fingerprint(command="npm i lodash")
         assert npm_install is not None
         assert npm_i is not None
         assert npm_install.fingerprint == npm_i.fingerprint
@@ -28,41 +44,41 @@ class TestMemoryPatternFingerprint:
         assert npm_install.components["ecosystem"] == "npm"
 
     def test_package_install_strips_versions(self) -> None:
-        with_version = build_memory_pattern_fingerprint(command="bun add express@4.18.0")
-        without_version = build_memory_pattern_fingerprint(command="bun add express")
+        with_version = _native_fingerprint(command="bun add express@4.18.0")
+        without_version = _native_fingerprint(command="bun add express")
         assert with_version is not None
         assert without_version is not None
         assert with_version.fingerprint == without_version.fingerprint
 
     def test_different_packages_do_not_group(self) -> None:
-        lodash = build_memory_pattern_fingerprint(command="npm install lodash")
-        express = build_memory_pattern_fingerprint(command="npm install express")
+        lodash = _native_fingerprint(command="npm install lodash")
+        express = _native_fingerprint(command="npm install express")
         assert lodash is not None
         assert express is not None
         assert lodash.fingerprint != express.fingerprint
 
     def test_package_install_skips_flags(self) -> None:
-        global_install = build_memory_pattern_fingerprint(command="npm install -g pm2")
-        plain_install = build_memory_pattern_fingerprint(command="npm install pm2")
+        global_install = _native_fingerprint(command="npm install -g pm2")
+        plain_install = _native_fingerprint(command="npm install pm2")
         assert global_install is not None
         assert plain_install is not None
         assert global_install.fingerprint == plain_install.fingerprint
         assert global_install.components["package"] == "pm2"
 
     def test_package_install_skips_save_flag(self) -> None:
-        with_flag = build_memory_pattern_fingerprint(command="npm install --save lodash")
-        without_flag = build_memory_pattern_fingerprint(command="npm install lodash")
+        with_flag = _native_fingerprint(command="npm install --save lodash")
+        without_flag = _native_fingerprint(command="npm install lodash")
         assert with_flag is not None
         assert without_flag is not None
         assert with_flag.fingerprint == without_flag.fingerprint
 
     def test_scoped_package_preserved(self) -> None:
-        scoped = build_memory_pattern_fingerprint(command="npm install @types/node")
+        scoped = _native_fingerprint(command="npm install @types/node")
         assert scoped is not None
         assert scoped.components["package"] == "@types/node"
 
     def test_mcp_tool_from_artifact_id_when_command_absent(self) -> None:
-        candidate = build_memory_pattern_fingerprint(
+        candidate = _native_fingerprint(
             command=None,
             artifact_id="mcp:lean_ctx:ctx_search",
         )
@@ -72,7 +88,7 @@ class TestMemoryPatternFingerprint:
         assert candidate.components["tool"] == "ctx_search"
 
     def test_tool_action_display_text_is_not_reclassified_as_a_command(self) -> None:
-        candidate = build_memory_pattern_fingerprint(
+        candidate = _native_fingerprint(
             command="npm install lodash",
             artifact_type="tool_action_request",
             artifact_id="codex_tool:project:search",
@@ -85,7 +101,7 @@ class TestMemoryPatternFingerprint:
         assert candidate.components["artifact"] == "codex_tool:project:search"
 
     def test_file_read_recognizes_file_read_artifact_type(self) -> None:
-        candidate = build_memory_pattern_fingerprint(
+        candidate = _native_fingerprint(
             command="read src/lib/index.ts",
             artifact_type="file_read",
         )
@@ -93,15 +109,15 @@ class TestMemoryPatternFingerprint:
         assert candidate.kind == "file_read_pattern"
 
     def test_mcp_tool_groups_by_server_and_tool(self) -> None:
-        event = build_memory_pattern_fingerprint(command="mcp__lean_ctx__ctx_search pattern='memory'")
+        event = _native_fingerprint(command="mcp__lean_ctx__ctx_search pattern='memory'")
         assert event is not None
         assert event.kind == "mcp_tool_pattern"
         assert event.components["server"] == "lean_ctx"
         assert event.components["tool"] == "ctx_search"
 
     def test_shell_command_groups_by_executable_and_subcommand(self) -> None:
-        git_push = build_memory_pattern_fingerprint(command="git push origin main")
-        git_push_other = build_memory_pattern_fingerprint(command="git push origin feature")
+        git_push = _native_fingerprint(command="git push origin main")
+        git_push_other = _native_fingerprint(command="git push origin feature")
         assert git_push is not None
         assert git_push_other is not None
         assert git_push.fingerprint == git_push_other.fingerprint
@@ -111,21 +127,21 @@ class TestMemoryPatternFingerprint:
 
     def test_bare_generic_labels_rejected(self) -> None:
         for raw in ("read", "write", "bash", "grep", "job", "tool", "mcp", "skill", "rg", "cat", "pi:project:read"):
-            assert build_memory_pattern_fingerprint(command=raw) is None, raw
+            assert _native_fingerprint(command=raw) is None, raw
 
     def test_bare_command_verbs_without_target_rejected(self) -> None:
-        assert build_memory_pattern_fingerprint(command="read") is None
-        assert build_memory_pattern_fingerprint(command="bash") is None
+        assert _native_fingerprint(command="read") is None
+        assert _native_fingerprint(command="bash") is None
 
     def test_concrete_rg_and_cat_commands_remain_eligible(self) -> None:
-        rg_pattern = build_memory_pattern_fingerprint(command="rg TODO src/lib/file.ts")
-        cat_pattern = build_memory_pattern_fingerprint(command="cat package.json")
+        rg_pattern = _native_fingerprint(command="rg TODO src/lib/file.ts")
+        cat_pattern = _native_fingerprint(command="cat package.json")
 
         assert rg_pattern is not None
         assert cat_pattern is not None
 
     def test_generic_artifact_fallback_uses_artifact_id(self) -> None:
-        candidate = build_memory_pattern_fingerprint(
+        candidate = _native_fingerprint(
             command=None,
             artifact_id="npm:lodash",
             artifact_type="package",
@@ -135,11 +151,11 @@ class TestMemoryPatternFingerprint:
         assert candidate.components["artifact"] == "npm:lodash"
 
     def test_no_signal_returns_none(self) -> None:
-        assert build_memory_pattern_fingerprint(command=None, artifact_id=None) is None
+        assert _native_fingerprint(command=None, artifact_id=None) is None
 
     def test_harness_dimension_separates_groups(self) -> None:
-        codex = build_memory_pattern_fingerprint(command="npm install lodash", harness="codex")
-        cursor = build_memory_pattern_fingerprint(command="npm install lodash", harness="cursor")
+        codex = _native_fingerprint(command="npm install lodash", harness="codex")
+        cursor = _native_fingerprint(command="npm install lodash", harness="cursor")
         assert codex is not None
         assert cursor is not None
         assert codex.fingerprint != cursor.fingerprint

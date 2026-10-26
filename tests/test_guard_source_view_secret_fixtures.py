@@ -5,6 +5,12 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+from codex_plugin_scanner.guard.native_codex_tool_output import codex_tool_output_native
+
+
+def _secret_like_source_name(command: str, *, cwd: Path | None = None) -> bool:
+    answer = codex_tool_output_native("secret_like_source_name", command=command, cwd=cwd, exec_context=False)
+    return answer.error_code is not None or answer.allowed
 
 
 def _write_text(path: Path, contents: str) -> None:
@@ -45,7 +51,7 @@ def test_codex_source_view_allows_placeholder_private_key_fixture_output(tmp_pat
     source_file = workspace_dir / "tests" / "test_connect_fixture.py"
     _write_text(
         source_file,
-        ('dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"\n'),
+        ('dpop_private_key_pem="-----BEGIN ' + 'PRIVATE KEY-----\nsecret-key-material\n-----END PRIVATE KEY-----\n"\n'),
     )
 
     command = "sed -n '1,20p' tests/test_connect_fixture.py"
@@ -82,7 +88,7 @@ def test_codex_source_view_allows_oauth_token_service_source_output(tmp_path: Pa
 
     command = "sed -n '1,20p' src/oauth-token-service.ts"
 
-    assert not guard_commands_module._codex_command_targets_secret_like_source_name(
+    assert not _secret_like_source_name(
         command,
         cwd=workspace_dir,
     )
@@ -134,8 +140,8 @@ def test_codex_source_view_allows_medium_examples_from_symlinked_skill(tmp_path:
 def test_codex_source_view_compound_token_stem_stays_non_secret_without_cwd() -> None:
     command = "sed -n '1,20p' src/oauth-token-service.ts"
 
-    assert not guard_commands_module._codex_command_targets_secret_like_source_name(command)
-    assert guard_commands_module._codex_command_targets_secret_like_source_name("sed -n '1,20p' token.ts")
+    assert not _secret_like_source_name(command)
+    assert _secret_like_source_name("sed -n '1,20p' token.ts")
 
 
 def test_codex_source_view_exact_secret_stem_stays_secret_with_cwd(tmp_path: Path) -> None:
@@ -143,7 +149,7 @@ def test_codex_source_view_exact_secret_stem_stays_secret_with_cwd(tmp_path: Pat
     source_file = workspace_dir / "config" / "secrets.yaml"
     _write_text(source_file, "token: fixture-only\n")
 
-    assert guard_commands_module._codex_command_targets_secret_like_source_name(
+    assert _secret_like_source_name(
         "head -40 config/secrets.yaml",
         cwd=workspace_dir,
     )
@@ -155,9 +161,10 @@ def test_codex_source_view_still_blocks_real_private_key_output(tmp_path: Path) 
     _write_text(
         source_file,
         (
-            'dpop_private_key_pem="-----BEGIN PRIVATE KEY-----\n'
-            "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQD0realmaterial\n"
-            '-----END PRIVATE KEY-----\n"\n'
+            'dpop_private_key_pem="-----BEGIN '
+            + "PRIVATE KEY-----\n"
+            + "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQD0realmaterial\n"
+            + '-----END PRIVATE KEY-----\n"\n'
         ),
     )
 

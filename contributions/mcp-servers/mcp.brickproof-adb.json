@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.brickproof-adb",
+  "version": "1.0.0",
+  "name": "brickproof-adb",
+  "description": "Lets an agent operate your own Android devices over ADB: screen, input, installs and package changes. Reading the device stays automatic; input, installs, package changes, file transfers, shell and connecting new devices are reviewed. The server adds its own guard rails: dry run by default, a protected set read off the device, a network guard and one-call rollback. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.st412m",
+    "displayName": "st412m",
+    "url": "https://github.com/st412m"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCommandLine", "background": "#7C2D12" },
+  "homepage": "https://github.com/st412m/brickproof-adb",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "brickproof-adb"
+  },
+  "riskClasses": ["external-device-control", "external-command-execution", "external-third-party-code-install"],
+  "tools": [
+    { "name": "adb_devices", "state": "inherit" },
+    { "name": "adb_connect", "state": "review" },
+    { "name": "adb_disconnect", "state": "inherit" },
+    { "name": "adb_pair", "state": "review" },
+    { "name": "adb_shell", "state": "review" },
+    { "name": "adb_logcat", "state": "inherit" },
+    { "name": "adb_screenshot", "state": "inherit" },
+    { "name": "adb_ui_dump", "state": "inherit" },
+    { "name": "adb_tap", "state": "review" },
+    { "name": "adb_swipe", "state": "review" },
+    { "name": "adb_key", "state": "review" },
+    { "name": "adb_text", "state": "review" },
+    { "name": "adb_find_and_tap", "state": "review" },
+    { "name": "adb_install", "state": "review" },
+    { "name": "adb_uninstall", "state": "review" },
+    { "name": "adb_app", "state": "review" },
+    { "name": "adb_push", "state": "review" },
+    { "name": "adb_pull", "state": "review" },
+    { "name": "other", "state": "review" }
+  ],
+  "referenceUrls": [
+    "https://github.com/st412m/brickproof-adb",
+    "https://github.com/st412m/brickproof-adb/blob/main/docs/safety.md",
+    "https://github.com/st412m/brickproof-adb/blob/main/docs/tools.md",
+    "https://www.npmjs.com/package/brickproof-adb"
+  ],
+  "saferAlternatives": [
+    "adb_install, and adb_app disable, uninstall, enable, restore and clear, change nothing without dry_run=false; launch, stop and backup act at once. adb_app refuses packages the device needs and keeps a snapshot; action=restore rolls it back.",
+    "adb_shell and adb_uninstall stay off until the operator enables them with brickproof-adb set; no tool can turn them on.",
+    "Start with adb_devices, adb_screenshot and adb_ui_dump; they only read the device.",
+    "Review defaults match the brickproof-adb package under any recognized package launcher. The Claude Desktop extension and the Home Assistant app start the server without one and keep Guard's normal handling."
+  ]
+}

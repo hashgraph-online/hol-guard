@@ -11,7 +11,10 @@ from pathlib import Path
 import pytest
 
 import codex_plugin_scanner.guard.native_command_control_binding as binding_module
-from codex_plugin_scanner.guard.native_policy_snapshot import NativePolicySnapshotPublisher
+from codex_plugin_scanner.guard.native_policy_snapshot import (
+    NativePolicySnapshotPublisher,
+    provision_native_policy_verifier_key,
+)
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth
 from codex_plugin_scanner.guard.runtime.extension_control_contract import (
@@ -37,12 +40,25 @@ def _allow_terminal_proof(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
+@pytest.fixture(autouse=True)
+def _pinned_integrity_material_and_resident_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin one integrity master for every store of the home and key the resident with it.
+
+    The resident-backed gate setup in ``_store`` needs a verifier key on disk before
+    the publisher exists. Deriving that key from the same pinned material the
+    publisher and the control authority use keeps a single key authoritative.
+    """
+
+    monkeypatch.setattr(GuardStore, "_policy_integrity_secret_material", lambda _self, *, create: (b"k" * 32, "test"))
+    provision_native_policy_verifier_key(tmp_path, b"k" * 32)
+
+
 def _publisher(store: GuardStore, monkeypatch: pytest.MonkeyPatch, client=None) -> NativePolicySnapshotPublisher:
     monkeypatch.setattr(store, "_policy_integrity_secret_material", lambda *, create: (b"k" * 32, "test"))
     return NativePolicySnapshotPublisher(
         store=store,
         status_provider=_status,
-        client_request=client or (lambda **kwargs: _ack(kwargs["payload"])),
+        client_request=client or (lambda **kwargs: _ack(kwargs["payload"], guard_home=kwargs.get("guard_home"))),
         poll_interval_seconds=0.05,
     )
 
@@ -114,7 +130,7 @@ def test_local_control_commit_invalidates_before_anchor_and_reopens_only_after_c
         assert authority.health is AuthorityHealth.PROTECTED
         assert snapshot["command_extensions"]["revision"] == authority.revision
         pushed_revisions.append(authority.revision)
-        return _ack(kwargs["payload"])
+        return _ack(kwargs["payload"], guard_home=kwargs.get("guard_home"))
 
     publisher = _publisher(store, monkeypatch, client)
     first = _publish_ready(publisher)
@@ -179,7 +195,7 @@ def test_verified_post_ack_read_rejects_cross_process_control_change_without_cal
         if calls == 2:
             entered.set()
             assert release.wait(5.0)
-        return _ack(kwargs["payload"])
+        return _ack(kwargs["payload"], guard_home=kwargs.get("guard_home"))
 
     publisher = _publisher(store, monkeypatch, client)
     first = _publish_ready(publisher)

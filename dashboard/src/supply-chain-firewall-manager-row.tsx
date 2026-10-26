@@ -1,10 +1,7 @@
-import { useCallback } from "react";
+import { Fragment, useCallback } from "react";
 import {
   HiMiniArrowPath,
   HiMiniBeaker,
-  HiMiniCheckCircle,
-  HiMiniClock,
-  HiMiniExclamationTriangle,
   HiMiniShieldCheck,
   HiMiniTrash,
   HiMiniWrenchScrewdriver,
@@ -48,7 +45,6 @@ function actionIsAvailable(state: string | undefined): boolean {
 }
 
 type ManagerRowProps = {
-  layout?: "row" | "card";
   manager: string;
   shim: PackageShimEntry | undefined;
   actions: PackageFirewallStatusResponse["actions"];
@@ -65,8 +61,19 @@ type ManagerRowProps = {
   onOpenDetails: (manager: string) => void;
 };
 
+const STATUS_MARK_CLASS: Record<ReturnType<typeof resolveShimStatus>["tone"], string> = {
+  green: "bg-brand-green",
+  blue: "bg-brand-blue",
+  attention: "bg-brand-attention",
+  slate: "bg-slate-300",
+};
+
+/**
+ * One line of the manager roster. Wide screens read it left to right as a
+ * ledger entry: which tool, how its shell finds it, then its state and what
+ * you can do about it. Phones stack the same three parts.
+ */
 export function ManagerRow({
-  layout = "row",
   manager,
   shim,
   actions,
@@ -83,14 +90,10 @@ export function ManagerRow({
   onOpenDetails,
 }: ManagerRowProps) {
   const status = resolveShimStatus(shim);
-  const installState = actions.install ?? "disabled";
-  const repairState = actions.repair ?? "disabled";
-  const testState = actions.test ?? "disabled";
-  const removeState = actions.remove ?? "disabled";
-  const installAvailable = actionIsAvailable(installState);
-  const repairAvailable = actionIsAvailable(repairState);
-  const testAvailable = actionIsAvailable(testState);
-  const removeAvailable = actionIsAvailable(removeState);
+  const installAvailable = actionIsAvailable(actions.install ?? "disabled");
+  const repairAvailable = actionIsAvailable(actions.repair ?? "disabled");
+  const testAvailable = actionIsAvailable(actions.test ?? "disabled");
+  const removeAvailable = actionIsAvailable(actions.remove ?? "disabled");
 
   const showInstall = (!shim || !shim.installed) && installAvailable;
   const showRepair =
@@ -107,147 +110,146 @@ export function ManagerRow({
   const handleRemoveConfirm = useCallback(() => onRemoveConfirm(manager), [onRemoveConfirm, manager]);
   const handleOpenDetails = useCallback(() => onOpenDetails(manager), [onOpenDetails, manager]);
 
-  const cardLayout = layout === "card";
-  const outerClass = cardLayout
-    ? "min-w-0 rounded-xl border border-slate-100 bg-white p-4 shadow-sm"
-    : "border-b border-slate-100 last:border-b-0";
-
   return (
-    <div className={outerClass} role={cardLayout ? "listitem" : "row"}>
-      <div className={cardLayout ? "flex flex-col gap-3" : "flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"}>
-        <div className={`flex min-w-0 flex-col gap-1 ${cardLayout ? "" : "sm:flex-1"}`} role="cell">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            {status.icon === "check" ? (
-              <HiMiniCheckCircle className="h-4 w-4 shrink-0 text-brand-green" aria-hidden="true" />
-            ) : status.icon === "restart" ? (
-              <HiMiniArrowPath className="h-4 w-4 shrink-0 text-brand-blue" aria-hidden="true" />
-            ) : (
-              <HiMiniExclamationTriangle className="h-4 w-4 shrink-0 text-brand-attention" aria-hidden="true" />
-            )}
-            <button
-              type="button"
-              onClick={handleOpenDetails}
-              className="truncate text-left font-mono text-sm font-semibold text-brand-dark hover:text-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30 rounded"
-              aria-label={`Open ${manager} manager details`}
-            >
-              {manager}
-            </button>
-            {shim?.detected && <Tag tone="green">Detected</Tag>}
-            {isMine && (
-              <HiMiniArrowPath
-                className="h-3.5 w-3.5 shrink-0 animate-spin text-brand-blue"
-                aria-label="Running…"
-              />
-            )}
-          </div>
-          {shim?.path_summary !== null && shim?.path_summary !== undefined && (
-            <p className={`break-all font-mono text-[11px] leading-relaxed text-slate-500 ${cardLayout ? "" : "sm:pl-6"}`}>
-              Shell path: {shim.path_summary}
-            </p>
+    <li className="grid min-w-0 gap-x-6 gap-y-2 py-3.5 md:grid-cols-[minmax(0,9rem)_minmax(0,1fr)_auto] md:items-start">
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <span className="flex min-w-0 items-center gap-2">
+          <span aria-hidden="true" className={`size-2 shrink-0 rounded-full ${STATUS_MARK_CLASS[status.tone]}`} />
+          <button
+            type="button"
+            onClick={handleOpenDetails}
+            className="inline-flex min-h-11 min-w-0 items-center truncate rounded text-left font-mono text-sm font-semibold text-brand-dark hover:text-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30 md:min-h-0"
+            aria-label={`Open ${manager} manager details`}
+          >
+            {manager}
+          </button>
+          {isMine && (
+            <HiMiniArrowPath
+              className="h-3.5 w-3.5 shrink-0 animate-spin text-brand-blue"
+              aria-label="Running…"
+            />
           )}
-          {shim?.last_intercept_proof_at !== null && shim?.last_intercept_proof_at !== undefined ? (
-            <p className={`flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 ${cardLayout ? "" : "sm:pl-6"}`}>
-              <HiMiniCheckCircle className="h-3.5 w-3.5 shrink-0 text-brand-green" aria-hidden="true" />
-              Last protection test {formatRelativeTime(shim.last_intercept_proof_at)}
-            </p>
-          ) : shim?.installed ? (
-            <p className={`flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 ${cardLayout ? "" : "sm:pl-6"}`}>
-              <HiMiniClock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-              No protection test recorded yet
-            </p>
-          ) : null}
-        </div>
-
-        <div className={`flex flex-wrap items-center gap-2 ${cardLayout ? "justify-between" : "sm:gap-3"}`} role="cell">
-          <div className="shrink-0">
-            <Tag tone={status.tone}>{status.label}</Tag>
-          </div>
-
-          <div className="shrink-0 [&_button]:min-h-11 [&_button]:h-11">
-            {isConfirmingRemove ? (
-              <div className="flex items-center gap-1.5">
-                <IconActionButton
-                  variant="ghost"
-                  label="Cancel"
-                  icon={<HiMiniXCircle className="h-4 w-4" />}
-                  onClick={onRemoveCancel}
-                  disabled={anyPending}
-                />
-                <IconActionButton
-                  variant="danger"
-                  label="Confirm"
-                  icon={<HiMiniTrash className="h-4 w-4" />}
-                  onClick={handleRemoveConfirm}
-                  disabled={anyPending}
-                />
-              </div>
-            ) : (
-              <div className="flex flex-wrap items-center gap-1.5">
-                {showInstall && (
-                  <IconActionButton
-                    variant="primary"
-                    label="Protect"
-                    icon={<HiMiniShieldCheck className="h-4 w-4" />}
-                    onClick={handleInstall}
-                    disabled={anyPending}
-                  />
-                )}
-                {showRepair && (
-                  <IconActionButton
-                    variant="primary"
-                    label="Fix PATH"
-                    icon={<HiMiniWrenchScrewdriver className="h-4 w-4" />}
-                    onClick={handleRepair}
-                    disabled={anyPending || repairAwaitingRefresh}
-                  />
-                )}
-                {showTest && (
-                  <IconActionButton
-                    variant="outline"
-                    label="Test"
-                    icon={<HiMiniBeaker className="h-4 w-4" />}
-                    onClick={handleTest}
-                    disabled={anyPending}
-                  />
-                )}
-                {showRemove && (
-                  <IconActionButton
-                    variant="danger"
-                    label="Remove"
-                    icon={<HiMiniTrash className="h-4 w-4" />}
-                    onClick={handleRemoveRequest}
-                    disabled={anyPending}
-                  />
-                )}
-              </div>
-            )}
-          </div>
-        </div>
+        </span>
+        {shim?.detected && <span className="pl-4 text-xs text-slate-500">Detected</span>}
       </div>
 
-      {shim?.activation_state === "restart_required" && (
-        <div className={cardLayout ? "mt-2" : "px-4 pb-2"}>
+      <div className="flex min-w-0 flex-col gap-1 pl-4 md:pl-0">
+        {shim?.path_summary !== null && shim?.path_summary !== undefined && (
+          <p className="break-words font-mono text-[11px] leading-relaxed text-slate-600">
+            Shell path: <PathText value={shim.path_summary} />
+          </p>
+        )}
+        {shim?.last_intercept_proof_at !== null && shim?.last_intercept_proof_at !== undefined ? (
           <p className="text-xs text-slate-500">
+            Last protection test {formatRelativeTime(shim.last_intercept_proof_at)}
+          </p>
+        ) : shim?.installed ? (
+          <p className="text-xs text-slate-500">No protection test recorded yet</p>
+        ) : null}
+        {shim?.activation_state === "restart_required" && (
+          <p className="text-xs text-slate-600">
             Guard updated your shell profile. Open a new shell or restart AI apps to activate this shim.
           </p>
-        </div>
-      )}
-
-      {shim?.activation_state === "repair_required" && !shim.path_broken && (
-        <div className={cardLayout ? "mt-2" : "px-4 pb-2"}>
-          <p className="text-xs text-slate-500">
+        )}
+        {shim?.activation_state === "repair_required" && !shim.path_broken && (
+          <p className="text-xs text-slate-600">
             Guard can add the shim directory to your shell profile automatically, then this manager will be ready after a restart.
           </p>
-        </div>
-      )}
-
-      {shim?.path_broken && (
-        <div className={cardLayout ? "mt-2" : "px-4 pb-2"}>
-          <p className="text-xs text-brand-attention">
+        )}
+        {shim?.path_broken && (
+          <p className="text-xs font-medium text-slate-700">
             Restart your shell after repair so PATH exports reload.
           </p>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 pl-4 md:justify-end md:pl-0 [&_button]:h-11 md:[&_button]:h-9 md:[&_button]:min-h-9">
+        <Tag tone={status.tone}>{status.label}</Tag>
+        {isConfirmingRemove ? (
+          <>
+            <IconActionButton
+              showLabel
+              variant="ghost"
+              label="Cancel"
+              icon={<HiMiniXCircle className="h-4 w-4" />}
+              onClick={onRemoveCancel}
+              disabled={anyPending}
+            />
+            <IconActionButton
+              showLabel
+              variant="danger"
+              label="Confirm"
+              icon={<HiMiniTrash className="h-4 w-4" />}
+              onClick={handleRemoveConfirm}
+              disabled={anyPending}
+            />
+          </>
+        ) : (
+          <>
+            {showInstall && (
+              <IconActionButton
+                showLabel
+                variant="primary"
+                label="Protect"
+                icon={<HiMiniShieldCheck className="h-4 w-4" />}
+                onClick={handleInstall}
+                disabled={anyPending}
+              />
+            )}
+            {showRepair && (
+              <IconActionButton
+                showLabel
+                variant="primary"
+                label="Fix PATH"
+                icon={<HiMiniWrenchScrewdriver className="h-4 w-4" />}
+                onClick={handleRepair}
+                disabled={anyPending || repairAwaitingRefresh}
+              />
+            )}
+            {showTest && (
+              <IconActionButton
+                showLabel
+                variant="outline"
+                label="Test"
+                icon={<HiMiniBeaker className="h-4 w-4" />}
+                onClick={handleTest}
+                disabled={anyPending}
+              />
+            )}
+            {/* Removing is reversible and asks twice, so it stays quiet
+                until the inline Confirm. */}
+            {showRemove && (
+              <IconActionButton
+                showLabel
+                variant="ghost"
+                label="Remove"
+                icon={<HiMiniTrash className="h-4 w-4" />}
+                onClick={handleRemoveRequest}
+                disabled={anyPending}
+              />
+            )}
+          </>
+        )}
+      </div>
+    </li>
+  );
+}
+
+/** Lets a long shell path wrap after each slash instead of mid-name. */
+function PathText({ value }: { value: string }) {
+  const parts = value.split("/");
+  return (
+    <>
+      {parts.map((part, index) => (
+        <Fragment key={index}>
+          {index > 0 ? (
+            <>
+              /<wbr />
+            </>
+          ) : null}
+          {part}
+        </Fragment>
+      ))}
+    </>
   );
 }

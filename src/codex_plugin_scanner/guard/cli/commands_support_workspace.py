@@ -52,20 +52,46 @@ def _package_firewall_cli_gate_input(args: argparse.Namespace, guard_home: Path)
         return ApprovalGateInput(password=None, totp_code=totp_code)
     return prompt_for_approval_gate(guard_home, use_cooldown=False)
 
+def _package_firewall_authority_unavailable_payload(
+    operation: str,
+    entitlement: dict[str, object],
+) -> dict[str, object]:
+    """The reply when the resident cannot say what the entitlement permits.
+
+    No action is offered and the command stops. The composition is the
+    authority, so a request it could not answer is refused rather than
+    guessed at from the entitlement dict.
+    """
+
+    return {
+        "available_actions": [],
+        "entitlement": entitlement,
+        "error": PACKAGE_FIREWALL_AUTHORITY_UNAVAILABLE,
+        "message": PACKAGE_FIREWALL_AUTHORITY_UNAVAILABLE_MESSAGE,
+        "operation": operation,
+    }
+
+
 def _package_firewall_block_payload(
     *,
     entitlement: dict[str, object],
     has_installed_managers: bool,
     operation: str,
+    guard_home: Path | None = None,
 ) -> tuple[int, dict[str, object]]:
-    status, error_code, message = package_firewall_block_details(entitlement)
+    try:
+        access = package_firewall_access(
+            entitlement,
+            has_installed_managers=has_installed_managers,
+            guard_home=guard_home,
+        )
+    except NativeHookComposeError:
+        return (503, _package_firewall_authority_unavailable_payload(operation, entitlement))
+    status, error_code, message = access.block
     return (
         status,
         {
-            "available_actions": package_firewall_available_actions(
-                entitlement,
-                has_installed_managers=has_installed_managers,
-            ),
+            "available_actions": access.available_actions,
             "cli_fallback": {
                 "connect": "hol-guard connect",
                 "status": "hol-guard package-shims status --json",
@@ -354,17 +380,6 @@ def _normalize_explicit_workspace_path(value: str | None) -> Path | None:
         return path
 
 
-def _workspace_from_hook_payload(payload: object, workspace: Path | None = None) -> Path | None:
-    if workspace is not None:
-        return workspace
-    if not isinstance(payload, dict):
-        return None
-    for key in ("workspace_root", "workspaceRoot", "cwd"):
-        value = payload.get(key)
-        resolved = _normalize_explicit_workspace_path(value if isinstance(value, str) else None)
-        if resolved is not None:
-            return resolved
-    return None
 _INSTALL_WORKSPACE_COMMANDS = frozenset({"install", "uninstall"})
 
 _PROJECT_ROOT_MARKERS = (
@@ -400,6 +415,8 @@ def _workspace_from_harness_detection(
     *,
     cwd: Path,
     guard_home: Path,
+    home_dir: Path | None = None,
+    home_override_explicit: bool = False,
 ) -> Path | None:
     try:
         adapter = get_adapter(harness)
@@ -407,9 +424,10 @@ def _workspace_from_harness_detection(
         return None
     detection = adapter.detect(
         HarnessContext(
-            home_dir=Path.home().resolve(),
+            home_dir=(home_dir or Path.home()).resolve(),
             workspace_dir=cwd,
             guard_home=guard_home,
+            home_override_explicit=home_override_explicit,
         )
     )
     for config_path in detection.config_paths:
@@ -425,6 +443,8 @@ def _resolve_default_install_workspace(
     args: argparse.Namespace,
     *,
     guard_home: Path,
+    home_dir: Path | None = None,
+    home_override_explicit: bool = False,
 ) -> Path | None:
     """Pick a project workspace for install/uninstall when --workspace is omitted."""
 
@@ -445,7 +465,13 @@ def _resolve_default_install_workspace(
         return git_root
 
     if harness is not None:
-        detected = _workspace_from_harness_detection(harness, cwd=cwd, guard_home=guard_home)
+        detected = _workspace_from_harness_detection(
+            harness,
+            cwd=cwd,
+            guard_home=guard_home,
+            home_dir=home_dir,
+            home_override_explicit=home_override_explicit,
+        )
         if detected is not None:
             return detected
     return None
@@ -454,23 +480,47 @@ def _resolve_guard_workspace(
     args: argparse.Namespace,
     *,
     guard_home: Path,
+    home_dir: Path | None = None,
+    home_override_explicit: bool = False,
 ) -> Path | None:
     explicit_workspace = getattr(args, "workspace", None)
     if explicit_workspace:
         return _normalize_explicit_workspace_path(str(explicit_workspace))
     guard_command = getattr(args, "guard_command", None)
     if guard_command in _INSTALL_WORKSPACE_COMMANDS:
-        return _resolve_default_install_workspace(args, guard_home=guard_home)
+        return _resolve_default_install_workspace(
+            args,
+            guard_home=guard_home,
+            home_dir=home_dir,
+            home_override_explicit=home_override_explicit,
+        )
     if guard_command == "sync":
         return Path.cwd().resolve()
     if guard_command != "apps":
+        return None
+    if getattr(args, "apps_command", None) == "repair" and (
+        bool(getattr(args, "restore_authority", False)) or getattr(args, "authority_request", None)
+        or getattr(args, "authority_request_sha256", None)
+        or getattr(args, "authority_deadline_epoch", None) is not None
+        or getattr(args, "authority_verification_workspace", None) is not None
+    ):
+        # Missing-authority repair derives its global target from authenticated
+        # retained bytes. Autodetection requires the absent live manifest and
+        # must not precede that read-only preparation. Explicit workspace
+        # overrides were already normalized above and remain in the plan.
         return None
     if getattr(args, "apps_command", None) not in {"connect", "disconnect", "repair", "test"}:
         return None
     harness = str(getattr(args, "harness", "")).strip()
     if not harness:
         return None
-    return _workspace_from_harness_detection(harness, cwd=Path.cwd().resolve(), guard_home=guard_home)
+    return _workspace_from_harness_detection(
+        harness,
+        cwd=Path.cwd().resolve(),
+        guard_home=guard_home,
+        home_dir=home_dir,
+        home_override_explicit=home_override_explicit,
+    )
 
 __all__ = [
     "_INSTALL_WORKSPACE_COMMANDS",
@@ -483,6 +533,7 @@ __all__ = [
     "_build_init_plan",
     "_guard_http_url",
     "_normalize_explicit_workspace_path",
+    "_package_firewall_authority_unavailable_payload",
     "_package_firewall_block_payload",
     "_package_firewall_cli_gate_input",
     "_print_init_plan_preview",
@@ -495,6 +546,5 @@ __all__ = [
     "_skip_init_step_payload",
     "_workspace_from_cursor_project_dir",
     "_workspace_from_harness_detection",
-    "_workspace_from_hook_payload",
     "_workspace_has_project_markers",
 ]

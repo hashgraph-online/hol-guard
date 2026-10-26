@@ -1,0 +1,17 @@
+[package]
+name = "guard-alloc-probe"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+description = "Test-only counting allocator used to measure library allocation bounds. Never linked into shipped binaries."
+
+# Deliberately does not inherit the workspace `unsafe_code = "forbid"` lint:
+# `GlobalAlloc` is an unsafe trait. The unsafe surface is the three delegating
+# methods in `src/lib.rs`; every shipped crate keeps `forbid(unsafe_code)`.
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+all = "deny"

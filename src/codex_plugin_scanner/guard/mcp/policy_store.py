@@ -46,8 +46,6 @@ class _PolicyImportResult(Protocol):
 
 
 _PENDING_TTL_SECONDS = 600  # 10 minutes
-_TERMINAL_PAYLOAD_TTL_SECONDS = 86400  # 24 hours
-_TERMINAL_METADATA_TTL_SECONDS = 604800  # 7 days
 
 _MCP_POLICY_REQUEST_SCHEMA = """
 create table if not exists mcp_policy_requests (
@@ -437,28 +435,6 @@ class MCPolicyRequestRepository:
         if result is None:
             raise PolicyToolError("policy_request_not_found", "Policy request not found.")
         return result
-
-    def purge_expired_and_old(self) -> int:
-        """Purge terminal payloads after 24h and terminal metadata after 7d."""
-        now = _now()
-        payload_cutoff = (now - timedelta(seconds=_TERMINAL_PAYLOAD_TTL_SECONDS)).isoformat().replace("+00:00", "Z")
-        metadata_cutoff = (now - timedelta(seconds=_TERMINAL_METADATA_TTL_SECONDS)).isoformat().replace("+00:00", "Z")
-        purged = 0
-        with self._store._connect() as connection:
-            cursor = connection.execute(
-                "delete from mcp_policy_requests where status in ('applied','declined','expired','failed') "
-                "and resolved_at < ?",
-                (metadata_cutoff,),
-            )
-            purged += cursor.rowcount if cursor.rowcount is not None else 0
-            cursor = connection.execute(
-                "update mcp_policy_requests set canonical_policy_yaml = '', plan_json = '' "
-                "where status in ('applied','declined','expired','failed') "
-                "and resolved_at < ? and canonical_policy_yaml != ''",
-                (payload_cutoff,),
-            )
-            connection.commit()
-        return purged
 
 
 __all__ = [

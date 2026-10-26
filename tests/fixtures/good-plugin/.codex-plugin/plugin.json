@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "A well-structured example plugin",
   "author": {
-    "name": "Hashgraph Online",
+    "name": "HOL",
     "email": "dev@hol.org"
   },
   "homepage": "https://github.com/hashgraph-online/hol-guard",
@@ -15,7 +15,7 @@
     "displayName": "Example Good Plugin",
     "shortDescription": "Reusable security-first plugin fixture",
     "longDescription": "A well-structured example plugin that exercises publishable interface metadata.",
-    "developerName": "Hashgraph Online",
+    "developerName": "HOL",
     "category": "Developer Tools",
     "capabilities": ["Read", "Write"],
     "websiteURL": "https://github.com/hashgraph-online/hol-guard",

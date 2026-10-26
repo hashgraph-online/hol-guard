@@ -10,6 +10,13 @@ from urllib.parse import urlparse
 REMOTE_PREFIXES = ("https://", "git+", "github://")
 DEFAULT_SAFE_READ_LIMIT_BYTES = 1_048_576
 
+# Shared filename allowlist for license checks and safe autofix; no arbitrary suffixes.
+LICENSE_FILENAMES = tuple(
+    f"{stem}{suffix}"
+    for stem in ("LICENSE", "LICENCE", "COPYING", "license", "licence", "copying")
+    for suffix in ("", ".md", ".txt", ".rst")
+)
+
 
 def path_entry_exists(path: Path) -> bool:
     """Return whether a directory entry exists without following its final link."""

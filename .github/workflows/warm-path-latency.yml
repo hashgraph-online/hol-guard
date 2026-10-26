@@ -1,0 +1,197 @@
+name: Warm-path latency baseline
+
+# Measurement only. Builds the installed static Linux native wheel for a frozen
+# baseline revision and a candidate revision on ONE hosted runner, then times
+# the warm benign Claude PreToolUse hook (process spawn to exit) and a warm
+# non-package MCP tools/call through the installed Codex proxy, alternating
+# targets round by round. It enforces no threshold and gates nothing.
+# It also drives the candidate's Codex proxy argv through the native MCP relay
+# and the Python proxy on one resident, reporting matched warm p95 per call and
+# what fraction of representative calls the resident decides versus defers.
+#
+# Pull requests that touch this lane run a one-round smoke so the lane stays
+# runnable; real baselines are collected with workflow_dispatch.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/warm-path-latency.yml"
+      - "scripts/bench_warm_path_latency.py"
+      - "scripts/warm_path_probes.py"
+      - "scripts/warm_path_services.py"
+      - "scripts/warm_path_stats.py"
+      - "scripts/summarize_warm_path_latency.py"
+      - "scripts/ci/build_installed_wheel_at_sha.sh"
+      - "scripts/bench_mcp_relay.py"
+  workflow_dispatch:
+    inputs:
+      baseline_sha:
+        description: Full 40-character baseline revision (default is the program-start revision)
+        type: string
+        default: 8c3dc9750789c407ca8c78508507296cda8e7d01
+      candidate_sha:
+        description: Full 40-character candidate revision (empty means the dispatched ref)
+        type: string
+        default: ""
+      reference_sha:
+        description: Optional full 40-character second baseline measured alongside the pair (default is the 10-09 revision)
+        type: string
+        default: 60c6253533264731863fc3c6cecb6dc0f57c352a
+      rounds:
+        description: Alternating-order rounds per target
+        type: string
+        default: "5"
+      hook_samples:
+        description: Timed hook calls per round and target
+        type: string
+        default: "300"
+      mcp_samples:
+        description: Timed tools/call round trips per round and target
+        type: string
+        default: "1000"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: warm-path-latency-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  measure:
+    name: Matched warm-path latency
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      BASELINE_SHA: ${{ inputs.baseline_sha || '8c3dc9750789c407ca8c78508507296cda8e7d01' }}
+      CANDIDATE_SHA: ${{ inputs.candidate_sha || github.sha }}
+      REFERENCE_SHA: ${{ inputs.reference_sha }}
+      ROUNDS: ${{ inputs.rounds || '1' }}
+      HOOK_SAMPLES: ${{ inputs.hook_samples || '20' }}
+      MCP_SAMPLES: ${{ inputs.mcp_samples || '50' }}
+      CARGO_TARGET_DIR: ${{ github.workspace }}/rust/target
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+        with:
+          version: "0.9.26"
+          enable-cache: true
+      - uses: ./.github/actions/setup-rust
+        with:
+          targets: x86_64-unknown-linux-musl
+      - name: Install static Linux linker
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends musl-tools
+      - name: Resolve revisions
+        run: |
+          set -euo pipefail
+          for name in BASELINE_SHA CANDIDATE_SHA REFERENCE_SHA; do
+            value=${!name}
+            [[ -z "$value" && "$name" == REFERENCE_SHA ]] && continue
+            [[ "$value" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::$name must be a full 40-character lowercase SHA"; exit 1; }
+            git cat-file -e "$value^{commit}"
+          done
+          [[ "$ROUNDS" =~ ^[1-9][0-9]?$ && "$HOOK_SAMPLES" =~ ^[1-9][0-9]{0,3}$ && "$MCP_SAMPLES" =~ ^[1-9][0-9]{0,4}$ ]]
+          targets="baseline=$BASELINE_SHA candidate=$CANDIDATE_SHA"
+          [[ -n "$REFERENCE_SHA" ]] && targets="$targets reference=$REFERENCE_SHA"
+          echo "TARGETS=$targets" >> "$GITHUB_ENV"
+      - name: Build and install each revision's native wheel
+        run: |
+          set -euo pipefail
+          for entry in $TARGETS; do
+            label=${entry%%=*}
+            sha=${entry#*=}
+            git worktree add --detach "$RUNNER_TEMP/src-$label" "$sha"
+            echo "::group::build $label $sha"
+            bash scripts/ci/build_installed_wheel_at_sha.sh "$RUNNER_TEMP/src-$label" "$sha"
+            echo "::endgroup::"
+          done
+      - name: Measure matched warm paths
+        run: |
+          set -euo pipefail
+          source scripts/ci/native-proof-environment.sh
+          args=()
+          for entry in $TARGETS; do
+            label=${entry%%=*}
+            sha=${entry#*=}
+            args+=(--target "$label=$sha=$RUNNER_TEMP/src-$label/.venv/bin/python")
+            # The hosted toolcache interpreter is world-writable and Guard refuses to install a
+            # hook for such an interpreter; tighten it on this disposable runner for both targets.
+            chmod go-w "$(readlink -f "$RUNNER_TEMP/src-$label/.venv/bin/python")"
+          done
+          python3 scripts/bench_warm_path_latency.py "${args[@]}" \
+            --rounds "$ROUNDS" \
+            --hook-samples "$HOOK_SAMPLES" --hook-warmup 20 \
+            --mcp-samples "$MCP_SAMPLES" --mcp-warmup 50 \
+            --json warm-path-latency.json
+      - name: Summarize
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          test -f warm-path-latency.json
+          python3 scripts/summarize_warm_path_latency.py --input warm-path-latency.json \
+            --baseline baseline --candidate candidate \
+            --markdown warm-path-summary.md --json warm-path-summary.json
+          cat warm-path-summary.md >> "$GITHUB_STEP_SUMMARY"
+          if [[ -n "$REFERENCE_SHA" ]]; then
+            python3 scripts/summarize_warm_path_latency.py --input warm-path-latency.json \
+              --baseline reference --candidate candidate \
+              --markdown warm-path-summary-reference.md --json warm-path-summary-reference.json
+            cat warm-path-summary-reference.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Require working probes
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import sys
+
+          document = json.load(open("warm-path-latency.json"))
+          problems = []
+          for round_ in document.get("rounds", []):
+              for label, phases in round_.get("results", {}).items():
+                  for name, phase in phases.items():
+                      if isinstance(phase, dict) and "error" in phase:
+                          problems.append(f"round {round_.get('round')} {label} {name}: {phase['error']}")
+          summary = json.load(open("warm-path-summary.json"))
+          for path, entry in summary.get("paths", {}).items():
+              if "error" in entry:
+                  problems.append(f"{path}: {entry['error']}")
+          if problems:
+              print("probe failures (measurement problem, not a latency verdict):")
+              print("\n".join(problems[:20]))
+              sys.exit(1)
+          PY
+      - name: Measure native MCP relay against the Python proxy (candidate)
+        if: ${{ !cancelled() }}
+        run: |
+          set -euo pipefail
+          source scripts/ci/native-proof-environment.sh
+          python3 scripts/bench_mcp_relay.py --python "$RUNNER_TEMP/src-candidate/.venv/bin/python" \
+            --rounds "$ROUNDS" --warmup 20 --samples "$MCP_SAMPLES" \
+            --json mcp-relay-bench.json --markdown mcp-relay-bench.md
+          cat mcp-relay-bench.md >> "$GITHUB_STEP_SUMMARY"
+          # A broken probe is a measurement problem; latency and deferral rates are never gated here.
+          python3 -c 'import json, sys; d = json.load(open("mcp-relay-bench.json")); sys.exit("error" in d)'
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: ${{ !cancelled() }}
+        with:
+          name: warm-path-latency
+          path: |
+            warm-path-latency.json
+            warm-path-summary*.md
+            warm-path-summary*.json
+            mcp-relay-bench.json
+            mcp-relay-bench.md
+          if-no-files-found: warn

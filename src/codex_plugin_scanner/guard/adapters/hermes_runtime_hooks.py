@@ -8,19 +8,19 @@ from __future__ import annotations
 
 import json
 import shlex
-import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, TextIO
+from typing import Any
 
 from codex_plugin_scanner.safe_output import write_text_atomic_no_follow
 
+from ..native_hook_render import native_hermes_bridge
 from .hermes_file_inspection import HERMES_CONFIG_MAX_BYTES, inspect_hermes_config, inspect_hermes_text_file
 
 _PRETOOL_EVENT = "pre_tool_call"
 _GUARD_HOOK_ID = "hol-guard-pretool"
 _ALLOWLIST_NAME = "shell-hooks-allowlist.json"
-_BLOCK_ACTIONS = frozenset({"review", "require-reapproval", "sandbox-required", "block"})
+_UNAVAILABLE_BLOCK: dict[str, object] = {"decision": "block", "reason": "HOL Guard blocked this action."}
 _LAUNCH_REVIEW_ONLY_LABEL = "launch-review only"
 _MALFORMED_ALLOWLIST = (
     "Hermes shell-hooks-allowlist.json is malformed; repair the file so Guard can allowlist its pre_tool_call command."
@@ -236,54 +236,25 @@ def hermes_allowlist_path(hermes_home: Path) -> Path:
     return hermes_home.expanduser().resolve(strict=False) / _ALLOWLIST_NAME
 
 
-def prepare_hermes_hook_payload(payload: Mapping[str, object]) -> dict[str, object]:
-    """Normalize Hermes stdin onto Guard envelope keys."""
-
-    normalized = dict(payload)
-    event_name = normalized.get("hook_event_name")
-    if isinstance(event_name, str) and event_name.replace("_", "").replace("-", "").lower() == "pretoolcall":
-        normalized["hook_event_name"] = "PreToolUse"
-    if not isinstance(normalized.get("tool_input"), Mapping):
-        args = normalized.get("args")
-        if isinstance(args, Mapping):
-            normalized["tool_input"] = dict(args)
-    return normalized
-
-
-def hermes_native_decision(*, policy_action: str, reason: str) -> dict[str, object]:
-    if policy_action in {"allow", "warn"}:
-        return {"decision": "allow", "reason": reason}
-    return {"decision": "block", "reason": reason or "HOL Guard blocked this action"}
-
-
-def hermes_should_exit_block(policy_action: str) -> bool:
-    return policy_action in _BLOCK_ACTIONS
-
-
 def hermes_bridge_response(
     daemon_response: Mapping[str, object],
     *,
     event_name: str,
+    guard_home: Path | None = None,
+    deadline: float | None = None,
 ) -> tuple[str, str, int]:
-    """Turn a daemon or CLI payload into Hermes stdout JSON plus exit code."""
+    """Turn a daemon or CLI payload into Hermes stdout JSON plus exit code.
+
+    The resident reads the reply and names both the decision and the exit
+    status. When it cannot answer, this forwards the constant block document
+    and the blocking status rather than reading the reply here.
+    """
 
     del event_name
-    policy_action, reason = _policy_from_response(daemon_response)
-    payload = hermes_native_decision(policy_action=policy_action, reason=reason)
+    rendered = native_hermes_bridge(daemon_response, guard_home=guard_home, deadline=deadline)
+    payload, exit_code = rendered if rendered is not None else (_UNAVAILABLE_BLOCK, 2)
     stdout = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
-    return stdout, "", 2 if hermes_should_exit_block(policy_action) else 0
-
-
-def emit_hermes_hook_response(
-    *,
-    policy_action: str,
-    reason: str,
-    output_stream: TextIO | None = None,
-) -> None:
-    stream = output_stream if output_stream is not None else sys.stdout
-    payload = hermes_native_decision(policy_action=policy_action, reason=reason)
-    stream.write(json.dumps(payload, separators=(",", ":")) + "\n")
-    stream.flush()
+    return stdout, "", exit_code
 
 
 def apply_hermes_doctor_protection_label(payload: dict[str, object]) -> None:
@@ -346,41 +317,6 @@ def sync_guard_runtime_hooks(
 def unsync_guard_runtime_hooks(config: dict[str, Any], *, hermes_home: Path) -> None:
     for command_string in remove_guard_pretool_hooks(config):
         remove_guard_hook_allowlist(hermes_home, command_string=command_string)
-
-
-def _policy_from_response(response: Mapping[str, object]) -> tuple[str, str]:
-    decision = response.get("decision")
-    if isinstance(decision, str) and decision.strip().lower() in {"block", "deny"}:
-        return "block", _reason_from_response(response)
-    if isinstance(decision, str) and decision.strip().lower() == "allow":
-        return "allow", _reason_from_response(response)
-    action = response.get("action")
-    if isinstance(action, str) and action.strip().lower() == "block":
-        return "block", _reason_from_response(response)
-    hook_specific = response.get("hookSpecificOutput")
-    if isinstance(hook_specific, Mapping):
-        permission = hook_specific.get("permissionDecision")
-        if isinstance(permission, str) and permission.strip().lower() in {"deny", "ask"}:
-            return "block", _reason_from_response(response)
-        if isinstance(permission, str) and permission.strip().lower() == "allow":
-            return "allow", _reason_from_response(response)
-    policy_action = response.get("policy_action")
-    if isinstance(policy_action, str) and policy_action.strip():
-        return policy_action.strip(), _reason_from_response(response)
-    return "block", _reason_from_response(response)
-
-
-def _reason_from_response(response: Mapping[str, object]) -> str:
-    for key in ("reason", "message", "permission_decision_reason"):
-        value = response.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    hook_specific = response.get("hookSpecificOutput")
-    if isinstance(hook_specific, Mapping):
-        value = hook_specific.get("permissionDecisionReason")
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    return "HOL Guard blocked this action"
 
 
 def _read_allowlist(path: Path) -> dict[str, Any] | None:

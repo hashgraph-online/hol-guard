@@ -10,12 +10,14 @@ import secrets
 import sys
 from pathlib import Path
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
 
 from . import __version__
 from ._scanner_commands import _scan_with_policy
 from .action_environment import drop_external_analyzer_credentials
 from .cli_ui import build_plain_text, build_verification_text
 from .config import ConfigError, load_scanner_config
+from .contributor_review import contributor_review_lines
 from .github_reporting import (
     build_scan_pr_comment_body,
     build_verify_pr_comment_body,
@@ -250,6 +252,42 @@ def _build_findings_summary_lines(findings: tuple[Finding, ...]) -> tuple[str, .
     return tuple(lines)
 
 
+HOL_PLUGINS_CONNECT_URL = "https://hol.org/plugins/connect"
+
+
+def _public_repository_for_publish_hint(*, repository: str, server_url: str, event_path: str) -> str:
+    """Return the repository name only when the event payload marks it public on github.com."""
+    if not repository or not event_path:
+        return ""
+    if server_url.rstrip("/") != "https://github.com":
+        return ""
+    try:
+        payload = json.loads(Path(event_path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ""
+    if not isinstance(payload, dict):
+        return ""
+    event_repository = payload.get("repository")
+    if not isinstance(event_repository, dict) or event_repository.get("private") is not False:
+        return ""
+    if event_repository.get("full_name") != repository:
+        return ""
+    return repository
+
+
+def _build_publish_hint_lines(repository: str) -> list[str]:
+    query = urlencode({"repo": repository, "utm_source": "hol-scanner-action", "utm_medium": "job-summary"})
+    return [
+        "",
+        "### Publish on HOL Plugins",
+        "",
+        f"Find this repository's HOL Plugins listing, claim it free and add a live trust badge: "
+        f"[{HOL_PLUGINS_CONNECT_URL}]({HOL_PLUGINS_CONNECT_URL}?{query})",
+        "",
+        "Shown for public repositories only. Set `publish_hint: false` to hide it.",
+    ]
+
+
 def _build_step_summary_lines(
     *,
     mode: str,
@@ -267,6 +305,7 @@ def _build_step_summary_lines(
     local_plugin_count: int | None = None,
     skipped_target_count: int | None = None,
     findings: tuple[Finding, ...] = (),
+    publish_hint_repository: str = "",
 ) -> tuple[str, ...]:
     lines = ["## HOL AI Plugin Scanner", "", f"- Mode: {mode}"]
     lines.append(f"- Scope: {scope}")
@@ -293,6 +332,9 @@ def _build_step_summary_lines(
         lines.append(f"- Submission issues: {', '.join(issue.url for issue in submission_issues)}")
     if mode in {"scan", "lint", "submit"}:
         lines.extend(_build_findings_summary_lines(findings))
+        lines.extend(contributor_review_lines(findings))
+    if publish_hint_repository and mode != "submit":
+        lines.extend(_build_publish_hint_lines(publish_hint_repository))
     return tuple(lines)
 
 
@@ -302,6 +344,7 @@ def main() -> int:
     output_format = _read_env("FORMAT", "text")
     output_path = _read_env("OUTPUT")
     write_step_summary = _read_bool_env("WRITE_STEP_SUMMARY", default=True)
+    publish_hint = _read_bool_env("PUBLISH_HINT", default=True)
     registry_payload_output = _read_env("REGISTRY_PAYLOAD_OUTPUT")
     upload_sarif = _read_bool_env("UPLOAD_SARIF")
     profile = _read_env("PROFILE", "default")
@@ -436,6 +479,15 @@ def main() -> int:
                     local_plugin_count=local_plugin_count,
                     skipped_target_count=skipped_target_count,
                     findings=summary_findings,
+                    publish_hint_repository=(
+                        _public_repository_for_publish_hint(
+                            repository=github_repository,
+                            server_url=github_server_url,
+                            event_path=github_event_path,
+                        )
+                        if publish_hint
+                        else ""
+                    ),
                 ),
             )
         output_values["action_exit_code"] = str(return_code)

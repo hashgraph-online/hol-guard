@@ -54,8 +54,14 @@ export function rebaseExtensionPolicyDraft(
   oldExtension: ExtensionCatalogItem,
   latestExtension: ExtensionCatalogItem,
   draftLayers: ExtensionControlLayer[],
+  rebasedLayers?: ExtensionControlLayer[],
 ): ExtensionPolicyRebaseResult {
-  let rebased = latestEffective.layers.map((layer) => ({ ...layer, controls: layer.controls.map((control) => ({ ...control })) }));
+  // `draftLayers` is always the operator's original draft, so every extension's
+  // requested state is read from what they actually asked for. `rebasedLayers`
+  // carries the result of rebasing the extensions handled before this one;
+  // starting from the latest authority again would drop their edits.
+  const onto = rebasedLayers ?? latestEffective.layers;
+  let rebased = onto.map((layer) => ({ ...layer, controls: layer.controls.map((control) => ({ ...control })) }));
   const conflicts: ExtensionPolicyRebaseConflict[] = [];
   const remapped: Record<string, string> = {};
 

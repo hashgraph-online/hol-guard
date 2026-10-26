@@ -35,8 +35,20 @@ def operator_working_directory(payload: dict[str, object], *, home_dir: Path) ->
 
 
 def public_local_cli_item(item: dict[str, object]) -> dict[str, object]:
-    """Redact package.json paths from public list/recognize payloads."""
+    """Redact package paths and keep MCP overview payloads metadata-only."""
 
+    if item.get("surface") == "mcp":
+        public = dict(item)
+        catalog = public.get("mcp_catalog")
+        if isinstance(catalog, dict):
+            public_catalog = {
+                key: value for key, value in catalog.items() if key not in {"tools", "server_info", "capabilities"}
+            }
+            skills = public_catalog.get("skills_catalog")
+            if isinstance(skills, dict):
+                public_catalog["skills_catalog"] = {key: value for key, value in skills.items() if key != "entries"}
+            public["mcp_catalog"] = public_catalog
+        return public
     if item.get("surface") != _SURFACE:
         return item
     public = dict(item)

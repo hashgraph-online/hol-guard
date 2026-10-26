@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.adapters.pi_support import enable_managed_extension
 
 
@@ -32,3 +34,20 @@ def test_enable_managed_extension_prunes_stale_hol_guard_extensions(tmp_path: Pa
 
     extensions = json.loads(settings_path.read_text(encoding="utf-8"))["extensions"]
     assert extensions == [str(custom_extension), str(current_extension)]
+
+
+def test_enable_managed_extension_rejects_symlink_and_foreign_name(tmp_path: Path) -> None:
+    settings_path = tmp_path / ".pi" / "agent" / "settings.json"
+    other = tmp_path / "elsewhere.json"
+    settings_path.parent.mkdir(parents=True)
+    other.write_text("{}", encoding="utf-8")
+    settings_path.symlink_to(other)
+    extension = tmp_path / "hol-guard.ts"
+    with pytest.raises(ValueError, match="settings path"):
+        enable_managed_extension(settings_path=settings_path, extension_path=extension)
+    assert other.read_text(encoding="utf-8") == "{}"
+
+    foreign = tmp_path / "notes.txt"
+    with pytest.raises(ValueError, match="settings path"):
+        enable_managed_extension(settings_path=foreign, extension_path=extension)
+    assert not foreign.exists()

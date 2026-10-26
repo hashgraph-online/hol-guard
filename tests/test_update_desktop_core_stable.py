@@ -48,6 +48,8 @@ def test_apply_installs_stable_sidecar_from_stable_tag(
     def fetch_bytes(url: str, limit: int) -> bytes:
         _ = limit
         urls.append(url)
+        if ".onedir." in url:
+            raise update_desktop_core.DesktopCoreUpdateError("desktop_core_asset_missing")
         return json.dumps(manifest).encode("utf-8") if url.endswith(".json") else binary
 
     result = update_desktop_core.apply_desktop_core_update(
@@ -61,7 +63,9 @@ def test_apply_installs_stable_sidecar_from_stable_tag(
     assert result.version == "3.0.7"
     prefix = "/releases/download/v3.0.7/hol-guard-core-3.0.7-aarch64-apple-darwin"
     assert urls[0].endswith(f"{prefix}.json")
-    assert urls[1].endswith(prefix)
+    if len(urls) == 3:
+        assert urls[1].endswith(f"{prefix}.onedir.json")
+    assert urls[-1].endswith(prefix)
 
 
 @pytest.mark.parametrize("target_version", ["3.0.1a1", "3.0.1b1", "3.0.1rc1"])

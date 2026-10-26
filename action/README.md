@@ -6,7 +6,7 @@
 [![Source of Truth](https://img.shields.io/badge/source-hol--guard-111827)](https://github.com/hashgraph-online/hol-guard/tree/main/action)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/hashgraph-online/hol-guard/blob/main/LICENSE)
 
-| ![Hashgraph Online Logo](https://hol.org/brand/Logo_Whole_Dark.png) | Marketplace-ready GitHub Action for scanning AI plugin repositories across Codex, Claude, Gemini, and OpenCode ecosystems for security, publishability, runtime readiness, and trust signals. The action emits structured reports, SARIF, policy results, and submission metadata while staying aligned to the main scanner release train.<br><br>[Latest Release](https://github.com/hashgraph-online/ai-plugin-scanner-action/releases/latest)<br>[Marketplace Repository](https://github.com/hashgraph-online/ai-plugin-scanner-action)<br>[Compatibility Alias](https://github.com/hashgraph-online/hol-codex-plugin-scanner-action)<br>[Scanner Source of Truth](https://github.com/hashgraph-online/hol-guard/tree/main/action)<br>[Report an Issue](https://github.com/hashgraph-online/hol-guard/issues) |
+| ![HOL Logo](https://hol.org/brand/Logo_Whole_Dark.png) | Marketplace-ready GitHub Action for scanning AI plugin repositories across Codex, Claude, Gemini, and OpenCode ecosystems for security, publishability, runtime readiness, and trust signals. The action emits structured reports, SARIF, policy results, and submission metadata while staying aligned to the main scanner release train.<br><br>[Latest Release](https://github.com/hashgraph-online/ai-plugin-scanner-action/releases/latest)<br>[Marketplace Repository](https://github.com/hashgraph-online/ai-plugin-scanner-action)<br>[Compatibility Alias](https://github.com/hashgraph-online/hol-codex-plugin-scanner-action)<br>[Scanner Source of Truth](https://github.com/hashgraph-online/hol-guard/tree/main/action)<br>[Report an Issue](https://github.com/hashgraph-online/hol-guard/issues) |
 | :--- | :--- |
 
 This repository is the canonical Marketplace-facing wrapper for the scanner action. The hol-guard repository remains the source of truth, while this published action bundle keeps the required root `action.yml` layout for GitHub Marketplace.
@@ -61,6 +61,7 @@ Security-conscious consumers should prefer the commit-SHA form, the same guidanc
 | `upload_sarif` | Upload the generated SARIF report to GitHub code scanning when `mode: scan` | `false` |
 | `sarif_category` | SARIF category used during GitHub code scanning upload | `ai-plugin-scanner` |
 | `write_step_summary` | Write a concise markdown summary to the GitHub Actions job summary | `true` |
+| `publish_hint` | On public github.com repositories, add a link to the repository's HOL Plugins listing (claim it free, add a trust badge) to the concise job summary. Makes no network request. | `true` |
 | `registry_payload_output` | Write a machine-readable plugin ecosystem payload JSON file for registry or awesome-list automation | `""` |
 | `min_score` | Fail if score is below this threshold (0-100) | `0` |
 | `fail_on_severity` | Fail on findings at or above this severity: `none`, `critical`, `high`, `medium`, `low`, `info` | `none` |

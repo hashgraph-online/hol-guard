@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.runtime.contained_execution_common import file_sha256
 from codex_plugin_scanner.guard.runtime.containment_contract import (
     ContainmentAttestation,
     ContainmentBackend,
@@ -15,7 +16,6 @@ from codex_plugin_scanner.guard.runtime.containment_contract import (
     ContainmentPolicy,
     ContainmentRequest,
 )
-from codex_plugin_scanner.guard.runtime.containment_executor import file_sha256
 from codex_plugin_scanner.guard.runtime.containment_health import (
     CONTAINMENT_POLICY_CONTRACT_DIGEST,
     ContainmentHealthEvidence,

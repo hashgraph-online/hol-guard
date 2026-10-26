@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import multiprocessing
 import queue
 import re
@@ -10,9 +9,10 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from hashlib import sha256
 from typing import Generic, Literal, TypeVar
 from uuid import uuid4
+
+from .native_continuation_authority import continuation_authority, offer_wire, result_dto
 
 ContinuationCapability = Literal["suspended-response", "session-resume", "retry-only", "unsupported"]
 ContinuationStatus = Literal[
@@ -226,17 +226,15 @@ class ContinuationCoordinator(Generic[ExecutionPlan]):
     def _terminal_result(
         self, offer: ContinuationOffer, *, action: ContinuationAction, cancelled: Callable[[], bool]
     ) -> ContinuationResult | None:
-        if action == "block":
-            return self._result(offer, "blocked_not_resumed", "decision_blocked")
-        if cancelled():
-            return self._result(offer, "failed", "continuation_cancelled")
-        if offer.capability == "unsupported":
-            return self._result(offer, "unsupported", "harness_unsupported")
-        if offer.capability == "retry-only":
-            return self._result(offer, "manual_retry_required", "manual_retry_required")
-        if offer.wait_deadline is not None and offer.wait_deadline <= self._now():
-            return self._result(offer, "manual_retry_required", "wait_window_expired")
-        return None
+        result = continuation_authority(
+            "coordinate",
+            offer=offer_wire(offer),
+            action=action,
+            cancelled=cancelled() if action != "block" else False,
+            now=self._now().isoformat(),
+            evidence_id=f"evidence-{uuid4().hex}",
+        )
+        return result_dto(result["result"])
 
     def _result(self, offer: ContinuationOffer, status: ContinuationStatus, reason: str) -> ContinuationResult:
         return ContinuationResult(
@@ -262,35 +260,25 @@ def capability_offer(
 ) -> ContinuationOffer:
     """Declare only a proven capability; named runtimes without transport downgrade explicitly."""
 
-    normalized = harness.strip().lower()
-    current_time = now()
-    if normalized == "codex" and original_hook_attached and wait_deadline is not None and wait_deadline > current_time:
-        capability: ContinuationCapability = "suspended-response"
-    elif normalized == "codex" and not headless and session_target_verified:
-        capability = "session-resume"
-    elif normalized in {"codex", "pi", "omp", "oh-my-pi", "grok", "openclaw", "hermes"}:
-        capability = "retry-only"
-    else:
-        capability = "unsupported"
-    return ContinuationOffer(
+    payload = continuation_authority(
+        "offer",
         correlation_id=correlation_id,
-        harness=normalized,
-        capability=capability,
-        original_hook_attached=original_hook_attached if capability == "suspended-response" else False,
-        wait_deadline=wait_deadline if capability == "suspended-response" else None,
-        opaque_target_id=opaque_target_id if capability == "session-resume" else None,
+        harness=harness,
+        original_hook_attached=original_hook_attached,
+        wait_deadline=wait_deadline.isoformat() if wait_deadline is not None else None,
+        opaque_target_id=opaque_target_id,
+        session_target_verified=session_target_verified,
+        headless=headless,
+        now=now().isoformat(),
     )
+    fields = dict(payload["offer"])
+    fields["wait_deadline"] = (
+        datetime.fromisoformat(fields["wait_deadline"]) if fields["wait_deadline"] is not None else None
+    )
+    return ContinuationOffer(**fields)
 
 
 def _offer_identity(offer: ContinuationOffer) -> str:
     """Bind idempotency to every security-relevant offer field, not correlation alone."""
 
-    document = {
-        "capability": offer.capability,
-        "contractVersion": offer.contract_version,
-        "deadline": offer.wait_deadline.isoformat() if offer.wait_deadline is not None else None,
-        "harness": offer.harness,
-        "hookAttached": offer.original_hook_attached,
-        "target": offer.opaque_target_id,
-    }
-    return sha256(json.dumps(document, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    return continuation_authority("identity", offer=offer_wire(offer))["identity_hash"]

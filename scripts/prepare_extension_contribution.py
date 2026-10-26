@@ -9,15 +9,19 @@ command from a contributor fixture.
 from __future__ import annotations
 
 import argparse
+import atexit
 import json
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_PREFIX = "contributions/command-sources/"
 FIXTURE_PREFIX = "tests/fixtures/command-source-"
 MAX_FIXTURE_BYTES = 1_048_576
+# Compiler digest to command packs staged once for this process.
+_STAGED_PACKS: dict[str, Path] = {}
 
 
 def _relative(path: Path) -> str:
@@ -149,6 +153,7 @@ def _compiler(path: Path | None) -> Path:
 
 
 def _run(command: list[str], *, input_bytes: bytes | None = None) -> bytes:
+    """Run an authoring subprocess and preserve its diagnostics when it fails."""
     completed = subprocess.run(
         command,
         input=input_bytes,
@@ -158,13 +163,53 @@ def _run(command: list[str], *, input_bytes: bytes | None = None) -> bytes:
     )
     if completed.returncode:
         detail = completed.stderr.decode(errors="replace").strip() or completed.stdout.decode(errors="replace").strip()
-        raise ValueError(detail[:1024] or "Declarative contribution preparation failed.")
+        raise ValueError(detail[-2048:] or "Declarative contribution preparation failed.")
     return completed.stdout
+
+
+def _development_release(compiler: Path, directory: Path) -> dict:
+    """Prepare native command packs for this checkout's maintainer checks.
+
+    Staging compiles every command pack, and each fixture request gets its own
+    cache. The checkout does not change during a run, so one staging per
+    compiler binary is copied into each request's directory. Authoring runs a
+    private copy of the compiler for every request, so the key is its bytes.
+    """
+    import hashlib
+    import shutil
+
+    import build_native_command_packs as packs
+
+    digest = hashlib.sha256()
+    with compiler.open("rb") as handle:
+        while chunk := handle.read(1 << 20):
+            digest.update(chunk)
+    staged = _STAGED_PACKS.get(digest.hexdigest())
+    if staged is None:
+        staged = Path(tempfile.mkdtemp(prefix="hol-guard-prepare-packs-")).resolve() / "packs"
+        atexit.register(shutil.rmtree, staged.parent, True)
+        packs.stage(compiler, staged, source_root=ROOT)
+        _STAGED_PACKS[digest.hexdigest()] = staged
+    shutil.copytree(staged, directory, dirs_exist_ok=True)
+    manifest = (directory / "release.json").read_bytes()
+    return {"root": json.loads(manifest), "source_context": hashlib.sha256(manifest).hexdigest()}
 
 
 def _validate_fixture(compiler: Path, path: Path) -> str:
     fixture = _load_object(path)
-    result = _run([str(compiler), "test"], input_bytes=path.read_bytes())
+    sys.path.insert(0, str(ROOT / "src"))
+    from codex_plugin_scanner.guard.extension_builder.bundle_baseline import authoring_request
+
+    with tempfile.TemporaryDirectory(prefix="hol-guard-prepare-context-") as scratch:
+        request = authoring_request(
+            "test",
+            fixture,
+            compiler,
+            installed=False,
+            cache_directory=Path(scratch).resolve(strict=True),
+            development=_development_release,
+        )
+        result = _run([str(compiler), "test"], input_bytes=json.dumps(request).encode())
     try:
         payload = json.loads(result)
     except json.JSONDecodeError as error:
@@ -227,12 +272,18 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--source", type=Path, help="One explicit command source to bind to --fixture.")
     parser.add_argument("--fixture", type=Path, help="One explicit portable fixture to bind to --source.")
+    parser.add_argument(
+        "--publish-directory",
+        action="store_true",
+        help="Preview the full public directory in CI; ordinary authoring only stages its own public record.",
+    )
     args = parser.parse_args(argv)
     try:
         if (args.source is None) != (args.fixture is None):
             raise ValueError("Use --source and --fixture together.")
         compiler = _compiler(args.compiler)
         fixture_paths = _fixtures()
+        public_ids = set()
         if args.source is not None:
             source = _load_object(args.source)
             extension_id = _extension_id(source, args.source)
@@ -240,10 +291,14 @@ def main(argv: list[str] | None = None) -> int:
             if _fixture_source_ids(fixture, args.fixture).get(extension_id) != source:
                 raise ValueError("The portable fixture does not bind the exact source document.")
             fixture_paths = [args.fixture]
+            public_ids.add(extension_id)
         if args.changed_from:
-            fixture_paths = _validate_changed_source_fixture_pairs(
-                _changed_paths(args.changed_from), fixture_paths, revision=args.changed_from
-            )
+            changed = _changed_paths(args.changed_from)
+            fixture_paths = _validate_changed_source_fixture_pairs(changed, fixture_paths, revision=args.changed_from)
+            for name in changed:
+                path = ROOT / name
+                if name.startswith("contributions/command-sources/command.") and path.is_file():
+                    public_ids.add(_extension_id(_load_object(path), path))
         validated = [_validate_fixture(compiler, path) for path in fixture_paths]
         projection = [
             sys.executable,
@@ -251,12 +306,18 @@ def main(argv: list[str] | None = None) -> int:
             "--compiler",
             str(compiler),
         ]
-        directory = [sys.executable, str(ROOT / "scripts/export_extension_directory.py")]
+        if args.publish_directory:
+            projection.extend(["--descriptor-dir", "contributions/extensions"])
+        else:
+            for extension_id in sorted(public_ids):
+                projection.extend(["--publish-descriptor", extension_id])
+        directory = [sys.executable, str(ROOT / "scripts/prepare_extension_directory.py"), "--compiler", str(compiler)]
         if args.check:
             projection.append("--check")
             directory.append("--check")
         _ = _run(projection)
-        _ = _run(directory)
+        if args.publish_directory:
+            _ = _run(directory)
         print(
             json.dumps(
                 {

@@ -1,0 +1,607 @@
+{
+"cases": [
+{
+"must_exist": true,
+"ok": false,
+"result": "ValueError",
+"value": ""
+},
+{
+"must_exist": false,
+"ok": false,
+"result": "ValueError",
+"value": ""
+},
+{
+"must_exist": true,
+"ok": false,
+"result": "ValueError",
+"value": "/abs/x"
+},
+{
+"must_exist": false,
+"ok": false,
+"result": "ValueError",
+"value": "/abs/x"
+},
+{
+"must_exist": true,
+"ok": false,
+"result": "ValueError",
+"value": "../x"
+},
+{
+"must_exist": false,
+"ok": false,
+"result": "ValueError",
+"value": "../x"
+},
+{
+"must_exist": true,
+"ok": false,
+"result": "ValueError",
+"value": "a/../b"
+},
+{
+"must_exist": false,
+"ok": false,
+"result": "ValueError",
+"value": "a/../b"
+},
+{
+"must_exist": true,
+"ok": false,
+"result": "ValueError",
+"value": "./a"
+},
+{
+"must_exist": false,
+"ok": false,
+"result": "ValueError",
+"value": "./a"
+},
+{
+"must_exist": true,
+"ok": false,
+"result": "ValueError",
+"value": "a//b"
+},
+{
+"must_exist": false,
+"ok": false,
+"result": "ValueError",
+"value": "a//b"
+},
+{
+"must_exist": true,
+"ok": false,
+"result": "ValueError",
+"value": "src\\a.py"
+},
+{
+"must_exist": false,
+"ok": false,
+"result": "ValueError",
+"value": "src\\a.py"
+},
+{
+"must_exist": true,
+"ok": true,
+"result": "src/a.py",
+"value": "src/a.py"
+},
+{
+"must_exist": false,
+"ok": true,
+"result": "src/a.py",
+"value": "src/a.py"
+},
+{
+"must_exist": true,
+"ok": true,
+"result": "Src/A.PY",
+"value": "Src/A.PY"
+},
+{
+"must_exist": false,
+"ok": true,
+"result": "Src/A.PY",
+"value": "Src/A.PY"
+},
+{
+"must_exist": true,
+"ok": false,
+"result": "ValueError",
+"value": ".ENV"
+},
+{
+"must_exist": false,
+"ok": false,
+"result": "ValueError",
+"value": ".ENV"
+},
+{
+"must_exist": true,
+"ok": false,
+"result": "ValueError",
+"value": ".env.production"
+},
+{
+"must_exist": false,
+"ok": false,
+"result": "ValueError",
+"value": ".env.production"
+},
+{
+"must_exist": true,
+"ok": false,
+"result": "ValueError",
+"value": ".envrc"
+},
+{
+"must_exist": false,
+"ok": false,
+"result": "ValueError",
+"value": ".envrc"
+},
+{
+"must_exist": true,
+"ok": false,
+"result": "ValueError",
+"value": ".GIT/x"
+},
+{
+"must_exist": false,
+"ok": false,
+"result": "ValueError",
+"value": ".GIT/x"
+},
+{
+"must_exist": true,
+"ok": false,
+"result": "ValueError",
+"value": "src/.aws/x"
+},
+{
+"must_exist": false,
+"ok": false,
+"result": "ValueError",
+"value": "src/.aws/x"
+},
+{
+"must_exist": true,
+"ok": false,
+"result": "ValueError",
+"value": "guard-home/x"
+},
+{
+"must_exist": false,
+"ok": false,
+"result": "ValueError",
+"value": "guard-home/x"
+},
+{
+"must_exist": true,
+"ok": false,
+"result": "ValueError",
+"value": "Guard-Home/x"
+},
+{
+"must_exist": false,
+"ok": false,
+"result": "ValueError",
+"value": "Guard-Home/x"
+},
+{
+"must_exist": true,
+"ok": true,
+"result": "credentials.json",
+"value": "credentials.json"
+},
+{
+"must_exist": false,
+"ok": true,
+"result": "credentials.json",
+"value": "credentials.json"
+},
+{
+"must_exist": true,
+"ok": true,
+"result": "id_rsa",
+"value": "id_rsa"
+},
+{
+"must_exist": false,
+"ok": true,
+"result": "id_rsa",
+"value": "id_rsa"
+},
+{
+"must_exist": true,
+"ok": true,
+"result": "secrets.yaml",
+"value": "secrets.yaml"
+},
+{
+"must_exist": false,
+"ok": true,
+"result": "secrets.yaml",
+"value": "secrets.yaml"
+},
+{
+"must_exist": true,
+"ok": true,
+"result": "server.pem",
+"value": "server.pem"
+},
+{
+"must_exist": false,
+"ok": true,
+"result": "server.pem",
+"value": "server.pem"
+},
+{
+"must_exist": true,
+"ok": false,
+"result": "ValueError",
+"value": "private.key"
+},
+{
+"must_exist": false,
+"ok": false,
+"result": "ValueError",
+"value": "private.key"
+},
+{
+"must_exist": true,
+"ok": false,
+"result": "ValueError",
+"value": ".npmrc"
+},
+{
+"must_exist": false,
+"ok": false,
+"result": "ValueError",
+"value": ".npmrc"
+},
+{
+"must_exist": true,
+"ok": false,
+"result": "ValueError",
+"value": ".netrc"
+},
+{
+"must_exist": false,
+"ok": false,
+"result": "ValueError",
+"value": ".netrc"
+},
+{
+"must_exist": true,
+"ok": true,
+"result": "token.txt",
+"value": "token.txt"
+},
+{
+"must_exist": false,
+"ok": true,
+"result": "token.txt",
+"value": "token.txt"
+},
+{
+"must_exist": true,
+"ok": true,
+"result": "service-account.json",
+"value": "service-account.json"
+},
+{
+"must_exist": false,
+"ok": true,
+"result": "service-account.json",
+"value": "service-account.json"
+},
+{
+"must_exist": true,
+"ok": false,
+"result": "ValueError",
+"value": ".pypirc"
+},
+{
+"must_exist": false,
+"ok": false,
+"result": "ValueError",
+"value": ".pypirc"
+},
+{
+"must_exist": true,
+"ok": true,
+"result": "kubeconfig",
+"value": "kubeconfig"
+},
+{
+"must_exist": false,
+"ok": true,
+"result": "kubeconfig",
+"value": "kubeconfig"
+},
+{
+"must_exist": true,
+"ok": true,
+"result": "config/secrets.json",
+"value": "config/secrets.json"
+},
+{
+"must_exist": false,
+"ok": true,
+"result": "config/secrets.json",
+"value": "config/secrets.json"
+},
+{
+"must_exist": true,
+"ok": true,
+"result": "aws_credentials",
+"value": "aws_credentials"
+},
+{
+"must_exist": false,
+"ok": true,
+"result": "aws_credentials",
+"value": "aws_credentials"
+},
+{
+"must_exist": true,
+"ok": false,
+"result": "ValueError",
+"value": "src/sub"
+},
+{
+"must_exist": false,
+"ok": false,
+"result": "ValueError",
+"value": "src/sub"
+},
+{
+"must_exist": true,
+"ok": true,
+"result": "src/sub/b.py",
+"value": "src/sub/b.py"
+},
+{
+"must_exist": false,
+"ok": true,
+"result": "src/sub/b.py",
+"value": "src/sub/b.py"
+},
+{
+"must_exist": true,
+"ok": false,
+"result": "ValueError",
+"value": "link_file"
+},
+{
+"must_exist": false,
+"ok": false,
+"result": "ValueError",
+"value": "link_file"
+},
+{
+"must_exist": true,
+"ok": false,
+"result": "ValueError",
+"value": "link_dir/a.py"
+},
+{
+"must_exist": false,
+"ok": true,
+"result": "link_dir/a.py",
+"value": "link_dir/a.py"
+},
+{
+"must_exist": true,
+"ok": false,
+"result": "ValueError",
+"value": "hard1"
+},
+{
+"must_exist": false,
+"ok": true,
+"result": "hard1",
+"value": "hard1"
+},
+{
+"must_exist": true,
+"ok": false,
+"result": "ValueError",
+"value": "hard0"
+},
+{
+"must_exist": false,
+"ok": true,
+"result": "hard0",
+"value": "hard0"
+},
+{
+"must_exist": true,
+"ok": false,
+"result": "ValueError",
+"value": "empty_dir"
+},
+{
+"must_exist": false,
+"ok": false,
+"result": "ValueError",
+"value": "empty_dir"
+},
+{
+"must_exist": true,
+"ok": true,
+"result": "build/out.txt",
+"value": "build/out.txt"
+},
+{
+"must_exist": false,
+"ok": true,
+"result": "build/out.txt",
+"value": "build/out.txt"
+},
+{
+"must_exist": true,
+"ok": false,
+"result": "FileNotFoundError",
+"value": "build/new.txt"
+},
+{
+"must_exist": false,
+"ok": true,
+"result": "build/new.txt",
+"value": "build/new.txt"
+},
+{
+"must_exist": true,
+"ok": false,
+"result": "FileNotFoundError",
+"value": "missing_dir/new.txt"
+},
+{
+"must_exist": false,
+"ok": false,
+"result": "FileNotFoundError",
+"value": "missing_dir/new.txt"
+},
+{
+"must_exist": true,
+"ok": true,
+"result": "README.md",
+"value": "README.md"
+},
+{
+"must_exist": false,
+"ok": true,
+"result": "README.md",
+"value": "README.md"
+},
+{
+"must_exist": true,
+"ok": false,
+"result": "ValueError",
+"value": "src/"
+},
+{
+"must_exist": false,
+"ok": false,
+"result": "ValueError",
+"value": "src/"
+},
+{
+"must_exist": true,
+"ok": false,
+"result": "ValueError",
+"value": ".git/config"
+},
+{
+"must_exist": false,
+"ok": false,
+"result": "ValueError",
+"value": ".git/config"
+},
+{
+"must_exist": true,
+"ok": false,
+"result": "ValueError",
+"value": ".ssh/id_rsa"
+},
+{
+"must_exist": false,
+"ok": false,
+"result": "ValueError",
+"value": ".ssh/id_rsa"
+},
+{
+"must_exist": true,
+"ok": false,
+"result": "FileNotFoundError",
+"value": "new_top.txt"
+},
+{
+"must_exist": false,
+"ok": true,
+"result": "new_top.txt",
+"value": "new_top.txt"
+},
+{
+"must_exist": true,
+"ok": false,
+"result": "FileNotFoundError",
+"value": "src/new.py"
+},
+{
+"must_exist": false,
+"ok": true,
+"result": "src/new.py",
+"value": "src/new.py"
+},
+{
+"must_exist": true,
+"ok": false,
+"result": "FileNotFoundError",
+"value": "link_dir/new.py"
+},
+{
+"must_exist": false,
+"ok": true,
+"result": "link_dir/new.py",
+"value": "link_dir/new.py"
+},
+{
+"must_exist": true,
+"ok": false,
+"result": "NotADirectoryError",
+"value": "link_file/x"
+},
+{
+"must_exist": false,
+"ok": true,
+"result": "link_file/x",
+"value": "link_file/x"
+}
+],
+"layout": {
+"dirs": [
+"empty_dir",
+"build"
+],
+"files": [
+"src/a.py",
+"src/sub/b.py",
+".env",
+".env.local",
+"credentials.json",
+"id_rsa",
+"secrets.yaml",
+"server.pem",
+"private.key",
+".npmrc",
+".netrc",
+"token.txt",
+"service-account.json",
+".pypirc",
+"kubeconfig",
+"config/secrets.json",
+"aws_credentials",
+".git/config",
+".ssh/id_rsa",
+"build/out.txt",
+"guard-home/x",
+"src/.aws/x",
+"README.md"
+],
+"hardlinks": {
+"hard1": "hard0"
+},
+"symlinks": {
+"link_dir": "src",
+"link_file": "src/a.py"
+}
+},
+"schema": "workspace-write-safe-relative-vectors.v1"
+}

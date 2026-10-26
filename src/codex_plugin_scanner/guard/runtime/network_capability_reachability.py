@@ -138,12 +138,6 @@ def load_reachability_manifest(path: Path) -> Mapping[str, object]:
     return cast(Mapping[str, object], payload)
 
 
-def assert_reachability_manifest(path: Path, *, repository_root: Path) -> None:
-    errors = validate_reachability_manifest(load_reachability_manifest(path), repository_root=repository_root)
-    if errors:
-        raise ReachabilityManifestError("\n".join(errors))
-
-
 def repository_manifest_path(repository_root: Path) -> Path:
     return repository_root / "ci" / "guard-network-capability-reachability.v1.json"
 
@@ -152,7 +146,6 @@ __all__: Sequence[str] = (
     "REACHABILITY_SCHEMA_VERSION",
     "REQUIRED_CAPABILITY_IDS",
     "ReachabilityManifestError",
-    "assert_reachability_manifest",
     "load_reachability_manifest",
     "repository_manifest_path",
     "validate_reachability_manifest",

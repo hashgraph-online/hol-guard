@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import urllib.error
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -16,15 +18,38 @@ from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import evaluate_detection
 from codex_plugin_scanner.guard.edge_events import build_runtime_session_event
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
+from codex_plugin_scanner.guard.native_policy_snapshot_publisher import provision_native_verifier_key_for_store
 from codex_plugin_scanner.guard.policy_bundle_parser import (
     computed_policy_bundle_hash,
     payload_hash_for_policy_bundle,
 )
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
+from codex_plugin_scanner.guard.runtime import runner_native_sync
 from codex_plugin_scanner.guard.shims import install_package_shims
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
+
+
+@pytest.fixture(autouse=True)
+def _snapshot_tests_without_resident_posture(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the cloud snapshot tests independent of the posture resident op.
+
+    These tests assert the cloud snapshot, not the supply-chain posture, and
+    some pin that building it opens a single store connection and leaves the
+    stored integrity state untouched. The posture op needs the resident's
+    verifier key, which provisioning writes for a throwaway guard home, and
+    the Windows enterprise lab cannot provision a resident for such homes at
+    all. The posture bridge has its own tests against the real resident.
+    """
+
+    from codex_plugin_scanner.guard import local_supply_chain
+
+    monkeypatch.setattr(
+        local_supply_chain,
+        "native_local_supply_chain_posture",
+        lambda *_args, **_kwargs: {"status": "not_configured"},
+    )
 
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
@@ -126,7 +151,10 @@ def test_sync_credentials_preserve_installation_id_when_cloud_workspace_changes(
     assert store.get_sync_payload("policy") == {"policy": "team"}
 
 
-def test_evaluate_detection_queues_access_graph_snapshot_without_syncing(tmp_path: Path) -> None:
+def test_evaluate_detection_queues_access_graph_snapshot_without_syncing(
+    tmp_path: Path,
+    native_context_digest: Path,
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-alpha")
     artifact = _artifact(tmp_path)
@@ -145,7 +173,10 @@ def test_evaluate_detection_queues_access_graph_snapshot_without_syncing(tmp_pat
     assert any(entity["entityType"] == "mcp_server" for entity in payload["payload"]["entities"])
 
 
-def test_evaluate_detection_queues_instruction_access_graph_edges(tmp_path: Path) -> None:
+def test_evaluate_detection_queues_instruction_access_graph_edges(
+    tmp_path: Path,
+    native_context_digest: Path,
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-alpha")
     instruction_path = tmp_path / "workspace" / "AGENTS.md"
@@ -172,10 +203,18 @@ def test_evaluate_detection_queues_instruction_access_graph_edges(tmp_path: Path
     assert any(edge["edgeType"] == "agent_uses_instruction" for edge in graph_payload["edges"])
 
 
-def test_evaluate_detection_queues_access_graph_snapshot_without_cloud_workspace(tmp_path: Path) -> None:
+def test_evaluate_detection_queues_access_graph_snapshot_without_cloud_workspace(
+    tmp_path: Path,
+    native_context_digest: Path,
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store)
-    artifact = _artifact(tmp_path)
+    # Graph queueing does not depend on the host Node installation or repo cwd.
+    # Keep real native launch identity, using the owned launcher pattern below.
+    launcher = tmp_path / "mcp-launcher"
+    launcher.write_text("#!/bin/sh\nexit 0\n")
+    launcher.chmod(0o700)
+    artifact = replace(_artifact(tmp_path), command=str(launcher), args=())
     config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=None)
 
     evaluation = evaluate_detection(_detection(artifact), store, config, default_action="allow", persist=True)
@@ -197,10 +236,16 @@ class _FailingAccessGraphEventStore(GuardStore):
         super().add_guard_event_v1(event)
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_access_graph_queue_failure_does_not_block_local_approval_decision(tmp_path: Path) -> None:
     store = _FailingAccessGraphEventStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-alpha")
-    artifact = _artifact(tmp_path)
+    # Exercise real native launch identity without depending on a host Node
+    # installation; this test isolates event-queue failure, not launcher speed.
+    launcher = tmp_path / "mcp-launcher"
+    launcher.write_text("#!/bin/sh\nexit 0\n")
+    launcher.chmod(0o700)
+    artifact = replace(_artifact(tmp_path), command=str(launcher), args=())
     config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=None)
 
     evaluation = evaluate_detection(_detection(artifact), store, config, default_action="allow", persist=True)
@@ -416,6 +461,26 @@ def test_build_runtime_snapshot_calls_oauth_health_once(tmp_path: Path, monkeypa
     assert calls == 1
 
 
+def test_runtime_snapshot_reuses_one_store_connection(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    provision_native_verifier_key_for_store(store)
+    opened = 0
+    original = sqlite3.connect
+
+    def counted_connect(*args, **kwargs):
+        nonlocal opened
+        opened += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(sqlite3, "connect", counted_connect)
+
+    snapshot = build_runtime_snapshot(store=store, approval_center_url=None)
+
+    assert opened == 1
+    assert snapshot["pending_count"] == 0
+    assert snapshot["device"]["local_registered"] is True
+
+
 def test_runtime_snapshot_exposes_safe_trust_status(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
 
@@ -432,6 +497,7 @@ def test_runtime_snapshot_exposes_safe_trust_status(tmp_path: Path) -> None:
 
 def test_runtime_snapshot_trust_status_does_not_refresh_integrity_state(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
+    provision_native_verifier_key_for_store(store)
     cached_state = {
         "backend": "cached-backend",
         "mode": "degraded",
@@ -985,7 +1051,9 @@ def test_sync_runtime_session_emits_package_manager_coverage_payload(
     session_payload = captured_body["session"]
     assert isinstance(session_payload, dict)
     assert session_payload["deviceId"] == store.get_or_create_installation_id()
-    assert session_payload["deviceName"] == store.get_device_metadata()["device_label"]
+    assert session_payload["deviceName"] == guard_runner_module.device_display_name(
+        store, store.get_device_metadata()["device_label"]
+    )
     assert session_payload["localIdentity"]["lastSyncedAt"] == "2026-04-24T00:01:00+00:00"
     assert session_payload["localIdentitySource"]["daemonId"] == "local-guard"
     assert session_payload["localIdentitySource"]["daemonVersion"] == "local-guard"
@@ -1044,7 +1112,7 @@ def test_local_runtime_session_applies_stable_policy_rollout_cohorts(
     monkeypatch.setenv("HOL_GUARD_POLICY_CANONICAL_ENFORCEMENT", "25")
 
     cohort = [
-        guard_runner_module._canonical_policy_enforcement_enabled(
+        runner_native_sync.canonical_policy_enforcement_enabled(
             device_id=f"device-{index}",
             workspace_id="workspace-alpha",
         )
@@ -1054,7 +1122,7 @@ def test_local_runtime_session_applies_stable_policy_rollout_cohorts(
     assert any(cohort)
     assert not all(cohort)
     assert cohort == [
-        guard_runner_module._canonical_policy_enforcement_enabled(
+        runner_native_sync.canonical_policy_enforcement_enabled(
             device_id=f"device-{index}",
             workspace_id="workspace-alpha",
         )

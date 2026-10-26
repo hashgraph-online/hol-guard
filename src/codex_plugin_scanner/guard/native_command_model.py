@@ -12,7 +12,11 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .native_command_model_wrappers import decode_sudo_prefix
+from .native_command_model_wrappers import (
+    decode_sudo_prefix,
+    inline_shell_script,
+    skip_exec_launcher,
+)
 from .native_resident_client import (
     native_resident_client_request,
     record_native_resident_client_failure_code,
@@ -23,7 +27,7 @@ from .native_runtime_resilience import (
     native_record_resident_failure,
     native_record_resident_success,
 )
-from .runtime.command_model import CanonicalCommand, CommandSegment
+from .runtime.command_model import CanonicalCommand, _canonical_from_wire
 
 _MAX_REQUEST_BYTES = 64 * 1024
 _MAX_SEGMENTS = 128
@@ -33,10 +37,6 @@ _WRAPPER_PARSER_PROFILE = "posix-bounded-wrappers-v2"
 _REQUIRED_FEATURE = "pre-tool-command-model-shadow-v1"
 _RESIDENT_FEATURE = "resident-command-model-shadow-v1"
 _RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
-
-
-def _plain_int(value: object) -> bool:
-    return isinstance(value, int) and not isinstance(value, bool)
 
 
 def _assignment_name(token: str) -> str | None:
@@ -49,6 +49,59 @@ def _assignment_name(token: str) -> str | None:
     if not all(character == "_" or (character.isascii() and character.isalnum()) for character in name[1:]):
         return None
     return name
+
+
+_ENV_PROGRAMS = frozenset({"env", "/usr/bin/env", "/bin/env"})
+_TRANSPARENT_PROGRAMS = frozenset({"command", "time"})
+
+
+def _transparent_prefix(tokens: list[str], index: int) -> tuple[int, list[str]] | None:
+    """Step past a ``command``, ``time`` or ``env NAME=value...`` prefix the native parser reads through.
+
+    The parser reports the program after such a prefix as the executable, and
+    carries the names an ``env`` prefix sets the way it carries a bare
+    ``NAME=value`` prefix. It does that only when a program follows that is not
+    an option and that the shell would not take as an assignment, and for
+    ``env`` only after at least one assignment and before a program that holds
+    no ``=``, since ``env`` would take such a word as one more assignment.
+    Every other spelling leaves the prefix itself as the executable.
+    """
+    if index >= len(tokens):
+        return None
+    names: list[str] = []
+    following = index + 1
+    if tokens[index] in _ENV_PROGRAMS:
+        while following < len(tokens) and (name := _assignment_name(tokens[following])) is not None:
+            names.append(name)
+            following += 1
+        if not names:
+            return None
+    elif tokens[index] not in _TRANSPARENT_PROGRAMS:
+        return None
+    if following >= len(tokens):
+        return None
+    program = tokens[following]
+    if not program or program.startswith("-") or _assignment_name(program) is not None:
+        return None
+    if names and "=" in program:
+        return None
+    return following, names
+
+
+def _bound_to_request(normalized_text: str, command: str) -> bool:
+    """Report whether one native model answers this exact request.
+
+    The model normally repeats the request word for word. The one exception is
+    a shell that carries its whole script and nothing else: it runs exactly
+    that script, so the parser reads the command as the script and reports the
+    script's own text. That spelling is recognized here from the request alone,
+    so the model still has to be the one those same words produce.
+    """
+
+    if normalized_text == command:
+        return True
+    script = inline_shell_script(command)
+    return script is not None and normalized_text == script
 
 
 def _decode_command_model(
@@ -72,7 +125,7 @@ def _decode_command_model(
     if (
         not isinstance(normalized_text, str)
         or not normalized_text
-        or normalized_text != command.strip()
+        or not _bound_to_request(normalized_text, command.strip())
         or payload.get("dialect") != dialect
         or payload.get("transport") != transport
         or payload.get("extraction_provenance") != extraction_provenance
@@ -188,14 +241,32 @@ def _decode_command_model(
                 break
             expected_environment_names.append(name)
             executable_index += 1
-        if profile == _WRAPPER_PARSER_PROFILE:
+        # The parser steps through these prefixes in one loop, in whatever
+        # order the text writes them, so `env FOO=1 sudo ls` and
+        # `sudo command ls` both reach `ls`.
+        expected_wrappers: list[str] = []
+        while True:
+            prefix = _transparent_prefix(tokens, executable_index)
+            if prefix is not None:
+                executable_index, names = prefix
+                expected_environment_names.extend(names)
+                continue
+            launched = skip_exec_launcher(tokens, executable_index)
+            if launched != executable_index:
+                executable_index = launched
+                continue
+            if profile != _WRAPPER_PARSER_PROFILE:
+                break
             decoded_prefix = decode_sudo_prefix(tokens, executable_index)
             if decoded_prefix is None:
                 return None
-            executable_index, expected_wrappers = decoded_prefix
-            if segment_wrappers != expected_wrappers:
+            executable_index, wrappers = decoded_prefix
+            if not wrappers:
+                break
+            expected_wrappers.extend(wrappers)
+            if len(expected_wrappers) > 4:
                 return None
-        elif segment_wrappers:
+        if segment_wrappers != expected_wrappers:
             return None
         expected_executable = tokens[executable_index] if executable_index < len(tokens) else None
         expected_arguments = tokens[executable_index + 1 :] if expected_executable is not None else []
@@ -254,10 +325,10 @@ def review_command_model_native(
     extraction_provenance: str = "guard-shell",
     timeout_seconds: float = 0.25,
 ) -> dict[str, Any] | None:
-    """Return native command-model evidence in explicit shadow/force modes only."""
+    """Return native command-model evidence in explicit force mode only."""
     status = native_runtime_status()
     if (
-        status.mode not in {"shadow", "force"}
+        status.mode != "force"
         or not status.available
         or not status.compatible
         or status.identity is None
@@ -343,99 +414,22 @@ def _canonical_command_from_native(
     if validated is None:
         return None
 
-    normalized_text = validated.get("normalized_text")
-    raw_segments = validated.get("segments")
-    if not isinstance(normalized_text, str) or not isinstance(raw_segments, list):
-        return None
-    if validated.get("confidence") == "uncertain":
-        uncertainty_reason = validated.get("uncertainty_reason")
-        if not isinstance(uncertainty_reason, str):
+    value = {**validated, "raw_text": command.strip(), "redirects": [], "embedded_commands": []}
+    identity = value.get("security_identity")
+    if identity is not None:
+        if not isinstance(identity, str) or not identity.startswith("command-security-v2:"):
             return None
-        return CanonicalCommand(
-            raw_text=command.strip(),
-            normalized_text=normalized_text,
-            dialect="posix",
-            transport="shell_string",
-            extraction_provenance="guard-shell",
-            wrapper_chain=(),
-            segments=(),
-            redirects=(),
-            embedded_commands=(),
-            confidence="uncertain",
-            uncertainty_reason=uncertainty_reason,
-        )
-
-    segments: list[CommandSegment] = []
-    for raw_segment in raw_segments:
-        if not isinstance(raw_segment, dict):
+        digest = identity.removeprefix("command-security-v2:")
+        if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest):
             return None
-        text = raw_segment.get("text")
-        tokens = raw_segment.get("tokens")
-        executable = raw_segment.get("executable")
-        arguments = raw_segment.get("arguments")
-        environment_names = raw_segment.get("environment_names")
-        path_overridden = raw_segment.get("path_overridden")
-        execution_context = raw_segment.get("execution_context")
-        raw_pipeline_index = raw_segment.get("pipeline_index")
-        span = raw_segment.get("span")
-        if (
-            not isinstance(text, str)
-            or not isinstance(tokens, list)
-            or not all(isinstance(value, str) for value in tokens)
-            or (executable is not None and not isinstance(executable, str))
-            or not isinstance(arguments, list)
-            or not all(isinstance(value, str) for value in arguments)
-            or not isinstance(environment_names, list)
-            or not all(isinstance(value, str) for value in environment_names)
-            or not isinstance(path_overridden, bool)
-            or not isinstance(execution_context, str)
-            or not isinstance(raw_pipeline_index, int)
-            or isinstance(raw_pipeline_index, bool)
-            or raw_pipeline_index < 0
-            or not isinstance(span, dict)
-        ):
-            return None
-        raw_start = span.get("start")
-        raw_end = span.get("end")
-        if (
-            not isinstance(raw_start, int)
-            or isinstance(raw_start, bool)
-            or not isinstance(raw_end, int)
-            or isinstance(raw_end, bool)
-        ):
-            return None
-        pipeline_index = raw_pipeline_index
-        segments.append(
-            CommandSegment(
-                text=text,
-                tokens=tuple(tokens),
-                executable=executable,
-                arguments=tuple(arguments),
-                environment_names=tuple(environment_names),
-                wrapper_chain=tuple(raw_segment["wrapper_chain"]),
-                path_overridden=path_overridden,
-                execution_context=execution_context,
-                pipeline_index=pipeline_index,
-                start=raw_start,
-                end=raw_end,
-            )
-        )
-
-    canonical = CanonicalCommand(
-        raw_text=command.strip(),
-        normalized_text=normalized_text,
-        dialect="posix",
-        transport="shell_string",
-        extraction_provenance="guard-shell",
-        wrapper_chain=tuple(validated["wrapper_chain"]),
-        segments=tuple(segments),
-        redirects=(),
-        embedded_commands=(),
-        confidence="exact",
-        uncertainty_reason=None,
-    )
+    else:
+        # Older exact shadow payloads omit the identity; keep their lazy API.
+        value["security_identity"] = ""
+    canonical = _canonical_from_wire(value)
     if validated.get("path_overridden") is not canonical.path_overridden:
         return None
+    if identity is None:
+        object.__setattr__(canonical, "_bound_identity", None)
     return canonical
 
 

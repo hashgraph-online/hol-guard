@@ -99,6 +99,13 @@ export function readHarnessActionUserMessage(error: unknown, fallback: string): 
   return fallback;
 }
 
+export function readPackageFirewallActionFailure(error: unknown): string {
+  if (error instanceof Error && GUARD_FETCH_NETWORK_ERROR_MESSAGE.test(error.message)) {
+    return "Guard lost connection to the local daemon. Confirm it is still running, then try again.";
+  }
+  return error instanceof Error ? error.message : "Action failed.";
+}
+
 export function isApprovalGateRequiredError(error: unknown): boolean {
   const code = readHarnessActionErrorCode(error);
   if (code !== null && APPROVAL_GATE_NON_CREDENTIAL_CODES.has(code)) {

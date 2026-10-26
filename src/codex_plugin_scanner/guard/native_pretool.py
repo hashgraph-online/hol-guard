@@ -9,9 +9,12 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+from .native_hook_decision import NativeHookDecisionError
+from .native_hook_pretool_floor import native_pretool_floor
 from .native_resident_client import native_resident_client_request
 from .native_route_receipt import record_native_hook_result
 from .native_runtime import _isolated_environment, _native_error, native_runtime_status
@@ -24,7 +27,9 @@ from .native_runtime_resilience import (
 _MAX_REQUEST_BYTES = 64 * 1024
 _MAX_RESULT_TEXT = 2_048
 _PRETOOL_AUTHORITY_FEATURE = "pre-tool-command-authority-v1"
-_PRETOOL_GENERIC_AUTHORITY_FEATURE = "pre-tool-generic-authority-v1"
+_PRETOOL_PATH_CONTEXT_FEATURE = "pre-tool-path-context-v1"
+_PRETOOL_EXECUTION_ENVIRONMENT_FEATURE = "pre-tool-execution-environment-v1"
+_PRETOOL_EXTENSION_EVIDENCE_FEATURE = "pre-tool-extension-evidence-v1"
 _RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
 _PRETOOL_RESULT_KEYS = {
     "schema",
@@ -87,7 +92,7 @@ _PRETOOL_ACTION_OPERATIONS = {
     "browser": {"navigate"},
     "config": {"set"},
     "prompt": {"submit"},
-    "harness": {"start", "stop"},
+    "harness": {"start", "stop", "set", "read"},
     "unknown": {"unknown"},
 }
 _POLICY_ACTIONS = {
@@ -99,6 +104,9 @@ _POLICY_ACTIONS = {
     "block",
 }
 _ALLOWING_POLICY_ACTIONS = {"allow", "warn"}
+# The actions a command-string review may answer to a caller that does not ask
+# for the whole lattice: such a caller has no containment or reapproval route.
+_LEGACY_REVIEW_ACTIONS = {"allow", "review", "block"}
 
 
 def _valid_generic_result_fields(payload: dict[str, Any]) -> bool:
@@ -162,7 +170,7 @@ def _decode_generic_pre_tool(payload: object) -> dict[str, Any] | None:
     return payload if payload["decision"] == expected_decision else None
 
 
-def _decode_pre_tool(payload: object, *, command: str) -> dict[str, Any] | None:
+def _decode_pre_tool(payload: object, *, command: str, full_lattice: bool = False) -> dict[str, Any] | None:
     if isinstance(payload, dict) and "action" in payload:
         return _decode_generic_pre_tool(payload)
     if not isinstance(payload, dict):
@@ -177,7 +185,7 @@ def _decode_pre_tool(payload: object, *, command: str) -> dict[str, Any] | None:
         not isinstance(decision, str)
         or decision not in {"allow", "deny"}
         or not isinstance(action, str)
-        or action not in {"allow", "review", "block"}
+        or action not in (_POLICY_ACTIONS if full_lattice else _LEGACY_REVIEW_ACTIONS)
         or not isinstance(reason_code, str)
         or not reason_code
         or not isinstance(reason, str)
@@ -198,36 +206,89 @@ def review_pre_tool_native(
     guard_home: Path,
     cwd: Path | None,
     home_dir: Path | None,
+    execution_environment: Mapping[str, object] | None = None,
     timeout_seconds: float = 0.5,
+    record_health: bool = True,
+    full_lattice: bool = False,
+    extension_evidence: bool = False,
 ) -> dict[str, Any] | None:
-    """Return the Rust PreToolUse decision, or None when native cannot decide."""
-    del cwd, home_dir
+    """Return the Rust PreToolUse decision, or None when native cannot decide.
+
+    ``record_health=False`` is for advisory callers running on a shortened
+    budget: their timeouts and overloads must not feed resident backoff.
+
+    ``cwd`` and ``home_dir`` say where the command runs. Every rule that
+    reads a path needs them to resolve ``../sibling`` and ``~/Code``, and
+    refuses the command without them, so a caller that leaves them out gets a
+    review for commands the enforced hook lane allows.
+
+    ``execution_environment`` is the stamp the outer hook bridge took in the
+    shell the command will run in. The rules that answer for an inherited
+    variable — a ``RIPGREP_CONFIG_PATH`` that prepends options to ``rg``, an
+    npm or rustup variable that moves what a tool loads — cannot be proven
+    without it, because neither this process nor the resident runtime is that
+    shell. A caller that cannot name the environment leaves it out and those
+    rules keep their review.
+
+    ``full_lattice=True`` admits every canonical action the review may answer,
+    ``require-reapproval`` and ``sandbox-required`` included, for a caller that
+    routes them. Other callers keep receiving only allow, review and block, so
+    an answer they cannot route stays a failed review rather than a relaxed one.
+
+    ``extension_evidence=True`` asks the resident to decide under the extension
+    controls of the snapshot it admitted and to return the
+    ``command_extensions`` evidence with the decision. A caller that resolves
+    the review against those controls needs it; a runtime without the feature
+    answers without evidence, and that caller fails closed.
+    """
     status = native_runtime_status()
     if (
-        status.mode == "off"
-        or not status.available
+        not status.available
         or not status.compatible
         or status.identity is None
         or status.capabilities is None
         or _PRETOOL_AUTHORITY_FEATURE not in status.capabilities.features
         or timeout_seconds <= 0
     ):
-        if status.mode in {"auto", "force"}:
-            return record_native_hook_result("native_fail_safe", None)
-        return None
+        return record_native_hook_result("native_fail_safe", None)
     timeout_seconds = min(timeout_seconds, 1.0)
     deadline_started = time.monotonic()
     deadline_monotonic = deadline_started + timeout_seconds
     deadline_budget_ms = max(1, min(9_000, int(timeout_seconds * 1_000)))
-    request = {
+    request: dict[str, Any] = {
         "command": command,
         "dialect": "posix",
         "transport": "shell_string",
         "extraction_provenance": "guard-shell",
     }
+    # An older runtime ignores the two fields and answers as it does today.
+    if _PRETOOL_PATH_CONTEXT_FEATURE in status.capabilities.features:
+        if cwd is not None:
+            request["cwd"] = str(cwd)
+        if home_dir is not None:
+            request["home_dir"] = str(home_dir)
+    # Several rules answer for what the command inherits from the shell: a
+    # RIPGREP_CONFIG_PATH that prepends options to rg, an npm or rustup
+    # variable that moves what a tool loads, the HOME a tilde expands from.
+    # The runtime cannot read any of it: the resident daemon is started with
+    # its own sanitized environment. This process is the hook, running in the
+    # agent's shell, so it is the one that can say.
+    if _PRETOOL_EXECUTION_ENVIRONMENT_FEATURE in status.capabilities.features and isinstance(
+        execution_environment, Mapping
+    ):
+        request["execution_environment"] = dict(execution_environment)
+    if extension_evidence and _PRETOOL_EXTENSION_EVIDENCE_FEATURE in status.capabilities.features:
+        request["extension_evidence"] = True
     encoded = json.dumps(request, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     if len(encoded) > _MAX_REQUEST_BYTES:
-        return record_native_hook_result("native_fail_safe", None)
+        # A shell with many exported names can outgrow the request bound. The
+        # environment is the one part that only widens what may be allowed, so
+        # dropping it leaves every rule that needs it unproven rather than
+        # losing the decision altogether.
+        request.pop("execution_environment", None)
+        encoded = json.dumps(request, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+        if len(encoded) > _MAX_REQUEST_BYTES:
+            return record_native_hook_result("native_fail_safe", None)
     environment = _isolated_environment()
     if _RESIDENT_PROTOCOL_FEATURE in status.capabilities.features:
         resident = json.dumps(
@@ -252,17 +313,20 @@ def review_pre_tool_native(
             except (UnicodeDecodeError, json.JSONDecodeError):
                 payload = None
             if _native_error(payload) == "native_overloaded":
-                native_record_overload(status.identity.sha256, guard_home)
+                if record_health:
+                    native_record_overload(status.identity.sha256, guard_home)
                 return record_native_hook_result("native_fail_safe", None)
-            decoded = _decode_pre_tool(payload, command=command)
+            decoded = _decode_pre_tool(payload, command=command, full_lattice=full_lattice)
             if decoded is not None:
-                native_record_resident_success(status.identity.sha256, guard_home)
+                if record_health:
+                    native_record_resident_success(status.identity.sha256, guard_home)
                 return record_native_hook_result("native_resident", decoded)
-        native_record_resident_failure(
-            status.identity.sha256,
-            guard_home,
-            reason="native_pre_tool_resident_unavailable",
-        )
+        if record_health:
+            native_record_resident_failure(
+                status.identity.sha256,
+                guard_home,
+                reason="native_pre_tool_resident_unavailable",
+            )
     return record_native_hook_result("native_fail_safe", None)
 
 
@@ -272,23 +336,26 @@ def native_pre_tool_policy_floor(
     guard_home: Path,
     cwd: Path | None,
     home_dir: Path | None,
+    execution_environment: Mapping[str, object] | None = None,
 ) -> str | None:
-    """Return a native PreToolUse floor, or ``block`` when native is expected but absent."""
-    native = review_pre_tool_native(
+    """The resident's PreToolUse floor for ``command``, or ``None`` for no floor.
+
+    The resident decides whether its pre-tool review floors the verdict, and at
+    which action. No review at all is a resident outage: this raises
+    ``NativeHookDecisionError`` and the hook answers with the host outage
+    response instead of a floor picked here.
+    """
+    review = review_pre_tool_native(
         command,
         guard_home=guard_home,
         cwd=cwd,
         home_dir=home_dir,
+        execution_environment=execution_environment,
+        full_lattice=True,
     )
-    if native is not None:
-        action = native.get("minimum_action")
-        if action == "review" and native.get("reason_code") == "native_git_helper_context_review":
-            return None
-        return action if action in {"allow", "review", "block"} else "block"
-    status = native_runtime_status()
-    if status.mode in {"off", "shadow"}:
-        return None
-    return "block"
+    if review is None:
+        raise NativeHookDecisionError("native_pre_tool_floor_unavailable")
+    return native_pretool_floor(review, guard_home=guard_home)
 
 
 __all__ = [

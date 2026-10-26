@@ -10,12 +10,18 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, TextIO, TypeAlias
 
+from ..harness_posture import harness_posture_line
+from ..protection_coverage import PROTECTION_NOT_IN_EFFECT_DETAIL, protection_is_in_effect
 from ..redaction import redact_text
 from ..value_coercion import coerce_int as _coerce_int
 from .doctor_readiness import doctor_runtime_readiness
 from .protect_output import _protect_harness_message_for_render, _restore_ephemeral_signed_approval_output
+from .render_approval_gate_nudge import print_approval_gate_nudge
+from .render_connectors import print_connector_setup_line, render_mcp_list
 from .render_doctor_readiness import build_doctor_harness_table, readiness_text
+from .render_skill_scan import skill_scan_rows, skill_scan_title
 from .render_uninstall import render_self_uninstall
+from .update_repair_notes import render_protection_repair_failures
 
 try:
     from ..redaction import redact_local_path
@@ -228,6 +234,77 @@ _NON_SECRET_DIAGNOSTIC_KEYS = frozenset({"authority_error", "authority_error_mes
 _SAFE_POLICY_LITERALS = frozenset(
     {"allow", "warn", "review", "block", "require-reapproval", "sandbox-required", "strict", "balanced", "custom"}
 )
+_SENSITIVE_ASSIGNMENT_TOKENS = ("token", "secret", "password", "credential")
+_SENSITIVE_API_KEY_FORMS = ("apikey", "api_key", "api-key")
+
+
+def _is_assignment_key_character(char: str) -> bool:
+    return char.isascii() and (char.isalnum() or char in "_-")
+
+
+def _sensitive_assignment_key(key: str) -> bool:
+    lowered = key.lower()
+    return any(token in lowered for token in _SENSITIVE_ASSIGNMENT_TOKENS) or any(
+        form in lowered for form in _SENSITIVE_API_KEY_FORMS
+    )
+
+
+def _redact_sensitive_assignments(text: str) -> str:
+    """Redact key=value secrets with a single forward scan."""
+
+    pieces: list[str] = []
+    copied_until = 0
+    search_from = 0
+    missing_quote_from: dict[str, int] = {}
+    while True:
+        equals = text.find("=", search_from)
+        if equals < 0:
+            break
+
+        key_start = equals
+        while key_start > 0 and _is_assignment_key_character(text[key_start - 1]):
+            key_start -= 1
+        key = text[key_start:equals]
+        if not key or not _sensitive_assignment_key(key):
+            search_from = equals + 1
+            continue
+
+        value_start = equals + 1
+        if value_start >= len(text):
+            search_from = value_start
+            continue
+
+        value_end = value_start
+        quote = text[value_start] if text[value_start] in {"'", '"'} else ""
+        if quote:
+            limit = missing_quote_from.get(quote)
+            closing = -1 if limit is not None and value_start + 1 >= limit else text.find(quote, value_start + 1)
+            if closing < 0:
+                missing_quote_from[quote] = min(limit or len(text), value_start + 1)
+                while value_end < len(text) and text[value_end] != "&" and not text[value_end].isspace():
+                    value_end += 1
+            else:
+                value_end = closing + 1
+        else:
+            while value_end < len(text) and text[value_end] != "&" and not text[value_end].isspace():
+                value_end += 1
+
+        if value_end <= value_start:
+            search_from = value_start
+            continue
+
+        pieces.append(text[copied_until:key_start])
+        pieces.append(text[key_start : equals + 1])
+        pieces.append("*****")
+        copied_until = value_end
+        search_from = value_end
+
+    if not pieces:
+        return text
+    pieces.append(text[copied_until:])
+    return "".join(pieces)
+
+
 _SENSITIVE_STRING_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (
         re.compile(
@@ -242,25 +319,29 @@ _SENSITIVE_STRING_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"(?i)(bearer\s+)[^\s,;]+"), r"\1*****"),
     (re.compile(r"(?im)\b(?:_authToken|npm[_ -]?token)\s*[:=]\s*[^\s]+"), "npm token redacted"),
     (re.compile(r"\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis|amqp)://[^\s]+", re.IGNORECASE), "*****"),
-    (
-        re.compile(
-            r"(?i)([a-z0-9_-]*(?:token|secret|api[-_]?key|password|credential)[a-z0-9_-]*=)(?:'[^']*'|\"[^\"]*\"|[^&\s]+)"
-        ),
-        r"\1*****",
-    ),
 )
 _TRUST_SENSITIVE_STRING_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = tuple(
     item for item in _SENSITIVE_STRING_PATTERNS if item[0].pattern != r"(?i)(api[-_ ]?key:\s*)[^\s,;]+"
 )
 
 
-def emit_guard_payload(command: str, payload: PayloadDict, as_json: bool) -> None:
-    """Render Guard payloads as JSON or human-friendly rich output."""
+def emit_guard_payload(
+    command: str,
+    payload: PayloadDict,
+    as_json: bool,
+    output_stream: TextIO | None = None,
+) -> None:
+    """Render Guard payloads as JSON or human-friendly rich output.
+
+    Output goes to ``output_stream`` when the caller supplies one, otherwise to stdout.
+    """
+
+    stream = output_stream if output_stream is not None else sys.stdout
 
     if as_json:
         redacted_output = redact_text(_safe_json_output_text(command, payload))
-        sys.stdout.write(redacted_output.text)
-        sys.stdout.write("\n")
+        stream.write(redacted_output.text)
+        stream.write("\n")
         return
 
     redacted_payload = _coerce_object_dict(_sanitize_payload_for_output(payload, command=command))
@@ -269,15 +350,15 @@ def emit_guard_payload(command: str, payload: PayloadDict, as_json: bool) -> Non
         plain_renderer = _PLAIN_TEXT_RENDERERS.get(command)
         if plain_renderer is None:
             redacted_output = redact_text(_safe_json_output_text(command, payload))
-            sys.stdout.write(redacted_output.text)
+            stream.write(redacted_output.text)
         else:
-            sys.stdout.write(plain_renderer(redacted_payload))
-        sys.stdout.write("\n")
+            stream.write(plain_renderer(redacted_payload))
+        stream.write("\n")
         return
 
     unicode_console = _windows_console_supports_unicode()
     console = Console(
-        file=sys.stdout,
+        file=stream,
         soft_wrap=True,
         legacy_windows=None,
         safe_box=not unicode_console,
@@ -317,6 +398,7 @@ def _redact_payload(value: object, *, key: str | None = None, command: str | Non
         )
         for pattern, replacement in patterns:
             redacted = pattern.sub(replacement, redacted)
+        redacted = _redact_sensitive_assignments(redacted)
         return redact_local_path(redacted)
     return value
 
@@ -331,6 +413,36 @@ def _safe_json_output_text(command: str, payload: PayloadDict) -> str:
     json_payload = _json_payload_for_command(command, payload)
     sanitized_payload = _coerce_object_dict(_sanitize_payload_for_output(json_payload, command=command))
     return _render_redacted_json_payload(sanitized_payload)
+
+
+def _protect_guidance_lines(payload: PayloadDict) -> list[str]:
+    supply_chain_evaluation = payload.get("supply_chain_evaluation")
+    user_copy = supply_chain_evaluation.get("user_copy") if isinstance(supply_chain_evaluation, dict) else None
+    user_copy_map = _coerce_object_dict(user_copy)
+    lines: list[str] = []
+    harness_message = str(user_copy_map.get("harness_message") or "").strip()
+    if harness_message:
+        lines.append(harness_message)
+
+    next_step = str(user_copy_map.get("next_step") or "").strip()
+    if next_step and next_step not in harness_message:
+        lines.append(f"Next step: {next_step}")
+
+    signed_url = payload.get("_ephemeral_signed_approval_url")
+    if isinstance(signed_url, str) and signed_url.strip():
+        dashboard_url = signed_url.strip()
+    elif (
+        "dashboard_url" in user_copy_map
+        and user_copy_map.get("dashboard_url") is None
+        and not payload.get("primary_approval_url")
+    ):
+        dashboard_url = ""
+    else:
+        dashboard_url = str(payload.get("primary_approval_url") or user_copy_map.get("dashboard_url") or "").strip()
+    if dashboard_url and not any(dashboard_url in line for line in lines):
+        lines.append(f"Review: {dashboard_url}")
+
+    return lines
 
 
 def _plain_text_protect(payload: PayloadDict) -> str:
@@ -368,21 +480,7 @@ def _plain_text_protect(payload: PayloadDict) -> str:
     if reason:
         lines.append(f"Reason: {reason}")
 
-    supply_chain_evaluation = payload.get("supply_chain_evaluation")
-    user_copy = supply_chain_evaluation.get("user_copy") if isinstance(supply_chain_evaluation, dict) else None
-    user_copy_map = _coerce_object_dict(user_copy)
-    harness_message = str(user_copy_map.get("harness_message") or "").strip()
-    if harness_message:
-        lines.append(harness_message)
-
-    next_step = str(user_copy_map.get("next_step") or "").strip()
-    if next_step and next_step not in harness_message:
-        lines.append(f"Next step: {next_step}")
-
-    dashboard_url = str(user_copy_map.get("dashboard_url") or "").strip()
-    if dashboard_url and dashboard_url not in harness_message:
-        lines.append(f"Review: {dashboard_url}")
-
+    lines.extend(_protect_guidance_lines(payload))
     return "\n".join(lines)
 
 
@@ -546,6 +644,9 @@ def _render_command_inspection(console: Console, payload: dict[str, object]) -> 
     reason = classification.get("reason")
     if isinstance(reason, str) and reason:
         console.print(Panel(Text(reason), title="Why", border_style=border_style))
+    recovery = classification.get("recovery")
+    if isinstance(recovery, str) and recovery:
+        console.print(Panel(Text(recovery), title="Next step", border_style=border_style))
     if extensions:
         alternatives = _coerce_string_list(extensions[0].get("safer_alternatives"))
         if alternatives:
@@ -628,6 +729,9 @@ def _plain_text_command_inspection(payload: PayloadDict) -> str:
         f"Reason: {classification.get('reason') or ''}",
         "Policy: Not evaluated; this inspection creates no approvals or receipts.",
     ]
+    recovery = classification.get("recovery")
+    if isinstance(recovery, str) and recovery:
+        lines.append(f"Recovery: {recovery}")
     if extensions:
         lines.insert(3, f"Extension: {extensions[0].get('extension_id') or 'unknown'}")
     if rules:
@@ -746,10 +850,29 @@ def _protection_status_copy(payload: dict[str, object], fallback: str) -> tuple[
     return _protection_display_name(payload, protection), bool(payload.get("protection_off")) or protection == "watch"
 
 
+def _protection_panel_line(name: str, *, protection_off: bool, in_effect: bool) -> str:
+    """Build the panel's headline, which must not read as protected when it is not.
+
+    The posture is still worth naming when no app is registered: it is what Guard
+    will enforce once the hooks are back. What it must not do is stand alone, in
+    the calm colour, while nothing is being checked.
+    """
+
+    if protection_off:
+        return f"[bold red]protection: {name} (off)[/bold red]"
+    if not in_effect:
+        return f"[bold red]protection: {name} ({PROTECTION_NOT_IN_EFFECT_DETAIL})[/bold red]"
+    return f"protection: {name}"
+
+
 def _render_status(console: Console, payload: dict[str, object]) -> None:
     harnesses = _coerce_dict_list(payload.get("harnesses"))
     name, protection_off = _protection_status_copy(payload, "protected")
-    protection_line = f"[bold red]protection: {name} (off)[/bold red]" if protection_off else f"protection: {name}"
+    reported = payload.get("protection_in_effect")
+    in_effect = reported if isinstance(reported, bool) else protection_is_in_effect(harnesses)
+    protection_line = _protection_panel_line(name, protection_off=protection_off, in_effect=in_effect)
+    protection_off = protection_off or not in_effect
+    protection_line += harness_posture_line(payload)
     console.print(
         Panel.fit(
             f"[bold]HOL Guard status[/bold]\n"
@@ -765,6 +888,8 @@ def _render_status(console: Console, payload: dict[str, object]) -> None:
     console.print(_build_product_table(harnesses))
     if payload.get("approval_center_url"):
         console.print(f"Approval center: [bold]{payload.get('approval_center_url')}[/bold]")
+    print_approval_gate_nudge(console, payload)
+    print_connector_setup_line(console, payload)
     review_items = [item for item in harnesses if _coerce_int(item.get("review_count")) > 0]
     if review_items:
         console.print(
@@ -831,20 +956,24 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
         if settings_url:
             summary.add_row("Settings URL", str(settings_url))
         console.print(Panel(summary, title="Guard notification setup", border_style="cyan"))
+        print_approval_gate_nudge(console, payload)
     elif "adapters" in payload:
         tables = _coerce_string_list(payload.get("tables"))
+        adapters = _coerce_dict_list(payload.get("adapters"))
         name, protection_off = _protection_status_copy(payload, "protected")
-        protection_line = (
-            f"[bold red]protection mode: {name} (off)[/bold red]" if protection_off else f"protection mode: {name}"
-        )
+        reported = payload.get("protection_in_effect")
+        in_effect = reported if isinstance(reported, bool) else protection_is_in_effect(adapters)
+        protection_line = _protection_panel_line(name, protection_off=protection_off, in_effect=in_effect)
+        protection_off = protection_off or not in_effect
         console.print(
             Panel.fit(
                 f"[bold]HOL Guard doctor[/bold]\n{protection_line}\n{len(tables)} local tables checked",
                 border_style="red" if protection_off else "cyan",
             )
         )
-        adapters = _coerce_dict_list(payload.get("adapters"))
         console.print(build_doctor_harness_table(adapters))
+        print_approval_gate_nudge(console, payload)
+        print_connector_setup_line(console, payload)
     elif "harnesses" in payload and all("install_aliases" in h for h in _coerce_dict_list(payload.get("harnesses"))):
         contracts = _coerce_dict_list(payload.get("harnesses"))
         table = Table(title="HOL Guard supported harnesses", box=box.SIMPLE_HEAD, show_lines=False)
@@ -866,6 +995,7 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
                 textwrap.shorten(blind_spots, width=60),
             )
         console.print(table)
+        print_approval_gate_nudge(console, payload)
     else:
         warnings = _coerce_string_list(payload.get("warnings"))
         summary = Table.grid(padding=(0, 1))
@@ -897,10 +1027,21 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
                 summary.add_row("Recovery", recovery_command)
         summary.add_row("Warnings", str(len(warnings)))
         name, protection_off = _protection_status_copy(payload, "")
+        reported = payload.get("protection_in_effect")
+        in_effect = reported if isinstance(reported, bool) else protection_is_in_effect([payload])
         if name:
-            value = f"[bold red]{name} (off)[/bold red]" if protection_off else name
-            summary.add_row("Protection mode", value)
-        console.print(Panel(summary, title="Guard doctor", border_style="cyan"))
+            if protection_off:
+                value = f"[bold red]{name} (off)[/bold red]"
+            elif not in_effect:
+                value = f"[bold red]{name} ({PROTECTION_NOT_IN_EFFECT_DETAIL})[/bold red]"
+            else:
+                value = name
+            summary.add_row("Protection", value)
+            per_app = harness_posture_line(payload).strip()
+            if per_app:
+                summary.add_row("Per app", per_app.removeprefix("per app: "))
+        protection_alarm = bool(name) and (protection_off or not in_effect)
+        console.print(Panel(summary, title="Guard doctor", border_style="red" if protection_alarm else "cyan"))
         if warnings:
             warning_text = "\n".join(
                 textwrap.fill(
@@ -911,6 +1052,7 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
                 for warning in warnings
             )
             console.print(Panel(Text(warning_text), title="Attention", border_style="yellow"))
+        print_approval_gate_nudge(console, payload)
         runtime_probe = payload.get("runtime_probe")
         if isinstance(runtime_probe, dict):
             console.print(_build_runtime_probe_panel(runtime_probe))
@@ -920,6 +1062,8 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
         supply_chain = payload.get("supply_chain")
         if isinstance(supply_chain, dict):
             console.print(_build_supply_chain_posture_panel(supply_chain))
+    _print_bundled_runtime_warning(console, payload)
+    _print_native_availability_note(console, payload)
     trust = payload.get("trust")
     if isinstance(trust, dict):
         console.print(_build_trust_doctor_panel(trust))
@@ -940,6 +1084,26 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
             )
         console.print(perf_table)
     console.print(_build_diagnostic_command_panel())
+
+
+def _print_bundled_runtime_warning(console: Console, payload: dict[str, object]) -> None:
+    native_runtime = payload.get("native_runtime")
+    bundled = native_runtime.get("bundled") if isinstance(native_runtime, dict) else None
+    if not isinstance(bundled, dict) or bundled.get("status") != "missing" or not bundled.get("message"):
+        return
+    lines = [str(bundled["message"]), "Or run `hol-guard doctor --repair`."]
+    manual = bundled.get("manual_install")
+    if isinstance(manual, str) and manual:
+        lines.append(f"If the download is blocked, install it by hand: {manual}")
+    console.print(Panel(Text("\n".join(lines)), title="Native runtime missing", border_style="red"))
+
+
+def _print_native_availability_note(console: Console, payload: dict[str, object]) -> None:
+    native_runtime = payload.get("native_runtime")
+    availability = native_runtime.get("availability") if isinstance(native_runtime, dict) else None
+    message = availability.get("message") if isinstance(availability, dict) else None
+    if isinstance(message, str) and message:
+        console.print(Panel(Text(message), title="Native runtime shared", border_style="yellow"))
 
 
 def _build_trust_doctor_panel(trust: dict[str, object]) -> Panel:
@@ -1140,6 +1304,42 @@ def _render_inventory(console: Console, payload: dict[str, object]) -> None:
     console.print(table)
 
 
+_INVENTORY_LIST_TITLES = {"extensions": "Plugins and extensions"}
+
+
+def _render_inventory_list(console: Console, payload: dict[str, object]) -> None:
+    raw_items = payload.get("items")
+    items = [item for item in raw_items if isinstance(item, dict)] if isinstance(raw_items, list) else []
+    title = _INVENTORY_LIST_TITLES.get(str(payload.get("kind") or ""), "Local Guard inventory")
+    console.print(
+        Panel.fit(
+            f"[bold]{title}[/bold]\n{len(items)} in the local Guard inventory",
+            border_style="cyan",
+        )
+    )
+    if not items:
+        console.print("[dim]Guard has not recorded any yet.[/dim]")
+        return
+    table = Table(box=box.SIMPLE_HEAVY, show_header=True)
+    table.add_column("Name", style="bold")
+    table.add_column("Harness", style="cyan")
+    table.add_column("Type")
+    table.add_column("Scope")
+    table.add_column("Verdict")
+    table.add_column("Last seen")
+    for item in items:
+        # Inventory strings are third-party names: Text keeps them literal, never Rich markup.
+        table.add_row(
+            Text(str(item.get("name") or "unknown")),
+            Text(str(item.get("harness") or "unknown")),
+            Text(str(item.get("artifact_type") or "artifact")),
+            Text(str(item.get("source_scope") or "unknown")),
+            _action_text(str(item.get("policy_action") or "warn")),
+            Text(str(item.get("last_seen_at") or "unknown")),
+        )
+    console.print(table)
+
+
 def _render_policies(console: Console, payload: dict[str, object]) -> None:
     if "counts" in payload or payload.get("operation") == "migrate-local-integrity":
         counts = _coerce_object_dict(payload.get("counts"))
@@ -1317,7 +1517,14 @@ def _render_approvals(console: Console, payload: dict[str, object]) -> None:
         body = Table.grid(padding=(0, 1))
         body.add_row("Status", str(payload["title"]))
         body.add_row("Next step", str(payload["body"]))
-        console.print(Panel(body, title="Approval resolved", border_style="green"))
+        blocked = payload.get("resolution_action") == "block"
+        console.print(
+            Panel(
+                body,
+                title="Approval blocked" if blocked else "Approval resolved",
+                border_style="red" if blocked else "green",
+            )
+        )
         return
     if payload.get("error"):
         console.print(Panel(str(payload.get("error")), title="Approval error", border_style="red"))
@@ -1407,6 +1614,10 @@ def _render_managed_install(console: Console, payload: dict[str, object]) -> Non
         _render_safe_decode_results(console, safe_decode_risks)
     if sandbox_analysis:
         _render_sandbox_results(console, sandbox_analysis)
+    if payload.get("native_resident_retired") is False:
+        console.print(
+            "[yellow]Could not stop the Guard native runtime. It may keep running until it goes idle.[/yellow]"
+        )
 
 
 def _render_apps(console: Console, payload: dict[str, object]) -> None:
@@ -1529,18 +1740,9 @@ def _render_skill_scan_results(console: Console, skill_scan: list[dict[str, obje
     table.add_column("Risks", justify="right", no_wrap=True)
     table.add_column("Severities", no_wrap=True)
     table.add_column("Signals", overflow="fold")
-    for entry in skill_scan:
-        severity_text = ", ".join(_coerce_string_list(entry.get("severities")))
-        signal_text = " ".join(_coerce_string_list(entry.get("signal_ids")))
-        risk_count = str(entry.get("risk_count", 0))
-        table.add_row(str(entry.get("skill_path", "?")), risk_count, severity_text, signal_text)
-    console.print(
-        Panel(
-            table,
-            title=f"[bold red]Skill security scan — {len(skill_scan)} file(s) with risks[/bold red]",
-            border_style="red",
-        )
-    )
+    for row in skill_scan_rows(skill_scan):
+        table.add_row(*row)
+    console.print(Panel(table, title=f"[bold red]{skill_scan_title(skill_scan)}[/bold red]", border_style="red"))
 
 
 def _managed_install_workspace_label(workspace: object) -> str:
@@ -1857,6 +2059,7 @@ def _render_update(console: Console, payload: dict[str, object]) -> None:
     error = str(payload.get("error") or "").strip()
     if notes:
         console.print(Panel("\n".join(f"{_bullet()} {note}" for note in notes), title="Notes", border_style="blue"))
+    render_protection_repair_failures(console, payload, _bullet(), Panel)
     if status in {"updated", "failed"} and stdout and stdout != str(payload.get("message") or "").strip():
         console.print(Panel(stdout, title="stdout", border_style="green"))
     if status == "failed" and stderr:
@@ -2191,28 +2394,35 @@ def _render_protect(console: Console, payload: dict[str, object]) -> None:
     if isinstance(request, dict):
         body.add_row("Command", _command_text(request.get("command")))
         body.add_row("Kind", str(request.get("install_kind") or "unknown"))
+    supply_chain_evaluation = payload.get("supply_chain_evaluation")
     if isinstance(verdict, dict):
         action = str(verdict.get("action") or "review")
         body.add_row("Action", _action_text(action))
         body.add_row("Executed", _bool_label(bool(payload.get("executed"))))
         body.add_row("Reason", str(verdict.get("reason") or "unknown"))
+        if action == "block" and isinstance(supply_chain_evaluation, dict):
+            reasons = _coerce_dict_list(supply_chain_evaluation.get("reasons"))
+            user_copy = supply_chain_evaluation.get("user_copy")
+            if (
+                isinstance(user_copy, dict)
+                and user_copy.get("next_step") == "hol-guard connect"
+                and any(item.get("code") == "cloud_auth_error" for item in reasons)
+                and not any(item.get("code") == "saved_package_block" for item in reasons)
+            ):
+                body.add_row("Next", "Run hol-guard connect to sign in, then retry this install.")
     console.print(Panel(body, title="Install protection", border_style="cyan"))
-    supply_chain_evaluation = payload.get("supply_chain_evaluation")
-    if isinstance(supply_chain_evaluation, dict):
-        user_copy = supply_chain_evaluation.get("user_copy")
-        if isinstance(user_copy, dict):
-            harness_message = str(user_copy.get("harness_message") or "").strip()
-            if harness_message:
-                harness_message, signed_approval_url = _protect_harness_message_for_render(payload, harness_message)
-                console.print(
-                    Panel(
-                        Text(harness_message, no_wrap=False, overflow="fold"),
-                        title="Guard guidance",
-                        border_style="magenta",
-                    )
-                )
-                if isinstance(signed_approval_url, str) and signed_approval_url:
-                    console.print(Text(signed_approval_url), soft_wrap=True)
+    guidance = _protect_guidance_lines(payload)
+    if guidance:
+        guidance_text, signed_approval_url = _protect_harness_message_for_render(payload, "\n".join(guidance))
+        console.print(
+            Panel(
+                Text(guidance_text, no_wrap=False, overflow="fold"),
+                title="Guard guidance",
+                border_style="magenta",
+            )
+        )
+        if isinstance(signed_approval_url, str) and signed_approval_url:
+            console.print(Text(signed_approval_url), soft_wrap=True)
     supply_chain = payload.get("supply_chain")
     if isinstance(supply_chain, dict):
         console.print(_build_supply_chain_posture_panel(supply_chain))
@@ -2761,8 +2971,7 @@ def _build_approval_table(items: list[dict[str, object]], *, title: str | None) 
 def _build_runtime_probe_panel(runtime_probe: dict[str, object]) -> Panel:
     body = Table.grid(padding=(0, 1))
     body.add_row("Command", _command_text(runtime_probe.get("command")))
-    body.add_row("Check succeeded", _bool_label(bool(runtime_probe.get("ok"))))
-    body.add_row("Scope", "Passive check; no Guard evaluation verified")
+    body.add_row("Succeeded", _bool_label(bool(runtime_probe.get("ok"))))
     if runtime_probe.get("return_code") is not None:
         body.add_row("Return code", str(runtime_probe.get("return_code")))
     if runtime_probe.get("reported_artifacts") is not None:
@@ -2773,7 +2982,7 @@ def _build_runtime_probe_panel(runtime_probe: dict[str, object]) -> Panel:
         stdout = _clean_terminal_output(str(runtime_probe.get("stdout")))
         preview = "\n".join(stdout.splitlines()[:6])
         body.add_row("stdout", preview)
-    return Panel(body, title="Passive probe", border_style="magenta")
+    return Panel(body, title="Runtime probe", border_style="magenta")
 
 
 def _build_cloud_summary_panel(payload: dict[str, object]) -> Panel:
@@ -2942,6 +3151,8 @@ _RENDERERS: dict[str, Renderer] = {
     "diff": _render_diff,
     "receipts": _render_receipts,
     "inventory": _render_inventory,
+    "extensions.list": _render_inventory_list,
+    "mcp.list": render_mcp_list,
     "policies": _render_policies,
     "exceptions": _render_policies,
     "advisories": _render_advisories,

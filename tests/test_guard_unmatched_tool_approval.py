@@ -6,54 +6,18 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-from codex_plugin_scanner.guard.runtime.secret_file_requests import (
-    is_explicitly_benign_tool_action_request,
-)
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.conftest import guard_commands_module
 from tests.guard_signed_approval_fixtures import write_synthetic_daemon_auth_token
 
-
-@pytest.mark.parametrize(
-    "command",
-    (
-        "date",
-        "date -u '+%Y-%m-%dT%H:%M:00Z'",
-        "date --utc +%s",
-    ),
-)
-def test_bounded_date_queries_are_benign(tmp_path: Path, command: str) -> None:
-    assert is_explicitly_benign_tool_action_request(
-        "bash",
-        {"command": command},
-        cwd=tmp_path,
-        home_dir=tmp_path,
-    )
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
 
-@pytest.mark.parametrize(
-    "command",
-    (
-        "date -s tomorrow",
-        "date --set=tomorrow",
-        "date +%s +%N",
-        "date -f timestamps.txt",
-    ),
-)
-def test_date_mutations_and_file_reads_still_require_review(tmp_path: Path, command: str) -> None:
-    assert not is_explicitly_benign_tool_action_request(
-        "bash",
-        {"command": command},
-        cwd=tmp_path,
-        home_dir=tmp_path,
-    )
-
-
-def test_codex_unmatched_tool_block_returns_real_review_request(
+def _queue_codex_bearer_review(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
-) -> None:
+) -> tuple[int, dict[str, object], list[dict[str, object]]]:
     guard_home = tmp_path / "guard-home"
     workspace = tmp_path / "x-ads-api-tools"
     workspace.mkdir()
@@ -110,6 +74,16 @@ def test_codex_unmatched_tool_block_returns_real_review_request(
     )
     payload = json.loads(capsys.readouterr().out)
     pending = GuardStore(guard_home).list_approval_requests(limit=5)
+    return result, payload, pending
+
+
+@pytest.mark.usefixtures("native_hook_force")
+def test_codex_unmatched_tool_block_returns_real_review_request(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    result, payload, pending = _queue_codex_bearer_review(tmp_path, monkeypatch, capsys)
 
     assert result == 0, payload
     assert "hookSpecificOutput" in payload, payload
@@ -119,8 +93,18 @@ def test_codex_unmatched_tool_block_returns_real_review_request(
     assert "Open HOL Guard to approve or keep this blocked:" in reason
     assert "guard-token=gld1." in reason
     assert "Approve it in HOL Guard, then retry." not in reason
-    assert pending[0]["artifact_type"] == "tool_action_request"
+    assert pending[0]["artifact_type"] == "tool_call"
     assert str(pending[0]["approval_url"]).endswith(f"/requests/{pending[0]['request_id']}")
+
+
+@pytest.mark.usefixtures("native_hook_force")
+def test_codex_review_request_masks_bearer_credentials(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _, _, pending = _queue_codex_bearer_review(tmp_path, monkeypatch, capsys)
+
     pending_json = json.dumps(pending[0])
     assert "secret-token-value" not in pending_json
     assert "Bearer *****" in pending_json

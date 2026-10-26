@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import stat
@@ -9,7 +10,6 @@ import pytest
 
 import codex_plugin_scanner.guard.native_runtime as native_runtime_module
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import isolated_hook_environment
-from codex_plugin_scanner.guard.config import hook_fast_path_enabled
 from codex_plugin_scanner.guard.native_runtime import (
     native_mode,
     native_runtime_status,
@@ -25,11 +25,6 @@ def test_native_mode_defaults_auto(monkeypatch: pytest.MonkeyPatch) -> None:
     status = native_runtime_status()
     assert status.mode == "auto"
     assert status.reason == "native_unavailable"
-
-
-def test_hook_fast_path_defaults_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("HOL_GUARD_HOOK_FAST_PATH", raising=False)
-    assert hook_fast_path_enabled() is True
 
 
 def test_isolated_hook_environment_keeps_native_mode_and_drops_loaders(tmp_path: Path) -> None:
@@ -49,14 +44,6 @@ def test_isolated_hook_environment_keeps_native_mode_and_drops_loaders(tmp_path:
     assert environment["HOL_GUARD_NATIVE_BINARY"] == str(binary)
     assert "PYTHONPATH" not in environment
     assert "LD_PRELOAD" not in environment
-
-
-def test_explicit_off_remains_emergency_rollback(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("HOL_GUARD_NATIVE", "off")
-    assert native_mode() == "off"
-    status = native_runtime_status()
-    assert status.mode == "off"
-    assert status.reason == "native_disabled"
 
 
 def test_invalid_native_mode_fails_to_auto(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -88,7 +75,7 @@ def test_parity_signature_hashes_excerpt() -> None:
 
 
 @pytest.mark.skipif(os.name == "nt", reason="fake executable uses a POSIX shebang")
-def test_explicit_shadow_runtime_is_validated_without_path_lookup(
+def test_explicit_force_runtime_is_validated_without_path_lookup(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -106,7 +93,7 @@ def test_explicit_shadow_runtime_is_validated_without_path_lookup(
         encoding="utf-8",
     )
     binary.chmod(0o700)
-    monkeypatch.setenv("HOL_GUARD_NATIVE", "shadow")
+    monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
     monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", str(binary))
     status = native_runtime_status()
     assert status.available is True
@@ -180,3 +167,29 @@ def test_override_is_ignored_in_auto_mode(tmp_path: Path, monkeypatch: pytest.Mo
     monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", str(binary))
     status = native_runtime_status()
     assert status.available is False
+
+
+def _probe_identity(tmp_path: Path) -> native_runtime_module.NativeRuntimeIdentity:
+    binary = tmp_path / "hol-guard-runtime"
+    binary.write_bytes(b"probe-runtime")
+    binary.chmod(0o700)
+    metadata = binary.stat()
+    return native_runtime_module.NativeRuntimeIdentity(
+        path=binary.resolve(),
+        size=metadata.st_size,
+        mtime_ns=metadata.st_mtime_ns,
+        sha256=hashlib.sha256(b"probe-runtime").hexdigest(),
+    )
+
+
+def _capabilities_payload() -> str:
+    return json.dumps(
+        {
+            "protocol_version": 1,
+            "runtime_version": "3.0.0a1",
+            "rule_digest": "b" * 64,
+            "build_sha": "a" * 40,
+            "target": "x86_64-unknown-linux-musl",
+            "features": ["hook-envelope-v2"],
+        }
+    )

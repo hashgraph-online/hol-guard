@@ -18,7 +18,7 @@ from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_command_activity_privacy import (
     COMMAND_ACTIVITY_DIAGNOSTICS_SCHEMA_VERSION,
 )
-from tests.guard_command_activity_api_support import json_request, seed
+from tests.guard_command_activity_api_support import json_request, recent_day, seed
 
 _PASSWORD = "correct horse battery staple"
 
@@ -48,7 +48,7 @@ def _dashboard_token(daemon: GuardDaemonServer) -> str:
 
 def test_diagnostics_export_requires_dashboard_auth_and_hosted_allowlist(tmp_path: Path) -> None:
     store = _store(tmp_path)
-    seed(store)
+    seed(store, occurred_on=recent_day())
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     try:
@@ -77,7 +77,7 @@ def test_diagnostics_export_requires_dashboard_auth_and_hosted_allowlist(tmp_pat
 
 def test_delete_route_requires_confirmation_and_high_risk_gate(tmp_path: Path) -> None:
     store = _store(tmp_path)
-    seed(store)
+    seed(store, occurred_on=recent_day())
     _enable_gate(store)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()

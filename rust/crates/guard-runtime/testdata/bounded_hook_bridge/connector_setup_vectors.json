@@ -1,0 +1,130 @@
+[
+  {
+    "harness": "copilot",
+    "ask": false,
+    "response": "{\"policy_action\": \"block\", \"reason_code\": \"native_command_review_required\", \"reason\": \"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Permitted on this device: `lanectl status`. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation.\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\"}",
+    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Permitted on this device: `lanectl status`. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation.\"}}",
+    "stderr": "",
+    "exit_code": 0
+  },
+  {
+    "harness": "copilot",
+    "ask": true,
+    "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_command_review_required\", \"reason\": \"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Setting it up is a one-time decision for the user in the HOL Guard inbox (`hol-guard approvals`), not an approval of this action. Do not retry it, in this or another spelling, until it is set up; continue with other work meanwhile. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\"}",
+    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Setting it up is a one-time decision for the user in the HOL Guard inbox (`hol-guard approvals`), not an approval of this action. Do not retry it, in this or another spelling, until it is set up; continue with other work meanwhile. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}}",
+    "stderr": "",
+    "exit_code": 0
+  },
+  {
+    "harness": "kimi",
+    "ask": false,
+    "response": "{\"policy_action\": \"block\", \"reason_code\": \"native_command_review_required\", \"reason\": \"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Permitted on this device: `lanectl status`. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation.\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\"}",
+    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Permitted on this device: `lanectl status`. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation.\"}}",
+    "stderr": "HOL Guard has not been set up for `lanectl` (local CLI) on this device. Permitted on this device: `lanectl status`. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation.",
+    "exit_code": 2
+  },
+  {
+    "harness": "kimi",
+    "ask": true,
+    "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_command_review_required\", \"reason\": \"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Setting it up is a one-time decision for the user in the HOL Guard inbox (`hol-guard approvals`), not an approval of this action. Do not retry it, in this or another spelling, until it is set up; continue with other work meanwhile. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\"}",
+    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Setting it up is a one-time decision for the user in the HOL Guard inbox (`hol-guard approvals`), not an approval of this action. Do not retry it, in this or another spelling, until it is set up; continue with other work meanwhile. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}}",
+    "stderr": "HOL Guard has not been set up for `lanectl` (local CLI) on this device. Setting it up is a one-time decision for the user in the HOL Guard inbox (`hol-guard approvals`), not an approval of this action. Do not retry it, in this or another spelling, until it is set up; continue with other work meanwhile. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.",
+    "exit_code": 2
+  },
+  {
+    "harness": "devin",
+    "ask": false,
+    "response": "{\"policy_action\": \"block\", \"reason_code\": \"native_command_review_required\", \"reason\": \"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Permitted on this device: `lanectl status`. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation.\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\"}",
+    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Permitted on this device: `lanectl status`. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation.\"},\"decision\":\"block\",\"reason\":\"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Permitted on this device: `lanectl status`. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation.\"}",
+    "stderr": "HOL Guard has not been set up for `lanectl` (local CLI) on this device. Permitted on this device: `lanectl status`. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation.",
+    "exit_code": 2
+  },
+  {
+    "harness": "devin",
+    "ask": true,
+    "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_command_review_required\", \"reason\": \"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Setting it up is a one-time decision for the user in the HOL Guard inbox (`hol-guard approvals`), not an approval of this action. Do not retry it, in this or another spelling, until it is set up; continue with other work meanwhile. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\"}",
+    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Setting it up is a one-time decision for the user in the HOL Guard inbox (`hol-guard approvals`), not an approval of this action. Do not retry it, in this or another spelling, until it is set up; continue with other work meanwhile. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"},\"decision\":\"block\",\"reason\":\"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Setting it up is a one-time decision for the user in the HOL Guard inbox (`hol-guard approvals`), not an approval of this action. Do not retry it, in this or another spelling, until it is set up; continue with other work meanwhile. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}",
+    "stderr": "HOL Guard has not been set up for `lanectl` (local CLI) on this device. Setting it up is a one-time decision for the user in the HOL Guard inbox (`hol-guard approvals`), not an approval of this action. Do not retry it, in this or another spelling, until it is set up; continue with other work meanwhile. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.",
+    "exit_code": 2
+  },
+  {
+    "harness": "zcode",
+    "ask": false,
+    "response": "{\"policy_action\": \"block\", \"reason_code\": \"native_command_review_required\", \"reason\": \"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Permitted on this device: `lanectl status`. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation.\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\"}",
+    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Permitted on this device: `lanectl status`. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation.\"}}",
+    "stderr": "HOL Guard has not been set up for `lanectl` (local CLI) on this device. Permitted on this device: `lanectl status`. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation.",
+    "exit_code": 2
+  },
+  {
+    "harness": "zcode",
+    "ask": true,
+    "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_command_review_required\", \"reason\": \"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Setting it up is a one-time decision for the user in the HOL Guard inbox (`hol-guard approvals`), not an approval of this action. Do not retry it, in this or another spelling, until it is set up; continue with other work meanwhile. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\"}",
+    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Setting it up is a one-time decision for the user in the HOL Guard inbox (`hol-guard approvals`), not an approval of this action. Do not retry it, in this or another spelling, until it is set up; continue with other work meanwhile. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}}",
+    "stderr": "",
+    "exit_code": 0
+  },
+  {
+    "harness": "openclaw",
+    "ask": false,
+    "response": "{\"policy_action\": \"block\", \"reason_code\": \"native_command_review_required\", \"reason\": \"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Permitted on this device: `lanectl status`. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation.\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\"}",
+    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Permitted on this device: `lanectl status`. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation.\"},\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Permitted on this device: `lanectl status`. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation.\",\"reason_code\":\"native_command_review_required\"}",
+    "stderr": "",
+    "exit_code": 0
+  },
+  {
+    "harness": "openclaw",
+    "ask": true,
+    "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_command_review_required\", \"reason\": \"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Setting it up is a one-time decision for the user in the HOL Guard inbox (`hol-guard approvals`), not an approval of this action. Do not retry it, in this or another spelling, until it is set up; continue with other work meanwhile. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\"}",
+    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Setting it up is a one-time decision for the user in the HOL Guard inbox (`hol-guard approvals`), not an approval of this action. Do not retry it, in this or another spelling, until it is set up; continue with other work meanwhile. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"},\"decision\":\"deny\",\"policy_action\":\"review\",\"reason\":\"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Setting it up is a one-time decision for the user in the HOL Guard inbox (`hol-guard approvals`), not an approval of this action. Do not retry it, in this or another spelling, until it is set up; continue with other work meanwhile. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\",\"reason_code\":\"native_command_review_required\",\"approval_url\":\"http://127.0.0.1:4781/approvals/0123456789abcdef\",\"approval_request_id\":\"0123456789abcdef\"}",
+    "stderr": "",
+    "exit_code": 0
+  },
+  {
+    "harness": "cline",
+    "ask": false,
+    "response": "{\"policy_action\": \"block\", \"reason_code\": \"native_command_review_required\", \"reason\": \"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Permitted on this device: `lanectl status`. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation.\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\"}",
+    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Permitted on this device: `lanectl status`. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation.\"}}",
+    "stderr": "",
+    "exit_code": 0
+  },
+  {
+    "harness": "cline",
+    "ask": true,
+    "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_command_review_required\", \"reason\": \"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Setting it up is a one-time decision for the user in the HOL Guard inbox (`hol-guard approvals`), not an approval of this action. Do not retry it, in this or another spelling, until it is set up; continue with other work meanwhile. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\"}",
+    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Setting it up is a one-time decision for the user in the HOL Guard inbox (`hol-guard approvals`), not an approval of this action. Do not retry it, in this or another spelling, until it is set up; continue with other work meanwhile. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}}",
+    "stderr": "",
+    "exit_code": 0
+  },
+  {
+    "harness": "opencode",
+    "ask": false,
+    "response": "{\"policy_action\": \"block\", \"reason_code\": \"native_command_review_required\", \"reason\": \"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Permitted on this device: `lanectl status`. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation.\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\"}",
+    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Permitted on this device: `lanectl status`. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation.\"}}",
+    "stderr": "",
+    "exit_code": 0
+  },
+  {
+    "harness": "opencode",
+    "ask": true,
+    "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_command_review_required\", \"reason\": \"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Setting it up is a one-time decision for the user in the HOL Guard inbox (`hol-guard approvals`), not an approval of this action. Do not retry it, in this or another spelling, until it is set up; continue with other work meanwhile. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\"}",
+    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Setting it up is a one-time decision for the user in the HOL Guard inbox (`hol-guard approvals`), not an approval of this action. Do not retry it, in this or another spelling, until it is set up; continue with other work meanwhile. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}}",
+    "stderr": "",
+    "exit_code": 0
+  },
+  {
+    "harness": "grok",
+    "ask": false,
+    "response": "{\"policy_action\": \"block\", \"reason_code\": \"native_command_review_required\", \"reason\": \"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Permitted on this device: `lanectl status`. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation.\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\"}",
+    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Permitted on this device: `lanectl status`. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation.\"},\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Permitted on this device: `lanectl status`. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation.\",\"reason_code\":\"native_command_review_required\"}",
+    "stderr": "",
+    "exit_code": 2
+  },
+  {
+    "harness": "grok",
+    "ask": true,
+    "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_command_review_required\", \"reason\": \"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Setting it up is a one-time decision for the user in the HOL Guard inbox (`hol-guard approvals`), not an approval of this action. Do not retry it, in this or another spelling, until it is set up; continue with other work meanwhile. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\"}",
+    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Setting it up is a one-time decision for the user in the HOL Guard inbox (`hol-guard approvals`), not an approval of this action. Do not retry it, in this or another spelling, until it is set up; continue with other work meanwhile. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"},\"decision\":\"deny\",\"policy_action\":\"review\",\"reason\":\"HOL Guard has not been set up for `lanectl` (local CLI) on this device. Setting it up is a one-time decision for the user in the HOL Guard inbox (`hol-guard approvals`), not an approval of this action. Do not retry it, in this or another spelling, until it is set up; continue with other work meanwhile. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\",\"reason_code\":\"native_command_review_required\",\"approval_url\":\"http://127.0.0.1:4781/approvals/0123456789abcdef\",\"approval_request_id\":\"0123456789abcdef\"}",
+    "stderr": "",
+    "exit_code": 2
+  }
+]

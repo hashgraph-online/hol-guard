@@ -12,8 +12,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from codex_plugin_scanner.guard.daemon.hook_process_capacity import process_tree_rss_bytes
 from scripts.native_slo_contract import SAFE_ROUTE_NAMES
+from scripts.native_slo_process_tree import process_tree_rss_bytes
 
 _MAX_CASES = 2_048
 _SIZE_BYTES = {"1k": 1 * 1024, "250k": 250 * 1024, "1m": 1 * 1024 * 1024, "5m": 5 * 1024 * 1024}
@@ -36,6 +36,9 @@ class Observation:
     # True only when the adapter returned an explicit bounded-capacity result;
     # a generic native fail-safe must not be mistaken for accepted overload.
     overloaded: bool = False
+    # The adapter's own request timer is distinct from any enclosing benchmark
+    # task timer.  It is optional for compatibility with synthetic fixtures.
+    enclosing_latency_ms: float | None = None
 
 
 @dataclass(frozen=True, slots=True)

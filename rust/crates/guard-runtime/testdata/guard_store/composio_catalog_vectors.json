@@ -1,0 +1,1687 @@
+{
+ "now": "2026-10-10T12:00:00+00:00",
+ "order_by": {
+  "local_cli_observation": "cli_id",
+  "local_mcp_provider_action": "cli_id, identity_hash, provider, tool_slug",
+  "local_mcp_provider_authority": "cli_id, identity_hash",
+  "local_mcp_workflow_proposal": "cli_id, identity_hash, proposal_id"
+ },
+ "scenarios": [
+  {
+   "name": "first_discovery",
+   "seed": {
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-388a1646603d6fee",
+      "declared_sources_json": null,
+      "example_label": "codex_apps",
+      "first_blocked_cause": null,
+      "help_status": null,
+      "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_context_at": null,
+      "last_harness": null,
+      "last_seen_at": "2026-09-27T12:00:00Z",
+      "last_trigger_summary": null,
+      "last_why_now": null,
+      "last_workspace_label": null,
+      "name": "codex_apps",
+      "observed_count": 1,
+      "remote_origin": null,
+      "server_args_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "server_command": "observed-mcp:codex:codex_apps",
+      "server_identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+      "source_label": "Codex \u00b7 observed provider metadata",
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_mcp_provider_action": [],
+    "local_mcp_provider_authority": [],
+    "local_mcp_workflow_proposal": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "one action, no proposals",
+     "method": "record_composio_discovery",
+     "native_payload": {
+      "authority_changed": true
+     },
+     "post_changed": {
+      "local_mcp_provider_action": [
+       {
+        "authority_hash": "c46e76e3fbfde6d9126228d806bd2194de4fbbb16dcd68013253e69946f23e3c",
+        "cli_id": "local-cli.mcp-388a1646603d6fee",
+        "description": "Synthetic metadata",
+        "full_schema": 1,
+        "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+        "input_schema_json": "{\"type\":\"object\"}",
+        "provider": "composio",
+        "revision": 1,
+        "source_tool": "mcp__codex_apps__composio__composio_search_tools",
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "slack",
+        "updated_at": "2026-09-27T12:00:00Z"
+       }
+      ],
+      "local_mcp_provider_authority": [
+       {
+        "cli_id": "local-cli.mcp-388a1646603d6fee",
+        "digest": "af79a3c2c06da6a0dcf4eeb01a5a2fa106732d0495c0e6de1a260d6ef6959f87",
+        "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c"
+       }
+      ]
+     },
+     "wire_args": {
+      "actions": [
+       {
+        "description": "Synthetic metadata",
+        "full_schema": true,
+        "input_schema": {
+         "type": "object"
+        },
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "slack"
+       }
+      ],
+      "barrier_closed": true,
+      "cli_id": "local-cli.mcp-388a1646603d6fee",
+      "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+      "proposals": [],
+      "seen_at": "2026-09-27T12:00:00Z",
+      "server_command": "observed-mcp:codex:codex_apps",
+      "source_tool": "mcp__codex_apps__composio__composio_search_tools"
+     }
+    },
+    {
+     "error": null,
+     "label": "the same action again changes nothing",
+     "method": "record_composio_discovery",
+     "native_payload": {
+      "authority_changed": false
+     },
+     "post_changed": {
+      "local_mcp_provider_action": [
+       {
+        "authority_hash": "c46e76e3fbfde6d9126228d806bd2194de4fbbb16dcd68013253e69946f23e3c",
+        "cli_id": "local-cli.mcp-388a1646603d6fee",
+        "description": "Synthetic metadata",
+        "full_schema": 1,
+        "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+        "input_schema_json": "{\"type\":\"object\"}",
+        "provider": "composio",
+        "revision": 1,
+        "source_tool": "mcp__codex_apps__composio__composio_search_tools",
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "slack",
+        "updated_at": "2026-09-27T12:01:00Z"
+       }
+      ]
+     },
+     "wire_args": {
+      "actions": [
+       {
+        "description": "Synthetic metadata",
+        "full_schema": true,
+        "input_schema": {
+         "type": "object"
+        },
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "slack"
+       }
+      ],
+      "barrier_closed": true,
+      "cli_id": "local-cli.mcp-388a1646603d6fee",
+      "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+      "proposals": [],
+      "seen_at": "2026-09-27T12:01:00Z",
+      "server_command": "observed-mcp:codex:codex_apps",
+      "source_tool": "mcp__codex_apps__composio__composio_search_tools"
+     }
+    }
+   ]
+  },
+  {
+   "name": "revision_moves_only_with_authority",
+   "seed": {
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-388a1646603d6fee",
+      "declared_sources_json": null,
+      "example_label": "codex_apps",
+      "first_blocked_cause": null,
+      "help_status": null,
+      "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_context_at": null,
+      "last_harness": null,
+      "last_seen_at": "2026-09-27T12:00:00Z",
+      "last_trigger_summary": null,
+      "last_why_now": null,
+      "last_workspace_label": null,
+      "name": "codex_apps",
+      "observed_count": 1,
+      "remote_origin": null,
+      "server_args_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "server_command": "observed-mcp:codex:codex_apps",
+      "server_identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+      "source_label": "Codex \u00b7 observed provider metadata",
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_mcp_provider_action": [],
+    "local_mcp_provider_authority": [],
+    "local_mcp_workflow_proposal": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "initial",
+     "method": "record_composio_discovery",
+     "native_payload": {
+      "authority_changed": true
+     },
+     "post_changed": {
+      "local_mcp_provider_action": [
+       {
+        "authority_hash": "c46e76e3fbfde6d9126228d806bd2194de4fbbb16dcd68013253e69946f23e3c",
+        "cli_id": "local-cli.mcp-388a1646603d6fee",
+        "description": "Synthetic metadata",
+        "full_schema": 1,
+        "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+        "input_schema_json": "{\"type\":\"object\"}",
+        "provider": "composio",
+        "revision": 1,
+        "source_tool": "mcp__codex_apps__composio__composio_search_tools",
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "slack",
+        "updated_at": "2026-09-27T12:00:00Z"
+       }
+      ],
+      "local_mcp_provider_authority": [
+       {
+        "cli_id": "local-cli.mcp-388a1646603d6fee",
+        "digest": "af79a3c2c06da6a0dcf4eeb01a5a2fa106732d0495c0e6de1a260d6ef6959f87",
+        "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c"
+       }
+      ]
+     },
+     "wire_args": {
+      "actions": [
+       {
+        "description": "Synthetic metadata",
+        "full_schema": true,
+        "input_schema": {
+         "type": "object"
+        },
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "slack"
+       }
+      ],
+      "barrier_closed": true,
+      "cli_id": "local-cli.mcp-388a1646603d6fee",
+      "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+      "proposals": [],
+      "seen_at": "2026-09-27T12:00:00Z",
+      "server_command": "observed-mcp:codex:codex_apps",
+      "source_tool": "mcp__codex_apps__composio__composio_search_tools"
+     }
+    },
+    {
+     "error": null,
+     "label": "new description keeps the revision",
+     "method": "record_composio_discovery",
+     "native_payload": {
+      "authority_changed": false
+     },
+     "post_changed": {
+      "local_mcp_provider_action": [
+       {
+        "authority_hash": "c46e76e3fbfde6d9126228d806bd2194de4fbbb16dcd68013253e69946f23e3c",
+        "cli_id": "local-cli.mcp-388a1646603d6fee",
+        "description": "New display text",
+        "full_schema": 1,
+        "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+        "input_schema_json": "{\"type\":\"object\"}",
+        "provider": "composio",
+        "revision": 1,
+        "source_tool": "mcp__codex_apps__composio__composio_search_tools",
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "slack",
+        "updated_at": "2026-09-27T12:01:00Z"
+       }
+      ]
+     },
+     "wire_args": {
+      "actions": [
+       {
+        "description": "New display text",
+        "full_schema": true,
+        "input_schema": {
+         "type": "object"
+        },
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "slack"
+       }
+      ],
+      "barrier_closed": true,
+      "cli_id": "local-cli.mcp-388a1646603d6fee",
+      "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+      "proposals": [],
+      "seen_at": "2026-09-27T12:01:00Z",
+      "server_command": "observed-mcp:codex:codex_apps",
+      "source_tool": "mcp__codex_apps__composio__composio_search_tools"
+     }
+    },
+    {
+     "error": null,
+     "label": "a widened schema moves it",
+     "method": "record_composio_discovery",
+     "native_payload": {
+      "authority_changed": true
+     },
+     "post_changed": {
+      "local_mcp_provider_action": [
+       {
+        "authority_hash": "6f035cf4e8f530442e3f89867380c364cc1e86367689dac066103f9cae3d14ec",
+        "cli_id": "local-cli.mcp-388a1646603d6fee",
+        "description": "Synthetic metadata",
+        "full_schema": 1,
+        "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+        "input_schema_json": "{\"required\":[\"query\"],\"type\":\"object\"}",
+        "provider": "composio",
+        "revision": 2,
+        "source_tool": "mcp__codex_apps__composio__composio_search_tools",
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "slack",
+        "updated_at": "2026-09-27T12:01:00Z"
+       }
+      ],
+      "local_mcp_provider_authority": [
+       {
+        "cli_id": "local-cli.mcp-388a1646603d6fee",
+        "digest": "cdc27735802949c05a609ac3bda3ed27422100e1b3a900b5514edae1d2ff9f0e",
+        "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c"
+       }
+      ]
+     },
+     "wire_args": {
+      "actions": [
+       {
+        "description": "Synthetic metadata",
+        "full_schema": true,
+        "input_schema": {
+         "required": [
+          "query"
+         ],
+         "type": "object"
+        },
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "slack"
+       }
+      ],
+      "barrier_closed": true,
+      "cli_id": "local-cli.mcp-388a1646603d6fee",
+      "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+      "proposals": [],
+      "seen_at": "2026-09-27T12:01:00Z",
+      "server_command": "observed-mcp:codex:codex_apps",
+      "source_tool": "mcp__codex_apps__composio__composio_search_tools"
+     }
+    },
+    {
+     "error": null,
+     "label": "a renamed toolkit moves it",
+     "method": "record_composio_discovery",
+     "native_payload": {
+      "authority_changed": true
+     },
+     "post_changed": {
+      "local_mcp_provider_action": [
+       {
+        "authority_hash": "40dc5d34fffd993f63dab74a11686b792869bbd3c69c4e3c5e1d6436e4abce75",
+        "cli_id": "local-cli.mcp-388a1646603d6fee",
+        "description": "Synthetic metadata",
+        "full_schema": 1,
+        "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+        "input_schema_json": "{\"required\":[\"query\"],\"type\":\"object\"}",
+        "provider": "composio",
+        "revision": 3,
+        "source_tool": "mcp__codex_apps__composio__composio_search_tools",
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "other",
+        "updated_at": "2026-09-27T12:01:00Z"
+       }
+      ],
+      "local_mcp_provider_authority": [
+       {
+        "cli_id": "local-cli.mcp-388a1646603d6fee",
+        "digest": "add97c73180e1b2ff606115d4e0139284c26939954cf6cffac1e3bf75e6262ae",
+        "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c"
+       }
+      ]
+     },
+     "wire_args": {
+      "actions": [
+       {
+        "description": "Synthetic metadata",
+        "full_schema": true,
+        "input_schema": {
+         "required": [
+          "query"
+         ],
+         "type": "object"
+        },
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "other"
+       }
+      ],
+      "barrier_closed": true,
+      "cli_id": "local-cli.mcp-388a1646603d6fee",
+      "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+      "proposals": [],
+      "seen_at": "2026-09-27T12:01:00Z",
+      "server_command": "observed-mcp:codex:codex_apps",
+      "source_tool": "mcp__codex_apps__composio__composio_search_tools"
+     }
+    },
+    {
+     "error": null,
+     "label": "dropping the full schema moves it",
+     "method": "record_composio_discovery",
+     "native_payload": {
+      "authority_changed": true
+     },
+     "post_changed": {
+      "local_mcp_provider_action": [
+       {
+        "authority_hash": "40dc5d34fffd993f63dab74a11686b792869bbd3c69c4e3c5e1d6436e4abce75",
+        "cli_id": "local-cli.mcp-388a1646603d6fee",
+        "description": "Synthetic metadata",
+        "full_schema": 0,
+        "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+        "input_schema_json": "{\"required\":[\"query\"],\"type\":\"object\"}",
+        "provider": "composio",
+        "revision": 4,
+        "source_tool": "mcp__codex_apps__composio__composio_search_tools",
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "other",
+        "updated_at": "2026-09-27T12:02:00Z"
+       }
+      ],
+      "local_mcp_provider_authority": [
+       {
+        "cli_id": "local-cli.mcp-388a1646603d6fee",
+        "digest": "196f845644caf2454c5bb0ce92c9efa4e97969057c83fe6e52b661fc4401f450",
+        "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c"
+       }
+      ]
+     },
+     "wire_args": {
+      "actions": [
+       {
+        "description": "Synthetic metadata",
+        "full_schema": false,
+        "input_schema": {
+         "required": [
+          "query"
+         ],
+         "type": "object"
+        },
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "other"
+       }
+      ],
+      "barrier_closed": true,
+      "cli_id": "local-cli.mcp-388a1646603d6fee",
+      "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+      "proposals": [],
+      "seen_at": "2026-09-27T12:02:00Z",
+      "server_command": "observed-mcp:codex:codex_apps",
+      "source_tool": "mcp__codex_apps__composio__composio_search_tools"
+     }
+    }
+   ]
+  },
+  {
+   "name": "subsets_merge",
+   "seed": {
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-388a1646603d6fee",
+      "declared_sources_json": null,
+      "example_label": "codex_apps",
+      "first_blocked_cause": null,
+      "help_status": null,
+      "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_context_at": null,
+      "last_harness": null,
+      "last_seen_at": "2026-09-27T12:00:00Z",
+      "last_trigger_summary": null,
+      "last_why_now": null,
+      "last_workspace_label": null,
+      "name": "codex_apps",
+      "observed_count": 1,
+      "remote_origin": null,
+      "server_args_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "server_command": "observed-mcp:codex:codex_apps",
+      "server_identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+      "source_label": "Codex \u00b7 observed provider metadata",
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_mcp_provider_action": [],
+    "local_mcp_provider_authority": [],
+    "local_mcp_workflow_proposal": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "first slug",
+     "method": "record_composio_discovery",
+     "native_payload": {
+      "authority_changed": true
+     },
+     "post_changed": {
+      "local_mcp_provider_action": [
+       {
+        "authority_hash": "c46e76e3fbfde6d9126228d806bd2194de4fbbb16dcd68013253e69946f23e3c",
+        "cli_id": "local-cli.mcp-388a1646603d6fee",
+        "description": "Synthetic metadata",
+        "full_schema": 1,
+        "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+        "input_schema_json": "{\"type\":\"object\"}",
+        "provider": "composio",
+        "revision": 1,
+        "source_tool": "mcp__codex_apps__composio__composio_search_tools",
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "slack",
+        "updated_at": "2026-09-27T12:00:00Z"
+       }
+      ],
+      "local_mcp_provider_authority": [
+       {
+        "cli_id": "local-cli.mcp-388a1646603d6fee",
+        "digest": "af79a3c2c06da6a0dcf4eeb01a5a2fa106732d0495c0e6de1a260d6ef6959f87",
+        "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c"
+       }
+      ]
+     },
+     "wire_args": {
+      "actions": [
+       {
+        "description": "Synthetic metadata",
+        "full_schema": true,
+        "input_schema": {
+         "type": "object"
+        },
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "slack"
+       }
+      ],
+      "barrier_closed": true,
+      "cli_id": "local-cli.mcp-388a1646603d6fee",
+      "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+      "proposals": [],
+      "seen_at": "2026-09-27T12:00:00Z",
+      "server_command": "observed-mcp:codex:codex_apps",
+      "source_tool": "mcp__codex_apps__composio__composio_search_tools"
+     }
+    },
+    {
+     "error": null,
+     "label": "second slug, the first stays",
+     "method": "record_composio_discovery",
+     "native_payload": {
+      "authority_changed": true
+     },
+     "post_changed": {
+      "local_mcp_provider_action": [
+       {
+        "authority_hash": "c46e76e3fbfde6d9126228d806bd2194de4fbbb16dcd68013253e69946f23e3c",
+        "cli_id": "local-cli.mcp-388a1646603d6fee",
+        "description": "Synthetic metadata",
+        "full_schema": 1,
+        "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+        "input_schema_json": "{\"type\":\"object\"}",
+        "provider": "composio",
+        "revision": 1,
+        "source_tool": "mcp__codex_apps__composio__composio_search_tools",
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "slack",
+        "updated_at": "2026-09-27T12:00:00Z"
+       },
+       {
+        "authority_hash": "4504825cedde6d68c4631cf7a90bd311367ece38a3a3e51c5122148acfffeccc",
+        "cli_id": "local-cli.mcp-388a1646603d6fee",
+        "description": "Synthetic metadata",
+        "full_schema": 1,
+        "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+        "input_schema_json": "{\"type\":\"object\"}",
+        "provider": "composio",
+        "revision": 1,
+        "source_tool": "mcp__codex_apps__composio__composio_search_tools",
+        "tool_slug": "SLACK_SEND_MESSAGE",
+        "toolkit": "slack",
+        "updated_at": "2026-09-27T12:01:00Z"
+       }
+      ],
+      "local_mcp_provider_authority": [
+       {
+        "cli_id": "local-cli.mcp-388a1646603d6fee",
+        "digest": "e16110334d8fd4e62cf21d6396ce745d0f9678d84f34938898989e95b80a92d1",
+        "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c"
+       }
+      ]
+     },
+     "wire_args": {
+      "actions": [
+       {
+        "description": "Synthetic metadata",
+        "full_schema": true,
+        "input_schema": {
+         "type": "object"
+        },
+        "tool_slug": "SLACK_SEND_MESSAGE",
+        "toolkit": "slack"
+       }
+      ],
+      "barrier_closed": true,
+      "cli_id": "local-cli.mcp-388a1646603d6fee",
+      "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+      "proposals": [],
+      "seen_at": "2026-09-27T12:01:00Z",
+      "server_command": "observed-mcp:codex:codex_apps",
+      "source_tool": "mcp__codex_apps__composio__composio_search_tools"
+     }
+    },
+    {
+     "error": null,
+     "label": "both slugs in one batch",
+     "method": "record_composio_discovery",
+     "native_payload": {
+      "authority_changed": true
+     },
+     "post_changed": {
+      "local_mcp_provider_action": [
+       {
+        "authority_hash": "c46e76e3fbfde6d9126228d806bd2194de4fbbb16dcd68013253e69946f23e3c",
+        "cli_id": "local-cli.mcp-388a1646603d6fee",
+        "description": "Synthetic metadata",
+        "full_schema": 1,
+        "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+        "input_schema_json": "{\"type\":\"object\"}",
+        "provider": "composio",
+        "revision": 1,
+        "source_tool": "mcp__codex_apps__composio__composio_search_tools",
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "slack",
+        "updated_at": "2026-09-27T12:02:00Z"
+       },
+       {
+        "authority_hash": "5fb655affe9fefddec76d5684ed2a40361f9093df9354913df3cc6774066f9e6",
+        "cli_id": "local-cli.mcp-388a1646603d6fee",
+        "description": "Synthetic metadata",
+        "full_schema": 1,
+        "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+        "input_schema_json": "{\"type\":\"object\"}",
+        "provider": "composio",
+        "revision": 2,
+        "source_tool": "mcp__codex_apps__composio__composio_search_tools",
+        "tool_slug": "SLACK_SEND_MESSAGE",
+        "toolkit": "other",
+        "updated_at": "2026-09-27T12:02:00Z"
+       }
+      ],
+      "local_mcp_provider_authority": [
+       {
+        "cli_id": "local-cli.mcp-388a1646603d6fee",
+        "digest": "674b0f1a29fcb38b98a627549a5dd320382b024d808ad5bd2db74133f95be2f0",
+        "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c"
+       }
+      ]
+     },
+     "wire_args": {
+      "actions": [
+       {
+        "description": "Synthetic metadata",
+        "full_schema": true,
+        "input_schema": {
+         "type": "object"
+        },
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "slack"
+       },
+       {
+        "description": "Synthetic metadata",
+        "full_schema": true,
+        "input_schema": {
+         "type": "object"
+        },
+        "tool_slug": "SLACK_SEND_MESSAGE",
+        "toolkit": "other"
+       }
+      ],
+      "barrier_closed": true,
+      "cli_id": "local-cli.mcp-388a1646603d6fee",
+      "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+      "proposals": [],
+      "seen_at": "2026-09-27T12:02:00Z",
+      "server_command": "observed-mcp:codex:codex_apps",
+      "source_tool": "mcp__codex_apps__composio__composio_search_tools"
+     }
+    }
+   ]
+  },
+  {
+   "name": "repeated_slug_in_one_batch",
+   "seed": {
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-388a1646603d6fee",
+      "declared_sources_json": null,
+      "example_label": "codex_apps",
+      "first_blocked_cause": null,
+      "help_status": null,
+      "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_context_at": null,
+      "last_harness": null,
+      "last_seen_at": "2026-09-27T12:00:00Z",
+      "last_trigger_summary": null,
+      "last_why_now": null,
+      "last_workspace_label": null,
+      "name": "codex_apps",
+      "observed_count": 1,
+      "remote_origin": null,
+      "server_args_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "server_command": "observed-mcp:codex:codex_apps",
+      "server_identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+      "source_label": "Codex \u00b7 observed provider metadata",
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_mcp_provider_action": [],
+    "local_mcp_provider_authority": [],
+    "local_mcp_workflow_proposal": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "the last copy of a repeated slug wins",
+     "method": "record_composio_discovery",
+     "native_payload": {
+      "authority_changed": true
+     },
+     "post_changed": {
+      "local_mcp_provider_action": [
+       {
+        "authority_hash": "4bd97a69d0a3786bcc63bef318bc0d7ed83649a368bf2bb70c2224692437a9af",
+        "cli_id": "local-cli.mcp-388a1646603d6fee",
+        "description": "Synthetic metadata",
+        "full_schema": 1,
+        "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+        "input_schema_json": "{\"type\":\"object\"}",
+        "provider": "composio",
+        "revision": 2,
+        "source_tool": "mcp__codex_apps__composio__composio_search_tools",
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "other",
+        "updated_at": "2026-09-27T12:00:00Z"
+       }
+      ],
+      "local_mcp_provider_authority": [
+       {
+        "cli_id": "local-cli.mcp-388a1646603d6fee",
+        "digest": "02e3433c19848bb157aea2c7aefc676eda90d626ab78378aae97a92760091964",
+        "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c"
+       }
+      ]
+     },
+     "wire_args": {
+      "actions": [
+       {
+        "description": "Synthetic metadata",
+        "full_schema": true,
+        "input_schema": {
+         "type": "object"
+        },
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "slack"
+       },
+       {
+        "description": "second copy",
+        "full_schema": true,
+        "input_schema": {
+         "type": "object"
+        },
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "slack"
+       },
+       {
+        "description": "Synthetic metadata",
+        "full_schema": true,
+        "input_schema": {
+         "type": "object"
+        },
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "other"
+       }
+      ],
+      "barrier_closed": true,
+      "cli_id": "local-cli.mcp-388a1646603d6fee",
+      "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+      "proposals": [],
+      "seen_at": "2026-09-27T12:00:00Z",
+      "server_command": "observed-mcp:codex:codex_apps",
+      "source_tool": "mcp__codex_apps__composio__composio_search_tools"
+     }
+    }
+   ]
+  },
+  {
+   "name": "workflow_proposals",
+   "seed": {
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-388a1646603d6fee",
+      "declared_sources_json": null,
+      "example_label": "codex_apps",
+      "first_blocked_cause": null,
+      "help_status": null,
+      "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_context_at": null,
+      "last_harness": null,
+      "last_seen_at": "2026-09-27T12:00:00Z",
+      "last_trigger_summary": null,
+      "last_why_now": null,
+      "last_workspace_label": null,
+      "name": "codex_apps",
+      "observed_count": 1,
+      "remote_origin": null,
+      "server_args_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "server_command": "observed-mcp:codex:codex_apps",
+      "server_identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+      "source_label": "Codex \u00b7 observed provider metadata",
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_mcp_provider_action": [],
+    "local_mcp_provider_authority": [],
+    "local_mcp_workflow_proposal": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "a proposal arrives with the catalog",
+     "method": "record_composio_discovery",
+     "native_payload": {
+      "authority_changed": true
+     },
+     "post_changed": {
+      "local_mcp_provider_action": [
+       {
+        "authority_hash": "c46e76e3fbfde6d9126228d806bd2194de4fbbb16dcd68013253e69946f23e3c",
+        "cli_id": "local-cli.mcp-388a1646603d6fee",
+        "description": "Synthetic metadata",
+        "full_schema": 1,
+        "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+        "input_schema_json": "{\"type\":\"object\"}",
+        "provider": "composio",
+        "revision": 1,
+        "source_tool": "mcp__codex_apps__composio__composio_search_tools",
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "slack",
+        "updated_at": "2026-09-27T12:00:00Z"
+       }
+      ],
+      "local_mcp_provider_authority": [
+       {
+        "cli_id": "local-cli.mcp-388a1646603d6fee",
+        "digest": "af79a3c2c06da6a0dcf4eeb01a5a2fa106732d0495c0e6de1a260d6ef6959f87",
+        "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c"
+       }
+      ],
+      "local_mcp_workflow_proposal": [
+       {
+        "cli_id": "local-cli.mcp-388a1646603d6fee",
+        "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+        "proposal_id": "edc63511bb8a0c24f46d4776355e9d15e57d87aaf0552897cdff304a5c97ae65",
+        "proposal_json": "{\"guidance_present\":true,\"primary\":[\"SLACK_SEARCH_MESSAGES\"],\"supporting\":[\"SLACK_SEND_MESSAGE\"]}",
+        "seen_at": "2026-09-27T12:00:00Z"
+       }
+      ]
+     },
+     "wire_args": {
+      "actions": [
+       {
+        "description": "Synthetic metadata",
+        "full_schema": true,
+        "input_schema": {
+         "type": "object"
+        },
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "slack"
+       }
+      ],
+      "barrier_closed": true,
+      "cli_id": "local-cli.mcp-388a1646603d6fee",
+      "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+      "proposals": [
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_SEARCH_MESSAGES"
+        ],
+        "supporting": [
+         "SLACK_SEND_MESSAGE"
+        ]
+       }
+      ],
+      "seen_at": "2026-09-27T12:00:00Z",
+      "server_command": "observed-mcp:codex:codex_apps",
+      "source_tool": "mcp__codex_apps__composio__composio_search_tools"
+     }
+    },
+    {
+     "error": null,
+     "label": "the same proposal refreshes rather than duplicating",
+     "method": "record_composio_discovery",
+     "native_payload": {
+      "authority_changed": false
+     },
+     "post_changed": {
+      "local_mcp_provider_action": [
+       {
+        "authority_hash": "c46e76e3fbfde6d9126228d806bd2194de4fbbb16dcd68013253e69946f23e3c",
+        "cli_id": "local-cli.mcp-388a1646603d6fee",
+        "description": "Synthetic metadata",
+        "full_schema": 1,
+        "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+        "input_schema_json": "{\"type\":\"object\"}",
+        "provider": "composio",
+        "revision": 1,
+        "source_tool": "mcp__codex_apps__composio__composio_search_tools",
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "slack",
+        "updated_at": "2026-09-27T12:01:00Z"
+       }
+      ],
+      "local_mcp_workflow_proposal": [
+       {
+        "cli_id": "local-cli.mcp-388a1646603d6fee",
+        "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+        "proposal_id": "edc63511bb8a0c24f46d4776355e9d15e57d87aaf0552897cdff304a5c97ae65",
+        "proposal_json": "{\"guidance_present\":true,\"primary\":[\"SLACK_SEARCH_MESSAGES\"],\"supporting\":[\"SLACK_SEND_MESSAGE\"]}",
+        "seen_at": "2026-09-27T12:01:00Z"
+       }
+      ]
+     },
+     "wire_args": {
+      "actions": [
+       {
+        "description": "Synthetic metadata",
+        "full_schema": true,
+        "input_schema": {
+         "type": "object"
+        },
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "slack"
+       }
+      ],
+      "barrier_closed": true,
+      "cli_id": "local-cli.mcp-388a1646603d6fee",
+      "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+      "proposals": [
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_SEARCH_MESSAGES"
+        ],
+        "supporting": [
+         "SLACK_SEND_MESSAGE"
+        ]
+       }
+      ],
+      "seen_at": "2026-09-27T12:01:00Z",
+      "server_command": "observed-mcp:codex:codex_apps",
+      "source_tool": "mcp__codex_apps__composio__composio_search_tools"
+     }
+    },
+    {
+     "error": null,
+     "label": "a different proposal is a second row",
+     "method": "record_composio_discovery",
+     "native_payload": {
+      "authority_changed": false
+     },
+     "post_changed": {
+      "local_mcp_workflow_proposal": [
+       {
+        "cli_id": "local-cli.mcp-388a1646603d6fee",
+        "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+        "proposal_id": "8178958cf8f0cca0e69221d64d3785322f2393a912989107080e8d64c1eedd50",
+        "proposal_json": "{\"guidance_present\":false,\"primary\":[\"SLACK_SEARCH_MESSAGES\"],\"supporting\":[]}",
+        "seen_at": "2026-09-27T12:01:00Z"
+       },
+       {
+        "cli_id": "local-cli.mcp-388a1646603d6fee",
+        "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+        "proposal_id": "edc63511bb8a0c24f46d4776355e9d15e57d87aaf0552897cdff304a5c97ae65",
+        "proposal_json": "{\"guidance_present\":true,\"primary\":[\"SLACK_SEARCH_MESSAGES\"],\"supporting\":[\"SLACK_SEND_MESSAGE\"]}",
+        "seen_at": "2026-09-27T12:01:00Z"
+       }
+      ]
+     },
+     "wire_args": {
+      "actions": [
+       {
+        "description": "Synthetic metadata",
+        "full_schema": true,
+        "input_schema": {
+         "type": "object"
+        },
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "slack"
+       }
+      ],
+      "barrier_closed": true,
+      "cli_id": "local-cli.mcp-388a1646603d6fee",
+      "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+      "proposals": [
+       {
+        "guidance_present": false,
+        "primary": [
+         "SLACK_SEARCH_MESSAGES"
+        ],
+        "supporting": []
+       }
+      ],
+      "seen_at": "2026-09-27T12:01:00Z",
+      "server_command": "observed-mcp:codex:codex_apps",
+      "source_tool": "mcp__codex_apps__composio__composio_search_tools"
+     }
+    },
+    {
+     "error": null,
+     "label": "no proposals leaves the stored ones alone",
+     "method": "record_composio_discovery",
+     "native_payload": {
+      "authority_changed": false
+     },
+     "post_changed": {
+      "local_mcp_provider_action": [
+       {
+        "authority_hash": "c46e76e3fbfde6d9126228d806bd2194de4fbbb16dcd68013253e69946f23e3c",
+        "cli_id": "local-cli.mcp-388a1646603d6fee",
+        "description": "Synthetic metadata",
+        "full_schema": 1,
+        "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+        "input_schema_json": "{\"type\":\"object\"}",
+        "provider": "composio",
+        "revision": 1,
+        "source_tool": "mcp__codex_apps__composio__composio_search_tools",
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "slack",
+        "updated_at": "2026-09-27T12:02:00Z"
+       }
+      ]
+     },
+     "wire_args": {
+      "actions": [
+       {
+        "description": "Synthetic metadata",
+        "full_schema": true,
+        "input_schema": {
+         "type": "object"
+        },
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "slack"
+       }
+      ],
+      "barrier_closed": true,
+      "cli_id": "local-cli.mcp-388a1646603d6fee",
+      "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+      "proposals": [],
+      "seen_at": "2026-09-27T12:02:00Z",
+      "server_command": "observed-mcp:codex:codex_apps",
+      "source_tool": "mcp__codex_apps__composio__composio_search_tools"
+     }
+    }
+   ]
+  },
+  {
+   "name": "proposal_capacity",
+   "seed": {
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-388a1646603d6fee",
+      "declared_sources_json": null,
+      "example_label": "codex_apps",
+      "first_blocked_cause": null,
+      "help_status": null,
+      "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_context_at": null,
+      "last_harness": null,
+      "last_seen_at": "2026-09-27T12:00:00Z",
+      "last_trigger_summary": null,
+      "last_why_now": null,
+      "last_workspace_label": null,
+      "name": "codex_apps",
+      "observed_count": 1,
+      "remote_origin": null,
+      "server_args_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "server_command": "observed-mcp:codex:codex_apps",
+      "server_identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+      "source_label": "Codex \u00b7 observed provider metadata",
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_mcp_provider_action": [],
+    "local_mcp_provider_authority": [],
+    "local_mcp_workflow_proposal": []
+   },
+   "steps": [
+    {
+     "error": {
+      "message": "provider_workflow_capacity",
+      "message_exact": true,
+      "type": "ValueError"
+     },
+     "label": "fifty-one proposals are refused",
+     "method": "record_composio_discovery",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {
+      "actions": [
+       {
+        "description": "Synthetic metadata",
+        "full_schema": true,
+        "input_schema": {
+         "type": "object"
+        },
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "slack"
+       }
+      ],
+      "barrier_closed": true,
+      "cli_id": "local-cli.mcp-388a1646603d6fee",
+      "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+      "proposals": [
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_0"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_1"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_2"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_3"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_4"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_5"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_6"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_7"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_8"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_9"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_10"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_11"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_12"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_13"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_14"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_15"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_16"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_17"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_18"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_19"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_20"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_21"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_22"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_23"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_24"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_25"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_26"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_27"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_28"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_29"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_30"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_31"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_32"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_33"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_34"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_35"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_36"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_37"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_38"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_39"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_40"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_41"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_42"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_43"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_44"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_45"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_46"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_47"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_48"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_49"
+        ],
+        "supporting": []
+       },
+       {
+        "guidance_present": true,
+        "primary": [
+         "SLACK_ACTION_50"
+        ],
+        "supporting": []
+       }
+      ],
+      "seen_at": "2026-09-27T12:00:00Z",
+      "server_command": "observed-mcp:codex:codex_apps",
+      "source_tool": "mcp__codex_apps__composio__composio_search_tools"
+     }
+    }
+   ]
+  },
+  {
+   "name": "separate_connections",
+   "seed": {
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-0f5e136b35fb5f0e",
+      "declared_sources_json": null,
+      "example_label": "composio",
+      "first_blocked_cause": null,
+      "help_status": null,
+      "identity_hash": "0f5e136b35fb5f0e3747b257bf725e515592a3c2750be6a3934ba93f9eb3edf1",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_context_at": null,
+      "last_harness": null,
+      "last_seen_at": "2026-09-27T12:01:00Z",
+      "last_trigger_summary": null,
+      "last_why_now": null,
+      "last_workspace_label": null,
+      "name": "composio",
+      "observed_count": 1,
+      "remote_origin": null,
+      "server_args_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "server_command": "observed-mcp:codex:composio",
+      "server_identity_hash": "0f5e136b35fb5f0e3747b257bf725e515592a3c2750be6a3934ba93f9eb3edf1",
+      "source_label": "Codex \u00b7 observed provider metadata",
+      "source_path": null,
+      "surface": "mcp"
+     },
+     {
+      "cli_id": "local-cli.mcp-388a1646603d6fee",
+      "declared_sources_json": null,
+      "example_label": "codex_apps",
+      "first_blocked_cause": null,
+      "help_status": null,
+      "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_context_at": null,
+      "last_harness": null,
+      "last_seen_at": "2026-09-27T12:00:00Z",
+      "last_trigger_summary": null,
+      "last_why_now": null,
+      "last_workspace_label": null,
+      "name": "codex_apps",
+      "observed_count": 1,
+      "remote_origin": null,
+      "server_args_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "server_command": "observed-mcp:codex:codex_apps",
+      "server_identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+      "source_label": "Codex \u00b7 observed provider metadata",
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_mcp_provider_action": [],
+    "local_mcp_provider_authority": [],
+    "local_mcp_workflow_proposal": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "the codex_apps connection",
+     "method": "record_composio_discovery",
+     "native_payload": {
+      "authority_changed": true
+     },
+     "post_changed": {
+      "local_mcp_provider_action": [
+       {
+        "authority_hash": "c46e76e3fbfde6d9126228d806bd2194de4fbbb16dcd68013253e69946f23e3c",
+        "cli_id": "local-cli.mcp-388a1646603d6fee",
+        "description": "Synthetic metadata",
+        "full_schema": 1,
+        "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+        "input_schema_json": "{\"type\":\"object\"}",
+        "provider": "composio",
+        "revision": 1,
+        "source_tool": "mcp__codex_apps__composio__composio_search_tools",
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "slack",
+        "updated_at": "2026-09-27T12:00:00Z"
+       }
+      ],
+      "local_mcp_provider_authority": [
+       {
+        "cli_id": "local-cli.mcp-388a1646603d6fee",
+        "digest": "af79a3c2c06da6a0dcf4eeb01a5a2fa106732d0495c0e6de1a260d6ef6959f87",
+        "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c"
+       }
+      ]
+     },
+     "wire_args": {
+      "actions": [
+       {
+        "description": "Synthetic metadata",
+        "full_schema": true,
+        "input_schema": {
+         "type": "object"
+        },
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "slack"
+       }
+      ],
+      "barrier_closed": true,
+      "cli_id": "local-cli.mcp-388a1646603d6fee",
+      "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+      "proposals": [],
+      "seen_at": "2026-09-27T12:00:00Z",
+      "server_command": "observed-mcp:codex:codex_apps",
+      "source_tool": "mcp__codex_apps__composio__composio_search_tools"
+     }
+    },
+    {
+     "error": null,
+     "label": "a different server is a different catalog",
+     "method": "record_composio_discovery",
+     "native_payload": {
+      "authority_changed": true
+     },
+     "post_changed": {
+      "local_mcp_provider_action": [
+       {
+        "authority_hash": "c46e76e3fbfde6d9126228d806bd2194de4fbbb16dcd68013253e69946f23e3c",
+        "cli_id": "local-cli.mcp-0f5e136b35fb5f0e",
+        "description": "Synthetic metadata",
+        "full_schema": 1,
+        "identity_hash": "0f5e136b35fb5f0e3747b257bf725e515592a3c2750be6a3934ba93f9eb3edf1",
+        "input_schema_json": "{\"type\":\"object\"}",
+        "provider": "composio",
+        "revision": 1,
+        "source_tool": "mcp__composio__composio_search_tools",
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "slack",
+        "updated_at": "2026-09-27T12:01:00Z"
+       },
+       {
+        "authority_hash": "c46e76e3fbfde6d9126228d806bd2194de4fbbb16dcd68013253e69946f23e3c",
+        "cli_id": "local-cli.mcp-388a1646603d6fee",
+        "description": "Synthetic metadata",
+        "full_schema": 1,
+        "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c",
+        "input_schema_json": "{\"type\":\"object\"}",
+        "provider": "composio",
+        "revision": 1,
+        "source_tool": "mcp__codex_apps__composio__composio_search_tools",
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "slack",
+        "updated_at": "2026-09-27T12:00:00Z"
+       }
+      ],
+      "local_mcp_provider_authority": [
+       {
+        "cli_id": "local-cli.mcp-0f5e136b35fb5f0e",
+        "digest": "92f5b6358b9d557f30f0b4a3a9d5fa64790b80ba691ac0774f01d6a4d7b87762",
+        "identity_hash": "0f5e136b35fb5f0e3747b257bf725e515592a3c2750be6a3934ba93f9eb3edf1"
+       },
+       {
+        "cli_id": "local-cli.mcp-388a1646603d6fee",
+        "digest": "af79a3c2c06da6a0dcf4eeb01a5a2fa106732d0495c0e6de1a260d6ef6959f87",
+        "identity_hash": "388a1646603d6feeae01e34181bb7e65ed2e330e5ec3f441116fb1a29ac4c26c"
+       }
+      ]
+     },
+     "wire_args": {
+      "actions": [
+       {
+        "description": "Synthetic metadata",
+        "full_schema": true,
+        "input_schema": {
+         "type": "object"
+        },
+        "tool_slug": "SLACK_SEARCH_MESSAGES",
+        "toolkit": "slack"
+       }
+      ],
+      "barrier_closed": true,
+      "cli_id": "local-cli.mcp-0f5e136b35fb5f0e",
+      "identity_hash": "0f5e136b35fb5f0e3747b257bf725e515592a3c2750be6a3934ba93f9eb3edf1",
+      "proposals": [],
+      "seen_at": "2026-09-27T12:01:00Z",
+      "server_command": "observed-mcp:codex:composio",
+      "source_tool": "mcp__composio__composio_search_tools"
+     }
+    }
+   ]
+  }
+ ],
+ "schema": "guard-store-composio-catalog-vectors.v1",
+ "schema_sql": [
+  "CREATE TABLE local_cli_observation (\n            cli_id text primary key,\n            identity_hash text not null,\n            kind text not null check (kind in ('executable', 'script')),\n            name text not null,\n            interpreter_name text,\n            example_label text not null,\n            observed_count integer not null check (observed_count >= 1),\n            last_seen_at text not null,\n            source_path text,\n            help_status text,\n            surface text not null default 'cli' check (surface in ('cli', 'mcp', 'package-scripts')),\n            server_identity_hash text,\n            server_command text,\n            server_args_hash text,\n            source_label text,\n            remote_origin text,\n            declared_sources_json text\n        , first_blocked_cause text, last_trigger_summary text, last_why_now text, last_harness text, last_workspace_label text, last_context_at text)",
+  "CREATE TABLE local_mcp_workflow_proposal (\n            cli_id text not null, identity_hash text not null, proposal_id text not null,\n            proposal_json text not null, seen_at text not null,\n            primary key (cli_id, identity_hash, proposal_id)\n        )",
+  "CREATE TABLE local_mcp_provider_authority (\n            cli_id text not null, identity_hash text not null, digest text not null,\n            primary key (cli_id, identity_hash)\n        )",
+  "CREATE TABLE local_mcp_provider_action (\n            cli_id text not null,\n            identity_hash text not null,\n            provider text not null check (provider = 'composio'),\n            tool_slug text not null,\n            toolkit text not null,\n            description text not null,\n            input_schema_json text not null,\n            authority_hash text not null,\n            full_schema integer not null check (full_schema in (0, 1)),\n            source_tool text not null,\n            revision integer not null check (revision >= 1),\n            updated_at text not null,\n            primary key (cli_id, identity_hash, provider, tool_slug)\n        )"
+ ],
+ "source": "guard"
+}

@@ -8,7 +8,6 @@ import pytest
 from codex_plugin_scanner.guard.managed_controls_policy_bundle import (
     MANAGED_CONTROLS_ACTIVE_STATE_KEY,
     MANAGED_CONTROLS_REVISION_STATE_KEY,
-    build_managed_controls_revision_state,
 )
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth, AuthorityPhase
@@ -18,6 +17,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     ControlTargetKind,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.managed_controls_activation_support import managed_revision_state
 from tests.test_extension_control_clear_catalog_migration import (
     _activate_under_catalog,
     _description_only_catalog_variant,
@@ -109,7 +109,7 @@ def test_stale_managed_activation_revision_mismatch_still_fails_closed(
     _activate_under_catalog(store, legacy, monkeypatch, preserve_local_controls=True)
     key = store._authority_key(required=True)
     assert key is not None
-    mismatched = build_managed_controls_revision_state(99, authority_key=key)
+    mismatched = managed_revision_state(99, authority_key=key)
     with store._connect() as connection:
         connection.execute(
             "update sync_state set payload_json = ? where state_key = ?",

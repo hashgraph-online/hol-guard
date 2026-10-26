@@ -5,9 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from codex_plugin_scanner.guard.runtime.github_command_capabilities import classify_github_cli
 from tests.command_extension_contracts import assert_reviewed_command_cases, assert_safe_command_cases
 from tests.native_command_test_support import real_native_command_evaluation
+from tests.native_github_capability_support import github_cli_assessment
 
 GIT_PORCELAIN_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
     ("git switch feature", "git workspace command", "command.git.switch"),
@@ -102,7 +102,7 @@ def test_git_help_modes_are_not_reviewed(tmp_path: Path) -> None:
 
 
 def test_github_account_switch_is_reviewed(tmp_path: Path) -> None:
-    assessment = classify_github_cli(("auth", "switch"))
+    assessment = github_cli_assessment(("auth", "switch"))
     assert assessment.capability == "write_local"
     assert assessment.reason_code == "github.command.local-auth-write"
     assert_reviewed_command_cases(

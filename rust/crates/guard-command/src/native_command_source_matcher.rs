@@ -87,11 +87,15 @@ impl SourceGraph {
                 }
             }
         }
-        let node = RawNode {
+        let mut node = RawNode {
             op: matcher.op,
             config: matcher.config,
             children,
         };
+        node.config.sort_all_objects();
+        for child in node.children.values_mut() {
+            child.sort_all_objects();
+        }
         let canonical = serde_json::to_vec(&node).map_err(|_| "command_source_encoding_failed")?;
         let id = digest_canonical_bytes(NODE_DOMAIN, &canonical);
         if let Some(existing) = self.nodes.get(&id) {

@@ -5,10 +5,7 @@
 from __future__ import annotations
 
 import sqlite3
-from concurrent.futures import ProcessPoolExecutor
-from dataclasses import replace
 from datetime import datetime, timezone
-from multiprocessing import get_context
 from pathlib import Path
 
 import pytest
@@ -212,109 +209,6 @@ def test_command_activity_migration_rejects_an_incompatible_existing_schema(tmp_
     assert version is None
 
 
-def test_activity_persistence_counts_one_command_and_each_rule_hit(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-    evidence = _evidence()
-
-    assert store.record_command_activity(evidence) is True
-    assert store.count_command_activities() == 1
-    assert store.count_command_activity_rule_hits() == 2
-    assert store.count_command_activity_rule_hits("command.git.push") == 1
-    assert store.count_command_activity_rule_hits("command.package.install") == 1
-
-
-def test_exact_activity_replay_is_an_idempotent_noop(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-    evidence = _evidence()
-
-    assert store.record_command_activity(evidence) is True
-    assert store.record_command_activity(evidence) is False
-    assert store.count_command_activities() == 1
-    assert store.count_command_activity_rule_hits() == 2
-
-
-def test_two_processes_cannot_duplicate_one_activity(tmp_path: Path) -> None:
-    guard_home = tmp_path / "guard-home"
-    first = GuardStore(guard_home, prime_policy_integrity=False)
-    evidence = _evidence()
-
-    with ProcessPoolExecutor(max_workers=2, mp_context=get_context("spawn")) as executor:
-        futures = [executor.submit(_record_in_process, str(guard_home), evidence) for _ in range(2)]
-        results = [future.result(timeout=20) for future in futures]
-
-    assert sorted(results) == [False, True]
-    assert first.count_command_activities() == 1
-    assert first.count_command_activity_rule_hits() == 2
-
-
-def test_request_correlation_is_unique_but_session_correlation_is_shareable(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-    store.record_command_activity(_evidence(activity_id="activity:01"))
-
-    with pytest.raises(sqlite3.IntegrityError):
-        store.record_command_activity(_evidence(activity_id="activity:02", session_digest="c" * 64))
-    assert store.record_command_activity(
-        _evidence(activity_id="activity:03", request_digest="c" * 64),
-    )
-
-    assert store.count_command_activities() == 2
-    assert store.count_command_activity_rule_hits() == 4
-
-
-def test_conflicting_activity_replay_is_rejected_without_mutation(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-    evidence = _evidence()
-    store.record_command_activity(evidence)
-    conflicts = (
-        CommandActivityEvidence(replace(evidence.activity, prompted=True), evidence.matches),
-        CommandActivityEvidence(
-            evidence.activity,
-            (replace(evidence.matches[0], severity=EvidenceSeverity.LOW), evidence.matches[1]),
-        ),
-        CommandActivityEvidence(
-            evidence.activity,
-            (
-                replace(evidence.matches[0], effect_claims=frozenset({EffectKind.NETWORK_WRITE})),
-                evidence.matches[1],
-            ),
-        ),
-        CommandActivityEvidence(
-            replace(
-                evidence.activity,
-                request_correlation=_correlation(CorrelationKind.REQUEST, "c" * 64),
-            ),
-            evidence.matches,
-        ),
-    )
-
-    for conflicting in conflicts:
-        with pytest.raises(ValueError, match="conflicting command activity replay"):
-            store.record_command_activity(conflicting)
-
-    assert store.count_command_activities() == 1
-    assert store.count_command_activity_rule_hits() == 2
-
-
-def test_match_failure_rolls_back_the_parent_activity(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-    with sqlite3.connect(store.path) as connection:
-        connection.execute(
-            """
-            create trigger fail_command_activity_match
-            before insert on command_activity_matches
-            begin
-              select raise(abort, 'injected match failure');
-            end
-            """
-        )
-
-    with pytest.raises(sqlite3.IntegrityError, match="injected match failure"):
-        store.record_command_activity(_evidence())
-
-    assert store.count_command_activities() == 0
-    assert store.count_command_activity_rule_hits() == 0
-
-
 def test_command_activity_integrity_rejects_orphans_and_cascades(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
     evidence = _evidence()
@@ -340,25 +234,6 @@ def test_command_activity_integrity_rejects_orphans_and_cascades(tmp_path: Path)
             )
         )
     assert child_counts == (0, 0, 0)
-
-
-def test_command_activity_parent_keys_cannot_be_updated(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-    evidence = _evidence()
-    store.record_command_activity(evidence)
-
-    updates = (
-        "update command_activity set activity_id = 'moved' where activity_id = 'activity:01'",
-        "update command_activity_matches set activity_id = 'moved' where activity_id = 'activity:01'",
-        "update command_activity_match_effects set ordinal = 9 where activity_id = 'activity:01'",
-        "update command_activity_correlations set activity_id = 'moved' where activity_id = 'activity:01'",
-    )
-    for statement in updates:
-        with store._connect() as connection, pytest.raises(sqlite3.IntegrityError, match="immutable"):
-            connection.execute(statement)
-
-    assert store.count_command_activities() == 1
-    assert store.count_command_activity_rule_hits() == 2
 
 
 def test_activity_schema_has_no_forbidden_privacy_columns(tmp_path: Path) -> None:

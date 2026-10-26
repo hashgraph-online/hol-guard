@@ -145,8 +145,8 @@ dashboard/src/approval-center-utils.tsx
 dashboard/src/queue-state.tsx
 dashboard/src/inbox*.tsx
 dashboard/src/approval-gate*.tsx
-hol-points-portal/src/lib/guard/triage/**
-hol-points-portal/src/lib/guard/review/**
+cloud-portal/src/lib/guard/triage/**
+cloud-portal/src/lib/guard/review/**
 ```
 
 ## No-fixture scan plan (HGLP013)

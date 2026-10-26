@@ -1,0 +1,1742 @@
+{
+  "schema": "hol-guard-cursor-native-review-answers.v1",
+  "now_micros": 1767323045678901,
+  "vectors": [
+    {
+      "home": "untokened",
+      "case": "pause",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}, \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}, \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}, \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "pause",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}, \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "pause",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}, \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause-reapproval",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"require-reapproval\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}, \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause-reapproval",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"require-reapproval\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}, \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause-reapproval",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"require-reapproval\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}, \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "pause-reapproval",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"require-reapproval\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}, \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "pause-reapproval",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"require-reapproval\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}, \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause-reason-without-link",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review.\"}, \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause-reason-without-link",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review.\"}, \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause-reason-without-link",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review.\"}, \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "pause-reason-without-link",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review.\"}, \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "pause-reason-without-link",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review.\"}, \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause-without-reason",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"review\", \"approval_url\": \" http://127.0.0.1:4781/approvals/0123456789abcdef \"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"agent_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause-without-reason",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"review\", \"approval_url\": \" http://127.0.0.1:4781/approvals/0123456789abcdef \"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"agent_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause-without-reason",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"review\", \"approval_url\": \" http://127.0.0.1:4781/approvals/0123456789abcdef \"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"agent_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "pause-without-reason",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"review\", \"approval_url\": \" http://127.0.0.1:4781/approvals/0123456789abcdef \"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"agent_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "pause-without-reason",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"review\", \"approval_url\": \" http://127.0.0.1:4781/approvals/0123456789abcdef \"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "block-with-link",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "block-with-link",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "block-with-link",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "block-with-link",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "block-with-link",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "queued-link",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"review\", \"risk_summary\": \"  why  \", \"approval_requests\": [{\"request_id\": \"x\"}, \"y\", {\"approval_url\": \"\\thttp://127.0.0.1:4781/approvals/0123456789abcdef\\n\"}]}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"why Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"agent_message\": \"why Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "queued-link",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"review\", \"risk_summary\": \"  why  \", \"approval_requests\": [{\"request_id\": \"x\"}, \"y\", {\"approval_url\": \"\\thttp://127.0.0.1:4781/approvals/0123456789abcdef\\n\"}]}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"why Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"agent_message\": \"why Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "queued-link",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"review\", \"risk_summary\": \"  why  \", \"approval_requests\": [{\"request_id\": \"x\"}, \"y\", {\"approval_url\": \"\\thttp://127.0.0.1:4781/approvals/0123456789abcdef\\n\"}]}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"why Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"agent_message\": \"why Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "queued-link",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"review\", \"risk_summary\": \"  why  \", \"approval_requests\": [{\"request_id\": \"x\"}, \"y\", {\"approval_url\": \"\\thttp://127.0.0.1:4781/approvals/0123456789abcdef\\n\"}]}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"why Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"agent_message\": \"why Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "queued-link",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"review\", \"risk_summary\": \"  why  \", \"approval_requests\": [{\"request_id\": \"x\"}, \"y\", {\"approval_url\": \"\\thttp://127.0.0.1:4781/approvals/0123456789abcdef\\n\"}]}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"why Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "decision-reason",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"sandbox-required\", \"guardApprovalUrl\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"decision_v2_json\": {\"user_title\": \"t\"}}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"t Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"agent_message\": \"t Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "decision-reason",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"sandbox-required\", \"guardApprovalUrl\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"decision_v2_json\": {\"user_title\": \"t\"}}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"t Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"agent_message\": \"t Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "decision-reason",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"sandbox-required\", \"guardApprovalUrl\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"decision_v2_json\": {\"user_title\": \"t\"}}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"t Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"agent_message\": \"t Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "decision-reason",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"sandbox-required\", \"guardApprovalUrl\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"decision_v2_json\": {\"user_title\": \"t\"}}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"t Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"agent_message\": \"t Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "decision-reason",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"sandbox-required\", \"guardApprovalUrl\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"decision_v2_json\": {\"user_title\": \"t\"}}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"t Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}, \"approval_url\": \"http://localhost:4781/approvals/r-1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://localhost:4781/approvals/r-1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://localhost:4781/approvals/r-1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}, \"approval_url\": \"http://localhost:4781/approvals/r-1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://localhost:4781/approvals/r-1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://localhost:4781/approvals/r-1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}, \"approval_url\": \"http://localhost:4781/approvals/r-1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://localhost:4781/approvals/r-1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://localhost:4781/approvals/r-1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "pause",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}, \"approval_url\": \"http://localhost:4781/approvals/r-1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://localhost:4781/approvals/r-1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://localhost:4781/approvals/r-1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "pause",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}, \"approval_url\": \"http://localhost:4781/approvals/r-1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://localhost:4781/approvals/r-1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://localhost:4781/approvals/r-1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause-reapproval",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"require-reapproval\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}, \"approval_url\": \"http://localhost:4781/approvals/r-1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://localhost:4781/approvals/r-1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://localhost:4781/approvals/r-1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause-reapproval",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"require-reapproval\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}, \"approval_url\": \"http://localhost:4781/approvals/r-1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://localhost:4781/approvals/r-1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://localhost:4781/approvals/r-1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause-reapproval",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"require-reapproval\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}, \"approval_url\": \"http://localhost:4781/approvals/r-1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://localhost:4781/approvals/r-1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://localhost:4781/approvals/r-1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "pause-reapproval",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"require-reapproval\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}, \"approval_url\": \"http://localhost:4781/approvals/r-1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://localhost:4781/approvals/r-1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://localhost:4781/approvals/r-1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "pause-reapproval",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"require-reapproval\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}, \"approval_url\": \"http://localhost:4781/approvals/r-1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://localhost:4781/approvals/r-1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://localhost:4781/approvals/r-1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause-reason-without-link",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review.\"}, \"approval_url\": \"http://localhost:4781/approvals/r-1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://localhost:4781/approvals/r-1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://localhost:4781/approvals/r-1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause-reason-without-link",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review.\"}, \"approval_url\": \"http://localhost:4781/approvals/r-1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://localhost:4781/approvals/r-1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://localhost:4781/approvals/r-1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause-reason-without-link",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review.\"}, \"approval_url\": \"http://localhost:4781/approvals/r-1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://localhost:4781/approvals/r-1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://localhost:4781/approvals/r-1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "pause-reason-without-link",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review.\"}, \"approval_url\": \"http://localhost:4781/approvals/r-1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://localhost:4781/approvals/r-1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://localhost:4781/approvals/r-1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "pause-reason-without-link",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review.\"}, \"approval_url\": \"http://localhost:4781/approvals/r-1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://localhost:4781/approvals/r-1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://localhost:4781/approvals/r-1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause-without-reason",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"review\", \"approval_url\": \" http://localhost:4781/approvals/r-1 \"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"agent_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause-without-reason",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"review\", \"approval_url\": \" http://localhost:4781/approvals/r-1 \"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"agent_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause-without-reason",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"review\", \"approval_url\": \" http://localhost:4781/approvals/r-1 \"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"agent_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "pause-without-reason",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"review\", \"approval_url\": \" http://localhost:4781/approvals/r-1 \"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"agent_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "pause-without-reason",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"review\", \"approval_url\": \" http://localhost:4781/approvals/r-1 \"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "block-with-link",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "block-with-link",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "block-with-link",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "block-with-link",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "block-with-link",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "queued-link",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"review\", \"risk_summary\": \"  why  \", \"approval_requests\": [{\"request_id\": \"x\"}, \"y\", {\"approval_url\": \"\\thttp://localhost:4781/approvals/r-1\\n\"}]}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"why Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"agent_message\": \"why Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "queued-link",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"review\", \"risk_summary\": \"  why  \", \"approval_requests\": [{\"request_id\": \"x\"}, \"y\", {\"approval_url\": \"\\thttp://localhost:4781/approvals/r-1\\n\"}]}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"why Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"agent_message\": \"why Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "queued-link",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"review\", \"risk_summary\": \"  why  \", \"approval_requests\": [{\"request_id\": \"x\"}, \"y\", {\"approval_url\": \"\\thttp://localhost:4781/approvals/r-1\\n\"}]}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"why Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"agent_message\": \"why Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "queued-link",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"review\", \"risk_summary\": \"  why  \", \"approval_requests\": [{\"request_id\": \"x\"}, \"y\", {\"approval_url\": \"\\thttp://localhost:4781/approvals/r-1\\n\"}]}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"why Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"agent_message\": \"why Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "queued-link",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"review\", \"risk_summary\": \"  why  \", \"approval_requests\": [{\"request_id\": \"x\"}, \"y\", {\"approval_url\": \"\\thttp://localhost:4781/approvals/r-1\\n\"}]}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"why Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "decision-reason",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"sandbox-required\", \"guardApprovalUrl\": \"http://localhost:4781/approvals/r-1\", \"decision_v2_json\": {\"user_title\": \"t\"}}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"t Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"agent_message\": \"t Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "decision-reason",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"sandbox-required\", \"guardApprovalUrl\": \"http://localhost:4781/approvals/r-1\", \"decision_v2_json\": {\"user_title\": \"t\"}}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"t Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"agent_message\": \"t Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "decision-reason",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"sandbox-required\", \"guardApprovalUrl\": \"http://localhost:4781/approvals/r-1\", \"decision_v2_json\": {\"user_title\": \"t\"}}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"t Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"agent_message\": \"t Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "decision-reason",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"sandbox-required\", \"guardApprovalUrl\": \"http://localhost:4781/approvals/r-1\", \"decision_v2_json\": {\"user_title\": \"t\"}}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"t Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\", \"agent_message\": \"t Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "decision-reason",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"sandbox-required\", \"guardApprovalUrl\": \"http://localhost:4781/approvals/r-1\", \"decision_v2_json\": {\"user_title\": \"t\"}}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"t Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}, \"approval_url\": \"https://guard.example.test/approvals/r1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"https://guard.example.test/approvals/r1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}, \"approval_url\": \"https://guard.example.test/approvals/r1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"https://guard.example.test/approvals/r1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}, \"approval_url\": \"https://guard.example.test/approvals/r1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"https://guard.example.test/approvals/r1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "pause",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}, \"approval_url\": \"https://guard.example.test/approvals/r1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"https://guard.example.test/approvals/r1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "pause",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}, \"approval_url\": \"https://guard.example.test/approvals/r1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"https://guard.example.test/approvals/r1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause-reapproval",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"require-reapproval\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}, \"approval_url\": \"https://guard.example.test/approvals/r1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"https://guard.example.test/approvals/r1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause-reapproval",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"require-reapproval\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}, \"approval_url\": \"https://guard.example.test/approvals/r1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"https://guard.example.test/approvals/r1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause-reapproval",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"require-reapproval\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}, \"approval_url\": \"https://guard.example.test/approvals/r1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"https://guard.example.test/approvals/r1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "pause-reapproval",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"require-reapproval\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}, \"approval_url\": \"https://guard.example.test/approvals/r1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"https://guard.example.test/approvals/r1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "pause-reapproval",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"require-reapproval\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}, \"approval_url\": \"https://guard.example.test/approvals/r1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"https://guard.example.test/approvals/r1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause-reason-without-link",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review.\"}, \"approval_url\": \"https://guard.example.test/approvals/r1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"https://guard.example.test/approvals/r1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause-reason-without-link",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review.\"}, \"approval_url\": \"https://guard.example.test/approvals/r1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"https://guard.example.test/approvals/r1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause-reason-without-link",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review.\"}, \"approval_url\": \"https://guard.example.test/approvals/r1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"https://guard.example.test/approvals/r1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "pause-reason-without-link",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review.\"}, \"approval_url\": \"https://guard.example.test/approvals/r1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"https://guard.example.test/approvals/r1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "pause-reason-without-link",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review.\"}, \"approval_url\": \"https://guard.example.test/approvals/r1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"https://guard.example.test/approvals/r1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause-without-reason",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"review\", \"approval_url\": \" https://guard.example.test/approvals/r1 \"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause-without-reason",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"review\", \"approval_url\": \" https://guard.example.test/approvals/r1 \"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "pause-without-reason",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"review\", \"approval_url\": \" https://guard.example.test/approvals/r1 \"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "pause-without-reason",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"review\", \"approval_url\": \" https://guard.example.test/approvals/r1 \"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "pause-without-reason",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"review\", \"approval_url\": \" https://guard.example.test/approvals/r1 \"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "block-with-link",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "block-with-link",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "block-with-link",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "block-with-link",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "block-with-link",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "queued-link",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"review\", \"risk_summary\": \"  why  \", \"approval_requests\": [{\"request_id\": \"x\"}, \"y\", {\"approval_url\": \"\\thttps://guard.example.test/approvals/r1\\n\"}]}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"why Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"why Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "queued-link",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"review\", \"risk_summary\": \"  why  \", \"approval_requests\": [{\"request_id\": \"x\"}, \"y\", {\"approval_url\": \"\\thttps://guard.example.test/approvals/r1\\n\"}]}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"why Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"why Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "queued-link",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"review\", \"risk_summary\": \"  why  \", \"approval_requests\": [{\"request_id\": \"x\"}, \"y\", {\"approval_url\": \"\\thttps://guard.example.test/approvals/r1\\n\"}]}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"why Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"why Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "queued-link",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"review\", \"risk_summary\": \"  why  \", \"approval_requests\": [{\"request_id\": \"x\"}, \"y\", {\"approval_url\": \"\\thttps://guard.example.test/approvals/r1\\n\"}]}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"why Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"why Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "queued-link",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"review\", \"risk_summary\": \"  why  \", \"approval_requests\": [{\"request_id\": \"x\"}, \"y\", {\"approval_url\": \"\\thttps://guard.example.test/approvals/r1\\n\"}]}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"why Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "decision-reason",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"sandbox-required\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"decision_v2_json\": {\"user_title\": \"t\"}}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"t Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"t Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "decision-reason",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"sandbox-required\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"decision_v2_json\": {\"user_title\": \"t\"}}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"t Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"t Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "decision-reason",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"sandbox-required\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"decision_v2_json\": {\"user_title\": \"t\"}}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"t Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"t Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "decision-reason",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"sandbox-required\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"decision_v2_json\": {\"user_title\": \"t\"}}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"t Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"t Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "decision-reason",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"sandbox-required\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"decision_v2_json\": {\"user_title\": \"t\"}}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"t Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "review-without-link",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"review\", \"reason\": \"Needs a look.\", \"reason_code\": \"c\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Needs a look.\", \"agent_message\": \"Needs a look.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "review-without-link",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"review\", \"reason\": \"Needs a look.\", \"reason_code\": \"c\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Needs a look.\", \"agent_message\": \"Needs a look.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "review-without-link",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"review\", \"reason\": \"Needs a look.\", \"reason_code\": \"c\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Needs a look.\", \"agent_message\": \"Needs a look.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "review-without-link",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"review\", \"reason\": \"Needs a look.\", \"reason_code\": \"c\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Needs a look.\", \"agent_message\": \"Needs a look.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "review-without-link",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"review\", \"reason\": \"Needs a look.\", \"reason_code\": \"c\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Needs a look.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "reapproval-without-link",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"require-reapproval\", \"stopReason\": \" s \"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"s\", \"agent_message\": \"s\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "reapproval-without-link",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"require-reapproval\", \"stopReason\": \" s \"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"s\", \"agent_message\": \"s\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "reapproval-without-link",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"require-reapproval\", \"stopReason\": \" s \"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"s\", \"agent_message\": \"s\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "reapproval-without-link",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"require-reapproval\", \"stopReason\": \" s \"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"s\", \"agent_message\": \"s\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "reapproval-without-link",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"require-reapproval\", \"stopReason\": \" s \"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"s\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "review-without-reason",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"review\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"HOL Guard blocked this Cursor action.\", \"agent_message\": \"HOL Guard blocked this Cursor action.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "review-without-reason",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"review\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"HOL Guard blocked this Cursor action.\", \"agent_message\": \"HOL Guard blocked this Cursor action.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "review-without-reason",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"review\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"HOL Guard blocked this Cursor action.\", \"agent_message\": \"HOL Guard blocked this Cursor action.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "review-without-reason",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"review\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"HOL Guard blocked this Cursor action.\", \"agent_message\": \"HOL Guard blocked this Cursor action.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "review-without-reason",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"review\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"HOL Guard blocked this Cursor action.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "prompt-allow",
+      "event": "UserPromptSubmit",
+      "response": "{\"policy_action\": \"allow\", \"reason_code\": \"native_policy_allow\", \"hookSpecificOutput\": {\"hookEventName\": \"UserPromptSubmit\"}}",
+      "stdout": "{\"permission\": \"allow\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "prompt-allow",
+      "event": "prompt",
+      "response": "{\"policy_action\": \"allow\", \"reason_code\": \"native_policy_allow\", \"hookSpecificOutput\": {\"hookEventName\": \"UserPromptSubmit\"}}",
+      "stdout": "{\"permission\": \"allow\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "prompt-block",
+      "event": "UserPromptSubmit",
+      "response": "{\"decision\": \"block\", \"reason\": \"Prompt blocked: \\u00e9 \\\"q\\\"\", \"systemMessage\": \"Prompt blocked.\", \"policy_action\": \"block\", \"reason_code\": \"native_prompt_block\", \"hookSpecificOutput\": {\"hookEventName\": \"UserPromptSubmit\"}}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Prompt blocked: \\u00e9 \\\"q\\\"\", \"agent_message\": \"Prompt blocked: \\u00e9 \\\"q\\\"\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "prompt-block",
+      "event": "prompt",
+      "response": "{\"decision\": \"block\", \"reason\": \"Prompt blocked: \\u00e9 \\\"q\\\"\", \"systemMessage\": \"Prompt blocked.\", \"policy_action\": \"block\", \"reason_code\": \"native_prompt_block\", \"hookSpecificOutput\": {\"hookEventName\": \"UserPromptSubmit\"}}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Prompt blocked: \\u00e9 \\\"q\\\"\", \"agent_message\": \"Prompt blocked: \\u00e9 \\\"q\\\"\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "untokened",
+      "case": "prompt-review",
+      "event": "UserPromptSubmit",
+      "response": "{\"decision\": \"block\", \"reason\": \"Prompt needs review.\", \"systemMessage\": \"Prompt needs review.\", \"policy_action\": \"review\", \"reason_code\": \"native_prompt_review\", \"hookSpecificOutput\": {\"hookEventName\": \"UserPromptSubmit\"}}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Prompt needs review.\", \"agent_message\": \"Prompt needs review.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "untokened",
+      "case": "prompt-review",
+      "event": "prompt",
+      "response": "{\"decision\": \"block\", \"reason\": \"Prompt needs review.\", \"systemMessage\": \"Prompt needs review.\", \"policy_action\": \"review\", \"reason_code\": \"native_prompt_review\", \"hookSpecificOutput\": {\"hookEventName\": \"UserPromptSubmit\"}}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Prompt needs review.\", \"agent_message\": \"Prompt needs review.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "tokened",
+      "case": "pause",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}, \"approval_url\": \"https://guard.example.test/approvals/r1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"https://guard.example.test/approvals/r1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "pause",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}, \"approval_url\": \"https://guard.example.test/approvals/r1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"https://guard.example.test/approvals/r1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "pause",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}, \"approval_url\": \"https://guard.example.test/approvals/r1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"https://guard.example.test/approvals/r1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "tokened",
+      "case": "pause",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}, \"approval_url\": \"https://guard.example.test/approvals/r1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"https://guard.example.test/approvals/r1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "tokened",
+      "case": "pause",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}, \"approval_url\": \"https://guard.example.test/approvals/r1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"https://guard.example.test/approvals/r1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "pause-reapproval",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"require-reapproval\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}, \"approval_url\": \"https://guard.example.test/approvals/r1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"https://guard.example.test/approvals/r1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "pause-reapproval",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"require-reapproval\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}, \"approval_url\": \"https://guard.example.test/approvals/r1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"https://guard.example.test/approvals/r1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "pause-reapproval",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"require-reapproval\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}, \"approval_url\": \"https://guard.example.test/approvals/r1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"https://guard.example.test/approvals/r1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "tokened",
+      "case": "pause-reapproval",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"require-reapproval\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}, \"approval_url\": \"https://guard.example.test/approvals/r1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"https://guard.example.test/approvals/r1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "tokened",
+      "case": "pause-reapproval",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"require-reapproval\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}, \"approval_url\": \"https://guard.example.test/approvals/r1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"https://guard.example.test/approvals/r1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "pause-reason-without-link",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review.\"}, \"approval_url\": \"https://guard.example.test/approvals/r1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"https://guard.example.test/approvals/r1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "pause-reason-without-link",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review.\"}, \"approval_url\": \"https://guard.example.test/approvals/r1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"https://guard.example.test/approvals/r1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "pause-reason-without-link",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review.\"}, \"approval_url\": \"https://guard.example.test/approvals/r1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"https://guard.example.test/approvals/r1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "tokened",
+      "case": "pause-reason-without-link",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review.\"}, \"approval_url\": \"https://guard.example.test/approvals/r1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"https://guard.example.test/approvals/r1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "tokened",
+      "case": "pause-reason-without-link",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review.\"}, \"approval_url\": \"https://guard.example.test/approvals/r1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"https://guard.example.test/approvals/r1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "pause-without-reason",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"review\", \"approval_url\": \" https://guard.example.test/approvals/r1 \"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "pause-without-reason",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"review\", \"approval_url\": \" https://guard.example.test/approvals/r1 \"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "pause-without-reason",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"review\", \"approval_url\": \" https://guard.example.test/approvals/r1 \"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "tokened",
+      "case": "pause-without-reason",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"review\", \"approval_url\": \" https://guard.example.test/approvals/r1 \"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "tokened",
+      "case": "pause-without-reason",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"review\", \"approval_url\": \" https://guard.example.test/approvals/r1 \"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"HOL Guard needs approval for this Cursor action. Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "block-with-link",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "block-with-link",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "block-with-link",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "block-with-link",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "block-with-link",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"https://guard.example.test/approvals/r1\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "queued-link",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"review\", \"risk_summary\": \"  why  \", \"approval_requests\": [{\"request_id\": \"x\"}, \"y\", {\"approval_url\": \"\\thttps://guard.example.test/approvals/r1\\n\"}]}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"why Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"why Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "queued-link",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"review\", \"risk_summary\": \"  why  \", \"approval_requests\": [{\"request_id\": \"x\"}, \"y\", {\"approval_url\": \"\\thttps://guard.example.test/approvals/r1\\n\"}]}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"why Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"why Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "queued-link",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"review\", \"risk_summary\": \"  why  \", \"approval_requests\": [{\"request_id\": \"x\"}, \"y\", {\"approval_url\": \"\\thttps://guard.example.test/approvals/r1\\n\"}]}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"why Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"why Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "tokened",
+      "case": "queued-link",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"review\", \"risk_summary\": \"  why  \", \"approval_requests\": [{\"request_id\": \"x\"}, \"y\", {\"approval_url\": \"\\thttps://guard.example.test/approvals/r1\\n\"}]}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"why Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"why Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "tokened",
+      "case": "queued-link",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"review\", \"risk_summary\": \"  why  \", \"approval_requests\": [{\"request_id\": \"x\"}, \"y\", {\"approval_url\": \"\\thttps://guard.example.test/approvals/r1\\n\"}]}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"why Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "decision-reason",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"sandbox-required\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"decision_v2_json\": {\"user_title\": \"t\"}}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"t Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"t Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "decision-reason",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"sandbox-required\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"decision_v2_json\": {\"user_title\": \"t\"}}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"t Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"t Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "decision-reason",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"sandbox-required\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"decision_v2_json\": {\"user_title\": \"t\"}}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"t Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"t Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "decision-reason",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"sandbox-required\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"decision_v2_json\": {\"user_title\": \"t\"}}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"t Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\", \"agent_message\": \"t Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "decision-reason",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"sandbox-required\", \"guardApprovalUrl\": \"https://guard.example.test/approvals/r1\", \"decision_v2_json\": {\"user_title\": \"t\"}}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"t Open HOL Guard to approve or keep this blocked: https://guard.example.test/approvals/r1.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "pause-signed",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}, \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "pause-signed",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}, \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "pause-signed",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}, \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "tokened",
+      "case": "pause-signed",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}, \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "tokened",
+      "case": "pause-signed",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef.\"}, \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "block-with-link",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "block-with-link",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "block-with-link",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "block-with-link",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "block-with-link",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://127.0.0.1:4781/approvals/0123456789abcdef#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "pause-signed",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1.\"}, \"approval_url\": \"http://localhost:4781/approvals/r-1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://localhost:4781/approvals/r-1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://localhost:4781/approvals/r-1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "pause-signed",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1.\"}, \"approval_url\": \"http://localhost:4781/approvals/r-1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://localhost:4781/approvals/r-1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://localhost:4781/approvals/r-1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "pause-signed",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1.\"}, \"approval_url\": \"http://localhost:4781/approvals/r-1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://localhost:4781/approvals/r-1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://localhost:4781/approvals/r-1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "tokened",
+      "case": "pause-signed",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1.\"}, \"approval_url\": \"http://localhost:4781/approvals/r-1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://localhost:4781/approvals/r-1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://localhost:4781/approvals/r-1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "tokened",
+      "case": "pause-signed",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1.\"}, \"approval_url\": \"http://localhost:4781/approvals/r-1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://localhost:4781/approvals/r-1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://localhost:4781/approvals/r-1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "block-with-link",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "block-with-link",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "block-with-link",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "block-with-link",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "block-with-link",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://localhost:4781/approvals/r-1\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://localhost:4781/approvals/r-1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "pause-signed",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1.\"}, \"approval_url\": \"http://[::1]:4781/approvals/r_1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://[::1]:4781/approvals/r_1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://[::1]:4781/approvals/r_1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://[::1]:4781/approvals/r_1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "pause-signed",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1.\"}, \"approval_url\": \"http://[::1]:4781/approvals/r_1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://[::1]:4781/approvals/r_1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://[::1]:4781/approvals/r_1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://[::1]:4781/approvals/r_1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "pause-signed",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1.\"}, \"approval_url\": \"http://[::1]:4781/approvals/r_1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://[::1]:4781/approvals/r_1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://[::1]:4781/approvals/r_1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://[::1]:4781/approvals/r_1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "tokened",
+      "case": "pause-signed",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1.\"}, \"approval_url\": \"http://[::1]:4781/approvals/r_1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://[::1]:4781/approvals/r_1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://[::1]:4781/approvals/r_1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://[::1]:4781/approvals/r_1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "tokened",
+      "case": "pause-signed",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"review\", \"reason_code\": \"native_policy_review\", \"reason\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1.\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"ask\", \"permissionDecisionReason\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1.\"}, \"approval_url\": \"http://[::1]:4781/approvals/r_1\", \"approval_request_id\": \"0123456789abcdef\", \"primary_approval_request_id\": \"0123456789abcdef\", \"primary_approval_url\": \"http://[::1]:4781/approvals/r_1\", \"guardApprovalRequestId\": \"0123456789abcdef\", \"guardApprovalUrl\": \"http://[::1]:4781/approvals/r_1\", \"approval_requests\": [{\"request_id\": \"0123456789abcdef\", \"approval_url\": \"http://[::1]:4781/approvals/r_1\"}], \"prompted\": true, \"approval_center_url\": \"http://127.0.0.1:4781\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env needs review. Open HOL Guard to approve: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "block-with-link",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://[::1]:4781/approvals/r_1\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "block-with-link",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://[::1]:4781/approvals/r_1\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "block-with-link",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://[::1]:4781/approvals/r_1\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "block-with-link",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://[::1]:4781/approvals/r_1\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\", \"agent_message\": \"r Open HOL Guard to approve or keep this blocked: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "block-with-link",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"block\", \"reason\": \"r\", \"approval_url\": \"http://[::1]:4781/approvals/r_1\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r Open HOL Guard to approve or keep this blocked: http://[::1]:4781/approvals/r_1#guard-token=gld1.eyJhdWQiOiJndWFyZC1sb2NhbC1kYWVtb24iLCJ2ZXJzaW9uIjoiZ3VhcmQtbG9jYWwtZGFlbW9uLXNlc3Npb24udjEiLCJzdXJmYWNlIjoiYXBwcm92YWwtY2VudGVyIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMDJUMTU6MDQ6MDUuNjc4OTAxKzAwOjAwIiwic2Vzc2lvbl9zdGFydGVkX2F0IjoiMjAyNi0wMS0wMlQwMzowNDowNS42Nzg5MDErMDA6MDAifQ.sLE6vlg0XamlRaaQIEDau9GxGuhltM0BG7gzovUgyXA.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "allow-with-link",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"allow\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}",
+      "stdout": "{\"permission\": \"allow\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "tokened",
+      "case": "allow-with-link",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"allow\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}",
+      "stdout": "{\"permission\": \"allow\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "tokened",
+      "case": "allow-with-link",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"allow\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}",
+      "stdout": "{\"permission\": \"allow\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "tokened",
+      "case": "allow-with-link",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"allow\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}",
+      "stdout": "{\"permission\": \"allow\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "tokened",
+      "case": "allow-with-link",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"allow\", \"approval_url\": \"http://127.0.0.1:4781/approvals/0123456789abcdef\"}",
+      "stdout": "{\"permission\": \"allow\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "tokened",
+      "case": "review-without-link",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"review\", \"reason\": \"Needs a look.\", \"reason_code\": \"c\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Needs a look.\", \"agent_message\": \"Needs a look.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "review-without-link",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"review\", \"reason\": \"Needs a look.\", \"reason_code\": \"c\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Needs a look.\", \"agent_message\": \"Needs a look.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "review-without-link",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"review\", \"reason\": \"Needs a look.\", \"reason_code\": \"c\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Needs a look.\", \"agent_message\": \"Needs a look.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "tokened",
+      "case": "review-without-link",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"review\", \"reason\": \"Needs a look.\", \"reason_code\": \"c\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Needs a look.\", \"agent_message\": \"Needs a look.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "tokened",
+      "case": "review-without-link",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"review\", \"reason\": \"Needs a look.\", \"reason_code\": \"c\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Needs a look.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "reapproval-without-link",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"require-reapproval\", \"stopReason\": \" s \"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"s\", \"agent_message\": \"s\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "reapproval-without-link",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"require-reapproval\", \"stopReason\": \" s \"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"s\", \"agent_message\": \"s\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "reapproval-without-link",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"require-reapproval\", \"stopReason\": \" s \"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"s\", \"agent_message\": \"s\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "tokened",
+      "case": "reapproval-without-link",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"require-reapproval\", \"stopReason\": \" s \"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"s\", \"agent_message\": \"s\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "tokened",
+      "case": "reapproval-without-link",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"require-reapproval\", \"stopReason\": \" s \"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"s\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "review-without-reason",
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"review\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"HOL Guard blocked this Cursor action.\", \"agent_message\": \"HOL Guard blocked this Cursor action.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "review-without-reason",
+      "event": " PreToolUse ",
+      "response": "{\"policy_action\": \"review\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"HOL Guard blocked this Cursor action.\", \"agent_message\": \"HOL Guard blocked this Cursor action.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "review-without-reason",
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"review\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"HOL Guard blocked this Cursor action.\", \"agent_message\": \"HOL Guard blocked this Cursor action.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "tokened",
+      "case": "review-without-reason",
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\": \"review\"}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"HOL Guard blocked this Cursor action.\", \"agent_message\": \"HOL Guard blocked this Cursor action.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "tokened",
+      "case": "review-without-reason",
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"review\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"HOL Guard blocked this Cursor action.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "prompt-allow",
+      "event": "UserPromptSubmit",
+      "response": "{\"policy_action\": \"allow\", \"reason_code\": \"native_policy_allow\", \"hookSpecificOutput\": {\"hookEventName\": \"UserPromptSubmit\"}}",
+      "stdout": "{\"permission\": \"allow\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "tokened",
+      "case": "prompt-allow",
+      "event": "prompt",
+      "response": "{\"policy_action\": \"allow\", \"reason_code\": \"native_policy_allow\", \"hookSpecificOutput\": {\"hookEventName\": \"UserPromptSubmit\"}}",
+      "stdout": "{\"permission\": \"allow\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "tokened",
+      "case": "prompt-block",
+      "event": "UserPromptSubmit",
+      "response": "{\"decision\": \"block\", \"reason\": \"Prompt blocked: \\u00e9 \\\"q\\\"\", \"systemMessage\": \"Prompt blocked.\", \"policy_action\": \"block\", \"reason_code\": \"native_prompt_block\", \"hookSpecificOutput\": {\"hookEventName\": \"UserPromptSubmit\"}}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Prompt blocked: \\u00e9 \\\"q\\\"\", \"agent_message\": \"Prompt blocked: \\u00e9 \\\"q\\\"\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "prompt-block",
+      "event": "prompt",
+      "response": "{\"decision\": \"block\", \"reason\": \"Prompt blocked: \\u00e9 \\\"q\\\"\", \"systemMessage\": \"Prompt blocked.\", \"policy_action\": \"block\", \"reason_code\": \"native_prompt_block\", \"hookSpecificOutput\": {\"hookEventName\": \"UserPromptSubmit\"}}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Prompt blocked: \\u00e9 \\\"q\\\"\", \"agent_message\": \"Prompt blocked: \\u00e9 \\\"q\\\"\"}\n",
+      "exit_code": 2
+    },
+    {
+      "home": "tokened",
+      "case": "prompt-review",
+      "event": "UserPromptSubmit",
+      "response": "{\"decision\": \"block\", \"reason\": \"Prompt needs review.\", \"systemMessage\": \"Prompt needs review.\", \"policy_action\": \"review\", \"reason_code\": \"native_prompt_review\", \"hookSpecificOutput\": {\"hookEventName\": \"UserPromptSubmit\"}}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Prompt needs review.\", \"agent_message\": \"Prompt needs review.\"}\n",
+      "exit_code": 0
+    },
+    {
+      "home": "tokened",
+      "case": "prompt-review",
+      "event": "prompt",
+      "response": "{\"decision\": \"block\", \"reason\": \"Prompt needs review.\", \"systemMessage\": \"Prompt needs review.\", \"policy_action\": \"review\", \"reason_code\": \"native_prompt_review\", \"hookSpecificOutput\": {\"hookEventName\": \"UserPromptSubmit\"}}",
+      "stdout": "{\"permission\": \"ask\", \"user_message\": \"Prompt needs review.\", \"agent_message\": \"Prompt needs review.\"}\n",
+      "exit_code": 0
+    }
+  ]
+}

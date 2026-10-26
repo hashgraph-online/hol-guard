@@ -343,64 +343,11 @@ class DecisionContext:
             )
 
 
-@dataclass(frozen=True, slots=True)
-class EvidenceSummary:
-    """Privacy-safe bounded decision/evidence summary."""
-
-    context_digest: str
-    guarantee_kinds: tuple[str, ...]
-    achieved_boundary: GuardExecutionAssuranceBoundary
-    degraded_reason: str | None = None
-
-    def __post_init__(self) -> None:
-        _ = _require_sha256(self.context_digest, "context_digest")
-        for kind in self.guarantee_kinds:
-            _ = _require_str(kind, "guarantee_kind")
-        _require_enum(self.achieved_boundary, GuardExecutionAssuranceBoundary, "achieved_boundary")
-        if self.degraded_reason is not None:
-            _ = _require_str(self.degraded_reason, "degraded_reason")
-
-
-def require_guarantees_satisfied(
-    required: Iterable[AtomicGuaranteeKind],
-    provided: Iterable[AtomicGuarantee],
-    minimum_boundary: GuardExecutionAssuranceBoundary,
-) -> tuple[str, ...]:
-    """Return unsatisfied required guarantee kinds.
-
-    A required kind is satisfied only if an enforced guarantee at or above the
-    minimum boundary is present. Boundary never substitutes for a missing
-    guarantee.
-    """
-
-    _require_enum(minimum_boundary, GuardExecutionAssuranceBoundary, "minimum_boundary")
-    boundary_order = (
-        GuardExecutionAssuranceBoundary.OBSERVED_HOST,
-        GuardExecutionAssuranceBoundary.CONTROLLED_HOST,
-        GuardExecutionAssuranceBoundary.OS_ISOLATED,
-        GuardExecutionAssuranceBoundary.HARDWARE_ISOLATED,
-    )
-    minimum_index = boundary_order.index(minimum_boundary)
-    satisfied: set[AtomicGuaranteeKind] = set()
-    for guarantee in provided:
-        _ = _require_instance(guarantee, AtomicGuarantee, "guarantee")
-        if not guarantee.enforced:
-            continue
-        if boundary_order.index(guarantee.boundary) < minimum_index:
-            continue
-        satisfied.add(guarantee.kind)
-    unsatisfied = [kind for kind in required if kind not in satisfied]
-    for kind in unsatisfied:
-        _require_enum(kind, AtomicGuaranteeKind, "required kind")
-    return tuple(kind.value for kind in unsatisfied)
-
-
 __all__ = [
     "EXECUTION_ASSURANCE_SCHEMA_VERSION",
     "AtomicGuarantee",
     "AtomicGuaranteeKind",
     "DecisionContext",
-    "EvidenceSummary",
     "ExecutionLease",
     "ExecutionOutcome",
     "GuardExecutionAssuranceBoundary",
@@ -410,5 +357,4 @@ __all__ = [
     "SecretHandle",
     "TerminalStatement",
     "framed_digest",
-    "require_guarantees_satisfied",
 ]

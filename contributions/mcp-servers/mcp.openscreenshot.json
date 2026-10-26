@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.openscreenshot",
+  "version": "1.0.0",
+  "name": "OpenScreenShot MCP",
+  "description": "Reviews OpenScreenShot capture_screenshot calls. Each call loads the URL the agent gives in a fresh headless Chrome that runs with --no-sandbox, and returns the page to the client as a PNG. The URL can carry data to its host, and the image enters the model context. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.pghqdev",
+    "displayName": "OpenScreenShot @PGHQdev",
+    "url": "https://github.com/PGHQdev/OpenScreenShot"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniGlobeAlt", "background": "#0D1117" },
+  "homepage": "https://openscreenshot.app",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "openscreenshot"
+  },
+  "riskClasses": [
+    "external-network-read",
+    "external-content-ingestion",
+    "unsandboxed-browser-launch",
+    "package-or-source-installation"
+  ],
+  "tools": [
+    { "name": "capture_screenshot", "state": "review" },
+    { "name": "other", "state": "inherit" }
+  ],
+  "referenceUrls": [
+    "https://github.com/PGHQdev/OpenScreenShot/tree/main/mcp",
+    "https://www.npmjs.com/package/openscreenshot",
+    "https://openscreenshot.app/blog/screenshot-mcp-server/"
+  ],
+  "saferAlternatives": [
+    "Check the url in each capture_screenshot call before approving it. A query string or path can carry data to that host.",
+    "Pass redact selectors, patterns (email, phone, secret), or rects, so the data is covered before the image reaches the client or a hosted model.",
+    "Capture only URLs you trust. The headless browser runs with --no-sandbox so it works in containers and CI.",
+    "Pin the package version in the launch args, for example npx -y openscreenshot@2.5.1."
+  ]
+}

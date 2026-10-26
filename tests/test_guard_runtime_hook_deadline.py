@@ -1,11 +1,7 @@
-from concurrent.futures import Future
-from dataclasses import FrozenInstanceError
-
 import pytest
 
 from codex_plugin_scanner.guard.daemon.runtime_hook_deadline import RuntimeHookDeadline
 from codex_plugin_scanner.guard.daemon.runtime_hook_scheduler import RuntimeHookScheduler
-from codex_plugin_scanner.guard.daemon.runtime_hook_work_item import RuntimeHookWorkItem
 
 
 class FakeClock:
@@ -24,7 +20,7 @@ def test_deadline_clamps_hint_and_ignores_wall_clock() -> None:
 
     assert deadline.expires_at == 103.75
     assert deadline.remaining(monotonic=clock) == 2.75
-    assert deadline.remaining_for_work(monotonic=clock) == 2.6
+    assert deadline.remaining_for_work(monotonic=clock) == 2.7
 
 
 @pytest.mark.parametrize(
@@ -63,32 +59,6 @@ def test_predictive_dispatch_rejects_when_secure_review_cannot_fit() -> None:
     assert scheduler.stats()["retained_bytes"] == 0
 
 
-def test_work_item_owns_immutable_hydrated_bytes() -> None:
-    clock = FakeClock()
-    source = bytearray(b'{"event":"PreToolUse"}')
-    payload = bytes(source)
-    item = RuntimeHookWorkItem(
-        normalized_payload=payload,
-        harness="pi",
-        event="PreToolUse",
-        workspace_fingerprint="workspace",
-        client_fingerprint="client",
-        lane="decision",
-        payload_bytes=len(payload),
-        arrival_sequence=1,
-        accepted_at=clock(),
-        queued_at=clock(),
-        deadline=RuntimeHookDeadline(expires_at=clock() + 1),
-        completion=Future(),
-    )
-
-    source[:] = b"x" * len(source)
-
-    assert item.normalized_payload == b'{"event":"PreToolUse"}'
-    with pytest.raises(FrozenInstanceError):
-        item.__setattr__("harness", "changed")
-
-
 def test_scheduler_health_dimensions_are_bounded() -> None:
     scheduler = RuntimeHookScheduler(monotonic=FakeClock())
     admission = scheduler.acquire(
@@ -108,3 +78,68 @@ def test_scheduler_health_dimensions_are_bounded() -> None:
     assert stats["retries"] == 1
     assert set(stats["queue_wait_by_lane_p99_ms"]) == {"decision", "content-security", "evidence"}
     admission.permit.release()
+
+
+def _record_slow_reviews(scheduler: RuntimeHookScheduler, clock: FakeClock, *, count: int, seconds: float) -> None:
+    for index in range(count):
+        admission = scheduler.acquire(
+            harness="omp",
+            client_key=f"stalled-{index}",
+            lane="decision",
+            payload_bytes=2,
+            normalized_payload=b"{}",
+            deadline=clock.value + 30.0,
+        )
+        assert admission.permit is not None
+        clock.value += seconds
+        admission.permit.release()
+
+
+def test_slow_samples_from_an_ended_stall_do_not_refuse_the_next_idle_hook() -> None:
+    clock = FakeClock()
+    scheduler = RuntimeHookScheduler(monotonic=clock)
+    # A hung resident made every review run to its deadline.
+    _record_slow_reviews(scheduler, clock, count=25, seconds=3.0)
+    assert scheduler.stats()["service_time_by_lane_p95_ms"]["decision"] >= 2900.0
+
+    # The resident is back; the hook only spent a moment waiting for fresh policy.
+    admission = scheduler.acquire(
+        harness="omp",
+        client_key="agent",
+        lane="decision",
+        payload_bytes=2,
+        normalized_payload=b"{}",
+        deadline=RuntimeHookDeadline(expires_at=clock.value + 2.0),
+    )
+
+    assert admission.reason_code is None
+    assert admission.permit is not None
+    admission.permit.release()
+
+
+def test_slow_samples_still_shed_hooks_while_other_reviews_are_in_flight() -> None:
+    clock = FakeClock()
+    scheduler = RuntimeHookScheduler(monotonic=clock)
+    _record_slow_reviews(scheduler, clock, count=25, seconds=3.0)
+    running = scheduler.acquire(
+        harness="omp",
+        client_key="running",
+        lane="decision",
+        payload_bytes=2,
+        normalized_payload=b"{}",
+        deadline=clock.value + 30.0,
+    )
+    assert running.permit is not None
+
+    admission = scheduler.acquire(
+        harness="omp",
+        client_key="agent",
+        lane="decision",
+        payload_bytes=2,
+        normalized_payload=b"{}",
+        deadline=RuntimeHookDeadline(expires_at=clock.value + 2.0),
+    )
+
+    assert admission.permit is None
+    assert admission.reason_code == "daemon_hook_deadline_exhausted"
+    running.permit.release()

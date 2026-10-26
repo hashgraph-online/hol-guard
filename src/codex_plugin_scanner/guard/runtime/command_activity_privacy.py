@@ -246,48 +246,6 @@ def validate_activity_schema_privacy() -> None:
         raise ValueError("raw or installation identifiers cannot enter command activity schemas")
 
 
-def validate_cloud_payload(payload: object) -> None:
-    """Reject non-aggregate, nested, or unexpected cloud payload shapes."""
-
-    if not isinstance(payload, dict):
-        raise ValueError("cloud command activity payload must be a dictionary")
-    typed_payload = cast(dict[object, object], payload)
-    expected = {"day", "dimension", "dimension_value", "count", "schema_version"}
-    if set(typed_payload) != expected or any(
-        isinstance(value, (dict, list, tuple, set)) for value in typed_payload.values()
-    ):
-        raise ValueError("cloud command activity payload must use the exact flat aggregate allowlist")
-    forbidden = set(typed_payload) & FORBIDDEN_ACTIVITY_FIELD_NAMES
-    if forbidden:
-        raise ValueError("cloud command activity payload contains forbidden fields")
-    day_value = typed_payload["day"]
-    dimension_value = typed_payload["dimension"]
-    bounded_value = typed_payload["dimension_value"]
-    count = typed_payload["count"]
-    schema_version = typed_payload["schema_version"]
-    if (
-        type(day_value) is not str
-        or re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", day_value) is None
-        or type(dimension_value) is not str
-        or type(bounded_value) is not str
-        or type(count) is not int
-        or type(schema_version) is not str
-    ):
-        raise ValueError("cloud command activity payload contains invalid scalar types")
-    try:
-        parsed_day = date.fromisoformat(day_value)
-        parsed_dimension = CloudAggregateDimension(dimension_value)
-    except ValueError as error:
-        raise ValueError("cloud command activity payload contains invalid bounded values") from error
-    _ = CloudCommandActivityAggregate(
-        day=parsed_day,
-        dimension=parsed_dimension,
-        dimension_value=bounded_value,
-        count=count,
-        schema_version=schema_version,
-    )
-
-
 def _frame(value: bytes) -> bytes:
     return len(value).to_bytes(4, "big") + value
 

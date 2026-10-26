@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import os
+import re
 import secrets
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -18,8 +19,6 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPubl
 
 from .evidence_hash import canonical_guard_evidence_payload, guard_evidence_hash
 
-GUARD_TRUST_ATTESTATION_PAYLOAD_VERSION = "guard-aibom-trust-attestation.v1"
-GUARD_TRUST_ATTESTATION_PAYLOAD_VERSION_V2 = "guard-aibom-trust-attestation.v2"
 GUARD_TRUST_ATTESTATION_PAYLOAD_VERSION_V3 = "guard-aibom-trust-attestation.v3"
 GUARD_TRUST_ATTESTATION_DOMAIN = "hol-guard:aibom-trust-attestation:v3"
 GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM = "rsa-pss-sha256"
@@ -60,10 +59,6 @@ class GuardTrustAttestationVerificationPolicy:
 
 def canonical_trust_attestation_payload(payload: Mapping[str, object]) -> bytes:
     return canonical_guard_evidence_payload(payload).encode("utf-8")
-
-
-def payload_hash_for_trust_attestation(payload: Mapping[str, object]) -> str:
-    return guard_evidence_hash(payload)
 
 
 def resolve_trust_attestation_signing_config(
@@ -648,19 +643,43 @@ _ATTESTATION_SUBJECT_BINDING_FIELDS = frozenset(
 )
 
 
+# The one timestamp spelling an attestation may carry, after a trailing ``Z``
+# becomes ``+00:00``. ``datetime.fromisoformat`` reads far more than this, and
+# what else it reads changes between the interpreters this project supports:
+# 3.10 refuses week dates and basic formats that 3.11 accepts, and only 3.14
+# reads ``24:00`` as the next midnight. The Rust port in
+# ``rust/crates/guard-command/src/attestation_timestamp.rs`` holds the same
+# shape, so every interpreter and the native runtime give one answer.
+#
+# A UTC offset carries no fraction here. Interpreters disagree about what one
+# means: the reader behind ``fromisoformat`` used to ask only whether the
+# offset's whole seconds were zero, so it read ``+00:00:00.999999`` as UTC
+# itself, and newer ones read it as a microsecond east. Neither RFC 3339 nor
+# ISO 8601 admits the spelling, so an attestation carrying one is no longer an
+# instant on either side rather than a different instant per interpreter.
+_ATTESTATION_TIMESTAMP_SHAPE = re.compile(
+    r"\d{4}-\d{2}-\d{2}[Tt ]"
+    r"(?:[01]\d|2[0-3]):\d{2}(?::\d{2}(?:\.(?:\d{6}|\d{3}))?)?"
+    r"[+-]\d{2}:\d{2}(?::\d{2})?",
+    re.ASCII,
+)
+
+
 def _parse_attestation_timestamp(value: object) -> datetime | None:
     if not isinstance(value, str) or not value.strip():
         return None
     normalized = value.strip()
     if normalized.endswith(("Z", "z")):
         normalized = f"{normalized[:-1]}+00:00"
+    if _ATTESTATION_TIMESTAMP_SHAPE.fullmatch(normalized) is None:
+        return None
     try:
         parsed = datetime.fromisoformat(normalized)
-    except ValueError:
+        # The shift to UTC can leave ``datetime``'s year range, which raises
+        # ``OverflowError`` rather than ``ValueError``.
+        return parsed.astimezone(timezone.utc) if parsed.tzinfo is not None else None
+    except (ValueError, OverflowError):
         return None
-    if parsed.tzinfo is None:
-        return None
-    return parsed.astimezone(timezone.utc)
 
 
 def _validate_attestation_payload(

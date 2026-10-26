@@ -14,7 +14,7 @@ from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.local_supply_chain import _resolve_stored_package_policy_override
 from codex_plugin_scanner.guard.models import GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.runtime.approval_context import build_approval_context_token
-from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
+from codex_plugin_scanner.guard.runtime.package_request_evaluation import (
     PackageRequestEvaluation,
     SupplyChainUserCopy,
 )
@@ -77,6 +77,7 @@ def _review_evaluation() -> PackageRequestEvaluation:
 
 def test_package_reuses_native_signed_policy_through_running_daemon(
     tmp_path: Path,
+    native_context_digest: Path,
 ) -> None:
     guard_home = tmp_path / "guard-home"
     workspace = tmp_path / "workspace"

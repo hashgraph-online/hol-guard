@@ -13,7 +13,13 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from ..models import CheckResult, Finding, Severity
-from ..path_support import path_entry_exists, read_text_file_within_root, resolves_within_root
+from ..path_support import (
+    LICENSE_FILENAMES,
+    path_entry_exists,
+    read_text_file_within_root,
+    resolves_within_root,
+)
+from .security_binaries import UninspectedBinary, inspect_packaged_binary, uninspected_binary_check
 from .security_failures import ScanInputUnreadableError, unreadable_scan_input_failure
 from .security_secret_patterns import (
     DOCUMENTATION_EXTS,
@@ -21,7 +27,11 @@ from .security_secret_patterns import (
     SecretPattern,
     _field_name_map_spans,
     _is_generated_token_expression,
+    _is_symbolic_reference_literal,
+    _python_symbolic_reference_spans,
+    _screen_route_map_spans,
 )
+from .security_shell_reads import ShellCredentialRead, _runtime_credential_findings, _shell_credential_reads
 
 EXCLUDED_DIRS = {"node_modules", ".git", "dist", ".next", "coverage", ".turbo", "__pycache__", ".venv", "venv"}
 
@@ -88,6 +98,7 @@ MAX_SCAN_FILE_BYTES = 16 * 1024 * 1024
 MAX_SCAN_TOTAL_BYTES = 512 * 1024 * 1024
 MAX_SECRET_MATCHES_PER_FILE = 10_000
 MAX_SCAN_DEPTH = 64
+MAX_UNINSPECTED_BINARIES = 64
 
 BINARY_EXTS = {
     ".png",
@@ -129,6 +140,58 @@ RISKY_APPROVAL_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r'approval[_ -]?policy["\']?\s*[:=]\s*["\']never["\']', re.I),
     re.compile(r'approvalMode["\']?\s*[:=]\s*["\']bypass["\']', re.I),
 ]
+# Markdown can name a risky value without setting it, as a rule or a changelog
+# does: "sandbox `danger-full-access`". Only a bare value alone in an inline code
+# span, outside fenced and indented code and not after an assignment or a flag,
+# counts as such a mention. Files that instruct an agent never qualify.
+# Any indentation opens a fence: a fence nested in a list item sits deeper than
+# three spaces, and an indented fence outside a list is code either way.
+# A closing marker counts only when it is no deeper than the fence it opened,
+# so a four-space marker does not close a top-level fence.
+MARKDOWN_FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})")
+MARKDOWN_BLOCKQUOTE_PREFIX_RE = re.compile(r"^(?: {0,3}>[ \t]?)+")
+MARKDOWN_LIST_MARKER_RE = re.compile(r"^ {0,3}(?:[-*+]|\d{1,9}[.)])[ \t]+")
+# How much of a line before an inline code span is read for an assignment or a
+# flag. A bounded window keeps long lines with many spans linear.
+APPROVAL_CONTEXT_WINDOW = 256
+# Prose that tells the reader to turn the value on, checked on the sentence
+# before an inline code span. The last such verb before the span governs it.
+# A negation governs that verb only when it sits immediately before it ("never
+# enable", "do not use", "avoid using"). A risk word anywhere in the sentence
+# also keeps the mention. Words such as "without", "instead", or "avoid" in
+# front of a different phrase do not.
+APPROVAL_INSTRUCTION_RE = re.compile(
+    r"\b(?:select(?:ing|ed)?|set(?:ting)?|use|using|enable|enabling|switch(?:ing)? to|choose|choosing"
+    r"|pick(?:ing)?|configure|configuring|pass(?:ing)?|turn(?:ing)? on|run(?:ning)? with|start(?:ing)? with"
+    r"|launch(?:ing)? with|opt(?:ing)? (?:in|for)|change (?:it )?to|allow(?:ing)?)\b",
+    re.I,
+)
+APPROVAL_NEGATION_RE = re.compile(r"\b(?:never|avoid|don'?t|do not|not)\s+$", re.I)
+APPROVAL_RISK_RE = re.compile(r"\b(?:unsafe|insecure|dangerous|risky|risks?)\b", re.I)
+APPROVAL_SENTENCE_END_RE = re.compile(r"[.!?;]")
+APPROVAL_ASSIGNMENT_TAIL_RE = re.compile(r"(?:[=:]|(?:^|\s)--?[A-Za-z][\w-]*)\s*$")
+AGENT_INSTRUCTION_FILENAMES = {"agent.md", "agents.md", "claude.md", "gemini.md", "skill.md"}
+AGENT_INSTRUCTION_STEMS = {"context", "system-prompt", "system_prompt"}
+AGENT_INSTRUCTION_PATH_HINTS = {
+    ".agents",
+    ".claude",
+    ".codex",
+    ".cursor",
+    ".gemini",
+    ".github",
+    ".kiro",
+    ".windsurf",
+    "agent",
+    "agents",
+    "command",
+    "commands",
+    "instruction",
+    "instructions",
+    "prompt",
+    "prompts",
+    "skill",
+    "skills",
+}
 
 APACHE_LICENSE_VERSION_RE = re.compile(r"apache\s+license\s*,?\s*version\s+2\.0", re.I)
 LICENSE_URL_RE = re.compile(r"https?://[^\s<>()\"']+")
@@ -143,8 +206,17 @@ def _raise_walk_error(error: OSError) -> None:
     raise ScanInputUnreadableError(f"filesystem traversal failed: {reason}") from error
 
 
-def _scan_all_files(plugin_dir: Path, files: tuple[Path, ...] | None = None) -> list[Path]:
-    """Recursively find all files, skipping excluded dirs."""
+def _scan_all_files(
+    plugin_dir: Path,
+    files: tuple[Path, ...] | None = None,
+    uninspected: list[UninspectedBinary] | None = None,
+) -> list[Path]:
+    """Recursively find all files, skipping excluded dirs.
+
+    A file over the size limit fails the scan unless ``uninspected`` is given and its
+    headers show a packaged executable; that file is then recorded there, left out of
+    the result, and never read.
+    """
     if files is not None:
         discovered = []
         try:
@@ -192,17 +264,25 @@ def _scan_all_files(plugin_dir: Path, files: tuple[Path, ...] | None = None) -> 
     if len(discovered) > MAX_SCAN_FILES:
         raise ScanBudgetExceededError(f"scannable files exceeded {MAX_SCAN_FILES}")
     total_bytes = 0
+    scannable = []
     for path in discovered:
         try:
             size = path.stat().st_size
         except OSError:
             continue
         if size > MAX_SCAN_FILE_BYTES:
-            raise ScanBudgetExceededError(f"{path.name} exceeded {MAX_SCAN_FILE_BYTES} bytes")
+            binary = inspect_packaged_binary(path) if uninspected is not None else None
+            if uninspected is None or binary is None:
+                raise ScanBudgetExceededError(f"{path.name} exceeded {MAX_SCAN_FILE_BYTES} bytes")
+            if len(uninspected) >= MAX_UNINSPECTED_BINARIES:
+                raise ScanBudgetExceededError(f"packaged binaries exceeded {MAX_UNINSPECTED_BINARIES}")
+            uninspected.append(UninspectedBinary(path=path, size=size, binary=binary))
+            continue
         total_bytes += size
         if total_bytes > MAX_SCAN_TOTAL_BYTES:
             raise ScanBudgetExceededError(f"aggregate input exceeded {MAX_SCAN_TOTAL_BYTES} bytes")
-    return discovered
+        scannable.append(path)
+    return scannable
 
 
 def _is_example_surface(relative_path: Path) -> bool:
@@ -239,12 +319,57 @@ def _looks_like_interpolated_secret(value: str) -> bool:
     return bool(_PURE_SHELL_EXPANSION_RE.fullmatch(normalized) or _PURE_TEMPLATE_EXPANSION_RE.fullmatch(normalized))
 
 
+BRACKETED_PLACEHOLDER_RE = re.compile(
+    r"^(?:<[A-Za-z][A-Za-z0-9 _.,:()/\-]{0,80}>|\[[A-Za-z][A-Za-z0-9 _.,:()/\-]{0,120}\])$"
+)
+
+
+def _is_bracketed_placeholder_text(candidate: str) -> bool:
+    """True if a fully-captured string is an enclosed, word-like bracketed placeholder.
+
+    Credential-shaped contents do not qualify: a bare alphanumeric token containing
+    a digit (e.g. [hunter2hunter2]) or any alphanumeric run mixing case and digits
+    (e.g. [Xk9q-2mZ7], <Prod_Db.Pass2024>) looks like a real secret, not wording.
+    """
+    if not BRACKETED_PLACEHOLDER_RE.fullmatch(candidate):
+        return False
+    inner = candidate[1:-1]
+    segments = re.findall(r"[A-Za-z0-9]+", inner)
+    return not any(
+        re.search(r"[0-9]", segment)
+        and (len(segments) == 1 or (re.search(r"[a-z]", segment) and re.search(r"[A-Z]", segment)))
+        for segment in segments
+    )
+
+
+def _is_bracketed_placeholder_literal(content: str, detector: SecretPattern, match: re.Match[str]) -> bool:
+    """True if the matched generic secret value is an enclosed bracketed placeholder.
+
+    Valid placeholders must have matching delimiters (<...> or [...]) and word-like
+    placeholder text (e.g. <password>, [redacted - retrieve token via auth]), preventing
+    unclosed or real bracket-prefixed credentials from bypassing security checks.
+    """
+    start = match.start(detector.value_group)
+    if start == 0 or content[start - 1] not in "\"'`":
+        candidate = match.group(detector.value_group).strip().strip("\"'`")
+        return _is_bracketed_placeholder_text(candidate)
+
+    quote = content[start - 1]
+    end = content.find(quote, start)
+    if end == -1 or "\n" in content[start:end]:
+        return False
+
+    literal = content[start:end].strip()
+    return _is_bracketed_placeholder_text(literal)
+
+
 def _looks_like_placeholder_secret(value: str) -> bool:
+    """Check if a candidate string matches placeholder heuristic markers on example surfaces."""
     normalized = _normalize_secret_candidate(value)
     lowered = normalized.lower()
     if not normalized:
         return True
-    if _looks_like_interpolated_secret(normalized) or normalized.startswith(("<", "[")):
+    if _looks_like_interpolated_secret(normalized) or _is_bracketed_placeholder_text(normalized):
         return True
     if "..." in normalized or "…" in normalized:
         return True
@@ -415,19 +540,28 @@ def _should_skip_secret_match(
     lines: list[str] | None = None,
     offsets: tuple[int, ...] | None = None,
     field_name_spans: tuple[tuple[int, int], ...] = (),
+    python_reference_spans: frozenset[tuple[int, int]] = frozenset(),
+    shell_read_spans: tuple[tuple[int, int], ...] = (),
 ) -> bool:
     """Decide whether a match qualifies for a scoped non-secret or example exemption."""
     candidate = _extract_secret_candidate(detector, match)
     if _looks_like_interpolated_secret(candidate):
         return True
+    # Fully-enclosed bracketed placeholders (<password>, [redacted...]) are universal documentation
+    # markers allowed across all scanned paths, but bare prefix unclosed credentials remain guarded.
+    if detector.kind == "generic" and _is_bracketed_placeholder_literal(content, detector, match):
+        return True
     if detector.kind == "generic" and _provider_payload(candidate) is None:
+        if _is_symbolic_reference_literal(relative_path, content, match, python_reference_spans):
+            return True
         if _is_generated_token_expression(relative_path, content, match):
             return True
-        span_index = bisect.bisect_right(field_name_spans, (match.start(), len(content))) - 1
-        if span_index >= 0:
-            start, end = field_name_spans[span_index]
-            if start <= match.start() and match.end() <= end:
-                return True
+        for spans in (field_name_spans, shell_read_spans):
+            span_index = bisect.bisect_right(spans, (match.start(), len(content))) - 1
+            if span_index >= 0:
+                start, end = spans[span_index]
+                if start <= match.start() and match.end() <= end:
+                    return True
     if not _is_example_surface(relative_path):
         return False
     if _looks_like_placeholder_secret(candidate):
@@ -446,11 +580,18 @@ def _should_skip_secret_match(
     return False
 
 
-def _first_hardcoded_secret_line(relative_path: Path, content: str) -> int | None:
+def _first_hardcoded_secret_line(
+    relative_path: Path, content: str, *, shell_reads: tuple[ShellCredentialRead, ...] | None = None
+) -> int | None:
     """Find the first retained secret line while enforcing the per-file match budget."""
     offsets = _newline_offsets(content)
     lines = content.splitlines()
-    field_name_spans = _field_name_map_spans(relative_path, content)
+    python_reference_spans = _python_symbolic_reference_spans(relative_path, content)
+    reads = _shell_credential_reads(relative_path, content) if shell_reads is None else shell_reads
+    shell_read_spans = tuple(read.span for read in reads)
+    field_name_spans = tuple(
+        sorted(_field_name_map_spans(relative_path, content) + _screen_route_map_spans(relative_path, content))
+    )
     first_line = _first_private_key_line(relative_path, content, lines=lines, offsets=offsets)
     first_offset: int | None = None
     matches_seen = 0
@@ -473,6 +614,8 @@ def _first_hardcoded_secret_line(relative_path: Path, content: str) -> int | Non
                 lines=lines,
                 offsets=offsets,
                 field_name_spans=field_name_spans,
+                python_reference_spans=python_reference_spans,
+                shell_read_spans=shell_read_spans,
             ):
                 continue
             first_offset = match.start()
@@ -539,8 +682,13 @@ def check_security_md(plugin_dir: Path) -> CheckResult:
 
 
 def check_license(plugin_dir: Path) -> CheckResult:
-    lp = plugin_dir / "LICENSE"
-    if not lp.exists():
+    lp: Path | None = None
+    for filename in LICENSE_FILENAMES:
+        candidate = plugin_dir / filename
+        if path_entry_exists(candidate):
+            lp = candidate
+            break
+    if lp is None:
         return CheckResult(
             name="LICENSE found",
             passed=False,
@@ -554,7 +702,7 @@ def check_license(plugin_dir: Path) -> CheckResult:
                     category="security",
                     title="LICENSE file is missing",
                     description="Plugins should ship a LICENSE file so consumers can review usage rights.",
-                    remediation="Add a LICENSE file that matches the manifest license metadata.",
+                    remediation="Add a LICENSE or LICENSE.md file that matches the manifest license metadata.",
                     file_path="LICENSE",
                 ),
             ),
@@ -581,11 +729,16 @@ def check_license(plugin_dir: Path) -> CheckResult:
         )
 
 
-def check_no_hardcoded_secrets(plugin_dir: Path, files: tuple[Path, ...] | None = None) -> CheckResult:
+def _check_no_hardcoded_secrets(
+    plugin_dir: Path,
+    files: tuple[Path, ...] | None,
+    runtime_findings: list[Finding],
+    uninspected: list[UninspectedBinary],
+) -> CheckResult:
     findings: list[tuple[str, int]] = []
     resolved_plugin_dir = plugin_dir.resolve()
     try:
-        for fpath in _scan_all_files(resolved_plugin_dir, files):
+        for fpath in _scan_all_files(resolved_plugin_dir, files, uninspected):
             relative_path = fpath.relative_to(resolved_plugin_dir)
             try:
                 content = read_text_file_within_root(
@@ -598,7 +751,13 @@ def check_no_hardcoded_secrets(plugin_dir: Path, files: tuple[Path, ...] | None 
                 return unreadable_scan_input_failure(
                     "No hardcoded secrets", max_points=7, path=relative_path.as_posix()
                 )
-            line_number = _first_hardcoded_secret_line(relative_path, content)
+            shell_reads = _shell_credential_reads(relative_path, content)
+            if len(shell_reads) > MAX_SECRET_MATCHES_PER_FILE:
+                raise ScanBudgetExceededError(
+                    f"runtime reads exceeded {MAX_SECRET_MATCHES_PER_FILE} in {relative_path}"
+                )
+            runtime_findings.extend(_runtime_credential_findings(relative_path, content, shell_reads))
+            line_number = _first_hardcoded_secret_line(relative_path, content, shell_reads=shell_reads)
             if line_number is not None:
                 findings.append((relative_path.as_posix(), line_number))
     except ScanInputUnreadableError as exc:
@@ -611,7 +770,12 @@ def check_no_hardcoded_secrets(plugin_dir: Path, files: tuple[Path, ...] | None 
         return _resource_budget_failure("No hardcoded secrets", max_points=7, reason=str(exc))
     if not findings:
         return CheckResult(
-            name="No hardcoded secrets", passed=True, points=7, max_points=7, message="No hardcoded secrets detected"
+            name="No hardcoded secrets",
+            passed=True,
+            points=7,
+            max_points=7,
+            message="No hardcoded secrets detected"
+            + (f" (excluding {len(uninspected)} uninspected packaged executable(s))" if uninspected else ""),
         )
     shown = [path for path, _line_number in findings[:5]]
     suffix = f" and {len(findings) - 5} more" if len(findings) > 5 else ""
@@ -635,6 +799,38 @@ def check_no_hardcoded_secrets(plugin_dir: Path, files: tuple[Path, ...] | None 
             for path, line_number in findings
         ),
     )
+
+
+def check_credential_access(
+    plugin_dir: Path,
+    files: tuple[Path, ...] | None = None,
+    *,
+    uninspected: list[UninspectedBinary] | None = None,
+) -> tuple[CheckResult, CheckResult]:
+    """Scan once and keep literal scoring separate from advisory capabilities."""
+    runtime_findings: list[Finding] = []
+    skipped = uninspected if uninspected is not None else []
+    literal_check = _check_no_hardcoded_secrets(plugin_dir, files, runtime_findings, skipped)
+    complete = all(finding.rule_id == "HARDCODED_SECRET" for finding in literal_check.findings)
+    if not complete:
+        skipped.clear()
+    message = (
+        "Runtime credential access requires review"
+        if runtime_findings
+        else "No supported runtime credential-access pattern detected; other access is not ruled out"
+    )
+    return literal_check, CheckResult(
+        name="Runtime credential access",
+        passed=complete,
+        points=0,
+        max_points=0,
+        message=message if complete else f"Runtime credential review incomplete: {literal_check.message}",
+        findings=tuple(runtime_findings),
+    )
+
+
+def check_no_hardcoded_secrets(plugin_dir: Path, files: tuple[Path, ...] | None = None) -> CheckResult:
+    return check_credential_access(plugin_dir, files)[0]
 
 
 def check_no_dangerous_mcp(plugin_dir: Path) -> CheckResult:
@@ -844,11 +1040,188 @@ def check_mcp_transport_security(plugin_dir: Path) -> CheckResult:
     )
 
 
-def check_no_approval_bypass_defaults(plugin_dir: Path, files: tuple[Path, ...] | None = None) -> CheckResult:
+def _is_agent_instruction_surface(relative_path: Path) -> bool:
+    """Whether an agent loads this file as instructions, judged by its name and directories."""
+    directories = {part.lower() for part in relative_path.parts[:-1]}
+    if relative_path.name.lower() in AGENT_INSTRUCTION_FILENAMES:
+        return True
+    stem = relative_path.stem.lower()
+    if stem in AGENT_INSTRUCTION_STEMS or stem in AGENT_INSTRUCTION_PATH_HINTS:
+        return True
+    return bool(directories & AGENT_INSTRUCTION_PATH_HINTS)
+
+
+def _is_documented_approval_value(line: str, start: int, end: int) -> bool:
+    """Whether line[start:end] is a bare value quoted alone in an inline code span of prose.
+
+    An assignment or a flag right before the span, in prose or at the end of an
+    earlier code span, makes it a setting rather than a mention. So does a
+    sentence that tells the reader to select or enable the value, unless a
+    negation governs that verb or the sentence names the risk.
+    """
+    if any(separator in line[start:end] for separator in "=:"):
+        return False
+    opens_span = start >= 1 and line[start - 1] == "`" and (start < 2 or line[start - 2] != "`")
+    closes_span = line[end : end + 1] == "`" and line[end + 1 : end + 2] != "`"
+    if not (opens_span and closes_span):
+        return False
+    # Step back over the padding and an earlier span's closing backticks first,
+    # then read a bounded window: padding cannot push a flag out of it, and
+    # each step covers only the gap since the previous span.
+    cut = start - 1
+    while cut > 0 and line[cut - 1] in " \t":
+        cut -= 1
+    while cut > 0 and line[cut - 1] == "`":
+        cut -= 1
+    while cut > 0 and line[cut - 1] in " \t":
+        cut -= 1
+    before = line[max(0, cut - APPROVAL_CONTEXT_WINDOW) : cut]
+    if APPROVAL_ASSIGNMENT_TAIL_RE.search(before):
+        return False
+    sentence_start = max(before.rfind(mark) for mark in ".!?;") + 1
+    prefix = before[sentence_start:]
+    suffix = APPROVAL_SENTENCE_END_RE.split(line[end + 1 : end + 1 + APPROVAL_CONTEXT_WINDOW], maxsplit=1)[0]
+    verbs = list(APPROVAL_INSTRUCTION_RE.finditer(prefix))
+    if not verbs:
+        return True
+    negated = APPROVAL_NEGATION_RE.search(prefix[: verbs[-1].start()]) is not None
+    risky = APPROVAL_RISK_RE.search(f"{prefix} {suffix}") is not None
+    return negated or risky
+
+
+def _markdown_fence_marker(line: str) -> tuple[str, int] | None:
+    """The fence token and the column of its first character, if this line is a fence.
+
+    A list marker on the same line is skipped, so ``- ```bash`` is a fence at the
+    token's column. Closing compares that column with the opening fence.
+    """
+    match = MARKDOWN_FENCE_RE.match(line)
+    if match:
+        return match.group(1), match.start(1)
+    without_list_marker = MARKDOWN_LIST_MARKER_RE.sub("", line, count=1)
+    if without_list_marker == line:
+        return None
+    match = MARKDOWN_FENCE_RE.match(without_list_marker)
+    if match is None:
+        return None
+    column = len(line) - len(without_list_marker) + match.start(1)
+    return match.group(1), column
+
+
+def _markdown_code_lines(lines: list[str]) -> list[bool]:
+    """Mark the lines of fenced or indented code, fence lines included.
+
+    Block-quote prefixes are removed first, and a list marker on the fence line
+    is skipped, so a fence inside a quote or a list item still counts. A closing
+    marker ends the fence only when it sits under the same number of quote
+    markers as the opening fence and is indented no deeper, so a marker one
+    quote level deeper, or quoted inside an unquoted fence, is text. An
+    indented line starts a code block only after a blank line or a heading, or
+    continues one, because indented code cannot interrupt a paragraph.
+    """
+    code_lines: list[bool] = []
+    fence: str | None = None
+    fence_column = 0
+    fence_quote_depth = 0
+    can_start_indented_code = True
+    for raw_line in lines:
+        quote_match = MARKDOWN_BLOCKQUOTE_PREFIX_RE.match(raw_line)
+        quote_depth = quote_match.group(0).count(">") if quote_match else 0
+        line = raw_line[quote_match.end() :] if quote_match else raw_line
+        marker = _markdown_fence_marker(line)
+        if fence is not None:
+            is_code = True
+            if marker is not None:
+                token, column = marker
+                remainder = line[column + len(token) :]
+                if (
+                    quote_depth == fence_quote_depth
+                    and column <= fence_column
+                    and token[0] == fence[0]
+                    and len(token) >= len(fence)
+                    and not remainder.strip()
+                ):
+                    fence = None
+        elif marker is not None:
+            fence, fence_column = marker
+            fence_quote_depth = quote_depth
+            is_code = True
+        else:
+            is_code = line.startswith(("    ", "\t")) and can_start_indented_code
+        code_lines.append(is_code)
+        stripped = line.strip()
+        can_start_indented_code = is_code or not stripped or stripped.startswith("#")
+    return code_lines
+
+
+def _has_risky_approval_default(relative_path: Path, content: str, *, declared: bool = False) -> bool:
+    """Whether the file sets a risky approval or sandbox default.
+
+    Documentation may name a value in an inline code span without setting it.
+    A file an ecosystem declares as package content (``declared``), an agent
+    instruction file, and every non-Markdown file are matched as before.
+    """
+    if (
+        declared
+        or relative_path.suffix.lower() not in DOCUMENTATION_EXTS
+        or _is_agent_instruction_surface(relative_path)
+    ):
+        return any(pattern.search(content) for pattern in RISKY_APPROVAL_PATTERNS)
+    lines = content.split("\n")
+    line_starts = [0]
+    for line in lines[:-1]:
+        line_starts.append(line_starts[-1] + len(line) + 1)
+    code_lines = _markdown_code_lines(lines)
+    for pattern in RISKY_APPROVAL_PATTERNS:
+        for match in pattern.finditer(content):
+            index = bisect.bisect_right(line_starts, match.start()) - 1
+            line_start = line_starts[index]
+            if "\n" in match.group(0) or code_lines[index]:
+                return True
+            if not _is_documented_approval_value(lines[index], match.start() - line_start, match.end() - line_start):
+                return True
+    return False
+
+
+def _instruction_file_keys(
+    plugin_dir: Path, resolved_plugin_dir: Path, instruction_files: tuple[Path, ...]
+) -> frozenset[str]:
+    """The relative paths of ``instruction_files`` under the plugin directory, as the scan reports them."""
+    keys: set[str] = set()
+    for path in instruction_files:
+        relative = path
+        if path.is_absolute():
+            for root in (resolved_plugin_dir, plugin_dir):
+                try:
+                    relative = path.relative_to(root)
+                    break
+                except ValueError:
+                    continue
+            else:
+                continue
+        normalized = os.path.normpath(relative.as_posix())
+        if normalized.startswith("..") or os.path.isabs(normalized):
+            continue
+        keys.add(Path(normalized).as_posix())
+    return frozenset(keys)
+
+
+def check_no_approval_bypass_defaults(
+    plugin_dir: Path, files: tuple[Path, ...] | None = None, *, instruction_files: tuple[Path, ...] = ()
+) -> CheckResult:
+    """Report files that default to bypassed approvals or an unrestricted sandbox.
+
+    ``files`` limits the scan to the package content an ecosystem declared,
+    such as a manifest's system prompt or commands, read as instructions.
+    ``instruction_files`` names files an agent loads as instructions, such as
+    a manifest's context file: the whole directory is still scanned, and those
+    files get no documentation exception.
+    """
     findings: list[str] = []
     resolved_plugin_dir = plugin_dir.resolve()
+    strict_paths = _instruction_file_keys(plugin_dir, resolved_plugin_dir, instruction_files)
     try:
-        for file_path in _scan_all_files(resolved_plugin_dir, files):
+        for file_path in _scan_all_files(resolved_plugin_dir, files, []):
             relative_path = file_path.relative_to(resolved_plugin_dir)
             if not file_path.name.endswith((".json", ".md", ".yaml", ".yml", ".toml")):
                 continue
@@ -865,7 +1238,8 @@ def check_no_approval_bypass_defaults(plugin_dir: Path, files: tuple[Path, ...] 
                     max_points=3,
                     path=relative_path.as_posix(),
                 )
-            if any(pattern.search(content) for pattern in RISKY_APPROVAL_PATTERNS):
+            declared = files is not None or relative_path.as_posix() in strict_paths
+            if _has_risky_approval_default(relative_path, content, declared=declared):
                 findings.append(relative_path.as_posix())
     except ScanInputUnreadableError as exc:
         return unreadable_scan_input_failure(
@@ -908,12 +1282,30 @@ def check_no_approval_bypass_defaults(plugin_dir: Path, files: tuple[Path, ...] 
     )
 
 
-def run_security_checks(plugin_dir: Path) -> tuple[CheckResult, ...]:
+def check_uninspected_binaries(plugin_dir: Path, files: tuple[Path, ...] | None = None) -> CheckResult | None:
+    """List packaged executables the scan skipped; None when there are none or the walk itself failed.
+
+    A failed walk is already reported by the content checks that share it.
+    """
+    resolved_plugin_dir = plugin_dir.resolve()
+    uninspected: list[UninspectedBinary] = []
+    try:
+        _scan_all_files(resolved_plugin_dir, files, uninspected)
+    except (ScanInputUnreadableError, ScanBudgetExceededError):
+        return None
+    return uninspected_binary_check(resolved_plugin_dir, uninspected) if uninspected else None
+
+
+def run_security_checks(plugin_dir: Path, *, instruction_files: tuple[Path, ...] = ()) -> tuple[CheckResult, ...]:
+    """Run the security checks; ``instruction_files`` are read as agent instructions by the approval check."""
+    uninspected: list[UninspectedBinary] = []
+    credential_checks = check_credential_access(plugin_dir, uninspected=uninspected)
     return (
         check_security_md(plugin_dir),
         check_license(plugin_dir),
-        check_no_hardcoded_secrets(plugin_dir),
+        *credential_checks,
         check_no_dangerous_mcp(plugin_dir),
         check_mcp_transport_security(plugin_dir),
-        check_no_approval_bypass_defaults(plugin_dir),
+        check_no_approval_bypass_defaults(plugin_dir, instruction_files=instruction_files),
+        *((uninspected_binary_check(plugin_dir.resolve(), uninspected),) if uninspected else ()),
     )

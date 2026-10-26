@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import (
     discover_harness_mcp_servers,
     extra_env_for_mcp_launch,
@@ -14,6 +16,8 @@ from codex_plugin_scanner.guard.runtime.local_mcp_probe import McpProbeResult, p
 from codex_plugin_scanner.guard.runtime.local_mcp_stdio import probe_env
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
 from codex_plugin_scanner.guard.store import GuardStore
+
+pytestmark = pytest.mark.usefixtures("native_mcp_probe")
 
 
 def _artifact(

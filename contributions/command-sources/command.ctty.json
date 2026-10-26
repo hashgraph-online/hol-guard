@@ -1,0 +1,3934 @@
+{
+  "extension": {
+    "action_classes": [
+      "ctty remote execution command",
+      "ctty bare-host remote execution command",
+      "ctty remote transfer command",
+      "ctty remote delete command",
+      "ctty remote write command",
+      "ctty local inventory mutation command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews ctty remote execution (batch exec and bare-host SSH), file transfers (put/get/scp), SFTP/FTP/WebDAV mutations, and local inventory writes (add/edit/move/import), while leaving read-only inspection unmatched.",
+    "ecosystem_ids": [],
+    "executables": [
+      "ctty"
+    ],
+    "extension_id": "command.ctty",
+    "homepage": "https://github.com/zsuroy/ctty",
+    "icon": {
+      "background": "#0F766E",
+      "kind": "react-icon",
+      "name": "HiMiniGlobeAlt"
+    },
+    "license": "MIT",
+    "name": "ctty command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "ctty remote execution command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `ctty exec`, which runs a remote shell command over SSH on hosts selected by `--tags` and/or `--hosts`. Safe variants: `--list-hosts` and alias `--dry-run` preview the Host set without SSH (upcoming ctty release / `feature/exec-list-hosts` @ 4e91994); `--help`/`-h` likewise clear review.",
+        "example_command": "ctty exec --tags prod -- uptime",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "ctty batch remote execution",
+        "permission_id": "command.ctty.permission.exec",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Preview targets with `ctty exec --tags \u2026 --list-hosts` (or `--dry-run`) before approving SSH.",
+          "Confirm with `ctty search --format json` / `ctty info` when useful.",
+          "Keep the host set minimal before approving batch execution."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "ctty bare-host remote execution command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `ctty <host> <command\u2026>` / `ctty <host> -- <command\u2026>` remote execution (and similar host-first invocations) that are not a known Cobra subcommand. Known subcommands are cleared via safe variants to avoid false positives on `search`, `info`, `sftp`, etc.",
+        "example_command": "ctty prod-web -- uptime",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "ctty bare-host remote execution",
+        "permission_id": "command.ctty.permission.host-exec",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Prefer `ctty info <host>` then a reviewed one-shot command.",
+          "Do not launch interactive `ctty <host>` shells from agents."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "ctty remote transfer command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `ctty put`, `ctty get`, and `ctty scp` transfers that read or write remote files via the built-in SFTP client.",
+        "example_command": "ctty put web-server ./app.tar.gz /srv/www/app.tar.gz",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "ctty remote file transfer",
+        "permission_id": "command.ctty.permission.transfer",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Confirm host and remote path before transferring.",
+          "List with `ctty sftp ls <host> <path> --format json` when only inspection is needed."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "ctty remote delete command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies headless FTP mutations and downloads: `ctty ftp get|put|mkdir|rm|rmdir|rename`.",
+        "example_command": "ctty sftp rm prod-server /tmp/old.log",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "ctty FTP remote mutation/download",
+        "permission_id": "command.ctty.permission.sftp-mutation",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "List with `ctty sftp ls <host> <path> --format json` before mutating."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "ctty remote write command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies headless FTP mutations and downloads: `ctty ftp get|put|mkdir|rm|rmdir|rename`.",
+        "example_command": "ctty ftp rm lab-nas /pub/old.txt",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "ctty FTP remote mutation/download",
+        "permission_id": "command.ctty.permission.ftp-mutation",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "List with `ctty ftp ls <site> <path> --format json` before mutating.",
+          "Prefer SFTP when available; FTP is cleartext."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "ctty remote delete command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies headless WebDAV mutations and downloads: `ctty webdav get|put|mkdir|rm|rmdir|rename`.",
+        "example_command": "ctty webdav rmdir nextcloud /Documents/TempDir",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "ctty WebDAV remote mutation/download",
+        "permission_id": "command.ctty.permission.webdav-mutation",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "List with `ctty webdav ls <site> <path> --format json` before mutating."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "ctty local inventory mutation command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies local inventory / SSH-config mutations: `ctty add`, `ctty edit`, `ctty move`, and `ctty import` (including non-interactive flag forms). `import --dry-run` is a safe variant.",
+        "example_command": "ctty add --name web1 --hostname 10.0.1.10 --user root --tags prod",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "ctty local inventory mutation",
+        "permission_id": "command.ctty.permission.inventory-write",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Preview imports with `ctty import <source> --dry-run` before writing.",
+          "Prefer reviewing the exact Host block or import source before approving."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "display_name": "Suroy",
+      "id": "community.zsuroy",
+      "url": "https://github.com/zsuroy"
+    },
+    "reference_urls": [
+      "https://github.com/zsuroy/ctty",
+      "https://github.com/zsuroy/ctty/blob/master/README.md",
+      "https://pkg.go.dev/github.com/zsuroy/ctty"
+    ],
+    "required": false,
+    "risk_classes": [
+      "execution",
+      "network_egress",
+      "destructive_shell"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "ctty remote execution command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `ctty exec` remote SSH. AUTO (safe variants): `--list-hosts`, alias `--dry-run`, and help. Normal exec without those flags stays REVIEW.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "ctty",
+                  "ctty.cmd",
+                  "ctty.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--no-update-check",
+                  "--help",
+                  "-h",
+                  "--version",
+                  "-t",
+                  "--tty",
+                  "-s",
+                  "--search",
+                  "--list-hosts",
+                  "--dry-run"
+                ],
+                "interspersed_options_with_values": [
+                  "--config",
+                  "-c",
+                  "--lang",
+                  "--tags",
+                  "--hosts",
+                  "--concurrency",
+                  "--format"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "-c",
+                  "--lang"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "exec"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.ctty.permission.exec",
+        "risk_classes": [
+          "execution",
+          "network_egress"
+        ],
+        "rule_id": "command.ctty.exec",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search",
+                      "--list-hosts",
+                      "--dry-run"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--tags",
+                      "--hosts",
+                      "--concurrency",
+                      "--format"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "exec"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search",
+                      "--list-hosts",
+                      "--dry-run"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--tags",
+                      "--hosts",
+                      "--concurrency",
+                      "--format"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "exec"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command short help",
+            "variant_id": "short-help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search",
+                      "--list-hosts",
+                      "--dry-run"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--tags",
+                      "--hosts",
+                      "--concurrency",
+                      "--format"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--list-hosts"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "exec"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Exec list-hosts preview (no SSH)",
+            "variant_id": "list-hosts"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search",
+                      "--list-hosts",
+                      "--dry-run"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--tags",
+                      "--hosts",
+                      "--concurrency",
+                      "--format"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--dry-run"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "exec"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Exec dry-run alias for list-hosts (no SSH)",
+            "variant_id": "dry-run"
+          }
+        ],
+        "safer_alternatives": [
+          "Preview with `ctty exec --tags \u2026 --list-hosts` or `--dry-run` (optionally `--format json`).",
+          "Confirm hosts with search/info before batch execution."
+        ],
+        "severity": "high",
+        "title": "ctty batch remote execution"
+      },
+      {
+        "action_classes": [
+          "ctty bare-host remote execution command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies host-first remote execution and interactive SSH (`ctty <host>`, `ctty <host> <cmd>`, `ctty <host> -- <cmd>`). Safe variants clear every known top-level Cobra subcommand so `search`/`info`/`sftp`/\u2026 do not inherit this rule.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "executables": [
+              "ctty",
+              "ctty.cmd",
+              "ctty.exe"
+            ],
+            "forbidden_flags": [],
+            "minimum_operands": 1,
+            "options_with_values": [
+              "--config",
+              "-c",
+              "--lang",
+              "--tags",
+              "--hosts",
+              "--concurrency",
+              "--format",
+              "--name",
+              "--hostname",
+              "--user",
+              "--port",
+              "--identity-file",
+              "--proxy-jump",
+              "--proxy-command",
+              "--option",
+              "-o",
+              "--tags",
+              "--password",
+              "--format",
+              "--from",
+              "--file",
+              "-f",
+              "--concurrency",
+              "--hosts"
+            ]
+          },
+          "op": "leading-operand-count.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.ctty.permission.host-exec",
+        "risk_classes": [
+          "execution",
+          "network_egress"
+        ],
+        "rule_id": "command.ctty.host-exec",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search",
+                      "--non-interactive",
+                      "--force",
+                      "--dry-run",
+                      "--yes",
+                      "-y"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--tags",
+                      "--hosts",
+                      "--concurrency",
+                      "--format",
+                      "--name",
+                      "--hostname",
+                      "--user",
+                      "--port",
+                      "--identity-file",
+                      "--proxy-jump",
+                      "--proxy-command",
+                      "--option",
+                      "-o",
+                      "--tags",
+                      "--password",
+                      "--format",
+                      "--from",
+                      "--file",
+                      "-f",
+                      "--concurrency",
+                      "--hosts"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "add"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Known ctty subcommand `add` (not bare-host exec)",
+            "variant_id": "subcommand-add"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search",
+                      "--non-interactive",
+                      "--force",
+                      "--dry-run",
+                      "--yes",
+                      "-y"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--tags",
+                      "--hosts",
+                      "--concurrency",
+                      "--format",
+                      "--name",
+                      "--hostname",
+                      "--user",
+                      "--port",
+                      "--identity-file",
+                      "--proxy-jump",
+                      "--proxy-command",
+                      "--option",
+                      "-o",
+                      "--tags",
+                      "--password",
+                      "--format",
+                      "--from",
+                      "--file",
+                      "-f",
+                      "--concurrency",
+                      "--hosts"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "browse"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Known ctty subcommand `browse` (not bare-host exec)",
+            "variant_id": "subcommand-browse"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search",
+                      "--non-interactive",
+                      "--force",
+                      "--dry-run",
+                      "--yes",
+                      "-y"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--tags",
+                      "--hosts",
+                      "--concurrency",
+                      "--format",
+                      "--name",
+                      "--hostname",
+                      "--user",
+                      "--port",
+                      "--identity-file",
+                      "--proxy-jump",
+                      "--proxy-command",
+                      "--option",
+                      "-o",
+                      "--tags",
+                      "--password",
+                      "--format",
+                      "--from",
+                      "--file",
+                      "-f",
+                      "--concurrency",
+                      "--hosts"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "completion"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Known ctty subcommand `completion` (not bare-host exec)",
+            "variant_id": "subcommand-completion"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search",
+                      "--non-interactive",
+                      "--force",
+                      "--dry-run",
+                      "--yes",
+                      "-y"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--tags",
+                      "--hosts",
+                      "--concurrency",
+                      "--format",
+                      "--name",
+                      "--hostname",
+                      "--user",
+                      "--port",
+                      "--identity-file",
+                      "--proxy-jump",
+                      "--proxy-command",
+                      "--option",
+                      "-o",
+                      "--tags",
+                      "--password",
+                      "--format",
+                      "--from",
+                      "--file",
+                      "-f",
+                      "--concurrency",
+                      "--hosts"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "edit"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Known ctty subcommand `edit` (not bare-host exec)",
+            "variant_id": "subcommand-edit"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search",
+                      "--non-interactive",
+                      "--force",
+                      "--dry-run",
+                      "--yes",
+                      "-y"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--tags",
+                      "--hosts",
+                      "--concurrency",
+                      "--format",
+                      "--name",
+                      "--hostname",
+                      "--user",
+                      "--port",
+                      "--identity-file",
+                      "--proxy-jump",
+                      "--proxy-command",
+                      "--option",
+                      "-o",
+                      "--tags",
+                      "--password",
+                      "--format",
+                      "--from",
+                      "--file",
+                      "-f",
+                      "--concurrency",
+                      "--hosts"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "exec"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Known ctty subcommand `exec` (not bare-host exec)",
+            "variant_id": "subcommand-exec"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search",
+                      "--non-interactive",
+                      "--force",
+                      "--dry-run",
+                      "--yes",
+                      "-y"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--tags",
+                      "--hosts",
+                      "--concurrency",
+                      "--format",
+                      "--name",
+                      "--hostname",
+                      "--user",
+                      "--port",
+                      "--identity-file",
+                      "--proxy-jump",
+                      "--proxy-command",
+                      "--option",
+                      "-o",
+                      "--tags",
+                      "--password",
+                      "--format",
+                      "--from",
+                      "--file",
+                      "-f",
+                      "--concurrency",
+                      "--hosts"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "ftp"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Known ctty subcommand `ftp` (not bare-host exec)",
+            "variant_id": "subcommand-ftp"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search",
+                      "--non-interactive",
+                      "--force",
+                      "--dry-run",
+                      "--yes",
+                      "-y"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--tags",
+                      "--hosts",
+                      "--concurrency",
+                      "--format",
+                      "--name",
+                      "--hostname",
+                      "--user",
+                      "--port",
+                      "--identity-file",
+                      "--proxy-jump",
+                      "--proxy-command",
+                      "--option",
+                      "-o",
+                      "--tags",
+                      "--password",
+                      "--format",
+                      "--from",
+                      "--file",
+                      "-f",
+                      "--concurrency",
+                      "--hosts"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "get"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Known ctty subcommand `get` (not bare-host exec)",
+            "variant_id": "subcommand-get"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search",
+                      "--non-interactive",
+                      "--force",
+                      "--dry-run",
+                      "--yes",
+                      "-y"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--tags",
+                      "--hosts",
+                      "--concurrency",
+                      "--format",
+                      "--name",
+                      "--hostname",
+                      "--user",
+                      "--port",
+                      "--identity-file",
+                      "--proxy-jump",
+                      "--proxy-command",
+                      "--option",
+                      "-o",
+                      "--tags",
+                      "--password",
+                      "--format",
+                      "--from",
+                      "--file",
+                      "-f",
+                      "--concurrency",
+                      "--hosts"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "import"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Known ctty subcommand `import` (not bare-host exec)",
+            "variant_id": "subcommand-import"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search",
+                      "--non-interactive",
+                      "--force",
+                      "--dry-run",
+                      "--yes",
+                      "-y"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--tags",
+                      "--hosts",
+                      "--concurrency",
+                      "--format",
+                      "--name",
+                      "--hostname",
+                      "--user",
+                      "--port",
+                      "--identity-file",
+                      "--proxy-jump",
+                      "--proxy-command",
+                      "--option",
+                      "-o",
+                      "--tags",
+                      "--password",
+                      "--format",
+                      "--from",
+                      "--file",
+                      "-f",
+                      "--concurrency",
+                      "--hosts"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "info"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Known ctty subcommand `info` (not bare-host exec)",
+            "variant_id": "subcommand-info"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search",
+                      "--non-interactive",
+                      "--force",
+                      "--dry-run",
+                      "--yes",
+                      "-y"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--tags",
+                      "--hosts",
+                      "--concurrency",
+                      "--format",
+                      "--name",
+                      "--hostname",
+                      "--user",
+                      "--port",
+                      "--identity-file",
+                      "--proxy-jump",
+                      "--proxy-command",
+                      "--option",
+                      "-o",
+                      "--tags",
+                      "--password",
+                      "--format",
+                      "--from",
+                      "--file",
+                      "-f",
+                      "--concurrency",
+                      "--hosts"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "move"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Known ctty subcommand `move` (not bare-host exec)",
+            "variant_id": "subcommand-move"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search",
+                      "--non-interactive",
+                      "--force",
+                      "--dry-run",
+                      "--yes",
+                      "-y"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--tags",
+                      "--hosts",
+                      "--concurrency",
+                      "--format",
+                      "--name",
+                      "--hostname",
+                      "--user",
+                      "--port",
+                      "--identity-file",
+                      "--proxy-jump",
+                      "--proxy-command",
+                      "--option",
+                      "-o",
+                      "--tags",
+                      "--password",
+                      "--format",
+                      "--from",
+                      "--file",
+                      "-f",
+                      "--concurrency",
+                      "--hosts"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "put"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Known ctty subcommand `put` (not bare-host exec)",
+            "variant_id": "subcommand-put"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search",
+                      "--non-interactive",
+                      "--force",
+                      "--dry-run",
+                      "--yes",
+                      "-y"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--tags",
+                      "--hosts",
+                      "--concurrency",
+                      "--format",
+                      "--name",
+                      "--hostname",
+                      "--user",
+                      "--port",
+                      "--identity-file",
+                      "--proxy-jump",
+                      "--proxy-command",
+                      "--option",
+                      "-o",
+                      "--tags",
+                      "--password",
+                      "--format",
+                      "--from",
+                      "--file",
+                      "-f",
+                      "--concurrency",
+                      "--hosts"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "scp"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Known ctty subcommand `scp` (not bare-host exec)",
+            "variant_id": "subcommand-scp"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search",
+                      "--non-interactive",
+                      "--force",
+                      "--dry-run",
+                      "--yes",
+                      "-y"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--tags",
+                      "--hosts",
+                      "--concurrency",
+                      "--format",
+                      "--name",
+                      "--hostname",
+                      "--user",
+                      "--port",
+                      "--identity-file",
+                      "--proxy-jump",
+                      "--proxy-command",
+                      "--option",
+                      "-o",
+                      "--tags",
+                      "--password",
+                      "--format",
+                      "--from",
+                      "--file",
+                      "-f",
+                      "--concurrency",
+                      "--hosts"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "search"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Known ctty subcommand `search` (not bare-host exec)",
+            "variant_id": "subcommand-search"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search",
+                      "--non-interactive",
+                      "--force",
+                      "--dry-run",
+                      "--yes",
+                      "-y"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--tags",
+                      "--hosts",
+                      "--concurrency",
+                      "--format",
+                      "--name",
+                      "--hostname",
+                      "--user",
+                      "--port",
+                      "--identity-file",
+                      "--proxy-jump",
+                      "--proxy-command",
+                      "--option",
+                      "-o",
+                      "--tags",
+                      "--password",
+                      "--format",
+                      "--from",
+                      "--file",
+                      "-f",
+                      "--concurrency",
+                      "--hosts"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "serial"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Known ctty subcommand `serial` (not bare-host exec)",
+            "variant_id": "subcommand-serial"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search",
+                      "--non-interactive",
+                      "--force",
+                      "--dry-run",
+                      "--yes",
+                      "-y"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--tags",
+                      "--hosts",
+                      "--concurrency",
+                      "--format",
+                      "--name",
+                      "--hostname",
+                      "--user",
+                      "--port",
+                      "--identity-file",
+                      "--proxy-jump",
+                      "--proxy-command",
+                      "--option",
+                      "-o",
+                      "--tags",
+                      "--password",
+                      "--format",
+                      "--from",
+                      "--file",
+                      "-f",
+                      "--concurrency",
+                      "--hosts"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "sftp"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Known ctty subcommand `sftp` (not bare-host exec)",
+            "variant_id": "subcommand-sftp"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search",
+                      "--non-interactive",
+                      "--force",
+                      "--dry-run",
+                      "--yes",
+                      "-y"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--tags",
+                      "--hosts",
+                      "--concurrency",
+                      "--format",
+                      "--name",
+                      "--hostname",
+                      "--user",
+                      "--port",
+                      "--identity-file",
+                      "--proxy-jump",
+                      "--proxy-command",
+                      "--option",
+                      "-o",
+                      "--tags",
+                      "--password",
+                      "--format",
+                      "--from",
+                      "--file",
+                      "-f",
+                      "--concurrency",
+                      "--hosts"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "telnet"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Known ctty subcommand `telnet` (not bare-host exec)",
+            "variant_id": "subcommand-telnet"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search",
+                      "--non-interactive",
+                      "--force",
+                      "--dry-run",
+                      "--yes",
+                      "-y"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--tags",
+                      "--hosts",
+                      "--concurrency",
+                      "--format",
+                      "--name",
+                      "--hostname",
+                      "--user",
+                      "--port",
+                      "--identity-file",
+                      "--proxy-jump",
+                      "--proxy-command",
+                      "--option",
+                      "-o",
+                      "--tags",
+                      "--password",
+                      "--format",
+                      "--from",
+                      "--file",
+                      "-f",
+                      "--concurrency",
+                      "--hosts"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "update"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Known ctty subcommand `update` (not bare-host exec)",
+            "variant_id": "subcommand-update"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search",
+                      "--non-interactive",
+                      "--force",
+                      "--dry-run",
+                      "--yes",
+                      "-y"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--tags",
+                      "--hosts",
+                      "--concurrency",
+                      "--format",
+                      "--name",
+                      "--hostname",
+                      "--user",
+                      "--port",
+                      "--identity-file",
+                      "--proxy-jump",
+                      "--proxy-command",
+                      "--option",
+                      "-o",
+                      "--tags",
+                      "--password",
+                      "--format",
+                      "--from",
+                      "--file",
+                      "-f",
+                      "--concurrency",
+                      "--hosts"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [],
+                    "required_flags_in_all_arguments": false,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "webdav"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Known ctty subcommand `webdav` (not bare-host exec)",
+            "variant_id": "subcommand-webdav"
+          },
+          {
+            "matcher": {
+              "config": {
+                "executables": [
+                  "ctty",
+                  "ctty.cmd",
+                  "ctty.exe"
+                ],
+                "required_arguments": [
+                  "--help"
+                ]
+              },
+              "op": "arguments.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {
+                "executables": [
+                  "ctty",
+                  "ctty.cmd",
+                  "ctty.exe"
+                ],
+                "required_arguments": [
+                  "-h"
+                ]
+              },
+              "op": "arguments.v1"
+            },
+            "title": "Command short help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Use search/info first; avoid interactive bare `ctty <host>` from agents."
+        ],
+        "severity": "high",
+        "title": "ctty bare-host remote execution"
+      },
+      {
+        "action_classes": [
+          "ctty remote transfer command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `ctty put`, `ctty get`, and `ctty scp` (upload and download).",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "ctty",
+                  "ctty.cmd",
+                  "ctty.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--no-update-check",
+                  "--help",
+                  "-h",
+                  "--version",
+                  "-t",
+                  "--tty",
+                  "-s",
+                  "--search"
+                ],
+                "interspersed_options_with_values": [
+                  "--config",
+                  "-c",
+                  "--lang"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "-c",
+                  "--lang"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "put"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "ctty",
+                  "ctty.cmd",
+                  "ctty.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--no-update-check",
+                  "--help",
+                  "-h",
+                  "--version",
+                  "-t",
+                  "--tty",
+                  "-s",
+                  "--search"
+                ],
+                "interspersed_options_with_values": [
+                  "--config",
+                  "-c",
+                  "--lang"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "-c",
+                  "--lang"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "get"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "ctty",
+                  "ctty.cmd",
+                  "ctty.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--no-update-check",
+                  "--help",
+                  "-h",
+                  "--version",
+                  "-t",
+                  "--tty",
+                  "-s",
+                  "--search"
+                ],
+                "interspersed_options_with_values": [
+                  "--config",
+                  "-c",
+                  "--lang"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "-c",
+                  "--lang"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "scp"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.ctty.permission.transfer",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.ctty.transfer",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "put"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "get"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "scp"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "put"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "get"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "scp"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command short help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Verify remote paths before transferring."
+        ],
+        "severity": "high",
+        "title": "ctty remote file transfer"
+      },
+      {
+        "action_classes": [
+          "ctty remote delete command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `ctty sftp mkdir|rm|rmdir|rename`. Read-only `sftp ls --format json` is not matched.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "ctty",
+                  "ctty.cmd",
+                  "ctty.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--no-update-check",
+                  "--help",
+                  "-h",
+                  "--version",
+                  "-t",
+                  "--tty",
+                  "-s",
+                  "--search"
+                ],
+                "interspersed_options_with_values": [
+                  "--config",
+                  "-c",
+                  "--lang",
+                  "--format"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "-c",
+                  "--lang"
+                ],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "sftp",
+                    "mkdir"
+                  ],
+                  [
+                    "sftp",
+                    "rm"
+                  ],
+                  [
+                    "sftp",
+                    "rmdir"
+                  ],
+                  [
+                    "sftp",
+                    "rename"
+                  ]
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.ctty.permission.sftp-mutation",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.ctty.sftp-mutation",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--format"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "paths": [
+                      [
+                        "sftp",
+                        "mkdir"
+                      ],
+                      [
+                        "sftp",
+                        "rm"
+                      ],
+                      [
+                        "sftp",
+                        "rmdir"
+                      ],
+                      [
+                        "sftp",
+                        "rename"
+                      ]
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--format"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "paths": [
+                      [
+                        "sftp",
+                        "mkdir"
+                      ],
+                      [
+                        "sftp",
+                        "rm"
+                      ],
+                      [
+                        "sftp",
+                        "rmdir"
+                      ],
+                      [
+                        "sftp",
+                        "rename"
+                      ]
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command short help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect with sftp ls --format json before mutating."
+        ],
+        "severity": "high",
+        "title": "ctty SFTP remote mutation"
+      },
+      {
+        "action_classes": [
+          "ctty remote write command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies headless FTP mutations and downloads: `ctty ftp get|put|mkdir|rm|rmdir|rename`. Read-only list/search/info/ls are not matched.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "ctty",
+                  "ctty.cmd",
+                  "ctty.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--no-update-check",
+                  "--help",
+                  "-h",
+                  "--version",
+                  "-t",
+                  "--tty",
+                  "-s",
+                  "--search"
+                ],
+                "interspersed_options_with_values": [
+                  "--config",
+                  "-c",
+                  "--lang",
+                  "--format"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "-c",
+                  "--lang"
+                ],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "ftp",
+                    "put"
+                  ],
+                  [
+                    "ftp",
+                    "mkdir"
+                  ],
+                  [
+                    "ftp",
+                    "rm"
+                  ],
+                  [
+                    "ftp",
+                    "rmdir"
+                  ],
+                  [
+                    "ftp",
+                    "rename"
+                  ],
+                  [
+                    "ftp",
+                    "get"
+                  ]
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.ctty.permission.ftp-mutation",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.ctty.ftp-mutation",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--format"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "paths": [
+                      [
+                        "ftp",
+                        "put"
+                      ],
+                      [
+                        "ftp",
+                        "mkdir"
+                      ],
+                      [
+                        "ftp",
+                        "rm"
+                      ],
+                      [
+                        "ftp",
+                        "rmdir"
+                      ],
+                      [
+                        "ftp",
+                        "rename"
+                      ]
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--format"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "paths": [
+                      [
+                        "ftp",
+                        "put"
+                      ],
+                      [
+                        "ftp",
+                        "mkdir"
+                      ],
+                      [
+                        "ftp",
+                        "rm"
+                      ],
+                      [
+                        "ftp",
+                        "rmdir"
+                      ],
+                      [
+                        "ftp",
+                        "rename"
+                      ]
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command short help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect with ftp ls --format json before mutating."
+        ],
+        "severity": "high",
+        "title": "ctty FTP remote mutation/download"
+      },
+      {
+        "action_classes": [
+          "ctty remote delete command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies headless WebDAV mutations and downloads: `ctty webdav get|put|mkdir|rm|rmdir|rename`. Read-only list/search/info/ls are not matched.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "ctty",
+                  "ctty.cmd",
+                  "ctty.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--no-update-check",
+                  "--help",
+                  "-h",
+                  "--version",
+                  "-t",
+                  "--tty",
+                  "-s",
+                  "--search"
+                ],
+                "interspersed_options_with_values": [
+                  "--config",
+                  "-c",
+                  "--lang",
+                  "--format"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "-c",
+                  "--lang"
+                ],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "webdav",
+                    "put"
+                  ],
+                  [
+                    "webdav",
+                    "mkdir"
+                  ],
+                  [
+                    "webdav",
+                    "rm"
+                  ],
+                  [
+                    "webdav",
+                    "rmdir"
+                  ],
+                  [
+                    "webdav",
+                    "rename"
+                  ],
+                  [
+                    "webdav",
+                    "get"
+                  ]
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.ctty.permission.webdav-mutation",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.ctty.webdav-mutation",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--format"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "paths": [
+                      [
+                        "webdav",
+                        "put"
+                      ],
+                      [
+                        "webdav",
+                        "mkdir"
+                      ],
+                      [
+                        "webdav",
+                        "rm"
+                      ],
+                      [
+                        "webdav",
+                        "rmdir"
+                      ],
+                      [
+                        "webdav",
+                        "rename"
+                      ]
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--format"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "paths": [
+                      [
+                        "webdav",
+                        "put"
+                      ],
+                      [
+                        "webdav",
+                        "mkdir"
+                      ],
+                      [
+                        "webdav",
+                        "rm"
+                      ],
+                      [
+                        "webdav",
+                        "rmdir"
+                      ],
+                      [
+                        "webdav",
+                        "rename"
+                      ]
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": []
+                  },
+                  "op": "executable-path-set.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command short help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Inspect with webdav ls --format json before mutating."
+        ],
+        "severity": "high",
+        "title": "ctty WebDAV remote mutation/download"
+      },
+      {
+        "action_classes": [
+          "ctty local inventory mutation command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `ctty add|edit|move|import`. `import --dry-run` clears this rule via a safe variant.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "ctty",
+                  "ctty.cmd",
+                  "ctty.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--no-update-check",
+                  "--help",
+                  "-h",
+                  "--version",
+                  "-t",
+                  "--tty",
+                  "-s",
+                  "--search",
+                  "--non-interactive",
+                  "--force"
+                ],
+                "interspersed_options_with_values": [
+                  "--config",
+                  "-c",
+                  "--lang",
+                  "--name",
+                  "--hostname",
+                  "--user",
+                  "--port",
+                  "--identity-file",
+                  "--proxy-jump",
+                  "--proxy-command",
+                  "--option",
+                  "-o",
+                  "--tags",
+                  "--password",
+                  "--format"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "-c",
+                  "--lang"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "add"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "ctty",
+                  "ctty.cmd",
+                  "ctty.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--no-update-check",
+                  "--help",
+                  "-h",
+                  "--version",
+                  "-t",
+                  "--tty",
+                  "-s",
+                  "--search",
+                  "--non-interactive"
+                ],
+                "interspersed_options_with_values": [
+                  "--config",
+                  "-c",
+                  "--lang",
+                  "--name",
+                  "--hostname",
+                  "--user",
+                  "--port",
+                  "--identity-file",
+                  "--proxy-jump",
+                  "--proxy-command",
+                  "--option",
+                  "-o",
+                  "--tags",
+                  "--password",
+                  "--format"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "-c",
+                  "--lang"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "edit"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "ctty",
+                  "ctty.cmd",
+                  "ctty.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--no-update-check",
+                  "--help",
+                  "-h",
+                  "--version",
+                  "-t",
+                  "--tty",
+                  "-s",
+                  "--search"
+                ],
+                "interspersed_options_with_values": [
+                  "--config",
+                  "-c",
+                  "--lang"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "-c",
+                  "--lang"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "move"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "ctty",
+                  "ctty.cmd",
+                  "ctty.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--no-update-check",
+                  "--help",
+                  "-h",
+                  "--version",
+                  "-t",
+                  "--tty",
+                  "-s",
+                  "--search",
+                  "--dry-run"
+                ],
+                "interspersed_options_with_values": [
+                  "--config",
+                  "-c",
+                  "--lang",
+                  "--from",
+                  "--file",
+                  "-f"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "--config",
+                  "-c",
+                  "--lang"
+                ],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "import"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.ctty.permission.inventory-write",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.ctty.inventory-write",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search",
+                      "--non-interactive",
+                      "--force"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--name",
+                      "--hostname",
+                      "--user",
+                      "--port",
+                      "--identity-file",
+                      "--proxy-jump",
+                      "--proxy-command",
+                      "--option",
+                      "-o",
+                      "--tags",
+                      "--password",
+                      "--format"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "add"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search",
+                      "--non-interactive"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--name",
+                      "--hostname",
+                      "--user",
+                      "--port",
+                      "--identity-file",
+                      "--proxy-jump",
+                      "--proxy-command",
+                      "--option",
+                      "-o",
+                      "--tags",
+                      "--password",
+                      "--format"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "edit"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "move"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search",
+                      "--dry-run"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--from",
+                      "--file",
+                      "-f"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "import"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search",
+                      "--non-interactive",
+                      "--force"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--name",
+                      "--hostname",
+                      "--user",
+                      "--port",
+                      "--identity-file",
+                      "--proxy-jump",
+                      "--proxy-command",
+                      "--option",
+                      "-o",
+                      "--tags",
+                      "--password",
+                      "--format"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "add"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search",
+                      "--non-interactive"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--name",
+                      "--hostname",
+                      "--user",
+                      "--port",
+                      "--identity-file",
+                      "--proxy-jump",
+                      "--proxy-command",
+                      "--option",
+                      "-o",
+                      "--tags",
+                      "--password",
+                      "--format"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "edit"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "move"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search",
+                      "--dry-run"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--from",
+                      "--file",
+                      "-f"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "import"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Command short help",
+            "variant_id": "short-help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": true,
+                    "executables": [
+                      "ctty",
+                      "ctty.cmd",
+                      "ctty.exe"
+                    ],
+                    "fail_secure_unknown_options": false,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [
+                      "--no-update-check",
+                      "--help",
+                      "-h",
+                      "--version",
+                      "-t",
+                      "--tty",
+                      "-s",
+                      "--search",
+                      "--dry-run"
+                    ],
+                    "interspersed_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang",
+                      "--from",
+                      "--file",
+                      "-f"
+                    ],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [
+                      "--config",
+                      "-c",
+                      "--lang"
+                    ],
+                    "options_with_values": [],
+                    "required_flags": [
+                      "--dry-run"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "import"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Import dry-run preview",
+            "variant_id": "import-dry-run"
+          }
+        ],
+        "safer_alternatives": [
+          "Use import --dry-run before writing SSH config includes."
+        ],
+        "severity": "high",
+        "title": "ctty local inventory mutation"
+      }
+    ],
+    "safer_alternatives": [
+      "Use search/info and \u2026 ls --format json for read-only inspection.",
+      "Preview imports with --dry-run; confirm hosts before exec/transfers."
+    ],
+    "source": "built-in",
+    "version": "1.1.1"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

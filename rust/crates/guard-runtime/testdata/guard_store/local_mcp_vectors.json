@@ -1,0 +1,3561 @@
+{
+ "now": "2026-10-10T12:00:00+00:00",
+ "order_by": {
+  "local_cli_authority": "singleton",
+  "local_cli_command": "cli_id, command_id",
+  "local_cli_command_grant": "cli_id, command_id",
+  "local_cli_forgotten": "identity_hash",
+  "local_cli_grant": "cli_id",
+  "local_cli_observation": "cli_id",
+  "local_cli_retention_state": "singleton",
+  "local_mcp_catalog": "cli_id",
+  "local_mcp_provider_action": "cli_id, identity_hash, provider, tool_slug",
+  "local_mcp_provider_authority": "cli_id, identity_hash",
+  "local_mcp_tool_authority": "cli_id, identity_hash, tool_name",
+  "local_mcp_workflow_proposal": "cli_id, identity_hash, proposal_id"
+ },
+ "scenarios": [
+  {
+   "name": "find_lookups",
+   "seed": {
+    "local_cli_authority": [
+     {
+      "revision": 0,
+      "singleton": 1
+     }
+    ],
+    "local_cli_command": [],
+    "local_cli_command_grant": [],
+    "local_cli_forgotten": [],
+    "local_cli_grant": [],
+    "local_cli_observation": [],
+    "local_cli_retention_state": [],
+    "local_mcp_catalog": [],
+    "local_mcp_provider_action": [],
+    "local_mcp_provider_authority": [],
+    "local_mcp_tool_authority": [],
+    "local_mcp_workflow_proposal": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "",
+     "method": "sql",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.cli-row",
+        "example_label": "cli-row",
+        "help_status": null,
+        "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "cli-row",
+        "observed_count": 2,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.legacy",
+        "example_label": "legacy",
+        "help_status": null,
+        "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "legacy",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "uvx",
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.one",
+        "example_label": "one",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "one",
+        "observed_count": 2,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.three",
+        "example_label": "three",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-06T00:00:00+00:00",
+        "name": "three",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "npx",
+        "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.two",
+        "example_label": "two",
+        "help_status": null,
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "two",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "npx",
+        "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "source_label": "Codex",
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ]
+     },
+     "sql": [
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash, source_label) values (?, ?, 'executable', ?, null, ?, 2, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.one",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "one",
+        "one",
+        "2026-10-01T00:00:00+00:00",
+        "mcp",
+        "5555555555555555555555555555555555555555555555555555555555555555",
+        "npx",
+        "1111111111111111111111111111111111111111111111111111111111111111",
+        null
+       ]
+      ],
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash, source_label) values (?, ?, 'executable', ?, null, ?, 2, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.two",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "two",
+        "two",
+        "2026-10-03T00:00:00+00:00",
+        "mcp",
+        "6666666666666666666666666666666666666666666666666666666666666666",
+        "npx",
+        "2222222222222222222222222222222222222222222222222222222222222222",
+        "Codex"
+       ]
+      ],
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash, source_label) values (?, ?, 'executable', ?, null, ?, 2, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.three",
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "three",
+        "three",
+        "2026-10-06T00:00:00+00:00",
+        "mcp",
+        "6666666666666666666666666666666666666666666666666666666666666666",
+        "npx",
+        "2222222222222222222222222222222222222222222222222222222222222222",
+        null
+       ]
+      ],
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash, source_label) values (?, ?, 'executable', ?, null, ?, 2, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.cli-row",
+        "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "cli-row",
+        "cli-row",
+        "2026-10-01T00:00:00+00:00",
+        "cli",
+        "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "npx",
+        "1111111111111111111111111111111111111111111111111111111111111111",
+        null
+       ]
+      ],
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash, source_label) values (?, ?, 'executable', ?, null, ?, 2, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.legacy",
+        "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "legacy",
+        "legacy",
+        "2026-10-01T00:00:00+00:00",
+        "mcp",
+        null,
+        "uvx",
+        "2222222222222222222222222222222222222222222222222222222222222222",
+        null
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "nothing supplied",
+     "method": "find_local_mcp_observation",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {
+      "args_hash": null,
+      "cli_id": null,
+      "command": null,
+      "server_identity_hash": null
+     }
+    },
+    {
+     "error": null,
+     "label": "command without args hash",
+     "method": "find_local_mcp_observation",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {
+      "args_hash": null,
+      "cli_id": null,
+      "command": "npx",
+      "server_identity_hash": null
+     }
+    },
+    {
+     "error": null,
+     "label": "by cli id",
+     "method": "find_local_mcp_observation",
+     "native_payload": {
+      "cli_id": "local-cli.one",
+      "example_label": "one",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "one",
+      "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "server_command": "npx",
+      "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "source_label": null
+     },
+     "post_changed": {},
+     "wire_args": {
+      "args_hash": null,
+      "cli_id": "local-cli.one",
+      "command": null,
+      "server_identity_hash": null
+     }
+    },
+    {
+     "error": null,
+     "label": "invalid cli id falls back to the hash",
+     "method": "find_local_mcp_observation",
+     "native_payload": {
+      "cli_id": "local-cli.one",
+      "example_label": "one",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "one",
+      "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "server_command": "npx",
+      "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "source_label": null
+     },
+     "post_changed": {},
+     "wire_args": {
+      "args_hash": null,
+      "cli_id": "local-cli.One",
+      "command": null,
+      "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555"
+     }
+    },
+    {
+     "error": null,
+     "label": "cli id never falls through",
+     "method": "find_local_mcp_observation",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {
+      "args_hash": null,
+      "cli_id": "local-cli.missing",
+      "command": null,
+      "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555"
+     }
+    },
+    {
+     "error": null,
+     "label": "uppercase server hash",
+     "method": "find_local_mcp_observation",
+     "native_payload": {
+      "cli_id": "local-cli.one",
+      "example_label": "one",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "one",
+      "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "server_command": "npx",
+      "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "source_label": null
+     },
+     "post_changed": {},
+     "wire_args": {
+      "args_hash": null,
+      "cli_id": null,
+      "command": null,
+      "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555"
+     }
+    },
+    {
+     "error": null,
+     "label": "identity hash column matches",
+     "method": "find_local_mcp_observation",
+     "native_payload": {
+      "cli_id": "local-cli.legacy",
+      "example_label": "legacy",
+      "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "legacy",
+      "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "server_command": "uvx",
+      "server_identity_hash": null,
+      "source_label": null
+     },
+     "post_changed": {},
+     "wire_args": {
+      "args_hash": null,
+      "cli_id": null,
+      "command": null,
+      "server_identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+     }
+    },
+    {
+     "error": null,
+     "label": "two rows share a server hash",
+     "method": "find_local_mcp_observation",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {
+      "args_hash": null,
+      "cli_id": null,
+      "command": null,
+      "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666"
+     }
+    },
+    {
+     "error": null,
+     "label": "non-hex hash falls back to the launch",
+     "method": "find_local_mcp_observation",
+     "native_payload": {
+      "cli_id": "local-cli.legacy",
+      "example_label": "legacy",
+      "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "legacy",
+      "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "server_command": "uvx",
+      "server_identity_hash": null,
+      "source_label": null
+     },
+     "post_changed": {},
+     "wire_args": {
+      "args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "cli_id": null,
+      "command": "uvx",
+      "server_identity_hash": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+     }
+    },
+    {
+     "error": null,
+     "label": "short hash with an ambiguous launch",
+     "method": "find_local_mcp_observation",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {
+      "args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "cli_id": null,
+      "command": "npx",
+      "server_identity_hash": "ab"
+     }
+    },
+    {
+     "error": null,
+     "label": "hash never falls through to the launch",
+     "method": "find_local_mcp_observation",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {
+      "args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "cli_id": null,
+      "command": "npx",
+      "server_identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+     }
+    },
+    {
+     "error": null,
+     "label": "cli surface rows are ignored",
+     "method": "find_local_mcp_observation",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {
+      "args_hash": null,
+      "cli_id": "local-cli.cli-row",
+      "command": null,
+      "server_identity_hash": null
+     }
+    }
+   ]
+  },
+  {
+   "name": "ensure_insert_and_refresh",
+   "seed": {
+    "local_cli_authority": [
+     {
+      "revision": 0,
+      "singleton": 1
+     }
+    ],
+    "local_cli_command": [],
+    "local_cli_command_grant": [],
+    "local_cli_forgotten": [],
+    "local_cli_grant": [],
+    "local_cli_observation": [],
+    "local_cli_retention_state": [],
+    "local_mcp_catalog": [],
+    "local_mcp_provider_action": [],
+    "local_mcp_provider_authority": [],
+    "local_mcp_tool_authority": [],
+    "local_mcp_workflow_proposal": []
+   },
+   "steps": [
+    {
+     "error": {
+      "message": "invalid local CLI id",
+      "message_exact": true,
+      "type": "ValueError"
+     },
+     "label": "invalid id",
+     "method": "ensure_local_mcp_observation",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {
+      "barrier_closed": true,
+      "cli_id": "local-cli.Bad",
+      "clock": "<NOW>",
+      "connection_identity_hash": null,
+      "example_label": "Bad server",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "Bad",
+      "replay_now": null,
+      "replayed": false,
+      "seen_at": "2026-10-01T00:00:00+00:00",
+      "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "server_command": "npx",
+      "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "source_label": null
+     }
+    },
+    {
+     "error": null,
+     "label": "first sighting inserts and prunes",
+     "method": "ensure_local_mcp_observation",
+     "native_payload": {
+      "cli_id": "local-cli.alpha"
+     },
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.alpha",
+        "example_label": "alpha server",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "alpha",
+        "observed_count": 1,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": "Codex \u00b7 config",
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ],
+      "local_cli_retention_state": [
+       {
+        "last_pruned_at": "2026-10-01T00:00:00+00:00",
+        "singleton": 1
+       }
+      ]
+     },
+     "wire_args": {
+      "barrier_closed": true,
+      "cli_id": "local-cli.alpha",
+      "clock": "<NOW>",
+      "connection_identity_hash": null,
+      "example_label": "alpha server",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "alpha",
+      "replay_now": null,
+      "replayed": false,
+      "seen_at": "2026-10-01T00:00:00+00:00",
+      "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "server_command": "npx",
+      "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "source_label": "Codex \u00b7 config"
+     }
+    },
+    {
+     "error": null,
+     "label": "refresh by server hash keeps count",
+     "method": "ensure_local_mcp_observation",
+     "native_payload": {
+      "cli_id": "local-cli.alpha"
+     },
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.alpha",
+        "example_label": "alpha server",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "alpha",
+        "observed_count": 1,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": "Codex \u00b7 config",
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ],
+      "local_cli_retention_state": [
+       {
+        "last_pruned_at": "2026-10-03T00:00:00+00:00",
+        "singleton": 1
+       }
+      ]
+     },
+     "wire_args": {
+      "barrier_closed": true,
+      "cli_id": "local-cli.alpha",
+      "clock": "<NOW>",
+      "connection_identity_hash": null,
+      "example_label": "alpha server",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "alpha",
+      "replay_now": null,
+      "replayed": false,
+      "seen_at": "2026-10-03T00:00:00+00:00",
+      "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "server_command": "npx",
+      "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "source_label": null
+     }
+    },
+    {
+     "error": null,
+     "label": "refresh renames and relabels",
+     "method": "ensure_local_mcp_observation",
+     "native_payload": {
+      "cli_id": "local-cli.alpha"
+     },
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.alpha",
+        "example_label": "alpha-renamed server",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-06T00:00:00+00:00",
+        "name": "alpha-renamed",
+        "observed_count": 1,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": "Claude",
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ],
+      "local_cli_retention_state": [
+       {
+        "last_pruned_at": "2026-10-06T00:00:00+00:00",
+        "singleton": 1
+       }
+      ]
+     },
+     "wire_args": {
+      "barrier_closed": true,
+      "cli_id": "local-cli.alpha",
+      "clock": "<NOW>",
+      "connection_identity_hash": null,
+      "example_label": "alpha-renamed server",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "alpha-renamed",
+      "replay_now": null,
+      "replayed": false,
+      "seen_at": "2026-10-06T00:00:00+00:00",
+      "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "server_command": "npx",
+      "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "source_label": "Claude"
+     }
+    },
+    {
+     "error": null,
+     "label": "connection hash looks up a separate connection",
+     "method": "ensure_local_mcp_observation",
+     "native_payload": {
+      "cli_id": "local-cli.beta"
+     },
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.alpha",
+        "example_label": "alpha-renamed server",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-06T00:00:00+00:00",
+        "name": "alpha-renamed",
+        "observed_count": 1,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": "Claude",
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.beta",
+        "example_label": "beta server",
+        "help_status": null,
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-06T00:00:00+00:00",
+        "name": "beta",
+        "observed_count": 1,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ]
+     },
+     "wire_args": {
+      "barrier_closed": true,
+      "cli_id": "local-cli.beta",
+      "clock": "<NOW>",
+      "connection_identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "example_label": "beta server",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "beta",
+      "replay_now": null,
+      "replayed": false,
+      "seen_at": "2026-10-06T00:00:00+00:00",
+      "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "server_command": "npx",
+      "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+      "source_label": null
+     }
+    },
+    {
+     "error": null,
+     "label": "connection hash finds the stored connection",
+     "method": "ensure_local_mcp_observation",
+     "native_payload": {
+      "cli_id": "local-cli.beta"
+     },
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.alpha",
+        "example_label": "alpha-renamed server",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-06T00:00:00+00:00",
+        "name": "alpha-renamed",
+        "observed_count": 1,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": "Claude",
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.beta",
+        "example_label": "beta server",
+        "help_status": null,
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-07T00:00:00+00:00",
+        "name": "beta",
+        "observed_count": 1,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ],
+      "local_cli_retention_state": [
+       {
+        "last_pruned_at": "2026-10-07T00:00:00+00:00",
+        "singleton": 1
+       }
+      ]
+     },
+     "wire_args": {
+      "barrier_closed": true,
+      "cli_id": "local-cli.beta",
+      "clock": "<NOW>",
+      "connection_identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "example_label": "beta server",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "beta",
+      "replay_now": null,
+      "replayed": false,
+      "seen_at": "2026-10-07T00:00:00+00:00",
+      "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "server_command": "npx",
+      "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+      "source_label": null
+     }
+    },
+    {
+     "error": null,
+     "label": "",
+     "method": "sql",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.alpha",
+        "example_label": "alpha-renamed server",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-06T00:00:00+00:00",
+        "name": "alpha-renamed",
+        "observed_count": 1,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": "Claude",
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.beta",
+        "example_label": "beta server",
+        "help_status": null,
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-07T00:00:00+00:00",
+        "name": "beta",
+        "observed_count": 1,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.gamma",
+        "example_label": "gamma",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "gamma",
+        "observed_count": 2,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.stale",
+        "example_label": "stale",
+        "help_status": null,
+        "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "stale",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "old",
+        "server_identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ],
+      "local_cli_retention_state": []
+     },
+     "sql": [
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash, source_label) values (?, ?, 'executable', ?, null, ?, 2, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.gamma",
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "gamma",
+        "gamma",
+        "2026-10-01T00:00:00+00:00",
+        "mcp",
+        null,
+        null,
+        null,
+        null
+       ]
+      ],
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash, source_label) values (?, ?, 'executable', ?, null, ?, 2, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.stale",
+        "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "stale",
+        "stale",
+        "2026-08-02T00:00:00+00:00",
+        "mcp",
+        "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "old",
+        "2222222222222222222222222222222222222222222222222222222222222222",
+        null
+       ]
+      ],
+      [
+       "delete from local_cli_retention_state",
+       []
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "server hash matches the identity column and fills nulls",
+     "method": "ensure_local_mcp_observation",
+     "native_payload": {
+      "cli_id": "local-cli.gamma"
+     },
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.alpha",
+        "example_label": "alpha-renamed server",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-06T00:00:00+00:00",
+        "name": "alpha-renamed",
+        "observed_count": 1,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": "Claude",
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.beta",
+        "example_label": "beta server",
+        "help_status": null,
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-07T00:00:00+00:00",
+        "name": "beta",
+        "observed_count": 1,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.gamma",
+        "example_label": "gamma server",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "gamma",
+        "observed_count": 2,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ],
+      "local_cli_retention_state": [
+       {
+        "last_pruned_at": "2026-10-03T00:00:00+00:00",
+        "singleton": 1
+       }
+      ]
+     },
+     "wire_args": {
+      "barrier_closed": true,
+      "cli_id": "local-cli.gamma",
+      "clock": "<NOW>",
+      "connection_identity_hash": null,
+      "example_label": "gamma server",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "gamma",
+      "replay_now": null,
+      "replayed": false,
+      "seen_at": "2026-10-03T00:00:00+00:00",
+      "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "server_command": "npx",
+      "server_identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "source_label": null
+     }
+    },
+    {
+     "error": null,
+     "label": "server hash naming another identity refreshes that record",
+     "method": "ensure_local_mcp_observation",
+     "native_payload": {
+      "cli_id": "local-cli.alpha"
+     },
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.alpha",
+        "example_label": "delta server",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "not a time",
+        "name": "delta",
+        "observed_count": 1,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": "Claude",
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.beta",
+        "example_label": "beta server",
+        "help_status": null,
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-07T00:00:00+00:00",
+        "name": "beta",
+        "observed_count": 1,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.gamma",
+        "example_label": "gamma server",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "gamma",
+        "observed_count": 2,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ],
+      "local_cli_retention_state": [
+       {
+        "last_pruned_at": "2026-10-10T12:00:00+00:00",
+        "singleton": 1
+       }
+      ]
+     },
+     "wire_args": {
+      "barrier_closed": true,
+      "cli_id": "local-cli.delta",
+      "clock": "<NOW>",
+      "connection_identity_hash": null,
+      "example_label": "delta server",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "delta",
+      "replay_now": null,
+      "replayed": false,
+      "seen_at": "not a time",
+      "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "server_command": "node",
+      "server_identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "source_label": null
+     }
+    }
+   ]
+  },
+  {
+   "name": "ensure_id_collisions",
+   "seed": {
+    "local_cli_authority": [
+     {
+      "revision": 0,
+      "singleton": 1
+     }
+    ],
+    "local_cli_command": [],
+    "local_cli_command_grant": [],
+    "local_cli_forgotten": [],
+    "local_cli_grant": [],
+    "local_cli_observation": [],
+    "local_cli_retention_state": [],
+    "local_mcp_catalog": [],
+    "local_mcp_provider_action": [],
+    "local_mcp_provider_authority": [],
+    "local_mcp_tool_authority": [],
+    "local_mcp_workflow_proposal": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "",
+     "method": "sql",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.dup",
+        "example_label": "dup",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "dup",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "x",
+        "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.dup-two",
+        "example_label": "dup-two",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "dup-two",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "x",
+        "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.same",
+        "example_label": "same",
+        "help_status": null,
+        "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "same",
+        "observed_count": 2,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.taken",
+        "example_label": "taken",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "taken",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "other",
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ]
+     },
+     "sql": [
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash, source_label) values (?, ?, 'executable', ?, null, ?, 2, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.taken",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "taken",
+        "taken",
+        "2026-10-01T00:00:00+00:00",
+        "mcp",
+        "5555555555555555555555555555555555555555555555555555555555555555",
+        "other",
+        "2222222222222222222222222222222222222222222222222222222222222222",
+        null
+       ]
+      ],
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash, source_label) values (?, ?, 'executable', ?, null, ?, 2, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.dup",
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "dup",
+        "dup",
+        "2026-10-01T00:00:00+00:00",
+        "mcp",
+        "6666666666666666666666666666666666666666666666666666666666666666",
+        "x",
+        "2222222222222222222222222222222222222222222222222222222222222222",
+        null
+       ]
+      ],
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash, source_label) values (?, ?, 'executable', ?, null, ?, 2, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.dup-two",
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "dup-two",
+        "dup-two",
+        "2026-10-01T00:00:00+00:00",
+        "mcp",
+        "6666666666666666666666666666666666666666666666666666666666666666",
+        "x",
+        "2222222222222222222222222222222222222222222222222222222222222222",
+        null
+       ]
+      ],
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash, source_label) values (?, ?, 'executable', ?, null, ?, 2, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.same",
+        "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "same",
+        "same",
+        "2026-10-01T00:00:00+00:00",
+        "cli",
+        null,
+        null,
+        null,
+        null
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "taken id with another identity uses the collision id",
+     "method": "ensure_local_mcp_observation",
+     "native_payload": {
+      "cli_id": "local-cli.mcp-bbbbbbbbbbbb"
+     },
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.dup",
+        "example_label": "dup",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "dup",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "x",
+        "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.dup-two",
+        "example_label": "dup-two",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "dup-two",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "x",
+        "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.mcp-bbbbbbbbbbbb",
+        "example_label": "taken server",
+        "help_status": null,
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "taken",
+        "observed_count": 1,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "new",
+        "server_identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.same",
+        "example_label": "same",
+        "help_status": null,
+        "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "same",
+        "observed_count": 2,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.taken",
+        "example_label": "taken",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "taken",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "other",
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ]
+     },
+     "wire_args": {
+      "barrier_closed": true,
+      "cli_id": "local-cli.taken",
+      "clock": "<NOW>",
+      "connection_identity_hash": null,
+      "example_label": "taken server",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "taken",
+      "replay_now": null,
+      "replayed": false,
+      "seen_at": "2026-10-03T00:00:00+00:00",
+      "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "server_command": "new",
+      "server_identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "source_label": null
+     }
+    },
+    {
+     "error": null,
+     "label": "second sighting finds the collision row",
+     "method": "ensure_local_mcp_observation",
+     "native_payload": {
+      "cli_id": "local-cli.mcp-bbbbbbbbbbbb"
+     },
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.dup",
+        "example_label": "dup",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "dup",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "x",
+        "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.dup-two",
+        "example_label": "dup-two",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "dup-two",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "x",
+        "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.mcp-bbbbbbbbbbbb",
+        "example_label": "taken server",
+        "help_status": null,
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-06T00:00:00+00:00",
+        "name": "taken",
+        "observed_count": 1,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "new",
+        "server_identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.same",
+        "example_label": "same",
+        "help_status": null,
+        "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "same",
+        "observed_count": 2,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.taken",
+        "example_label": "taken",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "taken",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "other",
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ],
+      "local_cli_retention_state": [
+       {
+        "last_pruned_at": "2026-10-06T00:00:00+00:00",
+        "singleton": 1
+       }
+      ]
+     },
+     "wire_args": {
+      "barrier_closed": true,
+      "cli_id": "local-cli.taken",
+      "clock": "<NOW>",
+      "connection_identity_hash": null,
+      "example_label": "taken server",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "taken",
+      "replay_now": null,
+      "replayed": false,
+      "seen_at": "2026-10-06T00:00:00+00:00",
+      "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "server_command": "new",
+      "server_identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "source_label": null
+     }
+    },
+    {
+     "error": null,
+     "label": "",
+     "method": "sql",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.dup",
+        "example_label": "dup",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "dup",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "x",
+        "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.dup-two",
+        "example_label": "dup-two",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "dup-two",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "x",
+        "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.same",
+        "example_label": "same",
+        "help_status": null,
+        "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "same",
+        "observed_count": 2,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.taken",
+        "example_label": "taken",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "taken",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "other",
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ]
+     },
+     "sql": [
+      [
+       "delete from local_cli_observation where cli_id = 'local-cli.mcp-bbbbbbbbbbbb'",
+       []
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "",
+     "method": "sql",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.dup",
+        "example_label": "dup",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "dup",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "x",
+        "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.dup-two",
+        "example_label": "dup-two",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "dup-two",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "x",
+        "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.mcp-bbbbbbbbbbbb",
+        "example_label": "mcp-bbbbbbbbbbbb",
+        "help_status": null,
+        "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "mcp-bbbbbbbbbbbb",
+        "observed_count": 2,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.same",
+        "example_label": "same",
+        "help_status": null,
+        "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "same",
+        "observed_count": 2,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.taken",
+        "example_label": "taken",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "taken",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "other",
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ]
+     },
+     "sql": [
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash, source_label) values (?, ?, 'executable', ?, null, ?, 2, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.mcp-bbbbbbbbbbbb",
+        "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "mcp-bbbbbbbbbbbb",
+        "mcp-bbbbbbbbbbbb",
+        "2026-10-01T00:00:00+00:00",
+        "cli",
+        null,
+        null,
+        null,
+        null
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "collision id also taken returns the original",
+     "method": "ensure_local_mcp_observation",
+     "native_payload": {
+      "cli_id": "local-cli.taken"
+     },
+     "post_changed": {},
+     "wire_args": {
+      "barrier_closed": true,
+      "cli_id": "local-cli.taken",
+      "clock": "<NOW>",
+      "connection_identity_hash": null,
+      "example_label": "taken server",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "taken",
+      "replay_now": null,
+      "replayed": false,
+      "seen_at": "2026-10-06T00:00:00+00:00",
+      "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "server_command": "new",
+      "server_identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "source_label": null
+     }
+    },
+    {
+     "error": null,
+     "label": "taken id with the same identity refreshes it",
+     "method": "ensure_local_mcp_observation",
+     "native_payload": {
+      "cli_id": "local-cli.same"
+     },
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.dup",
+        "example_label": "dup",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "dup",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "x",
+        "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.dup-two",
+        "example_label": "dup-two",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "dup-two",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "x",
+        "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.mcp-bbbbbbbbbbbb",
+        "example_label": "mcp-bbbbbbbbbbbb",
+        "help_status": null,
+        "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "mcp-bbbbbbbbbbbb",
+        "observed_count": 2,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.same",
+        "example_label": "same server",
+        "help_status": null,
+        "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "same",
+        "observed_count": 2,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "same",
+        "server_identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.taken",
+        "example_label": "taken",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "taken",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "other",
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ]
+     },
+     "wire_args": {
+      "barrier_closed": true,
+      "cli_id": "local-cli.same",
+      "clock": "<NOW>",
+      "connection_identity_hash": null,
+      "example_label": "same server",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "same",
+      "replay_now": null,
+      "replayed": false,
+      "seen_at": "2026-10-03T00:00:00+00:00",
+      "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "server_command": "same",
+      "server_identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "source_label": null
+     }
+    },
+    {
+     "error": null,
+     "label": "ambiguous launch refreshes the record holding the id",
+     "method": "ensure_local_mcp_observation",
+     "native_payload": {
+      "cli_id": "local-cli.dup"
+     },
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.dup",
+        "example_label": "dup server",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "dup",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "x",
+        "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.dup-two",
+        "example_label": "dup-two",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "dup-two",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "x",
+        "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.mcp-bbbbbbbbbbbb",
+        "example_label": "mcp-bbbbbbbbbbbb",
+        "help_status": null,
+        "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "mcp-bbbbbbbbbbbb",
+        "observed_count": 2,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.same",
+        "example_label": "same server",
+        "help_status": null,
+        "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "same",
+        "observed_count": 2,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "same",
+        "server_identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.taken",
+        "example_label": "taken",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "taken",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "other",
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ]
+     },
+     "wire_args": {
+      "barrier_closed": true,
+      "cli_id": "local-cli.dup",
+      "clock": "<NOW>",
+      "connection_identity_hash": null,
+      "example_label": "dup server",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "dup",
+      "replay_now": null,
+      "replayed": false,
+      "seen_at": "2026-10-03T00:00:00+00:00",
+      "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "server_command": "x",
+      "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+      "source_label": null
+     }
+    }
+   ]
+  },
+  {
+   "name": "ensure_replay",
+   "seed": {
+    "local_cli_authority": [
+     {
+      "revision": 0,
+      "singleton": 1
+     }
+    ],
+    "local_cli_command": [],
+    "local_cli_command_grant": [],
+    "local_cli_forgotten": [],
+    "local_cli_grant": [],
+    "local_cli_observation": [],
+    "local_cli_retention_state": [],
+    "local_mcp_catalog": [],
+    "local_mcp_provider_action": [],
+    "local_mcp_provider_authority": [],
+    "local_mcp_tool_authority": [],
+    "local_mcp_workflow_proposal": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "",
+     "method": "sql",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_forgotten": [
+       {
+        "forgotten_at": "2026-10-03T00:00:00+00:00",
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+       }
+      ],
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.expired",
+        "example_label": "expired",
+        "help_status": null,
+        "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "expired",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "exp",
+        "server_identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.listed",
+        "example_label": "listed",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-06T00:00:00+00:00",
+        "name": "listed",
+        "observed_count": 2,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ],
+      "local_cli_retention_state": [
+       {
+        "last_pruned_at": "2026-09-01T00:00:00+00:00",
+        "singleton": 1
+       }
+      ]
+     },
+     "sql": [
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash, source_label) values (?, ?, 'executable', ?, null, ?, 2, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.listed",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "listed",
+        "listed",
+        "2026-10-06T00:00:00+00:00",
+        "mcp",
+        "5555555555555555555555555555555555555555555555555555555555555555",
+        "npx",
+        "1111111111111111111111111111111111111111111111111111111111111111",
+        null
+       ]
+      ],
+      [
+       "insert into local_cli_forgotten values (?, ?)",
+       [
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "2026-10-03T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_cli_retention_state values (1, ?)",
+       [
+        "2026-09-01T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash, source_label) values (?, ?, 'executable', ?, null, ?, 2, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.expired",
+        "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "expired",
+        "expired",
+        "2026-08-02T00:00:00+00:00",
+        "mcp",
+        "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "exp",
+        "2222222222222222222222222222222222222222222222222222222222222222",
+        null
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "older replay keeps the later stored time",
+     "method": "ensure_local_mcp_observation",
+     "native_payload": {
+      "cli_id": "local-cli.listed"
+     },
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.expired",
+        "example_label": "expired",
+        "help_status": null,
+        "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "expired",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "exp",
+        "server_identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.listed",
+        "example_label": "listed server",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-06T00:00:00+00:00",
+        "name": "listed",
+        "observed_count": 2,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ]
+     },
+     "wire_args": {
+      "barrier_closed": true,
+      "cli_id": "local-cli.listed",
+      "clock": "<NOW>",
+      "connection_identity_hash": null,
+      "example_label": "listed server",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "listed",
+      "replay_now": null,
+      "replayed": true,
+      "seen_at": "2026-10-03T00:00:00+00:00",
+      "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "server_command": "npx",
+      "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "source_label": null
+     }
+    },
+    {
+     "error": null,
+     "label": "later replay moves forward",
+     "method": "ensure_local_mcp_observation",
+     "native_payload": {
+      "cli_id": "local-cli.listed"
+     },
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.expired",
+        "example_label": "expired",
+        "help_status": null,
+        "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "expired",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "exp",
+        "server_identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.listed",
+        "example_label": "listed server",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-08T00:00:00Z",
+        "name": "listed",
+        "observed_count": 2,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ]
+     },
+     "wire_args": {
+      "barrier_closed": true,
+      "cli_id": "local-cli.listed",
+      "clock": "<NOW>",
+      "connection_identity_hash": null,
+      "example_label": "listed server",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "listed",
+      "replay_now": null,
+      "replayed": true,
+      "seen_at": "2026-10-08T00:00:00Z",
+      "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "server_command": "npx",
+      "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "source_label": null
+     }
+    },
+    {
+     "error": null,
+     "label": "unparsable replay keeps the stored time",
+     "method": "ensure_local_mcp_observation",
+     "native_payload": {
+      "cli_id": "local-cli.listed"
+     },
+     "post_changed": {},
+     "wire_args": {
+      "barrier_closed": true,
+      "cli_id": "local-cli.listed",
+      "clock": "<NOW>",
+      "connection_identity_hash": null,
+      "example_label": "listed server",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "listed",
+      "replay_now": null,
+      "replayed": true,
+      "seen_at": "garbled",
+      "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "server_command": "npx",
+      "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "source_label": null
+     }
+    },
+    {
+     "error": null,
+     "label": "forgotten identity is skipped",
+     "method": "ensure_local_mcp_observation",
+     "native_payload": {
+      "replay_skipped": true
+     },
+     "post_changed": {},
+     "wire_args": {
+      "barrier_closed": true,
+      "cli_id": "local-cli.forgot",
+      "clock": "<NOW>",
+      "connection_identity_hash": null,
+      "example_label": "forgot server",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "forgot",
+      "replay_now": null,
+      "replayed": true,
+      "seen_at": "2026-10-01T00:00:00+00:00",
+      "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "server_command": "f",
+      "server_identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "source_label": null
+     }
+    },
+    {
+     "error": null,
+     "label": "seen after the forget is restored without pruning",
+     "method": "ensure_local_mcp_observation",
+     "native_payload": {
+      "cli_id": "local-cli.forgot"
+     },
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.expired",
+        "example_label": "expired",
+        "help_status": null,
+        "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "expired",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "exp",
+        "server_identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.forgot",
+        "example_label": "forgot server",
+        "help_status": null,
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-06T00:00:00+00:00",
+        "name": "forgot",
+        "observed_count": 1,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "f",
+        "server_identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.listed",
+        "example_label": "listed server",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-08T00:00:00Z",
+        "name": "listed",
+        "observed_count": 2,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ]
+     },
+     "wire_args": {
+      "barrier_closed": true,
+      "cli_id": "local-cli.forgot",
+      "clock": "<NOW>",
+      "connection_identity_hash": null,
+      "example_label": "forgot server",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "forgot",
+      "replay_now": null,
+      "replayed": true,
+      "seen_at": "2026-10-06T00:00:00+00:00",
+      "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "server_command": "f",
+      "server_identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "source_label": null
+     }
+    },
+    {
+     "error": null,
+     "label": "too old for the clock",
+     "method": "ensure_local_mcp_observation",
+     "native_payload": {
+      "replay_skipped": true
+     },
+     "post_changed": {},
+     "wire_args": {
+      "barrier_closed": true,
+      "cli_id": "local-cli.ancient",
+      "clock": "<NOW>",
+      "connection_identity_hash": null,
+      "example_label": "ancient server",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "ancient",
+      "replay_now": null,
+      "replayed": true,
+      "seen_at": "2026-08-02T00:00:00+00:00",
+      "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "server_command": "a",
+      "server_identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "source_label": null
+     }
+    },
+    {
+     "error": null,
+     "label": "inside the window of the replay time",
+     "method": "ensure_local_mcp_observation",
+     "native_payload": {
+      "cli_id": "local-cli.ancient"
+     },
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.ancient",
+        "example_label": "ancient server",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "ancient",
+        "observed_count": 1,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "a",
+        "server_identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.expired",
+        "example_label": "expired",
+        "help_status": null,
+        "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "expired",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "exp",
+        "server_identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.forgot",
+        "example_label": "forgot server",
+        "help_status": null,
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-06T00:00:00+00:00",
+        "name": "forgot",
+        "observed_count": 1,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "f",
+        "server_identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.listed",
+        "example_label": "listed server",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-08T00:00:00Z",
+        "name": "listed",
+        "observed_count": 2,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ]
+     },
+     "wire_args": {
+      "barrier_closed": true,
+      "cli_id": "local-cli.ancient",
+      "clock": "<NOW>",
+      "connection_identity_hash": null,
+      "example_label": "ancient server",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "ancient",
+      "replay_now": "2026-08-10T00:00:00Z",
+      "replayed": true,
+      "seen_at": "2026-08-02T00:00:00+00:00",
+      "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "server_command": "a",
+      "server_identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "source_label": null
+     }
+    }
+   ]
+  },
+  {
+   "name": "ensure_legacy_denial",
+   "seed": {
+    "local_cli_authority": [
+     {
+      "revision": 0,
+      "singleton": 1
+     }
+    ],
+    "local_cli_command": [],
+    "local_cli_command_grant": [],
+    "local_cli_forgotten": [],
+    "local_cli_grant": [],
+    "local_cli_observation": [],
+    "local_cli_retention_state": [],
+    "local_mcp_catalog": [],
+    "local_mcp_provider_action": [],
+    "local_mcp_provider_authority": [],
+    "local_mcp_tool_authority": [],
+    "local_mcp_workflow_proposal": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "",
+     "method": "sql",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_command_grant": [
+       {
+        "cli_id": "local-cli.legacy-choice",
+        "command_id": "tool",
+        "state": "block"
+       }
+      ],
+      "local_cli_grant": [
+       {
+        "cli_id": "local-cli.legacy-allow",
+        "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "revision": 1,
+        "state": "allowed",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "cli_id": "local-cli.legacy-choice",
+        "identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "revision": 1,
+        "state": "allowed",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "cli_id": "local-cli.legacy-deny",
+        "identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "revision": 1,
+        "state": "blocked",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       }
+      ],
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.legacy-allow",
+        "example_label": "legacy-allow",
+        "help_status": null,
+        "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "legacy-allow",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "node",
+        "server_identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.legacy-choice",
+        "example_label": "legacy-choice",
+        "help_status": null,
+        "identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "legacy-choice",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "uvx",
+        "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.legacy-deny",
+        "example_label": "legacy-deny",
+        "help_status": null,
+        "identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "legacy-deny",
+        "observed_count": 2,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ]
+     },
+     "sql": [
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash, source_label) values (?, ?, 'executable', ?, null, ?, 2, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.legacy-deny",
+        "5555555555555555555555555555555555555555555555555555555555555555",
+        "legacy-deny",
+        "legacy-deny",
+        "2026-10-01T00:00:00+00:00",
+        "mcp",
+        null,
+        "npx",
+        "1111111111111111111111111111111111111111111111111111111111111111",
+        null
+       ]
+      ],
+      [
+       "insert into local_cli_grant (cli_id, identity_hash, state, revision, updated_at) values (?, ?, ?, 1, ?)",
+       [
+        "local-cli.legacy-deny",
+        "5555555555555555555555555555555555555555555555555555555555555555",
+        "blocked",
+        "2026-10-01T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash, source_label) values (?, ?, 'executable', ?, null, ?, 2, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.legacy-choice",
+        "6666666666666666666666666666666666666666666666666666666666666666",
+        "legacy-choice",
+        "legacy-choice",
+        "2026-10-01T00:00:00+00:00",
+        "mcp",
+        "6666666666666666666666666666666666666666666666666666666666666666",
+        "uvx",
+        "2222222222222222222222222222222222222222222222222222222222222222",
+        null
+       ]
+      ],
+      [
+       "insert into local_cli_grant (cli_id, identity_hash, state, revision, updated_at) values (?, ?, ?, 1, ?)",
+       [
+        "local-cli.legacy-choice",
+        "6666666666666666666666666666666666666666666666666666666666666666",
+        "allowed",
+        "2026-10-01T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_cli_command_grant (cli_id, command_id, state) values (?, 'tool', 'block')",
+       [
+        "local-cli.legacy-choice"
+       ]
+      ],
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash, source_label) values (?, ?, 'executable', ?, null, ?, 2, ?, ?, ?, ?, ?, ?)",
+       [
+        "local-cli.legacy-allow",
+        "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "legacy-allow",
+        "legacy-allow",
+        "2026-10-01T00:00:00+00:00",
+        "mcp",
+        "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "node",
+        "2222222222222222222222222222222222222222222222222222222222222222",
+        null
+       ]
+      ],
+      [
+       "insert into local_cli_grant (cli_id, identity_hash, state, revision, updated_at) values (?, ?, ?, 1, ?)",
+       [
+        "local-cli.legacy-allow",
+        "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "allowed",
+        "2026-10-01T00:00:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "blocked legacy grant carries",
+     "method": "ensure_local_mcp_observation",
+     "native_payload": {
+      "cli_id": "local-cli.conn-a"
+     },
+     "post_changed": {
+      "local_cli_authority": [
+       {
+        "revision": 1,
+        "singleton": 1
+       }
+      ],
+      "local_cli_grant": [
+       {
+        "cli_id": "local-cli.conn-a",
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "revision": 1,
+        "state": "blocked",
+        "updated_at": "2026-10-03T00:00:00+00:00"
+       },
+       {
+        "cli_id": "local-cli.legacy-allow",
+        "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "revision": 1,
+        "state": "allowed",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "cli_id": "local-cli.legacy-choice",
+        "identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "revision": 1,
+        "state": "allowed",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "cli_id": "local-cli.legacy-deny",
+        "identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "revision": 1,
+        "state": "blocked",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       }
+      ],
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.conn-a",
+        "example_label": "conn-a server",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "conn-a",
+        "observed_count": 1,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.legacy-allow",
+        "example_label": "legacy-allow",
+        "help_status": null,
+        "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "legacy-allow",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "node",
+        "server_identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.legacy-choice",
+        "example_label": "legacy-choice",
+        "help_status": null,
+        "identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "legacy-choice",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "uvx",
+        "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.legacy-deny",
+        "example_label": "legacy-deny",
+        "help_status": null,
+        "identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "legacy-deny",
+        "observed_count": 2,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ],
+      "local_cli_retention_state": [
+       {
+        "last_pruned_at": "2026-10-03T00:00:00+00:00",
+        "singleton": 1
+       }
+      ]
+     },
+     "wire_args": {
+      "barrier_closed": true,
+      "cli_id": "local-cli.conn-a",
+      "clock": "<NOW>",
+      "connection_identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "example_label": "conn-a server",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "conn-a",
+      "replay_now": null,
+      "replayed": false,
+      "seen_at": "2026-10-03T00:00:00+00:00",
+      "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "server_command": "npx",
+      "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "source_label": null
+     }
+    },
+    {
+     "error": null,
+     "label": "carries to a second connection",
+     "method": "ensure_local_mcp_observation",
+     "native_payload": {
+      "cli_id": "local-cli.conn-b"
+     },
+     "post_changed": {
+      "local_cli_authority": [
+       {
+        "revision": 2,
+        "singleton": 1
+       }
+      ],
+      "local_cli_grant": [
+       {
+        "cli_id": "local-cli.conn-a",
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "revision": 1,
+        "state": "blocked",
+        "updated_at": "2026-10-03T00:00:00+00:00"
+       },
+       {
+        "cli_id": "local-cli.conn-b",
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "revision": 1,
+        "state": "blocked",
+        "updated_at": "2026-10-03T00:00:00+00:00"
+       },
+       {
+        "cli_id": "local-cli.legacy-allow",
+        "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "revision": 1,
+        "state": "allowed",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "cli_id": "local-cli.legacy-choice",
+        "identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "revision": 1,
+        "state": "allowed",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "cli_id": "local-cli.legacy-deny",
+        "identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "revision": 1,
+        "state": "blocked",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       }
+      ],
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.conn-a",
+        "example_label": "conn-a server",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "conn-a",
+        "observed_count": 1,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.conn-b",
+        "example_label": "conn-b server",
+        "help_status": null,
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "conn-b",
+        "observed_count": 1,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.legacy-allow",
+        "example_label": "legacy-allow",
+        "help_status": null,
+        "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "legacy-allow",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "node",
+        "server_identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.legacy-choice",
+        "example_label": "legacy-choice",
+        "help_status": null,
+        "identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "legacy-choice",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "uvx",
+        "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.legacy-deny",
+        "example_label": "legacy-deny",
+        "help_status": null,
+        "identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "legacy-deny",
+        "observed_count": 2,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ]
+     },
+     "wire_args": {
+      "barrier_closed": true,
+      "cli_id": "local-cli.conn-b",
+      "clock": "<NOW>",
+      "connection_identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "example_label": "conn-b server",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "conn-b",
+      "replay_now": null,
+      "replayed": false,
+      "seen_at": "2026-10-03T00:00:00+00:00",
+      "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "server_command": "npx",
+      "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "source_label": null
+     }
+    },
+    {
+     "error": null,
+     "label": "known connection is not a legacy candidate",
+     "method": "ensure_local_mcp_observation",
+     "native_payload": {
+      "cli_id": "local-cli.conn-a"
+     },
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.conn-a",
+        "example_label": "conn-a server",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-06T00:00:00+00:00",
+        "name": "conn-a",
+        "observed_count": 1,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.conn-b",
+        "example_label": "conn-b server",
+        "help_status": null,
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "conn-b",
+        "observed_count": 1,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.legacy-allow",
+        "example_label": "legacy-allow",
+        "help_status": null,
+        "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "legacy-allow",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "node",
+        "server_identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.legacy-choice",
+        "example_label": "legacy-choice",
+        "help_status": null,
+        "identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "legacy-choice",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "uvx",
+        "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.legacy-deny",
+        "example_label": "legacy-deny",
+        "help_status": null,
+        "identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "legacy-deny",
+        "observed_count": 2,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ],
+      "local_cli_retention_state": [
+       {
+        "last_pruned_at": "2026-10-06T00:00:00+00:00",
+        "singleton": 1
+       }
+      ]
+     },
+     "wire_args": {
+      "barrier_closed": true,
+      "cli_id": "local-cli.conn-a",
+      "clock": "<NOW>",
+      "connection_identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "example_label": "conn-a server",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "conn-a",
+      "replay_now": null,
+      "replayed": false,
+      "seen_at": "2026-10-06T00:00:00+00:00",
+      "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "server_command": "npx",
+      "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "source_label": null
+     }
+    },
+    {
+     "error": null,
+     "label": "blocked command choice carries",
+     "method": "ensure_local_mcp_observation",
+     "native_payload": {
+      "cli_id": "local-cli.conn-c"
+     },
+     "post_changed": {
+      "local_cli_authority": [
+       {
+        "revision": 3,
+        "singleton": 1
+       }
+      ],
+      "local_cli_grant": [
+       {
+        "cli_id": "local-cli.conn-a",
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "revision": 1,
+        "state": "blocked",
+        "updated_at": "2026-10-03T00:00:00+00:00"
+       },
+       {
+        "cli_id": "local-cli.conn-b",
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "revision": 1,
+        "state": "blocked",
+        "updated_at": "2026-10-03T00:00:00+00:00"
+       },
+       {
+        "cli_id": "local-cli.conn-c",
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "revision": 1,
+        "state": "blocked",
+        "updated_at": "2026-10-03T00:00:00+00:00"
+       },
+       {
+        "cli_id": "local-cli.legacy-allow",
+        "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "revision": 1,
+        "state": "allowed",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "cli_id": "local-cli.legacy-choice",
+        "identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "revision": 1,
+        "state": "allowed",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "cli_id": "local-cli.legacy-deny",
+        "identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "revision": 1,
+        "state": "blocked",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       }
+      ],
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.conn-a",
+        "example_label": "conn-a server",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-06T00:00:00+00:00",
+        "name": "conn-a",
+        "observed_count": 1,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.conn-b",
+        "example_label": "conn-b server",
+        "help_status": null,
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "conn-b",
+        "observed_count": 1,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.conn-c",
+        "example_label": "conn-c server",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "conn-c",
+        "observed_count": 1,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "uvx",
+        "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.legacy-allow",
+        "example_label": "legacy-allow",
+        "help_status": null,
+        "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "legacy-allow",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "node",
+        "server_identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.legacy-choice",
+        "example_label": "legacy-choice",
+        "help_status": null,
+        "identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "legacy-choice",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "uvx",
+        "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.legacy-deny",
+        "example_label": "legacy-deny",
+        "help_status": null,
+        "identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "legacy-deny",
+        "observed_count": 2,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ]
+     },
+     "wire_args": {
+      "barrier_closed": true,
+      "cli_id": "local-cli.conn-c",
+      "clock": "<NOW>",
+      "connection_identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "example_label": "conn-c server",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "conn-c",
+      "replay_now": null,
+      "replayed": false,
+      "seen_at": "2026-10-03T00:00:00+00:00",
+      "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "server_command": "uvx",
+      "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+      "source_label": null
+     }
+    },
+    {
+     "error": null,
+     "label": "legacy allow never crosses",
+     "method": "ensure_local_mcp_observation",
+     "native_payload": {
+      "cli_id": "local-cli.conn-d"
+     },
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.conn-a",
+        "example_label": "conn-a server",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-06T00:00:00+00:00",
+        "name": "conn-a",
+        "observed_count": 1,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.conn-b",
+        "example_label": "conn-b server",
+        "help_status": null,
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "conn-b",
+        "observed_count": 1,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.conn-c",
+        "example_label": "conn-c server",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "conn-c",
+        "observed_count": 1,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "uvx",
+        "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.conn-d",
+        "example_label": "conn-d server",
+        "help_status": null,
+        "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "conn-d",
+        "observed_count": 1,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "node",
+        "server_identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.legacy-allow",
+        "example_label": "legacy-allow",
+        "help_status": null,
+        "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "legacy-allow",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "node",
+        "server_identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.legacy-choice",
+        "example_label": "legacy-choice",
+        "help_status": null,
+        "identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "legacy-choice",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "uvx",
+        "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.legacy-deny",
+        "example_label": "legacy-deny",
+        "help_status": null,
+        "identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "legacy-deny",
+        "observed_count": 2,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ]
+     },
+     "wire_args": {
+      "barrier_closed": true,
+      "cli_id": "local-cli.conn-d",
+      "clock": "<NOW>",
+      "connection_identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "example_label": "conn-d server",
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "conn-d",
+      "replay_now": null,
+      "replayed": false,
+      "seen_at": "2026-10-03T00:00:00+00:00",
+      "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "server_command": "node",
+      "server_identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "source_label": null
+     }
+    },
+    {
+     "error": null,
+     "label": "same connection and server hash is not legacy",
+     "method": "ensure_local_mcp_observation",
+     "native_payload": {
+      "cli_id": "local-cli.conn-e"
+     },
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.conn-a",
+        "example_label": "conn-a server",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-06T00:00:00+00:00",
+        "name": "conn-a",
+        "observed_count": 1,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.conn-b",
+        "example_label": "conn-b server",
+        "help_status": null,
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "conn-b",
+        "observed_count": 1,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.conn-c",
+        "example_label": "conn-c server",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "conn-c",
+        "observed_count": 1,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "uvx",
+        "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.conn-d",
+        "example_label": "conn-d server",
+        "help_status": null,
+        "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "conn-d",
+        "observed_count": 1,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "node",
+        "server_identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.conn-e",
+        "example_label": "conn-e server",
+        "help_status": null,
+        "identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "conn-e",
+        "observed_count": 1,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.legacy-allow",
+        "example_label": "legacy-allow",
+        "help_status": null,
+        "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "legacy-allow",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "node",
+        "server_identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.legacy-choice",
+        "example_label": "legacy-choice",
+        "help_status": null,
+        "identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "legacy-choice",
+        "observed_count": 2,
+        "server_args_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "server_command": "uvx",
+        "server_identity_hash": "6666666666666666666666666666666666666666666666666666666666666666",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.legacy-deny",
+        "example_label": "legacy-deny",
+        "help_status": null,
+        "identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "legacy-deny",
+        "observed_count": 2,
+        "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "server_command": "npx",
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ]
+     },
+     "wire_args": {
+      "barrier_closed": true,
+      "cli_id": "local-cli.conn-e",
+      "clock": "<NOW>",
+      "connection_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "example_label": "conn-e server",
+      "identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "conn-e",
+      "replay_now": null,
+      "replayed": false,
+      "seen_at": "2026-10-03T00:00:00+00:00",
+      "server_args_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "server_command": "npx",
+      "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "source_label": null
+     }
+    }
+   ]
+  }
+ ],
+ "schema": "guard-store-local-mcp-vectors.v1",
+ "schema_sql": [
+  "CREATE TABLE local_cli_observation (\n            cli_id text primary key,\n            identity_hash text not null,\n            kind text not null check (kind in ('executable', 'script')),\n            name text not null,\n            interpreter_name text,\n            example_label text not null,\n            observed_count integer not null check (observed_count >= 1),\n            last_seen_at text not null,\n            source_path text,\n            help_status text,\n            surface text not null default 'cli' check (surface in ('cli', 'mcp', 'package-scripts')),\n            server_identity_hash text,\n            server_command text,\n            server_args_hash text,\n            source_label text\n        )",
+  "CREATE TABLE local_cli_grant (\n            cli_id text primary key,\n            identity_hash text not null,\n            state text not null check (state in ('allowed', 'blocked')),\n            revision integer not null check (revision >= 1),\n            updated_at text not null\n        )",
+  "CREATE TABLE local_cli_authority (\n            singleton integer primary key check (singleton = 1),\n            revision integer not null check (revision >= 0)\n        )",
+  "CREATE TABLE local_cli_command (\n            cli_id text not null,\n            command_id text not null,\n            name text not null,\n            usage text not null,\n            description text not null,\n            parent_id text,\n            sort_index integer not null check (sort_index >= 0),\n            primary key (cli_id, command_id)\n        )",
+  "CREATE TABLE local_cli_command_grant (\n            cli_id text not null,\n            command_id text not null,\n            state text not null check (state in ('inherit', 'allow', 'review', 'block')),\n            primary key (cli_id, command_id)\n        )",
+  "CREATE TABLE local_mcp_tool_authority (\n            cli_id text not null, identity_hash text not null, tool_name text not null,\n            catalog_revision integer not null, authority_hash text not null,\n            primary key (cli_id, identity_hash, tool_name)\n        )",
+  "CREATE TABLE local_mcp_workflow_proposal (\n            cli_id text not null, identity_hash text not null, proposal_id text not null,\n            proposal_json text not null, seen_at text not null,\n            primary key (cli_id, identity_hash, proposal_id)\n        )",
+  "CREATE TABLE local_mcp_catalog (\n            cli_id text primary key,\n            identity_hash text not null,\n            catalog_json text not null,\n            revision integer not null check (revision >= 1),\n            updated_at text not null,\n            last_complete_at text\n        )",
+  "CREATE TABLE local_mcp_provider_authority (\n            cli_id text not null, identity_hash text not null, digest text not null,\n            primary key (cli_id, identity_hash)\n        )",
+  "CREATE TABLE local_mcp_provider_action (\n            cli_id text not null,\n            identity_hash text not null,\n            provider text not null check (provider = 'composio'),\n            tool_slug text not null,\n            toolkit text not null,\n            description text not null,\n            input_schema_json text not null,\n            authority_hash text not null,\n            full_schema integer not null check (full_schema in (0, 1)),\n            source_tool text not null,\n            revision integer not null check (revision >= 1),\n            updated_at text not null,\n            primary key (cli_id, identity_hash, provider, tool_slug)\n        )",
+  "CREATE TABLE local_cli_forgotten (identity_hash text primary key, forgotten_at text not null)",
+  "CREATE TABLE local_cli_retention_state (singleton integer primary key check (singleton = 1), last_pruned_at text not null)"
+ ],
+ "source": "guard"
+}

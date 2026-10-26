@@ -1,0 +1,2401 @@
+{
+ "schema": [
+  "CREATE TABLE local_cli_schema_migration (\n            singleton integer primary key check (singleton = 1),\n            version integer not null,\n            checksum text not null\n        )",
+  "CREATE TABLE local_cli_observation (\n            cli_id text primary key,\n            identity_hash text not null,\n            kind text not null check (kind in ('executable', 'script')),\n            name text not null,\n            interpreter_name text,\n            example_label text not null,\n            observed_count integer not null check (observed_count >= 1),\n            last_seen_at text not null,\n            source_path text,\n            help_status text,\n            surface text not null default 'cli' check (surface in ('cli', 'mcp', 'package-scripts')),\n            server_identity_hash text,\n            server_command text,\n            server_args_hash text,\n            source_label text\n        )",
+  "CREATE TABLE local_cli_grant (\n            cli_id text primary key,\n            identity_hash text not null,\n            state text not null check (state in ('allowed', 'blocked')),\n            revision integer not null check (revision >= 1),\n            updated_at text not null\n        )",
+  "CREATE TABLE local_cli_command (\n            cli_id text not null,\n            command_id text not null,\n            name text not null,\n            usage text not null,\n            description text not null,\n            parent_id text,\n            sort_index integer not null check (sort_index >= 0),\n            primary key (cli_id, command_id)\n        )",
+  "CREATE TABLE local_cli_command_grant (\n            cli_id text not null,\n            command_id text not null,\n            state text not null check (state in ('inherit', 'allow', 'review', 'block')),\n            primary key (cli_id, command_id)\n        )"
+ ],
+ "vectors": [
+  {
+   "expected": {},
+   "name": "empty",
+   "rows": {
+    "local_cli_command": [],
+    "local_cli_command_grant": [],
+    "local_cli_grant": [],
+    "local_cli_observation": [],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  },
+  {
+   "expected": {},
+   "name": "schema_only",
+   "rows": {
+    "local_cli_command": [],
+    "local_cli_command_grant": [],
+    "local_cli_grant": [],
+    "local_cli_observation": [],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  },
+  {
+   "expected": {},
+   "name": "observed_without_grant",
+   "rows": {
+    "local_cli_command": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "description": "Observed tool",
+      "name": "search",
+      "parent_id": null,
+      "sort_index": 0,
+      "usage": "mcp__codex_apps__composio__search"
+     }
+    ],
+    "local_cli_command_grant": [],
+    "local_cli_grant": [],
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "example_label": "mcp__codex_apps__composio__",
+      "help_status": null,
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T10:00:00+00:00",
+      "name": "composio",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:codex:mcp__codex_apps__composio__",
+      "server_identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  },
+  {
+   "expected": {
+    "codex:mcp__codex_apps__composio__execute": "block",
+    "codex:mcp__codex_apps__composio__list": "review",
+    "codex:mcp__codex_apps__composio__search": "allow"
+   },
+   "name": "allowed_exact_states",
+   "rows": {
+    "local_cli_command": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "description": "Observed tool",
+      "name": "search",
+      "parent_id": null,
+      "sort_index": 0,
+      "usage": "mcp__codex_apps__composio__search"
+     },
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-43574525e70dee84daa68cc9",
+      "description": "Observed tool",
+      "name": "execute",
+      "parent_id": null,
+      "sort_index": 1,
+      "usage": "mcp__codex_apps__composio__execute"
+     },
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-66ae1db364c9e3e66d004a85",
+      "description": "Observed tool",
+      "name": "list",
+      "parent_id": null,
+      "sort_index": 2,
+      "usage": "mcp__codex_apps__composio__list"
+     }
+    ],
+    "local_cli_command_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "state": "allow"
+     },
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-43574525e70dee84daa68cc9",
+      "state": "block"
+     },
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-66ae1db364c9e3e66d004a85",
+      "state": "review"
+     }
+    ],
+    "local_cli_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "revision": 1,
+      "state": "allowed",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     }
+    ],
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "example_label": "mcp__codex_apps__composio__",
+      "help_status": null,
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T10:00:00+00:00",
+      "name": "composio",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:codex:mcp__codex_apps__composio__",
+      "server_identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  },
+  {
+   "expected": {
+    "codex:mcp__codex_apps__composio__execute": "allow"
+   },
+   "name": "inherit_state_is_omitted",
+   "rows": {
+    "local_cli_command": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "description": "Observed tool",
+      "name": "search",
+      "parent_id": null,
+      "sort_index": 0,
+      "usage": "mcp__codex_apps__composio__search"
+     },
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-43574525e70dee84daa68cc9",
+      "description": "Observed tool",
+      "name": "execute",
+      "parent_id": null,
+      "sort_index": 1,
+      "usage": "mcp__codex_apps__composio__execute"
+     }
+    ],
+    "local_cli_command_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "state": "inherit"
+     },
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-43574525e70dee84daa68cc9",
+      "state": "allow"
+     }
+    ],
+    "local_cli_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "revision": 1,
+      "state": "allowed",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     }
+    ],
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "example_label": "mcp__codex_apps__composio__",
+      "help_status": null,
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T10:00:00+00:00",
+      "name": "composio",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:codex:mcp__codex_apps__composio__",
+      "server_identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  },
+  {
+   "expected": {
+    "codex:mcp__codex_apps__composio__*": "block"
+   },
+   "name": "blocked_connector",
+   "rows": {
+    "local_cli_command": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "description": "Observed tool",
+      "name": "search",
+      "parent_id": null,
+      "sort_index": 0,
+      "usage": "mcp__codex_apps__composio__search"
+     }
+    ],
+    "local_cli_command_grant": [],
+    "local_cli_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "revision": 1,
+      "state": "blocked",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     }
+    ],
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "example_label": "mcp__codex_apps__composio__",
+      "help_status": null,
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T10:00:00+00:00",
+      "name": "composio",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:codex:mcp__codex_apps__composio__",
+      "server_identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  },
+  {
+   "expected": {
+    "codex:mcp__codex_apps__composio__*": "block"
+   },
+   "name": "blocked_connector_ignores_tool_allows",
+   "rows": {
+    "local_cli_command": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "description": "Observed tool",
+      "name": "search",
+      "parent_id": null,
+      "sort_index": 0,
+      "usage": "mcp__codex_apps__composio__search"
+     },
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-43574525e70dee84daa68cc9",
+      "description": "Observed tool",
+      "name": "execute",
+      "parent_id": null,
+      "sort_index": 1,
+      "usage": "mcp__codex_apps__composio__execute"
+     }
+    ],
+    "local_cli_command_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "state": "allow"
+     },
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-43574525e70dee84daa68cc9",
+      "state": "allow"
+     }
+    ],
+    "local_cli_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "revision": 2,
+      "state": "blocked",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     }
+    ],
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "example_label": "mcp__codex_apps__composio__",
+      "help_status": null,
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T10:00:00+00:00",
+      "name": "composio",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:codex:mcp__codex_apps__composio__",
+      "server_identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  },
+  {
+   "expected": {
+    "claude-code:mcp__github__*": "block",
+    "claude-code:mcp__github__get_issue": "allow"
+   },
+   "name": "other_tools_blocked",
+   "rows": {
+    "local_cli_command": [
+     {
+      "cli_id": "local-cli.mcp-7d98465fc95cbfef",
+      "command_id": "tool-b0c6525c0ec35ae465f7a28e",
+      "description": "Observed tool",
+      "name": "create_issue",
+      "parent_id": null,
+      "sort_index": 0,
+      "usage": "mcp__github__create_issue"
+     },
+     {
+      "cli_id": "local-cli.mcp-7d98465fc95cbfef",
+      "command_id": "tool-4dcb2169e907b07fbf50a8c6",
+      "description": "Observed tool",
+      "name": "get_issue",
+      "parent_id": null,
+      "sort_index": 1,
+      "usage": "mcp__github__get_issue"
+     },
+     {
+      "cli_id": "local-cli.mcp-7d98465fc95cbfef",
+      "command_id": "other",
+      "description": "Tools not yet seen",
+      "name": "Other tools",
+      "parent_id": null,
+      "sort_index": 2,
+      "usage": "other"
+     }
+    ],
+    "local_cli_command_grant": [
+     {
+      "cli_id": "local-cli.mcp-7d98465fc95cbfef",
+      "command_id": "tool-4dcb2169e907b07fbf50a8c6",
+      "state": "allow"
+     },
+     {
+      "cli_id": "local-cli.mcp-7d98465fc95cbfef",
+      "command_id": "other",
+      "state": "block"
+     }
+    ],
+    "local_cli_grant": [
+     {
+      "cli_id": "local-cli.mcp-7d98465fc95cbfef",
+      "identity_hash": "7d98465fc95cbfef2e37a7776adb66cc4fdb788c5f27f0a9c28df94be86463bd",
+      "revision": 1,
+      "state": "allowed",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     }
+    ],
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-7d98465fc95cbfef",
+      "example_label": "mcp__github__",
+      "help_status": null,
+      "identity_hash": "7d98465fc95cbfef2e37a7776adb66cc4fdb788c5f27f0a9c28df94be86463bd",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T10:00:00+00:00",
+      "name": "github",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:claude-code:mcp__github__",
+      "server_identity_hash": "7d98465fc95cbfef2e37a7776adb66cc4fdb788c5f27f0a9c28df94be86463bd",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  },
+  {
+   "expected": {
+    "claude-code:mcp__github__create_issue": "review"
+   },
+   "name": "other_tools_allowed_is_not_an_action",
+   "rows": {
+    "local_cli_command": [
+     {
+      "cli_id": "local-cli.mcp-7d98465fc95cbfef",
+      "command_id": "tool-b0c6525c0ec35ae465f7a28e",
+      "description": "Observed tool",
+      "name": "create_issue",
+      "parent_id": null,
+      "sort_index": 0,
+      "usage": "mcp__github__create_issue"
+     },
+     {
+      "cli_id": "local-cli.mcp-7d98465fc95cbfef",
+      "command_id": "other",
+      "description": "Tools not yet seen",
+      "name": "Other tools",
+      "parent_id": null,
+      "sort_index": 1,
+      "usage": "other"
+     }
+    ],
+    "local_cli_command_grant": [
+     {
+      "cli_id": "local-cli.mcp-7d98465fc95cbfef",
+      "command_id": "tool-b0c6525c0ec35ae465f7a28e",
+      "state": "review"
+     },
+     {
+      "cli_id": "local-cli.mcp-7d98465fc95cbfef",
+      "command_id": "other",
+      "state": "allow"
+     }
+    ],
+    "local_cli_grant": [
+     {
+      "cli_id": "local-cli.mcp-7d98465fc95cbfef",
+      "identity_hash": "7d98465fc95cbfef2e37a7776adb66cc4fdb788c5f27f0a9c28df94be86463bd",
+      "revision": 1,
+      "state": "allowed",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     }
+    ],
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-7d98465fc95cbfef",
+      "example_label": "mcp__github__",
+      "help_status": null,
+      "identity_hash": "7d98465fc95cbfef2e37a7776adb66cc4fdb788c5f27f0a9c28df94be86463bd",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T10:00:00+00:00",
+      "name": "github",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:claude-code:mcp__github__",
+      "server_identity_hash": "7d98465fc95cbfef2e37a7776adb66cc4fdb788c5f27f0a9c28df94be86463bd",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  },
+  {
+   "expected": {},
+   "name": "unset_grant_still_compiles_tool_states",
+   "rows": {
+    "local_cli_command": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "description": "Observed tool",
+      "name": "search",
+      "parent_id": null,
+      "sort_index": 0,
+      "usage": "mcp__codex_apps__composio__search"
+     }
+    ],
+    "local_cli_command_grant": [],
+    "local_cli_grant": [],
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "example_label": "mcp__codex_apps__composio__",
+      "help_status": null,
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T10:00:00+00:00",
+      "name": "composio",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:codex:mcp__codex_apps__composio__",
+      "server_identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  },
+  {
+   "expected": {
+    "claude-code:mcp__github__create_issue": "block",
+    "codex:mcp__codex_apps__composio__search": "allow",
+    "cursor:mcp__github__*": "block"
+   },
+   "name": "two_harnesses",
+   "rows": {
+    "local_cli_command": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "description": "Observed tool",
+      "name": "search",
+      "parent_id": null,
+      "sort_index": 0,
+      "usage": "mcp__codex_apps__composio__search"
+     },
+     {
+      "cli_id": "local-cli.mcp-3bee04dc7f9617d1",
+      "command_id": "tool-b0c6525c0ec35ae465f7a28e",
+      "description": "Observed tool",
+      "name": "create_issue",
+      "parent_id": null,
+      "sort_index": 0,
+      "usage": "mcp__github__create_issue"
+     },
+     {
+      "cli_id": "local-cli.mcp-7d98465fc95cbfef",
+      "command_id": "tool-b0c6525c0ec35ae465f7a28e",
+      "description": "Observed tool",
+      "name": "create_issue",
+      "parent_id": null,
+      "sort_index": 0,
+      "usage": "mcp__github__create_issue"
+     }
+    ],
+    "local_cli_command_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "state": "allow"
+     },
+     {
+      "cli_id": "local-cli.mcp-7d98465fc95cbfef",
+      "command_id": "tool-b0c6525c0ec35ae465f7a28e",
+      "state": "block"
+     }
+    ],
+    "local_cli_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "revision": 1,
+      "state": "allowed",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     },
+     {
+      "cli_id": "local-cli.mcp-3bee04dc7f9617d1",
+      "identity_hash": "3bee04dc7f9617d183d39bd40b55530c10d7768ac3aba86fb64038e83fa58461",
+      "revision": 2,
+      "state": "blocked",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     },
+     {
+      "cli_id": "local-cli.mcp-7d98465fc95cbfef",
+      "identity_hash": "7d98465fc95cbfef2e37a7776adb66cc4fdb788c5f27f0a9c28df94be86463bd",
+      "revision": 3,
+      "state": "allowed",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     }
+    ],
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "example_label": "mcp__codex_apps__composio__",
+      "help_status": null,
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T10:00:00+00:00",
+      "name": "composio",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:codex:mcp__codex_apps__composio__",
+      "server_identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     },
+     {
+      "cli_id": "local-cli.mcp-3bee04dc7f9617d1",
+      "example_label": "mcp__github__",
+      "help_status": null,
+      "identity_hash": "3bee04dc7f9617d183d39bd40b55530c10d7768ac3aba86fb64038e83fa58461",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T10:00:00+00:00",
+      "name": "github",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:cursor:mcp__github__",
+      "server_identity_hash": "3bee04dc7f9617d183d39bd40b55530c10d7768ac3aba86fb64038e83fa58461",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     },
+     {
+      "cli_id": "local-cli.mcp-7d98465fc95cbfef",
+      "example_label": "mcp__github__",
+      "help_status": null,
+      "identity_hash": "7d98465fc95cbfef2e37a7776adb66cc4fdb788c5f27f0a9c28df94be86463bd",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T10:00:00+00:00",
+      "name": "github",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:claude-code:mcp__github__",
+      "server_identity_hash": "7d98465fc95cbfef2e37a7776adb66cc4fdb788c5f27f0a9c28df94be86463bd",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  },
+  {
+   "expected": {},
+   "name": "stale_grant_identity",
+   "rows": {
+    "local_cli_command": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "description": "Observed tool",
+      "name": "search",
+      "parent_id": null,
+      "sort_index": 0,
+      "usage": "mcp__codex_apps__composio__search"
+     }
+    ],
+    "local_cli_command_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "state": "allow"
+     }
+    ],
+    "local_cli_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "identity_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "revision": 1,
+      "state": "allowed",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     }
+    ],
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "example_label": "mcp__codex_apps__composio__",
+      "help_status": null,
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T10:00:00+00:00",
+      "name": "composio",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:codex:mcp__codex_apps__composio__",
+      "server_identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  },
+  {
+   "expected": {},
+   "name": "grant_without_observation",
+   "rows": {
+    "local_cli_command": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "description": "Observed tool",
+      "name": "search",
+      "parent_id": null,
+      "sort_index": 0,
+      "usage": "mcp__codex_apps__composio__search"
+     }
+    ],
+    "local_cli_command_grant": [],
+    "local_cli_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "revision": 1,
+      "state": "blocked",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     }
+    ],
+    "local_cli_observation": [],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  },
+  {
+   "expected": {},
+   "name": "configured_server_is_not_observed",
+   "rows": {
+    "local_cli_command": [],
+    "local_cli_command_grant": [],
+    "local_cli_grant": [
+     {
+      "cli_id": "local-cli.mcp-configured",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "revision": 1,
+      "state": "blocked",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     }
+    ],
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-configured",
+      "example_label": "github",
+      "help_status": null,
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T10:00:00+00:00",
+      "name": "github",
+      "observed_count": 1,
+      "server_args_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "server_command": "npx",
+      "server_identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  },
+  {
+   "expected": {},
+   "name": "cli_surface_with_observed_marker",
+   "rows": {
+    "local_cli_command": [],
+    "local_cli_command_grant": [],
+    "local_cli_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "revision": 1,
+      "state": "blocked",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     }
+    ],
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "example_label": "mcp__codex_apps__composio__",
+      "help_status": null,
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T10:00:00+00:00",
+      "name": "composio",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:codex:mcp__codex_apps__composio__",
+      "server_identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "source_label": null,
+      "source_path": null,
+      "surface": "cli"
+     }
+    ],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  },
+  {
+   "expected": {},
+   "name": "marker_without_separator",
+   "rows": {
+    "local_cli_command": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "description": "Observed tool",
+      "name": "search",
+      "parent_id": null,
+      "sort_index": 0,
+      "usage": "mcp__codex_apps__composio__search"
+     }
+    ],
+    "local_cli_command_grant": [],
+    "local_cli_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "revision": 1,
+      "state": "blocked",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     }
+    ],
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "example_label": "mcp__codex_apps__composio__",
+      "help_status": null,
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T10:00:00+00:00",
+      "name": "composio",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:codex",
+      "server_identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  },
+  {
+   "expected": {},
+   "name": "marker_with_unknown_harness",
+   "rows": {
+    "local_cli_command": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "description": "Observed tool",
+      "name": "search",
+      "parent_id": null,
+      "sort_index": 0,
+      "usage": "mcp__codex_apps__composio__search"
+     }
+    ],
+    "local_cli_command_grant": [],
+    "local_cli_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "revision": 1,
+      "state": "blocked",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     }
+    ],
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "example_label": "mcp__codex_apps__composio__",
+      "help_status": null,
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T10:00:00+00:00",
+      "name": "composio",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:not-a-harness:mcp__codex_apps__composio__",
+      "server_identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  },
+  {
+   "expected": {},
+   "name": "marker_with_bad_namespace",
+   "rows": {
+    "local_cli_command": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "description": "Observed tool",
+      "name": "search",
+      "parent_id": null,
+      "sort_index": 0,
+      "usage": "mcp__codex_apps__composio__search"
+     }
+    ],
+    "local_cli_command_grant": [],
+    "local_cli_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "revision": 1,
+      "state": "blocked",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     }
+    ],
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "example_label": "mcp__codex_apps__composio__",
+      "help_status": null,
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T10:00:00+00:00",
+      "name": "composio",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:codex:mcp__codex_apps__",
+      "server_identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  },
+  {
+   "expected": {},
+   "name": "marker_for_another_connector",
+   "rows": {
+    "local_cli_command": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "description": "Observed tool",
+      "name": "search",
+      "parent_id": null,
+      "sort_index": 0,
+      "usage": "mcp__codex_apps__composio__search"
+     }
+    ],
+    "local_cli_command_grant": [],
+    "local_cli_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "revision": 1,
+      "state": "blocked",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     }
+    ],
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "example_label": "mcp__codex_apps__composio__",
+      "help_status": null,
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T10:00:00+00:00",
+      "name": "composio",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:codex:mcp__github__",
+      "server_identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  },
+  {
+   "expected": {
+    "CODEX:mcp__codex_apps__composio__*": "block"
+   },
+   "name": "marker_with_uppercase_harness",
+   "rows": {
+    "local_cli_command": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "description": "Observed tool",
+      "name": "search",
+      "parent_id": null,
+      "sort_index": 0,
+      "usage": "mcp__codex_apps__composio__search"
+     }
+    ],
+    "local_cli_command_grant": [],
+    "local_cli_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "revision": 1,
+      "state": "blocked",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     }
+    ],
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "example_label": "mcp__codex_apps__composio__",
+      "help_status": null,
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T10:00:00+00:00",
+      "name": "composio",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:CODEX:mcp__codex_apps__composio__",
+      "server_identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  },
+  {
+   "expected": {
+    "claude-code:mcp__github__create_issue": "block"
+   },
+   "name": "harness_alias_marker",
+   "rows": {
+    "local_cli_command": [
+     {
+      "cli_id": "local-cli.mcp-7d98465fc95cbfef",
+      "command_id": "tool-b0c6525c0ec35ae465f7a28e",
+      "description": "Observed tool",
+      "name": "create_issue",
+      "parent_id": null,
+      "sort_index": 0,
+      "usage": "mcp__github__create_issue"
+     }
+    ],
+    "local_cli_command_grant": [
+     {
+      "cli_id": "local-cli.mcp-7d98465fc95cbfef",
+      "command_id": "tool-b0c6525c0ec35ae465f7a28e",
+      "state": "block"
+     }
+    ],
+    "local_cli_grant": [
+     {
+      "cli_id": "local-cli.mcp-7d98465fc95cbfef",
+      "identity_hash": "7d98465fc95cbfef2e37a7776adb66cc4fdb788c5f27f0a9c28df94be86463bd",
+      "revision": 1,
+      "state": "allowed",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     }
+    ],
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-7d98465fc95cbfef",
+      "example_label": "mcp__github__",
+      "help_status": null,
+      "identity_hash": "7d98465fc95cbfef2e37a7776adb66cc4fdb788c5f27f0a9c28df94be86463bd",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T10:00:00+00:00",
+      "name": "github",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:claude-code:mcp__github__",
+      "server_identity_hash": "7d98465fc95cbfef2e37a7776adb66cc4fdb788c5f27f0a9c28df94be86463bd",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  },
+  {
+   "expected": {},
+   "name": "item_identity_differs_from_marker",
+   "rows": {
+    "local_cli_command": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "description": "Observed tool",
+      "name": "search",
+      "parent_id": null,
+      "sort_index": 0,
+      "usage": "mcp__codex_apps__composio__search"
+     }
+    ],
+    "local_cli_command_grant": [],
+    "local_cli_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "revision": 1,
+      "state": "blocked",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     }
+    ],
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "example_label": "mcp__codex_apps__composio__",
+      "help_status": null,
+      "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T10:00:00+00:00",
+      "name": "composio",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:codex:mcp__codex_apps__composio__",
+      "server_identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  },
+  {
+   "expected": {
+    "codex:mcp__codex_apps__composio__search": "allow"
+   },
+   "name": "command_outside_namespace",
+   "rows": {
+    "local_cli_command": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "description": "Observed tool",
+      "name": "search",
+      "parent_id": null,
+      "sort_index": 0,
+      "usage": "mcp__codex_apps__composio__search"
+     },
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-b0c6525c0ec35ae465f7a28e",
+      "description": "Foreign",
+      "name": "create_issue",
+      "parent_id": null,
+      "sort_index": 9,
+      "usage": "mcp__github__create_issue"
+     }
+    ],
+    "local_cli_command_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "state": "allow"
+     },
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-b0c6525c0ec35ae465f7a28e",
+      "state": "allow"
+     }
+    ],
+    "local_cli_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "revision": 1,
+      "state": "allowed",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     }
+    ],
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "example_label": "mcp__codex_apps__composio__",
+      "help_status": null,
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T10:00:00+00:00",
+      "name": "composio",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:codex:mcp__codex_apps__composio__",
+      "server_identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  },
+  {
+   "expected": {
+    "codex:mcp__codex_apps__composio__search": "allow"
+   },
+   "name": "command_id_mismatch",
+   "rows": {
+    "local_cli_command": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "description": "Observed tool",
+      "name": "search",
+      "parent_id": null,
+      "sort_index": 0,
+      "usage": "mcp__codex_apps__composio__search"
+     },
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "execute",
+      "description": "Slug id",
+      "name": "execute",
+      "parent_id": null,
+      "sort_index": 9,
+      "usage": "mcp__codex_apps__composio__execute"
+     }
+    ],
+    "local_cli_command_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "state": "allow"
+     },
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "execute",
+      "state": "block"
+     }
+    ],
+    "local_cli_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "revision": 1,
+      "state": "allowed",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     }
+    ],
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "example_label": "mcp__codex_apps__composio__",
+      "help_status": null,
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T10:00:00+00:00",
+      "name": "composio",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:codex:mcp__codex_apps__composio__",
+      "server_identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  },
+  {
+   "expected": {
+    "codex:mcp__codex_apps__composio__search": "allow"
+   },
+   "name": "unparseable_usage",
+   "rows": {
+    "local_cli_command": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "description": "Observed tool",
+      "name": "search",
+      "parent_id": null,
+      "sort_index": 0,
+      "usage": "mcp__codex_apps__composio__search"
+     },
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "bad",
+      "description": "Bad",
+      "name": "bad",
+      "parent_id": null,
+      "sort_index": 9,
+      "usage": "not an mcp tool"
+     }
+    ],
+    "local_cli_command_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "state": "allow"
+     },
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "bad",
+      "state": "block"
+     }
+    ],
+    "local_cli_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "revision": 1,
+      "state": "allowed",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     }
+    ],
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "example_label": "mcp__codex_apps__composio__",
+      "help_status": null,
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T10:00:00+00:00",
+      "name": "composio",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:codex:mcp__codex_apps__composio__",
+      "server_identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  },
+  {
+   "expected": {},
+   "name": "state_without_catalog_entry",
+   "rows": {
+    "local_cli_command": [],
+    "local_cli_command_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "state": "allow"
+     }
+    ],
+    "local_cli_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "revision": 1,
+      "state": "allowed",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     }
+    ],
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "example_label": "mcp__codex_apps__composio__",
+      "help_status": null,
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T10:00:00+00:00",
+      "name": "composio",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:codex:mcp__codex_apps__composio__",
+      "server_identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  },
+  {
+   "expected": {},
+   "name": "other_command_in_catalog_only",
+   "rows": {
+    "local_cli_command": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "description": "Observed tool",
+      "name": "search",
+      "parent_id": null,
+      "sort_index": 0,
+      "usage": "mcp__codex_apps__composio__search"
+     },
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "other",
+      "description": "Tools not yet seen",
+      "name": "Other tools",
+      "parent_id": null,
+      "sort_index": 1,
+      "usage": "other"
+     }
+    ],
+    "local_cli_command_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "other",
+      "state": "review"
+     }
+    ],
+    "local_cli_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "revision": 1,
+      "state": "allowed",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     }
+    ],
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "example_label": "mcp__codex_apps__composio__",
+      "help_status": null,
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T10:00:00+00:00",
+      "name": "composio",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:codex:mcp__codex_apps__composio__",
+      "server_identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  },
+  {
+   "expected": {
+    "codex:mcp__codex_apps__composio__search": "block"
+   },
+   "name": "duplicate_identity_reads_newest_grant",
+   "rows": {
+    "local_cli_command": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "description": "Observed tool",
+      "name": "search",
+      "parent_id": null,
+      "sort_index": 0,
+      "usage": "mcp__codex_apps__composio__search"
+     },
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec-twin",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "description": "Twin",
+      "name": "search",
+      "parent_id": null,
+      "sort_index": 0,
+      "usage": "mcp__codex_apps__composio__search"
+     }
+    ],
+    "local_cli_command_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "state": "allow"
+     },
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec-twin",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "state": "block"
+     }
+    ],
+    "local_cli_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "revision": 1,
+      "state": "allowed",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     },
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec-twin",
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "revision": 2,
+      "state": "allowed",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     }
+    ],
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "example_label": "mcp__codex_apps__composio__",
+      "help_status": null,
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T10:00:00+00:00",
+      "name": "composio",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:codex:mcp__codex_apps__composio__",
+      "server_identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     },
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec-twin",
+      "example_label": "mcp__codex_apps__composio__",
+      "help_status": null,
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T11:00:00+00:00",
+      "name": "composio",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:codex:mcp__codex_apps__composio__",
+      "server_identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  },
+  {
+   "expected": {},
+   "name": "duplicate_identity_newest_without_grant",
+   "rows": {
+    "local_cli_command": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "description": "Observed tool",
+      "name": "search",
+      "parent_id": null,
+      "sort_index": 0,
+      "usage": "mcp__codex_apps__composio__search"
+     }
+    ],
+    "local_cli_command_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "state": "allow"
+     }
+    ],
+    "local_cli_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "revision": 1,
+      "state": "allowed",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     }
+    ],
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "example_label": "mcp__codex_apps__composio__",
+      "help_status": null,
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T10:00:00+00:00",
+      "name": "composio",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:codex:mcp__codex_apps__composio__",
+      "server_identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     },
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec-twin",
+      "example_label": "mcp__codex_apps__composio__",
+      "help_status": null,
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T11:00:00+00:00",
+      "name": "composio",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:codex:mcp__codex_apps__composio__",
+      "server_identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  },
+  {
+   "expected": {
+    "codex:mcp__codex_apps__composio__search": "block"
+   },
+   "name": "null_server_identity_hash",
+   "rows": {
+    "local_cli_command": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "description": "Observed tool",
+      "name": "search",
+      "parent_id": null,
+      "sort_index": 0,
+      "usage": "mcp__codex_apps__composio__search"
+     }
+    ],
+    "local_cli_command_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "state": "block"
+     }
+    ],
+    "local_cli_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "revision": 1,
+      "state": "allowed",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     }
+    ],
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "example_label": "mcp__codex_apps__composio__",
+      "help_status": null,
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T10:00:00+00:00",
+      "name": "composio",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:codex:mcp__codex_apps__composio__",
+      "server_identity_hash": null,
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  },
+  {
+   "expected": {},
+   "name": "foreign_server_identity_hash",
+   "rows": {
+    "local_cli_command": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "description": "Observed tool",
+      "name": "search",
+      "parent_id": null,
+      "sort_index": 0,
+      "usage": "mcp__codex_apps__composio__search"
+     }
+    ],
+    "local_cli_command_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "state": "block"
+     }
+    ],
+    "local_cli_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "revision": 1,
+      "state": "allowed",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     }
+    ],
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "example_label": "mcp__codex_apps__composio__",
+      "help_status": null,
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T10:00:00+00:00",
+      "name": "composio",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:codex:mcp__codex_apps__composio__",
+      "server_identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  },
+  {
+   "expected": {
+    "codex:mcp__codex_apps__composio__search": "allow"
+   },
+   "name": "later_item_overrides_earlier",
+   "rows": {
+    "local_cli_command": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "description": "Observed tool",
+      "name": "search",
+      "parent_id": null,
+      "sort_index": 0,
+      "usage": "mcp__codex_apps__composio__search"
+     },
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec-old",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "description": "Old",
+      "name": "search",
+      "parent_id": null,
+      "sort_index": 0,
+      "usage": "mcp__codex_apps__composio__search"
+     }
+    ],
+    "local_cli_command_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "state": "allow"
+     }
+    ],
+    "local_cli_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "revision": 1,
+      "state": "allowed",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     },
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec-old",
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "revision": 2,
+      "state": "blocked",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     }
+    ],
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "example_label": "mcp__codex_apps__composio__",
+      "help_status": null,
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T10:00:00+00:00",
+      "name": "composio",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:codex:mcp__codex_apps__composio__",
+      "server_identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     },
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec-old",
+      "example_label": "mcp__codex_apps__composio__",
+      "help_status": null,
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T09:00:00+00:00",
+      "name": "composio",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:codex:mcp__codex_apps__composio__",
+      "server_identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  },
+  {
+   "expected": {
+    "codex:mcp__codex_apps__composio__search": "allow"
+   },
+   "name": "catalog_order_last_write_wins",
+   "rows": {
+    "local_cli_command": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "description": "Observed tool",
+      "name": "search",
+      "parent_id": null,
+      "sort_index": 0,
+      "usage": "mcp__codex_apps__composio__search"
+     },
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "zz-copy",
+      "description": "Copy",
+      "name": "search",
+      "parent_id": null,
+      "sort_index": 9,
+      "usage": "mcp__codex_apps__composio__search"
+     }
+    ],
+    "local_cli_command_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "command_id": "tool-6c046d138d80ae7db4bcdf50",
+      "state": "allow"
+     }
+    ],
+    "local_cli_grant": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "revision": 1,
+      "state": "allowed",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     }
+    ],
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-3bb3fbb0b02a73ec",
+      "example_label": "mcp__codex_apps__composio__",
+      "help_status": null,
+      "identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T10:00:00+00:00",
+      "name": "composio",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:codex:mcp__codex_apps__composio__",
+      "server_identity_hash": "3bb3fbb0b02a73ec96dc4214c297d808bbb32a6b3dc29318c7af9b580af61c77",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  },
+  {
+   "expected": {
+    "codex:mcp__github__tool_00": "allow",
+    "codex:mcp__github__tool_01": "review",
+    "codex:mcp__github__tool_02": "block",
+    "codex:mcp__github__tool_04": "allow",
+    "codex:mcp__github__tool_05": "review",
+    "codex:mcp__github__tool_06": "block",
+    "codex:mcp__github__tool_08": "allow",
+    "codex:mcp__github__tool_09": "review",
+    "codex:mcp__github__tool_10": "block"
+   },
+   "name": "many_tools",
+   "rows": {
+    "local_cli_command": [
+     {
+      "cli_id": "local-cli.mcp-16bda73dcce81d96",
+      "command_id": "tool-fbc9017b9d5802d405360c6a",
+      "description": "Observed tool",
+      "name": "tool_00",
+      "parent_id": null,
+      "sort_index": 0,
+      "usage": "mcp__github__tool_00"
+     },
+     {
+      "cli_id": "local-cli.mcp-16bda73dcce81d96",
+      "command_id": "tool-fac2e26ce12534e4d39c4247",
+      "description": "Observed tool",
+      "name": "tool_01",
+      "parent_id": null,
+      "sort_index": 1,
+      "usage": "mcp__github__tool_01"
+     },
+     {
+      "cli_id": "local-cli.mcp-16bda73dcce81d96",
+      "command_id": "tool-152836e2f93ef7a4542a1f85",
+      "description": "Observed tool",
+      "name": "tool_02",
+      "parent_id": null,
+      "sort_index": 2,
+      "usage": "mcp__github__tool_02"
+     },
+     {
+      "cli_id": "local-cli.mcp-16bda73dcce81d96",
+      "command_id": "tool-81c7b8b436bc52134bec4d7f",
+      "description": "Observed tool",
+      "name": "tool_03",
+      "parent_id": null,
+      "sort_index": 3,
+      "usage": "mcp__github__tool_03"
+     },
+     {
+      "cli_id": "local-cli.mcp-16bda73dcce81d96",
+      "command_id": "tool-4f18af308c4c62766d5e3407",
+      "description": "Observed tool",
+      "name": "tool_04",
+      "parent_id": null,
+      "sort_index": 4,
+      "usage": "mcp__github__tool_04"
+     },
+     {
+      "cli_id": "local-cli.mcp-16bda73dcce81d96",
+      "command_id": "tool-4d201e20190bcf6326c9f2be",
+      "description": "Observed tool",
+      "name": "tool_05",
+      "parent_id": null,
+      "sort_index": 5,
+      "usage": "mcp__github__tool_05"
+     },
+     {
+      "cli_id": "local-cli.mcp-16bda73dcce81d96",
+      "command_id": "tool-f165234fdfb62fa42ee1e040",
+      "description": "Observed tool",
+      "name": "tool_06",
+      "parent_id": null,
+      "sort_index": 6,
+      "usage": "mcp__github__tool_06"
+     },
+     {
+      "cli_id": "local-cli.mcp-16bda73dcce81d96",
+      "command_id": "tool-d4fb6267b9956f3160a74d33",
+      "description": "Observed tool",
+      "name": "tool_07",
+      "parent_id": null,
+      "sort_index": 7,
+      "usage": "mcp__github__tool_07"
+     },
+     {
+      "cli_id": "local-cli.mcp-16bda73dcce81d96",
+      "command_id": "tool-461217bdf52ca49585a9bf80",
+      "description": "Observed tool",
+      "name": "tool_08",
+      "parent_id": null,
+      "sort_index": 8,
+      "usage": "mcp__github__tool_08"
+     },
+     {
+      "cli_id": "local-cli.mcp-16bda73dcce81d96",
+      "command_id": "tool-750c4a99b191a3b941a53f74",
+      "description": "Observed tool",
+      "name": "tool_09",
+      "parent_id": null,
+      "sort_index": 9,
+      "usage": "mcp__github__tool_09"
+     },
+     {
+      "cli_id": "local-cli.mcp-16bda73dcce81d96",
+      "command_id": "tool-14f3773bf742ec574f8d7b0b",
+      "description": "Observed tool",
+      "name": "tool_10",
+      "parent_id": null,
+      "sort_index": 10,
+      "usage": "mcp__github__tool_10"
+     },
+     {
+      "cli_id": "local-cli.mcp-16bda73dcce81d96",
+      "command_id": "tool-1bc121b177366f99878391f2",
+      "description": "Observed tool",
+      "name": "tool_11",
+      "parent_id": null,
+      "sort_index": 11,
+      "usage": "mcp__github__tool_11"
+     }
+    ],
+    "local_cli_command_grant": [
+     {
+      "cli_id": "local-cli.mcp-16bda73dcce81d96",
+      "command_id": "tool-fbc9017b9d5802d405360c6a",
+      "state": "allow"
+     },
+     {
+      "cli_id": "local-cli.mcp-16bda73dcce81d96",
+      "command_id": "tool-fac2e26ce12534e4d39c4247",
+      "state": "review"
+     },
+     {
+      "cli_id": "local-cli.mcp-16bda73dcce81d96",
+      "command_id": "tool-152836e2f93ef7a4542a1f85",
+      "state": "block"
+     },
+     {
+      "cli_id": "local-cli.mcp-16bda73dcce81d96",
+      "command_id": "tool-81c7b8b436bc52134bec4d7f",
+      "state": "inherit"
+     },
+     {
+      "cli_id": "local-cli.mcp-16bda73dcce81d96",
+      "command_id": "tool-4f18af308c4c62766d5e3407",
+      "state": "allow"
+     },
+     {
+      "cli_id": "local-cli.mcp-16bda73dcce81d96",
+      "command_id": "tool-4d201e20190bcf6326c9f2be",
+      "state": "review"
+     },
+     {
+      "cli_id": "local-cli.mcp-16bda73dcce81d96",
+      "command_id": "tool-f165234fdfb62fa42ee1e040",
+      "state": "block"
+     },
+     {
+      "cli_id": "local-cli.mcp-16bda73dcce81d96",
+      "command_id": "tool-d4fb6267b9956f3160a74d33",
+      "state": "inherit"
+     },
+     {
+      "cli_id": "local-cli.mcp-16bda73dcce81d96",
+      "command_id": "tool-461217bdf52ca49585a9bf80",
+      "state": "allow"
+     },
+     {
+      "cli_id": "local-cli.mcp-16bda73dcce81d96",
+      "command_id": "tool-750c4a99b191a3b941a53f74",
+      "state": "review"
+     },
+     {
+      "cli_id": "local-cli.mcp-16bda73dcce81d96",
+      "command_id": "tool-14f3773bf742ec574f8d7b0b",
+      "state": "block"
+     },
+     {
+      "cli_id": "local-cli.mcp-16bda73dcce81d96",
+      "command_id": "tool-1bc121b177366f99878391f2",
+      "state": "inherit"
+     }
+    ],
+    "local_cli_grant": [
+     {
+      "cli_id": "local-cli.mcp-16bda73dcce81d96",
+      "identity_hash": "16bda73dcce81d9647798e0b6136bf505757d4c5360498586e6a26c692cc7ff1",
+      "revision": 1,
+      "state": "allowed",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     }
+    ],
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-16bda73dcce81d96",
+      "example_label": "mcp__github__",
+      "help_status": null,
+      "identity_hash": "16bda73dcce81d9647798e0b6136bf505757d4c5360498586e6a26c692cc7ff1",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T10:00:00+00:00",
+      "name": "github",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:codex:mcp__github__",
+      "server_identity_hash": "16bda73dcce81d9647798e0b6136bf505757d4c5360498586e6a26c692cc7ff1",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  },
+  {
+   "expected": {
+    "opencode:mcp__my-server.v2__*": "block",
+    "opencode:mcp__my-server.v2__do_thing": "allow",
+    "opencode:mcp__my-server.v2__other.thing": "review"
+   },
+   "name": "tool_names_with_dots_and_dashes",
+   "rows": {
+    "local_cli_command": [
+     {
+      "cli_id": "local-cli.mcp-8ba4170cd6737d46",
+      "command_id": "tool-c96a93803a1e4ed9ccdcf218",
+      "description": "Observed tool",
+      "name": "do_thing",
+      "parent_id": null,
+      "sort_index": 0,
+      "usage": "mcp__my-server.v2__do_thing"
+     },
+     {
+      "cli_id": "local-cli.mcp-8ba4170cd6737d46",
+      "command_id": "tool-3fa7e23340a70dda1ed58943",
+      "description": "Observed tool",
+      "name": "other.thing",
+      "parent_id": null,
+      "sort_index": 1,
+      "usage": "mcp__my-server.v2__other.thing"
+     },
+     {
+      "cli_id": "local-cli.mcp-8ba4170cd6737d46",
+      "command_id": "other",
+      "description": "Tools not yet seen",
+      "name": "Other tools",
+      "parent_id": null,
+      "sort_index": 2,
+      "usage": "other"
+     }
+    ],
+    "local_cli_command_grant": [
+     {
+      "cli_id": "local-cli.mcp-8ba4170cd6737d46",
+      "command_id": "tool-c96a93803a1e4ed9ccdcf218",
+      "state": "allow"
+     },
+     {
+      "cli_id": "local-cli.mcp-8ba4170cd6737d46",
+      "command_id": "tool-3fa7e23340a70dda1ed58943",
+      "state": "review"
+     },
+     {
+      "cli_id": "local-cli.mcp-8ba4170cd6737d46",
+      "command_id": "other",
+      "state": "block"
+     }
+    ],
+    "local_cli_grant": [
+     {
+      "cli_id": "local-cli.mcp-8ba4170cd6737d46",
+      "identity_hash": "8ba4170cd6737d46966d58189fc3cd6176d34071d85a77b17f21f8087dd40c31",
+      "revision": 1,
+      "state": "allowed",
+      "updated_at": "2026-10-11T10:00:00+00:00"
+     }
+    ],
+    "local_cli_observation": [
+     {
+      "cli_id": "local-cli.mcp-8ba4170cd6737d46",
+      "example_label": "mcp__my-server.v2__",
+      "help_status": null,
+      "identity_hash": "8ba4170cd6737d46966d58189fc3cd6176d34071d85a77b17f21f8087dd40c31",
+      "interpreter_name": null,
+      "kind": "executable",
+      "last_seen_at": "2026-10-11T10:00:00+00:00",
+      "name": "my-server.v2",
+      "observed_count": 1,
+      "server_args_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "server_command": "observed-mcp:opencode:mcp__my-server.v2__",
+      "server_identity_hash": "8ba4170cd6737d46966d58189fc3cd6176d34071d85a77b17f21f8087dd40c31",
+      "source_label": null,
+      "source_path": null,
+      "surface": "mcp"
+     }
+    ],
+    "local_cli_schema_migration": [
+     {
+      "checksum": "ec9eb649fbe1b6836f111e5683b21cd406d3160ab86f4f1db1ca9a118edb8fbe",
+      "singleton": 1,
+      "version": 11
+     }
+    ]
+   }
+  }
+ ]
+}

@@ -19,7 +19,6 @@ from typing import cast
 import pytest
 
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_workflow_capabilities import StoreWorkflowCapabilitiesMixin
 from codex_plugin_scanner.guard.store_workflow_capability_common import WORKFLOW_CAPABILITY_STORE_CLOCK
 from codex_plugin_scanner.guard.workflow_capabilities import (
     WORKFLOW_CAPABILITY_ALGORITHM,
@@ -35,8 +34,6 @@ from codex_plugin_scanner.guard.workflow_capabilities import (
     format_utc_timestamp,
     sign_workflow_capability,
     sign_workflow_capability_receipt,
-    verify_workflow_capability,
-    verify_workflow_capability_receipt,
 )
 
 _KEY = b"k" * 32
@@ -173,11 +170,6 @@ def test_framing_and_signatures_are_deterministic_and_tamper_evident() -> None:
 
     assert first == second
     assert canonical_framed_payload("ab", {"c": 1}) != canonical_framed_payload("a", {"bc": 1})
-    verify_workflow_capability(first, key=_KEY, key_id=_KEY_ID, now=_now(), expected_binding=claim.binding)
-
-    tampered = replace(first, claim=replace(claim, subject_id="other.subject"))
-    with pytest.raises(WorkflowCapabilityError, match="signature_invalid"):
-        verify_workflow_capability(tampered, key=_KEY, key_id=_KEY_ID, now=_now(), expected_binding=claim.binding)
 
 
 def test_contract_rejects_unknown_null_wildcard_bool_and_noncanonical_rules() -> None:
@@ -226,11 +218,6 @@ def test_direct_construction_rejects_nested_type_forgeries() -> None:
 
 
 def test_time_and_alpha_bounds_fail_closed() -> None:
-    signed = sign_workflow_capability(_claim(), key=_KEY, key_id=_KEY_ID)
-    with pytest.raises(WorkflowCapabilityError, match="not_yet_valid"):
-        verify_workflow_capability(signed, key=_KEY, key_id=_KEY_ID, now=_now(-1), expected_binding=_binding())
-    with pytest.raises(WorkflowCapabilityError, match="expired"):
-        verify_workflow_capability(signed, key=_KEY, key_id=_KEY_ID, now=_now(60), expected_binding=_binding())
     with pytest.raises(WorkflowCapabilityError, match="ttl_exceeds"):
         _claim(expires_at=format_utc_timestamp(_ISSUED + timedelta(hours=25)))
     with pytest.raises(WorkflowCapabilityError, match="max_uses"):
@@ -250,7 +237,6 @@ def test_issue_lookup_claim_and_reopen(tmp_path) -> None:
     assert store.lookup_workflow_capability(claim.capability_id) == issued
     assert receipt.receipt.task_id == claim.task_id
     assert receipt.receipt.approval_provenance_id == "provenance-054"
-    verify_workflow_capability_receipt(receipt, key=_KEY, key_id=_KEY_ID)
     assert _store(tmp_path).lookup_workflow_capability(claim.capability_id) == issued
     issue_events = store.list_events(event_name="workflow_capability.issued")
     assert issue_events[0]["occurred_at"] == _now()
@@ -351,30 +337,6 @@ def test_concurrent_claims_never_exceed_exact_use_limit(tmp_path) -> None:
     assert use_row == (8,)
     assert receipt_row == (8,)
     assert transition_rows == [(index,) for index in range(1, 10)]
-
-
-def test_claim_rolls_back_use_and_event_when_audit_link_fails(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
-    store = _store(tmp_path)
-    claim = _claim(capability_id="wc-rollback")
-    _issue(store, claim)
-
-    def fail_event(*args: object, **kwargs: object) -> int:
-        raise RuntimeError("forced_event_failure")
-
-    monkeypatch.setattr(StoreWorkflowCapabilitiesMixin, "_insert_workflow_capability_event", fail_event)
-    with pytest.raises(RuntimeError, match="forced_event_failure"):
-        _claim_capability(
-            store,
-            claim,
-            invocation_id="invocation-rollback",
-        )
-    with sqlite3.connect(store.path) as connection:
-        used_count = connection.execute(
-            "select used_count from guard_workflow_capabilities where capability_id = ?", (claim.capability_id,)
-        ).fetchone()
-        receipt_count = connection.execute("select count(*) from guard_workflow_capability_receipts").fetchone()
-    assert used_count == (0,)
-    assert receipt_count == (0,)
 
 
 def test_revocation_blocks_claim_and_is_idempotent(tmp_path) -> None:

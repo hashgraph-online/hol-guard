@@ -1,0 +1,413 @@
+{
+ "query": [
+  {
+   "encoded": "",
+   "pairs": [],
+   "query": ""
+  },
+  {
+   "encoded": "a=1",
+   "pairs": [
+    [
+     "a",
+     "1"
+    ]
+   ],
+   "query": "a=1"
+  },
+  {
+   "encoded": "a=1&b=2",
+   "pairs": [
+    [
+     "a",
+     "1"
+    ],
+    [
+     "b",
+     "2"
+    ]
+   ],
+   "query": "a=1&b=2"
+  },
+  {
+   "encoded": "a=1&a=2",
+   "pairs": [
+    [
+     "a",
+     "1"
+    ],
+    [
+     "a",
+     "2"
+    ]
+   ],
+   "query": "a=1&a=2"
+  },
+  {
+   "encoded": "a=",
+   "pairs": [
+    [
+     "a",
+     ""
+    ]
+   ],
+   "query": "a"
+  },
+  {
+   "encoded": "a=",
+   "pairs": [
+    [
+     "a",
+     ""
+    ]
+   ],
+   "query": "a="
+  },
+  {
+   "encoded": "=1",
+   "pairs": [
+    [
+     "",
+     "1"
+    ]
+   ],
+   "query": "=1"
+  },
+  {
+   "encoded": "a=+b",
+   "pairs": [
+    [
+     "a",
+     " b"
+    ]
+   ],
+   "query": "a=%20b"
+  },
+  {
+   "encoded": "a+b=c+d",
+   "pairs": [
+    [
+     "a b",
+     "c d"
+    ]
+   ],
+   "query": "a+b=c+d"
+  },
+  {
+   "encoded": "a=1&b=2",
+   "pairs": [
+    [
+     "a",
+     "1"
+    ],
+    [
+     "b",
+     "2"
+    ]
+   ],
+   "query": "a=1&&b=2"
+  }
+ ],
+ "roundtrip": [
+  {
+   "expected": "https://example.test/a/b?x=1&y=2#frag",
+   "fragment": "frag",
+   "netloc": "example.test",
+   "path": "/a/b",
+   "query": "x=1&y=2",
+   "scheme": "https",
+   "url": "https://example.test/a/b?x=1&y=2#frag"
+  },
+  {
+   "expected": "http://example.test",
+   "fragment": "",
+   "netloc": "example.test",
+   "path": "",
+   "query": "",
+   "scheme": "http",
+   "url": "http://example.test"
+  },
+  {
+   "expected": "//example.test/p",
+   "fragment": "",
+   "netloc": "example.test",
+   "path": "/p",
+   "query": "",
+   "scheme": "",
+   "url": "//example.test/p"
+  },
+  {
+   "expected": "/just/a/path",
+   "fragment": "",
+   "netloc": "",
+   "path": "/just/a/path",
+   "query": "",
+   "scheme": "",
+   "url": "/just/a/path"
+  },
+  {
+   "expected": "relative/path",
+   "fragment": "",
+   "netloc": "",
+   "path": "relative/path",
+   "query": "",
+   "scheme": "",
+   "url": "relative/path"
+  },
+  {
+   "expected": "mailto:user@example.test",
+   "fragment": "",
+   "netloc": "",
+   "path": "user@example.test",
+   "query": "",
+   "scheme": "mailto",
+   "url": "mailto:user@example.test"
+  },
+  {
+   "expected": "http://example.test/p?a=1#f",
+   "fragment": "f",
+   "netloc": "example.test",
+   "path": "/p",
+   "query": "a=1",
+   "scheme": "http",
+   "url": "http://example.test/p?a=1#f"
+  },
+  {
+   "expected": "?only=query",
+   "fragment": "",
+   "netloc": "",
+   "path": "",
+   "query": "only=query",
+   "scheme": "",
+   "url": "?only=query"
+  },
+  {
+   "expected": "#only-fragment",
+   "fragment": "only-fragment",
+   "netloc": "",
+   "path": "",
+   "query": "",
+   "scheme": "",
+   "url": "#only-fragment"
+  },
+  {
+   "expected": "",
+   "fragment": "",
+   "netloc": "",
+   "path": "",
+   "query": "",
+   "scheme": "",
+   "url": ""
+  }
+ ],
+ "urlunsplit": [
+  {
+   "expected": "",
+   "fragment": "",
+   "netloc": "",
+   "path": "",
+   "query": "",
+   "scheme": ""
+  },
+  {
+   "expected": "////path",
+   "fragment": "",
+   "netloc": "",
+   "path": "//path",
+   "query": "",
+   "scheme": ""
+  },
+  {
+   "expected": "////path?a=1",
+   "fragment": "",
+   "netloc": "",
+   "path": "//path",
+   "query": "a=1",
+   "scheme": ""
+  },
+  {
+   "expected": "/////triple",
+   "fragment": "",
+   "netloc": "",
+   "path": "///triple",
+   "query": "",
+   "scheme": ""
+  },
+  {
+   "expected": "path",
+   "fragment": "",
+   "netloc": "",
+   "path": "path",
+   "query": "",
+   "scheme": ""
+  },
+  {
+   "expected": "/path",
+   "fragment": "",
+   "netloc": "",
+   "path": "/path",
+   "query": "",
+   "scheme": ""
+  },
+  {
+   "expected": "http://",
+   "fragment": "",
+   "netloc": "",
+   "path": "",
+   "query": "",
+   "scheme": "http"
+  },
+  {
+   "expected": "http:path",
+   "fragment": "",
+   "netloc": "",
+   "path": "path",
+   "query": "",
+   "scheme": "http"
+  },
+  {
+   "expected": "http:///path",
+   "fragment": "",
+   "netloc": "",
+   "path": "/path",
+   "query": "",
+   "scheme": "http"
+  },
+  {
+   "expected": "http:////path",
+   "fragment": "",
+   "netloc": "",
+   "path": "//path",
+   "query": "",
+   "scheme": "http"
+  },
+  {
+   "expected": "http://example.test",
+   "fragment": "",
+   "netloc": "example.test",
+   "path": "",
+   "query": "",
+   "scheme": "http"
+  },
+  {
+   "expected": "http://example.test/path",
+   "fragment": "",
+   "netloc": "example.test",
+   "path": "path",
+   "query": "",
+   "scheme": "http"
+  },
+  {
+   "expected": "http://example.test/path",
+   "fragment": "",
+   "netloc": "example.test",
+   "path": "/path",
+   "query": "",
+   "scheme": "http"
+  },
+  {
+   "expected": "http://example.test//path",
+   "fragment": "",
+   "netloc": "example.test",
+   "path": "//path",
+   "query": "",
+   "scheme": "http"
+  },
+  {
+   "expected": "https://example.test:8443/a/b?x=1&y=2#frag",
+   "fragment": "frag",
+   "netloc": "example.test:8443",
+   "path": "/a/b",
+   "query": "x=1&y=2",
+   "scheme": "https"
+  },
+  {
+   "expected": "mailto:user@example.test",
+   "fragment": "",
+   "netloc": "",
+   "path": "user@example.test",
+   "query": "",
+   "scheme": "mailto"
+  },
+  {
+   "expected": "mailto:////user@example.test",
+   "fragment": "",
+   "netloc": "",
+   "path": "//user@example.test",
+   "query": "",
+   "scheme": "mailto"
+  },
+  {
+   "expected": "news:comp.lang.rust",
+   "fragment": "",
+   "netloc": "",
+   "path": "comp.lang.rust",
+   "query": "",
+   "scheme": "news"
+  },
+  {
+   "expected": "//example.test/p",
+   "fragment": "",
+   "netloc": "example.test",
+   "path": "/p",
+   "query": "",
+   "scheme": ""
+  },
+  {
+   "expected": "file:///etc/hosts",
+   "fragment": "",
+   "netloc": "",
+   "path": "/etc/hosts",
+   "query": "",
+   "scheme": "file"
+  },
+  {
+   "expected": "file:////etc/hosts",
+   "fragment": "",
+   "netloc": "",
+   "path": "//etc/hosts",
+   "query": "",
+   "scheme": "file"
+  },
+  {
+   "expected": "ftp:////host/p",
+   "fragment": "",
+   "netloc": "",
+   "path": "//host/p",
+   "query": "",
+   "scheme": "ftp"
+  },
+  {
+   "expected": "unknownscheme:////path",
+   "fragment": "",
+   "netloc": "",
+   "path": "//path",
+   "query": "",
+   "scheme": "unknownscheme"
+  },
+  {
+   "expected": "unknownscheme:/path",
+   "fragment": "",
+   "netloc": "",
+   "path": "/path",
+   "query": "",
+   "scheme": "unknownscheme"
+  },
+  {
+   "expected": "http://example.test/p#f",
+   "fragment": "f",
+   "netloc": "example.test",
+   "path": "/p",
+   "query": "",
+   "scheme": "http"
+  },
+  {
+   "expected": "http://example.test/p?q=1",
+   "fragment": "",
+   "netloc": "example.test",
+   "path": "/p",
+   "query": "q=1",
+   "scheme": "http"
+  }
+ ]
+}

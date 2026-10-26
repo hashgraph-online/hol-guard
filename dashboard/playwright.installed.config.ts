@@ -8,8 +8,15 @@ if (!origin) throw new Error("GUARD_INSTALLED_ORIGIN is required");
 
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: ["installed-command-activity.spec.ts", "installed-extension-control-center.spec.ts"],
+  testMatch: [
+    "installed-command-activity.spec.ts",
+    "installed-extension-control-center.spec.ts",
+    "installed-git-worktree-control.spec.ts",
+  ],
   fullyParallel: false,
+  // Both policy specs mutate the one installed authority, so they must not
+  // race each other for the current revision.
+  workers: 1,
   retries: 0,
   reporter: "list",
   outputDir: resolve(resolveProofDir(), "playwright-output"),

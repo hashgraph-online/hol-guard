@@ -8,6 +8,14 @@ from codex_plugin_scanner.guard import contained_node_execution
 from codex_plugin_scanner.guard.runtime.package_intent_common import LocalPackageExecutionEvidence, PackageIntent
 
 
+class _NativeRefuses:
+    """Resident that returns no contained result (sandbox or proof unavailable)."""
+
+    @staticmethod
+    def contained_node_execute_native(*_args: object, **_kwargs: object) -> None:
+        return None
+
+
 def _vitest_intent(workspace: Path) -> PackageIntent:
     execution = LocalPackageExecutionEvidence(
         manager_name="bunx",
@@ -33,7 +41,7 @@ def _vitest_intent(workspace: Path) -> PackageIntent:
     )
 
 
-def test_installed_package_shim_stops_vitest_when_runner_evidence_is_missing(tmp_path, monkeypatch) -> None:
+def test_installed_package_shim_stops_vitest_when_resident_returns_no_result(tmp_path, monkeypatch) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     guard_home = tmp_path / "guard-home"
@@ -47,8 +55,8 @@ def test_installed_package_shim_stops_vitest_when_runner_evidence_is_missing(tmp
     )
     monkeypatch.setattr(
         contained_node_execution,
-        "build_local_node_runner_evidence",
-        lambda *args, **kwargs: None,
+        "_native_execution",
+        _NativeRefuses,
     )
 
     with pytest.raises(SystemExit, match="refused uncontained Vitest execution"):
@@ -62,7 +70,7 @@ def test_installed_package_shim_stops_vitest_when_runner_evidence_is_missing(tmp
         )
 
 
-def test_non_shim_vitest_returns_to_review_when_runner_evidence_is_missing(tmp_path, monkeypatch) -> None:
+def test_non_shim_vitest_returns_to_review_when_resident_returns_no_result(tmp_path, monkeypatch) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     shim_directory = tmp_path / "bin"
@@ -75,8 +83,8 @@ def test_non_shim_vitest_returns_to_review_when_runner_evidence_is_missing(tmp_p
     )
     monkeypatch.setattr(
         contained_node_execution,
-        "build_local_node_runner_evidence",
-        lambda *args, **kwargs: None,
+        "_native_execution",
+        _NativeRefuses,
     )
 
     result = contained_node_execution.try_execute_contained_node_command(

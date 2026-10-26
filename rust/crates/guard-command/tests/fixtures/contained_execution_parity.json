@@ -1,0 +1,2644 @@
+{
+  "schema": "contained-execution-parity.v1",
+  "baseline": "1b76783140",
+  "source_sha256": {
+    "src/codex_plugin_scanner/guard/runtime/restricted_pytest_model.py": {
+      "revision": "d75f7f7c590536b3116bd03643033e19ca4117f9",
+      "sha256": "39725279d2225a1f926db286c1f80a35bd89ed879472c071764698a936e4e522"
+    },
+    "src/codex_plugin_scanner/guard/runtime/restricted_pytest_validation.py": {
+      "revision": "d75f7f7c590536b3116bd03643033e19ca4117f9",
+      "sha256": "4167da0044abf8b3ed85c7c7f82acd0abff10c546ad48280fd4bbda51523363c"
+    },
+    "src/codex_plugin_scanner/guard/runtime/restricted_credential_patterns.py": {
+      "revision": "1b76783140",
+      "sha256": "ee4457fac77d70e091e7786c9436d942749a6a6ef8004460b8d23c84150d9908"
+    },
+    "src/codex_plugin_scanner/guard/runtime/restricted_pytest_sandbox.py": {
+      "revision": "d75f7f7c590536b3116bd03643033e19ca4117f9",
+      "sha256": "b7fa65965fee0f3cb4e4bd10f64a2f9a42fc5fdd7065d6478c07b0364599faa6"
+    },
+    "src/codex_plugin_scanner/guard/runtime/restricted_pytest.py": {
+      "revision": "d75f7f7c590536b3116bd03643033e19ca4117f9",
+      "sha256": "0988d40631ea1ac5a4ca822bbe144b06ce12af9bf8d37e57f390b6f75cd1de29"
+    },
+    "src/codex_plugin_scanner/guard/runtime/restricted_node_test.py": {
+      "revision": "1b76783140",
+      "sha256": "1188bd505740a12b2507284217f00481bdad5d87df6badae296aa7646f6da3b3"
+    },
+    "src/codex_plugin_scanner/guard/runtime/restricted_vitest.py": {
+      "revision": "1b76783140",
+      "sha256": "9d1684406dc67261a3813b6194fd69fd060fee76e3d8cf6318ffed246a7dafc0"
+    },
+    "src/codex_plugin_scanner/guard/runtime/restricted_inline_eval.py": {
+      "revision": "1b76783140",
+      "sha256": "9eea9ae400dc6631696401f84d02bf6ae4009218a250500288e02d0652e81ad9"
+    },
+    "src/codex_plugin_scanner/guard/runtime/restricted_linux_mapping_plan.py": {
+      "revision": "1b76783140",
+      "sha256": "0b7d2c667b1da815b33870865be842e46702a96a9bd8271dcafa1e98329a4e4a"
+    },
+    "src/codex_plugin_scanner/guard/runtime/contained_test_hook.py": {
+      "revision": "1b76783140",
+      "sha256": "fe10f99e29110692288aa3c162ca745d1def40f843eced5036376cb565b3d6be"
+    }
+  },
+  "cases": [
+    {
+      "operation": "contained_kind",
+      "input": {
+        "command": []
+      },
+      "expected": {
+        "value": {
+          "inline_eval": false,
+          "node_test": false,
+          "vitest": false,
+          "git": false,
+          "node_tool": false
+        }
+      }
+    },
+    {
+      "operation": "node_runtime_args",
+      "input": {
+        "command": []
+      },
+      "expected": {
+        "reason_code": "pytest_restricted_invalid_command",
+        "message": "Restricted pytest requires a bounded, non-empty argv after `--`."
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": []
+      },
+      "expected": {
+        "value": false
+      }
+    },
+    {
+      "operation": "python_runtime_args",
+      "input": {
+        "command": []
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "contained_kind",
+      "input": {
+        "command": [
+          "node"
+        ]
+      },
+      "expected": {
+        "value": {
+          "inline_eval": false,
+          "node_test": false,
+          "vitest": false,
+          "git": false,
+          "node_tool": false
+        }
+      }
+    },
+    {
+      "operation": "node_runtime_args",
+      "input": {
+        "command": [
+          "node"
+        ]
+      },
+      "expected": {
+        "value": []
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "node"
+        ]
+      },
+      "expected": {
+        "value": false
+      }
+    },
+    {
+      "operation": "python_runtime_args",
+      "input": {
+        "command": [
+          "node"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "contained_kind",
+      "input": {
+        "command": [
+          "node",
+          "--test"
+        ]
+      },
+      "expected": {
+        "value": {
+          "inline_eval": false,
+          "node_test": true,
+          "vitest": false,
+          "git": false,
+          "node_tool": false
+        }
+      }
+    },
+    {
+      "operation": "node_runtime_args",
+      "input": {
+        "command": [
+          "node",
+          "--test"
+        ]
+      },
+      "expected": {
+        "value": []
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "node",
+          "--test"
+        ]
+      },
+      "expected": {
+        "value": false
+      }
+    },
+    {
+      "operation": "python_runtime_args",
+      "input": {
+        "command": [
+          "node",
+          "--test"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "contained_kind",
+      "input": {
+        "command": [
+          "python",
+          "-c",
+          "print(1)"
+        ]
+      },
+      "expected": {
+        "value": {
+          "inline_eval": true,
+          "node_test": false,
+          "vitest": false,
+          "git": false,
+          "node_tool": false
+        }
+      }
+    },
+    {
+      "operation": "node_runtime_args",
+      "input": {
+        "command": [
+          "python",
+          "-c",
+          "print(1)"
+        ]
+      },
+      "expected": {
+        "value": []
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "python",
+          "-c",
+          "print(1)"
+        ]
+      },
+      "expected": {
+        "value": true
+      }
+    },
+    {
+      "operation": "python_runtime_args",
+      "input": {
+        "command": [
+          "python",
+          "-c",
+          "print(1)"
+        ]
+      },
+      "expected": {
+        "value": []
+      }
+    },
+    {
+      "operation": "contained_kind",
+      "input": {
+        "command": [
+          "python3",
+          "-I",
+          "-S",
+          "-c",
+          "0"
+        ]
+      },
+      "expected": {
+        "value": {
+          "inline_eval": true,
+          "node_test": false,
+          "vitest": false,
+          "git": false,
+          "node_tool": false
+        }
+      }
+    },
+    {
+      "operation": "node_runtime_args",
+      "input": {
+        "command": [
+          "python3",
+          "-I",
+          "-S",
+          "-c",
+          "0"
+        ]
+      },
+      "expected": {
+        "value": []
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "python3",
+          "-I",
+          "-S",
+          "-c",
+          "0"
+        ]
+      },
+      "expected": {
+        "value": true
+      }
+    },
+    {
+      "operation": "python_runtime_args",
+      "input": {
+        "command": [
+          "python3",
+          "-I",
+          "-S",
+          "-c",
+          "0"
+        ]
+      },
+      "expected": {
+        "value": [
+          "-I",
+          "-S"
+        ]
+      }
+    },
+    {
+      "operation": "contained_kind",
+      "input": {
+        "command": [
+          "python",
+          "-II",
+          "-c",
+          "0"
+        ]
+      },
+      "expected": {
+        "value": {
+          "inline_eval": false,
+          "node_test": false,
+          "vitest": false,
+          "git": false,
+          "node_tool": false
+        }
+      }
+    },
+    {
+      "operation": "node_runtime_args",
+      "input": {
+        "command": [
+          "python",
+          "-II",
+          "-c",
+          "0"
+        ]
+      },
+      "expected": {
+        "value": []
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "python",
+          "-II",
+          "-c",
+          "0"
+        ]
+      },
+      "expected": {
+        "value": false
+      }
+    },
+    {
+      "operation": "python_runtime_args",
+      "input": {
+        "command": [
+          "python",
+          "-II",
+          "-c",
+          "0"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "contained_kind",
+      "input": {
+        "command": [
+          "python",
+          "-IS",
+          "-I",
+          "-c",
+          "0"
+        ]
+      },
+      "expected": {
+        "value": {
+          "inline_eval": false,
+          "node_test": false,
+          "vitest": false,
+          "git": false,
+          "node_tool": false
+        }
+      }
+    },
+    {
+      "operation": "node_runtime_args",
+      "input": {
+        "command": [
+          "python",
+          "-IS",
+          "-I",
+          "-c",
+          "0"
+        ]
+      },
+      "expected": {
+        "value": []
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "python",
+          "-IS",
+          "-I",
+          "-c",
+          "0"
+        ]
+      },
+      "expected": {
+        "value": false
+      }
+    },
+    {
+      "operation": "python_runtime_args",
+      "input": {
+        "command": [
+          "python",
+          "-IS",
+          "-I",
+          "-c",
+          "0"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "contained_kind",
+      "input": {
+        "command": [
+          "python",
+          "tests/test_sample.py"
+        ]
+      },
+      "expected": {
+        "value": {
+          "inline_eval": true,
+          "node_test": false,
+          "vitest": false,
+          "git": false,
+          "node_tool": false
+        }
+      }
+    },
+    {
+      "operation": "node_runtime_args",
+      "input": {
+        "command": [
+          "python",
+          "tests/test_sample.py"
+        ]
+      },
+      "expected": {
+        "value": []
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "python",
+          "tests/test_sample.py"
+        ]
+      },
+      "expected": {
+        "value": true
+      }
+    },
+    {
+      "operation": "python_runtime_args",
+      "input": {
+        "command": [
+          "python",
+          "tests/test_sample.py"
+        ]
+      },
+      "expected": {
+        "value": []
+      }
+    },
+    {
+      "operation": "contained_kind",
+      "input": {
+        "command": [
+          "python",
+          "../test_sample.py"
+        ]
+      },
+      "expected": {
+        "value": {
+          "inline_eval": false,
+          "node_test": false,
+          "vitest": false,
+          "git": false,
+          "node_tool": false
+        }
+      }
+    },
+    {
+      "operation": "node_runtime_args",
+      "input": {
+        "command": [
+          "python",
+          "../test_sample.py"
+        ]
+      },
+      "expected": {
+        "value": []
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "python",
+          "../test_sample.py"
+        ]
+      },
+      "expected": {
+        "value": false
+      }
+    },
+    {
+      "operation": "python_runtime_args",
+      "input": {
+        "command": [
+          "python",
+          "../test_sample.py"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "contained_kind",
+      "input": {
+        "command": [
+          "python",
+          "test_sample.py/"
+        ]
+      },
+      "expected": {
+        "value": {
+          "inline_eval": false,
+          "node_test": false,
+          "vitest": false,
+          "git": false,
+          "node_tool": false
+        }
+      }
+    },
+    {
+      "operation": "node_runtime_args",
+      "input": {
+        "command": [
+          "python",
+          "test_sample.py/"
+        ]
+      },
+      "expected": {
+        "value": []
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "python",
+          "test_sample.py/"
+        ]
+      },
+      "expected": {
+        "value": false
+      }
+    },
+    {
+      "operation": "python_runtime_args",
+      "input": {
+        "command": [
+          "python",
+          "test_sample.py/"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "contained_kind",
+      "input": {
+        "command": [
+          "node",
+          "--max-old-space-size=32",
+          "-e",
+          "0"
+        ]
+      },
+      "expected": {
+        "value": {
+          "inline_eval": true,
+          "node_test": false,
+          "vitest": false,
+          "git": false,
+          "node_tool": false
+        }
+      }
+    },
+    {
+      "operation": "node_runtime_args",
+      "input": {
+        "command": [
+          "node",
+          "--max-old-space-size=32",
+          "-e",
+          "0"
+        ]
+      },
+      "expected": {
+        "value": [
+          "--max-old-space-size=32"
+        ]
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "node",
+          "--max-old-space-size=32",
+          "-e",
+          "0"
+        ]
+      },
+      "expected": {
+        "value": true
+      }
+    },
+    {
+      "operation": "python_runtime_args",
+      "input": {
+        "command": [
+          "node",
+          "--max-old-space-size=32",
+          "-e",
+          "0"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "contained_kind",
+      "input": {
+        "command": [
+          "node",
+          "--eval",
+          "0"
+        ]
+      },
+      "expected": {
+        "value": {
+          "inline_eval": true,
+          "node_test": false,
+          "vitest": false,
+          "git": false,
+          "node_tool": false
+        }
+      }
+    },
+    {
+      "operation": "node_runtime_args",
+      "input": {
+        "command": [
+          "node",
+          "--eval",
+          "0"
+        ]
+      },
+      "expected": {
+        "value": []
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "node",
+          "--eval",
+          "0"
+        ]
+      },
+      "expected": {
+        "value": true
+      }
+    },
+    {
+      "operation": "python_runtime_args",
+      "input": {
+        "command": [
+          "node",
+          "--eval",
+          "0"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "contained_kind",
+      "input": {
+        "command": [
+          "node",
+          "--max-old-space-size=15",
+          "--test"
+        ]
+      },
+      "expected": {
+        "reason_code": "node_test_restricted_invalid_command",
+        "message": "Invalid bounded Node memory option."
+      }
+    },
+    {
+      "operation": "node_runtime_args",
+      "input": {
+        "command": [
+          "node",
+          "--max-old-space-size=15",
+          "--test"
+        ]
+      },
+      "expected": {
+        "reason_code": "node_test_restricted_invalid_command",
+        "message": "Invalid bounded Node memory option."
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "node",
+          "--max-old-space-size=15",
+          "--test"
+        ]
+      },
+      "expected": {
+        "reason_code": "node_test_restricted_invalid_command",
+        "message": "Invalid bounded Node memory option."
+      }
+    },
+    {
+      "operation": "python_runtime_args",
+      "input": {
+        "command": [
+          "node",
+          "--max-old-space-size=15",
+          "--test"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "contained_kind",
+      "input": {
+        "command": [
+          "node",
+          "--max-old-space-size=131073",
+          "--test"
+        ]
+      },
+      "expected": {
+        "reason_code": "node_test_restricted_invalid_command",
+        "message": "Invalid bounded Node memory option."
+      }
+    },
+    {
+      "operation": "node_runtime_args",
+      "input": {
+        "command": [
+          "node",
+          "--max-old-space-size=131073",
+          "--test"
+        ]
+      },
+      "expected": {
+        "reason_code": "node_test_restricted_invalid_command",
+        "message": "Invalid bounded Node memory option."
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "node",
+          "--max-old-space-size=131073",
+          "--test"
+        ]
+      },
+      "expected": {
+        "reason_code": "node_test_restricted_invalid_command",
+        "message": "Invalid bounded Node memory option."
+      }
+    },
+    {
+      "operation": "python_runtime_args",
+      "input": {
+        "command": [
+          "node",
+          "--max-old-space-size=131073",
+          "--test"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "contained_kind",
+      "input": {
+        "command": [
+          "node",
+          "--max-old-space-size=\u0663\u0662",
+          "--test"
+        ]
+      },
+      "expected": {
+        "reason_code": "node_test_restricted_invalid_command",
+        "message": "Invalid bounded Node memory option."
+      }
+    },
+    {
+      "operation": "node_runtime_args",
+      "input": {
+        "command": [
+          "node",
+          "--max-old-space-size=\u0663\u0662",
+          "--test"
+        ]
+      },
+      "expected": {
+        "reason_code": "node_test_restricted_invalid_command",
+        "message": "Invalid bounded Node memory option."
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "node",
+          "--max-old-space-size=\u0663\u0662",
+          "--test"
+        ]
+      },
+      "expected": {
+        "reason_code": "node_test_restricted_invalid_command",
+        "message": "Invalid bounded Node memory option."
+      }
+    },
+    {
+      "operation": "python_runtime_args",
+      "input": {
+        "command": [
+          "node",
+          "--max-old-space-size=\u0663\u0662",
+          "--test"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "contained_kind",
+      "input": {
+        "command": [
+          "node",
+          "--max-old-space-size=00016",
+          "--test"
+        ]
+      },
+      "expected": {
+        "value": {
+          "inline_eval": false,
+          "node_test": true,
+          "vitest": false,
+          "git": false,
+          "node_tool": false
+        }
+      }
+    },
+    {
+      "operation": "node_runtime_args",
+      "input": {
+        "command": [
+          "node",
+          "--max-old-space-size=00016",
+          "--test"
+        ]
+      },
+      "expected": {
+        "value": [
+          "--max-old-space-size=00016"
+        ]
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "node",
+          "--max-old-space-size=00016",
+          "--test"
+        ]
+      },
+      "expected": {
+        "value": false
+      }
+    },
+    {
+      "operation": "python_runtime_args",
+      "input": {
+        "command": [
+          "node",
+          "--max-old-space-size=00016",
+          "--test"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "contained_kind",
+      "input": {
+        "command": [
+          "node",
+          "--max-old-space-size=",
+          "--test"
+        ]
+      },
+      "expected": {
+        "reason_code": "node_test_restricted_invalid_command",
+        "message": "Invalid bounded Node memory option."
+      }
+    },
+    {
+      "operation": "node_runtime_args",
+      "input": {
+        "command": [
+          "node",
+          "--max-old-space-size=",
+          "--test"
+        ]
+      },
+      "expected": {
+        "reason_code": "node_test_restricted_invalid_command",
+        "message": "Invalid bounded Node memory option."
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "node",
+          "--max-old-space-size=",
+          "--test"
+        ]
+      },
+      "expected": {
+        "reason_code": "node_test_restricted_invalid_command",
+        "message": "Invalid bounded Node memory option."
+      }
+    },
+    {
+      "operation": "python_runtime_args",
+      "input": {
+        "command": [
+          "node",
+          "--max-old-space-size=",
+          "--test"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "contained_kind",
+      "input": {
+        "command": [
+          "node",
+          "--max-old-space-size=99999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999",
+          "--test"
+        ]
+      },
+      "expected": {
+        "reason_code": "node_test_restricted_invalid_command",
+        "message": "Invalid bounded Node memory option."
+      }
+    },
+    {
+      "operation": "node_runtime_args",
+      "input": {
+        "command": [
+          "node",
+          "--max-old-space-size=99999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999",
+          "--test"
+        ]
+      },
+      "expected": {
+        "reason_code": "node_test_restricted_invalid_command",
+        "message": "Invalid bounded Node memory option."
+      }
+    },
+    {
+      "operation": "inline_eval",
+      "input": {
+        "command": [
+          "node",
+          "--max-old-space-size=99999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999",
+          "--test"
+        ]
+      },
+      "expected": {
+        "reason_code": "node_test_restricted_invalid_command",
+        "message": "Invalid bounded Node memory option."
+      }
+    },
+    {
+      "operation": "python_runtime_args",
+      "input": {
+        "command": [
+          "node",
+          "--max-old-space-size=99999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999",
+          "--test"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "test_script",
+      "input": {
+        "value": "test.py"
+      },
+      "expected": {
+        "value": true
+      }
+    },
+    {
+      "operation": "test_script",
+      "input": {
+        "value": "tests/test_x.py"
+      },
+      "expected": {
+        "value": true
+      }
+    },
+    {
+      "operation": "test_script",
+      "input": {
+        "value": "./test.py"
+      },
+      "expected": {
+        "value": true
+      }
+    },
+    {
+      "operation": "test_script",
+      "input": {
+        "value": "test.py/"
+      },
+      "expected": {
+        "value": false
+      }
+    },
+    {
+      "operation": "test_script",
+      "input": {
+        "value": "tests//test.py"
+      },
+      "expected": {
+        "value": false
+      }
+    },
+    {
+      "operation": "test_script",
+      "input": {
+        "value": "../test.py"
+      },
+      "expected": {
+        "value": false
+      }
+    },
+    {
+      "operation": "test_script",
+      "input": {
+        "value": "/test.py"
+      },
+      "expected": {
+        "value": false
+      }
+    },
+    {
+      "operation": "test_script",
+      "input": {
+        "value": "~test.py"
+      },
+      "expected": {
+        "value": false
+      }
+    },
+    {
+      "operation": "test_script",
+      "input": {
+        "value": "test_\u00e9.py"
+      },
+      "expected": {
+        "value": false
+      }
+    },
+    {
+      "operation": "test_script",
+      "input": {
+        "value": "foo_test.py"
+      },
+      "expected": {
+        "value": true
+      }
+    },
+    {
+      "operation": "test_script",
+      "input": {
+        "value": "run_tests.py"
+      },
+      "expected": {
+        "value": true
+      }
+    },
+    {
+      "operation": "test_script",
+      "input": {
+        "value": "test.py$"
+      },
+      "expected": {
+        "value": false
+      }
+    },
+    {
+      "operation": "test_script",
+      "input": {
+        "value": ""
+      },
+      "expected": {
+        "value": false
+      }
+    },
+    {
+      "operation": "bun_vitest_invocation",
+      "input": {
+        "command": [
+          "vitest",
+          "run"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "vitest_arguments",
+      "input": {
+        "command": [
+          "vitest",
+          "run"
+        ]
+      },
+      "expected": {
+        "value": [
+          "run"
+        ]
+      }
+    },
+    {
+      "operation": "bun_vitest_invocation",
+      "input": {
+        "command": [
+          "npx",
+          "--no-install",
+          "vitest",
+          "run",
+          "-q"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "vitest_arguments",
+      "input": {
+        "command": [
+          "npx",
+          "--no-install",
+          "vitest",
+          "run",
+          "-q"
+        ]
+      },
+      "expected": {
+        "value": [
+          "run",
+          "-q"
+        ]
+      }
+    },
+    {
+      "operation": "bun_vitest_invocation",
+      "input": {
+        "command": [
+          "bun",
+          "x",
+          "vitest",
+          "run"
+        ]
+      },
+      "expected": {
+        "value": [
+          null,
+          [
+            "run"
+          ]
+        ]
+      }
+    },
+    {
+      "operation": "vitest_arguments",
+      "input": {
+        "command": [
+          "bun",
+          "x",
+          "vitest",
+          "run"
+        ]
+      },
+      "expected": {
+        "value": [
+          "run"
+        ]
+      }
+    },
+    {
+      "operation": "bun_vitest_invocation",
+      "input": {
+        "command": [
+          "bunx",
+          "--cwd=tests",
+          "vitest",
+          "run"
+        ]
+      },
+      "expected": {
+        "value": [
+          "tests",
+          [
+            "run"
+          ]
+        ]
+      }
+    },
+    {
+      "operation": "vitest_arguments",
+      "input": {
+        "command": [
+          "bunx",
+          "--cwd=tests",
+          "vitest",
+          "run"
+        ]
+      },
+      "expected": {
+        "value": [
+          "run"
+        ]
+      }
+    },
+    {
+      "operation": "bun_vitest_invocation",
+      "input": {
+        "command": [
+          "bunx",
+          "vitest",
+          "run"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "vitest_arguments",
+      "input": {
+        "command": [
+          "bunx",
+          "vitest",
+          "run"
+        ]
+      },
+      "expected": {
+        "value": [
+          "run"
+        ]
+      }
+    },
+    {
+      "operation": "bun_vitest_invocation",
+      "input": {
+        "command": [
+          "bun",
+          "--cwd",
+          "tests",
+          "x",
+          "--no-install",
+          "vitest",
+          "run"
+        ]
+      },
+      "expected": {
+        "value": [
+          "tests",
+          [
+            "run"
+          ]
+        ]
+      }
+    },
+    {
+      "operation": "vitest_arguments",
+      "input": {
+        "command": [
+          "bun",
+          "--cwd",
+          "tests",
+          "x",
+          "--no-install",
+          "vitest",
+          "run"
+        ]
+      },
+      "expected": {
+        "value": [
+          "run"
+        ]
+      }
+    },
+    {
+      "operation": "bun_vitest_invocation",
+      "input": {
+        "command": [
+          "bun",
+          "--cwd=",
+          "x",
+          "vitest",
+          "run"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "vitest_arguments",
+      "input": {
+        "command": [
+          "bun",
+          "--cwd=",
+          "x",
+          "vitest",
+          "run"
+        ]
+      },
+      "expected": {
+        "reason_code": "vitest_restricted_invalid_command",
+        "message": "Only local Vitest run is supported."
+      }
+    },
+    {
+      "operation": "bun_vitest_invocation",
+      "input": {
+        "command": [
+          "vitest",
+          "watch"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "vitest_arguments",
+      "input": {
+        "command": [
+          "vitest",
+          "watch"
+        ]
+      },
+      "expected": {
+        "reason_code": "vitest_restricted_invalid_command",
+        "message": "Protected Vitest requires direct run argv."
+      }
+    },
+    {
+      "operation": "bun_vitest_invocation",
+      "input": {
+        "command": [
+          "vitest",
+          "run",
+          ";"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "vitest_arguments",
+      "input": {
+        "command": [
+          "vitest",
+          "run",
+          ";"
+        ]
+      },
+      "expected": {
+        "reason_code": "vitest_restricted_invalid_command",
+        "message": "Protected Vitest requires direct run argv."
+      }
+    },
+    {
+      "operation": "bun_vitest_invocation",
+      "input": {
+        "command": [
+          "node",
+          "$ROOT/project/node_modules/vitest/vitest.mjs",
+          "run"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "vitest_arguments",
+      "input": {
+        "command": [
+          "node",
+          "$ROOT/project/node_modules/vitest/vitest.mjs",
+          "run"
+        ]
+      },
+      "expected": {
+        "value": [
+          "run"
+        ]
+      }
+    },
+    {
+      "operation": "bun_vitest_invocation",
+      "input": {
+        "command": [
+          "node",
+          "--max-old-space-size=32",
+          "$ROOT/project/node_modules/vitest/vitest.mjs",
+          "run"
+        ]
+      },
+      "expected": {
+        "value": null
+      }
+    },
+    {
+      "operation": "vitest_arguments",
+      "input": {
+        "command": [
+          "node",
+          "--max-old-space-size=32",
+          "$ROOT/project/node_modules/vitest/vitest.mjs",
+          "run"
+        ]
+      },
+      "expected": {
+        "value": [
+          "run"
+        ]
+      }
+    },
+    {
+      "operation": "readonly_config_arguments",
+      "input": {
+        "command": [
+          "run"
+        ],
+        "path": "$ROOT/project/node_modules/vitest/package.json",
+        "fixture_version": "3.4.1"
+      },
+      "expected": {
+        "value": [
+          "run"
+        ]
+      }
+    },
+    {
+      "operation": "readonly_config_arguments",
+      "input": {
+        "command": [
+          "run",
+          "--configLoader=custom"
+        ],
+        "path": "$ROOT/project/node_modules/vitest/package.json",
+        "fixture_version": "3.4.1"
+      },
+      "expected": {
+        "value": [
+          "run",
+          "--configLoader=custom"
+        ]
+      }
+    },
+    {
+      "operation": "readonly_config_arguments",
+      "input": {
+        "command": [
+          "run",
+          "--configLoader",
+          "native"
+        ],
+        "path": "$ROOT/project/node_modules/vitest/package.json",
+        "fixture_version": "3.4.1"
+      },
+      "expected": {
+        "value": [
+          "run",
+          "--configLoader",
+          "native"
+        ]
+      }
+    },
+    {
+      "operation": "readonly_config_arguments",
+      "input": {
+        "command": [
+          "run"
+        ],
+        "path": "$ROOT/project/node_modules/vitest/package.json",
+        "fixture_version": "4.0.0"
+      },
+      "expected": {
+        "value": [
+          "run",
+          "--configLoader",
+          "runner"
+        ]
+      }
+    },
+    {
+      "operation": "readonly_config_arguments",
+      "input": {
+        "command": [
+          "run",
+          "--configLoader=custom"
+        ],
+        "path": "$ROOT/project/node_modules/vitest/package.json",
+        "fixture_version": "4.0.0"
+      },
+      "expected": {
+        "value": [
+          "run",
+          "--configLoader=custom"
+        ]
+      }
+    },
+    {
+      "operation": "readonly_config_arguments",
+      "input": {
+        "command": [
+          "run",
+          "--configLoader",
+          "native"
+        ],
+        "path": "$ROOT/project/node_modules/vitest/package.json",
+        "fixture_version": "4.0.0"
+      },
+      "expected": {
+        "value": [
+          "run",
+          "--configLoader",
+          "native"
+        ]
+      }
+    },
+    {
+      "operation": "readonly_config_arguments",
+      "input": {
+        "command": [
+          "run"
+        ],
+        "path": "$ROOT/project/node_modules/vitest/package.json",
+        "fixture_version": "04.1"
+      },
+      "expected": {
+        "value": [
+          "run",
+          "--configLoader",
+          "runner"
+        ]
+      }
+    },
+    {
+      "operation": "readonly_config_arguments",
+      "input": {
+        "command": [
+          "run",
+          "--configLoader=custom"
+        ],
+        "path": "$ROOT/project/node_modules/vitest/package.json",
+        "fixture_version": "04.1"
+      },
+      "expected": {
+        "value": [
+          "run",
+          "--configLoader=custom"
+        ]
+      }
+    },
+    {
+      "operation": "readonly_config_arguments",
+      "input": {
+        "command": [
+          "run",
+          "--configLoader",
+          "native"
+        ],
+        "path": "$ROOT/project/node_modules/vitest/package.json",
+        "fixture_version": "04.1"
+      },
+      "expected": {
+        "value": [
+          "run",
+          "--configLoader",
+          "native"
+        ]
+      }
+    },
+    {
+      "operation": "readonly_config_arguments",
+      "input": {
+        "command": [
+          "run"
+        ],
+        "path": "$ROOT/project/node_modules/vitest/package.json",
+        "fixture_version": "\uff14.0"
+      },
+      "expected": {
+        "value": [
+          "run"
+        ]
+      }
+    },
+    {
+      "operation": "readonly_config_arguments",
+      "input": {
+        "command": [
+          "run",
+          "--configLoader=custom"
+        ],
+        "path": "$ROOT/project/node_modules/vitest/package.json",
+        "fixture_version": "\uff14.0"
+      },
+      "expected": {
+        "value": [
+          "run",
+          "--configLoader=custom"
+        ]
+      }
+    },
+    {
+      "operation": "readonly_config_arguments",
+      "input": {
+        "command": [
+          "run",
+          "--configLoader",
+          "native"
+        ],
+        "path": "$ROOT/project/node_modules/vitest/package.json",
+        "fixture_version": "\uff14.0"
+      },
+      "expected": {
+        "value": [
+          "run",
+          "--configLoader",
+          "native"
+        ]
+      }
+    },
+    {
+      "operation": "readonly_config_arguments",
+      "input": {
+        "command": [
+          "run"
+        ],
+        "path": "$ROOT/project/node_modules/vitest/package.json",
+        "fixture_version": ""
+      },
+      "expected": {
+        "value": [
+          "run"
+        ]
+      }
+    },
+    {
+      "operation": "readonly_config_arguments",
+      "input": {
+        "command": [
+          "run",
+          "--configLoader=custom"
+        ],
+        "path": "$ROOT/project/node_modules/vitest/package.json",
+        "fixture_version": ""
+      },
+      "expected": {
+        "value": [
+          "run",
+          "--configLoader=custom"
+        ]
+      }
+    },
+    {
+      "operation": "readonly_config_arguments",
+      "input": {
+        "command": [
+          "run",
+          "--configLoader",
+          "native"
+        ],
+        "path": "$ROOT/project/node_modules/vitest/package.json",
+        "fixture_version": ""
+      },
+      "expected": {
+        "value": [
+          "run",
+          "--configLoader",
+          "native"
+        ]
+      }
+    },
+    {
+      "operation": "readonly_config_arguments",
+      "input": {
+        "command": [
+          "run"
+        ],
+        "path": "$ROOT/project/node_modules/vitest/package.json",
+        "fixture_version": null
+      },
+      "expected": {
+        "value": [
+          "run"
+        ]
+      }
+    },
+    {
+      "operation": "readonly_config_arguments",
+      "input": {
+        "command": [
+          "run",
+          "--configLoader=custom"
+        ],
+        "path": "$ROOT/project/node_modules/vitest/package.json",
+        "fixture_version": null
+      },
+      "expected": {
+        "value": [
+          "run",
+          "--configLoader=custom"
+        ]
+      }
+    },
+    {
+      "operation": "readonly_config_arguments",
+      "input": {
+        "command": [
+          "run",
+          "--configLoader",
+          "native"
+        ],
+        "path": "$ROOT/project/node_modules/vitest/package.json",
+        "fixture_version": null
+      },
+      "expected": {
+        "value": [
+          "run",
+          "--configLoader",
+          "native"
+        ]
+      }
+    },
+    {
+      "operation": "seatbelt_string",
+      "input": {
+        "value": "$ROOT/project"
+      },
+      "expected": {
+        "value": "\"$ROOT/project\""
+      }
+    },
+    {
+      "operation": "seatbelt_string",
+      "input": {
+        "value": "a\\b\"c\nd\re"
+      },
+      "expected": {
+        "value": "\"a\\\\b\\\"c\\nd\\re\""
+      }
+    },
+    {
+      "operation": "seatbelt_string",
+      "input": {
+        "value": ".env"
+      },
+      "expected": {
+        "value": "\".env\""
+      }
+    },
+    {
+      "operation": "credential_patterns",
+      "input": {},
+      "expected": {
+        "value": [
+          "(^|/)\\.[eE][nN][vV]($|[./])",
+          "(^|/)[^/]*\\.[kK][eE][yY]$",
+          "(^|/)[kK][rR][bB]5[cC][cC]_[^/]*$",
+          "(^|/)(\\.[eE][nN][vV][rR][cC]|\\.[aA][uU][tT][hH][rR][cC]|\\.[nN][pP][mM][rR][cC]|\\.[pP][yY][pP][iI][rR][cC]|\\.[nN][eE][tT][rR][cC]|\\.[gG][iI][tT]\\-[cC][rR][eE][dD][eE][nN][tT][iI][aA][lL][sS]|[tT][eE][rR][rR][aA][fF][oO][rR][mM]\\.[tT][fF][vV][aA][rR][sS]|[pP][rR][iI][vV][aA][tT][eE]\\.[kK][eE][yY]|[wW][aA][lL][lL][eE][tT]\\.[kK][eE][yY])$",
+          "(^|/)[^/]*([pP][rR][iI][vV][aA][tT][eE]\\-[kK][eE][yY]|[pP][rR][iI][vV][aA][tT][eE]_[kK][eE][yY]|[wW][aA][lL][lL][eE][tT]\\-[kK][eE][yY]|[wW][aA][lL][lL][eE][tT]_[kK][eE][yY])[^/]*$",
+          "(^|/)(\\.[sS][sS][hH]|\\.[aA][wW][sS]|\\.[dD][oO][cC][kK][eE][rR]|\\.[kK][uU][bB][eE]|\\.[gG][nN][uU][pP][gG]|\\.[hH][oO][lL]\\-[gG][uU][aA][rR][dD])(/|$)"
+        ]
+      }
+    },
+    {
+      "operation": "credential_denials",
+      "input": {
+        "hide_metadata": false
+      },
+      "expected": {
+        "value": [
+          "(deny file-read-data (regex \"(^|/)\\\\.[eE][nN][vV]($|[./])\"))",
+          "(deny file-read-data (regex \"(^|/)[^/]*\\\\.[kK][eE][yY]$\"))",
+          "(deny file-read-data (regex \"(^|/)[kK][rR][bB]5[cC][cC]_[^/]*$\"))",
+          "(deny file-read-data (regex \"(^|/)(\\\\.[eE][nN][vV][rR][cC]|\\\\.[aA][uU][tT][hH][rR][cC]|\\\\.[nN][pP][mM][rR][cC]|\\\\.[pP][yY][pP][iI][rR][cC]|\\\\.[nN][eE][tT][rR][cC]|\\\\.[gG][iI][tT]\\\\-[cC][rR][eE][dD][eE][nN][tT][iI][aA][lL][sS]|[tT][eE][rR][rR][aA][fF][oO][rR][mM]\\\\.[tT][fF][vV][aA][rR][sS]|[pP][rR][iI][vV][aA][tT][eE]\\\\.[kK][eE][yY]|[wW][aA][lL][lL][eE][tT]\\\\.[kK][eE][yY])$\"))",
+          "(deny file-read-data (regex \"(^|/)[^/]*([pP][rR][iI][vV][aA][tT][eE]\\\\-[kK][eE][yY]|[pP][rR][iI][vV][aA][tT][eE]_[kK][eE][yY]|[wW][aA][lL][lL][eE][tT]\\\\-[kK][eE][yY]|[wW][aA][lL][lL][eE][tT]_[kK][eE][yY])[^/]*$\"))",
+          "(deny file-read-data (regex \"(^|/)(\\\\.[sS][sS][hH]|\\\\.[aA][wW][sS]|\\\\.[dD][oO][cC][kK][eE][rR]|\\\\.[kK][uU][bB][eE]|\\\\.[gG][nN][uU][pP][gG]|\\\\.[hH][oO][lL]\\\\-[gG][uU][aA][rR][dD])(/|$)\"))"
+        ]
+      }
+    },
+    {
+      "operation": "credential_denials",
+      "input": {
+        "hide_metadata": true
+      },
+      "expected": {
+        "value": [
+          "(deny file-read* (regex \"(^|/)\\\\.[eE][nN][vV]($|[./])\"))",
+          "(deny file-read* (regex \"(^|/)[^/]*\\\\.[kK][eE][yY]$\"))",
+          "(deny file-read* (regex \"(^|/)[kK][rR][bB]5[cC][cC]_[^/]*$\"))",
+          "(deny file-read* (regex \"(^|/)(\\\\.[eE][nN][vV][rR][cC]|\\\\.[aA][uU][tT][hH][rR][cC]|\\\\.[nN][pP][mM][rR][cC]|\\\\.[pP][yY][pP][iI][rR][cC]|\\\\.[nN][eE][tT][rR][cC]|\\\\.[gG][iI][tT]\\\\-[cC][rR][eE][dD][eE][nN][tT][iI][aA][lL][sS]|[tT][eE][rR][rR][aA][fF][oO][rR][mM]\\\\.[tT][fF][vV][aA][rR][sS]|[pP][rR][iI][vV][aA][tT][eE]\\\\.[kK][eE][yY]|[wW][aA][lL][lL][eE][tT]\\\\.[kK][eE][yY])$\"))",
+          "(deny file-read* (regex \"(^|/)[^/]*([pP][rR][iI][vV][aA][tT][eE]\\\\-[kK][eE][yY]|[pP][rR][iI][vV][aA][tT][eE]_[kK][eE][yY]|[wW][aA][lL][lL][eE][tT]\\\\-[kK][eE][yY]|[wW][aA][lL][lL][eE][tT]_[kK][eE][yY])[^/]*$\"))",
+          "(deny file-read* (regex \"(^|/)(\\\\.[sS][sS][hH]|\\\\.[aA][wW][sS]|\\\\.[dD][oO][cC][kK][eE][rR]|\\\\.[kK][uU][bB][eE]|\\\\.[gG][nN][uU][pP][gG]|\\\\.[hH][oO][lL]\\\\-[gG][uU][aA][rR][dD])(/|$)\"))"
+        ]
+      }
+    },
+    {
+      "operation": "nearest_project_root",
+      "input": {
+        "cwd": "$ROOT/project/tests",
+        "workspace": "$ROOT/project",
+        "value": "node_modules/vitest/vitest.mjs"
+      },
+      "expected": {
+        "value": "$ROOT/project"
+      }
+    },
+    {
+      "operation": "approved_node",
+      "input": {
+        "path": "$ROOT/project/bin/node",
+        "workspace": "$ROOT/project"
+      },
+      "expected": {
+        "value": true
+      }
+    },
+    {
+      "operation": "prepare_node",
+      "input": {
+        "command": [
+          "node",
+          "--test"
+        ],
+        "workspace": "$ROOT/project",
+        "cwd": "$ROOT/project",
+        "platform": "darwin",
+        "backend_executable": "/usr/bin/true",
+        "search_path": "$ROOT/project/bin"
+      },
+      "expected": {
+        "value": {
+          "profile_version": "node-test-readonly-v1",
+          "backend": "macos-seatbelt",
+          "backend_executable": "/usr/bin/true",
+          "workspace": "$ROOT/project",
+          "cwd": "$ROOT/project",
+          "command": [
+            "$ROOT/project/bin/node",
+            "--test"
+          ],
+          "executable": "$ROOT/project/bin/node",
+          "allowed_executables": [
+            "$ROOT/project/bin/node"
+          ],
+          "denied_capabilities": [
+            "host-home-read",
+            "host-secret-environment",
+            "network",
+            "docker-socket",
+            "workspace-write",
+            "workspace-credential-read",
+            "unapproved-process-exec",
+            "privileged-operation"
+          ]
+        }
+      }
+    },
+    {
+      "operation": "prepare_node",
+      "input": {
+        "command": [
+          "node",
+          "--max-old-space-size=32",
+          "--test",
+          "tests"
+        ],
+        "workspace": "$ROOT/project",
+        "cwd": "$ROOT/project",
+        "platform": "darwin",
+        "backend_executable": "/usr/bin/true",
+        "search_path": "$ROOT/project/bin"
+      },
+      "expected": {
+        "value": {
+          "profile_version": "node-test-readonly-v1",
+          "backend": "macos-seatbelt",
+          "backend_executable": "/usr/bin/true",
+          "workspace": "$ROOT/project",
+          "cwd": "$ROOT/project",
+          "command": [
+            "$ROOT/project/bin/node",
+            "--max-old-space-size=32",
+            "--test",
+            "tests"
+          ],
+          "executable": "$ROOT/project/bin/node",
+          "allowed_executables": [
+            "$ROOT/project/bin/node"
+          ],
+          "denied_capabilities": [
+            "host-home-read",
+            "host-secret-environment",
+            "network",
+            "docker-socket",
+            "workspace-write",
+            "workspace-credential-read",
+            "unapproved-process-exec",
+            "privileged-operation"
+          ]
+        }
+      }
+    },
+    {
+      "operation": "prepare_node",
+      "input": {
+        "command": [
+          "node",
+          "--test",
+          ";"
+        ],
+        "workspace": "$ROOT/project",
+        "cwd": "$ROOT/project",
+        "platform": "darwin",
+        "backend_executable": "/usr/bin/true",
+        "search_path": "$ROOT/project/bin"
+      },
+      "expected": {
+        "reason_code": "node_test_restricted_invalid_command",
+        "message": "Protected Node execution requires direct node --test argv."
+      }
+    },
+    {
+      "operation": "prepare_node",
+      "input": {
+        "command": [
+          "node",
+          "--require",
+          "evil.js",
+          "--test"
+        ],
+        "workspace": "$ROOT/project",
+        "cwd": "$ROOT/project",
+        "platform": "darwin",
+        "backend_executable": "/usr/bin/true",
+        "search_path": "$ROOT/project/bin"
+      },
+      "expected": {
+        "reason_code": "node_test_restricted_invalid_command",
+        "message": "Protected Node execution requires direct node --test argv."
+      }
+    },
+    {
+      "operation": "prepare_vitest",
+      "input": {
+        "command": [
+          "bunx",
+          "--cwd",
+          "tests",
+          "vitest",
+          "run"
+        ],
+        "workspace": "$ROOT/project",
+        "cwd": "$ROOT/project",
+        "platform": "darwin",
+        "backend_executable": "/usr/bin/true",
+        "search_path": "$ROOT/project/bin"
+      },
+      "expected": {
+        "value": {
+          "profile_version": "vitest-readonly-v1",
+          "backend": "macos-seatbelt",
+          "backend_executable": "/usr/bin/true",
+          "workspace": "$ROOT/project",
+          "cwd": "$ROOT/project/tests",
+          "command": [
+            "$ROOT/project/bin/node",
+            "$ROOT/project/node_modules/vitest/vitest.mjs",
+            "run",
+            "--configLoader",
+            "runner"
+          ],
+          "executable": "$ROOT/project/bin/node",
+          "allowed_executables": [
+            "$ROOT/project/bin/node"
+          ],
+          "denied_capabilities": [
+            "host-home-read",
+            "host-secret-environment",
+            "network",
+            "docker-socket",
+            "workspace-write",
+            "workspace-credential-read",
+            "unapproved-process-exec",
+            "privileged-operation"
+          ]
+        }
+      }
+    },
+    {
+      "operation": "prepare_vitest",
+      "input": {
+        "command": [
+          "bun",
+          "--cwd=tests",
+          "x",
+          "vitest",
+          "run"
+        ],
+        "workspace": "$ROOT/project",
+        "cwd": "$ROOT/project",
+        "platform": "darwin",
+        "backend_executable": "/usr/bin/true",
+        "search_path": "$ROOT/project/bin"
+      },
+      "expected": {
+        "value": {
+          "profile_version": "vitest-readonly-v1",
+          "backend": "macos-seatbelt",
+          "backend_executable": "/usr/bin/true",
+          "workspace": "$ROOT/project",
+          "cwd": "$ROOT/project/tests",
+          "command": [
+            "$ROOT/project/bin/node",
+            "$ROOT/project/node_modules/vitest/vitest.mjs",
+            "run",
+            "--configLoader",
+            "runner"
+          ],
+          "executable": "$ROOT/project/bin/node",
+          "allowed_executables": [
+            "$ROOT/project/bin/node"
+          ],
+          "denied_capabilities": [
+            "host-home-read",
+            "host-secret-environment",
+            "network",
+            "docker-socket",
+            "workspace-write",
+            "workspace-credential-read",
+            "unapproved-process-exec",
+            "privileged-operation"
+          ]
+        }
+      }
+    },
+    {
+      "operation": "prepare_vitest",
+      "input": {
+        "command": [
+          "vitest",
+          "run"
+        ],
+        "workspace": "$ROOT/project",
+        "cwd": "$ROOT/project",
+        "platform": "darwin",
+        "backend_executable": "/usr/bin/true",
+        "search_path": "$ROOT/project/bin"
+      },
+      "expected": {
+        "value": {
+          "profile_version": "vitest-readonly-v1",
+          "backend": "macos-seatbelt",
+          "backend_executable": "/usr/bin/true",
+          "workspace": "$ROOT/project",
+          "cwd": "$ROOT/project",
+          "command": [
+            "$ROOT/project/bin/node",
+            "$ROOT/project/node_modules/vitest/vitest.mjs",
+            "run",
+            "--configLoader",
+            "runner"
+          ],
+          "executable": "$ROOT/project/bin/node",
+          "allowed_executables": [
+            "$ROOT/project/bin/node"
+          ],
+          "denied_capabilities": [
+            "host-home-read",
+            "host-secret-environment",
+            "network",
+            "docker-socket",
+            "workspace-write",
+            "workspace-credential-read",
+            "unapproved-process-exec",
+            "privileged-operation"
+          ]
+        }
+      }
+    },
+    {
+      "operation": "prepare_vitest",
+      "input": {
+        "command": [
+          "node",
+          "$ROOT/project/node_modules/vitest/vitest.mjs",
+          "run"
+        ],
+        "workspace": "$ROOT/project",
+        "cwd": "$ROOT/project",
+        "platform": "darwin",
+        "backend_executable": "/usr/bin/true",
+        "search_path": "$ROOT/project/bin"
+      },
+      "expected": {
+        "value": {
+          "profile_version": "vitest-readonly-v1",
+          "backend": "macos-seatbelt",
+          "backend_executable": "/usr/bin/true",
+          "workspace": "$ROOT/project",
+          "cwd": "$ROOT/project",
+          "command": [
+            "$ROOT/project/bin/node",
+            "$ROOT/project/node_modules/vitest/vitest.mjs",
+            "run",
+            "--configLoader",
+            "runner"
+          ],
+          "executable": "$ROOT/project/bin/node",
+          "allowed_executables": [
+            "$ROOT/project/bin/node"
+          ],
+          "denied_capabilities": [
+            "host-home-read",
+            "host-secret-environment",
+            "network",
+            "docker-socket",
+            "workspace-write",
+            "workspace-credential-read",
+            "unapproved-process-exec",
+            "privileged-operation"
+          ]
+        }
+      }
+    },
+    {
+      "operation": "macos_profile",
+      "input": {
+        "profile_version": "pytest-restricted-v1",
+        "workspace": "$ROOT/project",
+        "cwd": "$ROOT/project",
+        "allowed_executables": [
+          "$ROOT/project/bin/node",
+          "/usr/bin/true"
+        ],
+        "read_only_roots": [],
+        "output_roots": [],
+        "command": [
+          "$ROOT/project/bin/node"
+        ],
+        "backend_executable": "/usr/bin/true",
+        "private_root": "$ROOT/private"
+      },
+      "expected": {
+        "value": "(version 1)\n(deny default)\n(deny file-link)\n(allow process-fork)\n(allow process-exec (literal \"$ROOT/project/bin/node\") (literal \"/usr/bin/true\"))\n(allow signal (target self) (target children))\n(allow sysctl-read)\n(allow file-read-data (literal \"/\"))\n(allow file-read-metadata (literal \"/\") (literal \"$ROOT/project\") (literal \"$ROOT\") $FIXTURE_ANCESTORS (literal \"$ROOT/private\") (literal \"/System\") (literal \"/Library/Apple\") (literal \"/Library\") (literal \"/Library/Frameworks\") (literal \"/opt/homebrew/Cellar\") (literal \"/opt/homebrew\") (literal \"/opt\") (literal \"/opt/homebrew/opt\") (literal \"/usr/lib\") (literal \"/usr\") (literal \"/usr/share\") (literal \"$ROOT/project/bin/node\") (literal \"$ROOT/project/bin\") (literal \"/usr/bin/true\") (literal \"/usr/bin\"))\n(allow file-read* (subpath \"$ROOT/project\") (subpath \"$ROOT/private\") (subpath \"/System\") (subpath \"/Library/Apple\") (subpath \"/Library/Frameworks\") (subpath \"/opt/homebrew/Cellar\") (subpath \"/opt/homebrew/opt\") (subpath \"/usr/lib\") (subpath \"/usr/share\") (literal \"/dev/null\") (literal \"/dev/random\") (literal \"/dev/urandom\") (literal \"/private/etc/hosts\") (literal \"/private/etc/protocols\") (literal \"/private/etc/resolv.conf\") (literal \"/private/etc/services\"))\n(allow file-write* (subpath \"$ROOT/project\") (subpath \"$ROOT/private\") (literal \"/dev/null\"))\n(deny file-write* (literal \"/usr/bin/true\"))"
+      },
+      "system_grants": {
+        "roots": [
+          "/System",
+          "/Library/Apple",
+          "/Library/Frameworks",
+          "/opt/homebrew/Cellar",
+          "/opt/homebrew/opt",
+          "/usr/lib",
+          "/usr/share"
+        ],
+        "files": [
+          "/dev/null",
+          "/dev/random",
+          "/dev/urandom",
+          "/private/etc/hosts",
+          "/private/etc/protocols",
+          "/private/etc/resolv.conf",
+          "/private/etc/services"
+        ]
+      }
+    },
+    {
+      "operation": "macos_profile",
+      "input": {
+        "profile_version": "pytest-readonly-v2",
+        "workspace": "$ROOT/project",
+        "cwd": "$ROOT/project",
+        "allowed_executables": [
+          "$ROOT/project/bin/node",
+          "/usr/bin/true"
+        ],
+        "read_only_roots": [],
+        "output_roots": [],
+        "command": [
+          "$ROOT/project/bin/node"
+        ],
+        "backend_executable": "/usr/bin/true",
+        "private_root": "$ROOT/private"
+      },
+      "expected": {
+        "value": "(version 1)\n(deny default)\n(deny file-link)\n(allow process-fork)\n(allow process-exec (literal \"$ROOT/project/bin/node\") (literal \"/usr/bin/true\"))\n(allow signal (target self) (target children))\n(allow sysctl-read)\n(allow file-read-data (literal \"/\"))\n(allow file-read-metadata (literal \"/\") (literal \"$ROOT/project\") (literal \"$ROOT\") $FIXTURE_ANCESTORS (literal \"$ROOT/private\") (literal \"/System\") (literal \"/Library/Apple\") (literal \"/Library\") (literal \"/Library/Frameworks\") (literal \"/opt/homebrew/Cellar\") (literal \"/opt/homebrew\") (literal \"/opt\") (literal \"/opt/homebrew/opt\") (literal \"/usr/lib\") (literal \"/usr\") (literal \"/usr/share\") (literal \"$ROOT/project/bin/node\") (literal \"$ROOT/project/bin\") (literal \"/usr/bin/true\") (literal \"/usr/bin\"))\n(allow file-read* (subpath \"$ROOT/project\") (subpath \"$ROOT/private\") (subpath \"/System\") (subpath \"/Library/Apple\") (subpath \"/Library/Frameworks\") (subpath \"/opt/homebrew/Cellar\") (subpath \"/opt/homebrew/opt\") (subpath \"/usr/lib\") (subpath \"/usr/share\") (literal \"/dev/null\") (literal \"/dev/random\") (literal \"/dev/urandom\") (literal \"/private/etc/hosts\") (literal \"/private/etc/protocols\") (literal \"/private/etc/resolv.conf\") (literal \"/private/etc/services\"))\n(allow file-write* (subpath \"$ROOT/private\") (literal \"/dev/null\"))\n(deny file-write* (literal \"/usr/bin/true\"))\n(deny file-read-data (regex \"(^|/)\\\\.[eE][nN][vV]($|[./])\"))\n(deny file-read-data (regex \"(^|/)[^/]*\\\\.[kK][eE][yY]$\"))\n(deny file-read-data (regex \"(^|/)[kK][rR][bB]5[cC][cC]_[^/]*$\"))\n(deny file-read-data (regex \"(^|/)(\\\\.[eE][nN][vV][rR][cC]|\\\\.[aA][uU][tT][hH][rR][cC]|\\\\.[nN][pP][mM][rR][cC]|\\\\.[pP][yY][pP][iI][rR][cC]|\\\\.[nN][eE][tT][rR][cC]|\\\\.[gG][iI][tT]\\\\-[cC][rR][eE][dD][eE][nN][tT][iI][aA][lL][sS]|[tT][eE][rR][rR][aA][fF][oO][rR][mM]\\\\.[tT][fF][vV][aA][rR][sS]|[pP][rR][iI][vV][aA][tT][eE]\\\\.[kK][eE][yY]|[wW][aA][lL][lL][eE][tT]\\\\.[kK][eE][yY])$\"))\n(deny file-read-data (regex \"(^|/)[^/]*([pP][rR][iI][vV][aA][tT][eE]\\\\-[kK][eE][yY]|[pP][rR][iI][vV][aA][tT][eE]_[kK][eE][yY]|[wW][aA][lL][lL][eE][tT]\\\\-[kK][eE][yY]|[wW][aA][lL][lL][eE][tT]_[kK][eE][yY])[^/]*$\"))\n(deny file-read-data (regex \"(^|/)(\\\\.[sS][sS][hH]|\\\\.[aA][wW][sS]|\\\\.[dD][oO][cC][kK][eE][rR]|\\\\.[kK][uU][bB][eE]|\\\\.[gG][nN][uU][pP][gG]|\\\\.[hH][oO][lL]\\\\-[gG][uU][aA][rR][dD])(/|$)\"))"
+      },
+      "system_grants": {
+        "roots": [
+          "/System",
+          "/Library/Apple",
+          "/Library/Frameworks",
+          "/opt/homebrew/Cellar",
+          "/opt/homebrew/opt",
+          "/usr/lib",
+          "/usr/share"
+        ],
+        "files": [
+          "/dev/null",
+          "/dev/random",
+          "/dev/urandom",
+          "/private/etc/hosts",
+          "/private/etc/protocols",
+          "/private/etc/resolv.conf",
+          "/private/etc/services"
+        ]
+      }
+    },
+    {
+      "operation": "macos_profile",
+      "input": {
+        "profile_version": "node-test-readonly-v1",
+        "workspace": "$ROOT/project",
+        "cwd": "$ROOT/project",
+        "allowed_executables": [
+          "$ROOT/project/bin/node",
+          "/usr/bin/true"
+        ],
+        "read_only_roots": [],
+        "output_roots": [],
+        "command": [
+          "$ROOT/project/bin/node"
+        ],
+        "backend_executable": "/usr/bin/true",
+        "private_root": "$ROOT/private"
+      },
+      "expected": {
+        "value": "(version 1)\n(deny default)\n(deny file-link)\n(allow process-fork)\n(allow process-exec (literal \"$ROOT/project/bin/node\") (literal \"/usr/bin/true\"))\n(allow signal (target self) (target children))\n(allow sysctl-read)\n(allow file-read-data (literal \"/\"))\n(allow file-read-metadata (literal \"/\") (literal \"$ROOT/project\") (literal \"$ROOT\") $FIXTURE_ANCESTORS (literal \"$ROOT/private\") (literal \"/System\") (literal \"/Library/Apple\") (literal \"/Library\") (literal \"/Library/Frameworks\") (literal \"/opt/homebrew/Cellar\") (literal \"/opt/homebrew\") (literal \"/opt\") (literal \"/opt/homebrew/opt\") (literal \"/usr/lib\") (literal \"/usr\") (literal \"/usr/share\") (literal \"$ROOT/project/bin/node\") (literal \"$ROOT/project/bin\") (literal \"/usr/bin/true\") (literal \"/usr/bin\"))\n(allow file-read* (subpath \"$ROOT/project\") (subpath \"$ROOT/private\") (subpath \"/System\") (subpath \"/Library/Apple\") (subpath \"/Library/Frameworks\") (subpath \"/opt/homebrew/Cellar\") (subpath \"/opt/homebrew/opt\") (subpath \"/usr/lib\") (subpath \"/usr/share\") (literal \"/dev/null\") (literal \"/dev/random\") (literal \"/dev/urandom\") (literal \"/private/etc/hosts\") (literal \"/private/etc/protocols\") (literal \"/private/etc/resolv.conf\") (literal \"/private/etc/services\") (literal \"/opt/homebrew/etc/openssl@3/openssl.cnf\"))\n(allow file-write* (subpath \"$ROOT/private\") (literal \"/dev/null\"))\n(deny file-write* (literal \"/usr/bin/true\"))\n(deny file-read-data (regex \"(^|/)\\\\.[eE][nN][vV]($|[./])\"))\n(deny file-read-data (regex \"(^|/)[^/]*\\\\.[kK][eE][yY]$\"))\n(deny file-read-data (regex \"(^|/)[kK][rR][bB]5[cC][cC]_[^/]*$\"))\n(deny file-read-data (regex \"(^|/)(\\\\.[eE][nN][vV][rR][cC]|\\\\.[aA][uU][tT][hH][rR][cC]|\\\\.[nN][pP][mM][rR][cC]|\\\\.[pP][yY][pP][iI][rR][cC]|\\\\.[nN][eE][tT][rR][cC]|\\\\.[gG][iI][tT]\\\\-[cC][rR][eE][dD][eE][nN][tT][iI][aA][lL][sS]|[tT][eE][rR][rR][aA][fF][oO][rR][mM]\\\\.[tT][fF][vV][aA][rR][sS]|[pP][rR][iI][vV][aA][tT][eE]\\\\.[kK][eE][yY]|[wW][aA][lL][lL][eE][tT]\\\\.[kK][eE][yY])$\"))\n(deny file-read-data (regex \"(^|/)[^/]*([pP][rR][iI][vV][aA][tT][eE]\\\\-[kK][eE][yY]|[pP][rR][iI][vV][aA][tT][eE]_[kK][eE][yY]|[wW][aA][lL][lL][eE][tT]\\\\-[kK][eE][yY]|[wW][aA][lL][lL][eE][tT]_[kK][eE][yY])[^/]*$\"))\n(deny file-read-data (regex \"(^|/)(\\\\.[sS][sS][hH]|\\\\.[aA][wW][sS]|\\\\.[dD][oO][cC][kK][eE][rR]|\\\\.[kK][uU][bB][eE]|\\\\.[gG][nN][uU][pP][gG]|\\\\.[hH][oO][lL]\\\\-[gG][uU][aA][rR][dD])(/|$)\"))"
+      },
+      "system_grants": {
+        "roots": [
+          "/System",
+          "/Library/Apple",
+          "/Library/Frameworks",
+          "/opt/homebrew/Cellar",
+          "/opt/homebrew/opt",
+          "/usr/lib",
+          "/usr/share"
+        ],
+        "files": [
+          "/dev/null",
+          "/dev/random",
+          "/dev/urandom",
+          "/private/etc/hosts",
+          "/private/etc/protocols",
+          "/private/etc/resolv.conf",
+          "/private/etc/services",
+          "/opt/homebrew/etc/openssl@3/openssl.cnf"
+        ]
+      }
+    },
+    {
+      "operation": "macos_profile",
+      "input": {
+        "profile_version": "vitest-readonly-v1",
+        "workspace": "$ROOT/project",
+        "cwd": "$ROOT/project",
+        "allowed_executables": [
+          "$ROOT/project/bin/node",
+          "/usr/bin/true"
+        ],
+        "read_only_roots": [],
+        "output_roots": [],
+        "command": [
+          "$ROOT/project/bin/node"
+        ],
+        "backend_executable": "/usr/bin/true",
+        "private_root": "$ROOT/private"
+      },
+      "expected": {
+        "value": "(version 1)\n(deny default)\n(deny file-link)\n(allow process-fork)\n(allow process-exec (literal \"$ROOT/project/bin/node\") (literal \"/usr/bin/true\"))\n(allow signal (target self) (target children))\n(allow sysctl-read)\n(allow file-read-data (literal \"/\"))\n(allow file-read-metadata (literal \"/\") (literal \"$ROOT/project\") (literal \"$ROOT\") $FIXTURE_ANCESTORS (literal \"$ROOT/private\") (literal \"/System\") (literal \"/Library/Apple\") (literal \"/Library\") (literal \"/Library/Frameworks\") (literal \"/opt/homebrew/Cellar\") (literal \"/opt/homebrew\") (literal \"/opt\") (literal \"/opt/homebrew/opt\") (literal \"/usr/lib\") (literal \"/usr\") (literal \"/usr/share\") (literal \"$ROOT/project/bin/node\") (literal \"$ROOT/project/bin\") (literal \"/usr/bin/true\") (literal \"/usr/bin\"))\n(allow file-read* (subpath \"$ROOT/project\") (subpath \"$ROOT/private\") (subpath \"/System\") (subpath \"/Library/Apple\") (subpath \"/Library/Frameworks\") (subpath \"/opt/homebrew/Cellar\") (subpath \"/opt/homebrew/opt\") (subpath \"/usr/lib\") (subpath \"/usr/share\") (literal \"/dev/null\") (literal \"/dev/random\") (literal \"/dev/urandom\") (literal \"/private/etc/hosts\") (literal \"/private/etc/protocols\") (literal \"/private/etc/resolv.conf\") (literal \"/private/etc/services\") (literal \"/opt/homebrew/etc/openssl@3/openssl.cnf\"))\n(allow file-write* (subpath \"$ROOT/private\") (literal \"/dev/null\"))\n(deny file-write* (literal \"/usr/bin/true\"))\n(deny file-read* (regex \"(^|/)\\\\.[eE][nN][vV]($|[./])\"))\n(deny file-read* (regex \"(^|/)[^/]*\\\\.[kK][eE][yY]$\"))\n(deny file-read* (regex \"(^|/)[kK][rR][bB]5[cC][cC]_[^/]*$\"))\n(deny file-read* (regex \"(^|/)(\\\\.[eE][nN][vV][rR][cC]|\\\\.[aA][uU][tT][hH][rR][cC]|\\\\.[nN][pP][mM][rR][cC]|\\\\.[pP][yY][pP][iI][rR][cC]|\\\\.[nN][eE][tT][rR][cC]|\\\\.[gG][iI][tT]\\\\-[cC][rR][eE][dD][eE][nN][tT][iI][aA][lL][sS]|[tT][eE][rR][rR][aA][fF][oO][rR][mM]\\\\.[tT][fF][vV][aA][rR][sS]|[pP][rR][iI][vV][aA][tT][eE]\\\\.[kK][eE][yY]|[wW][aA][lL][lL][eE][tT]\\\\.[kK][eE][yY])$\"))\n(deny file-read* (regex \"(^|/)[^/]*([pP][rR][iI][vV][aA][tT][eE]\\\\-[kK][eE][yY]|[pP][rR][iI][vV][aA][tT][eE]_[kK][eE][yY]|[wW][aA][lL][lL][eE][tT]\\\\-[kK][eE][yY]|[wW][aA][lL][lL][eE][tT]_[kK][eE][yY])[^/]*$\"))\n(deny file-read* (regex \"(^|/)(\\\\.[sS][sS][hH]|\\\\.[aA][wW][sS]|\\\\.[dD][oO][cC][kK][eE][rR]|\\\\.[kK][uU][bB][eE]|\\\\.[gG][nN][uU][pP][gG]|\\\\.[hH][oO][lL]\\\\-[gG][uU][aA][rR][dD])(/|$)\"))"
+      },
+      "system_grants": {
+        "roots": [
+          "/System",
+          "/Library/Apple",
+          "/Library/Frameworks",
+          "/opt/homebrew/Cellar",
+          "/opt/homebrew/opt",
+          "/usr/lib",
+          "/usr/share"
+        ],
+        "files": [
+          "/dev/null",
+          "/dev/random",
+          "/dev/urandom",
+          "/private/etc/hosts",
+          "/private/etc/protocols",
+          "/private/etc/resolv.conf",
+          "/private/etc/services",
+          "/opt/homebrew/etc/openssl@3/openssl.cnf"
+        ]
+      }
+    },
+    {
+      "operation": "macos_profile",
+      "input": {
+        "profile_version": "node-build-output-v1",
+        "workspace": "$ROOT/project",
+        "cwd": "$ROOT/project",
+        "allowed_executables": [
+          "$ROOT/project/bin/node",
+          "/usr/bin/true"
+        ],
+        "read_only_roots": [],
+        "output_roots": [
+          "$ROOT/project/dist"
+        ],
+        "command": [
+          "$ROOT/project/bin/node"
+        ],
+        "backend_executable": "/usr/bin/true",
+        "private_root": "$ROOT/private"
+      },
+      "expected": {
+        "value": "(version 1)\n(deny default)\n(deny file-link)\n(allow process-fork)\n(allow process-exec (literal \"$ROOT/project/bin/node\") (literal \"/usr/bin/true\"))\n(allow signal (target self) (target children))\n(allow sysctl-read)\n(allow file-read-data (literal \"/\"))\n(allow file-read-metadata (literal \"/\") (literal \"$ROOT/project\") (literal \"$ROOT\") $FIXTURE_ANCESTORS (literal \"$ROOT/private\") (literal \"/System\") (literal \"/Library/Apple\") (literal \"/Library\") (literal \"/Library/Frameworks\") (literal \"/opt/homebrew/Cellar\") (literal \"/opt/homebrew\") (literal \"/opt\") (literal \"/opt/homebrew/opt\") (literal \"/usr/lib\") (literal \"/usr\") (literal \"/usr/share\") (literal \"$ROOT/project/bin/node\") (literal \"$ROOT/project/bin\") (literal \"/usr/bin/true\") (literal \"/usr/bin\"))\n(allow file-read* (subpath \"$ROOT/project\") (subpath \"$ROOT/private\") (subpath \"/System\") (subpath \"/Library/Apple\") (subpath \"/Library/Frameworks\") (subpath \"/opt/homebrew/Cellar\") (subpath \"/opt/homebrew/opt\") (subpath \"/usr/lib\") (subpath \"/usr/share\") (literal \"/dev/null\") (literal \"/dev/random\") (literal \"/dev/urandom\") (literal \"/private/etc/hosts\") (literal \"/private/etc/protocols\") (literal \"/private/etc/resolv.conf\") (literal \"/private/etc/services\") (literal \"/opt/homebrew/etc/openssl@3/openssl.cnf\"))\n(allow file-write* (subpath \"$ROOT/project/dist\") (subpath \"$ROOT/private\") (literal \"/dev/null\"))\n(deny file-write* (literal \"/usr/bin/true\"))\n(deny file-read* (regex \"(^|/)\\\\.[eE][nN][vV]($|[./])\"))\n(deny file-read* (regex \"(^|/)[^/]*\\\\.[kK][eE][yY]$\"))\n(deny file-read* (regex \"(^|/)[kK][rR][bB]5[cC][cC]_[^/]*$\"))\n(deny file-read* (regex \"(^|/)(\\\\.[eE][nN][vV][rR][cC]|\\\\.[aA][uU][tT][hH][rR][cC]|\\\\.[nN][pP][mM][rR][cC]|\\\\.[pP][yY][pP][iI][rR][cC]|\\\\.[nN][eE][tT][rR][cC]|\\\\.[gG][iI][tT]\\\\-[cC][rR][eE][dD][eE][nN][tT][iI][aA][lL][sS]|[tT][eE][rR][rR][aA][fF][oO][rR][mM]\\\\.[tT][fF][vV][aA][rR][sS]|[pP][rR][iI][vV][aA][tT][eE]\\\\.[kK][eE][yY]|[wW][aA][lL][lL][eE][tT]\\\\.[kK][eE][yY])$\"))\n(deny file-read* (regex \"(^|/)[^/]*([pP][rR][iI][vV][aA][tT][eE]\\\\-[kK][eE][yY]|[pP][rR][iI][vV][aA][tT][eE]_[kK][eE][yY]|[wW][aA][lL][lL][eE][tT]\\\\-[kK][eE][yY]|[wW][aA][lL][lL][eE][tT]_[kK][eE][yY])[^/]*$\"))\n(deny file-read* (regex \"(^|/)(\\\\.[sS][sS][hH]|\\\\.[aA][wW][sS]|\\\\.[dD][oO][cC][kK][eE][rR]|\\\\.[kK][uU][bB][eE]|\\\\.[gG][nN][uU][pP][gG]|\\\\.[hH][oO][lL]\\\\-[gG][uU][aA][rR][dD])(/|$)\"))"
+      },
+      "system_grants": {
+        "roots": [
+          "/System",
+          "/Library/Apple",
+          "/Library/Frameworks",
+          "/opt/homebrew/Cellar",
+          "/opt/homebrew/opt",
+          "/usr/lib",
+          "/usr/share"
+        ],
+        "files": [
+          "/dev/null",
+          "/dev/random",
+          "/dev/urandom",
+          "/private/etc/hosts",
+          "/private/etc/protocols",
+          "/private/etc/resolv.conf",
+          "/private/etc/services",
+          "/opt/homebrew/etc/openssl@3/openssl.cnf"
+        ]
+      }
+    },
+    {
+      "operation": "macos_profile",
+      "input": {
+        "profile_version": "python-eval-readonly-v1",
+        "workspace": "$ROOT/project",
+        "cwd": "$ROOT/project",
+        "allowed_executables": [
+          "$ROOT/project/bin/node",
+          "/usr/bin/true"
+        ],
+        "read_only_roots": [],
+        "output_roots": [],
+        "command": [
+          "$ROOT/project/bin/node"
+        ],
+        "backend_executable": "/usr/bin/true",
+        "private_root": "$ROOT/private"
+      },
+      "expected": {
+        "value": "(version 1)\n(deny default)\n(deny file-link)\n(allow process-fork)\n(allow process-exec (literal \"$ROOT/project/bin/node\") (literal \"/usr/bin/true\"))\n(allow signal (target self) (target children))\n(allow sysctl-read)\n(allow file-read-data (literal \"/\"))\n(allow file-read-metadata (literal \"/\") (literal \"$ROOT/project\") (literal \"$ROOT\") $FIXTURE_ANCESTORS (literal \"$ROOT/private\") (literal \"/System\") (literal \"/Library/Apple\") (literal \"/Library\") (literal \"/Library/Frameworks\") (literal \"/opt/homebrew/Cellar\") (literal \"/opt/homebrew\") (literal \"/opt\") (literal \"/opt/homebrew/opt\") (literal \"/usr/lib\") (literal \"/usr\") (literal \"/usr/share\") (literal \"$ROOT/project/bin/node\") (literal \"$ROOT/project/bin\") (literal \"/usr/bin/true\") (literal \"/usr/bin\"))\n(allow file-read* (subpath \"$ROOT/project\") (subpath \"$ROOT/private\") (subpath \"/System\") (subpath \"/Library/Apple\") (subpath \"/Library/Frameworks\") (subpath \"/opt/homebrew/Cellar\") (subpath \"/opt/homebrew/opt\") (subpath \"/usr/lib\") (subpath \"/usr/share\") (literal \"/dev/null\") (literal \"/dev/random\") (literal \"/dev/urandom\") (literal \"/private/etc/hosts\") (literal \"/private/etc/protocols\") (literal \"/private/etc/resolv.conf\") (literal \"/private/etc/services\"))\n(allow file-write* (subpath \"$ROOT/private\") (literal \"/dev/null\"))\n(deny file-write* (literal \"/usr/bin/true\"))\n(deny file-read-data (regex \"(^|/)\\\\.[eE][nN][vV]($|[./])\"))\n(deny file-read-data (regex \"(^|/)[^/]*\\\\.[kK][eE][yY]$\"))\n(deny file-read-data (regex \"(^|/)[kK][rR][bB]5[cC][cC]_[^/]*$\"))\n(deny file-read-data (regex \"(^|/)(\\\\.[eE][nN][vV][rR][cC]|\\\\.[aA][uU][tT][hH][rR][cC]|\\\\.[nN][pP][mM][rR][cC]|\\\\.[pP][yY][pP][iI][rR][cC]|\\\\.[nN][eE][tT][rR][cC]|\\\\.[gG][iI][tT]\\\\-[cC][rR][eE][dD][eE][nN][tT][iI][aA][lL][sS]|[tT][eE][rR][rR][aA][fF][oO][rR][mM]\\\\.[tT][fF][vV][aA][rR][sS]|[pP][rR][iI][vV][aA][tT][eE]\\\\.[kK][eE][yY]|[wW][aA][lL][lL][eE][tT]\\\\.[kK][eE][yY])$\"))\n(deny file-read-data (regex \"(^|/)[^/]*([pP][rR][iI][vV][aA][tT][eE]\\\\-[kK][eE][yY]|[pP][rR][iI][vV][aA][tT][eE]_[kK][eE][yY]|[wW][aA][lL][lL][eE][tT]\\\\-[kK][eE][yY]|[wW][aA][lL][lL][eE][tT]_[kK][eE][yY])[^/]*$\"))\n(deny file-read-data (regex \"(^|/)(\\\\.[sS][sS][hH]|\\\\.[aA][wW][sS]|\\\\.[dD][oO][cC][kK][eE][rR]|\\\\.[kK][uU][bB][eE]|\\\\.[gG][nN][uU][pP][gG]|\\\\.[hH][oO][lL]\\\\-[gG][uU][aA][rR][dD])(/|$)\"))"
+      },
+      "system_grants": {
+        "roots": [
+          "/System",
+          "/Library/Apple",
+          "/Library/Frameworks",
+          "/opt/homebrew/Cellar",
+          "/opt/homebrew/opt",
+          "/usr/lib",
+          "/usr/share"
+        ],
+        "files": [
+          "/dev/null",
+          "/dev/random",
+          "/dev/urandom",
+          "/private/etc/hosts",
+          "/private/etc/protocols",
+          "/private/etc/resolv.conf",
+          "/private/etc/services"
+        ]
+      }
+    },
+    {
+      "operation": "approved_node",
+      "input": {
+        "path": "$ROOT/project/bin/node",
+        "workspace": "$ROOT/project",
+        "fixture_mode": 511
+      },
+      "expected": {
+        "value": false
+      }
+    },
+    {
+      "operation": "mapping_evidence",
+      "input": {
+        "images": [
+          "$ROOT/project/runner"
+        ],
+        "read_files": [
+          "$ROOT/project/ordinary.so",
+          "$ROOT/project/optional.node"
+        ],
+        "runtime_roots": [],
+        "workspace": "$ROOT/project"
+      },
+      "expected": {
+        "value": [
+          {
+            "path": "$ROOT/project/ordinary.so",
+            "identity": "$IDENTITY",
+            "sha256": "cd0bd04da9fc1ca158045d08e3cad672342389138af930e99be1d65c16c2aceb"
+          },
+          {
+            "path": "$ROOT/project/runner",
+            "identity": "$IDENTITY",
+            "sha256": "6cf423671b6fe1a42e0473524b3b9c25e797c32bd678af03f0c93b792b37bd1b"
+          }
+        ]
+      },
+      "fixture_files": {
+        "$ROOT/project/runner": "7f454c4602010100000000000000000002003e0001000000000000000000000040000000000000000000000000000000000000004000380002000000000000000100000005000000000000000000000000000000000000000000000000000000e100000000000000e10000000000000000100000000000000200000004000000b000000000000000b00000000000000000000000000000003000000000000000300000000000000008000000000000000500000000000000e0000000000000000a0000000000000001000000000000000000000000000000000000000000000000",
+        "$ROOT/project/ordinary.so": "7f454c4602010100000000000000000003003e0001000000000000000000000040000000000000000000000000000000000000004000380002000000000000000100000005000000000000000000000000000000000000000000000000000000e100000000000000e10000000000000000100000000000000200000004000000b000000000000000b00000000000000000000000000000003000000000000000300000000000000008000000000000000500000000000000e0000000000000000a0000000000000001000000000000000000000000000000000000000000000000",
+        "$ROOT/project/optional.node": "7f454c4602010100000000000000000003003e0001000000000000000000000040000000000000000000000000000000000000004000380002000000000000000100000005000000000000000000000000000000000000000000000000000000fb00000000000000fb0000000000000000100000000000000200000004000000b000000000000000b0000000000000000000000000000000400000000000000040000000000000000800000000000000010000000000000001000000000000000500000000000000f0000000000000000a000000000000000b000000000000000000000000000000000000000000000000616273656e742e736f00"
+      }
+    },
+    {
+      "operation": "mapping_evidence",
+      "input": {
+        "images": [
+          "$ROOT/project/runner"
+        ],
+        "read_files": [
+          "$ROOT/project/ordinary.so",
+          "$ROOT/project/optional.node"
+        ],
+        "runtime_roots": [],
+        "workspace": "$ROOT/project"
+      },
+      "expected": {
+        "value": [
+          {
+            "path": "$ROOT/project/ordinary.so",
+            "identity": "$IDENTITY",
+            "sha256": "cd0bd04da9fc1ca158045d08e3cad672342389138af930e99be1d65c16c2aceb"
+          },
+          {
+            "path": "$ROOT/project/runner",
+            "identity": "$IDENTITY",
+            "sha256": "b3f69ab775cedc33839eb568cac4913ed06ea4646fa7ef0b0f17a8d175f0ea5d"
+          }
+        ]
+      },
+      "fixture_files": {
+        "$ROOT/project/runner": "7f454c4602010100000000000000000002003e0001000000000000000000000040000000000000000000000000000000000000004000380002000000000000000100000005000000000000000000000000000000000000000000000000000000fd00000000000000fd0000000000000000100000000000000200000004000000b000000000000000b0000000000000000000000000000000400000000000000040000000000000000800000000000000010000000000000001000000000000000500000000000000f0000000000000000a000000000000000d0000000000000000000000000000000000000000000000006f7264696e6172792e736f00",
+        "$ROOT/project/ordinary.so": "7f454c4602010100000000000000000003003e0001000000000000000000000040000000000000000000000000000000000000004000380002000000000000000100000005000000000000000000000000000000000000000000000000000000e100000000000000e10000000000000000100000000000000200000004000000b000000000000000b00000000000000000000000000000003000000000000000300000000000000008000000000000000500000000000000e0000000000000000a0000000000000001000000000000000000000000000000000000000000000000",
+        "$ROOT/project/optional.node": "7f454c4602010100000000000000000003003e0001000000000000000000000040000000000000000000000000000000000000004000380002000000000000000100000005000000000000000000000000000000000000000000000000000000fb00000000000000fb0000000000000000100000000000000200000004000000b000000000000000b0000000000000000000000000000000400000000000000040000000000000000800000000000000010000000000000001000000000000000500000000000000f0000000000000000a000000000000000b000000000000000000000000000000000000000000000000616273656e742e736f00"
+      }
+    },
+    {
+      "operation": "mapping_evidence",
+      "input": {
+        "images": [
+          "$ROOT/project/runner"
+        ],
+        "read_files": [
+          "$ROOT/project/ordinary.so",
+          "$ROOT/project/optional.node"
+        ],
+        "runtime_roots": [],
+        "workspace": "$ROOT/project"
+      },
+      "expected": {
+        "reason_code": "linux_mapping_unavailable",
+        "message": "Linux executable mapping evidence could not be verified."
+      },
+      "fixture_files": {
+        "$ROOT/project/runner": "7f454c4602010100000000000000000002003e0001000000000000000000000040000000000000000000000000000000000000004000380002000000000000000100000005000000000000000000000000000000000000000000000000000000fb00000000000000fb0000000000000000100000000000000200000004000000b000000000000000b0000000000000000000000000000000400000000000000040000000000000000800000000000000010000000000000001000000000000000500000000000000f0000000000000000a000000000000000b000000000000000000000000000000000000000000000000616273656e742e736f00",
+        "$ROOT/project/ordinary.so": "7f454c4602010100000000000000000003003e0001000000000000000000000040000000000000000000000000000000000000004000380002000000000000000100000005000000000000000000000000000000000000000000000000000000e100000000000000e10000000000000000100000000000000200000004000000b000000000000000b00000000000000000000000000000003000000000000000300000000000000008000000000000000500000000000000e0000000000000000a0000000000000001000000000000000000000000000000000000000000000000",
+        "$ROOT/project/optional.node": "7f454c4602010100000000000000000003003e0001000000000000000000000040000000000000000000000000000000000000004000380002000000000000000100000005000000000000000000000000000000000000000000000000000000fb00000000000000fb0000000000000000100000000000000200000004000000b000000000000000b0000000000000000000000000000000400000000000000040000000000000000800000000000000010000000000000001000000000000000500000000000000f0000000000000000a000000000000000b000000000000000000000000000000000000000000000000616273656e742e736f00"
+      }
+    },
+    {
+      "operation": "mapping_evidence",
+      "input": {
+        "images": [
+          "$ROOT/project/runner"
+        ],
+        "read_files": [
+          "$ROOT/project/ordinary.so",
+          "$ROOT/project/optional.node"
+        ],
+        "runtime_roots": [],
+        "workspace": "$ROOT/project"
+      },
+      "expected": {
+        "reason_code": "linux_mapping_unavailable",
+        "message": "Linux executable mapping evidence could not be verified."
+      },
+      "fixture_files": {
+        "$ROOT/project/runner": "7f454c4602010100000000000000000002003e0001000000000000000000000040000000000000000000000000000000000000004000380002000000000000000100000005000000000000000000000000000000000000000000000000000000fe00000000000000fe0000000000000000100000000000000200000004000000b000000000000000b0000000000000000000000000000000400000000000000040000000000000000800000000000000010000000000000001000000000000000500000000000000f0000000000000000a000000000000000e0000000000000000000000000000000000000000000000002e2e2f6573636170652e736f00",
+        "$ROOT/project/ordinary.so": "7f454c4602010100000000000000000003003e0001000000000000000000000040000000000000000000000000000000000000004000380002000000000000000100000005000000000000000000000000000000000000000000000000000000e100000000000000e10000000000000000100000000000000200000004000000b000000000000000b00000000000000000000000000000003000000000000000300000000000000008000000000000000500000000000000e0000000000000000a0000000000000001000000000000000000000000000000000000000000000000",
+        "$ROOT/project/optional.node": "7f454c4602010100000000000000000003003e0001000000000000000000000040000000000000000000000000000000000000004000380002000000000000000100000005000000000000000000000000000000000000000000000000000000fb00000000000000fb0000000000000000100000000000000200000004000000b000000000000000b0000000000000000000000000000000400000000000000040000000000000000800000000000000010000000000000001000000000000000500000000000000f0000000000000000a000000000000000b000000000000000000000000000000000000000000000000616273656e742e736f00"
+      }
+    },
+    {
+      "operation": "process_ceiling_snapshot",
+      "input": {
+        "existing": 2
+      },
+      "expected": {
+        "value": 67
+      }
+    },
+    {
+      "operation": "process_ceiling_snapshot",
+      "input": {
+        "existing": 0
+      },
+      "expected": {
+        "value": 65
+      }
+    },
+    {
+      "operation": "process_ceiling_snapshot",
+      "input": {
+        "existing": 40
+      },
+      "expected": {
+        "value": 105
+      }
+    }
+  ]
+}

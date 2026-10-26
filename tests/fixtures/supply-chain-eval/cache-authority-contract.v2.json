@@ -1,0 +1,148 @@
+{
+  "schema_version": 2,
+  "basis": "Authored cache-authority corrections to the historical Python vectors. Verified bundle decisions rebuild package details; current saved blocks carry no cached Cloud entitlement, verdict, copy or provenance.",
+  "expected_patches": {
+    "offline_eval_cache_hit": {
+      "entitlement_state": "unknown",
+      "evidence_ids": ["evidence-91deacb3069f58cf"],
+      "packages": [{
+        "advisoryAliases": ["GHSA-VH95-RMGR-6W4M", "CVE-2020-7598"],
+        "alias": null,
+        "decision": "block",
+        "dependencyPath": null,
+        "direct": true,
+        "ecosystem": "npm",
+        "name": "minimist",
+        "namespace": null,
+        "packageManager": "npm",
+        "reasons": [{
+          "advisoryId": "GHSA-vh95-rmgr-6w4m",
+          "code": "known_malware_or_kev",
+          "message": "Cached bundle flagged minimist@1.2.8 from advisory intelligence.",
+          "severity": "critical",
+          "source": "bundle"
+        }],
+        "recommendedFixVersion": "1.2.9",
+        "redactedCommand": "npm install minimist@1.2.8",
+        "relatedAdvisoryIds": ["GHSA-vh95-rmgr-6w4m"],
+        "requestedVersion": "1.2.8",
+        "resolvedVersion": "1.2.8",
+        "riskScore": 980,
+        "sourceIdentity": null,
+        "sourceRepository": null,
+        "sourceRevisionKind": null,
+        "supportLabel": "Protected",
+        "supportLevel": "protected"
+      }],
+      "reasons": [{
+        "advisoryId": "GHSA-vh95-rmgr-6w4m",
+        "code": "known_malware_or_kev",
+        "message": "Cached bundle flagged minimist@1.2.8 from advisory intelligence.",
+        "severity": "critical",
+        "source": "bundle"
+      }],
+      "user_copy": {
+        "dashboard_url": null,
+        "harness_message": "HOL Guard blocked `minimist@1.2.8` before install. Reason: Cached bundle flagged minimist@1.2.8 from advisory intelligence. Fix: install `npm install minimist@1.2.9` or choose a team exception.",
+        "next_step": "npm install minimist@1.2.9",
+        "summary": "Cached bundle flagged minimist@1.2.8 from advisory intelligence.",
+        "title": "Critical install blocked"
+      }
+    },
+    "unpaid_unreachable_eval_cache_hit": {
+      "entitlement_state": "unknown",
+      "evidence_ids": ["evidence-91deacb3069f58cf"],
+      "packages": [{
+        "advisoryAliases": ["GHSA-VH95-RMGR-6W4M", "CVE-2020-7598"],
+        "alias": null,
+        "decision": "block",
+        "dependencyPath": null,
+        "direct": true,
+        "ecosystem": "npm",
+        "name": "minimist",
+        "namespace": null,
+        "packageManager": "npm",
+        "reasons": [{
+          "advisoryId": "GHSA-vh95-rmgr-6w4m",
+          "code": "known_malware_or_kev",
+          "message": "Cached bundle flagged minimist@1.2.8 from advisory intelligence.",
+          "severity": "critical",
+          "source": "bundle"
+        }],
+        "recommendedFixVersion": "1.2.9",
+        "redactedCommand": "npm install minimist@1.2.8",
+        "relatedAdvisoryIds": ["GHSA-vh95-rmgr-6w4m"],
+        "requestedVersion": "1.2.8",
+        "resolvedVersion": "1.2.8",
+        "riskScore": 980,
+        "sourceIdentity": null,
+        "sourceRepository": null,
+        "sourceRevisionKind": null,
+        "supportLabel": "Protected",
+        "supportLevel": "protected"
+      }],
+      "reasons": [{
+        "advisoryId": "GHSA-vh95-rmgr-6w4m",
+        "code": "known_malware_or_kev",
+        "message": "Cached bundle flagged minimist@1.2.8 from advisory intelligence.",
+        "severity": "critical",
+        "source": "bundle"
+      }],
+      "user_copy": {
+        "dashboard_url": null,
+        "harness_message": "HOL Guard blocked `minimist@1.2.8` before install. Reason: Cached bundle flagged minimist@1.2.8 from advisory intelligence. Fix: install `npm install minimist@1.2.9` or choose a team exception.",
+        "next_step": "npm install minimist@1.2.9",
+        "summary": "Cached bundle flagged minimist@1.2.8 from advisory intelligence.",
+        "title": "Critical install blocked"
+      }
+    },
+    "cached_cloud_error_saved_block": {
+      "bundle_version": null,
+      "cache_status": "cloud-error",
+      "enforcement": "policy_override",
+      "entitlement_state": "unknown",
+      "evidence_ids": ["evidence-91deacb3069f58cf"],
+      "packages": [{
+        "alias": null,
+        "decision": "block",
+        "dependencyPath": null,
+        "direct": true,
+        "ecosystem": "npm",
+        "name": "minimist",
+        "namespace": null,
+        "packageManager": "npm",
+        "reasons": [{
+          "code": "cloud_validation_error",
+          "message": "Your saved block remains active. The cached Cloud assessment is not verified intelligence.",
+          "severity": "critical",
+          "source": "guard-local"
+        }],
+        "recommendedFixVersion": null,
+        "redactedCommand": "npm install minimist@1.2.8",
+        "requestedVersion": "1.2.8",
+        "resolvedVersion": "1.2.8",
+        "riskScore": null,
+        "sourceIdentity": null,
+        "sourceRepository": null,
+        "sourceRevisionKind": null,
+        "supportLabel": "Protected",
+        "supportLevel": "protected"
+      }],
+      "policy_version": "local:none",
+      "reasons": [{
+        "code": "cloud_validation_error",
+        "message": "Your saved block remains active. The cached Cloud assessment is not verified intelligence.",
+        "severity": "unknown",
+        "source": "guard-cloud"
+      }],
+      "refresh_required": true,
+      "user_copy": {
+        "dashboard_url": null,
+        "harness_message": "HOL Guard blocked `minimist@1.2.8` before install. Reason: Your saved block remains active. The cached Cloud assessment is not verified intelligence.",
+        "next_step": null,
+        "summary": "Your saved block remains active. The cached Cloud assessment is not verified intelligence.",
+        "title": "Critical install blocked"
+      }
+    }
+  }
+}

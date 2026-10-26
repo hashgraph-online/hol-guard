@@ -1,38 +1,76 @@
 """Exercise the installed Pi/OMP extension against a scoped Guard daemon.
 
 The native-wheel workflow already builds and installs the wheel. This probe
-checks the generated extension boundary through the installed daemon's native
-resident route; negative cases deliberately inject malformed CLI results to
-prove the extension remains fail-closed.
+checks the generated extension boundary through the installed native resident,
+over the native hook bridge or the extension's loopback fetch, whichever lane
+the generated source takes. Negative cases run with no reachable review
+service: every hook must fail closed, and a CLI wired to return malformed
+reviews proves the extension only ever asks it to recover the daemon.
 """
 
 from __future__ import annotations
 
 import argparse
-import base64
 import hashlib
 import importlib
 import json
 import os
 import shutil
-import signal
 import stat
 import subprocess
 import sys
 import tempfile
 import textwrap
-import threading
 import time
 from collections.abc import Mapping
 from importlib import metadata
 from pathlib import Path
 from typing import Any
 
+try:
+    from ci.native_runtime.pi_probe_guard_evidence import (
+        FETCH,
+        NODE_BRIDGE_CAPTURE_SOURCE,
+        assert_guard_requests,
+        assert_unavailable_results,
+        capture_log_size,
+        generated_transport,
+        read_capture_records,
+        wait_for_bridge_native_routes,
+    )
+    from ci.native_runtime.pi_probe_guard_evidence import text_digest as _text_digest
+    from ci.native_runtime.probe_daemon_calls import (
+        ProbeCleanupError,
+        ProbeCleanupUnsafeError,
+        ProbeError,
+        _DaemonCallTimeoutError,
+        bounded_daemon_call,
+    )
+except ModuleNotFoundError:  # Run directly as a script from its own directory.
+    from pi_probe_guard_evidence import (  # type: ignore[no-redef]
+        FETCH,
+        NODE_BRIDGE_CAPTURE_SOURCE,
+        assert_guard_requests,
+        assert_unavailable_results,
+        capture_log_size,
+        generated_transport,
+        read_capture_records,
+        wait_for_bridge_native_routes,
+    )
+    from pi_probe_guard_evidence import text_digest as _text_digest  # type: ignore[no-redef]
+    from probe_daemon_calls import (  # type: ignore[no-redef]
+        ProbeCleanupError,
+        ProbeCleanupUnsafeError,
+        ProbeError,
+        _DaemonCallTimeoutError,
+        bounded_daemon_call,
+    )
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_TEXT_LIMIT = 12_000
 _NODE_PROBE_TIMEOUT = 5.0
-_DAEMON_READINESS_TIMEOUT = 5.0
-_DAEMON_CLEANUP_TIMEOUT = 10.0
+# Cold policy publication is setup, not part of the timed hook request.
+# Match the production workspace-readiness cap without extending hook budgets.
+_DAEMON_READINESS_TIMEOUT = 25.0
 _NODE_PROBE_SOURCE = 'const typedValue: string = "node-capability-probe";\nprocess.stdout.write(typedValue);\n'
 _ENV_ALLOWLIST = {
     "COMSPEC",
@@ -48,20 +86,16 @@ _ENV_ALLOWLIST = {
 }
 
 
-class ProbeError(RuntimeError):
-    """Raised when the installed Pi/native boundary cannot be proven."""
+def _daemon_cleanup_timeout_seconds() -> float:
+    from codex_plugin_scanner.guard.native_resident_client import NATIVE_RESIDENT_CLEANUP_TIMEOUT_SECONDS
+
+    return NATIVE_RESIDENT_CLEANUP_TIMEOUT_SECONDS
 
 
-class ProbeCleanupError(ProbeError):
-    """Raised when startup cleanup must be retained for a bounded retry."""
+def _native_cleanup_retry_interval_seconds() -> float:
+    from codex_plugin_scanner.guard.native_resident_client import NATIVE_RESIDENT_CLEANUP_RETRY_INTERVAL_SECONDS
 
-
-class ProbeCleanupUnsafeError(ProbeCleanupError):
-    """Raised when daemon containment is unproven and the scratch root may be mutable."""
-
-
-class _DaemonCallTimeoutError(ProbeCleanupUnsafeError):
-    """Internal signal interruption for a bounded daemon lifecycle call."""
+    return NATIVE_RESIDENT_CLEANUP_RETRY_INTERVAL_SECONDS
 
 
 def _is_source_checkout_package(package_path: Path, repo_root: Path) -> bool:
@@ -231,7 +265,7 @@ def _cases() -> list[dict[str, Any]]:
 
 def _negative_cases() -> list[dict[str, Any]]:
     return [
-        {"id": "negative-empty", "content": [{"type": "text", "text": "safe"}]},
+        {"id": "negative-empty", "content": []},
         {"id": "negative-malformed", "content": [{"type": "text", "text": "safe"}]},
         {"id": "negative-missing-decision", "content": [{"type": "text", "text": "safe"}]},
         {"id": "negative-missing-proof", "content": [{"type": "text", "text": "safe"}]},
@@ -241,17 +275,38 @@ def _negative_cases() -> list[dict[str, Any]]:
     ]
 
 
-def _text_digest(content: list[dict[str, Any]]) -> tuple[str, int, str]:
-    text = "".join(item["text"] for item in content if item.get("type") == "text" and isinstance(item.get("text"), str))
-    return hashlib.sha256(text.encode("utf-8")).hexdigest(), len(text), text[:_TEXT_LIMIT]
-
-
 def _canonical_content_digest(content: list[dict[str, Any]]) -> str:
     canonical = json.dumps(content, ensure_ascii=False, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 def _write_cli_wrapper(path: Path, *, python_path: Path, log_path: Path, negative: bool) -> None:
+    if negative and sys.platform != "win32":
+        compiler = shutil.which("cc")
+        if compiler is None:
+            raise ProbeError("negative CLI fixture requires the native build compiler")
+        # Synthetic malformed replies must fit the unchanged 300 ms CLI budget,
+        # without measuring Python interpreter startup on the hosted runner.
+        _run(
+            [
+                compiler,
+                "-std=c11",
+                "-O2",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                f"-DPROBE_LOG_PATH={json.dumps(str(log_path), ensure_ascii=False)}",
+                str(Path(__file__).with_name("pi_negative_cli_fixture.c")),
+                "-o",
+                str(path),
+            ],
+            env={key: value for key, value in os.environ.items() if key in _ENV_ALLOWLIST},
+            cwd=path.parent,
+            timeout=30,
+            label="negative CLI fixture compilation",
+        )
+        path.chmod(0o700)
+        return
     source = f"""\
 #!/usr/bin/env python3
 import base64
@@ -273,9 +328,17 @@ try:
 except (UnicodeDecodeError, json.JSONDecodeError):
     request = {{}}
 case_id = request.get("tool_call_id") or request.get("toolCallId") if isinstance(request, dict) else None
+if not isinstance(case_id, str) and isinstance(request, dict):
+    details = request.get("details")
+    case_id = details.get("probe") if isinstance(details, dict) else None
 if not isinstance(case_id, str):
     case_id = "unknown"
-if {negative!s}:
+is_recovery = sys.argv[1:3] == ["daemon", "recover"]
+if {negative!s} and is_recovery:
+    # This wrapper does not start a daemon. A successful recovery result would
+    # make the extension retry a daemon that cannot exist before CLI fallback.
+    returncode, stdout, stderr = 1, b"", b""
+elif {negative!s}:
     mismatch = "0" * 64
     responses = {{
         "negative-empty": (0, b"", b""),
@@ -310,6 +373,7 @@ else:
         returncode, stdout, stderr = 127, b"", str(exc).encode("utf-8", errors="replace")
 record({{
     "case_id": case_id,
+    "invocation_kind": "recovery" if is_recovery else "hook",
     "returncode": returncode,
     "stdin_b64": base64.b64encode(stdin_bytes).decode("ascii"),
     "stdout_b64": base64.b64encode(stdout).decode("ascii"),
@@ -334,7 +398,7 @@ const extensionPath = process.argv[2];
 const casesPath = process.argv[3];
 const cwd = process.argv[4];
 const contentDigest = (canonical) => createHash("sha256").update(canonical).digest("hex");
-const fetchEvidence = [];
+const guardEvidence = [];
 const originalFetch = globalThis.fetch;
 if (typeof originalFetch !== "function") throw new Error("fetch is unavailable");
 globalThis.fetch = async (input, init) => {
@@ -372,10 +436,14 @@ globalThis.fetch = async (input, init) => {
       }
     }
   } catch {}
-  fetchEvidence.push({ method, pathname: requestUrl.pathname, status: response.status, ...proof });
+  guardEvidence.push({
+    transport: "fetch", method, pathname: requestUrl.pathname, status: response.status, ...proof,
+  });
   return response;
 };
-const extensionModule = await import(pathToFileURL(extensionPath).href);
+"""
+        + NODE_BRIDGE_CAPTURE_SOURCE
+        + """const extensionModule = await import(pathToFileURL(extensionPath).href);
 const handlers = new Map();
 const notifications = [];
 const pi = {
@@ -389,7 +457,7 @@ const cases = JSON.parse(readFileSync(casesPath, "utf8"));
 const results = [];
 for (const testCase of cases) {
   const before = notifications.length;
-  const fetchStart = fetchEvidence.length;
+  const requestStart = guardEvidence.length;
   const event = {
     toolCallId: testCase.id,
     toolName: "Bash",
@@ -403,8 +471,7 @@ for (const testCase of cases) {
     { cwd, ui: { notify(message, kind) { notifications.push({ message, kind }); } } },
   );
   const inputContentAfter = JSON.stringify(event.content);
-  const fetchEnd = fetchEvidence.length;
-  for (const fetch of fetchEvidence.slice(fetchStart, fetchEnd)) fetch.case_id = testCase.id;
+  for (const request of guardEvidence.slice(requestStart)) request.case_id = testCase.id;
   results.push({
     id: testCase.id,
     preserved: result === undefined,
@@ -415,7 +482,7 @@ for (const testCase of cases) {
     input_content_unchanged: inputContentBefore === inputContentAfter,
   });
 }
-process.stdout.write(JSON.stringify({ results, fetches: fetchEvidence }));
+process.stdout.write(JSON.stringify({ results, guard_requests: guardEvidence }));
 """,
         encoding="utf-8",
     )
@@ -461,58 +528,21 @@ def _run_node_cases(
     try:
         payload = json.loads(completed.stdout.decode("utf-8"))
         results = payload["results"]
-        fetches = payload["fetches"]
+        requests = payload["guard_requests"]
     except (KeyError, TypeError, ValueError, UnicodeDecodeError) as exc:
         raise ProbeError("generated Pi extension returned invalid result JSON") from exc
     if not isinstance(results, list) or not all(isinstance(result, dict) for result in results):
         raise ProbeError("generated Pi extension returned an invalid result list")
-    if not isinstance(fetches, list) or not all(isinstance(fetch, dict) for fetch in fetches):
-        raise ProbeError("generated Pi extension returned invalid fetch evidence")
-    return results, fetches
+    if not isinstance(requests, list) or not all(isinstance(request, dict) for request in requests):
+        raise ProbeError("generated Pi extension returned invalid Guard request evidence")
+    return results, requests
 
 
 def _read_records(path: Path) -> dict[str, list[dict[str, Any]]]:
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError as exc:
-        raise ProbeError(f"CLI wrapper did not write its capture log: {exc}") from exc
     grouped: dict[str, list[dict[str, Any]]] = {}
-    for line in lines:
-        try:
-            record = json.loads(line)
-            case_id = record["case_id"]
-        except (KeyError, TypeError, ValueError) as exc:
-            raise ProbeError("CLI wrapper capture log contains invalid JSON") from exc
-        if not isinstance(case_id, str) or not isinstance(record, dict):
-            raise ProbeError("CLI wrapper capture log has an invalid record")
-        grouped.setdefault(case_id, []).append(record)
+    for record in read_capture_records(path):
+        grouped.setdefault(record["case_id"], []).append(record)
     return grouped
-
-
-def _payload_from_record(record: Mapping[str, Any]) -> dict[str, Any]:
-    try:
-        raw = base64.b64decode(str(record["stdin_b64"]), validate=True)
-        payload = json.loads(raw.decode("utf-8"))
-    except (KeyError, ValueError, UnicodeDecodeError) as exc:
-        raise ProbeError("CLI wrapper captured invalid request payload") from exc
-    if not isinstance(payload, dict):
-        raise ProbeError("CLI wrapper captured a non-object request payload")
-    return payload
-
-
-def _response_from_record(record: Mapping[str, Any]) -> dict[str, Any] | None:
-    try:
-        stdout = base64.b64decode(str(record["stdout_b64"]), validate=True).decode("utf-8")
-    except (KeyError, ValueError, UnicodeDecodeError) as exc:
-        raise ProbeError("CLI wrapper captured invalid stdout") from exc
-    for line in reversed(stdout.splitlines()):
-        try:
-            value = json.loads(line)
-        except ValueError:
-            continue
-        if isinstance(value, dict) and "decision" in value:
-            return value
-    return None
 
 
 def _assert_real_results(
@@ -562,82 +592,7 @@ def _assert_real_results(
     return evidence
 
 
-def _assert_fetch_evidence(
-    fetches: list[dict[str, Any]],
-    results: list[dict[str, Any]],
-    cases: list[dict[str, Any]],
-) -> dict[str, dict[str, Any]]:
-    """Validate redacted daemon responses correlated to each generated case."""
-    allowed_keys = {
-        "case_id",
-        "method",
-        "pathname",
-        "status",
-        "decision",
-        "model_output_action",
-        "reviewed_output_sha256",
-        "observe_mode",
-        "policy_action",
-    }
-    if len(fetches) != len(cases):
-        raise ProbeError("generated extension did not make exactly one daemon request per real case")
-    result_ids = [result.get("id") for result in results]
-    if len(results) != len(cases) or any(not isinstance(result_id, str) for result_id in result_ids):
-        raise ProbeError("daemon fetch evidence could not correlate every real case")
-    if len(set(result_ids)) != len(result_ids):
-        raise ProbeError("daemon fetch evidence found duplicate real case IDs")
-    by_id = {result["id"]: result for result in results}
-    expected_ids = {str(case["id"]) for case in cases}
-    if set(by_id) != expected_ids:
-        raise ProbeError("daemon fetch evidence could not correlate every real case")
-    fetches_by_case: dict[str, list[dict[str, Any]]] = {}
-    for fetch in fetches:
-        case_id = fetch.get("case_id")
-        if not isinstance(case_id, str):
-            raise ProbeError("daemon fetch evidence is missing its case correlation")
-        fetches_by_case.setdefault(case_id, []).append(fetch)
-    if set(fetches_by_case) != expected_ids or any(len(case_fetches) != 1 for case_fetches in fetches_by_case.values()):
-        raise ProbeError("daemon fetch evidence did not contain exactly one response per real case")
-    evidence: dict[str, dict[str, Any]] = {}
-    for case in cases:
-        case_id = str(case["id"])
-        fetch = fetches_by_case[case_id][0]
-        if set(fetch) - allowed_keys:
-            raise ProbeError(f"daemon fetch evidence contains unapproved fields for {case_id}")
-        if fetch.get("method") != "POST" or fetch.get("pathname") != "/v1/hooks/omp":
-            raise ProbeError(f"generated extension used an unexpected daemon route for {case_id}")
-        if fetch.get("status") != 200:
-            raise ProbeError(f"daemon hook response was not successful for {case_id}")
-        result = by_id[case_id]
-        digest, chars, _ = _text_digest(case["content"])
-        preserved = result.get("preserved") is True
-        if preserved:
-            expected_proof = {
-                "decision": "allow",
-                "model_output_action": "allow_original",
-                "reviewed_output_sha256": digest,
-            }
-        else:
-            expected_proof = {
-                "decision": "allow",
-                "model_output_action": "replace_with_reviewed_excerpt",
-            }
-            if case_id != "large-nonsource":
-                raise ProbeError(f"{case_id} was not preserved and is not an excerpt case")
-        for key, expected in expected_proof.items():
-            if fetch.get(key) != expected:
-                raise ProbeError(f"daemon response proof mismatch for {case_id}: {key}")
-        evidence[case_id] = {
-            "case_id": case_id,
-            "method": fetch["method"],
-            "pathname": fetch["pathname"],
-            "status": fetch["status"],
-            **expected_proof,
-            "sha256": digest,
-            "chars": chars,
-            "preserved": preserved,
-        }
-    return evidence
+_assert_fetch_evidence = assert_guard_requests
 
 
 def _assert_native_route_metrics(snapshot: Mapping[str, Any], expected: int) -> dict[str, int]:
@@ -679,62 +634,11 @@ def _assert_no_positive_cli_fallback(path: Path) -> None:
         raise ProbeError("positive generated extension unexpectedly used the CLI fallback")
 
 
-def _assert_negative_results(
-    results: list[dict[str, Any]],
-    records: dict[str, list[dict[str, Any]]],
-) -> dict[str, dict[str, Any]]:
-    expected_ids = {str(case["id"]) for case in _negative_cases()}
-    result_ids = [result.get("id") for result in results]
-    if len(results) != len(expected_ids) or any(not isinstance(result_id, str) for result_id in result_ids):
-        raise ProbeError("generated extension did not return every malformed-result case")
-    if len(set(result_ids)) != len(result_ids):
-        raise ProbeError("generated extension returned duplicate malformed-result case IDs")
-    by_id = {result["id"]: result for result in results}
-    if set(by_id) != expected_ids:
-        raise ProbeError("generated extension did not return every malformed-result case")
-    evidence: dict[str, dict[str, Any]] = {}
-    for case_id, result in by_id.items():
-        matching = records.get(case_id, [])
-        if not matching:
-            raise ProbeError(f"negative CLI wrapper was not invoked for {case_id}")
-        record = matching[-1]
-        if case_id == "negative-nonzero-allow" and record.get("returncode") == 0:
-            raise ProbeError("negative nonzero CLI case unexpectedly exited zero")
-        preserved = result.get("preserved") is True
-        response: dict[str, Any] | None = None
-        if case_id == "negative-observe":
-            response = _response_from_record(record)
-            if record.get("returncode") != 0:
-                raise ProbeError("explicit observe response exited nonzero")
-            if not preserved or not isinstance(response, dict):
-                raise ProbeError("explicit observe response was not preserved")
-            if response.get("decision") != "allow" or response.get("observe_mode") is not True:
-                raise ProbeError("explicit observe response lacked canonical allow metadata")
-        elif preserved:
-            raise ProbeError(f"malformed result silently preserved output: {case_id}")
-        else:
-            returned = result.get("result")
-            if not isinstance(returned, dict) or returned.get("isError") is not True:
-                raise ProbeError(f"malformed result was not visibly blocked: {case_id}")
-        evidence[case_id] = {
-            "cli_invocations": len(matching),
-            "preserved": preserved,
-            "observe_mode": (
-                response.get("observe_mode") if case_id == "negative-observe" and isinstance(response, dict) else None
-            ),
-            "is_error": bool(isinstance(result.get("result"), dict) and result["result"].get("isError")),
-        }
-    return evidence
-
-
 def _probe_native_identity() -> tuple[Any, Any, Any]:
-    from codex_plugin_scanner.guard.config import hook_fast_path_enabled
     from codex_plugin_scanner.guard.native_runtime import native_mode, native_runtime_status
 
     if native_mode() != "auto":
         raise ProbeError(f"unexpected native mode: {native_mode()}")
-    if not hook_fast_path_enabled():
-        raise ProbeError("unset fast-path configuration must be enabled")
     status = native_runtime_status()
     if not status.available or not status.compatible or status.reason != "native_ready":
         raise ProbeError(f"installed native runtime is not ready: {status}")
@@ -760,7 +664,9 @@ def _close_startup_resource(resource: Any | None) -> BaseException | None:
     return None
 
 
-def _start_installed_daemon(*, guard_home: Path, home: Path, workspace: Path, identity: Any) -> Any:
+def _start_installed_daemon(
+    *, guard_home: Path, home: Path, workspace: Path, identity: Any, register_workspace_policy: bool = True
+) -> Any:
     """Start the installed Guard daemon that the generated extension will use."""
     from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
     from codex_plugin_scanner.guard.store import GuardStore
@@ -788,7 +694,8 @@ def _start_installed_daemon(*, guard_home: Path, home: Path, workspace: Path, id
             "register_workspace",
             None,
         )
-        if callable(register_workspace):
+        # First-contact scenarios skip this on purpose: a freshly installed Guard has no bound policy.
+        if register_workspace_policy and callable(register_workspace):
             _ = register_workspace(workspace)
         daemon.start()
     except BaseException as startup_error:
@@ -838,77 +745,16 @@ def _prepare_installed_daemon_workspace(daemon: Any, workspace: Path) -> Any:
     except BaseException as exc:
         raise ProbeError(f"installed Guard daemon workspace readiness failed: {type(exc).__name__}") from exc
     if prepared is None:
-        raise ProbeError("installed Guard daemon workspace policy was not ready")
+        publisher = getattr(hook_worker, "policy_snapshot_publisher", None)
+        reason = getattr(publisher, "last_error", None)
+        if not isinstance(reason, str) or not reason:
+            reason = "readiness_deadline_exceeded"
+        raise ProbeError(f"installed Guard daemon workspace policy was not ready: {reason}")
     return prepared
 
 
-def _restore_alarm_state(
-    *,
-    prior_handler: Any,
-    prior_timer: tuple[float, float],
-    elapsed: float,
-) -> None:
-    """Restore SIGALRM even when setup or the bounded call failed."""
-    restoration_error: BaseException | None = None
-    try:
-        signal.setitimer(signal.ITIMER_REAL, 0)
-    except BaseException as exc:
-        restoration_error = exc
-
-    handler_restored = False
-    try:
-        signal.signal(signal.SIGALRM, prior_handler)
-        handler_restored = True
-    except BaseException as exc:
-        restoration_error = restoration_error or exc
-
-    if handler_restored:
-        prior_remaining, prior_interval = prior_timer
-        if prior_remaining > 0:
-            remaining = prior_remaining - elapsed
-            if remaining <= 0:
-                # The prior timer may have expired while this bounded call ran.
-                # Deliver it shortly instead of silently discarding it.
-                remaining = 0.001
-            try:
-                signal.setitimer(signal.ITIMER_REAL, remaining, prior_interval)
-            except BaseException as exc:
-                restoration_error = restoration_error or exc
-
-    if restoration_error is not None:
-        raise ProbeCleanupUnsafeError("Guard daemon alarm state restoration failed") from restoration_error
-
-
 def _bounded_daemon_call(daemon: Any, method_name: str) -> object | None:
-    if threading.current_thread() is not threading.main_thread():
-        raise ProbeError("bounded Guard daemon cleanup must run on the main thread")
-    method = getattr(daemon, method_name, None)
-    if not callable(method):
-        raise ProbeError(f"installed Guard daemon {method_name} signal is unavailable")
-
-    try:
-        prior_handler = signal.getsignal(signal.SIGALRM)
-        prior_timer = signal.getitimer(signal.ITIMER_REAL)
-    except BaseException as exc:
-        raise ProbeCleanupUnsafeError("Guard daemon alarm state could not be inspected") from exc
-    started = time.monotonic()
-
-    def timeout_handler(_signum: int, _frame: Any) -> None:
-        raise _DaemonCallTimeoutError(f"authenticated Guard daemon {method_name} timed out")
-
-    try:
-        signal.signal(signal.SIGALRM, timeout_handler)
-        signal.setitimer(signal.ITIMER_REAL, _DAEMON_CLEANUP_TIMEOUT)
-        return method()
-    except _DaemonCallTimeoutError:
-        raise
-    except BaseException as exc:
-        if method_name == "stop":
-            raise ProbeError(f"authenticated Guard daemon cleanup failed: {type(exc).__name__}") from exc
-        raise ProbeError(f"authenticated Guard daemon {method_name} failed: {type(exc).__name__}") from exc
-    finally:
-        elapsed = time.monotonic() - started
-        _restore_alarm_state(prior_handler=prior_handler, prior_timer=prior_timer, elapsed=elapsed)
+    return bounded_daemon_call(daemon, method_name, _daemon_cleanup_timeout_seconds())
 
 
 def _bounded_daemon_finish(daemon: Any) -> bool:
@@ -918,8 +764,15 @@ def _bounded_daemon_finish(daemon: Any) -> bool:
 
 
 def _cleanup_installed_daemon(daemon: Any) -> None:
+    stop_timeout: _DaemonCallTimeoutError | None = None
     try:
-        _bounded_daemon_call(daemon, "stop")
+        try:
+            _bounded_daemon_call(daemon, "stop")
+        except _DaemonCallTimeoutError as exc:
+            # stop() has already requested shutdown before its bounded finish
+            # can be interrupted. Retry the authenticated completion check so
+            # a daemon that actually stopped is not left quarantined.
+            stop_timeout = exc
         if not _bounded_daemon_finish(daemon):
             raise ProbeCleanupUnsafeError("authenticated Guard daemon containment was not confirmed")
         is_quarantined = getattr(daemon, "_is_quarantined", None)
@@ -930,6 +783,10 @@ def _cleanup_installed_daemon(daemon: Any) -> None:
         if callable(is_alive) and is_alive():
             raise ProbeCleanupUnsafeError("authenticated Guard daemon serve thread remained alive")
     except BaseException as exc:
+        if stop_timeout is not None and exc is not stop_timeout:
+            raise ProbeCleanupUnsafeError(
+                "authenticated Guard daemon cleanup did not complete after stop timeout"
+            ) from exc
         if isinstance(exc, ProbeCleanupUnsafeError):
             raise exc
         if isinstance(exc, ProbeError):
@@ -965,34 +822,47 @@ def _cleanup_native(identity: Any, guard_home: Path) -> None:
         stop_native_resident,
     )
 
-    cleanup_error: OSError | RuntimeError | None = None
-    try:
-        contained = close_native_residents(guard_home)
-    except (OSError, RuntimeError) as exc:
+    deadline = time.monotonic() + _daemon_cleanup_timeout_seconds()
+    last_error: OSError | RuntimeError | None = None
+    stop_confirmed = True
+    while True:
         contained = False
-        cleanup_error = exc
-    if _native_state_files(guard_home):
+        cleanup_error: OSError | RuntimeError | None = None
         try:
-            if not stop_native_resident(
-                executable=identity.path,
-                state_dir=guard_home / "native-runtime",
-                environment=_native_cleanup_environment(),
-                timeout_seconds=2.0,
-            ):
-                cleanup_error = cleanup_error or RuntimeError("native resident stop did not complete")
-        except (OSError, RuntimeError) as exc:
-            cleanup_error = cleanup_error or exc
-    if cleanup_error is None and not contained:
-        try:
-            contained = close_native_residents(guard_home)
+            contained = close_native_residents(guard_home, deadline_monotonic=deadline)
         except (OSError, RuntimeError) as exc:
             cleanup_error = exc
-    if cleanup_error is None and not contained:
-        cleanup_error = RuntimeError("native resident containment did not complete")
-    if cleanup_error is None and _native_state_files(guard_home):
-        cleanup_error = RuntimeError("native resident state remained after cleanup")
-    if cleanup_error is not None:
-        raise ProbeError(f"authenticated native cleanup failed: {type(cleanup_error).__name__}") from cleanup_error
+        state_files = _native_state_files(guard_home)
+        if state_files or not stop_confirmed:
+            remaining = deadline - time.monotonic()
+            if remaining > 0:
+                stop_confirmed = False
+                try:
+                    if not stop_native_resident(
+                        executable=identity.path,
+                        state_dir=guard_home / "native-runtime",
+                        environment=_native_cleanup_environment(),
+                        timeout_seconds=min(2.0, remaining),
+                        # This isolated probe owns the fixture Guard home. Retire
+                        # its verified clients too, so a retry can authenticate
+                        # idempotent containment after the generation disappears.
+                        retire_clients=True,
+                        deadline_monotonic=deadline,
+                    ):
+                        cleanup_error = RuntimeError("native resident stop did not complete")
+                    else:
+                        stop_confirmed = True
+                except (OSError, RuntimeError) as exc:
+                    cleanup_error = exc
+                state_files = _native_state_files(guard_home)
+        if cleanup_error is None and contained and not state_files and stop_confirmed:
+            return
+        last_error = cleanup_error or last_error
+        if time.monotonic() >= deadline:
+            if last_error is None:
+                last_error = RuntimeError("native resident containment did not complete")
+            raise ProbeError(f"authenticated native cleanup failed: {type(last_error).__name__}") from last_error
+        time.sleep(min(_native_cleanup_retry_interval_seconds(), max(0.0, deadline - time.monotonic())))
 
 
 def _remove_probe_path(path: Path) -> bool:
@@ -1246,7 +1116,7 @@ def _run_probe(*, json_path: Path | None = None) -> dict[str, Any]:
             raise
         native_started = True
         _prepare_installed_daemon_workspace(daemon, workspace)
-        real_results, real_fetches = _run_node_cases(
+        real_results, real_requests = _run_node_cases(
             node=node,
             extension=extension,
             runner=runner,
@@ -1256,8 +1126,13 @@ def _run_probe(*, json_path: Path | None = None) -> dict[str, Any]:
         )
         _assert_no_positive_cli_fallback(real_log)
         real_output_evidence = _assert_real_results(real_results, cases)
-        real_fetch_evidence = _assert_fetch_evidence(real_fetches, real_results, cases)
-        native_routes = _wait_for_native_route_metrics(daemon, len(cases))
+        # The source names the lane: the native bridge, or loopback fetch.
+        transport = generated_transport(extension.read_text(encoding="utf-8"))
+        real_request_evidence = assert_guard_requests(real_requests, real_results, cases, transport=transport)
+        if transport == FETCH:
+            native_routes = _wait_for_native_route_metrics(daemon, len(cases))
+        else:
+            native_routes = wait_for_bridge_native_routes(daemon, len(cases))
         negative_home = root / "negative-home"
         negative_guard_home = root / "negative-guard-home"
         negative_workspace = root / "negative-workspace"
@@ -1276,12 +1151,14 @@ def _run_probe(*, json_path: Path | None = None) -> dict[str, Any]:
         )
         negative_cases = _negative_cases()
         negative_results = []
+        negative_records: dict[str, list[dict[str, Any]]] = {}
         negative_errors = []
         for case in negative_cases:
-            # Each malformed fallback must start with a fresh extension runtime.
+            # Each unavailable-service case must start with a fresh extension runtime.
             # A timed-out child can leave containment state set for that process.
             negative_cases_path = root / f"{case['id']}-cases.json"
             negative_cases_path.write_text(json.dumps([case], ensure_ascii=True), encoding="utf-8")
+            log_offset = capture_log_size(negative_log)
             try:
                 case_results, _ = _run_node_cases(
                     node=node,
@@ -1295,17 +1172,18 @@ def _run_probe(*, json_path: Path | None = None) -> dict[str, Any]:
                 negative_errors.append((case["id"], exc))
                 continue
             negative_results.extend(case_results)
+            negative_records[str(case["id"])] = read_capture_records(negative_log, log_offset)
         if negative_errors:
             failed_cases = ", ".join(str(case_id) for case_id, _ in negative_errors)
             raise ProbeError(f"generated Pi extension failed negative cases: {failed_cases}") from negative_errors[0][1]
-        negative_evidence = _assert_negative_results(negative_results, _read_records(negative_log))
+        negative_evidence = assert_unavailable_results(negative_results, negative_records, negative_cases)
         receipt = {
             "schema": "hol-guard.installed-pi-native-output.v1",
             "package_version": package_version,
             "source_sha": getattr(capabilities, "build_sha", None),
             "package_origin_kind": "non-editable-distribution-manifest",
             "source_checkout_import": False,
-            "execution_path": "unmodified-generated-extension-via-scoped-installed-daemon-native-resident",
+            "execution_path": f"unmodified-generated-extension-via-{transport}-to-scoped-native-resident",
             "native_prerequisite": "default-auto-status-checked",
             "workflow_order": "after-native-default-auto-probe",
             "daemon": "scoped-installed-GuardDaemonServer",
@@ -1319,16 +1197,17 @@ def _run_probe(*, json_path: Path | None = None) -> dict[str, Any]:
             },
             "generated_extension": {
                 "harness": "omp",
+                "transport": transport,
                 "real_cases": {
                     case_id: {
                         **real_output_evidence[case_id],
-                        "daemon_response": real_fetch_evidence[case_id],
+                        "daemon_response": real_request_evidence[case_id],
                     }
                     for case_id in real_output_evidence
                 },
-                "malformed_result_cases": negative_evidence,
+                "unavailable_service_cases": negative_evidence,
             },
-            "native_route_metrics": {"native_resident": native_routes["native_resident"]},
+            "native_route_metrics": native_routes,
             "cleanup": "authenticated_daemon_stop_then_native_resident_stop",
         }
     finally:

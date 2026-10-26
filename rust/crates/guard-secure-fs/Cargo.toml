@@ -15,5 +15,8 @@ thiserror.workspace = true
 [target.'cfg(unix)'.dependencies]
 nix.workspace = true
 
+[target.'cfg(windows)'.dependencies]
+guard-runtime-windows-process = { path = "../guard-runtime-windows-process" }
+
 [lints]
 workspace = true

@@ -1,15 +1,43 @@
 import {
+  SettingsSaveProofModal,
   isSettingsSaveProofSubmitDisabled,
   requiresSettingsSaveProof,
   resolveSettingsSaveProofKind,
   resolveSettingsSaveProofModalCopy,
 } from "./settings-save-proof-modal";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import type { GuardApprovalGatePublicConfig } from "./guard-types";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
     throw new Error(message);
   }
 }
+
+const retainedGate: GuardApprovalGatePublicConfig = {
+  enabled: false, configured: true, totp_enabled: true, totp_pending: false,
+  cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null,
+  locked_until: null, fail_closed: false, strict_all_decisions: false,
+};
+const reenableMode = resolveSettingsSaveProofKind({
+  savedGateEnabled: retainedGate.enabled, wasConfigured: retainedGate.configured,
+  draftGateEnabled: true, changingPassword: false,
+});
+assert(reenableMode === "setup-gate", "retained TOTP must not select a TOTP-only re-enable dialog");
+const reenableMarkup = renderToStaticMarkup(createElement(SettingsSaveProofModal, {
+  open: true, mode: reenableMode!, gate: retainedGate,
+  ...resolveSettingsSaveProofModalCopy({ mode: reenableMode!, gateSettingsChanged: true }),
+  error: null, pending: false, onCancel: () => {}, onConfirm: () => {},
+}));
+assert(reenableMarkup.includes("Confirm password"), "re-enable renders password confirmation");
+assert(reenableMarkup.includes('type="password"'), "re-enable renders password fields");
+assert(!reenableMarkup.includes("Authenticator code"), "re-enable does not request unsupported TOTP-only proof");
+assert(isSettingsSaveProofSubmitDisabled(reenableMode!, { totpCode: "000000" }, true),
+  "TOTP alone cannot submit a gate-enable password setup");
+assert(!isSettingsSaveProofSubmitDisabled(reenableMode!, {
+  newPassword: "synthetic-test-password", confirmPassword: "synthetic-test-password",
+}, true), "confirmed password satisfies the gate-enable form contract");
 
 assert(
   resolveSettingsSaveProofKind({
@@ -35,8 +63,8 @@ assert(
     wasConfigured: true,
     draftGateEnabled: true,
     changingPassword: false,
-  }) === "verify-save",
-  "save-proof: re-enabling configured gate requires verify modal",
+  }) === "setup-gate",
+  "save-proof: re-enabling configured gate supplies password setup required by the backend",
 );
 assert(
   resolveSettingsSaveProofKind({

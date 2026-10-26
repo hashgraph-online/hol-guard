@@ -1,28 +1,32 @@
-import { useMemo, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, type ChangeEvent } from "react";
+import { bulkApproveConsequenceCopyForSelection } from "./approval-retry-guidance";
 import { BulkDrawerShell } from "./queue-bulk-drawer-shell";
 import { toneRing, toneChip, toneIcon } from "./queue-bulk-risk-presentation";
-import { isBulkApproveGateReady } from "./queue-bulk-approval-credentials";
+import { bulkApproveCooldownOpen, isBulkApproveGateReady } from "./queue-bulk-approval-credentials";
 import {
   HiMiniCheckCircle,
   HiMiniExclamationTriangle,
   HiMiniShieldCheck,
   HiMiniXMark,
   HiMiniKey,
+  HiMiniNoSymbol,
 } from "react-icons/hi2";
 import {
   buildBulkApproveConsequenceCopy,
   summarizeBulkApproveSelection,
+  type BulkApproveRiskLine,
 } from "./approval-center-utils";
 import type { GuardApprovalGatePublicConfig } from "./guard-types";
 import type { QueueGroup } from "./queue-state";
+import type { QueueBulkStickyBarProps } from "./use-queue-bulk-approve";
 import type {
   BulkRiskDisclosure,
   BulkRiskTier,
-  BulkRiskTone,
 } from "./queue-bulk-risk-disclosure";
 
 export {
   isBulkApproveGateReady,
+  bulkApproveCooldownOpen,
   validateBulkApproveCredentials,
   buildBulkGateCredentials,
 } from "./queue-bulk-approval-credentials";
@@ -33,54 +37,108 @@ const TIER_LABEL: Record<BulkRiskTier, string> = {
   high: "High risk",
 };
 
-export type QueueBulkStickyBarProps = {
-  visible: boolean;
-  selectedGroupCount: number;
-  selectedActionCount: number;
-  riskTier: BulkRiskTier;
-  riskTone: BulkRiskTone;
-  gateReady: boolean;
-  onStartReview: () => void;
-  onClearSelection: () => void;
-};
+export type { QueueBulkStickyBarProps } from "./use-queue-bulk-approve";
 
 export function QueueBulkStickyBar(props: QueueBulkStickyBarProps) {
-  if (!props.visible) return null;
-  const unit = props.selectedActionCount === 1 ? "read" : "reads";
+  const blockButton = useRef<HTMLButtonElement | null>(null);
+  const previousStep = useRef(props.blockStep);
+  useEffect(() => {
+    // Cancelling the confirmation returns focus to the button that opened it.
+    if (previousStep.current === "confirming" && props.blockStep === "idle") blockButton.current?.focus();
+    previousStep.current = props.blockStep;
+  }, [props.blockStep]);
+  if (!props.visible) {
+    // A partial block can leave nothing selected, such as when the one request
+    // that failed was settled elsewhere. Its outcome still has to be shown.
+    return props.blockError ? (
+      <p role="alert" className="mb-4 text-xs text-brand-attention">{props.blockError}</p>
+    ) : null;
+  }
+  const total = props.selectedRequestCount;
+  const unit = total === 1 ? "request" : "requests";
+  const approvableNote = props.selectedActionCount === total
+    ? "approve once"
+    : `${props.selectedActionCount} can be approved at once`;
   const ChipIcon = toneIcon(props.riskTone);
+  const confirmingBlock = props.blockStep !== "idle";
+  const blocking = props.blockStep === "blocking";
   return (
     <div
       className="sticky top-2 z-20 mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white/95 px-4 py-3 shadow-md backdrop-blur"
       role="region"
-      aria-label="Bulk approval selection"
+      aria-label="Bulk selection"
     >
-      <span
-        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${toneChip(props.riskTone)}`}
-      >
-        <ChipIcon className="h-3.5 w-3.5" aria-hidden="true" />
-        {TIER_LABEL[props.riskTier]}
-      </span>
+      {props.canApprove ? (
+        <span
+          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${toneChip(props.riskTone)}`}
+        >
+          <ChipIcon className="h-3.5 w-3.5" aria-hidden="true" />
+          {TIER_LABEL[props.riskTier]}
+        </span>
+      ) : null}
       <p className="min-w-0 flex-1 text-sm font-medium text-brand-dark">
-        <span className="font-mono text-base font-semibold">{props.selectedActionCount}</span>
+        <span className="font-mono text-base font-semibold">{total}</span>
         {" "}
-        {unit} selected · approve once
+        {unit} selected{props.canApprove ? ` · ${approvableNote}` : ""}
       </p>
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={props.onStartReview}
-          className="inline-flex min-h-9 items-center rounded-full bg-brand-blue px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-blue/90"
-        >
-          Review &amp; approve
-        </button>
-        <button
-          type="button"
-          onClick={props.onClearSelection}
-          className="inline-flex min-h-9 items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-slate-50 hover:text-brand-dark"
-        >
-          Clear
-        </button>
-      </div>
+      {confirmingBlock ? (
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Confirm block">
+          <p className="text-sm text-brand-dark">
+            Block {total} {unit} just this once? Any agent still waiting is told no.
+          </p>
+          <button
+            type="button"
+            onClick={props.onConfirmBlock}
+            disabled={blocking}
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-full bg-brand-dark px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-dark/90 disabled:cursor-wait disabled:opacity-60"
+          >
+            <HiMiniNoSymbol className="h-4 w-4" aria-hidden="true" />
+            {blocking ? "Blocking…" : `Block ${total}`}
+          </button>
+          <button
+            type="button"
+            onClick={props.onCancelBlock}
+            disabled={blocking}
+            autoFocus
+            className="inline-flex min-h-9 items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-slate-50 hover:text-brand-dark disabled:opacity-60"
+          >
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2">
+          {props.canApprove ? (
+            <button
+              type="button"
+              onClick={props.onStartReview}
+              className="inline-flex min-h-9 items-center rounded-full bg-brand-blue px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-blue/90"
+            >
+              Review &amp; approve
+            </button>
+          ) : null}
+          {props.blockAvailable ? (
+            <button
+              ref={blockButton}
+              type="button"
+              onClick={props.onRequestBlock}
+              className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-4 py-1.5 text-sm font-semibold text-brand-dark transition-colors hover:bg-slate-50"
+            >
+              <HiMiniNoSymbol className="h-4 w-4" aria-hidden="true" />
+              Block selected
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={props.onClearSelection}
+            className="inline-flex min-h-9 items-center rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-slate-50 hover:text-brand-dark"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+      {props.blockError ? (
+        <p role="alert" className="w-full text-xs text-brand-attention">{props.blockError}</p>
+      ) : null}
     </div>
   );
 }
@@ -109,14 +167,14 @@ export type QueueBulkGatePromptProps = {
 };
 
 /**
- * Discovery prompt shown when eligible reads exist in the queue but the
- * approval gate is not configured. Ambient selection (and the bulk drawer)
+ * Discovery prompt shown when eligible actions exist in the queue but the
+ * approval gate is not ready. Ambient selection (and the bulk drawer)
  * require the gate, so without this banner users would never learn that bulk
- * approval is available once they set up an approval password.
+ * approval is available once they enable proof with a configured password.
  */
 export function QueueBulkGatePrompt(props: QueueBulkGatePromptProps) {
   if (!props.visible) return null;
-  const unit = props.eligibleActionCount === 1 ? "read" : "reads";
+  const unit = props.eligibleActionCount === 1 ? "action" : "actions";
   return (
     <div className="mb-4 rounded-xl border border-brand-blue/20 bg-brand-blue/[0.04] px-4 py-3">
       <div className="flex flex-wrap items-start gap-3">
@@ -125,8 +183,8 @@ export function QueueBulkGatePrompt(props: QueueBulkGatePromptProps) {
             Approve {props.eligibleActionCount} {unit} at once
           </p>
           <p className="mt-1 text-xs leading-5 text-brand-dark/70">
-            Set up a local approval password to unlock bulk approval for read-only file reads.
-            Bulk approval always approves once and never remembers future reads.
+            Enable Ask for proof with a configured approval password to review eligible actions together.
+            Bulk approval approves each action once and never remembers future actions.
           </p>
         </div>
         <a
@@ -145,6 +203,8 @@ export type QueueBulkDrawerProps = {
   step: "review" | "submitting" | "completed";
   selectedGroups: QueueGroup[];
   selectedActionCount: number;
+  /** Selected actions the agent stays blocked on after approval. */
+  retryBlockedActionCount?: number;
   sensitiveFileReadCount: number;
   riskDisclosure: BulkRiskDisclosure;
   approvalGate: GuardApprovalGatePublicConfig | null;
@@ -162,6 +222,22 @@ export type QueueBulkDrawerProps = {
   onConfirmApprove: () => void;
   onCancel: () => void;
 };
+
+/** Show what a bulk line will approve: the file path, else the command, else the action title. */
+function BulkLineDetail(props: { line: BulkApproveRiskLine }) {
+  const { line } = props;
+  if (line.path !== null) {
+    return <span className="mt-0.5 block truncate font-mono text-[11px] text-brand-dark/60">{line.path}</span>;
+  }
+  if (line.command !== null) {
+    return (
+      <span className="mt-0.5 block break-all font-mono text-[11px] text-brand-dark/60" title={line.command}>
+        {line.command}
+      </span>
+    );
+  }
+  return <span className="mt-0.5 block text-brand-dark/60">{line.title}</span>;
+}
 
 export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
   if (!props.open) return null;
@@ -206,24 +282,20 @@ export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
       ? "Approving…"
       : `Approve once (${props.selectedActionCount} ${unit})`;
 
-  // Group preview lines by category label so the operator sees the action mix
-  // at a glance: "File reads (3)", "Shell commands (2)" instead of a flat list.
-  // Group the first 8 preview lines by category label so the operator sees the
-  // action mix at a glance: "File reads (3)", "Shell commands (2)" instead of a
-  // flat list. Slice before grouping so the preview count and hidden count stay
-  // mathematically consistent.
-  const PREVIEW_LIMIT = 8;
+  // Group every selected line by category label so the operator sees the action
+  // mix at a glance ("File reads (3)", "Shell commands (2)") and can still read
+  // each command before approving. The list scrolls instead of truncating.
   const shownGroups = useMemo(() => {
     const map = new Map<string, typeof riskLines>();
-    for (const line of riskLines.slice(0, PREVIEW_LIMIT)) {
+    for (const line of riskLines) {
       const bucket = map.get(line.categoryLabel) ?? [];
       bucket.push(line);
       map.set(line.categoryLabel, bucket);
     }
     return Array.from(map.entries());
   }, [riskLines]);
-  const hiddenCount = Math.max(0, riskLines.length - PREVIEW_LIMIT);
   const gateReady = isBulkApproveGateReady(props.approvalGate);
+  const executionApprovalAvailable = (props.retryBlockedActionCount ?? 0) === 0;
 
   const actionFooter = (
     <div className="flex flex-wrap items-center justify-end gap-2">
@@ -237,7 +309,7 @@ export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
       </button>
       <button
         type="submit"
-        disabled={props.step === "submitting" || !props.canConfirm}
+        disabled={props.step === "submitting" || !props.canConfirm || !executionApprovalAvailable}
         className="min-h-11 rounded-full bg-brand-blue px-6 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {submitLabel}
@@ -252,7 +324,7 @@ export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
       footer={actionFooter}
       onSubmit={(event) => {
         event.preventDefault();
-        if (props.step !== "submitting" && props.canConfirm) props.onConfirmApprove();
+        if (props.step !== "submitting" && props.canConfirm && executionApprovalAvailable) props.onConfirmApprove();
       }}
     >
       {/* Header zone — generous top space, clear count hierarchy */}
@@ -338,7 +410,7 @@ export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
             {props.selectedActionCount} {unit}
           </span>
         </div>
-        <div className="mt-2.5 space-y-3 rounded-xl bg-slate-50/80 px-4 py-3">
+        <div className="mt-2.5 max-h-72 space-y-3 overflow-y-auto rounded-xl bg-slate-50/80 px-4 py-3">
           {shownGroups.map(([categoryLabel, lines]) => (
             <div key={categoryLabel}>
               <p className="text-[11px] font-semibold text-brand-dark/70">
@@ -348,25 +420,15 @@ export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
                 </span>
               </p>
               <ul className="mt-1.5 space-y-1.5">
-                {lines.slice(0, 3).map((line) => (
+                {lines.map((line) => (
                   <li key={line.requestId} className="text-xs text-brand-dark">
                     <span className="font-medium">{line.harnessLabel}</span>
-                    {line.path !== null ? (
-                      <span className="mt-0.5 block truncate font-mono text-[11px] text-brand-dark/60">{line.path}</span>
-                    ) : (
-                      <span className="mt-0.5 block text-brand-dark/60">{line.title}</span>
-                    )}
+                    <BulkLineDetail line={line} />
                   </li>
                 ))}
-                {lines.length > 3 && (
-                  <li className="text-[11px] text-muted-foreground">+ {lines.length - 3} more</li>
-                )}
               </ul>
             </div>
           ))}
-          {hiddenCount > 0 && (
-            <p className="text-[11px] text-muted-foreground">and {hiddenCount} more selected {unit}</p>
-          )}
         </div>
       </section>
 
@@ -386,9 +448,18 @@ export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
           <span className="h-px flex-1 bg-slate-200" aria-hidden="true" />
         </div>
 
-        {gateReady ? (
+        {!executionApprovalAvailable ? (
+          <p className="mt-3 text-sm text-brand-attention" role="status">
+            Run once is unavailable for part of this selection. Open those requests individually before approving the remaining actions.
+          </p>
+        ) : gateReady ? (
           <div className="mt-3 space-y-3 rounded-xl border border-slate-200 bg-white p-4">
-            {props.approvalGate?.totp_enabled !== true && (
+            {bulkApproveCooldownOpen(props.approvalGate) && (
+              <p className="text-sm text-brand-dark/80">
+                Your approval window is still open, so no password is needed.
+              </p>
+            )}
+            {props.approvalGate?.totp_enabled !== true && !bulkApproveCooldownOpen(props.approvalGate) && (
               <>
                 <div className="flex items-center gap-2">
               <HiMiniKey className="h-4 w-4 text-brand-blue" aria-hidden="true" />
@@ -451,7 +522,11 @@ export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
               </div>
             )}
             <p className="text-[11px] leading-4 text-muted-foreground">
-              {buildBulkApproveConsequenceCopy(props.selectedActionCount)}
+              {bulkApproveConsequenceCopyForSelection(
+                props.selectedActionCount,
+                props.retryBlockedActionCount ?? 0,
+                buildBulkApproveConsequenceCopy,
+              )}
             </p>
           </div>
         ) : (

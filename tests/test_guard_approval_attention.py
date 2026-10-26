@@ -277,7 +277,6 @@ def test_attention_settings_round_trip_and_validate(tmp_path: Path) -> None:
 def test_attention_rejects_unauthorized_workspace_before_config_read_without_rewriting_scope(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, explicit_workspace: bool
 ) -> None:
-    from codex_plugin_scanner.guard.directory_path_authority import DirectoryPathTrustError
     from codex_plugin_scanner.guard.runtime import approval_attention as attention_module
 
     outside = Path(tmp_path.anchor) / "outside-authorized-guard-roots"
@@ -299,8 +298,9 @@ def test_attention_rejects_unauthorized_workspace_before_config_read_without_rew
 
     monkeypatch.setattr(attention_module, "load_guard_config", forbidden_config_read)
     opened_urls: list[str] = []
-    with pytest.raises(DirectoryPathTrustError, match="unexpected_root"):
-        _schedule(store, runtime, result, now=[0.0], opened_urls=opened_urls)
+    # Scheduling stops at the workspace: no browser, no configuration read,
+    # and the queued operation keeps the answer it was about to be given.
+    _ = _schedule(store, runtime, result, now=[0.0], opened_urls=opened_urls)
     assert opened_urls == []
     persisted = store.get_approval_request(str(request["request_id"]))
     assert persisted is not None
@@ -378,7 +378,7 @@ def test_attention_worker_continues_after_rejected_workspace_without_relaxing_pe
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, replacement_timing: str
 ) -> None:
     from codex_plugin_scanner.guard.config_file_io import ConfigFileTrustError
-    from codex_plugin_scanner.guard.directory_path_authority import DirectoryPathTrustError
+    from codex_plugin_scanner.guard.native_directory_trust import NativeDirectoryTrustError
     from codex_plugin_scanner.guard.runtime import approval_attention as attention_module
 
     tmp_path = tmp_path.resolve()
@@ -469,7 +469,7 @@ def test_attention_worker_continues_after_rejected_workspace_without_relaxing_pe
     finally:
         assert coordinator.stop()
 
-    expected_error = DirectoryPathTrustError if replacement_timing == "before_validation" else ConfigFileTrustError
+    expected_error = NativeDirectoryTrustError if replacement_timing == "before_validation" else ConfigFileTrustError
     assert len(rejected) == 1 and isinstance(rejected[0], expected_error)
     assert opened_urls == [healthy_url]
     assert None not in loaded_workspaces

@@ -24,9 +24,7 @@ from .render_native import (
     render_command_source,
     render_contribution,
     revision_digest,
-    test_path,
 )
-from .render_tests import render_mcp_tests
 from .review import Review, load_review
 
 MANIFEST_SCHEMA = "guard.extension-kit.v1"
@@ -112,12 +110,9 @@ canonical sources. The kit's `base: "packaged"` envelope is for a new addition;
 it cannot replace an extension already embedded in the rebuilt compiler.
 """
     else:
-        verification = f"""The MCP contribution is `{contribution_path(metadata)}`. Its generated Python
-tests validate contribution metadata and native registration:
-
-```sh
-python -m pytest {test_path(metadata)}
-```
+        verification = f"""The MCP contribution is `{contribution_path(metadata)}`. The shared
+contribution checks validate its metadata and native registration; no
+per-contribution test module is generated.
 
 Follow the [native validation sequence](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/extension-builder/VALIDATION.md)
 to regenerate and verify the complete catalog after integration.
@@ -194,8 +189,10 @@ def _trust_map() -> dict[str, object]:
         packaged = resources.files("codex_plugin_scanner.guard.contracts.data.extensions")
         value = parse_json((packaged / "trust-class-map.v1.json").read_bytes())
     except (FileNotFoundError, ModuleNotFoundError, OSError):
-        path = Path(__file__).resolve().parents[4] / "contracts/extensions/trust-class-map.v1.json"
-        value = read_json(path)
+        from ..runtime.extension_trust import trust_map_from_bindings
+
+        bindings = Path(__file__).resolve().parents[4] / "contracts/extensions/trust"
+        value = trust_map_from_bindings(bindings)
     if not isinstance(value, dict):
         raise BuilderError("native_trust", "The packaged extension trust map is invalid.")
     return value
@@ -258,7 +255,6 @@ def build_kit(discovery: Discovery, review: Review) -> Kit:
         files.update({f"artifacts/{path}": content for path, content in artifacts.items()})
     else:
         files[f"artifacts/{contribution_path(metadata)}"] = render_contribution(discovery, review)
-        files[f"artifacts/{test_path(metadata)}"] = render_mcp_tests(discovery, review)
     manifest = {
         "schemaVersion": MANIFEST_SCHEMA,
         "builderVersion": BUILDER_VERSION,

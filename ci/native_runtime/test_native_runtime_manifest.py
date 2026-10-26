@@ -110,7 +110,7 @@ def test_status_rejects_manifest_build_sha_mismatch(tmp_path: Path, monkeypatch:
     monkeypatch.setattr(
         native_runtime,
         "_capabilities_for_identity",
-        lambda *_args: native_runtime.NativeRuntimeCapabilities(
+        lambda *_args, **_kwargs: native_runtime.NativeRuntimeCapabilities(
             protocol_version=1,
             runtime_version="3.0.0a1",
             rule_digest="b" * 64,
@@ -138,7 +138,7 @@ def test_status_accepts_fully_bound_manifest(tmp_path: Path, monkeypatch: pytest
     monkeypatch.setattr(
         native_runtime,
         "_capabilities_for_identity",
-        lambda *_args: native_runtime.NativeRuntimeCapabilities(
+        lambda *_args, **_kwargs: native_runtime.NativeRuntimeCapabilities(
             protocol_version=1,
             runtime_version="3.0.0a1",
             rule_digest="b" * 64,

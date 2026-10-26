@@ -27,6 +27,20 @@ assert(
   isChunkLoadError(new Error("Importing a module script failed.")),
   "Safari module script failures are chunk-load errors",
 );
+assert(
+  isChunkLoadError(
+    new SyntaxError("The requested module './chunks/guard-api.js' does not provide an export named 'loadHomeSummary'"),
+  ),
+  "Chromium stale-chunk link failures are chunk-load errors",
+);
+assert(
+  isChunkLoadError(new SyntaxError("Importing binding name 'loadHomeSummary' is not found.")),
+  "WebKit stale-chunk link failures are chunk-load errors",
+);
+assert(
+  isChunkLoadError(new SyntaxError("import not found: loadHomeSummary")),
+  "Gecko stale-chunk link failures are chunk-load errors",
+);
 assert(!isChunkLoadError(new Error("policy save failed")), "unrelated errors are not chunk-load errors");
 
 const memoryStorage = (): Pick<Storage, "getItem" | "setItem" | "removeItem"> => {

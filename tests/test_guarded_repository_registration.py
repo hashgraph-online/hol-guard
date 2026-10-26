@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlparse
 
 from codex_plugin_scanner.guarded_repository_evidence import (
@@ -38,7 +38,7 @@ def _evidence():
         findings_total=2,
         sarif_sha256="b" * 64,
         visibility="public",
-        generated_at=datetime(2026, 8, 9, 20, 0, tzinfo=UTC),
+        generated_at=datetime(2026, 8, 9, 20, 0, tzinfo=timezone.utc),
     )
 
 
@@ -80,6 +80,8 @@ def test_registration_binds_oidc_audience_and_keeps_token_out_of_body(monkeypatc
     assert registration_timeout == 15
     assert registration_request.full_url == "https://hol.org/api/guard/repository-attestations"
     assert registration_request.get_header("Authorization") == "Bearer oidc-secret-token"
+    # The edge answers Python's default urllib User-Agent with a 403.
+    assert registration_request.get_header("User-agent") == "hol-guard-attestation-registration"
     assert registration_body["evidenceSha256"] == digest
     assert registration_body["attestationId"] == "123456"
     assert "oidc" not in json.dumps(registration_body).lower()

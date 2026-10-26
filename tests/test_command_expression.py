@@ -1,77 +1,54 @@
 from __future__ import annotations
 
-from typing import Literal
+import json
+from pathlib import Path
 
 import pytest
+import yaml
 
-from codex_plugin_scanner.guard.runtime.command_expression import (
-    CommandCondition,
-    CommandExpression,
-    CommandExpressionError,
-    command_expression_from_mapping,
-    matches_command_expression,
-    validate_command_expression,
+from codex_plugin_scanner.guard.policy_document import canonical_policy_document_bytes
+from codex_plugin_scanner.guard.policy_document_yaml import (
+    PolicyDocumentError,
+    parse_policy_document_yaml,
 )
 
-
-def _expression(combinator: Literal["all", "any"], *conditions: CommandCondition) -> CommandExpression:
-    return CommandExpression(combinator=combinator, conditions=tuple(conditions))
-
-
-def test_all_expression_requires_each_typed_condition() -> None:
-    expression = _expression(
-        "all",
-        CommandCondition("command", "startsWith", "docker compose"),
-        CommandCondition("command", "endsWith", "--detach"),
-    )
-
-    assert matches_command_expression(expression, "docker   compose up --detach")
-    assert not matches_command_expression(expression, "docker compose up")
+ROOT = Path(__file__).resolve().parents[1]
+FIXTURES = ROOT / "spec" / "guard-policy" / "v1alpha1" / "fixtures"
 
 
-def test_any_expression_supports_exact_glob_and_case_flag() -> None:
-    expression = _expression(
-        "any",
-        CommandCondition("command", "exact", "git push", case_sensitive=False),
-        CommandCondition("command", "glob", "docker compose *"),
-    )
-
-    assert matches_command_expression(expression, "GIT PUSH")
-    assert matches_command_expression(expression, "docker compose up --detach")
-    assert not matches_command_expression(expression, "git commit -m ship")
+def _document_with_commands(commands: dict[str, object]) -> str:
+    document = parse_policy_document_yaml((FIXTURES / "valid" / "basic.yaml").read_bytes())
+    value = json.loads(canonical_policy_document_bytes(document))
+    value["spec"]["rules"][0]["match"]["commands"] = commands
+    return yaml.safe_dump(value, allow_unicode=True, sort_keys=False)
 
 
-def test_omitted_case_flag_preserves_case_insensitive_legacy_exact_matching() -> None:
-    expression = command_expression_from_mapping(
+def test_a_condition_keeps_its_spelling_and_loses_only_its_spacing() -> None:
+    source = _document_with_commands(
         {
             "combinator": "all",
-            "conditions": [{"field": "command", "operator": "exact", "value": "git push"}],
+            "conditions": [{"field": "command", "operator": "startsWith", "value": "  docker   compose  "}],
         }
     )
 
-    assert matches_command_expression(expression, "GIT PUSH")
+    document = parse_policy_document_yaml(source)
+
+    commands = document.rules[0].match.to_mapping()["commands"]
+    assert commands == {
+        "combinator": "all",
+        "conditions": [
+            {"field": "command", "operator": "startsWith", "value": "docker compose", "caseSensitive": False}
+        ],
+    }
 
 
-def test_regex_validation_and_matching_share_runtime_dialect() -> None:
-    expression = _expression(
-        "all",
-        CommandCondition("command", "regex", r"^docker\s+compose\s+(up|down)$"),
+def test_a_value_that_is_only_spacing_is_refused_at_its_rule() -> None:
+    source = _document_with_commands(
+        {"combinator": "all", "conditions": [{"field": "command", "operator": "exact", "value": " "}]}
     )
 
-    validate_command_expression(expression)
-    assert matches_command_expression(expression, "docker compose up")
-    assert not matches_command_expression(expression, "docker compose logs")
+    with pytest.raises(PolicyDocumentError) as error:
+        parse_policy_document_yaml(source)
 
-
-def test_invalid_regex_is_rejected_before_evaluation() -> None:
-    expression = _expression("all", CommandCondition("command", "regex", "[unclosed"))
-
-    with pytest.raises(CommandExpressionError, match="invalid_command_regex"):
-        validate_command_expression(expression)
-
-
-def test_mapping_requires_explicit_boolean_combinator() -> None:
-    with pytest.raises(CommandExpressionError, match="command_expression_combinator_required"):
-        command_expression_from_mapping(
-            {"conditions": [{"field": "command", "operator": "exact", "value": "git push"}]}
-        )
+    assert error.value.diagnostics[0].code == "command_value_required"
+    assert error.value.diagnostics[0].path == ("spec", "rules", 0, "match", "commands")

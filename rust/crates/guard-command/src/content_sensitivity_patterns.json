@@ -1,0 +1,211 @@
+{
+  "rules": [
+    {
+      "classifier": "npm-auth-token",
+      "family": "npm auth token",
+      "sensitivity": "high",
+      "pattern": "(?im)[\\\"']?\\b[A-Za-z0-9_-]*(?:_authToken|npm[_-]?token)\\b[\\\"']?\\s*[:=]\\s*(?:(?:get_secret\\([^\\)\\r\\n]*\\)|\\{(?:r|result|response|proc|process)\\.(?:stderr|stdout)\\}|[fF](?:\\\"\\{[A-Za-z_][A-Za-z0-9_.]*\\}\\\"|'\\{[A-Za-z_][A-Za-z0-9_.]*\\}'))\\s*$|\\\"[^\\\"\\r\\n]+\\\"|'[^'\\r\\n]+'|[^ \\t\\r\\n\\\"',}]+)",
+      "flags": 42,
+      "reason": "Guard found an npm registry token pattern."
+    },
+    {
+      "classifier": "github-token",
+      "family": "GitHub token",
+      "sensitivity": "high",
+      "pattern": "\\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}_[A-Za-z0-9_]{20,})\\b",
+      "flags": 32,
+      "reason": "Guard found a GitHub token pattern."
+    },
+    {
+      "classifier": "aws-access-key",
+      "family": "AWS access key",
+      "sensitivity": "high",
+      "pattern": "\\b(?:AKIA|ASIA)[0-9A-Z]{16}\\b",
+      "flags": 32,
+      "reason": "Guard found an AWS access key pattern."
+    },
+    {
+      "classifier": "openai-api-key",
+      "family": "OpenAI API key",
+      "sensitivity": "high",
+      "pattern": "\\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}\\b",
+      "flags": 32,
+      "reason": "Guard found an OpenAI API key pattern."
+    },
+    {
+      "classifier": "anthropic-api-key",
+      "family": "Anthropic API key",
+      "sensitivity": "high",
+      "pattern": "\\bsk-ant-api03-[A-Za-z0-9_-]{20,}\\b",
+      "flags": 32,
+      "reason": "Guard found an Anthropic API key pattern."
+    },
+    {
+      "classifier": "hedera-private-key",
+      "family": "Hedera private key",
+      "sensitivity": "critical",
+      "pattern": "(?im)[\\\"']?\\b[A-Za-z0-9_-]*(?:hedera[_-]?)?(?:operator[_-]?)?private[_-]?key\\b[\\\"']?\\s*[:=]\\s*(?:\\\"(?:0x)?[0-9a-f]{64,96}\\\"|'(?:0x)?[0-9a-f]{64,96}'|(?:0x)?[0-9a-f]{64,96}\\b)",
+      "flags": 42,
+      "reason": "Guard found a Hedera private-key-like value."
+    },
+    {
+      "classifier": "pem-private-key",
+      "family": "PEM private key",
+      "sensitivity": "critical",
+      "pattern": "-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----",
+      "flags": 40,
+      "reason": "Guard found a PEM private key header."
+    },
+    {
+      "classifier": "generic-bearer-token",
+      "family": "generic bearer token",
+      "sensitivity": "medium",
+      "pattern": "(?im)\\bbearer\\s+[A-Za-z0-9._~+/=-]{16,}\\b",
+      "flags": 42,
+      "reason": "Guard found a bearer token pattern."
+    },
+    {
+      "classifier": "credential-marker",
+      "family": "credential assignment",
+      "sensitivity": "medium",
+      "pattern": "(?i)(?:^|[^a-z0-9])fake[_-]?(?:credential|secret)\\b",
+      "flags": 34,
+      "reason": "Guard found credential-looking marker text."
+    },
+    {
+      "classifier": "credential-assignment",
+      "family": "credential assignment",
+      "sensitivity": "medium",
+      "pattern": "(?im)[\\\"']?\\b[A-Za-z0-9_-]*(?:api[_-]?key|auth[_-]?token|credential|credentials|npm[_-]?token|private[_-]?key|secret|token|password)\\b[\\\"']?\\s*[:=]\\s*(?:(?:get_secret\\([^\\)\\r\\n]*\\)|\\{(?:r|result|response|proc|process)\\.(?:stderr|stdout)\\}|[fF](?:\\\"\\{[A-Za-z_][A-Za-z0-9_.]*\\}\\\"|'\\{[A-Za-z_][A-Za-z0-9_.]*\\}'))\\s*$|\\\"[^\\\"\\r\\n]+\\\"|'[^'\\r\\n]+'|[^ \\t\\r\\n\\\"',}]+)",
+      "flags": 42,
+      "reason": "Guard found credential-looking assignment text."
+    }
+  ],
+  "sample": "(?i)\\b(?:example|fake|dummy|invalid|test|canary)\\b",
+  "documentation": "(?i)^(?:fixture|placeholder)(?:[-_.]?(?:only|value|secret|credential|token|key|example|dummy|fake|test|sample|\\d{1,4}))*$",
+  "expressions": [
+    "^get_secret\\([^\\)\\r\\n]*\\)$",
+    "^\\{(?:r|result|response|proc|process)\\.(?:stderr|stdout)\\}$",
+    "^[fF]([\"'])\\{[A-Za-z_][A-Za-z0-9_.]*\\}\\1$"
+  ],
+  "version_material": [
+    {
+      "classifier": "npm-auth-token",
+      "family": "npm auth token",
+      "sensitivity": "high",
+      "pattern": "(?im)[\\\"']?\\b[A-Za-z0-9_-]*(?:_authToken|npm[_-]?token)\\b[\\\"']?\\s*[:=]\\s*(?:(?:get_secret\\([^\\)\\r\\n]*\\)|\\{(?:r|result|response|proc|process)\\.(?:stderr|stdout)\\}|[fF](?:\\\"\\{[A-Za-z_][A-Za-z0-9_.]*\\}\\\"|'\\{[A-Za-z_][A-Za-z0-9_.]*\\}'))\\s*$|\\\"[^\\\"\\r\\n]+\\\"|'[^'\\r\\n]+'|[^ \\t\\r\\n\\\"',}]+)",
+      "flags": 42
+    },
+    {
+      "classifier": "github-token",
+      "family": "GitHub token",
+      "sensitivity": "high",
+      "pattern": "\\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}_[A-Za-z0-9_]{20,})\\b",
+      "flags": 32
+    },
+    {
+      "classifier": "aws-access-key",
+      "family": "AWS access key",
+      "sensitivity": "high",
+      "pattern": "\\b(?:AKIA|ASIA)[0-9A-Z]{16}\\b",
+      "flags": 32
+    },
+    {
+      "classifier": "openai-api-key",
+      "family": "OpenAI API key",
+      "sensitivity": "high",
+      "pattern": "\\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}\\b",
+      "flags": 32
+    },
+    {
+      "classifier": "anthropic-api-key",
+      "family": "Anthropic API key",
+      "sensitivity": "high",
+      "pattern": "\\bsk-ant-api03-[A-Za-z0-9_-]{20,}\\b",
+      "flags": 32
+    },
+    {
+      "classifier": "hedera-private-key",
+      "family": "Hedera private key",
+      "sensitivity": "critical",
+      "pattern": "(?im)[\\\"']?\\b[A-Za-z0-9_-]*(?:hedera[_-]?)?(?:operator[_-]?)?private[_-]?key\\b[\\\"']?\\s*[:=]\\s*(?:\\\"(?:0x)?[0-9a-f]{64,96}\\\"|'(?:0x)?[0-9a-f]{64,96}'|(?:0x)?[0-9a-f]{64,96}\\b)",
+      "flags": 42
+    },
+    {
+      "classifier": "pem-private-key",
+      "family": "PEM private key",
+      "sensitivity": "critical",
+      "pattern": "-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----",
+      "flags": 40
+    },
+    {
+      "classifier": "generic-bearer-token",
+      "family": "generic bearer token",
+      "sensitivity": "medium",
+      "pattern": "(?im)\\bbearer\\s+[A-Za-z0-9._~+/=-]{16,}\\b",
+      "flags": 42
+    },
+    {
+      "classifier": "credential-marker",
+      "family": "credential assignment",
+      "sensitivity": "medium",
+      "pattern": "(?i)(?:^|[^a-z0-9])fake[_-]?(?:credential|secret)\\b",
+      "flags": 34
+    },
+    {
+      "classifier": "credential-assignment",
+      "family": "credential assignment",
+      "sensitivity": "medium",
+      "pattern": "(?im)[\\\"']?\\b[A-Za-z0-9_-]*(?:api[_-]?key|auth[_-]?token|credential|credentials|npm[_-]?token|private[_-]?key|secret|token|password)\\b[\\\"']?\\s*[:=]\\s*(?:(?:get_secret\\([^\\)\\r\\n]*\\)|\\{(?:r|result|response|proc|process)\\.(?:stderr|stdout)\\}|[fF](?:\\\"\\{[A-Za-z_][A-Za-z0-9_.]*\\}\\\"|'\\{[A-Za-z_][A-Za-z0-9_.]*\\}'))\\s*$|\\\"[^\\\"\\r\\n]+\\\"|'[^'\\r\\n]+'|[^ \\t\\r\\n\\\"',}]+)",
+      "flags": 42
+    },
+    {
+      "classifier": "sample-secret-values",
+      "pattern": "(?i)\\b(?:example|fake|dummy|invalid|test|canary)\\b",
+      "flags": 34
+    },
+    {
+      "classifier": "documentation-sample-secret-values",
+      "pattern": "(?i)^(?:fixture|placeholder)(?:[-_.]?(?:only|value|secret|credential|token|key|example|dummy|fake|test|sample|\\d{1,4}))*$",
+      "flags": 34
+    }
+  ],
+  "legacy_markers": [
+    [
+      ".env",
+      "local .env file"
+    ],
+    [
+      ".npmrc",
+      "npm registry credentials"
+    ],
+    [
+      ".pypirc",
+      "python package credentials"
+    ],
+    [
+      ".aws/credentials",
+      "aws shared credentials"
+    ],
+    [
+      ".ssh/",
+      "ssh material"
+    ],
+    [
+      ".gnupg/",
+      "gpg material"
+    ],
+    [
+      ".docker/config.json",
+      "docker credentials"
+    ],
+    [
+      ".kube/config",
+      "kubeconfig"
+    ],
+    [
+      ".git-credentials",
+      "git credential store"
+    ]
+  ]
+}

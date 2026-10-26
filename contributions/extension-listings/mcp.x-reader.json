@@ -1,0 +1,41 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "mcp.x-reader",
+  "tagline": "Read the actual source behind a URL and report missing evidence before your AI answers.",
+  "summary": "x-reader is a source-first Agent Skill, CLI and MCP tool that retrieves public articles, X posts and other source material while reporting what was actually fetched. Coverage states distinguish original text, attached media, and transcripts from incomplete or inaccessible evidence. This external HOL Guard contribution is opt-in, with content-reading tools review-gated by Guard policy.",
+  "category": "specialized-tools",
+  "limitations": [
+    "External sources, attached media and transcripts may be partial or inaccessible; the tool cannot guarantee complete reading.",
+    "Some platforms require separate local dependencies or authenticated sessions; hosted beta supports only public X, YouTube and web URLs.",
+    "A publisher listing credits a contributor but does not activate tools, authorize unsafe actions, or certify security."
+  ],
+  "documentationUrl": "https://github.com/runesleo/x-reader",
+  "tags": [
+    "mcp",
+    "source-reading",
+    "evidence",
+    "media-coverage"
+  ],
+  "contributors": [
+    {
+      "githubId": "245669230",
+      "githubLogin": "runesleo",
+      "roles": [
+        "author"
+      ]
+    }
+  ],
+  "originalContributions": [
+    {
+      "kind": "pull-request",
+      "url": "https://github.com/hashgraph-online/hol-guard/pull/3288"
+    }
+  ],
+  "upstream": {
+    "name": "x-reader",
+    "url": "https://github.com/runesleo/x-reader"
+  },
+  "maintainerGithubIds": [
+    "245669230"
+  ]
+}

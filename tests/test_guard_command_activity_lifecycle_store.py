@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import store_command_activity_health_schema as health_schema
+from codex_plugin_scanner.guard.native_guard_store import NativeGuardStoreUnavailable
 from codex_plugin_scanner.guard.runtime.command_activity_contract import (
     ActivityApprovalReuseStatus,
     ActivityDecisionReason,
@@ -215,6 +216,45 @@ def test_transition_rejects_fact_changes_and_unknown_correlations(tmp_path: Path
     unknown = _activity(activity_id="activity:02", request=_request("b" * 64))
     with pytest.raises(ValueError, match="does not identify"):
         store.transition_command_activity(_confirmed(unknown, succeeded=True))
+
+
+def _unavailable(reason: str) -> NativeGuardStoreUnavailable:
+    error = NativeGuardStoreUnavailable(f"Guard store native runtime unavailable ({reason}).")
+    error.reason = reason
+    return error
+
+
+def test_local_health_fallback_runs_only_before_the_request_is_sent(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
+
+    def fail(reason: str):
+        def call(_method: str, _args: object) -> object:
+            raise _unavailable(reason)
+
+        return call
+
+    store._native_store_call = fail("native_guard_store_unavailable")
+    with pytest.raises(NativeGuardStoreUnavailable) as sent:
+        store.record_command_activity_persistence_failure(error_code="post_record_failed", occurred_at=_NOW)
+    assert sent.value.reason == "native_guard_store_unavailable"
+    store._native_store_call = fail("native_guard_store_response_invalid")
+    with pytest.raises(NativeGuardStoreUnavailable):
+        store.record_command_activity_observation_conflict(occurred_at=_NOW)
+    assert store.get_command_activity_persistence_health().dropped_event_count == 0
+
+    store._native_store_call = fail("native_guard_store_prerequisite_unavailable")
+    store.record_command_activity_persistence_failure(error_code="post_record_failed", occurred_at=_NOW)
+    health = store.get_command_activity_persistence_health()
+    assert health.dropped_event_count == 1
+    assert health.persistence_error_count == 1
+    assert health.last_error_code == "post_record_failed"
+
+    store._native_store_call = fail("native_guard_store_request_invalid")
+    store.record_command_activity_observation_conflict(occurred_at=_NOW)
+    health = store.get_command_activity_persistence_health()
+    assert health.dropped_event_count == 2
+    assert health.persistence_error_count == 1
+    assert health.last_error_code == "post_result_conflict"
 
 
 def test_health_failure_counts_are_bounded_and_store_no_error_details(tmp_path: Path) -> None:

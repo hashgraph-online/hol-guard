@@ -19,10 +19,7 @@ from codex_plugin_scanner.guard.adapters.cursor_hooks import (
     _MANAGED_HOOK_EVENTS,
     _MANAGED_HOOK_TIMEOUT_SECONDS,
     HOOK_SCRIPT_NAME,
-    _hook_script_mode_is_executable,
     _strip_managed_hook_entries,
-    cursor_hook_response_from_guard,
-    cursor_hook_should_block,
     cursor_hooks_path,
     cursor_native_hook_state,
     install_cursor_hooks,
@@ -35,6 +32,23 @@ from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.store import GuardStore
 
 
+def _cursor_shell_fingerprint(command: str) -> str:
+    """The digest both Cursor state keys are built from.
+
+    Spelled out here rather than imported from the CLI module: the resident
+    derives these keys now, so a test that wants to read a row back has to say
+    independently what that row is called.
+    """
+
+    from codex_plugin_scanner.guard.adapters.cursor_native_approval import normalize_cursor_shell_command
+
+    return hashlib.sha256(normalize_cursor_shell_command(command).encode("utf-8")).hexdigest()[:24]
+
+
+def _cursor_native_shell_allow_key(conversation_id: str, command: str) -> str:
+    return f"cursor_native_shell_allow:{conversation_id}:{_cursor_shell_fingerprint(command)}"
+
+
 def _cursor_shell_artifact(*, workspace_dir: Path, command: str) -> GuardArtifact:
     return GuardArtifact(
         artifact_id="cursor:project:shell:rm",
@@ -44,81 +58,6 @@ def _cursor_shell_artifact(*, workspace_dir: Path, command: str) -> GuardArtifac
         source_scope="project",
         config_path=str(workspace_dir / ".cursor" / "mcp.json"),
         command=command,
-    )
-
-
-def test_cursor_hook_executable_mode_is_platform_portable(monkeypatch) -> None:
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor_hooks.os.name", "nt")
-    assert _hook_script_mode_is_executable(0o600) is True
-
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.cursor_hooks.os.name", "posix")
-    assert _hook_script_mode_is_executable(0o600) is False
-    assert _hook_script_mode_is_executable(0o700) is True
-
-
-def _record_cursor_pending_for_test(
-    *,
-    store,
-    guard_home: Path,
-    guard_commands_module,
-    conversation_id: str,
-    command: str,
-    workspace_dir: Path,
-    generation_id: str | None = "gen-cursor-test",
-) -> None:
-    payload: dict[str, object] = {
-        "conversation_id": conversation_id,
-        "hook_event_name": "beforeShellExecution",
-        "command": command,
-        "cwd": str(workspace_dir),
-    }
-    if generation_id is not None:
-        payload["generation_id"] = generation_id
-    guard_commands_module._record_cursor_pending_shell_permission(
-        store=store,
-        guard_home=guard_home,
-        payload=payload,
-        reason="Requests a sensitive native tool action.",
-        artifact=_cursor_shell_artifact(workspace_dir=workspace_dir, command=command),
-        artifact_hash="hash-cursor-shell",
-    )
-
-
-def _trusted_cursor_after_shell_env(
-    guard_home: Path,
-    *,
-    conversation_id: str,
-    command: str,
-    workspace_dir: Path,
-    approval_binding: str = "gen-cursor-test",
-) -> dict[str, str]:
-    from codex_plugin_scanner.guard.adapters.cursor_native_approval import (
-        compute_cursor_after_shell_proof,
-        ensure_cursor_hook_attestation_secret,
-    )
-
-    secret = ensure_cursor_hook_attestation_secret(guard_home)
-    proof = compute_cursor_after_shell_proof(
-        secret=secret,
-        conversation_id=conversation_id,
-        command=command,
-        approval_binding=approval_binding,
-    )
-    return {
-        "HOL_GUARD_MANAGED_CURSOR_HOOK": "1",
-        "HOL_GUARD_CURSOR_AFTER_SHELL_PROOF": proof,
-        "HOL_GUARD_CURSOR_APPROVAL_BINDING": approval_binding,
-        "CURSOR_SESSION_ID": conversation_id,
-        "CURSOR_PROJECT_DIR": str(workspace_dir),
-        "CURSOR_VERSION": "test",
-    }
-
-
-def test_managed_hook_events_exclude_pretooluse() -> None:
-    assert "preToolUse" not in _MANAGED_HOOK_EVENTS
-    assert _MANAGED_HOOK_EVENTS == (
-        "beforeShellExecution", "beforeMCPExecution", "beforeReadFile",
-        "beforeWriteFile", "afterShellExecution", "afterMCPExecution",
     )
 
 
@@ -229,8 +168,8 @@ def test_cursor_hook_script_source_includes_daemon_fast_path(tmp_path: Path) -> 
     assert "_cursor_availability_response" in source
     assert "cursor_fallback_permission" in source
     assert "run_isolated_hook_process = None" in source
-    assert 'compact_event == "beforereadfile"' in source
-    assert "hook_action_is_emergency_safe" in source
+    assert 'hook_event_name.strip().lower() == "beforereadfile"' in source
+    assert "_cursor_permission" in source
     assert "/v1/hooks/cursor?" in source
     assert '"hook_env"' in source
     assert "subprocess.CompletedProcess(" in source
@@ -242,7 +181,7 @@ def test_cursor_hook_script_uses_one_deadline_and_isolated_process_tree(tmp_path
     context = HarnessContext(home_dir=tmp_path / "home", guard_home=tmp_path / "guard", workspace_dir=tmp_path)
     source = cursor_hook_script_source(context)
 
-    assert "deadline_monotonic = time.monotonic() + GUARD_HOOK_TIMEOUT_SECONDS" in source
+    assert "deadline_monotonic = _HOOK_DEADLINE_MONOTONIC" in source
     assert "timeout = _request_timeout(deadline_monotonic" in source
     assert "run_isolated_hook_process(" in source
     assert "allow_windows_breakaway=True" in source
@@ -499,11 +438,13 @@ def test_cursor_hook_recovery_honors_total_deadline(tmp_path: Path) -> None:
 
     # Includes cold interpreter startup, which can dominate the injected 200 ms hook budget on loaded CI.
     assert time.monotonic() - started < 2
-    assert proc.returncode == 0
-    assert json.loads(proc.stdout)["permission"] == "allow"
+    assert proc.returncode == 2
+    response = json.loads(proc.stdout)
+    assert response["permission"] == "deny"
+    assert response["user_message"] == ("HOL Guard could not complete the native hook decision safely.")
 
 
-def test_cursor_hook_allows_workspace_read_without_blocking_on_dead_daemon(tmp_path: Path) -> None:
+def test_cursor_hook_denies_workspace_read_within_recovery_deadline(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
 
     home_dir = tmp_path / "home"
@@ -527,14 +468,16 @@ def test_cursor_hook_allows_workspace_read_without_blocking_on_dead_daemon(tmp_p
     (guard_home / "daemon-auth-token").write_text("stale-token", encoding="utf-8")
     context = HarnessContext(home_dir=home_dir, guard_home=guard_home, workspace_dir=workspace_dir)
     script_path = tmp_path / "cursor-hook.py"
-    script_path.write_text(
-        cursor_hook_script_source(
-            context,
-            guard_cli=[sys.executable, str(fallback)],
-            recovery_command=[sys.executable, str(recovery)],
-        ),
-        encoding="utf-8",
+    source = cursor_hook_script_source(
+        context,
+        guard_cli=[sys.executable, str(fallback)],
+        recovery_command=[sys.executable, str(recovery)],
+    ).replace(
+        f"GUARD_HOOK_TIMEOUT_SECONDS = {_MANAGED_HOOK_TIMEOUT_SECONDS - 3}",
+        "GUARD_HOOK_TIMEOUT_SECONDS = 0.2",
+        1,
     )
+    script_path.write_text(source, encoding="utf-8")
     started = time.monotonic()
     proc = subprocess.run(
         [sys.executable, str(script_path)],
@@ -551,8 +494,10 @@ def test_cursor_hook_allows_workspace_read_without_blocking_on_dead_daemon(tmp_p
         timeout=3,
     )
     assert time.monotonic() - started < 2
-    assert proc.returncode == 0, proc.stderr
-    assert json.loads(proc.stdout) == {"permission": "allow"}
+    assert proc.returncode == 2, proc.stderr
+    response = json.loads(proc.stdout)
+    assert response["permission"] == "deny"
+    assert response["user_message"] == ("HOL Guard could not complete the native hook decision safely.")
     assert not fallback_marker.exists()
 
 
@@ -566,7 +511,14 @@ def test_cursor_hook_emits_json_when_guard_package_import_fails(tmp_path: Path) 
     workspace_dir.mkdir()
     context = HarnessContext(home_dir=home_dir, guard_home=guard_home, workspace_dir=workspace_dir)
     script_path = tmp_path / "cursor-hook.py"
-    script_path.write_text(cursor_hook_script_source(context), encoding="utf-8")
+    script_path.write_text(
+        cursor_hook_script_source(
+            context,
+            guard_cli=[sys.executable, "-c", "raise SystemExit(1)"],
+            recovery_command=[sys.executable, "-c", "raise SystemExit(0)"],
+        ),
+        encoding="utf-8",
+    )
     proc = subprocess.run(
         [sys.executable, "-S", str(script_path)],
         input=json.dumps(
@@ -579,10 +531,13 @@ def test_cursor_hook_emits_json_when_guard_package_import_fails(tmp_path: Path) 
         capture_output=True,
         text=True,
         env={"PATH": os.environ.get("PATH", ""), "HOME": str(home_dir)},
-        timeout=10,
+        timeout=3,
     )
-    assert proc.returncode == 0, proc.stderr
-    assert json.loads(proc.stdout)["permission"] == "allow"
+    assert proc.returncode == 2, proc.stderr
+    assert json.loads(proc.stdout) == {
+        "permission": "deny",
+        "user_message": "HOL Guard could not complete the native hook decision safely.",
+    }
 
 
 @pytest.mark.skipif(os.name != "posix", reason="process-group descendant assertion requires POSIX")
@@ -635,8 +590,8 @@ def test_cursor_hook_timeout_kills_fallback_descendants(
     )
     time.sleep(1)
 
-    assert proc.returncode == 0
-    assert json.loads(proc.stdout)["permission"] == "allow"
+    assert proc.returncode == 2
+    assert json.loads(proc.stdout)["permission"] == "deny"
     assert not marker.exists()
 
 
@@ -698,7 +653,8 @@ def test_cursor_hook_timeout_kills_descendants_without_package_import(
     assert not marker.exists()
 
 
-def test_cursor_hook_script_uses_daemon_fast_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.usefixtures("native_route_policy_with_hooks_off")
+def test_cursor_hook_script_follows_a_live_daemon_allow(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
 
     home_dir = tmp_path / "home"
@@ -737,7 +693,7 @@ def test_cursor_hook_script_uses_daemon_fast_path(tmp_path: Path, monkeypatch: p
     finally:
         daemon.stop()
 
-    assert proc.returncode == 0
+    assert proc.returncode == 0, proc.stderr
     assert json.loads(proc.stdout) == {"permission": "allow"}
 
 
@@ -749,7 +705,7 @@ def test_cursor_hook_script_uses_daemon_fast_path(tmp_path: Path, monkeypatch: p
         ({"recorded": False}, 0),
     ],
 )
-def test_generated_cursor_hook_continues_for_missing_or_unknown_guard_action(
+def test_generated_cursor_hook_denies_missing_or_unknown_guard_action(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     guard_payload: dict[str, object],
@@ -791,9 +747,12 @@ def test_generated_cursor_hook_continues_for_missing_or_unknown_guard_action(
         timeout=10,
     )
 
-    assert proc.returncode == 0
+    assert proc.returncode == 2
     response = json.loads(proc.stdout)
-    assert response["permission"] == "allow"
+    assert response["permission"] == "deny"
+    assert response["user_message"] == (
+        "Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal."
+    )
 
 
 def test_cursor_resolve_guard_cli_command_ignores_path_collisions(
@@ -1091,54 +1050,6 @@ def test_strip_managed_hook_entries_removes_hol_guard_pretooluse(tmp_path: Path)
     assert stripped == [{"command": "lean-ctx hook rewrite", "matcher": "Shell"}]
 
 
-def test_install_cursor_hooks_strips_legacy_pretooluse_entry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    home = tmp_path / "home"
-    guard_home = tmp_path / "guard"
-    workspace = tmp_path / "workspace"
-    home.mkdir()
-    guard_home.mkdir()
-    workspace.mkdir()
-    cursor_dir = home / ".cursor"
-    cursor_dir.mkdir()
-    script_path = cursor_dir / "hooks" / "hol-guard-cursor-hook.py"
-    hooks_path = cursor_dir / "hooks.json"
-    hooks_path.write_text(
-        json.dumps(
-            {
-                "version": 1,
-                "hooks": {
-                    "preToolUse": [
-                        {"command": "lean-ctx hook rewrite", "matcher": "Shell"},
-                        {
-                            "command": str(script_path),
-                            "failClosed": True,
-                            "matcher": "Shell|Read",
-                            "timeout": 35,
-                        },
-                    ]
-                },
-            }
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.cursor_hooks._resolve_guard_cli_command",
-        lambda _context: ["hol-guard"],
-    )
-    context = HarnessContext(home_dir=home, guard_home=guard_home, workspace_dir=workspace)
-    result = install_cursor_hooks(context)
-    installed = json.loads(hooks_path.read_text(encoding="utf-8"))
-    pre_tool_use = installed["hooks"].get("preToolUse")
-    if pre_tool_use is not None:
-        assert all("hol-guard-cursor-hook.py" not in str(entry.get("command", "")) for entry in pre_tool_use)
-    assert "beforeShellExecution" in installed["hooks"]
-    assert result["managed_hook_events"] == list(_MANAGED_HOOK_EVENTS)
-    for event_name in _MANAGED_HOOK_EVENTS:
-        entry = installed["hooks"][event_name][-1]
-        assert entry["timeout"] == _MANAGED_HOOK_TIMEOUT_SECONDS
-
-
 def test_install_cursor_hooks_preserves_top_level_event_entries(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1197,35 +1108,6 @@ def test_prepare_cursor_hook_payload_maps_after_mcp_execution() -> None:
     assert tool_input["command"] == "pnpm test"
 
 
-def test_cursor_hook_response_from_guard_maps_read_ask_to_deny() -> None:
-    response = cursor_hook_response_from_guard(
-        policy_action="require-reapproval",
-        guard_payload={"review_hint": "Approve in Guard"},
-        hook_event_name="beforeReadFile",
-    )
-    assert response["permission"] == "deny"
-    assert response["user_message"] == "Approve in Guard"
-
-
-def test_cursor_hook_response_from_guard_allows_shell() -> None:
-    response = cursor_hook_response_from_guard(
-        policy_action="allow",
-        guard_payload={},
-        hook_event_name="beforeShellExecution",
-    )
-    assert response["permission"] == "allow"
-
-
-@pytest.mark.parametrize("policy_action", ["", "future-action", "ALLOW"])
-def test_cursor_hook_response_from_guard_fails_closed_for_unknown_action(policy_action: str) -> None:
-    response = cursor_hook_response_from_guard(
-        policy_action=policy_action,
-        guard_payload={"risk_summary": "Malformed Guard response."},
-        hook_event_name="beforeShellExecution",
-    )
-    assert response["permission"] == "deny"
-
-
 def test_cursor_hook_warn_with_risk_remains_allowed_without_a_prompt() -> None:
     from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_would_prompt_user
 
@@ -1234,12 +1116,6 @@ def test_cursor_hook_warn_with_risk_remains_allowed_without_a_prompt() -> None:
         policy_action="warn",
         guard_payload=payload,
     )
-    response = cursor_hook_response_from_guard(
-        policy_action="warn",
-        guard_payload=payload,
-        hook_event_name="beforeShellExecution",
-    )
-    assert response == {"permission": "allow"}
     assert not cursor_hook_would_prompt_user(policy_action="allow", guard_payload={})
     assert cursor_hook_would_prompt_user(policy_action="review", guard_payload={})
     assert cursor_hook_would_prompt_user(policy_action="require-reapproval", guard_payload={})
@@ -1253,58 +1129,6 @@ def test_validated_hol_guard_src_path_rejects_non_guard_trees(tmp_path: Path) ->
     src_root.mkdir()
     (src_root / "codex_plugin_scanner").mkdir()
     assert _validated_hol_guard_src_path(str(src_root)) == str(src_root.resolve())
-
-
-def test_cursor_after_shell_requires_observer_fields(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.cursor_hooks import prepare_cursor_hook_payload
-    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-    from codex_plugin_scanner.guard.store import GuardStore
-
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    store = GuardStore(home_dir)
-    conversation_id = "conv-cursor-after-shell-guard"
-    command = "rm -rf ./hol-guard-cursor-native-test-marker"
-    generation_id = "gen-cursor-after-shell-guard"
-    _record_cursor_pending_for_test(
-        store=store,
-        guard_home=home_dir,
-        guard_commands_module=guard_commands_module,
-        conversation_id=conversation_id,
-        command=command,
-        workspace_dir=workspace_dir,
-        generation_id=generation_id,
-    )
-    saved = guard_commands_module._persist_cursor_native_permission_after_shell(
-        store=store,
-        payload=prepare_cursor_hook_payload(
-            {
-                "conversation_id": conversation_id,
-                "generation_id": generation_id,
-                "hook_event_name": "afterShellExecution",
-                "command": command,
-                "cwd": str(workspace_dir),
-            }
-        ),
-        harness="cursor",
-        home_dir=home_dir,
-        guard_home=home_dir,
-        workspace=workspace_dir,
-        hook_env=_trusted_cursor_after_shell_env(
-            home_dir,
-            conversation_id=conversation_id,
-            command=command,
-            workspace_dir=workspace_dir,
-            approval_binding=generation_id,
-        ),
-    )
-    assert saved is False
-
-
-def test_cursor_hook_should_block() -> None:
-    assert cursor_hook_should_block(policy_action="block") is True
-    assert cursor_hook_should_block(policy_action="allow") is False
 
 
 def test_cursor_hook_script_source_infers_event_before_prepare(tmp_path: Path) -> None:
@@ -1349,506 +1173,6 @@ def test_install_cursor_hooks_registers_after_shell_observer(tmp_path: Path, mon
     assert (guard_home / "secrets" / "cursor-hook-attestation.key").is_file()
 
 
-def test_cursor_native_shell_session_allow_after_trusted_after_shell(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.cursor_hooks import prepare_cursor_hook_payload
-    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-    from codex_plugin_scanner.guard.store import GuardStore
-
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    store = GuardStore(home_dir)
-    conversation_id = "conv-cursor-native-shell"
-    command = "rm -rf ./hol-guard-cursor-native-test-marker"
-    generation_id = "gen-cursor-native-shell"
-    _record_cursor_pending_for_test(
-        store=store,
-        guard_home=home_dir,
-        guard_commands_module=guard_commands_module,
-        conversation_id=conversation_id,
-        command=command,
-        workspace_dir=workspace_dir,
-        generation_id=generation_id,
-    )
-    saved = guard_commands_module._persist_cursor_native_permission_after_shell(
-        store=store,
-        payload=prepare_cursor_hook_payload(
-            {
-                "conversation_id": conversation_id,
-                "generation_id": generation_id,
-                "hook_event_name": "afterShellExecution",
-                "command": command,
-                "cwd": str(workspace_dir),
-                "duration": 15,
-            }
-        ),
-        harness="cursor",
-        home_dir=home_dir,
-        guard_home=home_dir,
-        workspace=workspace_dir,
-        hook_env=_trusted_cursor_after_shell_env(
-            home_dir,
-            conversation_id=conversation_id,
-            command=command,
-            workspace_dir=workspace_dir,
-            approval_binding=generation_id,
-        ),
-    )
-    policies = store.list_policy_decisions("cursor")
-
-    assert saved is True
-    assert policies == []
-    assert guard_commands_module._cursor_native_shell_is_approved(
-        store,
-        prepare_cursor_hook_payload(
-            {
-                "conversation_id": conversation_id,
-                "hook_event_name": "beforeShellExecution",
-                "command": command,
-                "cwd": str(workspace_dir),
-            }
-        ),
-    )
-    assert (
-        guard_commands_module._load_cursor_pending_shell_permission(
-            store,
-            conversation_id=conversation_id,
-            command=command,
-        )
-        is None
-    )
-
-
-def test_cursor_native_accept_resolves_inbox_when_approval_gate_enabled(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.cursor_hooks import prepare_cursor_hook_payload
-    from codex_plugin_scanner.guard.approval_gate import update_settings as update_approval_gate_settings
-    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-    from codex_plugin_scanner.guard.models import GuardApprovalRequest
-    from codex_plugin_scanner.guard.store import GuardStore
-
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    store = GuardStore(home_dir)
-    update_approval_gate_settings(
-        store.guard_home,
-        {
-            "enabled": True,
-            "new_password": "cursor-native-accept-gate",
-            "confirm_password": "cursor-native-accept-gate",
-            "cooldown_seconds": 0,
-            "strict_all_decisions": False,
-        },
-    )
-    conversation_id = "conv-cursor-native-inbox"
-    command = "rm -rf ./hol-guard-cursor-native-test-marker"
-    generation_id = "gen-cursor-native-inbox"
-    request_id = "req-cursor-native-inbox"
-    artifact = _cursor_shell_artifact(workspace_dir=workspace_dir, command=command)
-    store.add_approval_request(
-        GuardApprovalRequest(
-            request_id=request_id,
-            harness="cursor",
-            artifact_id=artifact.artifact_id,
-            artifact_name=artifact.name,
-            artifact_hash="hash-cursor-shell",
-            policy_action="require-reapproval",
-            recommended_scope="artifact",
-            changed_fields=("tool_action_request",),
-            source_scope="project",
-            config_path=artifact.config_path,
-            review_command=f"hol-guard approvals approve {request_id}",
-            approval_url=f"http://127.0.0.1:5474/approvals/{request_id}",
-        ),
-        "2026-08-15T00:00:00+00:00",
-    )
-    _record_cursor_pending_for_test(
-        store=store,
-        guard_home=home_dir,
-        guard_commands_module=guard_commands_module,
-        conversation_id=conversation_id,
-        command=command,
-        workspace_dir=workspace_dir,
-        generation_id=generation_id,
-    )
-    guard_commands_module._attach_cursor_pending_approval_request_ids(
-        store=store,
-        payload={
-            "conversation_id": conversation_id,
-            "hook_event_name": "beforeShellExecution",
-            "command": command,
-            "cwd": str(workspace_dir),
-            "generation_id": generation_id,
-        },
-        response_payload={"approval_request_ids": [request_id]},
-    )
-    saved = guard_commands_module._persist_cursor_native_permission_after_shell(
-        store=store,
-        payload=prepare_cursor_hook_payload(
-            {
-                "conversation_id": conversation_id,
-                "generation_id": generation_id,
-                "hook_event_name": "afterShellExecution",
-                "command": command,
-                "cwd": str(workspace_dir),
-                "duration": 15,
-            }
-        ),
-        harness="cursor",
-        home_dir=home_dir,
-        guard_home=home_dir,
-        workspace=workspace_dir,
-        hook_env=_trusted_cursor_after_shell_env(
-            home_dir,
-            conversation_id=conversation_id,
-            command=command,
-            workspace_dir=workspace_dir,
-            approval_binding=generation_id,
-        ),
-    )
-    resolved = store.get_approval_request(request_id)
-
-    assert saved is True
-    assert resolved is not None
-    assert resolved.get("status") == "resolved"
-    assert resolved.get("resolution_action") == "allow"
-    assert store.list_approval_requests(status="pending", harness="cursor") == []
-
-
-def test_cursor_native_accept_resolves_inbox_by_artifact_when_ids_missing(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.cursor_hooks import prepare_cursor_hook_payload
-    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-    from codex_plugin_scanner.guard.models import GuardApprovalRequest
-    from codex_plugin_scanner.guard.store import GuardStore
-
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    store = GuardStore(home_dir)
-    conversation_id = "conv-cursor-native-inbox-fallback"
-    command = "rm -rf ./hol-guard-cursor-native-test-marker"
-    generation_id = "gen-cursor-native-inbox-fallback"
-    request_id = "req-cursor-native-inbox-fallback"
-    artifact = _cursor_shell_artifact(workspace_dir=workspace_dir, command=command)
-    store.add_approval_request(
-        GuardApprovalRequest(
-            request_id=request_id,
-            harness="cursor",
-            artifact_id=artifact.artifact_id,
-            artifact_name=artifact.name,
-            artifact_hash="hash-cursor-shell",
-            policy_action="require-reapproval",
-            recommended_scope="artifact",
-            changed_fields=("tool_action_request",),
-            source_scope="project",
-            config_path=artifact.config_path,
-            review_command=f"hol-guard approvals approve {request_id}",
-            approval_url=f"http://127.0.0.1:5474/approvals/{request_id}",
-        ),
-        "2026-08-15T00:00:00+00:00",
-    )
-    _record_cursor_pending_for_test(
-        store=store,
-        guard_home=home_dir,
-        guard_commands_module=guard_commands_module,
-        conversation_id=conversation_id,
-        command=command,
-        workspace_dir=workspace_dir,
-        generation_id=generation_id,
-    )
-    saved = guard_commands_module._persist_cursor_native_permission_after_shell(
-        store=store,
-        payload=prepare_cursor_hook_payload(
-            {
-                "conversation_id": conversation_id,
-                "generation_id": generation_id,
-                "hook_event_name": "afterShellExecution",
-                "command": command,
-                "cwd": str(workspace_dir),
-                "duration": 15,
-            }
-        ),
-        harness="cursor",
-        home_dir=home_dir,
-        guard_home=home_dir,
-        workspace=workspace_dir,
-        hook_env=_trusted_cursor_after_shell_env(
-            home_dir,
-            conversation_id=conversation_id,
-            command=command,
-            workspace_dir=workspace_dir,
-            approval_binding=generation_id,
-        ),
-    )
-    resolved = store.get_approval_request(request_id)
-
-    assert saved is True
-    assert resolved is not None
-    assert resolved.get("status") == "resolved"
-
-
-def test_cursor_tampered_pending_shell_cannot_bootstrap_signed_native_allow(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.cursor_hooks import prepare_cursor_hook_payload
-    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    store = GuardStore(home_dir)
-    conversation_id = "conv-cursor-tampered-pending"
-    command = "rm -rf ./hol-guard-cursor-native-test-marker"
-    generation_id = "gen-cursor-tampered-pending"
-    _record_cursor_pending_for_test(
-        store=store,
-        guard_home=home_dir,
-        guard_commands_module=guard_commands_module,
-        conversation_id=conversation_id,
-        command=command,
-        workspace_dir=workspace_dir,
-        generation_id=generation_id,
-    )
-    pending_key = guard_commands_module._cursor_pending_shell_state_key(conversation_id, command)
-    with sqlite3.connect(store.path) as connection:
-        row = connection.execute(
-            "select payload_json from sync_state where state_key = ?",
-            (pending_key,),
-        ).fetchone()
-        assert row is not None
-        tampered = json.loads(str(row[0]))
-        tampered["artifact_hash"] = "forged-artifact-hash"
-        connection.execute(
-            "update sync_state set payload_json = ? where state_key = ?",
-            (json.dumps(tampered), pending_key),
-        )
-
-    saved = guard_commands_module._persist_cursor_native_permission_after_shell(
-        store=store,
-        payload=prepare_cursor_hook_payload(
-            {
-                "conversation_id": conversation_id,
-                "generation_id": generation_id,
-                "hook_event_name": "afterShellExecution",
-                "command": command,
-                "cwd": str(workspace_dir),
-                "duration": 15,
-            }
-        ),
-        harness="cursor",
-        home_dir=home_dir,
-        guard_home=home_dir,
-        workspace=workspace_dir,
-        hook_env=_trusted_cursor_after_shell_env(
-            home_dir,
-            conversation_id=conversation_id,
-            command=command,
-            workspace_dir=workspace_dir,
-            approval_binding=generation_id,
-        ),
-    )
-
-    assert saved is False
-    assert store.get_sync_payload(pending_key) is None
-    assert (
-        store.get_sync_payload(guard_commands_module._cursor_native_shell_allow_state_key(conversation_id, command))
-        is None
-    )
-    events = store.list_events(event_name="rule.ignored.local_integrity")
-    event_payloads = [event_payload for event in events if isinstance(event_payload := event.get("payload"), dict)]
-    assert any(
-        event_payload.get("source") == "cursor-pending-shell" and event_payload.get("integrity_status") == "tampered"
-        for event_payload in event_payloads
-    )
-
-
-def test_forged_after_shell_without_attestation_is_rejected(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.cursor_hooks import prepare_cursor_hook_payload
-    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-    from codex_plugin_scanner.guard.store import GuardStore
-
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    store = GuardStore(home_dir)
-    conversation_id = "conv-cursor-forged-after-shell"
-    command = "rm -rf ./hol-guard-cursor-native-test-marker"
-    generation_id = "gen-cursor-forged"
-    _record_cursor_pending_for_test(
-        store=store,
-        guard_home=home_dir,
-        guard_commands_module=guard_commands_module,
-        conversation_id=conversation_id,
-        command=command,
-        workspace_dir=workspace_dir,
-        generation_id=generation_id,
-    )
-    saved = guard_commands_module._persist_cursor_native_permission_after_shell(
-        store=store,
-        payload=prepare_cursor_hook_payload(
-            {
-                "conversation_id": conversation_id,
-                "generation_id": generation_id,
-                "hook_event_name": "afterShellExecution",
-                "command": command,
-                "cwd": str(workspace_dir),
-                "duration": 15,
-            }
-        ),
-        harness="cursor",
-        home_dir=home_dir,
-        guard_home=home_dir,
-        workspace=workspace_dir,
-        hook_env={},
-    )
-    assert saved is False
-    assert not guard_commands_module._cursor_native_shell_is_approved(
-        store,
-        prepare_cursor_hook_payload(
-            {
-                "conversation_id": conversation_id,
-                "hook_event_name": "beforeShellExecution",
-                "command": command,
-                "cwd": str(workspace_dir),
-            }
-        ),
-    )
-    assert len(store.list_policy_decisions("cursor")) == 0
-
-
-def test_cursor_session_allow_without_generation_id_uses_binding_file(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.cursor_hooks import prepare_cursor_hook_payload
-    from codex_plugin_scanner.guard.adapters.cursor_native_approval import read_cursor_shell_binding_file
-    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-    from codex_plugin_scanner.guard.store import GuardStore
-
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    store = GuardStore(home_dir)
-    conversation_id = "conv-cursor-no-generation-id"
-    command = "rm -rf ./hol-guard-cursor-native-test-marker"
-    _record_cursor_pending_for_test(
-        store=store,
-        guard_home=home_dir,
-        guard_commands_module=guard_commands_module,
-        conversation_id=conversation_id,
-        command=command,
-        workspace_dir=workspace_dir,
-        generation_id=None,
-    )
-    approval_binding = read_cursor_shell_binding_file(
-        home_dir,
-        conversation_id=conversation_id,
-        command=command,
-    )
-    assert approval_binding is not None
-    assert approval_binding.startswith("hol-guard:")
-    saved = guard_commands_module._persist_cursor_native_permission_after_shell(
-        store=store,
-        payload=prepare_cursor_hook_payload(
-            {
-                "conversation_id": conversation_id,
-                "hook_event_name": "afterShellExecution",
-                "command": command,
-                "cwd": str(workspace_dir),
-                "duration": 8,
-            }
-        ),
-        harness="cursor",
-        home_dir=home_dir,
-        guard_home=home_dir,
-        workspace=workspace_dir,
-        hook_env=_trusted_cursor_after_shell_env(
-            home_dir,
-            conversation_id=conversation_id,
-            command=command,
-            workspace_dir=workspace_dir,
-            approval_binding=approval_binding,
-        ),
-    )
-    assert saved is True
-    assert guard_commands_module._cursor_native_shell_is_approved(
-        store,
-        prepare_cursor_hook_payload(
-            {
-                "conversation_id": conversation_id,
-                "hook_event_name": "beforeShellExecution",
-                "command": command,
-                "cwd": str(workspace_dir),
-            }
-        ),
-    )
-
-
-def test_cursor_after_shell_proof_message_uses_null_separator() -> None:
-    from codex_plugin_scanner.guard.adapters.cursor_native_approval import cursor_after_shell_proof_message
-
-    message = cursor_after_shell_proof_message(
-        conversation_id="conv-test",
-        command="echo hello",
-        approval_binding="hol-guard:test-binding",
-    )
-    assert message == (b"conv-test\x00echo hello\x00hol-guard:test-binding\x00afterShellExecution")
-
-
-def test_cursor_native_shell_session_allow_survives_approval_gate_block(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.cursor_hooks import prepare_cursor_hook_payload
-    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-    from codex_plugin_scanner.guard.store import GuardStore
-
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    store = GuardStore(home_dir)
-    conversation_id = "conv-cursor-session-allow"
-    command = "rm -rf ./hol-guard-cursor-native-test-marker"
-    generation_id = "gen-cursor-session-allow"
-    _record_cursor_pending_for_test(
-        store=store,
-        guard_home=home_dir,
-        guard_commands_module=guard_commands_module,
-        conversation_id=conversation_id,
-        command=command,
-        workspace_dir=workspace_dir,
-        generation_id=generation_id,
-    )
-    saved = guard_commands_module._persist_cursor_native_permission_after_shell(
-        store=store,
-        payload=prepare_cursor_hook_payload(
-            {
-                "conversation_id": conversation_id,
-                "generation_id": generation_id,
-                "hook_event_name": "afterShellExecution",
-                "command": command,
-                "cwd": str(workspace_dir),
-                "duration": 12,
-            }
-        ),
-        harness="cursor",
-        home_dir=home_dir,
-        guard_home=home_dir,
-        workspace=workspace_dir,
-        hook_env=_trusted_cursor_after_shell_env(
-            home_dir,
-            conversation_id=conversation_id,
-            command=command,
-            workspace_dir=workspace_dir,
-            approval_binding=generation_id,
-        ),
-    )
-    assert saved is True
-    assert guard_commands_module._cursor_native_shell_is_approved(
-        store,
-        prepare_cursor_hook_payload(
-            {
-                "conversation_id": conversation_id,
-                "hook_event_name": "beforeShellExecution",
-                "command": command,
-                "cwd": str(workspace_dir),
-            }
-        ),
-    )
-
-
 def test_normalize_cursor_shell_command_unwraps_lean_ctx_wrapper() -> None:
     from codex_plugin_scanner.guard.adapters.cursor_native_approval import normalize_cursor_shell_command
 
@@ -1862,94 +1186,6 @@ def test_normalize_cursor_shell_command_unwraps_lean_ctx_wrapper() -> None:
     assert "lean-ctx" not in normalized
 
 
-def test_cursor_native_shell_is_approved_for_lean_ctx_wrapped_retry(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-    from codex_plugin_scanner.guard.cli.commands_hook_runtime_eval import _cursor_native_saved_approval_hash
-    from codex_plugin_scanner.guard.store import GuardStore
-
-    home_dir = tmp_path / "home"
-    store = GuardStore(home_dir)
-    conversation_id = "conv-cursor-lean-ctx-session-allow"
-    command = "gh api graphql -f query='query { viewer { login } }'"
-    wrapped = "/path/to/lean-ctx -c 'gh api graphql -f query='\\''query { viewer { login } }'\\'''"
-    now = guard_commands_module._now()
-    assert guard_commands_module._record_cursor_native_shell_allow_state(
-        store=store,
-        conversation_id=conversation_id,
-        command=command,
-        artifact=_cursor_shell_artifact(workspace_dir=tmp_path, command=command),
-        artifact_hash="hash-gh-viewer-login",
-        now=now,
-    )
-
-    payload = {"conversation_id": conversation_id, "command": wrapped}
-    assert guard_commands_module._cursor_native_shell_is_approved(store, payload)
-    assert _cursor_native_saved_approval_hash(store, payload) == "hash-gh-viewer-login"
-
-
-def test_unsigned_cursor_native_shell_allowance_fails_closed_with_integrity_event(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-    from codex_plugin_scanner.guard.cli.commands_hook_runtime_eval import _cursor_native_saved_approval_hash
-
-    store = GuardStore(tmp_path / "home")
-    conversation_id = "conv-cursor-unsigned-session-allow"
-    command = "gh api graphql -f query='query { viewer { login } }'"
-    now = guard_commands_module._now()
-    state_key = guard_commands_module._cursor_native_shell_allow_state_key(conversation_id, command)
-    store.set_sync_payload(
-        state_key,
-        {
-            "saved_at": now,
-            "action": "allow",
-            "artifact_id": "cursor:project:tool-action:gh-viewer-login",
-            "artifact_hash": "hash-gh-viewer-login",
-            "artifact_name": "destructive shell command",
-            "command": command,
-            "native_source": "cursor-native",
-        },
-        now,
-    )
-
-    payload = {"conversation_id": conversation_id, "command": command}
-    assert not guard_commands_module._cursor_native_shell_is_approved(store, payload)
-    assert _cursor_native_saved_approval_hash(store, payload) is None
-    assert store.get_sync_payload(state_key) is None
-    events = store.list_events(event_name="rule.ignored.local_integrity")
-    assert len(events) == 1
-    assert events[0]["payload"]["source"] == "cursor-native-session"
-    assert events[0]["payload"]["integrity_status"] == "missing_integrity"
-
-
-def test_tampered_cursor_native_shell_allowance_fails_closed_with_integrity_event(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-    from codex_plugin_scanner.guard.cli.commands_hook_runtime_eval import _cursor_native_saved_approval_hash
-
-    store = GuardStore(tmp_path / "home")
-    conversation_id = "conv-cursor-tampered-session-allow"
-    command = "rm -rf ./sensitive-directory"
-    now = guard_commands_module._now()
-    state_key = guard_commands_module._cursor_native_shell_allow_state_key(conversation_id, command)
-    assert guard_commands_module._record_cursor_native_shell_allow_state(
-        store=store,
-        conversation_id=conversation_id,
-        command=command,
-        artifact=_cursor_shell_artifact(workspace_dir=tmp_path, command=command),
-        artifact_hash="hash-before-tamper",
-        now=now,
-    )
-    stored = store.get_sync_payload(state_key)
-    assert isinstance(stored, dict)
-    store.set_sync_payload(state_key, {**stored, "artifact_hash": "forged-hash"}, now)
-
-    payload = {"conversation_id": conversation_id, "command": command}
-    assert not guard_commands_module._cursor_native_shell_is_approved(store, payload)
-    assert _cursor_native_saved_approval_hash(store, payload) is None
-    events = store.list_events(event_name="rule.ignored.local_integrity")
-    assert len(events) == 1
-    assert events[0]["payload"]["integrity_status"] == "tampered"
-    assert events[0]["payload"]["message"] == "local_authority_integrity_payload_hash_mismatch"
-
-
 def test_signed_cursor_allowance_cannot_be_replayed_into_another_conversation(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 
@@ -1958,8 +1194,8 @@ def test_signed_cursor_allowance_cannot_be_replayed_into_another_conversation(tm
     forged_conversation = "conv-cursor-forged-copy"
     command = "rm -rf ./sensitive-directory"
     now = guard_commands_module._now()
-    approved_state_key = guard_commands_module._cursor_native_shell_allow_state_key(approved_conversation, command)
-    forged_state_key = guard_commands_module._cursor_native_shell_allow_state_key(forged_conversation, command)
+    approved_state_key = _cursor_native_shell_allow_key(approved_conversation, command)
+    forged_state_key = _cursor_native_shell_allow_key(forged_conversation, command)
     assert guard_commands_module._record_cursor_native_shell_allow_state(
         store=store,
         conversation_id=approved_conversation,
@@ -1988,7 +1224,7 @@ def test_malformed_cursor_allowance_json_fails_closed_with_integrity_event(tmp_p
     conversation_id = "conv-cursor-malformed-json"
     command = "rm -rf ./sensitive-directory"
     now = guard_commands_module._now()
-    state_key = guard_commands_module._cursor_native_shell_allow_state_key(conversation_id, command)
+    state_key = _cursor_native_shell_allow_key(conversation_id, command)
     assert guard_commands_module._record_cursor_native_shell_allow_state(
         store=store,
         conversation_id=conversation_id,
@@ -2023,7 +1259,7 @@ def test_cursor_native_shell_does_not_approve_unrelated_command(tmp_path: Path) 
     approved_command = "gh api graphql -f query='query { viewer { login } }'"
     now = guard_commands_module._now()
     store.set_sync_payload(
-        guard_commands_module._cursor_native_shell_allow_state_key(conversation_id, approved_command),
+        _cursor_native_shell_allow_key(conversation_id, approved_command),
         {
             "saved_at": now,
             "action": "allow",
@@ -2047,84 +1283,6 @@ def test_cursor_native_shell_does_not_approve_unrelated_command(tmp_path: Path) 
             "command": graphql_command,
         },
     )
-
-
-def test_cursor_after_shell_rejects_boolean_duration(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.cursor_hooks import prepare_cursor_hook_payload
-    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-    from codex_plugin_scanner.guard.store import GuardStore
-
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    store = GuardStore(home_dir)
-    conversation_id = "conv-cursor-bool-duration"
-    command = "rm -rf ./hol-guard-cursor-native-test-marker"
-    generation_id = "gen-cursor-bool-duration"
-    _record_cursor_pending_for_test(
-        store=store,
-        guard_home=home_dir,
-        guard_commands_module=guard_commands_module,
-        conversation_id=conversation_id,
-        command=command,
-        workspace_dir=workspace_dir,
-        generation_id=generation_id,
-    )
-    saved = guard_commands_module._persist_cursor_native_permission_after_shell(
-        store=store,
-        payload=prepare_cursor_hook_payload(
-            {
-                "conversation_id": conversation_id,
-                "generation_id": generation_id,
-                "hook_event_name": "afterShellExecution",
-                "command": command,
-                "cwd": str(workspace_dir),
-                "duration": True,
-            }
-        ),
-        harness="cursor",
-        home_dir=home_dir,
-        guard_home=home_dir,
-        workspace=workspace_dir,
-        hook_env=_trusted_cursor_after_shell_env(
-            home_dir,
-            conversation_id=conversation_id,
-            command=command,
-            workspace_dir=workspace_dir,
-            approval_binding=generation_id,
-        ),
-    )
-    assert saved is False
-
-
-def _trusted_cursor_after_observer_env(
-    guard_home: Path,
-    *,
-    conversation_id: str,
-    command: str,
-    observer_event: str,
-    approval_binding: str = "gen-cursor-test",
-) -> dict[str, str]:
-    from codex_plugin_scanner.guard.adapters.cursor_native_approval import (
-        compute_cursor_after_observer_proof,
-        ensure_cursor_hook_attestation_secret,
-    )
-
-    secret = ensure_cursor_hook_attestation_secret(guard_home)
-    proof = compute_cursor_after_observer_proof(
-        secret=secret,
-        conversation_id=conversation_id,
-        command=command,
-        approval_binding=approval_binding,
-        observer_event=observer_event,
-    )
-    return {
-        "HOL_GUARD_MANAGED_CURSOR_HOOK": "1",
-        "HOL_GUARD_CURSOR_AFTER_SHELL_PROOF": proof,
-        "HOL_GUARD_CURSOR_APPROVAL_BINDING": approval_binding,
-        "CURSOR_SESSION_ID": conversation_id,
-        "CURSOR_VERSION": "test",
-    }
 
 
 def test_cursor_shell_command_from_payload_prefers_inner_lean_ctx_command() -> None:
@@ -2166,67 +1324,6 @@ def test_cursor_shell_command_from_payload_prefers_bash_wrapper_inner_command() 
     assert command == "rm -rf ./hol-guard-cursor-native-mcp-marker"
 
 
-def test_cursor_native_mcp_session_allow_generic_tool_name(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.cursor_hooks import prepare_cursor_hook_payload
-    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-    from codex_plugin_scanner.guard.store import GuardStore
-
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    store = GuardStore(home_dir)
-    conversation_id = "conv-cursor-generic-mcp"
-    inner_command = "rm -rf ./hol-guard-cursor-native-mcp-marker"
-    generation_id = "gen-cursor-generic-mcp"
-    before_payload = prepare_cursor_hook_payload(
-        {
-            "conversation_id": conversation_id,
-            "generation_id": generation_id,
-            "hook_event_name": "beforeMCPExecution",
-            "tool_name": "run_terminal_cmd",
-            "tool_input": {"command": inner_command},
-        }
-    )
-    guard_commands_module._record_cursor_pending_shell_permission(
-        store=store,
-        guard_home=home_dir,
-        payload=before_payload,
-        reason="Requests a sensitive native tool action.",
-        artifact=_cursor_shell_artifact(workspace_dir=workspace_dir, command=inner_command),
-        artifact_hash="hash-cursor-generic-mcp-shell",
-    )
-    saved = guard_commands_module._persist_cursor_native_permission_after_shell(
-        store=store,
-        payload=prepare_cursor_hook_payload(
-            {
-                "conversation_id": conversation_id,
-                "generation_id": generation_id,
-                "hook_event_name": "afterMCPExecution",
-                "tool_name": "run_terminal_cmd",
-                "tool_input": {"command": inner_command},
-                "result_json": '{"ok": true}',
-                "duration": 12,
-            }
-        ),
-        harness="cursor",
-        home_dir=home_dir,
-        guard_home=home_dir,
-        workspace=workspace_dir,
-        hook_env=_trusted_cursor_after_observer_env(
-            home_dir,
-            conversation_id=conversation_id,
-            command=inner_command,
-            observer_event="afterMCPExecution",
-            approval_binding=generation_id,
-        ),
-    )
-    assert saved is True
-    assert guard_commands_module._cursor_native_shell_is_approved(
-        store,
-        before_payload,
-    )
-
-
 def test_extract_sensitive_tool_action_request_accepts_generic_mcp_tool_command() -> None:
     from codex_plugin_scanner.guard.runtime.secret_file_requests import (
         extract_sensitive_tool_action_request,
@@ -2238,68 +1335,6 @@ def test_extract_sensitive_tool_action_request_accepts_generic_mcp_tool_command(
     )
     assert match is not None
     assert match.action_class == "destructive shell command"
-
-
-def test_cursor_native_mcp_session_allow_after_trusted_after_mcp(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.cursor_hooks import prepare_cursor_hook_payload
-    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-    from codex_plugin_scanner.guard.store import GuardStore
-
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    store = GuardStore(home_dir)
-    conversation_id = "conv-cursor-native-mcp"
-    inner_command = "rm -rf ./hol-guard-cursor-native-mcp-marker"
-    generation_id = "gen-cursor-native-mcp"
-    before_payload = prepare_cursor_hook_payload(
-        {
-            "conversation_id": conversation_id,
-            "generation_id": generation_id,
-            "hook_event_name": "beforeMCPExecution",
-            "tool_name": "ctx_shell",
-            "tool_input": {"command": inner_command},
-            "command": str(home_dir / ".local" / "bin" / "lean-ctx"),
-        }
-    )
-    guard_commands_module._record_cursor_pending_shell_permission(
-        store=store,
-        guard_home=home_dir,
-        payload=before_payload,
-        reason="Requests a sensitive native tool action.",
-        artifact=_cursor_shell_artifact(workspace_dir=workspace_dir, command=inner_command),
-        artifact_hash="hash-cursor-mcp-shell",
-    )
-    saved = guard_commands_module._persist_cursor_native_permission_after_shell(
-        store=store,
-        payload=prepare_cursor_hook_payload(
-            {
-                "conversation_id": conversation_id,
-                "generation_id": generation_id,
-                "hook_event_name": "afterMCPExecution",
-                "tool_name": "ctx_shell",
-                "tool_input": {"command": inner_command},
-                "result_json": '{"ok": true}',
-                "duration": 12,
-            }
-        ),
-        harness="cursor",
-        home_dir=home_dir,
-        guard_home=home_dir,
-        workspace=workspace_dir,
-        hook_env=_trusted_cursor_after_observer_env(
-            home_dir,
-            conversation_id=conversation_id,
-            command=inner_command,
-            observer_event="afterMCPExecution",
-            approval_binding=generation_id,
-        ),
-    )
-    assert saved is True
-    assert guard_commands_module._cursor_native_shell_is_approved(
-        store,
-        before_payload,
-    )
 
 
 def test_uninstall_cursor_hooks_restores_backup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

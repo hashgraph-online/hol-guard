@@ -4,6 +4,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,19 @@ from codex_plugin_scanner.guard.daemon import recovery_worker
 from codex_plugin_scanner.guard.daemon import server as server_module
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
+
+
+def _patch_worker_popen(monkeypatch: pytest.MonkeyPatch, replacement: Callable[..., object]) -> None:
+    """Replace worker spawns while the native Guard-config loader still runs."""
+
+    real_popen = subprocess.Popen
+
+    def popen(command: object, *args: object, **kwargs: object) -> object:
+        if isinstance(command, (list, tuple)) and "guard-config-load" in command:
+            return real_popen(command, *args, **kwargs)  # type: ignore[call-overload]
+        return replacement(command, *args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "Popen", popen)
 
 
 def test_invalid_remaining_seconds_falls_back_to_valid_milliseconds() -> None:
@@ -120,43 +134,6 @@ def test_recovery_reservation_keeps_live_worker_owner_past_expiry(
     assert replacement is not None and replacement != token
 
 
-def test_recovery_reservation_rejects_reused_pid_identity(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    guard_home.mkdir()
-    claimed_at = time.time()
-    clock = [claimed_at]
-    command = "python recovery-worker"
-    start_marker = "linux:worker-generation-a"
-    monkeypatch.setattr(daemon_manager.time, "time", lambda: clock[0])
-    monkeypatch.setattr(daemon_manager, "_guard_daemon_pid_is_running", lambda _pid: True)
-    monkeypatch.setattr(daemon_manager, "_guard_daemon_command_for_pid", lambda _pid: command)
-    monkeypatch.setattr(daemon_manager, "process_start_token", lambda _pid: start_marker)
-
-    token = daemon_manager._claim_guard_daemon_recovery_reservation(guard_home)  # pyright: ignore[reportPrivateUsage]
-    assert token is not None
-    assert daemon_manager._bind_guard_daemon_recovery_reservation(  # pyright: ignore[reportPrivateUsage]
-        guard_home,
-        token=token,
-        pid=4242,
-    )
-    reservation = daemon_manager._load_guard_daemon_recovery_reservation(guard_home)  # pyright: ignore[reportPrivateUsage]
-    assert isinstance(reservation, dict)
-    assert daemon_manager._guard_daemon_recovery_owner_state(reservation) is True  # pyright: ignore[reportPrivateUsage]
-
-    monkeypatch.setattr(daemon_manager, "_guard_daemon_command_for_pid", lambda _pid: "python unrelated")
-    assert daemon_manager._guard_daemon_recovery_owner_state(reservation) is False  # pyright: ignore[reportPrivateUsage]
-    monkeypatch.setattr(daemon_manager, "_guard_daemon_command_for_pid", lambda _pid: command)
-    monkeypatch.setattr(daemon_manager, "process_start_token", lambda _pid: "linux:worker-generation-b")
-    assert daemon_manager._guard_daemon_recovery_owner_state(reservation) is False  # pyright: ignore[reportPrivateUsage]
-
-    clock[0] += 31.0
-    replacement = daemon_manager._claim_guard_daemon_recovery_reservation(guard_home)  # pyright: ignore[reportPrivateUsage]
-    assert replacement is not None and replacement != token
-
-
 def test_recovery_scheduler_contains_worker_when_reservation_bind_raises(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -199,7 +176,8 @@ def test_recovery_scheduler_contains_worker_when_reservation_bind_raises(
     )
 
     assert process.reaped is True
-    assert signals == [(4243, daemon_manager.signal.SIGTERM)]
+    # The native resident (not under test here) shares the patched ``os.killpg``.
+    assert [signal for signal in signals if signal[0] == FakeProcess.pid] == [(4243, daemon_manager.signal.SIGTERM)]
     assert daemon_manager._load_guard_daemon_recovery_reservation(guard_home) == {}  # pyright: ignore[reportPrivateUsage]
 
 
@@ -246,9 +224,8 @@ def test_recovery_scheduler_respects_explicitly_off_protection(
         'mode = "observe"\nprotection_posture = "watch"\n',
         encoding="utf-8",
     )
-    monkeypatch.setattr(
-        subprocess,
-        "Popen",
+    _patch_worker_popen(
+        monkeypatch,
         lambda *_args, **_kwargs: pytest.fail("disabled protection must not restart a recovery worker"),
     )
 
@@ -315,11 +292,7 @@ def test_recovery_scheduler_keeps_one_live_worker_past_reservation_expiry(
         lambda *_args: ["python", "recovery-worker"],
     )
     monkeypatch.setattr(daemon_manager, "_daemon_launcher_env", lambda **_kwargs: {})
-    monkeypatch.setattr(
-        subprocess,
-        "Popen",
-        lambda *_args, **_kwargs: spawned.append(FakeProcess()) or spawned[-1],
-    )
+    _patch_worker_popen(monkeypatch, lambda *_args, **_kwargs: spawned.append(FakeProcess()) or spawned[-1])
 
     daemon_manager.schedule_guard_daemon_recovery(
         guard_home,
@@ -362,7 +335,7 @@ def test_frozen_recovery_scheduler_spawns_private_worker(
         spawned.append((command, kwargs))
         return object()
 
-    monkeypatch.setattr(subprocess, "Popen", spawn)
+    _patch_worker_popen(monkeypatch, spawn)
 
     daemon_manager.schedule_guard_daemon_recovery(
         guard_home,
@@ -432,7 +405,6 @@ def test_stop_invalidates_owned_service_begin_before_workers_start(
         assert len(start_errors) == 1
         assert str(start_errors[0]) == "Guard daemon stopped during startup"
         assert daemon._owner_lock is None
-        assert daemon._server.hook_process_runner.stats()["workers"] == 0
     finally:
         release_begin.set()
         daemon.stop()

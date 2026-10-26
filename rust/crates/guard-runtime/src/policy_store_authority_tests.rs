@@ -3,10 +3,7 @@ use std::sync::atomic::AtomicUsize;
 
 #[test]
 fn watcher_samples_fingerprint_after_observed_lock() {
-    let unique = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
+    let unique = crate::unique_nanos::unique_nanos();
     let path = std::env::temp_dir().join(format!(
         "hol-guard-authority-watch-{}-{unique}.json",
         std::process::id()

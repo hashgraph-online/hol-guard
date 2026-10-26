@@ -6,173 +6,95 @@ import io
 import json
 import os
 import queue
-import shlex
-import subprocess
 import sys
 import threading
 from collections.abc import Callable, Mapping, Sequence
-from copy import deepcopy
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from functools import partial
-from hashlib import sha256
 from pathlib import Path
 from typing import IO, Any, Literal, TextIO, cast
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from uuid import uuid4
 
-from ..action_lattice import (
-    GuardActionNormalization,
-    most_restrictive_guard_action,
-    normalize_guard_action,
-)
 from ..adapters.base import HarnessContext
 from ..approval_gate import ApprovalGateError
 from ..approval_scope_support import package_request_runtime_workspace_scope
 from ..approvals import approval_prompt_flow, build_approval_browser_url, first_approval_url, queue_blocked_approvals
+from ..blocked_request_mode import asks_for_approval, safe_alternative_reason
 from ..browser_opener import open_browser_url
 from ..config import GuardConfig
 from ..daemon import ensure_guard_daemon
 from ..daemon.manager import load_guard_daemon_auth_token
+from ..harness_posture import config_for_harness
 from ..local_supply_chain import (
     _cleanup_external_archive_downloads,
+    _external_archive_downloads,
     _package_evaluation_requires_external_archive_binding,
-    _package_policy_override_evaluation,
     _resolve_stored_package_policy_override,
-    _verified_external_archive_replacements,
-    compose_current_package_policy_action,
-    package_request_policy_hash,
+    evaluate_package_request_artifact,
+    package_current_action_and_hash,
+    package_external_archive_override,
 )
 from ..mcp_tool_calls import (
-    ApprovalReuseClaimDisposition,
+    RUNTIME_TOOL_CALL_CONNECTOR_SETUP_REQUIRED,
     ToolCallDecision,
     allow_tool_call,
     block_tool_call,
-    build_tool_call_artifact,
-    build_tool_call_hash,
-    claimed_approval_authorizes_postclaim_review,
+    build_tool_call_identity,
     evaluate_tool_call,
-    resolve_tool_call_policy_action,
-    tool_call_risk_categories,
-    tool_call_risk_summary,
 )
 from ..models import GuardAction, GuardArtifact, HarnessDetection
+from ..native_approval_proof import (
+    ApprovalReuseClaimDisposition,
+    claimed_approval_authorizes_postclaim_review,
+    fresh_claim_allows_reapproval,
+)
+from ..native_decisions import NativeDecisionAuthorityError, NativeDecisionUnavailableError
+from ..native_execution import (
+    mcp_stdio_session_close_native,
+    mcp_stdio_session_open_native,
+)
+from ..native_hook_artifact_compose import NativeHookComposeError
+from ..native_mcp_proxy_decision import (
+    NativeMcpProxyDecisionError,
+    cursor_fact,
+    native_external_archive_bind,
+    native_inline_approval_reply,
+    native_inline_approval_reply_available,
+    native_mcp_proxy_decide,
+    native_package_answer,
+    package_facts,
+    tool_facts,
+)
+from ..native_mcp_relay_server_report import report_mcp_relay_server
+from ..native_package_authority import NativePackageArtifactUnavailableError
 from ..package_execution_context import build_package_execution_context
-from ..policy.engine import build_decision_v2
 from ..runtime.approval_context import (
     build_configured_environment_hash,
     build_runtime_launch_identity,
     resolved_runtime_launch_executable,
     runtime_launch_identity_matches,
 )
-from ..runtime.approval_reuse import APPROVAL_REUSE_CLAIM_FAILED
-from ..runtime.browser_mcp_intent import normalize_browser_mcp_intent
+from ..runtime.composio_contract import composio_names_a_wrapper
 from ..runtime.harness_attribution import origin_harness_env
 from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
-from ..runtime.package_execution_policy import is_execution_permitted
-from ..runtime.package_intent import build_package_request_artifact, extract_package_intent_request
-from ..runtime.signals import RiskSeverityLabel, RiskSignalV2
-from ..runtime.supply_chain_package_eval import evaluate_package_request_artifact
+from ..runtime.package_intent_common import build_package_request_artifact
+from ..runtime.package_intent_parser import extract_package_intent_request
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
 from ..tool_decision_evidence import tool_decision_scanner_evidence as _tool_decision_scanner_evidence
 from ._env import _build_scrubbed_env
+from .native_mcp_child_io import _ChildOutputFrame, _NativeChildProcess, _NativeMcpChildIo
+from .runtime_mcp_projection import McpCallProjector, connector_agent_text, review_artifact_payload
 from .stdio import (
     ProxyIoTimeoutError,
+    _approval_surface_policy_for_browser,
     _blocked_tool_response,
     _is_timeout_response,
     _quarantine_process,
     _readline_with_timeout,
-    _redact_json,
     _timeout_response,
 )
-
-
-def _guard_action(value: object) -> GuardAction:
-    return normalize_guard_action(value)
-
-
-_SHELL_COMMAND_ARGUMENT_KEYS = frozenset({"cmd", "command", "shellCommand", "shell_command"})
-
-
-class _ExternalArchiveBindingError(ValueError):
-    pass
-
-
-def _replace_external_archive_shell_command(
-    command: str,
-    *,
-    replacements: Mapping[str, str],
-    matched_sources: set[str],
-) -> str:
-    if not any(source_url in command for source_url in replacements):
-        return command
-    if sys.platform == "win32":
-        raise _ExternalArchiveBindingError("opaque Windows shell command cannot safely bind archive path")
-    if "`" in command or "$(" in command or "\n" in command or "\r" in command:
-        raise _ExternalArchiveBindingError("compound shell expression cannot safely bind archive path")
-    lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
-    lexer.whitespace_split = True
-    lexer.commenters = ""
-    try:
-        tokens = list(lexer)
-    except ValueError as error:
-        raise _ExternalArchiveBindingError("shell command could not be parsed for archive binding") from error
-    if any(token and all(character in "();<>|&" for character in token) for token in tokens):
-        raise _ExternalArchiveBindingError("compound shell command cannot safely bind archive path")
-    bound_tokens: list[str] = []
-    for token in tokens:
-        bound_token = token
-        for source_url, local_path in replacements.items():
-            if source_url not in bound_token:
-                continue
-            bound_token = bound_token.replace(source_url, local_path)
-            matched_sources.add(source_url)
-        bound_tokens.append(bound_token)
-    return shlex.join(bound_tokens)
-
-
-def _replace_external_archive_values(
-    value: object,
-    *,
-    replacements: Mapping[str, str],
-    matched_sources: set[str],
-    shell_command: bool = False,
-) -> object:
-    if isinstance(value, str):
-        if shell_command:
-            return _replace_external_archive_shell_command(
-                value,
-                replacements=replacements,
-                matched_sources=matched_sources,
-            )
-        replaced = value
-        for source_url, local_path in replacements.items():
-            if source_url not in replaced:
-                continue
-            replaced = replaced.replace(source_url, local_path)
-            matched_sources.add(source_url)
-        return replaced
-    if isinstance(value, list):
-        return [
-            _replace_external_archive_values(
-                item,
-                replacements=replacements,
-                matched_sources=matched_sources,
-                shell_command=False,
-            )
-            for item in value
-        ]
-    if isinstance(value, dict):
-        return {
-            key: _replace_external_archive_values(
-                item,
-                replacements=replacements,
-                matched_sources=matched_sources,
-                shell_command=key in _SHELL_COMMAND_ARGUMENT_KEYS and isinstance(item, str),
-            )
-            for key, item in value.items()
-        }
-    return value
 
 
 def _bound_external_archive_mcp_request(
@@ -180,273 +102,50 @@ def _bound_external_archive_mcp_request(
     params: dict[str, Any],
     *,
     evaluation: object,
+    guard_home: Path,
 ) -> tuple[dict[str, Any], dict[str, Any]] | None:
-    replacements = _verified_external_archive_replacements(evaluation)
-    if replacements is None:
-        return None
-    requires_binding = _package_evaluation_requires_external_archive_binding(evaluation)
-    if not replacements:
-        return None if requires_binding else (message, params)
-    matched_sources: set[str] = set()
+    downloads = _external_archive_downloads(evaluation)
+    requires_binding = _package_evaluation_requires_external_archive_binding(evaluation, guard_home=guard_home)
+    if not downloads and not requires_binding:
+        return message, params
     try:
-        bound_params = cast(
-            dict[str, Any],
-            _replace_external_archive_values(
-                deepcopy(params),
-                replacements=replacements,
-                matched_sources=matched_sources,
-            ),
+        # With no downloads the resident does not inspect params, so keep the request small.
+        bound_params = native_external_archive_bind(
+            params if downloads else {},
+            downloads,
+            requires_binding=requires_binding,
+            guard_home=guard_home,
         )
-    except _ExternalArchiveBindingError:
+    except NativeMcpProxyDecisionError:
         return None
-    if matched_sources != set(replacements):
+    if bound_params is None:
         return None
-    bound_message = deepcopy(message)
-    bound_message["params"] = bound_params
-    return bound_message, bound_params
+    if not downloads:
+        return message, params
+    return {**message, "params": bound_params}, bound_params
 
 
-def _approval_surface_policy_for_browser(configured_policy: object, approval_flow: Mapping[str, object]) -> str:
-    if approval_flow.get("tier") != "approval-center":
-        return "notify-only"
-    if approval_flow.get("auto_open_browser") is False:
-        return "never-auto-open"
-    policy = str(configured_policy or "auto-open-once")
-    if policy == "native-only":
-        return "never-auto-open"
-    return policy
-
-
-def _most_restrictive_package_policy_action(stored_action: object | None, current_action: object) -> GuardAction:
-    if stored_action is None:
-        return normalize_guard_action(current_action)
-    return most_restrictive_guard_action(stored_action, current_action)
-
-
-def _guard_action_normalization_evidence(
-    source: str,
-    normalization: GuardActionNormalization,
-) -> dict[str, object] | None:
-    if normalization.recognized:
-        return None
-    return {
-        "source": "guard_action_normalizer",
-        "input_source": source,
-        "reason_code": normalization.reason_code,
-        "original_action": normalization.original_action,
-        "original_type": normalization.original_type,
-        "normalized_action": normalization.action,
-    }
-
-
-def _tool_decision_after_runtime_allow(decision: ToolCallDecision, *, source: str) -> ToolCallDecision:
+def _tool_decision_after_runtime_allow(
+    decision: ToolCallDecision, *, source: str, policy_action: GuardAction
+) -> ToolCallDecision:
     return replace(
         decision,
         action="allow",
+        policy_action=policy_action,
         source=source,
         pending_approval_reuse_decision=None,
         approval_reuse_claim_disposition=None,
     )
 
 
-_APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM = "approval_reuse_context_changed_after_claim"
-_APPROVAL_REUSE_CONFIG_REFRESH_FAILED = "approval_reuse_current_config_refresh_failed"
-
-
-def _postclaim_authority_evidence(
-    scanner_evidence: tuple[dict[str, object], ...],
-    *,
-    context_matches: bool,
-    current_action: GuardAction,
-) -> tuple[dict[str, object], ...]:
-    if context_matches:
-        return scanner_evidence
-    return (
-        *scanner_evidence,
-        {
-            "source": "approval_reuse",
-            "status": "rejected",
-            "reason_code": _APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
-            "context_matches": context_matches,
-            "current_action": current_action,
-            "effective_action": current_action,
-        },
-    )
-
-
-def _postclaim_claim_evidence(
-    scanner_evidence: tuple[dict[str, object], ...],
-    *,
-    current_action: GuardAction,
-    claim_authorizes_review: bool,
-) -> tuple[dict[str, object], ...]:
-    """Record a retained-row revocation at an otherwise unchanged boundary."""
-
-    if current_action != "review" or claim_authorizes_review:
-        return scanner_evidence
-    return (
-        *scanner_evidence,
-        {
-            "source": "approval_reuse",
-            "status": "rejected",
-            "reason_code": _APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
-            "context_matches": True,
-            "claimed_authority_matches": False,
-            "current_action": current_action,
-            "effective_action": "require-reapproval",
-        },
-    )
-
-
-def _config_refresh_failure_evidence(
-    scanner_evidence: tuple[dict[str, object], ...],
-) -> tuple[dict[str, object], ...]:
-    return (
-        *scanner_evidence,
-        {
-            "source": "approval_reuse",
-            "status": "rejected",
-            "reason_code": _APPROVAL_REUSE_CONFIG_REFRESH_FAILED,
-            "effective_action": "require-reapproval",
-        },
-    )
-
-
-def _postclaim_tool_action(decision: ToolCallDecision) -> GuardAction:
-    current_action = normalize_guard_action(
-        decision.current_action if decision.current_action is not None else decision.action,
-        unknown_action="block",
-    )
-    if decision.saved_action is None or decision.saved_action == "allow":
-        return current_action
-    return most_restrictive_guard_action(
-        current_action,
-        decision.action,
-        unknown_action="block",
-    )
-
-
-_SECRET_ARGUMENT_KEY_FRAGMENTS = (
-    "apikey",
-    "authorization",
-    "cookie",
-    "credential",
-    "password",
-    "secret",
-    "token",
-)
-
-
-def _secret_shaped_argument_key(key: object) -> bool:
-    normalized = "".join(character for character in str(key).casefold() if character.isalnum())
-    return any(fragment in normalized for fragment in _SECRET_ARGUMENT_KEY_FRAGMENTS)
-
-
-def _redact_mcp_scalar(value: str) -> str:
-    parsed = urlsplit(value)
-    if parsed.scheme and parsed.netloc and parsed.query:
-        query = [
-            (key, "*****" if _secret_shaped_argument_key(key) else item)
-            for key, item in parse_qsl(parsed.query, keep_blank_values=True)
-        ]
-        value = urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urlencode(query), parsed.fragment))
-    redacted = _redact_json(value)
-    return redacted if isinstance(redacted, str) else "*****"
-
-
-def _safe_mcp_arguments(value: object) -> object:
-    """Project MCP arguments into a display/persistence-safe representation."""
-
-    if isinstance(value, Mapping):
-        return {
-            str(key): "*****" if _secret_shaped_argument_key(key) else _safe_mcp_arguments(item)
-            for key, item in value.items()
-        }
-    if isinstance(value, list | tuple):
-        return [_safe_mcp_arguments(item) for item in value]
-    if isinstance(value, str):
-        return _redact_mcp_scalar(value)
-    return value
-
-
-def _safe_mcp_params(params: Mapping[str, object]) -> dict[str, object]:
-    return cast(dict[str, object], _safe_mcp_arguments(params))
-
-
-def _mcp_arguments_digest(arguments: object) -> str:
-    try:
-        serialized = json.dumps(arguments, sort_keys=True, separators=(",", ":"), default=str)
-    except (TypeError, ValueError):
-        serialized = repr(arguments)
-    return sha256(serialized.encode("utf-8")).hexdigest()
-
-
-def _browser_intent_payload(
-    artifact: Any,
-    arguments: object,
-    *,
-    default_launch_target: str,
-) -> tuple[str, dict[str, object] | None]:
-    """Project the launch target label and safe browser intent payload for a tool call."""
-    browser_intent = normalize_browser_mcp_intent(artifact, arguments)
-    if browser_intent is None:
-        return default_launch_target, None
-    # Build a safer browser-specific launch target label
-    target = browser_intent.target_domain or browser_intent.target_origin or "unknown"
-    launch_target = f"{browser_intent.mcp_server_name} {browser_intent.operation} {target}"
-    browser_intent_dict = cast(
-        dict[str, object],
-        _safe_mcp_arguments(
-            {
-                "version": browser_intent.version,
-                "intent": browser_intent.intent,
-                "operation": browser_intent.operation,
-                "target_url": browser_intent.target_url,
-                "target_origin": browser_intent.target_origin,
-                "target_domain": browser_intent.target_domain,
-                "target_path_prefix": browser_intent.target_path_prefix,
-                "method": browser_intent.method,
-                "profile_mode": browser_intent.profile_mode,
-                "mcp_server_name": browser_intent.mcp_server_name,
-                "mcp_server_identity_hash": browser_intent.mcp_server_identity_hash,
-                "mcp_tool_name": browser_intent.mcp_tool_name,
-                "mcp_tool_identity_hash": browser_intent.mcp_tool_identity_hash,
-                "mcp_schema_hash": browser_intent.mcp_schema_hash,
-                "sensitive_surface_flags": list(browser_intent.sensitive_surface_flags),
-                "volatile_fields_dropped": list(browser_intent.volatile_fields_dropped),
-            }
-        ),
-    )
-    return launch_target, browser_intent_dict
-
-
 _ToolCatalogState = Literal["unobserved", "pending", "complete", "invalidated", "error"]
-_APPROVAL_REUSE_TOOL_CATALOG_INCOMPLETE = "approval_reuse_tool_catalog_incomplete"
 _TOOL_CATALOG_EXECUTION_BOUNDARY_CHANGED = "tool_catalog_changed_at_execution_boundary"
 _TOOLS_CALL_PREWRITE_QUIET_SECONDS = 0.005
+_RELAY_REPORT_EXIT_SECONDS = 2.0
 
 
 class _ToolCatalogBoundaryChangedError(RuntimeError):
     """The catalog authority changed before a guarded tool call was written."""
-
-
-@dataclass(frozen=True, slots=True)
-class _ChildOutputFrame:
-    line: str | None = None
-    error: BaseException | None = None
-
-
-def _canonical_tool_catalog_entry(name: str, definition: Mapping[str, object]) -> dict[str, object]:
-    """Normalize internal aliases while retaining every advertised field."""
-
-    canonical = {str(key): deepcopy(value) for key, value in definition.items() if str(key) != "name"}
-    if "input_schema" in canonical:
-        canonical.setdefault("inputSchema", canonical["input_schema"])
-        canonical.pop("input_schema", None)
-    if "output_schema" in canonical:
-        canonical.setdefault("outputSchema", canonical["output_schema"])
-        canonical.pop("output_schema", None)
-    return {"name": name, **canonical}
 
 
 def _tool_catalog_fingerprint(
@@ -454,31 +153,19 @@ def _tool_catalog_fingerprint(
     *,
     state: _ToolCatalogState = "complete",
 ) -> str:
-    """Hash catalog lifecycle state plus the complete canonical tool surface."""
+    """Hash catalog lifecycle state plus the complete canonical tool surface.
 
-    canonical_tools = [_canonical_tool_catalog_entry(name, catalog[name]) for name in sorted(catalog)]
-    serialized = json.dumps(
-        {
-            "state": state,
-            "tools": canonical_tools,
-            "version": "mcp-advertised-tool-catalog-v2",
-        },
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-        allow_nan=False,
-    )
-    return sha256(serialized.encode("utf-8")).hexdigest()
+    Canonicalization and hashing are native authority; this delegates. The
+    native validator returns `None` when the canonical document can't be
+    serialized — Python's `json.dumps(..., allow_nan=False)` raised
+    `ValueError` on the same condition, so this raises too.
+    """
+    from ..native_context import context_mcp_tool_catalog_fingerprint
 
-
-def _enforcement_action(
-    action: object,
-    *,
-    approval_decision: ToolCallDecision | None = None,
-) -> GuardAction:
-    if approval_decision is not None:
-        return resolve_tool_call_policy_action(approval_decision, action=action)
-    return normalize_guard_action(action)
+    fingerprint, _ = context_mcp_tool_catalog_fingerprint(catalog, state=state)
+    if fingerprint is None:
+        raise ValueError("mcp_tool_catalog_fingerprint_unserializable")
+    return fingerprint
 
 
 def _resolved_executable_identity(
@@ -523,6 +210,19 @@ def _configured_server_launch_environment(configured_keys: Sequence[str]) -> dic
     return _build_scrubbed_env(configured_values)
 
 
+def _ensure_native_launch_resident_verifier(store: GuardStore) -> None:
+    """Provision the resident verifier key before any native launch RPC.
+
+    See `native_policy_snapshot_publisher.ensure_native_launch_resident_verifier`
+    — the same prerequisite is shared with the stdio proxy, which opens native
+    resident sessions through a different entrypoint.
+    """
+
+    from ..native_policy_snapshot_publisher import ensure_native_launch_resident_verifier
+
+    ensure_native_launch_resident_verifier(store)
+
+
 @dataclass(frozen=True, slots=True)
 class _PackagePolicyResolution:
     base_evaluation: Any
@@ -545,6 +245,48 @@ class _ToolCallAuthority:
     catalog_generation: int
     catalog_state: _ToolCatalogState
     catalog_fingerprint: str
+    # The resident's route for ``decision`` when it was folded into evaluation.
+    route: Mapping[str, Any] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _PostclaimForward:
+    """Forwarding state the resident cleared after saved approvals were claimed."""
+
+    authoritative_action: GuardAction
+    artifact: Any
+    resolution: _PackagePolicyResolution
+    scanner_evidence: tuple[Any, ...]
+    catalog_generation: int
+    catalog_state: _ToolCatalogState
+    catalog_fingerprint: str
+
+
+@dataclass(frozen=True, slots=True)
+class _AnswerLeg:
+    """The side a stopped call is recorded against: the tool's or the package's."""
+
+    artifact: Any
+    artifact_hash: str
+    scanner_evidence: tuple[dict[str, object], ...]
+    signals: tuple[str, ...] = ()
+    risk_categories: tuple[str, ...] = ()
+    # The package evaluation; only the package side carries one.
+    evaluation: Any = None
+
+
+# The tool route's and the tool postclaim's stops, by the ``package_answer``
+# kind that renders them.
+_TOOL_STOP_KINDS = {"stored_block": "stored_tool_block", "terminal": "terminal_tool"}
+# The package precheck's stops, by the same kinds.
+_PACKAGE_PRECHECK_STOPS = {
+    "stored_package_block": "stored_package_block",
+    "terminal": "terminal_package",
+    "queue": "queue_package",
+}
+# The package compose and postclaim name their stops by those kinds already.
+_TOOL_SIDE_STOPS = frozenset({"stored_tool_block", "terminal_tool", "queue_tool"})
+_PACKAGE_SIDE_STOPS = frozenset({"stored_package_block", "terminal_package", "queue_package"})
 
 
 class RuntimeMcpGuardProxy:
@@ -572,28 +314,33 @@ class RuntimeMcpGuardProxy:
         self.command = command
         self.context = context
         self.store = store
-        self.config = config
+        from ..native_context import bound_context_digest_home
+
+        self.config = config_for_harness(config, harness)
         self.source_scope = source_scope
         self.config_path = config_path
         self.transport = transport
         self.server_id = server_id
         self._current_config_provider = current_config_provider
         self.server_env_keys = tuple(dict.fromkeys(key.strip() for key in server_env_keys if key.strip()))
-        initial_launch_env = _configured_server_launch_environment(self.server_env_keys)
-        self.server_identity = server_identity or build_mcp_server_identity(
-            config_path=self.config_path,
-            command=self.command[0] if self.command else "",
-            args=tuple(self.command[1:]),
-            transport=self.transport,
-            env=_configured_server_environment(initial_launch_env, self.server_env_keys),
-            env_keys=self.server_env_keys,
-        )
+        with bound_context_digest_home(context.guard_home):
+            _ensure_native_launch_resident_verifier(self.store)
+            initial_launch_env = _configured_server_launch_environment(self.server_env_keys)
+            self.server_identity = server_identity or build_mcp_server_identity(
+                config_path=self.config_path,
+                command=self.command[0] if self.command else "",
+                args=tuple(self.command[1:]),
+                transport=self.transport,
+                env=_configured_server_environment(initial_launch_env, self.server_env_keys),
+                env_keys=self.server_env_keys,
+            )
+        self._call_projector = McpCallProjector(context.guard_home)
         self._inline_prompt_available = False
         self._inline_prompt_counter = 0
         self._buffered_child_responses: dict[str, list[dict[str, Any]]] = {}
         self._buffered_client_responses: dict[str, list[dict[str, Any]]] = {}
         self._child_output_queue: queue.Queue[_ChildOutputFrame] | None = None
-        self._active_child_stdout: IO[str] | None = None
+        self._active_child_stdout: IO[str] | _NativeMcpChildIo | None = None
         self._tools_call_boundary_lock = threading.RLock()
         self._tool_catalog_state: _ToolCatalogState = "unobserved"
         self._tool_catalog: dict[str, dict[str, object]] = {}
@@ -602,7 +349,10 @@ class RuntimeMcpGuardProxy:
         self._tool_catalog_inflight = False
         self._tool_catalog_inflight_cursor: str | None = None
         self._tool_catalog_generation = 0
-        self._active_process: subprocess.Popen[str] | None = None
+        # The last complete catalog reported for the relay.
+        self._relay_reported_catalog: str | None = None
+        self._relay_report: threading.Thread | None = None
+        self._active_process: _NativeChildProcess | None = None
         self._active_runtime_launch_identity: dict[str, object] | None = None
         self._active_executable_identity: dict[str, object] | None = None
         self._active_server_env_values_hash: str | None = None
@@ -741,6 +491,7 @@ class RuntimeMcpGuardProxy:
             self._active_server_env_values_hash = None
             self._active_server_identity = None
             self._deactivate_child_process_io()
+            self._finish_relay_report()
 
     def _reset_child_process_state(self) -> None:
         self._buffered_child_responses.clear()
@@ -755,32 +506,12 @@ class RuntimeMcpGuardProxy:
         self._child_output_queue = None
         self._active_child_stdout = None
 
-    def _activate_child_output_pump(self, child_stdout: IO[str]) -> None:
-        output_queue: queue.Queue[_ChildOutputFrame] = queue.Queue()
-        self._child_output_queue = output_queue
-        self._active_child_stdout = child_stdout
+    def _prepare_launch(self) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
+        """Compute launch identity/env shared by the Popen and native paths.
 
-        def pump() -> None:
-            try:
-                while True:
-                    line = child_stdout.readline()
-                    if not line:
-                        output_queue.put(_ChildOutputFrame())
-                        return
-                    output_queue.put(_ChildOutputFrame(line=line))
-            except BaseException as exc:  # pragma: no cover - surfaced by the synchronous consumer
-                output_queue.put(_ChildOutputFrame(error=exc))
-
-        threading.Thread(
-            target=pump,
-            name=f"guard-mcp-child-output-{self.harness}-{self.server_name}",
-            daemon=True,
-        ).start()
-
-    def _start_process(self) -> subprocess.Popen[str]:
-        # A catalog belongs to one concrete server process. A replacement
-        # process must explicitly advertise a complete root-to-terminal list
-        # before any saved allow can be reused against it.
+        Populates ``self._active_*`` identity fields; callers clear them on
+        failure. Native resident must be reachable — these calls raise.
+        """
         self._reset_child_process_state()
         launch_env = _configured_server_launch_environment(self.server_env_keys)
         child_env = dict(launch_env)
@@ -812,36 +543,63 @@ class RuntimeMcpGuardProxy:
             env=configured_env,
             env_keys=self.server_env_keys,
         )
-        process: subprocess.Popen[str] | None = None
+        return launch_env, child_env, configured_env
+
+    def _clear_launch_identity(self) -> None:
+        self._active_executable_identity = None
+        self._active_runtime_launch_identity = None
+        self._active_server_env_values_hash = None
+        self._active_server_identity = None
+
+    def _start_process(self) -> _NativeChildProcess:
+        """Launch only through the resident that owns the migrated data plane."""
+        native_session_id: str | None = None
         try:
-            process = subprocess.Popen(
-                self.command,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=None,
-                text=True,
-                cwd=self.context.workspace_dir,
-                env=child_env,
-                executable=resolved_runtime_launch_executable(self._active_runtime_launch_identity),
+            launch_env, child_env, _configured_env = self._prepare_launch()
+            identity = self._active_runtime_launch_identity
+            if identity is None:
+                raise RuntimeError("Guard runtime MCP server executable could not be verified.")
+            executable = resolved_runtime_launch_executable(identity)
+            if not isinstance(executable, str) or not executable:
+                raise RuntimeError("Guard runtime MCP server executable could not be verified.")
+            argv = [executable, *self.command[1:]]
+            native_session_id = f"mcp-{self.harness}-{self.server_name}-{os.getpid()}-{uuid4().hex[:8]}"
+            opened = mcp_stdio_session_open_native(
+                argv,
+                session_id=native_session_id,
+                home_dir=Path(child_env["HOME"]) if child_env.get("HOME") else None,
+                cwd=self.context.workspace_dir or Path.cwd(),
+                extra_env=child_env,
+                guard_home=self.context.guard_home,
             )
+            if opened is None:
+                # An ambiguous transport result can follow a successful spawn.
+                # Keep the id for cleanup; never create a second Python child.
+                raise RuntimeError("Native MCP session authority is unavailable.")
+            if opened.get("status") != "opened":
+                raise RuntimeError(f"native MCP session open failed: {opened.get('payload')}")
             if not self._verify_post_spawn_launch_identity(launch_env=launch_env):
                 raise RuntimeError(
                     "Guard runtime MCP server launch identity changed while the child process was starting."
                 )
-            if process.stdout is not None:
-                self._activate_child_output_pump(process.stdout)
-            return process
+            # This queue injects already-decoded notifications into the relay;
+            # it is not a Python child-process transport or output reader.
+            self._child_output_queue = queue.Queue()
+            return _NativeChildProcess(native_session_id, self.context.guard_home)
         except BaseException:
-            if process is not None:
-                _quarantine_process(process)
-            self._active_executable_identity = None
-            self._active_runtime_launch_identity = None
-            self._active_server_env_values_hash = None
-            self._active_server_identity = None
+            try:
+                if native_session_id is not None:
+                    mcp_stdio_session_close_native(native_session_id, guard_home=self.context.guard_home)
+            except Exception:
+                # Preserve the original launch failure even if cleanup's
+                # transport is unavailable. Never retry through Python.
+                pass
+            finally:
+                self._clear_launch_identity()
             raise
 
     def _verify_post_spawn_launch_identity(self, *, launch_env: Mapping[str, str]) -> bool:
-        """Re-hash launch inputs after ``Popen`` and reject a spawn-time swap."""
+        """Re-hash launch inputs after native spawn and reject a spawn-time swap."""
 
         expected = self._active_runtime_launch_identity
         if expected is None:
@@ -897,24 +655,7 @@ class RuntimeMcpGuardProxy:
         config = provider()
         if not isinstance(config, GuardConfig):
             raise RuntimeError("runtime_mcp_current_config_provider_invalid")
-        return config
-
-    @staticmethod
-    def _catalog_boundary_failure_evidence(
-        scanner_evidence: tuple[dict[str, object], ...],
-        *,
-        phase: str,
-    ) -> tuple[dict[str, object], ...]:
-        return (
-            *scanner_evidence,
-            {
-                "source": "tool_catalog",
-                "status": "rejected",
-                "reason_code": _TOOL_CATALOG_EXECUTION_BOUNDARY_CHANGED,
-                "phase": phase,
-                "effective_action": "require-reapproval",
-            },
-        )
+        return config_for_harness(config, self.harness)
 
     def _catalog_boundary_failure_response(
         self,
@@ -931,65 +672,70 @@ class RuntimeMcpGuardProxy:
             arguments=params.get("arguments"),
         )
         fresh_decision = fresh_authority.decision
-        evidence = self._catalog_boundary_failure_evidence(
-            (*scanner_evidence, *_tool_decision_scanner_evidence(fresh_decision)),
-            phase=phase,
+        outcome = self._native_decide(
+            {"check": "boundary_failure", "phase": phase, "fresh": tool_facts(fresh_decision)}
         )
-        fresh_action = _enforcement_action(
-            fresh_decision.action,
-            approval_decision=fresh_decision,
+        evidence = (
+            *scanner_evidence,
+            *_tool_decision_scanner_evidence(fresh_decision),
+            *outcome["evidence_append"],
         )
-        if fresh_decision.saved_action == "block":
-            return self._stored_tool_block_response(
-                message_id=message_id,
-                artifact=fresh_authority.artifact,
-                artifact_hash=fresh_authority.artifact_hash,
-                tool_name=tool_name,
-                params=params,
-                signals=fresh_decision.signals,
-                risk_categories=fresh_decision.risk_categories,
-                scanner_evidence=evidence,
-                package_request=package_request,
-            )
-        if fresh_action in {"block", "sandbox-required"}:
-            return self._terminal_tool_response(
-                message_id=message_id,
-                artifact=fresh_authority.artifact,
-                artifact_hash=fresh_authority.artifact_hash,
-                tool_name=tool_name,
-                params=params,
-                policy_action=fresh_action,
-                signals=fresh_decision.signals,
-                risk_categories=fresh_decision.risk_categories,
-                scanner_evidence=evidence,
-            )
-        return self._queue_approval_center_response(
+        return self._stopped_call_response(
+            _TOOL_STOP_KINDS.get(outcome["kind"], "queue_tool"),
             message_id=message_id,
-            artifact=fresh_authority.artifact,
-            artifact_hash=fresh_authority.artifact_hash,
             tool_name=tool_name,
-            signals=fresh_decision.signals,
             params=params,
-            scanner_evidence=evidence,
-            policy_action="require-reapproval",
+            leg=_AnswerLeg(
+                fresh_authority.artifact,
+                fresh_authority.artifact_hash,
+                evidence,
+                fresh_decision.signals,
+                fresh_decision.risk_categories,
+            ),
+            policy_action=outcome.get("policy_action"),
+            package_request=package_request,
         )
 
-    def _disable_saved_allow_without_complete_catalog(self, decision: ToolCallDecision) -> ToolCallDecision:
-        """Reject saved-allow authority until this process has a complete catalog."""
+    def _native_decide(
+        self,
+        query: Mapping[str, object],
+        *,
+        supply: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Ask the native resident for a proxy decision; any failure raises."""
 
-        if self._tool_catalog_state == "complete" or decision.pending_approval_reuse_decision is None:
+        return native_mcp_proxy_decide(query, guard_home=Path(self.store.guard_home), supply=supply)
+
+    def _native_evidence_item(self, kind: str) -> dict[str, object]:
+        """The resident's evidence item for a claim or config refresh failure."""
+
+        return dict(self._native_decide({"check": "evidence_item", "kind": kind})["item"])
+
+    def _apply_saved_allow_gate(
+        self,
+        decision: ToolCallDecision,
+        gate: Mapping[str, Any] | None = None,
+    ) -> ToolCallDecision:
+        """Present the resident's saved-allow gate verdict on a decision."""
+
+        if gate is None:
+            gate = self._native_decide(
+                {
+                    "check": "saved_allow_gate",
+                    "catalog_state": self._tool_catalog_state,
+                    "decision": tool_facts(decision),
+                }
+            )
+        if not gate["disable"]:
             return decision
-        current_action = _guard_action(decision.current_action or decision.action)
         return replace(
             decision,
-            action=current_action,
-            source="tool-catalog-state",
-            summary=(
-                "Guard cannot reuse a saved MCP approval until the current server process "
-                "has advertised a complete tool catalog."
-            ),
-            approval_reuse_status="rejected",
-            approval_reuse_reason_code=_APPROVAL_REUSE_TOOL_CATALOG_INCOMPLETE,
+            action=gate["action"],
+            policy_action=gate["policy_action"],
+            source=gate["source"],
+            summary=gate["summary"],
+            approval_reuse_status=gate["approval_reuse_status"],
+            approval_reuse_reason_code=gate["approval_reuse_reason_code"],
             pending_approval_reuse_decision=None,
             approval_reuse_claim_disposition=None,
         )
@@ -1000,20 +746,33 @@ class RuntimeMcpGuardProxy:
         tool_name: str,
         arguments: object,
         config: GuardConfig | None = None,
+        route_inputs: Mapping[str, object] | None = None,
     ) -> _ToolCallAuthority:
-        """Rebuild the complete current tool-call identity and policy result."""
+        """Rebuild the complete current tool-call identity and policy result.
+
+        With ``route_inputs`` the resident also answers the saved-allow gate and
+        the route for the decision in the same call.
+        """
 
         authority_config = config or self.config
+        # The native canonical catalog page retains `name` inside each entry.
+        # Strip it before the build so the name-matched `mcp_tool_authority_hash`
+        # is not written into hash-affecting `metadata`; the resident binds the
+        # full definition in `runtime_private_metadata` without changing the
+        # exact saved-block artifact hash.
         tool_definition = self._tool_catalog.get(tool_name, {})
-        tool_description_value = tool_definition.get("description")
-        tool_schema = tool_definition.get("inputSchema", tool_definition.get("input_schema"))
+        public_tool_definition = {key: value for key, value in tool_definition.items() if key != "name"}
         catalog_generation = self._tool_catalog_generation
         catalog_state = self._tool_catalog_state
         catalog_fingerprint = _tool_catalog_fingerprint(
             self._tool_catalog,
             state=catalog_state,
         )
-        artifact = build_tool_call_artifact(
+        identity = build_tool_call_identity(
+            arguments=arguments,
+            workspace=self.context.workspace_dir or Path.cwd(),
+            config=authority_config,
+            guard_home=self.store.guard_home,
             harness=self.harness,
             server_name=self.server_name,
             tool_name=tool_name,
@@ -1030,25 +789,34 @@ class RuntimeMcpGuardProxy:
                 "tool_catalog_fingerprint": catalog_fingerprint,
             },
             server_identity=self._session_server_identity(),
-            tool_schema=tool_schema,
-            tool_description=tool_description_value if isinstance(tool_description_value, str) else None,
+            tool_definition=public_tool_definition,
+            provider_catalog_hash=(
+                self.store.read_mcp_provider_authority_hash() if composio_names_a_wrapper(tool_name) else None
+            ),
         )
-        artifact_hash = build_tool_call_hash(
-            artifact,
-            arguments,
-            workspace=self.context.workspace_dir or Path.cwd(),
+        artifact, artifact_hash = identity.artifact, identity.artifact_hash
+        if artifact_hash is None:
+            raise ValueError("native_mcp_tool_approval_hash_unavailable")
+        gate_state = self._tool_catalog_state
+        folded: dict[str, Any] = {}
+        evaluated = evaluate_tool_call(
+            store=self.store,
             config=authority_config,
+            artifact=artifact,
+            artifact_hash=artifact_hash,
+            arguments=arguments,
+            claim_saved_approval=False,
+            proxy_input=None if route_inputs is None else {**route_inputs, "catalog_state": gate_state},
+            proxy_out=None if route_inputs is None else folded,
         )
-        decision = self._disable_saved_allow_without_complete_catalog(
-            evaluate_tool_call(
-                store=self.store,
-                config=authority_config,
-                artifact=artifact,
-                artifact_hash=artifact_hash,
-                arguments=arguments,
-                claim_saved_approval=False,
-            )
-        )
+        route: Mapping[str, Any] | None = None
+        verdict = folded.get("proxy")
+        # The folded gate is valid only for the catalog state it was asked under.
+        if verdict is not None and self._tool_catalog_state == gate_state:
+            decision = self._apply_saved_allow_gate(evaluated, verdict["gate"])
+            route = verdict["route"]
+        else:
+            decision = self._apply_saved_allow_gate(evaluated)
         return _ToolCallAuthority(
             artifact=artifact,
             artifact_hash=artifact_hash,
@@ -1056,14 +824,15 @@ class RuntimeMcpGuardProxy:
             catalog_generation=catalog_generation,
             catalog_state=catalog_state,
             catalog_fingerprint=catalog_fingerprint,
+            route=route,
         )
 
     def _handle_message(
         self,
         *,
         message: dict[str, Any],
-        child_stdin: IO[str],
-        child_stdout: IO[str],
+        child_stdin: IO[str] | _NativeMcpChildIo,
+        child_stdout: IO[str] | _NativeMcpChildIo,
         client_input: TextIO | None,
         server_output: TextIO | None,
         approval_callback: Any | None,
@@ -1100,7 +869,6 @@ class RuntimeMcpGuardProxy:
         artifact_hash: str,
         decision: ToolCallDecision,
         scanner_evidence: tuple[dict[str, object], ...],
-        arguments: object,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         block_tool_call(
             store=self.store,
@@ -1110,7 +878,7 @@ class RuntimeMcpGuardProxy:
             now=_now(),
             signals=decision.signals,
             risk_categories=decision.risk_categories,
-            arguments=_safe_mcp_arguments(arguments),
+            arguments=self._call_projector.project(tool_name, message.get("params")).safe_arguments,
             additional_scanner_evidence=scanner_evidence,
             policy_action="block",
         )
@@ -1126,35 +894,33 @@ class RuntimeMcpGuardProxy:
             "approval_requests": [],
         }
 
+    @staticmethod
     def _inline_approval_deny_result(
-        self,
-        approval_result: object,
+        answer: object,
         deny_tool_call: Callable[..., tuple[dict[str, Any], dict[str, Any]]],
-        tool_name: str,
     ) -> tuple[dict[str, Any], dict[str, Any]] | None:
-        if _approval_denies(approval_result):
-            return deny_tool_call(
-                decision_source="inline-denied",
-                event_decision="deny-inline",
-                reason=f"HOL Guard blocked tool call {tool_name} from {self.server_name}.",
-            )
-        if _approval_invalid(approval_result):
-            return deny_tool_call(
-                decision_source="inline-invalid",
-                event_decision="deny-inline-invalid",
-                reason=(
-                    f"HOL Guard blocked tool call {tool_name} from {self.server_name} because inline "
-                    "approval returned an invalid response."
-                ),
-            )
-        return None
+        """The block the resident named for a refused or malformed answer.
+
+        The resident classified the answer and composed the block, so an answer
+        that names none leaves the call unblocked here; the route treats that as
+        an inline decision it never bound and fails closed on it.
+        """
+
+        block = answer.get("block") if isinstance(answer, Mapping) else None
+        if not isinstance(block, Mapping):
+            return None
+        return deny_tool_call(
+            decision_source=block["decision_source"],
+            event_decision=block["event_decision"],
+            reason=block["reason"],
+        )
 
     def _handle_message_serialized(
         self,
         *,
         message: dict[str, Any],
-        child_stdin: IO[str],
-        child_stdout: IO[str],
+        child_stdin: IO[str] | _NativeMcpChildIo,
+        child_stdout: IO[str] | _NativeMcpChildIo,
         client_input: TextIO | None,
         server_output: TextIO | None,
         approval_callback: Any | None,
@@ -1166,7 +932,11 @@ class RuntimeMcpGuardProxy:
             "method": method,
             "tool_name": params.get("name") if isinstance(params, dict) else None,
             "decision": "forward",
-            "redacted_params": _safe_mcp_params(params) if isinstance(params, Mapping) else {},
+            "redacted_params": (
+                self._call_projector.project(str(params.get("name") or "unknown"), params).safe_params
+                if isinstance(params, dict)
+                else {}
+            ),
         }
         if method in {"notifications/tools/list_changed", "tools/list_changed"}:
             self._invalidate_tools_catalog()
@@ -1229,334 +999,285 @@ class RuntimeMcpGuardProxy:
                 "approval_requests": [],
             }
 
+        try:
+            return self._handle_tool_call(
+                message=message,
+                params=params,
+                event=event,
+                child_stdin=child_stdin,
+                child_stdout=child_stdout,
+                client_input=client_input,
+                server_output=server_output,
+                approval_callback=approval_callback,
+            )
+        except (
+            NativeMcpProxyDecisionError,
+            NativeDecisionAuthorityError,
+            NativeDecisionUnavailableError,
+            NativeHookComposeError,
+            NativePackageArtifactUnavailableError,
+            KeyError,
+            TypeError,
+        ):
+            # No authoritative native answer, or one whose shape the proxy cannot
+            # read: nothing executes.
+            return _blocked_tool_response(
+                message.get("id"),
+                str(params.get("name") or "unknown"),
+                "HOL Guard could not obtain a native decision for this tool call.",
+                {"approvalRequests": [], "guardPolicyAction": "block"},
+            ), {
+                **event,
+                "decision": "native-decision-unavailable",
+                "policy_action": "block",
+                "approval_requests": [],
+            }
+
+    @staticmethod
+    def _apply_decision_override(decision: ToolCallDecision, override: Mapping[str, Any] | None) -> ToolCallDecision:
+        """Present the resident's observe-mode downgrade of a tool decision."""
+
+        if override is None:
+            return decision
+        return replace(
+            decision,
+            action=override["action"],
+            policy_action=override["policy_action"],
+            source=override["source"],
+            pending_approval_reuse_decision=None,
+            approval_reuse_claim_disposition=None,
+        )
+
+    def _route_inputs(
+        self,
+        *,
+        tool_name: str,
+        package_artifact: Any | None,
+        approval_callback: Any | None,
+    ) -> dict[str, object]:
+        """The non-decision facts the resident routes a tool call on."""
+
+        return {
+            "mode": self.config.mode,
+            "package_present": package_artifact is not None,
+            "asks_for_approval": bool(asks_for_approval(self.config)),
+            # A prompt is only worth raising when the resident can classify the
+            # answer. Without the query every answer -- including an approval the
+            # user gave -- fails closed into the approval queue, so an older
+            # resident would interrupt the user for nothing.
+            "inline_available": bool(
+                self._inline_prompt_available
+                and approval_callback is not None
+                and native_inline_approval_reply_available()
+            ),
+            "tool_name": tool_name,
+        }
+
+    def _route_tool_call(
+        self,
+        *,
+        decision: ToolCallDecision,
+        tool_name: str,
+        package_artifact: Any | None,
+        approval_callback: Any | None,
+        held: dict[str, Any],
+        folded_route: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Ask the resident how one tool call routes, supplying facts on demand.
+
+        A route the resident already folded into the decision (one that needs no
+        caller-supplied fact) is used as is.
+        """
+
+        if folded_route is not None and folded_route.get("need") is None:
+            return dict(folded_route)
+
+        def effective(need: Mapping[str, Any]) -> ToolCallDecision:
+            return self._apply_decision_override(decision, need.get("decision_override"))
+
+        def package_policy(_need: Mapping[str, Any]) -> dict[str, object]:
+            resolution = self._resolve_package_policy(artifact=package_artifact)
+            held["package_resolution"] = resolution
+            return {"package_saved_policy_blocks": bool(resolution.saved_policy_blocks)}
+
+        def native_prompt(need: Mapping[str, Any]) -> dict[str, object]:
+            return {"native_prompt_allows": bool(self._allow_after_native_prompt(effective(need)))}
+
+        def inline_approval(need: Mapping[str, Any]) -> dict[str, object]:
+            if approval_callback is None:
+                return {"inline_approval": "fallthrough"}
+            result = approval_callback(self._inline_approval_request(tool_name, effective(need).summary))
+            answer = native_inline_approval_reply(
+                result,
+                tool_name=tool_name,
+                server_name=self.server_name,
+                guard_home=Path(self.store.guard_home),
+            )
+            held["inline_approval_answer"] = answer
+            return {"inline_approval": answer["inline_approval"]}
+
+        return self._native_decide(
+            {
+                "check": "route_tool_call",
+                **self._route_inputs(
+                    tool_name=tool_name,
+                    package_artifact=package_artifact,
+                    approval_callback=approval_callback,
+                ),
+                "decision": tool_facts(decision),
+            },
+            supply={
+                "package_policy": package_policy,
+                "native_prompt": native_prompt,
+                "inline_approval": inline_approval,
+            },
+        )
+
+    def _handle_tool_call(
+        self,
+        *,
+        message: dict[str, Any],
+        params: dict[str, Any],
+        event: dict[str, Any],
+        child_stdin: IO[str] | _NativeMcpChildIo,
+        child_stdout: IO[str] | _NativeMcpChildIo,
+        client_input: TextIO | None,
+        server_output: TextIO | None,
+        approval_callback: Any | None,
+    ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
         tool_name = str(params.get("name") or "unknown")
         arguments = params.get("arguments")
-        authority = self._resolve_tool_call_authority(tool_name=tool_name, arguments=arguments)
+        package_artifact = self._package_request_artifact(tool_name=tool_name, arguments=arguments)
+        authority = self._resolve_tool_call_authority(
+            tool_name=tool_name,
+            arguments=arguments,
+            route_inputs=self._route_inputs(
+                tool_name=tool_name,
+                package_artifact=package_artifact,
+                approval_callback=approval_callback,
+            ),
+        )
         artifact = authority.artifact
         tool_artifact_hash = authority.artifact_hash
-        package_artifact = self._package_request_artifact(tool_name=tool_name, arguments=arguments)
-        decision = authority.decision
-        if (
-            package_artifact is None
-            and self.config.mode == "observe"
-            and decision.pending_approval_reuse_decision is not None
-            and decision.current_action is not None
-        ):
-            decision = replace(
-                decision,
-                action=decision.current_action,
-                source="observe-current-policy",
-                pending_approval_reuse_decision=None,
-                approval_reuse_claim_disposition=None,
-            )
-        decision_scanner_evidence = _tool_decision_scanner_evidence(decision)
-        deny_inline_call = partial(
-            self._deny_inline_tool_call,
-            message=message,
+        held: dict[str, Any] = {}
+        routed = self._route_tool_call(
+            decision=authority.decision,
             tool_name=tool_name,
-            event=event,
-            artifact=artifact,
-            artifact_hash=tool_artifact_hash,
-            decision=decision,
-            scanner_evidence=decision_scanner_evidence,
-            arguments=arguments,
+            package_artifact=package_artifact,
+            approval_callback=approval_callback,
+            held=held,
+            folded_route=authority.route,
         )
-        if decision.saved_action == "block":
-            return self._stored_tool_block_response(
+        decision = self._apply_decision_override(authority.decision, routed["decision_override"])
+        decision_scanner_evidence = _tool_decision_scanner_evidence(decision)
+        route = routed["route"]
+        kind = route["kind"]
+        tool_policy_action = routed["tool_policy_action"]
+        boundary: dict[str, Any] = {
+            "expected_catalog_generation": authority.catalog_generation,
+            "expected_catalog_state": authority.catalog_state,
+            "expected_catalog_fingerprint": authority.catalog_fingerprint,
+        }
+
+        def queue() -> tuple[dict[str, Any], dict[str, Any]]:
+            return self._queue_approval_center_response(
                 message_id=message.get("id"),
                 artifact=artifact,
                 artifact_hash=tool_artifact_hash,
                 tool_name=tool_name,
-                params=params,
                 signals=decision.signals,
-                risk_categories=decision.risk_categories,
+                params=params,
                 scanner_evidence=decision_scanner_evidence,
+                policy_action=tool_policy_action,
+                connector_setup=decision.connector_setup if tool_policy_action == "review" else None,
+            )
+
+        if kind in _TOOL_STOP_KINDS:
+            return self._stopped_call_response(
+                _TOOL_STOP_KINDS[kind],
+                message_id=message.get("id"),
+                tool_name=tool_name,
+                params=params,
+                leg=_AnswerLeg(
+                    artifact, tool_artifact_hash, decision_scanner_evidence, decision.signals, decision.risk_categories
+                ),
+                policy_action=route.get("policy_action"),
                 package_request=package_artifact is not None,
             )
-        tool_policy_action = _enforcement_action(
-            decision.action,
-            approval_decision=decision,
-        )
-        if tool_policy_action in {"block", "sandbox-required"}:
-            return self._terminal_tool_response(
-                message_id=message.get("id"),
-                artifact=artifact,
-                artifact_hash=tool_artifact_hash,
-                tool_name=tool_name,
-                params=params,
-                policy_action=tool_policy_action,
-                signals=decision.signals,
-                risk_categories=decision.risk_categories,
-                scanner_evidence=decision_scanner_evidence,
-            )
-        if package_artifact is not None:
-            package_resolution = self._resolve_package_policy(artifact=package_artifact)
-            if package_resolution.saved_policy_blocks:
-                return self._handle_package_request(
+        if kind == "queue":
+            return queue()
+        if kind == "inline_denied":
+            denied = self._inline_approval_deny_result(
+                held.get("inline_approval_answer"),
+                deny_tool_call=partial(
+                    self._deny_inline_tool_call,
                     message=message,
-                    child_stdin=child_stdin,
-                    child_stdout=child_stdout,
-                    client_input=client_input,
-                    server_output=server_output,
                     tool_name=tool_name,
-                    params=params,
-                    artifact=package_artifact,
-                    tool_artifact=artifact,
-                    tool_artifact_hash=tool_artifact_hash,
-                    tool_decision=decision,
-                    tool_scanner_evidence=decision_scanner_evidence,
-                    package_resolution=package_resolution,
-                    expected_catalog_generation=authority.catalog_generation,
-                    expected_catalog_state=authority.catalog_state,
-                    expected_catalog_fingerprint=authority.catalog_fingerprint,
-                )
-            if decision.action in {"allow", "warn"}:
-                response, package_event = self._handle_package_request(
-                    message=message,
-                    child_stdin=child_stdin,
-                    child_stdout=child_stdout,
-                    client_input=client_input,
-                    server_output=server_output,
-                    tool_name=tool_name,
-                    params=params,
-                    artifact=package_artifact,
-                    tool_artifact=artifact,
-                    tool_artifact_hash=tool_artifact_hash,
-                    tool_decision=decision,
-                    tool_scanner_evidence=decision_scanner_evidence,
-                    package_resolution=package_resolution,
-                    expected_catalog_generation=authority.catalog_generation,
-                    expected_catalog_state=authority.catalog_state,
-                    expected_catalog_fingerprint=authority.catalog_fingerprint,
-                )
-                return response, package_event
-            if self._allow_after_native_prompt(decision):
-                response, package_event = self._handle_package_request(
-                    message=message,
-                    child_stdin=child_stdin,
-                    child_stdout=child_stdout,
-                    client_input=client_input,
-                    server_output=server_output,
-                    tool_name=tool_name,
-                    params=params,
-                    artifact=package_artifact,
-                    tool_artifact=artifact,
-                    tool_artifact_hash=tool_artifact_hash,
-                    tool_decision=_tool_decision_after_runtime_allow(decision, source="native-approved"),
-                    tool_scanner_evidence=decision_scanner_evidence,
-                    package_resolution=package_resolution,
-                    expected_catalog_generation=authority.catalog_generation,
-                    expected_catalog_state=authority.catalog_state,
-                    expected_catalog_fingerprint=authority.catalog_fingerprint,
-                )
-                return response, package_event
-            if self._inline_prompt_available and approval_callback is not None:
-                approval_result = approval_callback(self._inline_approval_request(tool_name, decision.summary))
-                if _approval_allows(approval_result):
-                    try:
-                        allow_tool_call(
-                            store=self.store,
-                            artifact=artifact,
-                            artifact_hash=tool_artifact_hash,
-                            decision_source="inline-approved",
-                            now=_now(),
-                            signals=decision.signals,
-                            risk_categories=decision.risk_categories,
-                            remember=True,
-                            arguments=_safe_mcp_arguments(arguments),
-                            additional_scanner_evidence=decision_scanner_evidence,
-                            emit_runtime_evidence=False,
-                        )
-                    except ApprovalGateError:
-                        return self._queue_approval_center_response(
-                            message_id=message.get("id"),
-                            artifact=artifact,
-                            artifact_hash=tool_artifact_hash,
-                            tool_name=tool_name,
-                            signals=decision.signals,
-                            params=params,
-                            scanner_evidence=decision_scanner_evidence,
-                            policy_action=tool_policy_action,
-                        )
-                    response, package_event = self._handle_package_request(
-                        message=message,
-                        child_stdin=child_stdin,
-                        child_stdout=child_stdout,
-                        client_input=client_input,
-                        server_output=server_output,
-                        tool_name=tool_name,
-                        params=params,
-                        artifact=package_artifact,
-                        tool_artifact=artifact,
-                        tool_artifact_hash=tool_artifact_hash,
-                        tool_decision=_tool_decision_after_runtime_allow(decision, source="inline-approved"),
-                        tool_scanner_evidence=decision_scanner_evidence,
-                        package_resolution=package_resolution,
-                        expected_catalog_generation=authority.catalog_generation,
-                        expected_catalog_state=authority.catalog_state,
-                        expected_catalog_fingerprint=authority.catalog_fingerprint,
-                        remember_allow=True,
-                        remember_decision_source="inline-approved",
-                        remember_signals=decision.signals,
-                        remember_risk_categories=decision.risk_categories,
-                    )
-                    return response, package_event
-                denied = self._inline_approval_deny_result(
-                    approval_result,
-                    deny_tool_call=deny_inline_call,
-                    tool_name=tool_name,
-                )
-                if denied is not None:
-                    return denied
-            if self.config.mode == "observe":
-                response, package_event = self._handle_package_request(
-                    message=message,
-                    child_stdin=child_stdin,
-                    child_stdout=child_stdout,
-                    client_input=client_input,
-                    server_output=server_output,
-                    tool_name=tool_name,
-                    params=params,
-                    artifact=package_artifact,
-                    tool_artifact=artifact,
-                    tool_artifact_hash=tool_artifact_hash,
-                    tool_decision=_tool_decision_after_runtime_allow(decision, source="policy-allow"),
-                    tool_scanner_evidence=decision_scanner_evidence,
-                    package_resolution=package_resolution,
-                    expected_catalog_generation=authority.catalog_generation,
-                    expected_catalog_state=authority.catalog_state,
-                    expected_catalog_fingerprint=authority.catalog_fingerprint,
-                )
-                return response, package_event
-            response, queued_event = self._queue_approval_center_response(
-                message_id=message.get("id"),
-                artifact=artifact,
-                artifact_hash=tool_artifact_hash,
-                tool_name=tool_name,
-                signals=decision.signals,
-                params=params,
-                scanner_evidence=decision_scanner_evidence,
-                policy_action=tool_policy_action,
-            )
-            return response, queued_event
-        if decision.action in {"allow", "warn"}:
-            return self._allow_and_forward(
-                message=message,
-                child_stdin=child_stdin,
-                child_stdout=child_stdout,
-                client_input=client_input,
-                server_output=server_output,
-                artifact=artifact,
-                artifact_hash=tool_artifact_hash,
-                decision_source=_decision_source(decision.action, decision.source),
-                signals=decision.signals,
-                risk_categories=decision.risk_categories,
-                params=params,
-                scanner_evidence=decision_scanner_evidence,
-                policy_action=_enforcement_action(
-                    decision.action,
-                    approval_decision=decision,
-                ),
-                approval_decision=decision,
-                expected_catalog_generation=authority.catalog_generation,
-                expected_catalog_state=authority.catalog_state,
-                expected_catalog_fingerprint=authority.catalog_fingerprint,
-            )
-        if self._allow_after_native_prompt(decision):
-            return self._allow_and_forward(
-                message=message,
-                child_stdin=child_stdin,
-                child_stdout=child_stdout,
-                client_input=client_input,
-                server_output=server_output,
-                artifact=artifact,
-                artifact_hash=tool_artifact_hash,
-                decision_source="native-approved",
-                signals=decision.signals,
-                risk_categories=decision.risk_categories,
-                params=params,
-                scanner_evidence=decision_scanner_evidence,
-                policy_action="allow",
-                expected_catalog_generation=authority.catalog_generation,
-                expected_catalog_state=authority.catalog_state,
-                expected_catalog_fingerprint=authority.catalog_fingerprint,
-            )
-        if self._inline_prompt_available and approval_callback is not None:
-            approval_result = approval_callback(self._inline_approval_request(tool_name, decision.summary))
-            if _approval_allows(approval_result):
-                return self._allow_and_forward(
-                    message=message,
-                    child_stdin=child_stdin,
-                    child_stdout=child_stdout,
-                    client_input=client_input,
-                    server_output=server_output,
+                    event=event,
                     artifact=artifact,
                     artifact_hash=tool_artifact_hash,
-                    decision_source="inline-approved",
-                    signals=decision.signals,
-                    risk_categories=decision.risk_categories,
-                    params=params,
-                    remember=True,
+                    decision=decision,
                     scanner_evidence=decision_scanner_evidence,
-                    policy_action="allow",
-                    expected_catalog_generation=authority.catalog_generation,
-                    expected_catalog_state=authority.catalog_state,
-                    expected_catalog_fingerprint=authority.catalog_fingerprint,
-                )
-            denied = self._inline_approval_deny_result(
-                approval_result,
-                deny_tool_call=deny_inline_call,
-                tool_name=tool_name,
+                ),
             )
-            if denied is not None:
-                return denied
-        if self.config.mode == "observe":
-            try:
-                catalog_current = self._drain_and_validate_catalog_authority(
-                    child_stdin=child_stdin,
-                    child_stdout=child_stdout,
-                    client_input=client_input,
-                    server_output=server_output,
-                    generation=authority.catalog_generation,
-                    state=authority.catalog_state,
-                    fingerprint=authority.catalog_fingerprint,
-                )
-            except Exception:
-                self._poison_tools_catalog()
-                catalog_current = False
-            if not catalog_current:
-                return self._catalog_boundary_failure_response(
-                    message_id=message.get("id"),
-                    tool_name=tool_name,
-                    params=params,
-                    scanner_evidence=decision_scanner_evidence,
-                    phase="before_observe_revalidation",
-                    package_request=False,
-                )
-            fresh_authority = self._resolve_tool_call_authority(
-                tool_name=tool_name,
-                arguments=arguments,
-            )
-            artifact = fresh_authority.artifact
-            tool_artifact_hash = fresh_authority.artifact_hash
-            authority = fresh_authority
-            fresh_decision = fresh_authority.decision
-            fresh_scanner_evidence = _tool_decision_scanner_evidence(fresh_decision)
-            fresh_policy_action = _enforcement_action(
-                fresh_decision.current_action or fresh_decision.action,
-                approval_decision=fresh_decision,
-            )
-            observe_override = not is_execution_permitted(fresh_policy_action)
-            executed_action: GuardAction = "allow" if observe_override else fresh_policy_action
-            observe_evidence = fresh_scanner_evidence
-            if observe_override:
-                observe_mode_evidence: dict[str, object] = {
-                    "source": "observe_mode",
-                    "observed_policy_action": fresh_policy_action,
-                    "authoritative_action": executed_action,
+            if denied is None:
+                raise NativeMcpProxyDecisionError("native_mcp_proxy_decision_inline_unbound")
+            return denied
+        if kind == "package":
+            extra: dict[str, Any] = {}
+            if route["inline_record"]:
+                try:
+                    allow_tool_call(
+                        store=self.store,
+                        artifact=artifact,
+                        artifact_hash=tool_artifact_hash,
+                        decision_source="inline-approved",
+                        now=_now(),
+                        signals=decision.signals,
+                        risk_categories=decision.risk_categories,
+                        remember=bool(route["remember"]),
+                        arguments=self._call_projector.project(tool_name, params).safe_arguments,
+                        additional_scanner_evidence=decision_scanner_evidence,
+                        emit_runtime_evidence=False,
+                    )
+                except ApprovalGateError:
+                    return queue()
+                extra = {
+                    "remember_allow": bool(route["remember"]),
+                    "remember_decision_source": "inline-approved",
+                    "remember_signals": decision.signals,
+                    "remember_risk_categories": decision.risk_categories,
                 }
-                observe_evidence = (*observe_evidence, observe_mode_evidence)
-            response, observe_event = self._allow_and_forward(
+            tool_source = route["tool_source"]
+            return self._handle_package_request(
+                message=message,
+                child_stdin=child_stdin,
+                child_stdout=child_stdout,
+                client_input=client_input,
+                server_output=server_output,
+                tool_name=tool_name,
+                params=params,
+                artifact=package_artifact,
+                tool_artifact=artifact,
+                tool_artifact_hash=tool_artifact_hash,
+                tool_decision=(
+                    decision
+                    if tool_source is None
+                    else _tool_decision_after_runtime_allow(
+                        decision,
+                        source=tool_source,
+                        policy_action=route["decision_policy_action"],
+                    )
+                ),
+                tool_scanner_evidence=decision_scanner_evidence,
+                package_resolution=held["package_resolution"],
+                expected_catalog_generation=authority.catalog_generation,
+                expected_catalog_state=authority.catalog_state,
+                expected_catalog_fingerprint=authority.catalog_fingerprint,
+                **extra,
+            )
+        if kind == "allow_and_forward":
+            return self._allow_and_forward(
                 message=message,
                 child_stdin=child_stdin,
                 child_stdout=child_stdout,
@@ -1564,35 +1285,93 @@ class RuntimeMcpGuardProxy:
                 server_output=server_output,
                 artifact=artifact,
                 artifact_hash=tool_artifact_hash,
-                decision_source="policy-observe",
-                signals=fresh_decision.signals,
-                risk_categories=fresh_decision.risk_categories,
+                decision_source=route["decision_source"],
+                signals=decision.signals,
+                risk_categories=decision.risk_categories,
                 params=params,
-                scanner_evidence=observe_evidence,
-                policy_action=executed_action,
-                expected_catalog_generation=authority.catalog_generation,
-                expected_catalog_state=authority.catalog_state,
-                expected_catalog_fingerprint=authority.catalog_fingerprint,
+                remember=bool(route["remember"]),
+                scanner_evidence=decision_scanner_evidence,
+                policy_action=route["policy_action"],
+                approval_decision=decision if route["pass_approval_decision"] else None,
+                **boundary,
             )
-            final_observe_event = {
-                **observe_event,
-                "decision": executed_action,
-                "observe_mode": True,
-            }
-            if observe_override:
-                final_observe_event["observed_policy_action"] = fresh_policy_action
-            return response, final_observe_event
-        response, queued_event = self._queue_approval_center_response(
-            message_id=message.get("id"),
-            artifact=artifact,
-            artifact_hash=tool_artifact_hash,
-            tool_name=tool_name,
-            signals=decision.signals,
+        if kind == "observe_forward":
+            return self._observe_tool_forward(
+                message=message,
+                params=params,
+                tool_name=tool_name,
+                arguments=arguments,
+                authority=authority,
+                decision_scanner_evidence=decision_scanner_evidence,
+                child_stdin=child_stdin,
+                child_stdout=child_stdout,
+                client_input=client_input,
+                server_output=server_output,
+            )
+        raise NativeMcpProxyDecisionError("native_mcp_proxy_decision_route_unknown")
+
+    def _observe_tool_forward(
+        self,
+        *,
+        message: dict[str, Any],
+        params: dict[str, Any],
+        tool_name: str,
+        arguments: object,
+        authority: _ToolCallAuthority,
+        decision_scanner_evidence: tuple[dict[str, object], ...],
+        child_stdin: IO[str] | _NativeMcpChildIo,
+        child_stdout: IO[str] | _NativeMcpChildIo,
+        client_input: TextIO | None,
+        server_output: TextIO | None,
+    ) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+        try:
+            catalog_current = self._drain_and_validate_catalog_authority(
+                child_stdin=child_stdin,
+                child_stdout=child_stdout,
+                client_input=client_input,
+                server_output=server_output,
+                generation=authority.catalog_generation,
+                state=authority.catalog_state,
+                fingerprint=authority.catalog_fingerprint,
+            )
+        except Exception:
+            self._poison_tools_catalog()
+            catalog_current = False
+        if not catalog_current:
+            return self._catalog_boundary_failure_response(
+                message_id=message.get("id"),
+                tool_name=tool_name,
+                params=params,
+                scanner_evidence=decision_scanner_evidence,
+                phase="before_observe_revalidation",
+                package_request=False,
+            )
+        fresh_authority = self._resolve_tool_call_authority(tool_name=tool_name, arguments=arguments)
+        fresh_decision = fresh_authority.decision
+        observed = self._native_decide({"check": "observe_tool_forward", "fresh": tool_facts(fresh_decision)})
+        executed_action = observed["executed_action"]
+        response, observe_event = self._allow_and_forward(
+            message=message,
+            child_stdin=child_stdin,
+            child_stdout=child_stdout,
+            client_input=client_input,
+            server_output=server_output,
+            artifact=fresh_authority.artifact,
+            artifact_hash=fresh_authority.artifact_hash,
+            decision_source="policy-observe",
+            signals=fresh_decision.signals,
+            risk_categories=fresh_decision.risk_categories,
             params=params,
-            scanner_evidence=decision_scanner_evidence,
-            policy_action=tool_policy_action,
+            scanner_evidence=(*_tool_decision_scanner_evidence(fresh_decision), *observed["evidence_append"]),
+            policy_action=executed_action,
+            expected_catalog_generation=fresh_authority.catalog_generation,
+            expected_catalog_state=fresh_authority.catalog_state,
+            expected_catalog_fingerprint=fresh_authority.catalog_fingerprint,
         )
-        return response, queued_event
+        final_observe_event = {**observe_event, "decision": executed_action, "observe_mode": True}
+        if observed["observe_override"]:
+            final_observe_event["observed_policy_action"] = observed["observed_policy_action"]
+        return response, final_observe_event
 
     def _package_request_artifact(self, *, tool_name: str, arguments: object) -> Any | None:
         intent = extract_package_intent_request(
@@ -1600,6 +1379,7 @@ class RuntimeMcpGuardProxy:
             arguments,
             action_envelope_command=_command_argument(arguments),
             workspace=self.context.workspace_dir,
+            guard_home=self.context.guard_home,
         )
         if intent is None:
             return None
@@ -1608,6 +1388,7 @@ class RuntimeMcpGuardProxy:
             intent=intent,
             config_path=self.config_path,
             source_scope=self.source_scope,
+            guard_home=self.context.guard_home,
         )
 
     def _resolve_package_policy(
@@ -1624,18 +1405,13 @@ class RuntimeMcpGuardProxy:
             retain_external_archive_blob=external_archive_network_authorized,
         )
         try:
-            package_current_action = compose_current_package_policy_action(
-                artifact=artifact,
-                evaluation=package_evaluation,
-                config=self.config,
-            )
             package_workspace = self.context.workspace_dir or Path.cwd()
             package_context = build_package_execution_context(
                 workspace_dir=package_workspace,
                 artifact=artifact,
             )
-            artifact_digest = package_request_policy_hash(
-                artifact=artifact,
+            package_current_action, artifact_digest = package_current_action_and_hash(
+                artifact,
                 store=self.store,
                 workspace_dir=package_workspace,
                 evaluation=package_evaluation,
@@ -1680,8 +1456,8 @@ class RuntimeMcpGuardProxy:
         self,
         *,
         message: dict[str, Any],
-        child_stdin: IO[str],
-        child_stdout: IO[str],
+        child_stdin: IO[str] | _NativeMcpChildIo,
+        child_stdout: IO[str] | _NativeMcpChildIo,
         client_input: TextIO | None,
         server_output: TextIO | None,
         tool_name: str,
@@ -1727,40 +1503,28 @@ class RuntimeMcpGuardProxy:
                 phase="before_package_revalidation",
                 package_request=True,
             )
-        if package_resolution.saved_policy_blocks:
-            return self._stored_package_block_response(
+        precheck = self._native_decide(
+            {
+                "check": "package_precheck",
+                "mode": self.config.mode,
+                "saved_policy_blocks": bool(package_resolution.saved_policy_blocks),
+                "policy_action": package_evaluation.policy_action,
+            }
+        )
+        if precheck["kind"] in _PACKAGE_PRECHECK_STOPS:
+            return self._stopped_call_response(
+                _PACKAGE_PRECHECK_STOPS[precheck["kind"]],
                 message_id=message.get("id"),
-                artifact=artifact,
-                artifact_hash=package_resolution.artifact_digest,
                 tool_name=tool_name,
                 params=params,
-                package_evaluation=package_evaluation,
-                scanner_evidence=scanner_evidence,
+                leg=_AnswerLeg(
+                    artifact, package_resolution.artifact_digest, scanner_evidence, evaluation=package_evaluation
+                ),
+                policy_action=precheck.get("policy_action"),
+                package_request=True,
             )
-
-        package_action = _enforcement_action(package_evaluation.policy_action)
-        if package_action in {"block", "sandbox-required"}:
-            return self._terminal_package_response(
-                message_id=message.get("id"),
-                artifact=artifact,
-                artifact_hash=package_resolution.artifact_digest,
-                tool_name=tool_name,
-                params=params,
-                package_evaluation=package_evaluation,
-                policy_action=package_action,
-                scanner_evidence=scanner_evidence,
-            )
-        if not is_execution_permitted(package_action) and self.config.mode != "observe":
-            return self._queue_package_approval_response(
-                message_id=message.get("id"),
-                artifact=artifact,
-                artifact_hash=package_resolution.artifact_digest,
-                tool_name=tool_name,
-                params=params,
-                package_evaluation=package_evaluation,
-                policy_action=package_action,
-                scanner_evidence=scanner_evidence,
-            )
+        if precheck["kind"] != "proceed":
+            raise NativeMcpProxyDecisionError("native_mcp_proxy_decision_precheck_unknown")
 
         fresh_tool_authority = self._resolve_tool_call_authority(
             tool_name=tool_name,
@@ -1778,106 +1542,63 @@ class RuntimeMcpGuardProxy:
             resolution=fresh_package_resolution,
             tool_evidence=fresh_tool_evidence,
         )
-        if fresh_tool_decision.saved_action == "block":
-            return self._stored_tool_block_response(
+        composed = self._native_decide(
+            {
+                "check": "package_compose",
+                "mode": self.config.mode,
+                "tool": tool_facts(fresh_tool_decision),
+                "package": package_facts(fresh_package_resolution),
+            }
+        )
+        compose_kind = composed["kind"]
+        if compose_kind in _TOOL_SIDE_STOPS or compose_kind in _PACKAGE_SIDE_STOPS:
+            return self._stopped_call_response(
+                compose_kind,
                 message_id=message.get("id"),
-                artifact=tool_artifact,
-                artifact_hash=tool_artifact_hash,
                 tool_name=tool_name,
                 params=params,
-                signals=fresh_tool_decision.signals,
-                risk_categories=fresh_tool_decision.risk_categories,
-                scanner_evidence=fresh_tool_evidence,
+                leg=(
+                    _AnswerLeg(
+                        tool_artifact,
+                        tool_artifact_hash,
+                        fresh_tool_evidence,
+                        fresh_tool_decision.signals,
+                        fresh_tool_decision.risk_categories,
+                    )
+                    if compose_kind in _TOOL_SIDE_STOPS
+                    else _AnswerLeg(
+                        artifact,
+                        fresh_package_resolution.artifact_digest,
+                        fresh_scanner_evidence,
+                        evaluation=fresh_package_resolution.evaluation,
+                    )
+                ),
+                policy_action=composed.get("policy_action"),
                 package_request=True,
             )
-        if fresh_package_resolution.saved_policy_blocks:
-            return self._stored_package_block_response(
-                message_id=message.get("id"),
-                artifact=artifact,
-                artifact_hash=fresh_package_resolution.artifact_digest,
-                tool_name=tool_name,
-                params=params,
-                package_evaluation=fresh_package_resolution.evaluation,
-                scanner_evidence=fresh_scanner_evidence,
-            )
-
-        if self.config.mode == "observe":
-            tool_observed_action = _enforcement_action(
-                fresh_tool_decision.current_action or fresh_tool_decision.action,
-                approval_decision=fresh_tool_decision,
-            )
-            package_observed_action = _enforcement_action(fresh_package_resolution.current_action)
-            if tool_observed_action in {"block", "sandbox-required"}:
-                return self._terminal_tool_response(
-                    message_id=message.get("id"),
-                    artifact=tool_artifact,
-                    artifact_hash=tool_artifact_hash,
-                    tool_name=tool_name,
-                    params=params,
-                    policy_action=tool_observed_action,
-                    signals=fresh_tool_decision.signals,
-                    risk_categories=fresh_tool_decision.risk_categories,
-                    scanner_evidence=fresh_tool_evidence,
-                )
-            if package_observed_action in {"block", "sandbox-required"}:
-                return self._terminal_package_response(
-                    message_id=message.get("id"),
-                    artifact=artifact,
-                    artifact_hash=fresh_package_resolution.artifact_digest,
-                    tool_name=tool_name,
-                    params=params,
-                    package_evaluation=fresh_package_resolution.evaluation,
-                    policy_action=package_observed_action,
-                    scanner_evidence=fresh_scanner_evidence,
-                )
-            if not is_execution_permitted(tool_observed_action):
+        if compose_kind == "observe_forward":
+            if composed["queue_observed_tool"] is not None:
                 self._queue_observed_approval_requests(
                     artifact=tool_artifact,
                     artifact_hash=tool_artifact_hash,
                     tool_name=tool_name,
                     params=params,
-                    policy_action=tool_observed_action,
+                    policy_action=composed["queue_observed_tool"],
                     risk_summary=fresh_tool_decision.summary,
                     risk_signals=list(fresh_tool_decision.signals),
                     extra_fields={"scanner_evidence": list(fresh_tool_evidence)},
                 )
-            if not is_execution_permitted(package_observed_action):
+            if composed["queue_observed_package"] is not None:
                 self._queue_observed_package_request(
                     artifact=artifact,
                     artifact_hash=fresh_package_resolution.artifact_digest,
                     tool_name=tool_name,
                     params=params,
                     package_evaluation=fresh_package_resolution.evaluation,
-                    policy_action=package_observed_action,
+                    policy_action=composed["queue_observed_package"],
                     scanner_evidence=fresh_scanner_evidence,
                 )
-            observed_policy_action = most_restrictive_guard_action(
-                tool_observed_action,
-                package_observed_action,
-            )
-            effective_tool_action: GuardAction = (
-                tool_observed_action if is_execution_permitted(tool_observed_action) else "allow"
-            )
-            effective_package_action: GuardAction = (
-                package_observed_action if is_execution_permitted(package_observed_action) else "allow"
-            )
-            executed_action = most_restrictive_guard_action(
-                effective_tool_action,
-                effective_package_action,
-            )
-            observe_override = (
-                effective_tool_action != tool_observed_action or effective_package_action != package_observed_action
-            )
-            observe_evidence = fresh_scanner_evidence
-            if observe_override:
-                observe_mode_evidence: dict[str, object] = {
-                    "source": "observe_mode",
-                    "observed_policy_action": observed_policy_action,
-                    "observed_tool_policy_action": tool_observed_action,
-                    "observed_package_policy_action": package_observed_action,
-                    "authoritative_action": executed_action,
-                }
-                observe_evidence = (*observe_evidence, observe_mode_evidence)
+            executed_action = composed["executed_action"]
             response, observe_event = self._record_package_forward(
                 message=message,
                 child_stdin=child_stdin,
@@ -1890,7 +1611,7 @@ class RuntimeMcpGuardProxy:
                 params=params,
                 policy_action=executed_action,
                 package_evaluation=fresh_package_resolution.evaluation,
-                scanner_evidence=observe_evidence,
+                scanner_evidence=(*fresh_scanner_evidence, *composed["evidence_append"]),
                 event_decision=executed_action,
                 remember=False,
                 policy_workspace=fresh_package_resolution.policy_workspace,
@@ -1899,70 +1620,24 @@ class RuntimeMcpGuardProxy:
                 expected_catalog_state=expected_catalog_state,
                 expected_catalog_fingerprint=expected_catalog_fingerprint,
             )
-            final_observe_event = {
-                **observe_event,
-                "decision": executed_action,
-                "observe_mode": True,
-            }
-            if observe_override:
+            final_observe_event = {**observe_event, "decision": executed_action, "observe_mode": True}
+            if composed["observe_override"]:
                 final_observe_event.update(
                     {
-                        "observed_policy_action": observed_policy_action,
-                        "observed_tool_policy_action": tool_observed_action,
-                        "observed_package_policy_action": package_observed_action,
+                        "observed_policy_action": composed["observed_policy_action"],
+                        "observed_tool_policy_action": composed["observed_tool_policy_action"],
+                        "observed_package_policy_action": composed["observed_package_policy_action"],
                     }
                 )
             return response, final_observe_event
+        if compose_kind != "proceed":
+            raise NativeMcpProxyDecisionError("native_mcp_proxy_decision_compose_unknown")
 
-        tool_action = _enforcement_action(
-            fresh_tool_decision.action,
-            approval_decision=fresh_tool_decision,
-        )
-        package_action = _enforcement_action(fresh_package_resolution.evaluation.policy_action)
-        authoritative_action = most_restrictive_guard_action(tool_action, package_action)
-        if authoritative_action in {"block", "sandbox-required"}:
-            return self._terminal_package_response(
-                message_id=message.get("id"),
-                artifact=artifact,
-                artifact_hash=fresh_package_resolution.artifact_digest,
-                tool_name=tool_name,
-                params=params,
-                package_evaluation=fresh_package_resolution.evaluation,
-                policy_action=authoritative_action,
-                scanner_evidence=fresh_scanner_evidence,
-            )
-        if not is_execution_permitted(authoritative_action):
-            if not is_execution_permitted(tool_action):
-                return self._queue_approval_center_response(
-                    message_id=message.get("id"),
-                    artifact=tool_artifact,
-                    artifact_hash=tool_artifact_hash,
-                    tool_name=tool_name,
-                    signals=fresh_tool_decision.signals,
-                    params=params,
-                    scanner_evidence=fresh_tool_evidence,
-                    policy_action=tool_action,
-                )
-            return self._queue_package_approval_response(
-                message_id=message.get("id"),
-                artifact=artifact,
-                artifact_hash=fresh_package_resolution.artifact_digest,
-                tool_name=tool_name,
-                params=params,
-                package_evaluation=fresh_package_resolution.evaluation,
-                policy_action=_enforcement_action(fresh_package_resolution.evaluation.policy_action),
-                scanner_evidence=fresh_scanner_evidence,
-            )
-
-        pending_claims = tuple(
-            decision
-            for decision in (
-                fresh_tool_decision.pending_approval_reuse_decision,
-                fresh_package_resolution.pending_approval_reuse_decision,
-            )
-            if decision is not None
-        )
-        if pending_claims:
+        authoritative_action = composed["authoritative_action"]
+        if composed["pending_claims"]:
+            pending_tool = fresh_tool_decision.pending_approval_reuse_decision
+            pending_package = fresh_package_resolution.pending_approval_reuse_decision
+            pending_claims = tuple(claim for claim in (pending_tool, pending_package) if claim is not None)
             try:
                 catalog_current = self._drain_and_validate_catalog_authority(
                     child_stdin=child_stdin,
@@ -1985,28 +1660,17 @@ class RuntimeMcpGuardProxy:
                     phase="before_saved_approval_claim",
                     package_request=True,
                 )
-        if pending_claims and not self.store.claim_approval_reuse_decisions(pending_claims, now=_now()):
-            claim_failure_item: dict[str, object] = {
-                "source": "approval_reuse",
-                "status": "rejected",
-                "reason_code": APPROVAL_REUSE_CLAIM_FAILED,
-                "effective_action": "require-reapproval",
-            }
-            claim_failure_evidence = (
-                *fresh_scanner_evidence,
-                claim_failure_item,
-            )
-            return self._queue_package_approval_response(
-                message_id=message.get("id"),
-                artifact=artifact,
-                artifact_hash=fresh_package_resolution.artifact_digest,
-                tool_name=tool_name,
-                params=params,
-                package_evaluation=fresh_package_resolution.evaluation,
-                policy_action="require-reapproval",
-                scanner_evidence=claim_failure_evidence,
-            )
-        if pending_claims:
+            if not self.store.claim_approval_reuse_decisions(pending_claims, now=_now()):
+                return self._queue_package_approval_response(
+                    message_id=message.get("id"),
+                    artifact=artifact,
+                    artifact_hash=fresh_package_resolution.artifact_digest,
+                    tool_name=tool_name,
+                    params=params,
+                    package_evaluation=fresh_package_resolution.evaluation,
+                    policy_action="require-reapproval",
+                    scanner_evidence=(*fresh_scanner_evidence, self._native_evidence_item("claim_failed")),
+                )
             try:
                 fresh_config = self._claim_boundary_config()
             except Exception:
@@ -2018,211 +1682,56 @@ class RuntimeMcpGuardProxy:
                     params=params,
                     package_evaluation=fresh_package_resolution.evaluation,
                     policy_action="require-reapproval",
-                    scanner_evidence=_config_refresh_failure_evidence(fresh_scanner_evidence),
+                    scanner_evidence=(*fresh_scanner_evidence, self._native_evidence_item("config_refresh_failed")),
                 )
             self.config = fresh_config
-            claimed_tool_decision = fresh_tool_decision.pending_approval_reuse_decision
-            claimed_tool_disposition = fresh_tool_decision.approval_reuse_claim_disposition
-            claimed_package_decision = fresh_package_resolution.pending_approval_reuse_decision
-            claimed_package_disposition = fresh_package_resolution.approval_reuse_claim_disposition
-            postclaim_tool_authority = self._resolve_tool_call_authority(
+            postclaim = self._package_postclaim(
+                message=message,
                 tool_name=tool_name,
-                arguments=params.get("arguments"),
+                params=params,
+                artifact=artifact,
+                tool_artifact=tool_artifact,
+                tool_artifact_hash=tool_artifact_hash,
+                fresh_tool_decision=fresh_tool_decision,
+                fresh_package_resolution=fresh_package_resolution,
             )
-            expected_catalog_generation = postclaim_tool_authority.catalog_generation
-            expected_catalog_state = postclaim_tool_authority.catalog_state
-            expected_catalog_fingerprint = postclaim_tool_authority.catalog_fingerprint
-            postclaim_package_artifact = self._package_request_artifact(
-                tool_name=tool_name,
-                arguments=params.get("arguments"),
-            )
-            postclaim_tool_decision = postclaim_tool_authority.decision
-            postclaim_tool_action = _postclaim_tool_action(postclaim_tool_decision)
-            tool_context_matches = (
-                postclaim_tool_authority.artifact.artifact_id == tool_artifact.artifact_id
-                and postclaim_tool_authority.artifact_hash == tool_artifact_hash
-            )
-            postclaim_tool_evidence = _postclaim_authority_evidence(
-                _tool_decision_scanner_evidence(postclaim_tool_decision),
-                context_matches=tool_context_matches,
-                current_action=postclaim_tool_action,
-            )
-            if postclaim_tool_decision.saved_action == "block":
-                return self._stored_tool_block_response(
-                    message_id=message.get("id"),
-                    artifact=postclaim_tool_authority.artifact,
-                    artifact_hash=postclaim_tool_authority.artifact_hash,
-                    tool_name=tool_name,
-                    params=params,
-                    signals=postclaim_tool_decision.signals,
-                    risk_categories=postclaim_tool_decision.risk_categories,
-                    scanner_evidence=postclaim_tool_evidence,
-                    package_request=True,
-                )
-            if postclaim_tool_action in {"block", "sandbox-required"}:
-                return self._terminal_tool_response(
-                    message_id=message.get("id"),
-                    artifact=postclaim_tool_authority.artifact,
-                    artifact_hash=postclaim_tool_authority.artifact_hash,
-                    tool_name=tool_name,
-                    params=params,
-                    policy_action=postclaim_tool_action,
-                    signals=postclaim_tool_decision.signals,
-                    risk_categories=postclaim_tool_decision.risk_categories,
-                    scanner_evidence=postclaim_tool_evidence,
-                )
-            if postclaim_package_artifact is None:
-                return self._queue_approval_center_response(
-                    message_id=message.get("id"),
-                    artifact=postclaim_tool_authority.artifact,
-                    artifact_hash=postclaim_tool_authority.artifact_hash,
-                    tool_name=tool_name,
-                    signals=postclaim_tool_decision.signals,
-                    params=params,
-                    scanner_evidence=postclaim_tool_evidence,
-                    policy_action="require-reapproval",
-                )
-
-            postclaim_package_resolution = self._resolve_package_policy(
-                artifact=postclaim_package_artifact,
-                external_archive_network_authorized=True,
-            )
-            postclaim_package_action = most_restrictive_guard_action(
-                postclaim_package_resolution.current_action,
-                postclaim_package_resolution.evaluation.policy_action,
-                unknown_action="block",
-            )
-            package_context_matches = (
-                postclaim_package_artifact.artifact_id == artifact.artifact_id
-                and postclaim_package_resolution.artifact_digest == fresh_package_resolution.artifact_digest
-            )
-            postclaim_package_evidence = _postclaim_authority_evidence(
-                self._package_scanner_evidence(
-                    resolution=postclaim_package_resolution,
-                    tool_evidence=_tool_decision_scanner_evidence(postclaim_tool_decision),
-                ),
-                context_matches=package_context_matches,
-                current_action=postclaim_package_action,
-            )
-            tool_claim_authorizes_review = claimed_approval_authorizes_postclaim_review(
-                claim_disposition=claimed_tool_disposition,
-                claimed_decision=claimed_tool_decision,
-                current_decision=postclaim_tool_decision.pending_approval_reuse_decision,
-            )
-            package_claim_authorizes_review = claimed_approval_authorizes_postclaim_review(
-                claim_disposition=claimed_package_disposition,
-                claimed_decision=claimed_package_decision,
-                current_decision=postclaim_package_resolution.pending_approval_reuse_decision,
-            )
-            postclaim_tool_evidence = _postclaim_claim_evidence(
-                postclaim_tool_evidence,
-                current_action=postclaim_tool_action,
-                claim_authorizes_review=tool_claim_authorizes_review,
-            )
-            postclaim_package_evidence = _postclaim_claim_evidence(
-                postclaim_package_evidence,
-                current_action=postclaim_package_action,
-                claim_authorizes_review=package_claim_authorizes_review,
-            )
-            if postclaim_package_resolution.saved_policy_blocks:
-                response = self._stored_package_block_response(
-                    message_id=message.get("id"),
-                    artifact=postclaim_package_artifact,
-                    artifact_hash=postclaim_package_resolution.artifact_digest,
-                    tool_name=tool_name,
-                    params=params,
-                    package_evaluation=postclaim_package_resolution.evaluation,
-                    scanner_evidence=postclaim_package_evidence,
-                )
-                _cleanup_external_archive_downloads(postclaim_package_resolution.evaluation)
-                return response
-            if postclaim_package_action in {"block", "sandbox-required"}:
-                response = self._terminal_package_response(
-                    message_id=message.get("id"),
-                    artifact=postclaim_package_artifact,
-                    artifact_hash=postclaim_package_resolution.artifact_digest,
-                    tool_name=tool_name,
-                    params=params,
-                    package_evaluation=postclaim_package_resolution.evaluation,
-                    policy_action=postclaim_package_action,
-                    scanner_evidence=postclaim_package_evidence,
-                )
-                _cleanup_external_archive_downloads(postclaim_package_resolution.evaluation)
-                return response
-            if (
-                not tool_context_matches
-                or postclaim_tool_action == "require-reapproval"
-                or (postclaim_tool_action == "review" and not tool_claim_authorizes_review)
-            ):
-                response = self._queue_approval_center_response(
-                    message_id=message.get("id"),
-                    artifact=postclaim_tool_authority.artifact,
-                    artifact_hash=postclaim_tool_authority.artifact_hash,
-                    tool_name=tool_name,
-                    signals=postclaim_tool_decision.signals,
-                    params=params,
-                    scanner_evidence=postclaim_tool_evidence,
-                    policy_action="require-reapproval",
-                )
-                _cleanup_external_archive_downloads(postclaim_package_resolution.evaluation)
-                return response
-            if (
-                not package_context_matches
-                or postclaim_package_action == "require-reapproval"
-                or (postclaim_package_action == "review" and not package_claim_authorizes_review)
-            ):
-                response = self._queue_package_approval_response(
-                    message_id=message.get("id"),
-                    artifact=postclaim_package_artifact,
-                    artifact_hash=postclaim_package_resolution.artifact_digest,
-                    tool_name=tool_name,
-                    params=params,
-                    package_evaluation=postclaim_package_resolution.evaluation,
-                    policy_action="require-reapproval",
-                    scanner_evidence=postclaim_package_evidence,
-                )
-                _cleanup_external_archive_downloads(postclaim_package_resolution.evaluation)
-                return response
-            effective_tool_action: GuardAction = "allow" if postclaim_tool_action == "review" else postclaim_tool_action
-            effective_package_action: GuardAction = (
-                "allow" if postclaim_package_action == "review" else postclaim_package_action
-            )
-            authoritative_action = most_restrictive_guard_action(
-                effective_tool_action,
-                effective_package_action,
-                unknown_action="block",
-            )
-            artifact = postclaim_package_artifact
-            fresh_package_resolution = postclaim_package_resolution
-            fresh_scanner_evidence = postclaim_package_evidence
+            if not isinstance(postclaim, _PostclaimForward):
+                return postclaim
+            authoritative_action = postclaim.authoritative_action
+            artifact = postclaim.artifact
+            fresh_package_resolution = postclaim.resolution
+            fresh_scanner_evidence = postclaim.scanner_evidence
+            expected_catalog_generation = postclaim.catalog_generation
+            expected_catalog_state = postclaim.catalog_state
+            expected_catalog_fingerprint = postclaim.catalog_fingerprint
         bound_request = _bound_external_archive_mcp_request(
             message,
             params,
             evaluation=fresh_package_resolution.evaluation,
+            guard_home=Path(self.store.guard_home),
         )
         if bound_request is None:
-            binding_failure = _package_policy_override_evaluation(
-                fresh_package_resolution.evaluation,
-                decision="block",
-                policy_action="block",
-                title="External archive blocked",
-                summary="The inspected external archive could not be bound to the forwarded installer request.",
-                harness_message="HOL Guard blocked an external archive whose digest-bound blob was unavailable.",
-                reason_code="external_archive_digest_mismatch",
-                reason_message="The inspected external archive changed or was absent from the forwarded request.",
-            )
-            response = self._terminal_package_response(
-                message_id=message.get("id"),
-                artifact=artifact,
-                artifact_hash=fresh_package_resolution.artifact_digest,
-                tool_name=tool_name,
-                params=params,
-                package_evaluation=binding_failure,
-                policy_action="block",
-                scanner_evidence=fresh_scanner_evidence,
-            )
-            _cleanup_external_archive_downloads(fresh_package_resolution.evaluation)
-            return response
+            try:
+                binding_failure = package_external_archive_override(
+                    fresh_package_resolution.evaluation,
+                    variant="mcp_unbound",
+                )
+                return self._stopped_call_response(
+                    "terminal_package",
+                    message_id=message.get("id"),
+                    tool_name=tool_name,
+                    params=params,
+                    leg=_AnswerLeg(
+                        artifact,
+                        fresh_package_resolution.artifact_digest,
+                        fresh_scanner_evidence,
+                        evaluation=binding_failure,
+                    ),
+                    policy_action="block",
+                    package_request=True,
+                )
+            finally:
+                _cleanup_external_archive_downloads(fresh_package_resolution.evaluation)
         bound_message, bound_params = bound_request
         try:
             return self._record_package_forward(
@@ -2251,6 +1760,179 @@ class RuntimeMcpGuardProxy:
         finally:
             _cleanup_external_archive_downloads(fresh_package_resolution.evaluation)
 
+    def _package_postclaim(
+        self,
+        *,
+        message: dict[str, Any],
+        tool_name: str,
+        params: dict[str, Any],
+        artifact: Any,
+        tool_artifact: Any,
+        tool_artifact_hash: str,
+        fresh_tool_decision: ToolCallDecision,
+        fresh_package_resolution: _PackagePolicyResolution,
+    ) -> tuple[dict[str, Any], dict[str, Any]] | _PostclaimForward:
+        """Revalidate a package request after its saved approvals were claimed.
+
+        Returns a rendered response tuple, or a ``_PostclaimForward`` when the
+        resident found the claimed authority still covers the request.
+        """
+
+        claimed_tool_decision = fresh_tool_decision.pending_approval_reuse_decision
+        claimed_tool_disposition = fresh_tool_decision.approval_reuse_claim_disposition
+        claimed_package_decision = fresh_package_resolution.pending_approval_reuse_decision
+        claimed_package_disposition = fresh_package_resolution.approval_reuse_claim_disposition
+        authority = self._resolve_tool_call_authority(tool_name=tool_name, arguments=params.get("arguments"))
+        postclaim_package_artifact = self._package_request_artifact(
+            tool_name=tool_name,
+            arguments=params.get("arguments"),
+        )
+        tool_decision = authority.decision
+        resolved: dict[str, _PackagePolicyResolution] = {}
+
+        def package_facts_need(_need: Mapping[str, Any]) -> dict[str, object]:
+            resolution = self._resolve_package_policy(
+                artifact=postclaim_package_artifact,
+                external_archive_network_authorized=True,
+            )
+            resolved["package"] = resolution
+            return {
+                "package": {
+                    "facts": package_facts(resolution),
+                    "artifact_id": (
+                        postclaim_package_artifact.artifact_id if postclaim_package_artifact is not None else None
+                    ),
+                    "expected_artifact_id": artifact.artifact_id,
+                    "digest": resolution.artifact_digest,
+                    "expected_digest": fresh_package_resolution.artifact_digest,
+                    "tool_claim_authorizes_review": bool(
+                        claimed_approval_authorizes_postclaim_review(
+                            claim_disposition=claimed_tool_disposition,
+                            claimed_decision=claimed_tool_decision,
+                            current_decision=tool_decision.pending_approval_reuse_decision,
+                            guard_home=self.store.guard_home,
+                        )
+                    ),
+                    "package_claim_authorizes_review": bool(
+                        claimed_approval_authorizes_postclaim_review(
+                            claim_disposition=claimed_package_disposition,
+                            claimed_decision=claimed_package_decision,
+                            current_decision=resolution.pending_approval_reuse_decision,
+                            guard_home=self.store.guard_home,
+                        )
+                    ),
+                }
+            }
+
+        try:
+            outcome = self._native_decide(
+                {
+                    "check": "package_postclaim",
+                    "tool": tool_facts(tool_decision),
+                    "tool_context": {
+                        "artifact_id": authority.artifact.artifact_id,
+                        "expected_artifact_id": tool_artifact.artifact_id,
+                        "artifact_hash": authority.artifact_hash,
+                        "expected_artifact_hash": tool_artifact_hash,
+                    },
+                    "package_artifact_present": postclaim_package_artifact is not None,
+                },
+                supply={"postclaim_package": package_facts_need},
+            )
+        except BaseException:
+            if "package" in resolved:
+                _cleanup_external_archive_downloads(resolved["package"].evaluation)
+            raise
+        resolution = resolved.get("package")
+        try:
+            return self._render_package_postclaim(
+                outcome,
+                message=message,
+                tool_name=tool_name,
+                params=params,
+                authority=authority,
+                tool_decision=tool_decision,
+                postclaim_package_artifact=postclaim_package_artifact,
+                resolution=resolution,
+            )
+        except BaseException:
+            if resolution is not None:
+                _cleanup_external_archive_downloads(resolution.evaluation)
+            raise
+        finally:
+            if resolution is not None and outcome["disposition"]["kind"] != "forward":
+                _cleanup_external_archive_downloads(resolution.evaluation)
+
+    def _render_package_postclaim(
+        self,
+        outcome: Mapping[str, Any],
+        *,
+        message: dict[str, Any],
+        tool_name: str,
+        params: dict[str, Any],
+        authority: _ToolCallAuthority,
+        tool_decision: ToolCallDecision,
+        postclaim_package_artifact: Any | None,
+        resolution: _PackagePolicyResolution | None,
+    ) -> tuple[dict[str, Any], dict[str, Any]] | _PostclaimForward:
+        disposition = outcome["disposition"]
+        kind = disposition["kind"]
+        tool_evidence = (
+            *_tool_decision_scanner_evidence(tool_decision),
+            *outcome.get("tool_evidence_append", ()),
+        )
+        if kind in _TOOL_SIDE_STOPS:
+            return self._stopped_call_response(
+                kind,
+                message_id=message.get("id"),
+                tool_name=tool_name,
+                params=params,
+                leg=_AnswerLeg(
+                    authority.artifact,
+                    authority.artifact_hash,
+                    tool_evidence,
+                    tool_decision.signals,
+                    tool_decision.risk_categories,
+                ),
+                policy_action="require-reapproval" if kind == "queue_tool" else disposition.get("policy_action"),
+                package_request=True,
+            )
+        if resolution is None or postclaim_package_artifact is None:
+            raise NativeMcpProxyDecisionError("native_mcp_proxy_decision_postclaim_unbound")
+        package_evidence = (
+            *self._package_scanner_evidence(
+                resolution=resolution,
+                tool_evidence=_tool_decision_scanner_evidence(tool_decision),
+            ),
+            *outcome.get("package_evidence_append", ()),
+        )
+        if kind in _PACKAGE_SIDE_STOPS:
+            return self._stopped_call_response(
+                kind,
+                message_id=message.get("id"),
+                tool_name=tool_name,
+                params=params,
+                leg=_AnswerLeg(
+                    postclaim_package_artifact,
+                    resolution.artifact_digest,
+                    package_evidence,
+                    evaluation=resolution.evaluation,
+                ),
+                policy_action="require-reapproval" if kind == "queue_package" else disposition.get("policy_action"),
+                package_request=True,
+            )
+        if kind != "forward":
+            raise NativeMcpProxyDecisionError("native_mcp_proxy_decision_disposition_unknown")
+        return _PostclaimForward(
+            authoritative_action=disposition["authoritative_action"],
+            artifact=postclaim_package_artifact,
+            resolution=resolution,
+            scanner_evidence=package_evidence,
+            catalog_generation=authority.catalog_generation,
+            catalog_state=authority.catalog_state,
+            catalog_fingerprint=authority.catalog_fingerprint,
+        )
+
     @staticmethod
     def _package_scanner_evidence(
         *,
@@ -2272,8 +1954,8 @@ class RuntimeMcpGuardProxy:
         self,
         *,
         message: dict[str, Any],
-        child_stdin: IO[str],
-        child_stdout: IO[str],
+        child_stdin: IO[str] | _NativeMcpChildIo,
+        child_stdout: IO[str] | _NativeMcpChildIo,
         client_input: TextIO | None,
         server_output: TextIO | None,
         artifact: Any,
@@ -2306,7 +1988,7 @@ class RuntimeMcpGuardProxy:
                 signals=receipt_signals or reason_signals,
                 risk_categories=receipt_risk_categories,
                 remember=True,
-                arguments=_safe_mcp_arguments(params.get("arguments")),
+                arguments=self._call_projector.project(tool_name, params).safe_arguments,
                 policy_workspace=policy_workspace,
                 additional_scanner_evidence=scanner_evidence,
                 policy_action=policy_action,
@@ -2341,7 +2023,7 @@ class RuntimeMcpGuardProxy:
             signals=receipt_signals or reason_signals,
             risk_categories=receipt_risk_categories,
             remember=False,
-            arguments=_safe_mcp_arguments(params.get("arguments")),
+            arguments=self._call_projector.project(tool_name, params).safe_arguments,
             policy_workspace=policy_workspace,
             additional_scanner_evidence=scanner_evidence,
             policy_action=policy_action,
@@ -2351,7 +2033,7 @@ class RuntimeMcpGuardProxy:
             "tool_name": tool_name,
             "decision": "timeout" if _is_timeout_response(response) else event_decision,
             "policy_action": policy_action,
-            "redacted_params": _safe_mcp_params(params),
+            "redacted_params": self._call_projector.project(tool_name, params).safe_params,
             "scanner_evidence": list(scanner_evidence),
         }
 
@@ -2366,35 +2048,24 @@ class RuntimeMcpGuardProxy:
         policy_action: GuardAction,
         scanner_evidence: tuple[dict[str, object], ...],
     ) -> None:
-        decision_v2_payload = self._package_decision_v2(package_evaluation, policy_action)
+        answer = self._package_answer(
+            "queue_package", tool_name=tool_name, policy_action=policy_action, evaluation=package_evaluation
+        )
         self._queue_observed_approval_requests(
             artifact=artifact,
             artifact_hash=artifact_hash,
             tool_name=tool_name,
             params=params,
             policy_action=policy_action,
-            risk_summary=package_evaluation.risk_summary,
-            risk_signals=[str(item.get("message") or item.get("code") or "") for item in package_evaluation.reasons],
-            decision_v2_payload=decision_v2_payload,
+            risk_summary=answer["risk_summary"],
+            risk_signals=list(answer["risk_signals"]),
+            decision_v2_payload=answer["decision_v2"],
             extra_fields={
                 "changed_fields": ["runtime_tool_call", "package_request"],
                 "scanner_evidence": list(scanner_evidence),
                 "supply_chain_evaluation": package_evaluation.to_dict(),
             },
         )
-
-    @staticmethod
-    def _package_decision_v2(package_evaluation: Any, policy_action: GuardAction) -> dict[str, Any]:
-        payload = build_decision_v2(
-            policy_action,
-            reason=policy_action,
-            signals=_package_reason_signals(package_evaluation.reasons),
-        ).to_dict()
-        payload["user_title"] = package_evaluation.user_copy.title
-        payload["user_body"] = package_evaluation.user_copy.summary
-        payload["harness_message"] = package_evaluation.user_copy.harness_message
-        payload["dashboard_primary_detail"] = package_evaluation.user_copy.summary
-        return payload
 
     def _queue_package_approval_response(
         self,
@@ -2408,9 +2079,38 @@ class RuntimeMcpGuardProxy:
         policy_action: GuardAction,
         scanner_evidence: tuple[dict[str, object], ...],
     ) -> tuple[dict[str, Any], dict[str, Any]]:
+        answer = self._package_answer(
+            "queue_package", tool_name=tool_name, policy_action=policy_action, evaluation=package_evaluation
+        )
+        risk_signals = tuple(answer["risk_signals"])
+        if not asks_for_approval(self.config):
+            response, event = self._queue_approval_center_response(
+                message_id=message_id,
+                artifact=artifact,
+                artifact_hash=artifact_hash,
+                tool_name=tool_name,
+                params=params,
+                signals=tuple(answer["safe_alternative_signals"]),
+                scanner_evidence=scanner_evidence,
+                policy_action=policy_action,
+            )
+            # The resident says how the evaluation is restated as the block the
+            # agent was given; its guidance is whatever the approval center
+            # answered.
+            overlay = answer["safe_alternative_overlay"]
+            message = response["error"]["message"]
+            blocked = dict(package_evaluation.to_dict())
+            user_copy = blocked.get("user_copy")
+            blocked.update(decision=overlay["decision"], policy_action=overlay["policy_action"])
+            blocked["user_copy"] = {
+                **(user_copy if isinstance(user_copy, dict) else {}),
+                **overlay["user_copy"],
+                "next_step": message,
+                "harness_message": message,
+            }
+            response["error"]["data"]["supplyChainEvaluation"] = blocked
+            return response, event
         approval_center_url = ensure_guard_daemon(self.context.guard_home)
-        decision_v2_payload = self._package_decision_v2(package_evaluation, policy_action)
-        risk_signals = tuple(str(item.get("message") or item.get("code") or "") for item in package_evaluation.reasons)
         queued = queue_blocked_approvals(
             redaction_level=self.config.receipt_redaction_level,
             detection=HarnessDetection(
@@ -2431,10 +2131,10 @@ class RuntimeMcpGuardProxy:
                         "config_path": artifact.config_path,
                         "changed_fields": ["runtime_tool_call", "package_request"],
                         "policy_action": policy_action,
-                        "launch_target": self._launch_target(tool_name, params.get("arguments")),
-                        "risk_summary": package_evaluation.risk_summary,
+                        "launch_target": self._call_projector.project(tool_name, params).launch_target,
+                        "risk_summary": answer["risk_summary"],
                         "risk_signals": list(risk_signals),
-                        "decision_v2_json": decision_v2_payload,
+                        "decision_v2_json": answer["decision_v2"],
                         "scanner_evidence": list(scanner_evidence),
                         "supply_chain_evaluation": package_evaluation.to_dict(),
                     }
@@ -2451,7 +2151,7 @@ class RuntimeMcpGuardProxy:
             decision_source="approval-center-pending",
             now=_now(),
             signals=risk_signals,
-            arguments=_safe_mcp_arguments(params.get("arguments")),
+            arguments=self._call_projector.project(tool_name, params).safe_arguments,
             additional_scanner_evidence=scanner_evidence,
             policy_action=policy_action,
         )
@@ -2482,228 +2182,117 @@ class RuntimeMcpGuardProxy:
             "tool_name": tool_name,
             "decision": "queue-package-approval",
             "policy_action": policy_action,
-            "redacted_params": _safe_mcp_params(params),
+            "redacted_params": self._call_projector.project(tool_name, params).safe_params,
             "approval_center_url": approval_center_url,
             "approval_requests": queued,
             "review_url": review_url,
             "scanner_evidence": list(scanner_evidence),
         }
 
-    def _terminal_tool_response(
+    def _package_answer(
         self,
+        kind: str,
         *,
-        message_id: Any,
-        artifact: Any,
-        artifact_hash: str,
         tool_name: str,
-        params: dict[str, Any],
-        policy_action: GuardAction,
-        signals: tuple[str, ...],
-        risk_categories: tuple[str, ...],
-        scanner_evidence: tuple[dict[str, object], ...],
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
-        block_tool_call(
-            store=self.store,
-            artifact=artifact,
-            artifact_hash=artifact_hash,
-            decision_source="policy-block",
-            now=_now(),
+        policy_action: str | None = None,
+        package_request: bool = False,
+        signals: tuple[str, ...] = (),
+        evaluation: Any = None,
+    ) -> dict[str, Any]:
+        return native_package_answer(
+            kind,
+            tool_name=tool_name,
+            server_name=self.server_name,
+            guard_home=Path(self.store.guard_home),
+            policy_action=policy_action,
+            package_request=package_request,
             signals=signals,
-            risk_categories=risk_categories,
-            arguments=_safe_mcp_arguments(params.get("arguments")),
-            additional_scanner_evidence=scanner_evidence,
-            policy_action=policy_action,
-        )
-        reason = (
-            f"HOL Guard blocked tool call {tool_name} from {self.server_name}."
-            if policy_action == "block"
-            else (
-                f"HOL Guard requires an enforceable sandbox for tool call {tool_name} from "
-                f"{self.server_name}; this runtime cannot provide one."
-            )
-        )
-        response = _blocked_tool_response(
-            message_id,
-            tool_name,
-            reason,
-            {"approvalRequests": [], "guardPolicyAction": policy_action},
-        )
-        event: dict[str, Any] = {
-            "method": "tools/call",
-            "tool_name": tool_name,
-            "decision": f"terminal-{policy_action}",
-            "policy_action": policy_action,
-            "redacted_params": _safe_mcp_params(params),
-            "approval_requests": [],
-        }
-        if scanner_evidence:
-            event["scanner_evidence"] = list(scanner_evidence)
-        return response, event
-
-    def _record_package_block(
-        self,
-        *,
-        artifact: Any,
-        artifact_hash: str,
-        params: dict[str, Any],
-        package_evaluation: Any,
-        scanner_evidence: tuple[dict[str, object], ...],
-        policy_action: GuardAction,
-    ) -> None:
-        reason_signals = tuple(
-            str(item.get("message") or item.get("code") or "") for item in package_evaluation.reasons
-        )
-        block_tool_call(
-            store=self.store,
-            artifact=artifact,
-            artifact_hash=artifact_hash,
-            decision_source="policy-block",
-            now=_now(),
-            signals=reason_signals,
-            arguments=_safe_mcp_arguments(params.get("arguments")),
-            additional_scanner_evidence=scanner_evidence,
-            policy_action=policy_action,
+            evaluation=None if evaluation is None else evaluation.to_dict(),
         )
 
-    def _terminal_package_response(
+    def _stopped_call_response(
         self,
+        kind: str,
         *,
         message_id: Any,
-        artifact: Any,
-        artifact_hash: str,
         tool_name: str,
         params: dict[str, Any],
-        package_evaluation: Any,
-        policy_action: GuardAction,
-        scanner_evidence: tuple[dict[str, object], ...],
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
-        self._record_package_block(
-            artifact=artifact,
-            artifact_hash=artifact_hash,
-            params=params,
-            package_evaluation=package_evaluation,
-            scanner_evidence=scanner_evidence,
-            policy_action=policy_action,
-        )
-        reason = (
-            f"HOL Guard blocked package install request {tool_name} from {self.server_name}."
-            if policy_action == "block"
-            else (
-                f"HOL Guard requires an enforceable sandbox for package install request {tool_name} from "
-                f"{self.server_name}; this runtime cannot provide one."
-            )
-        )
-        response = _blocked_tool_response(
-            message_id,
-            tool_name,
-            reason,
-            {
-                "approvalRequests": [],
-                "guardPolicyAction": policy_action,
-                "supplyChainEvaluation": package_evaluation.to_dict(),
-            },
-        )
-        return response, {
-            "method": "tools/call",
-            "tool_name": tool_name,
-            "decision": f"terminal-package-{policy_action}",
-            "policy_action": policy_action,
-            "redacted_params": _safe_mcp_params(params),
-            "approval_requests": [],
-            "scanner_evidence": list(scanner_evidence),
-        }
-
-    def _stored_tool_block_response(
-        self,
-        *,
-        message_id: Any,
-        artifact: Any,
-        artifact_hash: str,
-        tool_name: str,
-        params: dict[str, Any],
-        signals: tuple[str, ...],
-        risk_categories: tuple[str, ...],
-        scanner_evidence: tuple[dict[str, object], ...],
+        leg: _AnswerLeg,
+        policy_action: GuardAction | None,
         package_request: bool,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
+        """Answer a call the resident stopped before it was forwarded.
+
+        ``kind`` is the resident's ``package_answer`` kind. A queued stop goes
+        to the approval center. Every other stop is a block: the resident
+        writes its message, payload, event label and receipt signals, and this
+        records the receipt and frames the error with them.
+        """
+
+        if kind in {"queue_tool", "queue_package"}:
+            if policy_action is None:
+                raise NativeMcpProxyDecisionError("native_mcp_proxy_decision_payload_invalid")
+            if kind == "queue_tool":
+                return self._queue_approval_center_response(
+                    message_id=message_id,
+                    artifact=leg.artifact,
+                    artifact_hash=leg.artifact_hash,
+                    tool_name=tool_name,
+                    signals=leg.signals,
+                    params=params,
+                    scanner_evidence=leg.scanner_evidence,
+                    policy_action=policy_action,
+                )
+            return self._queue_package_approval_response(
+                message_id=message_id,
+                artifact=leg.artifact,
+                artifact_hash=leg.artifact_hash,
+                tool_name=tool_name,
+                params=params,
+                package_evaluation=leg.evaluation,
+                policy_action=policy_action,
+                scanner_evidence=leg.scanner_evidence,
+            )
+        answer = self._package_answer(
+            kind,
+            tool_name=tool_name,
+            policy_action=policy_action,
+            package_request=package_request,
+            signals=leg.signals,
+            evaluation=leg.evaluation,
+        )
+        if answer["kind"] != "block":
+            raise NativeMcpProxyDecisionError("native_mcp_proxy_decision_payload_invalid")
+        data = answer["data"]
+        if kind in {"stored_package_block", "terminal_package"} and leg.evaluation is not None:
+            # The resident does not echo the evaluation back; attach the one
+            # this call already holds.
+            data["supplyChainEvaluation"] = leg.evaluation.to_dict()
+        # A package block records the arguments under the call's own name.
+        projected_name = tool_name if leg.evaluation is None else str(params.get("name") or "unknown")
         block_tool_call(
             store=self.store,
-            artifact=artifact,
-            artifact_hash=artifact_hash,
-            decision_source="policy-block",
+            artifact=leg.artifact,
+            artifact_hash=leg.artifact_hash,
+            decision_source=answer["decision_source"],
             now=_now(),
-            signals=signals,
-            risk_categories=risk_categories,
-            arguments=_safe_mcp_arguments(params.get("arguments")),
-            additional_scanner_evidence=scanner_evidence,
-            policy_action="block",
-        )
-        request_kind = "package tool call" if package_request else "tool call"
-        response = _blocked_tool_response(
-            message_id,
-            tool_name,
-            (
-                f"HOL Guard blocked {request_kind} {tool_name} from {self.server_name}. "
-                "This exact request is already blocked by authenticated saved policy."
-            ),
-            {
-                "approvalRequests": [],
-                "guardPolicyAction": "block",
-            },
+            signals=tuple(answer["signals"]),
+            risk_categories=leg.risk_categories,
+            arguments=self._call_projector.project(projected_name, params).safe_arguments,
+            additional_scanner_evidence=leg.scanner_evidence,
+            policy_action=answer["policy_action"],
         )
         event: dict[str, Any] = {
             "method": "tools/call",
             "tool_name": tool_name,
-            "decision": "block-stored-policy",
-            "policy_action": "block",
-            "redacted_params": _safe_mcp_params(params),
+            "decision": answer["decision"],
+            "policy_action": answer["policy_action"],
+            "redacted_params": self._call_projector.project(tool_name, params).safe_params,
             "approval_requests": [],
         }
-        if scanner_evidence:
-            event["scanner_evidence"] = list(scanner_evidence)
-        return response, event
-
-    def _stored_package_block_response(
-        self,
-        *,
-        message_id: Any,
-        artifact: Any,
-        artifact_hash: str,
-        tool_name: str,
-        params: dict[str, Any],
-        package_evaluation: Any,
-        scanner_evidence: tuple[dict[str, object], ...],
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
-        self._record_package_block(
-            artifact=artifact,
-            artifact_hash=artifact_hash,
-            params=params,
-            package_evaluation=package_evaluation,
-            scanner_evidence=scanner_evidence,
-            policy_action="block",
-        )
-        response = _blocked_tool_response(
-            message_id,
-            tool_name,
-            (
-                f"HOL Guard blocked package install request {tool_name} from {self.server_name}. "
-                "This exact request is already blocked by stored policy with authenticated local integrity."
-            ),
-            {
-                "approvalRequests": [],
-                "guardPolicyAction": "block",
-                "supplyChainEvaluation": package_evaluation.to_dict(),
-            },
-        )
-        return response, {
-            "method": "tools/call",
-            "tool_name": tool_name,
-            "decision": "package-block-stored",
-            "policy_action": "block",
-            "redacted_params": _safe_mcp_params(params),
-            "approval_requests": [],
-            "scanner_evidence": list(scanner_evidence),
-        }
+        if leg.scanner_evidence or answer["scanner_evidence_always"]:
+            event["scanner_evidence"] = list(leg.scanner_evidence)
+        return _blocked_tool_response(message_id, tool_name, answer["message"], data), event
 
     def _record_client_capabilities(self, method: str, params: object) -> None:
         del method, params
@@ -2719,8 +2308,8 @@ class RuntimeMcpGuardProxy:
         self,
         *,
         message: dict[str, Any],
-        child_stdin: IO[str],
-        child_stdout: IO[str],
+        child_stdin: IO[str] | _NativeMcpChildIo,
+        child_stdout: IO[str] | _NativeMcpChildIo,
         client_input: TextIO | None,
         server_output: TextIO | None,
         artifact: Any,
@@ -2778,16 +2367,7 @@ class RuntimeMcpGuardProxy:
                     package_request=False,
                 )
             if not self.store.claim_approval_reuse_decisions((pending,), now=_now()):
-                claim_failure_item: dict[str, object] = {
-                    "source": "approval_reuse",
-                    "status": "rejected",
-                    "reason_code": APPROVAL_REUSE_CLAIM_FAILED,
-                    "effective_action": "require-reapproval",
-                }
-                failed_evidence = (
-                    *scanner_evidence,
-                    claim_failure_item,
-                )
+                failed_evidence = (*scanner_evidence, self._native_evidence_item("claim_failed"))
                 return self._queue_approval_center_response(
                     message_id=message.get("id"),
                     artifact=artifact,
@@ -2810,7 +2390,7 @@ class RuntimeMcpGuardProxy:
                     tool_name=tool_name,
                     signals=signals,
                     params=params,
-                    scanner_evidence=_config_refresh_failure_evidence(scanner_evidence),
+                    scanner_evidence=(*scanner_evidence, self._native_evidence_item("config_refresh_failed")),
                     policy_action="require-reapproval",
                 )
             self.config = fresh_config
@@ -2824,56 +2404,61 @@ class RuntimeMcpGuardProxy:
             expected_catalog_state = fresh_authority.catalog_state
             expected_catalog_fingerprint = fresh_authority.catalog_fingerprint
             fresh_decision = fresh_authority.decision
-            fresh_evidence = _tool_decision_scanner_evidence(fresh_decision)
-            fresh_action = _postclaim_tool_action(fresh_decision)
-            context_matches = (
-                fresh_authority.artifact.artifact_id == artifact.artifact_id
-                and fresh_authority.artifact_hash == artifact_hash
-            )
-            postclaim_evidence = _postclaim_authority_evidence(
-                fresh_evidence,
-                context_matches=context_matches,
-                current_action=fresh_action,
-            )
             claim_authorizes_review = claimed_approval_authorizes_postclaim_review(
                 claim_disposition=claim_disposition,
                 claimed_decision=pending,
                 current_decision=fresh_decision.pending_approval_reuse_decision,
+                guard_home=self.store.guard_home,
             )
-            postclaim_evidence = _postclaim_claim_evidence(
-                postclaim_evidence,
-                current_action=fresh_action,
-                claim_authorizes_review=claim_authorizes_review,
+
+            def reapproval_allowed(_need: Mapping[str, Any]) -> dict[str, object]:
+                return {
+                    "fresh_claim_allows_reapproval": bool(
+                        fresh_claim_allows_reapproval(
+                            claim_disposition=claim_disposition,
+                            reason_code=fresh_decision.approval_reuse_reason_code,
+                            decision=pending,
+                            artifact=fresh_authority.artifact,
+                            artifact_hash=fresh_authority.artifact_hash,
+                            guard_home=self.store.guard_home,
+                        )
+                    )
+                }
+
+            postclaim = self._native_decide(
+                {
+                    "check": "tool_postclaim",
+                    "fresh": tool_facts(fresh_decision),
+                    "artifact_id": fresh_authority.artifact.artifact_id,
+                    "expected_artifact_id": artifact.artifact_id,
+                    "artifact_hash": fresh_authority.artifact_hash,
+                    "expected_artifact_hash": artifact_hash,
+                    "claim_authorizes_review": bool(claim_authorizes_review),
+                },
+                supply={"fresh_claim_allows_reapproval": reapproval_allowed},
             )
-            if fresh_decision.saved_action == "block":
-                return self._stored_tool_block_response(
+            postclaim_evidence = (
+                *_tool_decision_scanner_evidence(fresh_decision),
+                *postclaim["evidence_append"],
+            )
+            disposition = postclaim["disposition"]
+            if disposition["kind"] in _TOOL_STOP_KINDS:
+                return self._stopped_call_response(
+                    _TOOL_STOP_KINDS[disposition["kind"]],
                     message_id=message.get("id"),
-                    artifact=fresh_authority.artifact,
-                    artifact_hash=fresh_authority.artifact_hash,
                     tool_name=tool_name,
                     params=params,
-                    signals=fresh_decision.signals,
-                    risk_categories=fresh_decision.risk_categories,
-                    scanner_evidence=postclaim_evidence,
+                    leg=_AnswerLeg(
+                        fresh_authority.artifact,
+                        fresh_authority.artifact_hash,
+                        postclaim_evidence,
+                        fresh_decision.signals,
+                        fresh_decision.risk_categories,
+                    ),
+                    policy_action=disposition.get("policy_action"),
                     package_request=False,
                 )
-            if fresh_action in {"block", "sandbox-required"}:
-                return self._terminal_tool_response(
-                    message_id=message.get("id"),
-                    artifact=fresh_authority.artifact,
-                    artifact_hash=fresh_authority.artifact_hash,
-                    tool_name=tool_name,
-                    params=params,
-                    policy_action=fresh_action,
-                    signals=fresh_decision.signals,
-                    risk_categories=fresh_decision.risk_categories,
-                    scanner_evidence=postclaim_evidence,
-                )
-            if (
-                not context_matches
-                or fresh_action == "require-reapproval"
-                or (fresh_action == "review" and not claim_authorizes_review)
-            ):
+            if disposition["kind"] == "queue_reapproval":
                 return self._queue_approval_center_response(
                     message_id=message.get("id"),
                     artifact=fresh_authority.artifact,
@@ -2882,11 +2467,13 @@ class RuntimeMcpGuardProxy:
                     signals=fresh_decision.signals,
                     params=params,
                     scanner_evidence=postclaim_evidence,
-                    policy_action="require-reapproval",
+                    policy_action=disposition["policy_action"],
                 )
-            # An unchanged current review is satisfied by the exact claim. A
-            # current allow/warn is independently executable. Carry the fresh
-            # identity and risk material into the final receipt and forward.
+            if disposition["kind"] != "forward":
+                raise NativeMcpProxyDecisionError("native_mcp_proxy_decision_disposition_unknown")
+            # The resident found the claimed authority still covers the fresh
+            # identity. Carry the fresh identity and risk material into the
+            # final receipt and forward.
             artifact = fresh_authority.artifact
             artifact_hash = fresh_authority.artifact_hash
             signals = fresh_decision.signals
@@ -2903,7 +2490,7 @@ class RuntimeMcpGuardProxy:
                     signals=signals,
                     risk_categories=risk_categories,
                     remember=True,
-                    arguments=_safe_mcp_arguments(params.get("arguments")),
+                    arguments=self._call_projector.project(str(params.get("name") or "unknown"), params).safe_arguments,
                     additional_scanner_evidence=scanner_evidence,
                     policy_action=policy_action,
                     emit_runtime_evidence=False,
@@ -2948,7 +2535,7 @@ class RuntimeMcpGuardProxy:
             signals=signals,
             risk_categories=risk_categories,
             remember=False,
-            arguments=_safe_mcp_arguments(params.get("arguments")),
+            arguments=self._call_projector.project(str(params.get("name") or "unknown"), params).safe_arguments,
             additional_scanner_evidence=scanner_evidence,
             policy_action=policy_action,
         )
@@ -2957,24 +2544,35 @@ class RuntimeMcpGuardProxy:
             "tool_name": params.get("name"),
             "decision": "timeout" if _is_timeout_response(response) else decision_source,
             "policy_action": policy_action,
-            "redacted_params": _safe_mcp_params(params),
+            "redacted_params": self._call_projector.project(str(params.get("name") or "unknown"), params).safe_params,
         }
         if scanner_evidence:
             event["scanner_evidence"] = list(scanner_evidence)
         return response, event
 
     @staticmethod
-    def _forward_notification(message: dict[str, Any], child_stdin: IO[str]) -> None:
+    def _forward_notification(message: dict[str, Any], child_stdin: IO[str] | _NativeMcpChildIo) -> None:
         child_stdin.write(json.dumps(message) + "\n")
         child_stdin.flush()
 
     def _next_child_output_frame(
         self,
-        child_stdout: IO[str],
+        child_stdout: IO[str] | _NativeMcpChildIo,
         *,
         timeout_seconds: float,
         required: bool,
     ) -> _ChildOutputFrame | None:
+        if isinstance(child_stdout, _NativeMcpChildIo):
+            # Drain the resident-path injection buffer first so synthesized
+            # frames (post-claim notifications in tests) are observed before
+            # the next real child frame.
+            injected = self._child_output_queue
+            if injected is not None:
+                try:
+                    return injected.get_nowait()
+                except queue.Empty:
+                    pass
+            return child_stdout.next_frame(timeout_seconds, required)
         output_queue = self._child_output_queue if child_stdout is self._active_child_stdout else None
         if output_queue is not None:
             try:
@@ -3020,8 +2618,8 @@ class RuntimeMcpGuardProxy:
         self,
         payload: dict[str, Any],
         *,
-        child_stdin: IO[str],
-        child_stdout: IO[str],
+        child_stdin: IO[str] | _NativeMcpChildIo,
+        child_stdout: IO[str] | _NativeMcpChildIo,
         client_input: TextIO | None,
         server_output: TextIO | None,
     ) -> None:
@@ -3047,8 +2645,8 @@ class RuntimeMcpGuardProxy:
     def _drain_child_messages(
         self,
         *,
-        child_stdin: IO[str],
-        child_stdout: IO[str],
+        child_stdin: IO[str] | _NativeMcpChildIo,
+        child_stdout: IO[str] | _NativeMcpChildIo,
         client_input: TextIO | None,
         server_output: TextIO | None,
         quiet_seconds: float = 0.0,
@@ -3100,8 +2698,8 @@ class RuntimeMcpGuardProxy:
     def _drain_and_validate_catalog_authority(
         self,
         *,
-        child_stdin: IO[str],
-        child_stdout: IO[str],
+        child_stdin: IO[str] | _NativeMcpChildIo,
+        child_stdout: IO[str] | _NativeMcpChildIo,
         client_input: TextIO | None,
         server_output: TextIO | None,
         generation: int,
@@ -3122,11 +2720,26 @@ class RuntimeMcpGuardProxy:
             fingerprint=fingerprint,
         )
 
+    def _can_exchange(
+        self,
+        child_stdin: IO[str] | _NativeMcpChildIo,
+        child_stdout: IO[str] | _NativeMcpChildIo,
+    ) -> bool:
+        """True when the quiet edge, write and response can ride one resident round trip.
+
+        Frames already queued on the proxy side (injected or locally pending)
+        are an unfinished drain, so the legacy path must run them first.
+        """
+        if not isinstance(child_stdin, _NativeMcpChildIo) or child_stdin is not child_stdout:
+            return False
+        injected = self._child_output_queue
+        return child_stdin.idle() and (injected is None or injected.empty())
+
     def _forward_message(
         self,
         message: dict[str, Any],
-        child_stdin: IO[str],
-        child_stdout: IO[str],
+        child_stdin: IO[str] | _NativeMcpChildIo,
+        child_stdout: IO[str] | _NativeMcpChildIo,
         *,
         client_input: TextIO | None,
         server_output: TextIO | None,
@@ -3135,25 +2748,44 @@ class RuntimeMcpGuardProxy:
         expected_catalog_fingerprint: str | None = None,
     ) -> dict[str, Any]:
         request_id = message.get("id")
-        if (
-            str(message.get("method", "")) == "tools/call"
+        catalog = (
+            (expected_catalog_generation, expected_catalog_state, expected_catalog_fingerprint)
+            if str(message.get("method", "")) == "tools/call"
             and expected_catalog_generation is not None
             and expected_catalog_state is not None
             and expected_catalog_fingerprint is not None
+            else None
+        )
+        written = False
+        if catalog is not None and request_id is not None and self._can_exchange(child_stdin, child_stdout):
+            if not self._catalog_authority_matches(generation=catalog[0], state=catalog[1], fingerprint=catalog[2]):
+                raise _ToolCatalogBoundaryChangedError(_TOOL_CATALOG_EXECUTION_BOUNDARY_CHANGED)
+            exchanged = cast("_NativeMcpChildIo", child_stdin).exchange(
+                message,
+                quiet_seconds=_TOOLS_CALL_PREWRITE_QUIET_SECONDS,
+                response_timeout_seconds=self._child_response_timeout_seconds(),
+            )
+            if isinstance(exchanged, dict):
+                return exchanged
+            written = exchanged
+        if (
+            catalog is not None
+            and not written
             and not self._drain_and_validate_catalog_authority(
                 child_stdin=child_stdin,
                 child_stdout=child_stdout,
                 client_input=client_input,
                 server_output=server_output,
-                generation=expected_catalog_generation,
-                state=expected_catalog_state,
-                fingerprint=expected_catalog_fingerprint,
+                generation=catalog[0],
+                state=catalog[1],
+                fingerprint=catalog[2],
                 quiet_seconds=_TOOLS_CALL_PREWRITE_QUIET_SECONDS,
             )
         ):
             raise _ToolCatalogBoundaryChangedError(_TOOL_CATALOG_EXECUTION_BOUNDARY_CHANGED)
-        child_stdin.write(json.dumps(message) + "\n")
-        child_stdin.flush()
+        if not written:
+            child_stdin.write(json.dumps(message) + "\n")
+            child_stdin.flush()
         while True:
             buffered_response = self._pop_buffered_child_response(request_id)
             if buffered_response is not None:
@@ -3176,6 +2808,20 @@ class RuntimeMcpGuardProxy:
                     message="Guard runtime MCP proxy timed out waiting for the MCP server.",
                 )
             assert frame is not None
+            # The native stdio session returns a timeout as a frame ``error``
+            # rather than raising. Mirror the ``except ProxyIoTimeoutError``
+            # branch above so both transports yield the same
+            # ``_timeout_response`` and quarantine the child.
+            if isinstance(frame.error, ProxyIoTimeoutError):
+                active_process = self._active_process
+                if active_process is not None:
+                    _quarantine_process(active_process)
+                return _timeout_response(
+                    request_id,
+                    source="child_response",
+                    timeout_seconds=timeout_seconds,
+                    message="Guard runtime MCP proxy timed out waiting for the MCP server.",
+                )
             line = self._child_output_line(frame)
             payload = json.loads(line)
             if not isinstance(payload, dict):
@@ -3230,8 +2876,8 @@ class RuntimeMcpGuardProxy:
         self,
         *,
         payload: dict[str, Any],
-        child_stdin: IO[str],
-        child_stdout: IO[str],
+        child_stdin: IO[str] | _NativeMcpChildIo,
+        child_stdout: IO[str] | _NativeMcpChildIo,
         client_input: TextIO | None,
         server_output: TextIO | None,
     ) -> None:
@@ -3300,8 +2946,8 @@ class RuntimeMcpGuardProxy:
         *,
         input_stream: TextIO,
         output_stream: TextIO,
-        child_stdin: IO[str],
-        child_stdout: IO[str],
+        child_stdin: IO[str] | _NativeMcpChildIo,
+        child_stdout: IO[str] | _NativeMcpChildIo,
     ) -> dict[str, Any]:
         request_id = request.get("id")
         output_stream.write(json.dumps(request) + "\n")
@@ -3359,41 +3005,19 @@ class RuntimeMcpGuardProxy:
         *,
         policy_action: str = "require-reapproval",
         scanner_evidence: tuple[dict[str, object], ...] = (),
+        connector_setup: Mapping[str, object] | None = None,
     ) -> dict[str, Any]:
-        """Build the artifact payload for approval center queueing.
-
-        Includes browser intent metadata when the MCP tool call is a browser
-        automation call (HGBM063-HGBM065).
-        """
-        arguments = params.get("arguments")
-        launch_target, browser_intent_dict = _browser_intent_payload(
+        """Build the artifact payload for approval center queueing."""
+        projection = self._call_projector.project(tool_name, params, artifact)
+        return review_artifact_payload(
+            projection,
             artifact,
-            arguments,
-            default_launch_target=self._launch_target(tool_name, arguments),
+            artifact_hash,
+            signals,
+            policy_action=policy_action,
+            scanner_evidence=scanner_evidence,
+            connector_setup=connector_setup,
         )
-        changed_fields: list[str] = ["runtime_tool_call"]
-
-        if browser_intent_dict is not None:
-            changed_fields.append("runtime_browser_tool_call")
-
-        payload: dict[str, Any] = {
-            "artifact_id": artifact.artifact_id,
-            "artifact_name": artifact.name,
-            "artifact_hash": artifact_hash,
-            "artifact_type": artifact.artifact_type,
-            "source_scope": artifact.source_scope,
-            "config_path": artifact.config_path,
-            "changed_fields": changed_fields,
-            "policy_action": policy_action,
-            "launch_target": launch_target,
-            "risk_summary": tool_call_risk_summary(artifact, arguments),
-            "risk_signals": list(signals),
-        }
-        if browser_intent_dict is not None:
-            payload["browser_intent"] = browser_intent_dict
-        if scanner_evidence:
-            payload["scanner_evidence"] = list(scanner_evidence)
-        return payload
 
     def _queue_approval_center_response(
         self,
@@ -3406,7 +3030,74 @@ class RuntimeMcpGuardProxy:
         params: dict[str, Any],
         scanner_evidence: tuple[dict[str, object], ...] = (),
         policy_action: GuardAction = "require-reapproval",
+        connector_setup: Mapping[str, object] | None = None,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
+        connector_code = (
+            {} if connector_setup is None else {"guardReasonCode": RUNTIME_TOOL_CALL_CONNECTOR_SETUP_REQUIRED}
+        )
+        if not asks_for_approval(self.config):
+            block_tool_call(
+                store=self.store,
+                artifact=artifact,
+                artifact_hash=artifact_hash,
+                decision_source="policy-safe-alternative",
+                now=_now(),
+                signals=signals,
+                risk_categories=self._call_projector.project(tool_name, params, artifact).risk_categories,
+                arguments=self._call_projector.project(tool_name, params, artifact).safe_arguments,
+                additional_scanner_evidence=scanner_evidence,
+                policy_action=policy_action,
+            )
+            from ..approvals import record_unprompted_review
+
+            record_unprompted_review(
+                detection=HarnessDetection(
+                    harness=self.harness,
+                    installed=True,
+                    command_available=True,
+                    config_paths=(self.config_path,),
+                    artifacts=(artifact,),
+                ),
+                evaluation={
+                    "artifacts": [
+                        self._build_artifact_payload(
+                            artifact,
+                            artifact_hash,
+                            tool_name,
+                            params,
+                            signals,
+                            policy_action=policy_action,
+                            scanner_evidence=scanner_evidence,
+                            connector_setup=connector_setup,
+                        )
+                    ]
+                },
+                store=self.store,
+                redaction_level=self.config.receipt_redaction_level,
+            )
+            return _blocked_tool_response(
+                message_id,
+                tool_name,
+                safe_alternative_reason(
+                    f"HOL Guard blocked tool call {tool_name} from {self.server_name}. " + " ".join(signals)
+                )
+                if connector_setup is None
+                else connector_agent_text(connector_setup, ask=False),
+                {
+                    "approvalRequests": [],
+                    "guardPolicyAction": "block",
+                    "transportOutcome": "not-forwarded",
+                    **connector_code,
+                },
+            ), {
+                "method": "tools/call",
+                "tool_name": tool_name,
+                "decision": "safe-alternative",
+                "policy_action": policy_action,
+                "approval_requests": [],
+                "prompted": False,
+                "redacted_params": self._call_projector.project(tool_name, params, artifact).safe_params,
+            }
         approval_center_url = ensure_guard_daemon(self.context.guard_home)
         queued = queue_blocked_approvals(
             redaction_level=self.config.receipt_redaction_level,
@@ -3427,6 +3118,7 @@ class RuntimeMcpGuardProxy:
                         signals,
                         policy_action=policy_action,
                         scanner_evidence=scanner_evidence,
+                        connector_setup=connector_setup,
                     ),
                 ]
             },
@@ -3441,8 +3133,8 @@ class RuntimeMcpGuardProxy:
             decision_source="approval-center-pending",
             now=_now(),
             signals=signals,
-            risk_categories=tool_call_risk_categories(artifact, params.get("arguments")),
-            arguments=_safe_mcp_arguments(params.get("arguments")),
+            risk_categories=self._call_projector.project(tool_name, params, artifact).risk_categories,
+            arguments=self._call_projector.project(tool_name, params, artifact).safe_arguments,
             additional_scanner_evidence=scanner_evidence,
             policy_action=policy_action,
         )
@@ -3458,6 +3150,7 @@ class RuntimeMcpGuardProxy:
             "approvalRequests": queued,
             "guardPolicyAction": policy_action,
             "reviewUrl": review_url,
+            **connector_code,
         }
         response = _blocked_tool_response(
             message_id,
@@ -3465,7 +3158,9 @@ class RuntimeMcpGuardProxy:
             (
                 f"HOL Guard stopped tool call {tool_name} from {self.server_name}. "
                 f"Approve request {request_id} at {review_url}, then retry the same action."
-            ),
+            )
+            if connector_setup is None
+            else f"{connector_agent_text(connector_setup, ask=True)} Review it at {review_url}.",
             response_data,
         )
         queued_event: dict[str, Any] = {
@@ -3473,7 +3168,7 @@ class RuntimeMcpGuardProxy:
             "tool_name": tool_name,
             "decision": "queue-approval",
             "policy_action": policy_action,
-            "redacted_params": _safe_mcp_params(params),
+            "redacted_params": self._call_projector.project(tool_name, params, artifact).safe_params,
             "approval_center_url": approval_center_url,
             "approval_requests": queued,
             "review_url": review_url,
@@ -3498,11 +3193,8 @@ class RuntimeMcpGuardProxy:
         if policy_action not in {"review", "block", "sandbox-required", "require-reapproval"}:
             return []
         approval_center_url = ensure_guard_daemon(self.context.guard_home)
-        launch_target, browser_intent_dict = _browser_intent_payload(
-            artifact,
-            params.get("arguments"),
-            default_launch_target=self._launch_target(tool_name, params.get("arguments")),
-        )
+        projection = self._call_projector.project(tool_name, params, artifact)
+        launch_target, browser_intent_dict = projection.display_launch_target, projection.browser_intent
         artifact_payload: dict[str, Any] = {
             "artifact_id": artifact.artifact_id,
             "artifact_name": artifact.name,
@@ -3539,26 +3231,74 @@ class RuntimeMcpGuardProxy:
             now=_now(),
         )
 
-    def _clear_tools_catalog(
-        self,
-        state: _ToolCatalogState,
-        *,
-        advance_generation: bool,
-    ) -> None:
-        self._tool_catalog_state = state
+    def _catalog_state_fact(self) -> dict[str, object]:
+        pending = self._tool_catalog_pending
+        return {
+            "state": self._tool_catalog_state,
+            "generation": self._tool_catalog_generation,
+            "inflight": self._tool_catalog_inflight,
+            "inflight_cursor": self._tool_catalog_inflight_cursor,
+            "expected_cursor": self._tool_catalog_expected_cursor,
+            "catalog_names": sorted(self._tool_catalog),
+            "pending_names": None if pending is None else sorted(pending),
+        }
+
+    def _catalog_unavailable(self) -> None:
+        """Fail closed when the resident cannot answer a catalog event.
+
+        This only records that no authoritative catalog exists; it never
+        computes a transition. The ``error`` state authorizes nothing.
+        """
+
+        self._tool_catalog_state = "error"
         self._tool_catalog = {}
         self._tool_catalog_pending = None
         self._tool_catalog_expected_cursor = None
         self._tool_catalog_inflight = False
         self._tool_catalog_inflight_cursor = None
-        if advance_generation:
-            self._tool_catalog_generation += 1
+        self._tool_catalog_generation += 1
+
+    def _catalog_event(self, event: dict[str, object]) -> dict[str, Any] | None:
+        """Apply one resident-decided catalog transition to the mirrored state."""
+
+        try:
+            payload = self._native_decide(
+                {"check": "catalog_event", "state": self._catalog_state_fact(), "event": event}
+            )
+            state = payload["state"]
+            pool = {**self._tool_catalog, **(self._tool_catalog_pending or {}), **(payload.get("page") or {})}
+            catalog = {name: pool[name] for name in payload["catalog_names"]}
+            pending_names = payload["pending_names"]
+            pending = None if pending_names is None else {name: pool[name] for name in pending_names}
+            applied = (
+                state["state"],
+                state["generation"],
+                state["inflight"],
+                state["inflight_cursor"],
+                state["expected_cursor"],
+            )
+        except (NativeMcpProxyDecisionError, KeyError, TypeError):
+            self._catalog_unavailable()
+            return None
+        (
+            self._tool_catalog_state,
+            self._tool_catalog_generation,
+            self._tool_catalog_inflight,
+            self._tool_catalog_inflight_cursor,
+            self._tool_catalog_expected_cursor,
+        ) = applied
+        self._tool_catalog = catalog
+        self._tool_catalog_pending = pending
+        return payload
 
     def _reset_tools_catalog_unobserved(self) -> None:
-        self._clear_tools_catalog("unobserved", advance_generation=True)
+        self._catalog_event({"kind": "reset"})
 
     def _poison_tools_catalog(self) -> None:
-        self._clear_tools_catalog("error", advance_generation=True)
+        self._catalog_event({"kind": "poison"})
+
+    def _invalidate_tools_catalog(self) -> None:
+        self._catalog_event({"kind": "invalidate"})
 
     def _begin_tools_catalog_request(
         self,
@@ -3568,62 +3308,19 @@ class RuntimeMcpGuardProxy:
     ) -> int:
         """Start one validated root or continuation request and return its generation."""
 
-        if request_cursor is None:
-            if advance_root_generation:
-                self._tool_catalog_generation += 1
-            self._tool_catalog_state = "pending"
-            self._tool_catalog = {}
-            self._tool_catalog_pending = {}
-            self._tool_catalog_expected_cursor = None
-            self._tool_catalog_inflight = True
-            self._tool_catalog_inflight_cursor = None
+        payload = self._catalog_event(
+            {
+                "kind": "begin",
+                "cursor": cursor_fact(request_cursor),
+                "advance_root_generation": advance_root_generation,
+            }
+        )
+        if payload is None:
             return self._tool_catalog_generation
-
-        request_generation = self._tool_catalog_generation
-        if (
-            not isinstance(request_cursor, str)
-            or self._tool_catalog_state != "pending"
-            or self._tool_catalog_pending is None
-            or self._tool_catalog_inflight
-            or self._tool_catalog_expected_cursor is None
-            or request_cursor != self._tool_catalog_expected_cursor
-        ):
-            self._poison_tools_catalog()
-            return request_generation
-        self._tool_catalog_inflight = True
-        self._tool_catalog_inflight_cursor = request_cursor
-        return request_generation
+        return int(payload["request_generation"])
 
     def _fail_tools_catalog_request(self, request_generation: int) -> None:
-        if request_generation == self._tool_catalog_generation:
-            self._poison_tools_catalog()
-
-    @staticmethod
-    def _normalized_tools_catalog_page(tools: object) -> dict[str, dict[str, object]] | None:
-        if not isinstance(tools, list):
-            return None
-        page: dict[str, dict[str, object]] = {}
-        for item in tools:
-            if not isinstance(item, dict) or any(not isinstance(key, str) for key in item):
-                return None
-            raw_name = item.get("name")
-            if not isinstance(raw_name, str) or not raw_name or raw_name != raw_name.strip():
-                return None
-            if raw_name in page:
-                return None
-            entry = {key: deepcopy(value) for key, value in item.items() if key != "name"}
-            try:
-                json.dumps(
-                    _canonical_tool_catalog_entry(raw_name, entry),
-                    sort_keys=True,
-                    separators=(",", ":"),
-                    ensure_ascii=False,
-                    allow_nan=False,
-                )
-            except (TypeError, ValueError):
-                return None
-            page[raw_name] = entry
-        return page
+        self._catalog_event({"kind": "fail", "request_generation": request_generation})
 
     def _capture_tools_catalog(
         self,
@@ -3632,67 +3329,46 @@ class RuntimeMcpGuardProxy:
         request_cursor: object | None = None,
         request_generation: int | None = None,
     ) -> None:
-        # Keep direct unit callers safe while production always calls the
-        # explicit begin method before forwarding the list request.
-        if request_generation is None:
-            request_generation = self._begin_tools_catalog_request(request_cursor)
-        elif request_generation != self._tool_catalog_generation:
-            return
-        elif not self._tool_catalog_inflight:
-            request_generation = self._begin_tools_catalog_request(
-                request_cursor,
-                advance_root_generation=False,
-            )
-
-        if request_generation != self._tool_catalog_generation:
-            return
-        if not self._tool_catalog_inflight or request_cursor != self._tool_catalog_inflight_cursor:
-            self._poison_tools_catalog()
-            return
-        if _is_timeout_response(response) or "error" in response:
-            self._poison_tools_catalog()
-            return
-        result = response.get("result")
-        if not isinstance(result, dict):
-            self._poison_tools_catalog()
-            return
-        page = self._normalized_tools_catalog_page(result.get("tools"))
-        if page is None:
-            self._poison_tools_catalog()
-            return
-        next_cursor = result.get("nextCursor")
-        if next_cursor is not None and not isinstance(next_cursor, str):
-            self._poison_tools_catalog()
-            return
-        pending = self._tool_catalog_pending
-        if pending is None or any(name in pending for name in page):
-            self._poison_tools_catalog()
-            return
-        merged = {**pending, **page}
-        self._tool_catalog_inflight = False
-        self._tool_catalog_inflight_cursor = None
-        if next_cursor is not None:
-            self._tool_catalog_state = "pending"
-            self._tool_catalog = {}
-            self._tool_catalog_pending = merged
-            self._tool_catalog_expected_cursor = next_cursor
-            return
-        self._tool_catalog_state = "complete"
-        self._tool_catalog = merged
-        self._tool_catalog_pending = None
-        self._tool_catalog_expected_cursor = None
-
-    def _invalidate_tools_catalog(self) -> None:
-        self._clear_tools_catalog("invalidated", advance_generation=True)
-
-    @staticmethod
-    def _launch_target(tool_name: str, arguments: object) -> str:
-        safe_arguments = _safe_mcp_arguments(arguments)
-        serialized_arguments = (
-            json.dumps(safe_arguments, sort_keys=True, separators=(",", ":")) if arguments is not None else ""
+        self._catalog_event(
+            {
+                "kind": "capture",
+                "cursor": cursor_fact(request_cursor),
+                "request_generation": request_generation,
+                "response": response,
+            }
         )
-        digest = _mcp_arguments_digest(arguments)
-        return f"{tool_name} {serialized_arguments} [arguments-sha256:{digest}]".strip()
+        self._report_relay_server()
+
+    def _report_relay_server(self) -> None:
+        """Report a newly complete catalog so later sessions can be relayed."""
+
+        if self._tool_catalog_state != "complete":
+            return
+        try:
+            reported = json.dumps(self._tool_catalog, sort_keys=True, default=repr)
+            identity_hash = self._session_server_identity().identity_hash
+        except Exception:
+            return
+        if reported == self._relay_reported_catalog:
+            return
+        self._relay_reported_catalog = reported
+        self._relay_report = report_mcp_relay_server(
+            guard_home=self.store.guard_home,
+            harness=self.harness,
+            server_name=self.server_name,
+            source_scope=self.source_scope,
+            config_path=self.config_path,
+            server_id=self.server_id,
+            identity_hash=identity_hash,
+            tools=list(self._tool_catalog.values()),
+        )
+
+    def _finish_relay_report(self) -> None:
+        """Give an unsent report a moment before the session exits."""
+
+        report, self._relay_report = self._relay_report, None
+        if report is not None:
+            report.join(timeout=_RELAY_REPORT_EXIT_SECONDS)
 
 
 class ElicitationMcpGuardProxy(RuntimeMcpGuardProxy):
@@ -3768,35 +3444,6 @@ class OpenCodeMcpGuardProxy(RuntimeMcpGuardProxy):
         raise RuntimeError("OpenCode uses native permission prompts instead of Guard MCP inline approval.")
 
 
-def _approval_allows(payload: object) -> bool:
-    if not isinstance(payload, dict):
-        return False
-    if payload.get("action") != "accept":
-        return False
-    content = payload.get("content")
-    return isinstance(content, dict) and content.get("decision") == "approve"
-
-
-def _approval_denies(payload: object) -> bool:
-    if not isinstance(payload, dict):
-        return False
-    if payload.get("action") != "accept":
-        return False
-    content = payload.get("content")
-    return isinstance(content, dict) and content.get("decision") == "deny"
-
-
-def _approval_invalid(payload: object) -> bool:
-    if not isinstance(payload, dict):
-        return True
-    if payload.get("action") != "accept":
-        return False
-    content = payload.get("content")
-    if not isinstance(content, dict):
-        return True
-    return content.get("decision") not in {"approve", "deny"}
-
-
 def _approval_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if "result" in payload:
         result = payload.get("result")
@@ -3804,12 +3451,6 @@ def _approval_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if "error" in payload:
         return {"action": "cancel"}
     return {"action": "cancel"}
-
-
-def _decision_source(action: str, source: str) -> str:
-    if source == "policy":
-        return f"policy-{action}"
-    return f"{source}-{action}"
 
 
 def _is_notification(message: dict[str, Any]) -> bool:
@@ -3838,57 +3479,6 @@ def _command_argument(arguments: object) -> str | None:
 
 def _has_saved_package_block(reasons: Sequence[object]) -> bool:
     return any(isinstance(reason, Mapping) and reason.get("code") == "saved_package_block" for reason in reasons)
-
-
-def _package_reason_signals(reasons: Sequence[object]) -> tuple[RiskSignalV2, ...]:
-    signals: list[RiskSignalV2] = []
-    for reason in reasons:
-        if not isinstance(reason, Mapping):
-            continue
-        code = _optional_text(reason.get("code")) or "package-risk"
-        message = _optional_text(reason.get("message")) or code.replace("_", " ")
-        severity = _package_signal_severity(_optional_text(reason.get("severity")))
-        signals.append(
-            RiskSignalV2(
-                signal_id=f"supply-chain.{code}",
-                category="supply_chain",
-                severity=severity,
-                confidence="strong" if severity in {"high", "critical"} else "likely",
-                detector=_optional_text(reason.get("source")) or "guard.supply-chain",
-                title=message,
-                plain_reason=message,
-                technical_detail=message,
-                evidence_ref=None,
-                redaction_level="summary",
-                false_positive_hint=(
-                    "Review the package request or add a scoped exception only for a verified false positive."
-                ),
-                advisory_id=None,
-            )
-        )
-    return tuple(signals)
-
-
-def _package_signal_severity(value: str | None) -> RiskSeverityLabel:
-    match value:
-        case "info":
-            return "info"
-        case "low":
-            return "low"
-        case "medium":
-            return "medium"
-        case "high":
-            return "high"
-        case "critical":
-            return "critical"
-        case _:
-            return "medium"
-
-
-def _optional_text(value: object) -> str | None:
-    if isinstance(value, str) and value.strip():
-        return value.strip()
-    return None
 
 
 def _now() -> str:

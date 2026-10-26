@@ -111,6 +111,32 @@
         ]
       },
       {
+        "action_classes": [],
+        "baseline_floor": "allow",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Creates a new private repository owned by the signed-in account, optionally adding it as a remote of the current directory without pushing.",
+        "example_command": "gh repo create todo-app --private --source=.",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "new private repository",
+        "permission_id": "command.github.permission.create-private-remote",
+        "replacement_permission_id": null,
+        "risk_tier": "low",
+        "safer_guidance": [
+          "Keep the operation read-only or limited to opening a pull-request proposal."
+        ],
+        "typed_capabilities": [
+          "create_private_remote"
+        ]
+      },
+      {
         "action_classes": [
           "GitHub routine pull-request merge command"
         ],
@@ -270,7 +296,8 @@
         "replacement_permission_id": null,
         "risk_tier": "high",
         "safer_guidance": [
-          "Inspect the exact repository, resource, and operation before confirming it."
+          "Inspect the exact repository, resource, and operation before confirming it.",
+          "To publish new work without approval, create the repository with `gh repo create NAME --private --source=.` and then run `git push -u origin BRANCH`."
         ],
         "typed_capabilities": [
           "content_remote"
@@ -677,7 +704,8 @@
         "rule_version": "1.0.0",
         "safe_variants": [],
         "safer_alternatives": [
-          "Inspect the exact repository, resource, and operation before confirming it."
+          "Inspect the exact repository, resource, and operation before confirming it.",
+          "To publish new work without approval, create the repository with `gh repo create NAME --private --source=.` and then run `git push -u origin BRANCH`."
         ],
         "severity": "high",
         "title": "GitHub content mutation"

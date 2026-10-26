@@ -1,0 +1,15 @@
+{
+  "name": "pdf-tools",
+  "version": "1.4.0",
+  "description": "Fill PDF forms and extract text from PDFs.",
+  "author": {
+    "name": "Acme Labs"
+  },
+  "homepage": "https://acme.example/pdf-tools",
+  "repository": "https://github.com/acme/pdf-tools",
+  "license": "MIT",
+  "keywords": [
+    "pdf",
+    "forms"
+  ]
+}

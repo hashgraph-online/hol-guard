@@ -8,6 +8,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 
+from ..fork_safety import forget_in_child
 from ..mdm.file_lock import release_file_lock
 from .file_locking import lock_daemon_file, try_lock_daemon_file
 
@@ -15,6 +16,8 @@ _POLL_INTERVAL_SECONDS = 0.1
 _THREAD_LOCKS: dict[str, threading.Lock] = {}
 _THREAD_LOCKS_GUARD = threading.Lock()
 _THREAD_DEPTHS: dict[tuple[int, str], int] = {}
+forget_in_child(_THREAD_LOCKS)
+forget_in_child(_THREAD_DEPTHS)
 
 
 @contextmanager

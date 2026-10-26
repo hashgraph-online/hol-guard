@@ -1,0 +1,40 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.loomdesk",
+  "version": "1.0.0",
+  "name": "LoomDesk MCP",
+  "description": "Reviews LoomDesk's planning tools, which return unsigned Robinhood Chain transactions (open, add to, change or close a liquidity position, a limit order, a swap, a new pool) for the caller's own wallet to sign. LoomDesk holds no keys and signs nothing. Read tools keep Guard's usual handling. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "loomdesk.trade",
+    "displayName": "LoomDesk",
+    "url": "https://loomdesk.trade"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCube", "background": "#0B0A08" },
+  "homepage": "https://loomdesk.trade/mcp",
+  "launch": {
+    "kind": "remote-http",
+    "url": "https://loomdesk.trade/mcp",
+    "serverNames": ["loomdesk", "loomdesk-mcp"]
+  },
+  "riskClasses": ["external-onchain-transaction", "external-token-swap", "external-liquidity-change"],
+  "tools": [
+    { "name": "plan_build", "state": "review" },
+    { "name": "plan_ladder", "state": "review" },
+    { "name": "plan_ladder_action", "state": "review" },
+    { "name": "plan_limit_order", "state": "review" },
+    { "name": "plan_open_pool", "state": "review" },
+    { "name": "plan_swap", "state": "review" },
+    { "name": "other", "state": "inherit" }
+  ],
+  "referenceUrls": [
+    "https://loomdesk.trade/mcp",
+    "https://loomdesk.trade/llms.txt",
+    "https://loomdesk.trade/disclosures"
+  ],
+  "saferAlternatives": [
+    "Use the read tools (market_tokens, ladder_pools, my_ladders, book_status) when no transaction is needed.",
+    "Keep the plan_* tools on Review: what they return moves the wallet's funds once signed, so check the amounts, the pool and the contract before signing."
+  ]
+}

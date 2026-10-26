@@ -13,15 +13,11 @@ import pytest
 
 from codex_plugin_scanner.guard.cli.commands import add_guard_root_parser, run_guard_command
 from codex_plugin_scanner.guard.mdm.contracts import ManagedNetworkPolicy
+from codex_plugin_scanner.guard.native_verified_read_plan import NativeVerifiedReadPlanError
 from codex_plugin_scanner.guard.runtime import verified_github_reads as github_reads
 from codex_plugin_scanner.guard.runtime import verified_read_execution as local_reads
-from codex_plugin_scanner.guard.runtime.command_verified_read_candidates import verified_read_candidate_operation
 from codex_plugin_scanner.guard.runtime.effect_contract import ProofRoute
 from codex_plugin_scanner.guard.runtime.effect_decision import FinalDisposition
-from codex_plugin_scanner.guard.runtime.launch_identity_binding import (
-    RuleVersionBinding,
-    observe_launch_identity_binding,
-)
 from codex_plugin_scanner.guard.runtime.verified_github_reads import try_read_verified_public_github_pull_request
 from codex_plugin_scanner.guard.runtime.verified_read_execution import try_execute_verified_local_read
 from tests.guard_command_corpus import iter_benign_corpus
@@ -39,6 +35,11 @@ def _workspace(tmp_path: Path) -> tuple[Path, Path, Path]:
     return workspace, repository, cwd
 
 
+def _requires_read_proof(evaluation: object) -> bool:
+    reasons = evaluation.decision_plane.reasons
+    return any(reason.reason_code == "verified-read-proof-required" for reason in reasons)
+
+
 def test_every_cdx_060_corpus_case_requires_proof_instead_of_inheriting_allow() -> None:
     records = (
         (case, oracle)
@@ -53,7 +54,7 @@ def test_every_cdx_060_corpus_case_requires_proof_instead_of_inheriting_allow() 
     )
     assert len(evaluations) == 350
     assert {item.minimum_action for item in evaluations} == {"review"}
-    assert {item.decision_plane.action for item in evaluations} == {"review"}
+    assert {item.decision_plane.action for item in evaluations} == {"review", "require-reapproval"}
     assert all(
         any(reason.reason_code == "verified-read-proof-required" for reason in item.decision_plane.reasons)
         for item in evaluations
@@ -73,7 +74,7 @@ def test_raw_shell_candidates_never_mint_positive_proof(tmp_path: Path) -> None:
     )
     for command in commands:
         evaluation = real_native_command_evaluation(command, cwd=cwd, home_dir=home).evaluation
-        assert verified_read_candidate_operation(evaluation.command) is not None
+        assert _requires_read_proof(evaluation)
         assert evaluation.decision_plane.action == "review"
         assert evaluation.decision_plane.proof_routes == frozenset()
 
@@ -86,7 +87,7 @@ def test_raw_search_without_cwd_evidence_retains_approval_floor(tmp_path: Path) 
 
     evaluation = real_native_command_evaluation("rg -n GuardAction src", cwd=missing, home_dir=home).evaluation
 
-    assert verified_read_candidate_operation(evaluation.command) == "workspace-read"
+    assert _requires_read_proof(evaluation)
     assert evaluation.decision_plane.action == "require-reapproval"
     assert evaluation.decision_plane.proof_routes == frozenset()
     assert any(reason.reason_code == "critical.local-script-execution" for reason in evaluation.decision_plane.reasons)
@@ -97,7 +98,7 @@ def test_git_read_overlap_reaches_the_frozen_cdx_064_pair_baseline() -> None:
         "git diff --check", cwd=Path("workspace"), home_dir=Path("home")
     ).evaluation
 
-    assert verified_read_candidate_operation(evaluation.command) == "workspace-read"
+    assert _requires_read_proof(evaluation)
     assert evaluation.minimum_action == "review"
     assert evaluation.decision_plane.action == "review"
     assert evaluation.decision_plane.proof_routes == frozenset()
@@ -138,6 +139,40 @@ def test_local_executor_rejects_shell_composition_and_boundary_drift(tmp_path: P
         assert try_execute_verified_local_read(("head", "-40", ".env")) is None
     finally:
         os.chdir(previous)
+
+
+def test_local_executor_shows_the_slice_the_resident_planned(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _workspace_path, _repository, cwd = _workspace(tmp_path)
+    source = cwd / "main.py"
+    _ = source.write_text("".join(f"line{number}\n" for number in range(1, 11)), encoding="utf-8")
+    monkeypatch.chdir(cwd)
+
+    view = try_execute_verified_local_read(("sed", "-n", "3,5p", "main.py"))
+    leading = try_execute_verified_local_read(("head", "--lines=2", "main.py"))
+    trailing = try_execute_verified_local_read(("tail", "-2", "main.py"))
+
+    assert view is not None and view.operation_id == "bounded-source-view"
+    assert view.stdout == "line3\nline4\nline5\n"
+    assert leading is not None and leading.operation_id == "bounded-head"
+    assert leading.stdout == "line1\nline2\n"
+    assert trailing is not None and trailing.operation_id == "bounded-tail"
+    assert trailing.stdout == "line9\nline10\n"
+
+
+def test_local_executor_has_no_grammar_of_its_own(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Without the resident's plan there is no read, and no Python fallback."""
+
+    _workspace_path, _repository, cwd = _workspace(tmp_path)
+    _ = (cwd / "main.py").write_text("print('ok')\n", encoding="utf-8")
+    monkeypatch.chdir(cwd)
+
+    def unavailable(_argv: tuple[str, ...]) -> object:
+        raise NativeVerifiedReadPlanError("native_verified_read_plan_unavailable")
+
+    monkeypatch.setattr(local_reads, "verified_read_plan", unavailable)
+
+    assert try_execute_verified_local_read(("head", "-40", "main.py")) is None
+    assert try_execute_verified_local_read(("pwd",)) is None
 
 
 def test_local_executor_rejects_untrusted_workspace_and_context_drift(
@@ -351,25 +386,3 @@ def test_github_verified_read_proof_binds_managed_ca_contents(tmp_path: Path, mo
     second = read_once()
 
     assert first.proof.binding_digest != second.proof.binding_digest
-
-
-def test_proof_apis_do_not_accept_syntax_proof_or_transport_injection(tmp_path: Path) -> None:
-    local_parameters = inspect.signature(try_execute_verified_local_read).parameters
-    github_parameters = inspect.signature(try_read_verified_public_github_pull_request).parameters
-    assert "proof" not in local_parameters and "receipt" not in local_parameters
-    assert "proof" not in github_parameters and "transport" not in github_parameters
-
-    workspace, repository, cwd = _workspace(tmp_path)
-    command = real_native_command_evaluation("pwd", cwd=cwd).evaluation.command
-    observation = observe_launch_identity_binding(
-        command=command,
-        workspace=workspace,
-        repository=repository,
-        working_directory=cwd,
-        policy_version="verified-read-test.v1",
-        rules=(RuleVersionBinding("command.verified-read.test", "1.0.0"),),
-        launch_env={"PATH": os.environ.get("PATH", "")},
-    )
-    assert observation.can_issue_positive_proof is False
-    assert observation.unresolved_requirements == observation.required_requirements
-    assert real_native_command_evaluation("pwd").evaluation.decision_plane.proof_routes == frozenset()

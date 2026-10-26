@@ -4,24 +4,40 @@ from __future__ import annotations
 
 from pathlib import Path
 
-_ASSET = Path(__file__).parents[1] / "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/fleet-workspace.js"
-_DETECTION_ASSET = (
-    Path(__file__).parents[1] / "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/harness-detection.js"
-)
+from tests.dashboard_bundle_support import CHUNKS_DIR, dashboard_chunk
+
+_CHUNKS = CHUNKS_DIR
+_ASSET = dashboard_chunk("fleet-workspace")
 _AUTHORITATIVE_SOURCE = Path(__file__).parents[1] / "dashboard/src/fleet-workspace.tsx"
 _DETECTION_SOURCE = Path(__file__).parents[1] / "dashboard/src/harness-detection.ts"
 _RECOVERY_SOURCE = Path(__file__).parents[1] / "dashboard/src/fleet-protection-recovery.tsx"
+_RECOVERY_PARTS_SOURCE = Path(__file__).parents[1] / "dashboard/src/fleet-protection-recovery-parts.tsx"
 _COPY_SOURCE = Path(__file__).parents[1] / "dashboard/src/fleet-protection-recovery-copy.ts"
 
 
+def _detection_asset() -> Path:
+    # Rollup names a shared chunk after one of its modules, so find it by content.
+    matches = [
+        path for path in sorted(_CHUNKS.glob("*.js")) if "function useHarnessDetection(" in path.read_text("utf-8")
+    ]
+    assert len(matches) == 1, matches
+    return matches[0]
+
+
 def _source() -> str:
-    return "\n".join(path.read_text(encoding="utf-8") for path in (_ASSET, _DETECTION_ASSET))
+    return "\n".join(path.read_text(encoding="utf-8") for path in (_ASSET, _detection_asset()))
 
 
 def _authoritative_source() -> str:
     return "\n".join(
         path.read_text(encoding="utf-8")
-        for path in (_AUTHORITATIVE_SOURCE, _DETECTION_SOURCE, _RECOVERY_SOURCE, _COPY_SOURCE)
+        for path in (
+            _AUTHORITATIVE_SOURCE,
+            _DETECTION_SOURCE,
+            _RECOVERY_SOURCE,
+            _RECOVERY_PARTS_SOURCE,
+            _COPY_SOURCE,
+        )
     )
 
 
@@ -56,13 +72,12 @@ def test_degraded_protection_exposes_recovery_actions() -> None:
     assert "Restore local protection" in authoritative_source
 
 
-def test_protection_repair_requires_local_auth_token() -> None:
-    from codex_plugin_scanner.guard.daemon import server as daemon_server
+def test_protection_repair_requires_local_auth_token(native_approval_reuse_runtime: Path) -> None:
+    from codex_plugin_scanner.guard.native_daemon_route import native_route_facts
 
-    assert daemon_server._GuardDaemonHandler._requires_header_token(
-        "/v1/protection/repair",
-        ["v1", "protection", "repair"],
-    )
+    assert native_route_facts(
+        "POST", "/v1/protection/repair", guard_home=native_approval_reuse_runtime
+    ).requires_header_token
 
 
 def test_protect_metrics_use_locale_grouping() -> None:

@@ -10,7 +10,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import tarfile
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from pathlib import Path, PurePosixPath
 from zipfile import ZipFile
 
@@ -33,6 +33,22 @@ def _relative_path(value: object, *, source: bool) -> str:
     if path.as_posix() != value or path.suffix != ".py":
         raise RuntimeError(f"invalid retirement Python path: {value}")
     return value
+
+
+def _dead_code_removal(record: Mapping[str, object]) -> bool:
+    """Allow a retirement that deleted dead Python rather than superseding it.
+
+    Most retired modules name the Rust that took their behaviour over. A few
+    reached nobody at all, so there is no replacement to name; those still have
+    to be recorded here, or their path and digest keep no protection against
+    quietly coming back. Such a record declares why it was dead instead.
+    """
+    if record.get("retirement") != "dead_code":
+        return False
+    reason = record.get("removal_reason")
+    if not isinstance(reason, str) or not reason.strip():
+        raise RuntimeError(f"dead code retirement needs a removal reason: {record.get('path')}")
+    return True
 
 
 def _records(contract: Mapping[str, object]) -> list[dict[str, object]]:
@@ -59,14 +75,12 @@ def _records(contract: Mapping[str, object]) -> list[dict[str, object]]:
         ):
             raise RuntimeError(f"retired implementation symbols are required: {path}")
         replacements = record.get("native_replacements")
-        if (
-            not isinstance(replacements, list)
-            or not replacements
-            or not all(
-                isinstance(item, str) and item.startswith("rust/") and ".." not in PurePosixPath(item).parts
-                for item in replacements
-            )
+        if not isinstance(replacements, list) or not all(
+            isinstance(item, str) and item.startswith("rust/") and ".." not in PurePosixPath(item).parts
+            for item in replacements
         ):
+            raise RuntimeError(f"native replacement paths are required: {path}")
+        if not replacements and not _dead_code_removal(record):
             raise RuntimeError(f"native replacement paths are required: {path}")
         paths.add(path)
         modules.add(module)
@@ -86,6 +100,33 @@ def _literal_string(node: ast.AST) -> str | None:
         if left is not None and right is not None and len(left) + len(right) <= 256:
             return left + right
     return None
+
+
+def _retired_flag_reads(tree: ast.AST, name: str, flags: set[str]) -> list[str]:
+    """Reject environment reads of removed runtime flags (writes stay legal)."""
+
+    def env_base(value: ast.AST) -> bool:
+        return (isinstance(value, ast.Name) and value.id == "environ") or (
+            isinstance(value, ast.Attribute) and value.attr == "environ"
+        )
+
+    failures: list[str] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Subscript):
+            if env_base(node.value):
+                key = node.slice
+                if isinstance(key, ast.Constant) and isinstance(key.value, str) and key.value in flags:
+                    failures.append(f"{name}:{node.lineno}: reads retired runtime flag {key.value}")
+        elif isinstance(node, ast.Call) and node.args:
+            function = node.func
+            arg = node.args[0]
+            if not isinstance(arg, ast.Constant) or not isinstance(arg.value, str) or arg.value not in flags:
+                continue
+            if (isinstance(function, ast.Name) and function.id == "getenv") or (
+                isinstance(function, ast.Attribute) and function.attr in {"getenv", "get"} and env_base(function.value)
+            ):
+                failures.append(f"{name}:{node.lineno}: reads retired runtime flag {arg.value}")
+    return failures
 
 
 def _source_violations(text: str, name: str, modules: set[str], symbols: set[str]) -> list[str]:
@@ -159,6 +200,60 @@ def _artifact_members(artifact: Path) -> Iterator[tuple[str, bytes | None]]:
     raise RuntimeError(f"unsupported package artifact: {artifact}")
 
 
+def _removed_runtime_flags(contract: Mapping[str, object]) -> set[str]:
+    delta = contract.get("dependency_delta")
+    if not isinstance(delta, Mapping):
+        return set()
+    flags = delta.get("removed_runtime_flags")
+    if not isinstance(flags, list) or not all(isinstance(flag, str) and flag for flag in flags):
+        raise RuntimeError("dependency_delta.removed_runtime_flags must be a list of strings")
+    return set(flags)
+
+
+def _retired_content_validator(records: list[dict[str, object]], flags: set[str]) -> Callable[[str, bytes], None]:
+    modules = {str(record["module"]) for record in records}
+    symbols = {symbol for record in records for symbol in record["forbidden_symbols"]}
+    digests = {str(record["source_sha256"]) for record in records}
+    basenames = {PurePosixPath(str(record["path"])).stem for record in records}
+
+    def check_content(name: str, data: bytes) -> None:
+        if hashlib.sha256(data).hexdigest() in digests:
+            raise RuntimeError(f"copied retired Python implementation: {name}")
+        text = data.decode("utf-8-sig")
+        if not any(token in text for token in symbols | basenames | flags | {"import"}):
+            return
+        failures = _source_violations(text, name, modules, symbols)
+        if flags:
+            failures.extend(_retired_flag_reads(ast.parse(text, filename=name), name, flags))
+        if failures:
+            raise RuntimeError("; ".join(failures))
+
+    return check_content
+
+
+def validate_retired_artifacts(contract: Mapping[str, object], artifacts: Sequence[Path]) -> None:
+    """Check package paths and contents once, before expensive source analysis."""
+    records = _records(contract)
+    basenames = {PurePosixPath(str(record["path"])).stem for record in records}
+    bodies = contract.get("retired_bodies", [])
+    if not basenames and not bodies:
+        return
+    check_content = _retired_content_validator(records, _removed_runtime_flags(contract))
+    for artifact in artifacts:
+        for name, data in _artifact_members(artifact):
+            basename = PurePosixPath(name.replace("\\", "/")).name
+            if any(
+                basename == stem + ".py"
+                or basename == stem + ".pyc"
+                or (basename.startswith(stem + ".") and basename.endswith(".pyc"))
+                for stem in basenames
+            ):
+                raise RuntimeError(f"package artifact contains retired module: {name}")
+            if data is not None:
+                check_content(name, data)
+                _check_retired_body_content(name, data, bodies)
+
+
 def validate_retired_modules(
     root: Path,
     contract: Mapping[str, object],
@@ -167,6 +262,7 @@ def validate_retired_modules(
     artifacts: Sequence[Path] = (),
 ) -> list[dict[str, object]]:
     records = _records(contract)
+    validate_retired_bodies(root, contract)
     retired_tests = contract.get("retired_test_paths", [])
     if not isinstance(retired_tests, list):
         raise RuntimeError("retired_test_paths must be a list")
@@ -174,10 +270,6 @@ def validate_retired_modules(
         path = _relative_path(value, source=False)
         if (root / path).exists() or (root / path).is_symlink():
             raise RuntimeError(f"retired implementation test still exists: {path}")
-    modules = {str(record["module"]) for record in records}
-    symbols = {symbol for record in records for symbol in record["forbidden_symbols"]}
-    digests = {str(record["source_sha256"]) for record in records}
-    basenames = {PurePosixPath(str(record["path"])).stem for record in records}
     evidence: list[dict[str, object]] = []
     for record in records:
         relative = str(record["path"])
@@ -194,29 +286,72 @@ def validate_retired_modules(
     if not records:
         return evidence
 
-    def check_content(name: str, data: bytes) -> None:
-        if hashlib.sha256(data).hexdigest() in digests:
-            raise RuntimeError(f"copied retired Python implementation: {name}")
-        text = data.decode("utf-8-sig")
-        if not any(token in text for token in symbols | basenames | {"import"}):
-            return
-        failures = _source_violations(text, name, modules, symbols)
-        if failures:
-            raise RuntimeError("; ".join(failures))
+    flags = _removed_runtime_flags(contract)
+    basenames = {PurePosixPath(str(record["path"])).stem for record in records}
+    check_content = _retired_content_validator(records, flags)
 
     for directory in _SOURCE_ROOTS:
         for path in sorted((root / directory).rglob("*.py")):
+            if path.stem in basenames:
+                raise RuntimeError(f"retired module name reappeared: {path.relative_to(root).as_posix()}")
             check_content(path.relative_to(root).as_posix(), path.read_bytes())
-    for artifact in artifacts:
-        for name, data in _artifact_members(artifact):
-            basename = PurePosixPath(name.replace("\\", "/")).name
-            if any(
-                basename == stem + ".py"
-                or basename == stem + ".pyc"
-                or (basename.startswith(stem + ".") and basename.endswith(".pyc"))
-                for stem in basenames
-            ):
-                raise RuntimeError(f"package artifact contains retired module: {name}")
-            if data is not None:
-                check_content(name, data)
+    validate_retired_artifacts(contract, artifacts)
     return evidence
+
+
+def validate_retired_bodies(root: Path, contract: Mapping[str, object]) -> None:
+    """Allow a public DTO facade while rejecting its original implementation."""
+    records = contract.get("retired_bodies", [])
+    if not isinstance(records, list):
+        raise RuntimeError("retired_bodies must be a list")
+    seen: set[str] = set()
+    for record in records:
+        if not isinstance(record, dict):
+            raise RuntimeError("retired body record must be an object")
+        path = _relative_path(record.get("path"), source=True)
+        symbols = record.get("forbidden_symbols")
+        replacements = record.get("native_replacements")
+        if path in seen or not _sha256(record.get("source_sha256")):
+            raise RuntimeError(f"invalid retired body identity: {path}")
+        if (
+            not isinstance(symbols, list)
+            or not symbols
+            or not all(isinstance(s, str) and s.isidentifier() for s in symbols)
+        ):
+            raise RuntimeError(f"retired body symbols required: {path}")
+        if (
+            not isinstance(replacements, list)
+            or not replacements
+            or not all(
+                isinstance(p, str)
+                and p.startswith("rust/")
+                and ".." not in PurePosixPath(p).parts
+                and (root / p).is_file()
+                for p in replacements
+            )
+        ):
+            raise RuntimeError(f"retired body native replacement missing: {path}")
+        seen.add(path)
+        _check_retired_body_content(path, (root / path).read_bytes(), records)
+
+
+def _check_retired_body_content(name: str, source: bytes, records: object) -> None:
+    if not isinstance(records, list):
+        raise RuntimeError("retired_bodies must be a list")
+    digest = hashlib.sha256(source).hexdigest()
+    for record in records:
+        if not isinstance(record, dict) or not _sha256(record.get("source_sha256")):
+            raise RuntimeError("invalid retired body record")
+        if digest == record["source_sha256"]:
+            raise RuntimeError(f"retired Python body still exists: {name}")
+        if PurePosixPath(name).name != PurePosixPath(str(record.get("path"))).name:
+            continue
+        tree = ast.parse(source)
+        identifiers = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
+        identifiers.update(
+            node.name
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+        )
+        if identifiers.intersection(record.get("forbidden_symbols", [])):
+            raise RuntimeError(f"retired Python implementation symbol still exists: {name}")

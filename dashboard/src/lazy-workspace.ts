@@ -13,6 +13,16 @@ export type LoadWorkspaceModuleOptions = {
   wait?: (ms: number) => Promise<void>;
 };
 
+// A tab opened before Guard restarted on a new version still runs the old entry
+// bundle. Its next lazy chunk comes from the new build and fails to link against
+// the old shared modules, so treat those link errors as stale chunks too.
+const MODULE_LINK_ERROR_PATTERNS = [
+  /does not provide an export named/, // Chromium
+  /importing binding name .* is not found/, // WebKit
+  /import not found:/, // Gecko
+  /ambiguous indirect export:/, // Gecko
+];
+
 export function isChunkLoadError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   const normalized = message.toLowerCase();
@@ -20,7 +30,8 @@ export function isChunkLoadError(error: unknown): boolean {
     normalized.includes("failed to fetch dynamically imported module") ||
     normalized.includes("error loading dynamically imported module") ||
     normalized.includes("importing a module script failed") ||
-    normalized.includes("loading chunk")
+    normalized.includes("loading chunk") ||
+    MODULE_LINK_ERROR_PATTERNS.some((pattern) => pattern.test(normalized))
   );
 }
 

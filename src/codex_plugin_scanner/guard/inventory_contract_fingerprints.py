@@ -9,6 +9,7 @@ from pathlib import Path
 from .inventory_contract_constants import _IGNORED_TREE_DIR_NAMES, _MAX_FINGERPRINT_FILE_BYTES, _WHITESPACE_RE
 from .inventory_contract_models import GuardAgentInventoryFinding, GuardAgentInventoryItem, GuardInventorySource
 from .inventory_contract_redaction import redact_local_path
+from .native_inventory_snapshot_digest import native_inventory_snapshot_digest
 
 
 def fingerprint_text(value: str) -> str:
@@ -30,50 +31,21 @@ def _inventory_snapshot_content_hash(
     sources: tuple[GuardInventorySource, ...],
     runtime_version: str | None,
 ) -> str:
-    """Compute snapshot identity from stable evidence rather than observation timestamps."""
-    return fingerprint_mapping(
-        {
-            "agent_type": agent_type,
-            "runtime_version": runtime_version,
-            "items": [
-                {
-                    "capability_categories": item.capability_categories,
-                    "content_hash": item.content_hash,
-                    "drift_state": item.drift_state,
-                    "item_id": item.item_id,
-                    "item_kind": item.item_kind,
-                    "metadata": _stable_snapshot_value(item.metadata),
-                    "risk_level": item.risk_level,
-                    "scanner_sources": item.scanner_sources,
-                    "security_score": item.security_score,
-                    "source_fingerprint": item.source_fingerprint,
-                }
-                for item in sorted(items, key=lambda value: (value.item_kind, value.item_id))
-            ],
-            "findings": [
-                {
-                    "artifact_id": finding.artifact_id,
-                    "check_id": finding.check_id,
-                    "confidence": finding.confidence,
-                    "evidence": _stable_snapshot_value(finding.evidence),
-                    "finding_id": finding.finding_id,
-                    "severity": finding.severity,
-                    "source": finding.source,
-                    "summary": finding.summary,
-                    "title": finding.title,
-                }
-                for finding in sorted(findings, key=lambda value: (value.source, value.finding_id))
-            ],
-            "sources": [
-                {
-                    "detail": source.detail,
-                    "source_id": source.source_id,
-                    "source_type": source.source_type,
-                    "status": source.status,
-                }
-                for source in sorted(sources, key=lambda value: (value.source_type, value.source_id))
-            ],
-        }
+    """Compute snapshot identity from stable evidence rather than observation timestamps.
+
+    The rules that make the identity repeatable - which observation fields are
+    dropped, how nested lists are ordered, how rows are sorted and the exact
+    serialization the hash is taken over - live in the native runtime. A
+    resident that cannot answer leaves the snapshot without an identity rather
+    than with one computed here, because two implementations of this grammar
+    would disagree about whether an inventory changed.
+    """
+    return native_inventory_snapshot_digest(
+        agent_type=agent_type,
+        items=items,
+        findings=findings,
+        sources=sources,
+        runtime_version=runtime_version,
     )
 
 

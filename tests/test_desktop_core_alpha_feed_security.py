@@ -49,17 +49,22 @@ def linux_publish_job() -> dict[str, object]:
     return publish_job("publish-linux-x64", linux=True)
 
 
-def test_feed_follows_the_newest_stable_release_and_wakes_after_main_publisher() -> None:
+def test_feed_preserves_trusted_push_without_publication_completion_overlap() -> None:
     text = workflow_text()
     trusted_push = """push:
     branches: [main]
     paths:
+      - .github/actions/release-api-token/**
       - .github/workflows/desktop-core-alpha-feed.yml
+      - scripts/release/wait_for_core_publication.py
+      - scripts/release/ready_core_releases.py
       - scripts/release/desktop_core_alpha_feed.py"""
     assert trusted_push in text
     assert "branches: [main]" in text
-    assert 'workflows: ["Publish to PyPI"]' in text
-    assert "workflow_run.conclusion == 'success'" in text
+    config = workflow()
+    triggers = config.get("on", config.get(True))
+    assert isinstance(triggers, dict)
+    assert "workflow_run" not in triggers
 
 
 def test_release_discovery_selects_the_newest_stable_release(tmp_path: Path, capsys) -> None:
@@ -98,7 +103,13 @@ def test_privileged_feed_is_main_bound_and_pins_candidate_provenance() -> None:
     text = workflow_text()
     provenance = (ROOT / "scripts/release/authorize_macos_core_source.sh").read_text(encoding="utf-8")
     job = publish_job()
-    assert job["permissions"] == {"contents": "write", "id-token": "write", "attestations": "write"}
+    assert job["permissions"] == {
+        "actions": "read",
+        "statuses": "read",
+        "contents": "write",
+        "id-token": "write",
+        "attestations": "write",
+    }
     assert 'test "$GITHUB_REF" = "refs/heads/main"' in text
     assert "ref: ${{ github.sha }}" in text
     assert "persist-credentials: false" in text
@@ -114,11 +125,9 @@ def test_privileged_feed_is_main_bound_and_pins_candidate_provenance() -> None:
     assert "read_publish_attestation_commit.py" in provenance
     assert 'merge-base --is-ancestor "$SOURCE_SHA" "$attested_commit"' in provenance
     assert '--source-digest "$attested_commit"' in provenance
-    attestation = (ROOT / "scripts/release/read_publish_attestation_commit.py").read_text(
-        encoding="utf-8"
-    )
+    attestation = (ROOT / "scripts/release/read_publish_attestation_commit.py").read_text(encoding="utf-8")
     assert "provenance workflow is not the publish workflow" in attestation
-    linux = linux_workflow_text()
+    linux = linux_workflow_text() + provenance
     assert '--source-ref "$source_ref"' in linux
     assert 'verify_published_wheel "refs/tags/${CORE_TAG}"' in linux
     assert 'verify_published_wheel "refs/heads/${RELEASE_BRANCH}"' in linux
@@ -136,6 +145,9 @@ def test_feed_uses_apple_trust_and_no_redundant_manifest_key() -> None:
     extraction_line = (
         'codesign --display --extract-certificates "$BINARY" >/dev/null 2> "$RUNNER_TEMP/codesign-certificates.txt"'
     )
+    onedir_extraction_line = (
+        'codesign --display --extract-certificates "$LAUNCHER" >/dev/null 2> "$RUNNER_TEMP/codesign-onedir-certs.txt"'
+    )
     extraction_lines = [
         line.strip() for line in text.splitlines() if "codesign --display --extract-certificates" in line
     ]
@@ -147,12 +159,14 @@ def test_feed_uses_apple_trust_and_no_redundant_manifest_key() -> None:
     assert "json.sig" not in text
     assert "minisign" not in helper.lower()
     assert "bunx @tauri-apps/cli" not in text
-    assert steps["Import Apple signing identity"]["if"] == "steps.release.outputs.available == 'true'"
+    assert steps["Import Apple signing identity"]["if"] == (
+        "steps.release.outputs.available == 'true' && steps.registry.outputs.registry_ready == 'true'"
+    )
     assert "security find-identity -v -p codesigning" in text
     assert "apple-signing-fingerprint.txt" in text
     assert 'CERT_DIR="$RUNNER_TEMP/codesign-certs"' in text
     assert 'cd "$CERT_DIR"' in text
-    assert extraction_lines == [extraction_line]
+    assert extraction_lines == [extraction_line, onedir_extraction_line]
     assert '--extract-certificates "$CERT_DIR"' not in text
     assert '--extract-certificates "$CERT_PREFIX"' not in text
     assert 'test -s "$CERT_DIR/codesign0"' in text
@@ -171,15 +185,14 @@ def test_feed_builds_core_with_multiprocessing_safe_entrypoint() -> None:
     entrypoint = FROZEN_ENTRYPOINT.read_text(encoding="utf-8")
     freeze_dispatch = entrypoint.index("freeze_support()")
     version_probe = entrypoint.index('sys.argv[1] == "--version"')
+    bootstrap_proxy = entrypoint.index("if _try_proxy_running_desktop_bootstrap():")
     guard_import = entrypoint.index("from codex_plugin_scanner.guard.frozen_daemon_runtime")
-    assert freeze_dispatch < version_probe < guard_import
+    assert freeze_dispatch < version_probe < bootstrap_proxy < guard_import
     assert "scripts/mdm/hol-guard-entry.py" in workflow_text()
 
 
 def test_macos_feed_avoids_bash4_only_builtins_and_binds_mode() -> None:
-    text = workflow_text() + (ROOT / "scripts/release/authorize_macos_core_source.sh").read_text(
-        encoding="utf-8"
-    )
+    text = workflow_text() + (ROOT / "scripts/release/authorize_macos_core_source.sh").read_text(encoding="utf-8")
     job = publish_job()
     assert "mapfile " not in text
     assert "readarray " not in text
@@ -188,8 +201,9 @@ def test_macos_feed_avoids_bash4_only_builtins_and_binds_mode() -> None:
     assert manifest["env"]["MODE"] == "${{ steps.existing.outputs.mode }}"
     assert 'test "$WHEEL_COUNT" -eq 1' in text
     assert 'test -f "$WHEEL"' in text
-    assert '--pattern "hol_guard-${CORE_VERSION}-*-macosx_*_arm64.whl"' in text
-    assert '-name "hol_guard-${CORE_VERSION}-*-macosx_*_arm64.whl"' in text
+    assert 'WHEEL_PATTERN="hol_guard-${CORE_VERSION}-*-macosx_*_arm64.whl"' in text
+    assert '--pattern "$WHEEL_PATTERN"' in text
+    assert '-name "$WHEEL_PATTERN"' in text
     assert '--pattern "hol_guard-${CORE_VERSION}-*.whl"' not in text
     assert '-name "hol_guard-${CORE_VERSION}-*.whl"' not in text
 
@@ -201,13 +215,12 @@ def test_frozen_sidecar_stages_cloud_review_package_data() -> None:
 
 
 def test_frozen_sidecar_stages_attested_native_runtime() -> None:
-    text = workflow_text() + (ROOT / "scripts/release/authorize_macos_core_source.sh").read_text(
-        encoding="utf-8"
-    )
+    text = workflow_text() + (ROOT / "scripts/release/authorize_macos_core_source.sh").read_text(encoding="utf-8")
     build = next(step for step in publish_job()["steps"] if step.get("name") == "Build standalone Core executable")
     run = build["run"]
     assert isinstance(run, str)
-    assert 'cp "$WHEEL" "$RUNNER_TEMP/attested-macos-arm64.whl"' in text
+    assert "ATTESTED_NAME=attested-macos-arm64.whl" in text
+    assert 'cp "$WHEEL" "$RUNNER_TEMP/$ATTESTED_NAME"' in text
     assert "python3 -I scripts/release/stage_native_runtime_for_desktop_core.py" in run
     assert '--wheel "$RUNNER_TEMP/attested-macos-arm64.whl"' in run
     assert '--expected-version "$CORE_VERSION"' in run
@@ -291,14 +304,24 @@ def test_linux_feed_publishes_digest_verified_gnu_sidecar() -> None:
     assert isinstance(build_run, str)
     assert "publish-linux-x64" not in workflow()["jobs"]
     assert linux_workflow_text().count("\n") <= 500
-    assert job["runs-on"] == "ubuntu-24.04"
+    assert job["runs-on"] == "ubuntu-22.04"
     assert job["env"]["RELEASE_TARGET"] == "x86_64-unknown-linux-gnu"
     assert job["env"]["NATIVE_RUNTIME_TARGET"] == "x86_64-unknown-linux-musl"
-    assert job["permissions"] == {"contents": "write", "id-token": "write", "attestations": "write"}
+    assert job["permissions"] == {
+        "actions": "read",
+        "statuses": "read",
+        "contents": "write",
+        "id-token": "write",
+        "attestations": "write",
+    }
     assert 'test "$(uname -m)" = "x86_64"' in text
-    assert '--pattern "hol_guard-${CORE_VERSION}-*-manylinux_*_x86_64.whl"' in text
-    assert '-name "hol_guard-${CORE_VERSION}-*-manylinux_*_x86_64.whl"' in text
-    assert 'cp "$WHEEL" "$RUNNER_TEMP/attested-linux-x64.whl"' in text
+    source = (ROOT / "scripts/release/authorize_macos_core_source.sh").read_text()
+    assert "bash scripts/release/authorize_macos_core_source.sh" in text
+    assert 'WHEEL_PATTERN="hol_guard-${CORE_VERSION}-*-manylinux_*_x86_64.whl"' in source
+    assert '--pattern "$WHEEL_PATTERN"' in source
+    assert '-name "$WHEEL_PATTERN"' in source
+    assert "ATTESTED_NAME=attested-linux-x64.whl" in source
+    assert 'cp "$WHEEL" "$RUNNER_TEMP/$ATTESTED_NAME"' in source
     assert '--wheel "$RUNNER_TEMP/attested-linux-x64.whl"' in build_run
     assert '--expected-target "$NATIVE_RUNTIME_TARGET"' in build_run
     assert "--codesign-identity" not in build_run

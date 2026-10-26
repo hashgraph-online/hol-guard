@@ -10,14 +10,12 @@ from pathlib import Path
 from codex_plugin_scanner.guard.store_evidence import (
     EvidenceRecord,
     _sanitize_csv_formula_cell,
-    compact_evidence,
     count_evidence,
     evidence_index_statements,
     evidence_schema_statement,
     export_evidence_csv,
     export_evidence_json,
     list_evidence,
-    search_evidence,
     store_evidence,
 )
 
@@ -191,34 +189,6 @@ class TestListEvidence:
         assert created_ats == sorted(created_ats, reverse=True)
 
 
-class TestSearchEvidence:
-    def test_search_by_summary(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
-        store_evidence(conn, _rec(evidence_id="e1", summary="secret key leaked"))
-        store_evidence(conn, _rec(evidence_id="e2", summary="benign output"))
-        results = search_evidence(conn, "secret")
-        assert len(results) == 1
-        assert results[0].evidence_id == "e1"
-
-    def test_search_case_insensitive(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
-        store_evidence(conn, _rec(evidence_id="e1", summary="Secret Token Found"))
-        results = search_evidence(conn, "secret")
-        assert len(results) == 1
-
-    def test_search_no_match(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
-        store_evidence(conn, _rec(evidence_id="e1", summary="benign output"))
-        results = search_evidence(conn, "malware")
-        assert len(results) == 0
-
-    def test_search_does_not_expose_details_json(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
-        store_evidence(conn, _rec(evidence_id="e1", summary="clean", details={"password": "s3cr3t"}))
-        results = search_evidence(conn, "s3cr3t")
-        assert len(results) == 0
-
-
 class TestCountEvidence:
     def test_count_zero(self, tmp_path: Path) -> None:
         conn = _db(tmp_path)
@@ -320,36 +290,6 @@ class TestExportEvidence:
             "\n=FORMULA()",
         ):
             assert f"'{dangerous_value}" == _sanitize_csv_formula_cell(dangerous_value)
-
-
-class TestCompactEvidence:
-    def test_compact_removes_old(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
-        store_evidence(conn, _rec(evidence_id="old"))
-        conn.execute("update guard_evidence set created_at = '2020-01-01T00:00:00Z' where evidence_id = 'old'")
-        conn.commit()
-        store_evidence(conn, _rec(evidence_id="new", action_id="a2"))
-        removed = compact_evidence(conn, retain_days=30)
-        assert removed >= 1
-        remaining = count_evidence(conn)
-        assert remaining == 1
-
-    def test_compact_keeps_recent(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
-        for i in range(5):
-            store_evidence(conn, _rec(evidence_id=f"e{i}", action_id=f"a{i}"))
-        removed = compact_evidence(conn, retain_days=90)
-        assert removed == 0
-        assert count_evidence(conn) == 5
-
-    def test_compact_idempotent(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
-        store_evidence(conn, _rec(evidence_id="e1"))
-        conn.execute("update guard_evidence set created_at = '2020-01-01T00:00:00Z'")
-        conn.commit()
-        compact_evidence(conn, retain_days=30)
-        removed2 = compact_evidence(conn, retain_days=30)
-        assert removed2 == 0
 
 
 class TestActionIdentityField:

@@ -17,7 +17,7 @@ from codex_plugin_scanner.guard.cli import commands_support_interaction as inter
 from codex_plugin_scanner.guard.daemon import client
 from codex_plugin_scanner.guard.models import GUARD_ACTION_VALUES, GuardAction
 from codex_plugin_scanner.guard.package_execution_context import PackageExecutionContext
-from codex_plugin_scanner.guard.runtime import js_semver, runner
+from codex_plugin_scanner.guard.runtime import runner
 from codex_plugin_scanner.guard.store_workflow_capability_secret_control import (
     StoreWorkflowCapabilitySecretControlMixin,
 )
@@ -39,21 +39,6 @@ def test_handler_identity_is_a_hashable_tagged_key_not_an_unpacking_record() -> 
     }
     assert len(identities) == 4
     assert {len(identity) for identity in identities} == {2, 3, 5}
-
-
-@pytest.mark.parametrize(
-    "selector,version,expected",
-    [
-        ("*", "10.0.0", True),
-        ("^*", "10.0.0", True),
-        ("~*", "10.0.0", True),
-        ("^1.2.3", "1.9.0", True),
-        ("^1.2.3", "2.0.0", False),
-        ("~1.2.3", "1.3.0", False),
-    ],
-)
-def test_variable_comparator_counts_preserve_range_semantics(selector: str, version: str, expected: bool) -> None:
-    assert js_semver.version_matches_js_selector(version, selector) is expected
 
 
 @pytest.mark.parametrize("matches", [False, True])

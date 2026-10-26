@@ -6,9 +6,11 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.cli.commands_support_codex_commands import (
-    _codex_command_is_read_only_git_metadata,
-)
+from codex_plugin_scanner.guard.native_codex_tool_output import codex_tool_output_native
+
+
+def _codex_command_is_read_only_git_metadata(command_text: str, *, cwd: Path | None = None) -> bool:
+    return codex_tool_output_native("git_metadata", command=command_text, cwd=cwd).allowed
 
 
 def _init_repository(path: Path) -> None:

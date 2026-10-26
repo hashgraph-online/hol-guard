@@ -19,6 +19,7 @@ from codex_plugin_scanner.guard.adapters.zcode_config import (
     is_guard_managed_hook_command,
 )
 from codex_plugin_scanner.guard.runtime.actions import normalize_zcode_hook_payload
+from codex_plugin_scanner.guard.shims import PreparedGuardShim
 
 
 def _ctx(tmp_path: Path) -> HarnessContext:
@@ -43,8 +44,10 @@ class TestZCodeMcpToolCoverage:
     def test_install_installs_mcp_pretooluse_hook(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
         monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.zcode.install_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-zcode"), "notes": []},
+            "codex_plugin_scanner.guard.adapters.zcode.prepare_guard_shim",
+            lambda *args, **kwargs: PreparedGuardShim(
+                (), {"shim_path": str(ctx.guard_home / "bin" / "guard-zcode"), "notes": []}
+            ),
         )
         ZCodeHarnessAdapter().install(ctx)
         payload = json.loads((ctx.home_dir / ".zcode" / "cli" / "config.json").read_text(encoding="utf-8"))

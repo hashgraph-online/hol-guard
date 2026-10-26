@@ -1,7 +1,8 @@
 """Stable Guard CLI resolution for Desktop-managed frozen runtimes.
 
-Desktop Core lives under ``versions/<release>/`` or ``bundled/<release>/`` and
-those directories can be replaced on update. Hooks and package-manager shims
+Desktop Core lives under ``versions/<release>/`` (launcher at
+``<release>/hol-guard`` or ``<release>/bundle/hol-guard``) or
+``bundled/<release>/`` and those directories can be replaced on update. Hooks and package-manager shims
 must not bake either ephemeral path.
 """
 
@@ -9,10 +10,28 @@ from __future__ import annotations
 
 import os
 import sys
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 
 MACOS_BUNDLED_HOL_GUARD = Path("/Applications/HOL Guard.app/Contents/MacOS/hol-guard")
 CURRENT_HOL_GUARD_SHIM = "current-hol-guard"
+_EXACT_PROCESS_BINDING: ContextVar[str | None] = ContextVar("guard_exact_process_binding", default=None)
+
+
+@contextmanager
+def exact_process_guard_cli_binding():
+    """Prepare immutable current-process argv; this scope grants no authority.
+
+    A transition must bind candidate hooks before publishing its pointer. The
+    stable launcher would still resolve the predecessor at that boundary.
+    """
+    executable = str(Path(sys.executable).resolve(strict=True))
+    token = _EXACT_PROCESS_BINDING.set(executable)
+    try:
+        yield
+    finally:
+        _EXACT_PROCESS_BINDING.reset(token)
 
 
 def desktop_core_shim_for_executable(executable: Path) -> Path | None:
@@ -78,7 +97,7 @@ def _desktop_core_root(executable: Path) -> Path | None:
             relative_parts = executable.relative_to(ancestor).parts
         except ValueError:
             continue
-        if ancestor_name == "versions" and len(relative_parts) == 2:
+        if ancestor_name == "versions" and _versioned_launcher(relative_parts):
             return ancestor.parent
         if ancestor_name != "bundled":
             continue
@@ -87,6 +106,43 @@ def _desktop_core_root(executable: Path) -> Path | None:
         if len(relative_parts) == 4 and relative_parts[1:3] == ("lib", "hol-guard-core"):
             return ancestor.parent
     return None
+
+
+def desktop_core_root_for_executable(executable: Path) -> tuple[Path, str] | None:
+    """Return the Core root and release name of a launcher below ``versions/<release>/``.
+
+    ``bundled/`` layouts are part of the app and carry no release of their own
+    to compare against ``current.json``, so they answer None.
+    """
+
+    if executable.name.lower() not in {"hol-guard", "hol-guard.exe"}:
+        return None
+    for ancestor in executable.parents:
+        if ancestor.name.lower() != "versions":
+            continue
+        relative_parts = executable.relative_to(ancestor).parts
+        if _versioned_launcher(relative_parts):
+            return ancestor.parent, relative_parts[0]
+    return None
+
+
+def versioned_launcher_release(relative_parts: tuple[str, ...]) -> str | None:
+    """Return the release a path below ``versions/`` names when it is a Core launcher."""
+
+    if not relative_parts or relative_parts[-1].lower() not in {"hol-guard", "hol-guard.exe"}:
+        return None
+    return relative_parts[0] if _versioned_launcher(relative_parts) else None
+
+
+def _versioned_launcher(relative_parts: tuple[str, ...]) -> bool:
+    """Whether a path below ``versions/`` is a Core launcher.
+
+    Core installed by this CLI keeps its launcher at ``<release>/hol-guard``.
+    Desktop unpacks the release tree below ``bundle/``, so its launcher sits at
+    ``<release>/bundle/hol-guard``. Anything deeper is a file inside the tree.
+    """
+
+    return len(relative_parts) == 2 or (len(relative_parts) == 3 and relative_parts[1] == "bundle")
 
 
 def frozen_cli_path_is_runnable(path: Path) -> bool:
@@ -99,6 +155,18 @@ def frozen_cli_path_is_runnable(path: Path) -> bool:
     return os.access(path, os.X_OK)
 
 
+def _shim_is_launchable(shim: Path) -> bool:
+    """Whether a ``current-hol-guard`` shim can stand in as argv0 on this platform.
+
+    Windows cannot run the extensionless POSIX launcher, so it needs the
+    ``.cmd`` (or ``.bat``/``.exe``) form.
+    """
+
+    if not frozen_cli_path_is_runnable(shim):
+        return False
+    return sys.platform != "win32" or shim.suffix.lower() in {".cmd", ".bat", ".exe"}
+
+
 def resolve_frozen_guard_cli() -> str:
     """Return a prune-safe frozen launcher, then the process executable.
 
@@ -106,14 +174,40 @@ def resolve_frozen_guard_cli() -> str:
     versioned runtime. Other frozen layouts keep ``sys.executable``.
     """
 
+    exact = _EXACT_PROCESS_BINDING.get()
+    if exact is not None:
+        return exact
     executable = Path(sys.executable)
     shim = desktop_core_shim_for_executable(executable)
-    if shim is not None and frozen_cli_path_is_runnable(shim):
+    if shim is not None and _shim_is_launchable(shim):
         return str(shim)
     versioned_desktop = shim is not None
     if versioned_desktop and sys.platform == "darwin" and frozen_cli_path_is_runnable(MACOS_BUNDLED_HOL_GUARD):
         return str(MACOS_BUNDLED_HOL_GUARD)
     return sys.executable
+
+
+def guard_cli_launcher() -> str:
+    """Return the argv0 Guard writes into harness hooks, MCP proxies and launchers.
+
+    A source install keeps the running interpreter. A frozen Core uses the
+    prune-safe launcher when one can be spawned directly, so a Desktop update
+    does not strand an installed hook on a removed ``versions/<release>/``
+    executable.
+
+    Harnesses spawn MCP servers and exec-form hooks without a command
+    interpreter, and Node refuses to spawn a batch file that way. Windows
+    Desktop only ships a ``current-hol-guard.cmd`` shim, so there this keeps
+    the Core executable, exactly as before; post-update harness repair rebinds
+    those entries to the new release.
+    """
+
+    if not bool(getattr(sys, "frozen", False)):
+        return sys.executable
+    launcher = resolve_frozen_guard_cli()
+    if sys.platform == "win32" and Path(launcher).suffix.lower() in {".cmd", ".bat"}:
+        return sys.executable
+    return launcher
 
 
 def resolve_guard_cli_argv0(baked_argv0: str) -> str:
@@ -178,9 +272,7 @@ def prune_safe_cli_executable(executable: str) -> str:
     """Prefer the Desktop current-hol-guard shim over a pruneable versions path."""
 
     shim = desktop_core_shim_for_executable(Path(executable))
-    if shim is None or not frozen_cli_path_is_runnable(shim):
-        return executable
-    if sys.platform == "win32" and shim.suffix.lower() not in {".cmd", ".bat", ".exe"}:
+    if shim is None or not _shim_is_launchable(shim):
         return executable
     return str(shim)
 
@@ -199,10 +291,12 @@ __all__ = [
     "durable_desktop_current_hol_guard",
     "frozen_cli_path_is_runnable",
     "frozen_launcher_is_prune_safe",
+    "guard_cli_launcher",
     "prune_safe_cli_executable",
     "resolve_frozen_guard_cli",
     "resolve_guard_cli_argv0",
     "resolved_guard_cli",
     "trusted_frozen_guard_cli_paths",
     "uses_top_level_hook_command",
+    "versioned_launcher_release",
 ]

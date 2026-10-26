@@ -1,0 +1,1916 @@
+{
+ "_source": "Recorded from the rendered Grok bounded hook client (bounded_cli_hook_script_template).",
+ "events": [
+  {
+   "input": "",
+   "event": "PreToolUse",
+   "conflict": false
+  },
+  {
+   "input": "{}",
+   "event": "PreToolUse",
+   "conflict": false
+  },
+  {
+   "input": "not json",
+   "event": "PreToolUse",
+   "conflict": false
+  },
+  {
+   "input": "[]",
+   "event": "PreToolUse",
+   "conflict": false
+  },
+  {
+   "input": "{\"hook_event_name\":\"PreToolUse\"}",
+   "event": "PreToolUse",
+   "conflict": false
+  },
+  {
+   "input": "{\"hook_event_name\":\"pre_tool_use\"}",
+   "event": "PreToolUse",
+   "conflict": false
+  },
+  {
+   "input": "{\"hook_event_name\":\"pre-tool-call\"}",
+   "event": "PreToolUse",
+   "conflict": false
+  },
+  {
+   "input": "{\"hook_event_name\":\"  UserPromptSubmit  \"}",
+   "event": "UserPromptSubmit",
+   "conflict": false
+  },
+  {
+   "input": "{\"hook_event_name\":\"user_prompt_submitted\"}",
+   "event": "UserPromptSubmit",
+   "conflict": false
+  },
+  {
+   "input": "{\"hook_event_name\":\"PermissionRequestV2\"}",
+   "event": "PermissionRequest",
+   "conflict": false
+  },
+  {
+   "input": "{\"hook_event_name\":\"post_tool_use\"}",
+   "event": "PostToolUse",
+   "conflict": false
+  },
+  {
+   "input": "{\"hook_event_name\":\"SessionStart\"}",
+   "event": "SessionStart",
+   "conflict": false
+  },
+  {
+   "input": "{\"hook_event_name\":\"session_end\"}",
+   "event": "session_end",
+   "conflict": false
+  },
+  {
+   "input": "{\"hook_event_name\":\"subagent-stop\"}",
+   "event": "subagent-stop",
+   "conflict": false
+  },
+  {
+   "input": "{\"hook_event_name\":\"PermissionDenied\"}",
+   "event": "PermissionDenied",
+   "conflict": false
+  },
+  {
+   "input": "{\"hook_event_name\":\"Stop\"}",
+   "event": "Stop",
+   "conflict": false
+  },
+  {
+   "input": "{\"hook_event_name\":\"Notification\"}",
+   "event": "Notification",
+   "conflict": false
+  },
+  {
+   "input": "{\"hook_event_name\":\"TaskError\"}",
+   "event": "TaskError",
+   "conflict": false
+  },
+  {
+   "input": "{\"hook_event_name\":\"AfterShell\"}",
+   "event": "AfterShell",
+   "conflict": false
+  },
+  {
+   "input": "{\"hook_event_name\":\"PostTool\"}",
+   "event": "PostTool",
+   "conflict": false
+  },
+  {
+   "input": "{\"hook_event_name\":\"Custom Event\"}",
+   "event": "Custom Event",
+   "conflict": false
+  },
+  {
+   "input": "{\"hook_event_name\":\"   \"}",
+   "event": "PreToolUse",
+   "conflict": false
+  },
+  {
+   "input": "{\"hook_event_name\":\"\"}",
+   "event": "PreToolUse",
+   "conflict": false
+  },
+  {
+   "input": "{\"hook_event_name\":7,\"event\":\"SessionStart\"}",
+   "event": "SessionStart",
+   "conflict": false
+  },
+  {
+   "input": "{\"hookEventName\":\"UserPromptSubmit\"}",
+   "event": "UserPromptSubmit",
+   "conflict": false
+  },
+  {
+   "input": "{\"event\":\"pretoolcall\"}",
+   "event": "PreToolUse",
+   "conflict": false
+  },
+  {
+   "input": "{\"eventName\":\"SubagentStart\"}",
+   "event": "SubagentStart",
+   "conflict": false
+  },
+  {
+   "input": "{\"hook_name\":\"PostToolUse\"}",
+   "event": "PostToolUse",
+   "conflict": false
+  },
+  {
+   "input": "{\"hookName\":\"stop\"}",
+   "event": "stop",
+   "conflict": false
+  },
+  {
+   "input": "{\"hook_event_name\":\"PreToolUse\",\"event\":\"PreToolUse\"}",
+   "event": "PreToolUse",
+   "conflict": false
+  },
+  {
+   "input": "{\"hook_event_name\":\"PreToolUse\",\"event\":\"pretoolcall\"}",
+   "event": "PreToolUse",
+   "conflict": false
+  },
+  {
+   "input": "{\"hook_event_name\":\"PreToolUse\",\"hookName\":\"SessionStart\"}",
+   "event": "PreToolUse",
+   "conflict": true
+  },
+  {
+   "input": "{\"hook_event_name\":\"SessionStart\",\"hookName\":\"PreToolUse\"}",
+   "event": "SessionStart",
+   "conflict": true
+  },
+  {
+   "input": "{\"hook_event_name\":\"UserPromptSubmit\",\"eventName\":\"user_prompt_submit\"}",
+   "event": "UserPromptSubmit",
+   "conflict": false
+  },
+  {
+   "input": "{\"hook_event_name\":\"PreToolUse\",\"hook_event_name\":\"SessionStart\"}",
+   "event": "SessionStart",
+   "conflict": false
+  }
+ ],
+ "failures": [
+  {
+   "input": "",
+   "stdout": "{\"decision\":\"deny\",\"reason\":\"HOL Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal.\"}\n"
+  },
+  {
+   "input": "{}",
+   "stdout": "{\"decision\":\"deny\",\"reason\":\"HOL Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal.\"}\n"
+  },
+  {
+   "input": "not json",
+   "stdout": "{\"decision\":\"deny\",\"reason\":\"HOL Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal.\"}\n"
+  },
+  {
+   "input": "[]",
+   "stdout": "{\"decision\":\"deny\",\"reason\":\"HOL Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal.\"}\n"
+  },
+  {
+   "input": "{\"hook_event_name\":\"PreToolUse\"}",
+   "stdout": "{\"decision\":\"deny\",\"reason\":\"HOL Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal.\"}\n"
+  },
+  {
+   "input": "{\"hook_event_name\":\"pre_tool_use\"}",
+   "stdout": "{\"decision\":\"deny\",\"reason\":\"HOL Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal.\"}\n"
+  },
+  {
+   "input": "{\"hook_event_name\":\"pre-tool-call\"}",
+   "stdout": "{\"decision\":\"deny\",\"reason\":\"HOL Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal.\"}\n"
+  },
+  {
+   "input": "{\"hook_event_name\":\"  UserPromptSubmit  \"}",
+   "stdout": "{\"decision\":\"block\",\"reason\":\"HOL Guard could not complete native prompt review safely.\",\"systemMessage\":\"HOL Guard could not complete native prompt review safely.\",\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\"}}\n"
+  },
+  {
+   "input": "{\"hook_event_name\":\"user_prompt_submitted\"}",
+   "stdout": "{\"decision\":\"block\",\"reason\":\"HOL Guard could not complete native prompt review safely.\",\"systemMessage\":\"HOL Guard could not complete native prompt review safely.\",\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\"}}\n"
+  },
+  {
+   "input": "{\"hook_event_name\":\"PermissionRequestV2\"}",
+   "stdout": "{\"decision\":\"deny\",\"reason\":\"HOL Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal.\"}\n"
+  },
+  {
+   "input": "{\"hook_event_name\":\"post_tool_use\"}",
+   "stdout": "{}\n"
+  },
+  {
+   "input": "{\"hook_event_name\":\"SessionStart\"}",
+   "stdout": "{}\n"
+  },
+  {
+   "input": "{\"hook_event_name\":\"session_end\"}",
+   "stdout": "{}\n"
+  },
+  {
+   "input": "{\"hook_event_name\":\"subagent-stop\"}",
+   "stdout": "{}\n"
+  },
+  {
+   "input": "{\"hook_event_name\":\"PermissionDenied\"}",
+   "stdout": "{}\n"
+  },
+  {
+   "input": "{\"hook_event_name\":\"Stop\"}",
+   "stdout": "{\"decision\":\"allow\",\"reason\":\"HOL Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal.\"}\n"
+  },
+  {
+   "input": "{\"hook_event_name\":\"Notification\"}",
+   "stdout": "{\"decision\":\"allow\",\"reason\":\"HOL Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal.\"}\n"
+  },
+  {
+   "input": "{\"hook_event_name\":\"TaskError\"}",
+   "stdout": "{\"decision\":\"allow\",\"reason\":\"HOL Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal.\"}\n"
+  },
+  {
+   "input": "{\"hook_event_name\":\"AfterShell\"}",
+   "stdout": "{\"decision\":\"allow\",\"reason\":\"HOL Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal.\"}\n"
+  },
+  {
+   "input": "{\"hook_event_name\":\"PostTool\"}",
+   "stdout": "{\"decision\":\"allow\",\"reason\":\"HOL Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal.\"}\n"
+  },
+  {
+   "input": "{\"hook_event_name\":\"Custom Event\"}",
+   "stdout": "{\"decision\":\"deny\",\"reason\":\"HOL Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal.\"}\n"
+  },
+  {
+   "input": "{\"hook_event_name\":\"   \"}",
+   "stdout": "{\"decision\":\"deny\",\"reason\":\"HOL Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal.\"}\n"
+  },
+  {
+   "input": "{\"hook_event_name\":\"\"}",
+   "stdout": "{\"decision\":\"deny\",\"reason\":\"HOL Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal.\"}\n"
+  },
+  {
+   "input": "{\"hook_event_name\":7,\"event\":\"SessionStart\"}",
+   "stdout": "{}\n"
+  },
+  {
+   "input": "{\"hookEventName\":\"UserPromptSubmit\"}",
+   "stdout": "{\"decision\":\"block\",\"reason\":\"HOL Guard could not complete native prompt review safely.\",\"systemMessage\":\"HOL Guard could not complete native prompt review safely.\",\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\"}}\n"
+  },
+  {
+   "input": "{\"event\":\"pretoolcall\"}",
+   "stdout": "{\"decision\":\"deny\",\"reason\":\"HOL Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal.\"}\n"
+  },
+  {
+   "input": "{\"eventName\":\"SubagentStart\"}",
+   "stdout": "{}\n"
+  },
+  {
+   "input": "{\"hook_name\":\"PostToolUse\"}",
+   "stdout": "{}\n"
+  },
+  {
+   "input": "{\"hookName\":\"stop\"}",
+   "stdout": "{\"decision\":\"allow\",\"reason\":\"HOL Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal.\"}\n"
+  },
+  {
+   "input": "{\"hook_event_name\":\"PreToolUse\",\"event\":\"PreToolUse\"}",
+   "stdout": "{\"decision\":\"deny\",\"reason\":\"HOL Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal.\"}\n"
+  },
+  {
+   "input": "{\"hook_event_name\":\"PreToolUse\",\"event\":\"pretoolcall\"}",
+   "stdout": "{\"decision\":\"deny\",\"reason\":\"HOL Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal.\"}\n"
+  },
+  {
+   "input": "{\"hook_event_name\":\"UserPromptSubmit\",\"eventName\":\"user_prompt_submit\"}",
+   "stdout": "{\"decision\":\"block\",\"reason\":\"HOL Guard could not complete native prompt review safely.\",\"systemMessage\":\"HOL Guard could not complete native prompt review safely.\",\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\"}}\n"
+  },
+  {
+   "input": "{\"hook_event_name\":\"PreToolUse\",\"hook_event_name\":\"SessionStart\"}",
+   "stdout": "{}\n"
+  }
+ ],
+ "to_native": [
+  {
+   "response": "{}",
+   "event": "PreToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HOL Guard block this action\"},\"decision\":\"deny\",\"policy_action\":\"block\"}",
+   "exit": 2
+  },
+  {
+   "response": "{}",
+   "event": "UserPromptSubmit",
+   "stdout": "{}",
+   "exit": 0
+  },
+  {
+   "response": "{}",
+   "event": "PermissionRequest",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HOL Guard block this action\"},\"decision\":\"deny\",\"policy_action\":\"block\"}",
+   "exit": 0
+  },
+  {
+   "response": "{}",
+   "event": "PostToolUse",
+   "stdout": "{}",
+   "exit": 0
+  },
+  {
+   "response": "{}",
+   "event": "SessionStart",
+   "stdout": "{}",
+   "exit": 0
+  },
+  {
+   "response": "{}",
+   "event": "Stop",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HOL Guard block this action\"},\"decision\":\"deny\",\"policy_action\":\"block\"}",
+   "exit": 0
+  },
+  {
+   "response": "{}",
+   "event": "Custom",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Custom\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HOL Guard block this action\"},\"decision\":\"deny\",\"policy_action\":\"block\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"allow\"}",
+   "event": "PreToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"},\"decision\":\"allow\",\"policy_action\":\"allow\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"allow\"}",
+   "event": "UserPromptSubmit",
+   "stdout": "{}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"allow\"}",
+   "event": "PermissionRequest",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"permissionDecision\":\"allow\"},\"decision\":\"allow\",\"policy_action\":\"allow\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"allow\"}",
+   "event": "PostToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"permissionDecision\":\"allow\"},\"decision\":\"allow\",\"policy_action\":\"allow\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"allow\"}",
+   "event": "SessionStart",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"permissionDecision\":\"allow\"},\"decision\":\"allow\",\"policy_action\":\"allow\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"allow\"}",
+   "event": "Stop",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"permissionDecision\":\"allow\"},\"decision\":\"allow\",\"policy_action\":\"allow\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"allow\"}",
+   "event": "Custom",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Custom\",\"permissionDecision\":\"allow\"},\"decision\":\"allow\",\"policy_action\":\"allow\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"warn\",\"reason\":\"noted\"}",
+   "event": "PreToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"},\"decision\":\"allow\",\"policy_action\":\"warn\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"warn\",\"reason\":\"noted\"}",
+   "event": "UserPromptSubmit",
+   "stdout": "{}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"warn\",\"reason\":\"noted\"}",
+   "event": "PermissionRequest",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"permissionDecision\":\"allow\"},\"decision\":\"allow\",\"policy_action\":\"warn\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"warn\",\"reason\":\"noted\"}",
+   "event": "PostToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"permissionDecision\":\"allow\"},\"decision\":\"allow\",\"policy_action\":\"warn\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"warn\",\"reason\":\"noted\"}",
+   "event": "SessionStart",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"permissionDecision\":\"allow\"},\"decision\":\"allow\",\"policy_action\":\"warn\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"warn\",\"reason\":\"noted\"}",
+   "event": "Stop",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"permissionDecision\":\"allow\"},\"decision\":\"allow\",\"policy_action\":\"warn\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"warn\",\"reason\":\"noted\"}",
+   "event": "Custom",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Custom\",\"permissionDecision\":\"allow\"},\"decision\":\"allow\",\"policy_action\":\"warn\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"allow\",\"reason\":\"daemon unreachable, allowed\"}",
+   "event": "PreToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"daemon unreachable, allowed\"},\"decision\":\"allow\",\"policy_action\":\"allow\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"allow\",\"reason\":\"daemon unreachable, allowed\"}",
+   "event": "UserPromptSubmit",
+   "stdout": "{}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"allow\",\"reason\":\"daemon unreachable, allowed\"}",
+   "event": "PermissionRequest",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"daemon unreachable, allowed\"},\"decision\":\"allow\",\"policy_action\":\"allow\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"allow\",\"reason\":\"daemon unreachable, allowed\"}",
+   "event": "PostToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"daemon unreachable, allowed\"},\"decision\":\"allow\",\"policy_action\":\"allow\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"allow\",\"reason\":\"daemon unreachable, allowed\"}",
+   "event": "SessionStart",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"daemon unreachable, allowed\"},\"decision\":\"allow\",\"policy_action\":\"allow\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"allow\",\"reason\":\"daemon unreachable, allowed\"}",
+   "event": "Stop",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"daemon unreachable, allowed\"},\"decision\":\"allow\",\"policy_action\":\"allow\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"allow\",\"reason\":\"daemon unreachable, allowed\"}",
+   "event": "Custom",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Custom\",\"permissionDecision\":\"allow\",\"permissionDecisionReason\":\"daemon unreachable, allowed\"},\"decision\":\"allow\",\"policy_action\":\"allow\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"review\",\"reason\":\"needs a look\",\"approval_request_id\":\"req-1\",\"approval_url\":\"http://127.0.0.1/a\"}",
+   "event": "PreToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"needs a look\"},\"decision\":\"deny\",\"policy_action\":\"review\",\"reason\":\"needs a look\",\"approval_url\":\"http://127.0.0.1/a\",\"approval_request_id\":\"req-1\"}",
+   "exit": 2
+  },
+  {
+   "response": "{\"policy_action\":\"review\",\"reason\":\"needs a look\",\"approval_request_id\":\"req-1\",\"approval_url\":\"http://127.0.0.1/a\"}",
+   "event": "UserPromptSubmit",
+   "stdout": "{\"decision\":\"block\",\"reason\":\"needs a look\"}",
+   "exit": 2
+  },
+  {
+   "response": "{\"policy_action\":\"review\",\"reason\":\"needs a look\",\"approval_request_id\":\"req-1\",\"approval_url\":\"http://127.0.0.1/a\"}",
+   "event": "PermissionRequest",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"needs a look\"},\"decision\":\"deny\",\"policy_action\":\"review\",\"reason\":\"needs a look\",\"approval_url\":\"http://127.0.0.1/a\",\"approval_request_id\":\"req-1\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"review\",\"reason\":\"needs a look\",\"approval_request_id\":\"req-1\",\"approval_url\":\"http://127.0.0.1/a\"}",
+   "event": "PostToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"needs a look\"},\"decision\":\"deny\",\"policy_action\":\"review\",\"reason\":\"needs a look\",\"approval_url\":\"http://127.0.0.1/a\",\"approval_request_id\":\"req-1\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"review\",\"reason\":\"needs a look\",\"approval_request_id\":\"req-1\",\"approval_url\":\"http://127.0.0.1/a\"}",
+   "event": "SessionStart",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"needs a look\"},\"decision\":\"deny\",\"policy_action\":\"review\",\"reason\":\"needs a look\",\"approval_url\":\"http://127.0.0.1/a\",\"approval_request_id\":\"req-1\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"review\",\"reason\":\"needs a look\",\"approval_request_id\":\"req-1\",\"approval_url\":\"http://127.0.0.1/a\"}",
+   "event": "Stop",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"needs a look\"},\"decision\":\"deny\",\"policy_action\":\"review\",\"reason\":\"needs a look\",\"approval_url\":\"http://127.0.0.1/a\",\"approval_request_id\":\"req-1\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"review\",\"reason\":\"needs a look\",\"approval_request_id\":\"req-1\",\"approval_url\":\"http://127.0.0.1/a\"}",
+   "event": "Custom",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Custom\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"needs a look\"},\"decision\":\"deny\",\"policy_action\":\"review\",\"reason\":\"needs a look\",\"approval_url\":\"http://127.0.0.1/a\",\"approval_request_id\":\"req-1\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"require-reapproval\",\"approval_requests\":[{\"request_id\":\"a\"},{\"request_id\":\"b\"}],\"reason_code\":\"x\"}",
+   "event": "PreToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"HOL Guard require-reapproval this action\"},\"decision\":\"deny\",\"policy_action\":\"require-reapproval\",\"reason_code\":\"x\",\"approval_requests\":[{\"request_id\":\"a\"},{\"request_id\":\"b\"}]}",
+   "exit": 2
+  },
+  {
+   "response": "{\"policy_action\":\"require-reapproval\",\"approval_requests\":[{\"request_id\":\"a\"},{\"request_id\":\"b\"}],\"reason_code\":\"x\"}",
+   "event": "UserPromptSubmit",
+   "stdout": "{\"decision\":\"block\",\"reason\":\"HOL Guard blocked this action (require-reapproval)\"}",
+   "exit": 2
+  },
+  {
+   "response": "{\"policy_action\":\"require-reapproval\",\"approval_requests\":[{\"request_id\":\"a\"},{\"request_id\":\"b\"}],\"reason_code\":\"x\"}",
+   "event": "PermissionRequest",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"HOL Guard require-reapproval this action\"},\"decision\":\"deny\",\"policy_action\":\"require-reapproval\",\"reason_code\":\"x\",\"approval_requests\":[{\"request_id\":\"a\"},{\"request_id\":\"b\"}]}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"require-reapproval\",\"approval_requests\":[{\"request_id\":\"a\"},{\"request_id\":\"b\"}],\"reason_code\":\"x\"}",
+   "event": "PostToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"HOL Guard require-reapproval this action\"},\"decision\":\"deny\",\"policy_action\":\"require-reapproval\",\"reason_code\":\"x\",\"approval_requests\":[{\"request_id\":\"a\"},{\"request_id\":\"b\"}]}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"require-reapproval\",\"approval_requests\":[{\"request_id\":\"a\"},{\"request_id\":\"b\"}],\"reason_code\":\"x\"}",
+   "event": "SessionStart",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"HOL Guard require-reapproval this action\"},\"decision\":\"deny\",\"policy_action\":\"require-reapproval\",\"reason_code\":\"x\",\"approval_requests\":[{\"request_id\":\"a\"},{\"request_id\":\"b\"}]}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"require-reapproval\",\"approval_requests\":[{\"request_id\":\"a\"},{\"request_id\":\"b\"}],\"reason_code\":\"x\"}",
+   "event": "Stop",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"HOL Guard require-reapproval this action\"},\"decision\":\"deny\",\"policy_action\":\"require-reapproval\",\"reason_code\":\"x\",\"approval_requests\":[{\"request_id\":\"a\"},{\"request_id\":\"b\"}]}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"require-reapproval\",\"approval_requests\":[{\"request_id\":\"a\"},{\"request_id\":\"b\"}],\"reason_code\":\"x\"}",
+   "event": "Custom",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Custom\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"HOL Guard require-reapproval this action\"},\"decision\":\"deny\",\"policy_action\":\"require-reapproval\",\"reason_code\":\"x\",\"approval_requests\":[{\"request_id\":\"a\"},{\"request_id\":\"b\"}]}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"sandbox-required\"}",
+   "event": "PreToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"HOL Guard sandbox-required this action\"},\"decision\":\"deny\",\"policy_action\":\"sandbox-required\"}",
+   "exit": 2
+  },
+  {
+   "response": "{\"policy_action\":\"sandbox-required\"}",
+   "event": "UserPromptSubmit",
+   "stdout": "{\"decision\":\"block\",\"reason\":\"HOL Guard blocked this action (sandbox-required)\"}",
+   "exit": 2
+  },
+  {
+   "response": "{\"policy_action\":\"sandbox-required\"}",
+   "event": "PermissionRequest",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"HOL Guard sandbox-required this action\"},\"decision\":\"deny\",\"policy_action\":\"sandbox-required\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"sandbox-required\"}",
+   "event": "PostToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"HOL Guard sandbox-required this action\"},\"decision\":\"deny\",\"policy_action\":\"sandbox-required\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"sandbox-required\"}",
+   "event": "SessionStart",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"HOL Guard sandbox-required this action\"},\"decision\":\"deny\",\"policy_action\":\"sandbox-required\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"sandbox-required\"}",
+   "event": "Stop",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"HOL Guard sandbox-required this action\"},\"decision\":\"deny\",\"policy_action\":\"sandbox-required\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"sandbox-required\"}",
+   "event": "Custom",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Custom\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"HOL Guard sandbox-required this action\"},\"decision\":\"deny\",\"policy_action\":\"sandbox-required\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"block\",\"reason\":\"no\"}",
+   "event": "PreToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"no\"},\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"no\"}",
+   "exit": 2
+  },
+  {
+   "response": "{\"policy_action\":\"block\",\"reason\":\"no\"}",
+   "event": "UserPromptSubmit",
+   "stdout": "{\"decision\":\"block\",\"reason\":\"no\"}",
+   "exit": 2
+  },
+  {
+   "response": "{\"policy_action\":\"block\",\"reason\":\"no\"}",
+   "event": "PermissionRequest",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"no\"},\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"no\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"block\",\"reason\":\"no\"}",
+   "event": "PostToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"no\"},\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"no\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"block\",\"reason\":\"no\"}",
+   "event": "SessionStart",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"no\"},\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"no\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"block\",\"reason\":\"no\"}",
+   "event": "Stop",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"no\"},\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"no\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"block\",\"reason\":\"no\"}",
+   "event": "Custom",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Custom\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"no\"},\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"no\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"block\",\"permission_decision_reason\":\"fallback reason\"}",
+   "event": "PreToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"fallback reason\"},\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"fallback reason\"}",
+   "exit": 2
+  },
+  {
+   "response": "{\"policy_action\":\"block\",\"permission_decision_reason\":\"fallback reason\"}",
+   "event": "UserPromptSubmit",
+   "stdout": "{\"decision\":\"block\",\"reason\":\"fallback reason\"}",
+   "exit": 2
+  },
+  {
+   "response": "{\"policy_action\":\"block\",\"permission_decision_reason\":\"fallback reason\"}",
+   "event": "PermissionRequest",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"fallback reason\"},\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"fallback reason\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"block\",\"permission_decision_reason\":\"fallback reason\"}",
+   "event": "PostToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"fallback reason\"},\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"fallback reason\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"block\",\"permission_decision_reason\":\"fallback reason\"}",
+   "event": "SessionStart",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"fallback reason\"},\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"fallback reason\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"block\",\"permission_decision_reason\":\"fallback reason\"}",
+   "event": "Stop",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"fallback reason\"},\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"fallback reason\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"block\",\"permission_decision_reason\":\"fallback reason\"}",
+   "event": "Custom",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Custom\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"fallback reason\"},\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"fallback reason\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"mystery\"}",
+   "event": "PreToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\"}}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"mystery\"}",
+   "event": "UserPromptSubmit",
+   "stdout": "{}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"mystery\"}",
+   "event": "PermissionRequest",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\"}}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"mystery\"}",
+   "event": "PostToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\"}}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"mystery\"}",
+   "event": "SessionStart",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\"}}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"mystery\"}",
+   "event": "Stop",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\"}}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"mystery\"}",
+   "event": "Custom",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Custom\"}}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"\"}",
+   "event": "PreToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HOL Guard block this action\"},\"decision\":\"deny\",\"policy_action\":\"block\"}",
+   "exit": 2
+  },
+  {
+   "response": "{\"policy_action\":\"\"}",
+   "event": "UserPromptSubmit",
+   "stdout": "{\"decision\":\"block\",\"reason\":\"HOL Guard blocked this action (block)\"}",
+   "exit": 2
+  },
+  {
+   "response": "{\"policy_action\":\"\"}",
+   "event": "PermissionRequest",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HOL Guard block this action\"},\"decision\":\"deny\",\"policy_action\":\"block\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"\"}",
+   "event": "PostToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HOL Guard block this action\"},\"decision\":\"deny\",\"policy_action\":\"block\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"\"}",
+   "event": "SessionStart",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HOL Guard block this action\"},\"decision\":\"deny\",\"policy_action\":\"block\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"\"}",
+   "event": "Stop",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HOL Guard block this action\"},\"decision\":\"deny\",\"policy_action\":\"block\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"\"}",
+   "event": "Custom",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Custom\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HOL Guard block this action\"},\"decision\":\"deny\",\"policy_action\":\"block\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":null,\"reason\":null}",
+   "event": "PreToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HOL Guard block this action\"},\"decision\":\"deny\",\"policy_action\":\"block\"}",
+   "exit": 2
+  },
+  {
+   "response": "{\"policy_action\":null,\"reason\":null}",
+   "event": "UserPromptSubmit",
+   "stdout": "{\"decision\":\"block\",\"reason\":\"HOL Guard blocked this action (block)\"}",
+   "exit": 2
+  },
+  {
+   "response": "{\"policy_action\":null,\"reason\":null}",
+   "event": "PermissionRequest",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HOL Guard block this action\"},\"decision\":\"deny\",\"policy_action\":\"block\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":null,\"reason\":null}",
+   "event": "PostToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HOL Guard block this action\"},\"decision\":\"deny\",\"policy_action\":\"block\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":null,\"reason\":null}",
+   "event": "SessionStart",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HOL Guard block this action\"},\"decision\":\"deny\",\"policy_action\":\"block\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":null,\"reason\":null}",
+   "event": "Stop",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HOL Guard block this action\"},\"decision\":\"deny\",\"policy_action\":\"block\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":null,\"reason\":null}",
+   "event": "Custom",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Custom\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HOL Guard block this action\"},\"decision\":\"deny\",\"policy_action\":\"block\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"reason\":\"no policy\"}",
+   "event": "PreToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"no policy\"},\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"no policy\"}",
+   "exit": 2
+  },
+  {
+   "response": "{\"reason\":\"no policy\"}",
+   "event": "UserPromptSubmit",
+   "stdout": "{\"decision\":\"block\",\"reason\":\"no policy\"}",
+   "exit": 2
+  },
+  {
+   "response": "{\"reason\":\"no policy\"}",
+   "event": "PermissionRequest",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"no policy\"},\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"no policy\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"reason\":\"no policy\"}",
+   "event": "PostToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"no policy\"},\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"no policy\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"reason\":\"no policy\"}",
+   "event": "SessionStart",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"no policy\"},\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"no policy\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"reason\":\"no policy\"}",
+   "event": "Stop",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"no policy\"},\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"no policy\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"reason\":\"no policy\"}",
+   "event": "Custom",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Custom\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"no policy\"},\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"no policy\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":1.5,\"reason\":3}",
+   "event": "PreToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\"}}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":1.5,\"reason\":3}",
+   "event": "UserPromptSubmit",
+   "stdout": "{}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":1.5,\"reason\":3}",
+   "event": "PermissionRequest",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\"}}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":1.5,\"reason\":3}",
+   "event": "PostToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\"}}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":1.5,\"reason\":3}",
+   "event": "SessionStart",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\"}}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":1.5,\"reason\":3}",
+   "event": "Stop",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\"}}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":1.5,\"reason\":3}",
+   "event": "Custom",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Custom\"}}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":true}",
+   "event": "PreToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\"}}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":true}",
+   "event": "UserPromptSubmit",
+   "stdout": "{}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":true}",
+   "event": "PermissionRequest",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\"}}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":true}",
+   "event": "PostToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\"}}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":true}",
+   "event": "SessionStart",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\"}}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":true}",
+   "event": "Stop",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\"}}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":true}",
+   "event": "Custom",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Custom\"}}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"block\",\"reason\":false,\"approval_url\":false,\"guardApprovalUrl\":\"\",\"approval_requests\":[]}",
+   "event": "PreToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HOL Guard block this action\"},\"decision\":\"deny\",\"policy_action\":\"block\",\"approval_url\":false,\"guardApprovalUrl\":\"\",\"approval_requests\":[]}",
+   "exit": 2
+  },
+  {
+   "response": "{\"policy_action\":\"block\",\"reason\":false,\"approval_url\":false,\"guardApprovalUrl\":\"\",\"approval_requests\":[]}",
+   "event": "UserPromptSubmit",
+   "stdout": "{\"decision\":\"block\",\"reason\":\"HOL Guard blocked this action (block)\"}",
+   "exit": 2
+  },
+  {
+   "response": "{\"policy_action\":\"block\",\"reason\":false,\"approval_url\":false,\"guardApprovalUrl\":\"\",\"approval_requests\":[]}",
+   "event": "PermissionRequest",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HOL Guard block this action\"},\"decision\":\"deny\",\"policy_action\":\"block\",\"approval_url\":false,\"guardApprovalUrl\":\"\",\"approval_requests\":[]}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"block\",\"reason\":false,\"approval_url\":false,\"guardApprovalUrl\":\"\",\"approval_requests\":[]}",
+   "event": "PostToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HOL Guard block this action\"},\"decision\":\"deny\",\"policy_action\":\"block\",\"approval_url\":false,\"guardApprovalUrl\":\"\",\"approval_requests\":[]}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"block\",\"reason\":false,\"approval_url\":false,\"guardApprovalUrl\":\"\",\"approval_requests\":[]}",
+   "event": "SessionStart",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HOL Guard block this action\"},\"decision\":\"deny\",\"policy_action\":\"block\",\"approval_url\":false,\"guardApprovalUrl\":\"\",\"approval_requests\":[]}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"block\",\"reason\":false,\"approval_url\":false,\"guardApprovalUrl\":\"\",\"approval_requests\":[]}",
+   "event": "Stop",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HOL Guard block this action\"},\"decision\":\"deny\",\"policy_action\":\"block\",\"approval_url\":false,\"guardApprovalUrl\":\"\",\"approval_requests\":[]}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"block\",\"reason\":false,\"approval_url\":false,\"guardApprovalUrl\":\"\",\"approval_requests\":[]}",
+   "event": "Custom",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Custom\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HOL Guard block this action\"},\"decision\":\"deny\",\"policy_action\":\"block\",\"approval_url\":false,\"guardApprovalUrl\":\"\",\"approval_requests\":[]}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"review\",\"primary_approval_request_id\":\"p\",\"primary_approval_url\":\"u\",\"guardApprovalRequestId\":\"g\",\"unrelated\":1}",
+   "event": "PreToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"HOL Guard review this action\"},\"decision\":\"deny\",\"policy_action\":\"review\",\"primary_approval_request_id\":\"p\",\"primary_approval_url\":\"u\",\"guardApprovalRequestId\":\"g\"}",
+   "exit": 2
+  },
+  {
+   "response": "{\"policy_action\":\"review\",\"primary_approval_request_id\":\"p\",\"primary_approval_url\":\"u\",\"guardApprovalRequestId\":\"g\",\"unrelated\":1}",
+   "event": "UserPromptSubmit",
+   "stdout": "{\"decision\":\"block\",\"reason\":\"HOL Guard blocked this action (review)\"}",
+   "exit": 2
+  },
+  {
+   "response": "{\"policy_action\":\"review\",\"primary_approval_request_id\":\"p\",\"primary_approval_url\":\"u\",\"guardApprovalRequestId\":\"g\",\"unrelated\":1}",
+   "event": "PermissionRequest",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"HOL Guard review this action\"},\"decision\":\"deny\",\"policy_action\":\"review\",\"primary_approval_request_id\":\"p\",\"primary_approval_url\":\"u\",\"guardApprovalRequestId\":\"g\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"review\",\"primary_approval_request_id\":\"p\",\"primary_approval_url\":\"u\",\"guardApprovalRequestId\":\"g\",\"unrelated\":1}",
+   "event": "PostToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"HOL Guard review this action\"},\"decision\":\"deny\",\"policy_action\":\"review\",\"primary_approval_request_id\":\"p\",\"primary_approval_url\":\"u\",\"guardApprovalRequestId\":\"g\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"review\",\"primary_approval_request_id\":\"p\",\"primary_approval_url\":\"u\",\"guardApprovalRequestId\":\"g\",\"unrelated\":1}",
+   "event": "SessionStart",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"HOL Guard review this action\"},\"decision\":\"deny\",\"policy_action\":\"review\",\"primary_approval_request_id\":\"p\",\"primary_approval_url\":\"u\",\"guardApprovalRequestId\":\"g\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"review\",\"primary_approval_request_id\":\"p\",\"primary_approval_url\":\"u\",\"guardApprovalRequestId\":\"g\",\"unrelated\":1}",
+   "event": "Stop",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"HOL Guard review this action\"},\"decision\":\"deny\",\"policy_action\":\"review\",\"primary_approval_request_id\":\"p\",\"primary_approval_url\":\"u\",\"guardApprovalRequestId\":\"g\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"review\",\"primary_approval_request_id\":\"p\",\"primary_approval_url\":\"u\",\"guardApprovalRequestId\":\"g\",\"unrelated\":1}",
+   "event": "Custom",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Custom\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"HOL Guard review this action\"},\"decision\":\"deny\",\"policy_action\":\"review\",\"primary_approval_request_id\":\"p\",\"primary_approval_url\":\"u\",\"guardApprovalRequestId\":\"g\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"decision\":\"allow\"}",
+   "event": "PreToolUse",
+   "stdout": "{\"decision\":\"allow\"}",
+   "exit": 2
+  },
+  {
+   "response": "{\"decision\":\"allow\"}",
+   "event": "UserPromptSubmit",
+   "stdout": "{\"decision\":\"allow\"}",
+   "exit": 2
+  },
+  {
+   "response": "{\"decision\":\"allow\"}",
+   "event": "PermissionRequest",
+   "stdout": "{\"decision\":\"allow\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"decision\":\"allow\"}",
+   "event": "PostToolUse",
+   "stdout": "{\"decision\":\"allow\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"decision\":\"allow\"}",
+   "event": "SessionStart",
+   "stdout": "{\"decision\":\"allow\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"decision\":\"allow\"}",
+   "event": "Stop",
+   "stdout": "{\"decision\":\"allow\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"decision\":\"allow\"}",
+   "event": "Custom",
+   "stdout": "{\"decision\":\"allow\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"kept\"}",
+   "event": "PreToolUse",
+   "stdout": "{\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"kept\"}",
+   "exit": 2
+  },
+  {
+   "response": "{\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"kept\"}",
+   "event": "UserPromptSubmit",
+   "stdout": "{\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"kept\"}",
+   "exit": 2
+  },
+  {
+   "response": "{\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"kept\"}",
+   "event": "PermissionRequest",
+   "stdout": "{\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"kept\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"kept\"}",
+   "event": "PostToolUse",
+   "stdout": "{\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"kept\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"kept\"}",
+   "event": "SessionStart",
+   "stdout": "{\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"kept\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"kept\"}",
+   "event": "Stop",
+   "stdout": "{\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"kept\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"kept\"}",
+   "event": "Custom",
+   "stdout": "{\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"kept\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"ask\"},\"policy_action\":\"review\"}",
+   "event": "PreToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"permissionDecision\":\"ask\"},\"policy_action\":\"review\"}",
+   "exit": 2
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"ask\"},\"policy_action\":\"review\"}",
+   "event": "UserPromptSubmit",
+   "stdout": "{\"hookSpecificOutput\":{\"permissionDecision\":\"ask\"},\"policy_action\":\"review\"}",
+   "exit": 2
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"ask\"},\"policy_action\":\"review\"}",
+   "event": "PermissionRequest",
+   "stdout": "{\"hookSpecificOutput\":{\"permissionDecision\":\"ask\"},\"policy_action\":\"review\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"ask\"},\"policy_action\":\"review\"}",
+   "event": "PostToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"permissionDecision\":\"ask\"},\"policy_action\":\"review\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"ask\"},\"policy_action\":\"review\"}",
+   "event": "SessionStart",
+   "stdout": "{\"hookSpecificOutput\":{\"permissionDecision\":\"ask\"},\"policy_action\":\"review\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"ask\"},\"policy_action\":\"review\"}",
+   "event": "Stop",
+   "stdout": "{\"hookSpecificOutput\":{\"permissionDecision\":\"ask\"},\"policy_action\":\"review\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{\"permissionDecision\":\"ask\"},\"policy_action\":\"review\"}",
+   "event": "Custom",
+   "stdout": "{\"hookSpecificOutput\":{\"permissionDecision\":\"ask\"},\"policy_action\":\"review\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{},\"policy_action\":null}",
+   "event": "PreToolUse",
+   "stdout": "{\"hookSpecificOutput\":{},\"policy_action\":null}",
+   "exit": 2
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{},\"policy_action\":null}",
+   "event": "UserPromptSubmit",
+   "stdout": "{\"hookSpecificOutput\":{},\"policy_action\":null}",
+   "exit": 2
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{},\"policy_action\":null}",
+   "event": "PermissionRequest",
+   "stdout": "{\"hookSpecificOutput\":{},\"policy_action\":null}",
+   "exit": 0
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{},\"policy_action\":null}",
+   "event": "PostToolUse",
+   "stdout": "{\"hookSpecificOutput\":{},\"policy_action\":null}",
+   "exit": 0
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{},\"policy_action\":null}",
+   "event": "SessionStart",
+   "stdout": "{\"hookSpecificOutput\":{},\"policy_action\":null}",
+   "exit": 0
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{},\"policy_action\":null}",
+   "event": "Stop",
+   "stdout": "{\"hookSpecificOutput\":{},\"policy_action\":null}",
+   "exit": 0
+  },
+  {
+   "response": "{\"hookSpecificOutput\":{},\"policy_action\":null}",
+   "event": "Custom",
+   "stdout": "{\"hookSpecificOutput\":{},\"policy_action\":null}",
+   "exit": 0
+  },
+  {
+   "response": "{\"decision\":\"deny\",\"policy_action\":2}",
+   "event": "PreToolUse",
+   "stdout": "{\"decision\":\"deny\",\"policy_action\":2}",
+   "exit": 0
+  },
+  {
+   "response": "{\"decision\":\"deny\",\"policy_action\":2}",
+   "event": "UserPromptSubmit",
+   "stdout": "{\"decision\":\"deny\",\"policy_action\":2}",
+   "exit": 0
+  },
+  {
+   "response": "{\"decision\":\"deny\",\"policy_action\":2}",
+   "event": "PermissionRequest",
+   "stdout": "{\"decision\":\"deny\",\"policy_action\":2}",
+   "exit": 0
+  },
+  {
+   "response": "{\"decision\":\"deny\",\"policy_action\":2}",
+   "event": "PostToolUse",
+   "stdout": "{\"decision\":\"deny\",\"policy_action\":2}",
+   "exit": 0
+  },
+  {
+   "response": "{\"decision\":\"deny\",\"policy_action\":2}",
+   "event": "SessionStart",
+   "stdout": "{\"decision\":\"deny\",\"policy_action\":2}",
+   "exit": 0
+  },
+  {
+   "response": "{\"decision\":\"deny\",\"policy_action\":2}",
+   "event": "Stop",
+   "stdout": "{\"decision\":\"deny\",\"policy_action\":2}",
+   "exit": 0
+  },
+  {
+   "response": "{\"decision\":\"deny\",\"policy_action\":2}",
+   "event": "Custom",
+   "stdout": "{\"decision\":\"deny\",\"policy_action\":2}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"allow\",\"reason\":\"caf\\u00e9 \\u2713\"}",
+   "event": "PreToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"},\"decision\":\"allow\",\"policy_action\":\"allow\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"allow\",\"reason\":\"caf\\u00e9 \\u2713\"}",
+   "event": "UserPromptSubmit",
+   "stdout": "{}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"allow\",\"reason\":\"caf\\u00e9 \\u2713\"}",
+   "event": "PermissionRequest",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"permissionDecision\":\"allow\"},\"decision\":\"allow\",\"policy_action\":\"allow\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"allow\",\"reason\":\"caf\\u00e9 \\u2713\"}",
+   "event": "PostToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"permissionDecision\":\"allow\"},\"decision\":\"allow\",\"policy_action\":\"allow\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"allow\",\"reason\":\"caf\\u00e9 \\u2713\"}",
+   "event": "SessionStart",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"permissionDecision\":\"allow\"},\"decision\":\"allow\",\"policy_action\":\"allow\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"allow\",\"reason\":\"caf\\u00e9 \\u2713\"}",
+   "event": "Stop",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Stop\",\"permissionDecision\":\"allow\"},\"decision\":\"allow\",\"policy_action\":\"allow\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"allow\",\"reason\":\"caf\\u00e9 \\u2713\"}",
+   "event": "Custom",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"Custom\",\"permissionDecision\":\"allow\"},\"decision\":\"allow\",\"policy_action\":\"allow\"}",
+   "exit": 0
+  },
+  {
+   "response": "{\"policy_action\":\"allow\",\"policy_action\":\"block\"}",
+   "event": "PreToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"HOL Guard block this action\"},\"decision\":\"deny\",\"policy_action\":\"block\"}",
+   "exit": 2
+  },
+  {
+   "response": "{\"policy_action\":\"allow\",\"policy_action\":\"block\"}",
+   "event": "UserPromptSubmit",
+   "stdout": "{\"decision\":\"block\",\"reason\":\"HOL Guard blocked this action (block)\"}",
+   "exit": 2
+  },
+  {
+   "response": "{\"reason\":\"a\",\"policy_action\":\"review\",\"reason\":\"b\"}",
+   "event": "PreToolUse",
+   "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"b\"},\"decision\":\"deny\",\"policy_action\":\"review\",\"reason\":\"b\"}",
+   "exit": 2
+  },
+  {
+   "response": "{\"reason\":\"a\",\"policy_action\":\"review\",\"reason\":\"b\"}",
+   "event": "UserPromptSubmit",
+   "stdout": "{\"decision\":\"block\",\"reason\":\"b\"}",
+   "exit": 2
+  }
+ ],
+ "request_ids": [
+  {
+   "payload": "{}",
+   "ids": []
+  },
+  {
+   "payload": "{\"policy_action\":\"review\",\"approval_request_id\":\" r1 \"}",
+   "ids": [
+    "r1"
+   ]
+  },
+  {
+   "payload": "{\"policy_action\":\"review\",\"approval_requests\":[{\"request_id\":\"a\"},\"x\",{\"request_id\":\" \"},{\"request_id\":4},{\"request_id\":\" b \"}]}",
+   "ids": [
+    "a",
+    "b"
+   ]
+  },
+  {
+   "payload": "{\"approval_requests\":[],\"primary_approval_request_id\":\"p\",\"approval_request_id\":\"q\"}",
+   "ids": [
+    "p"
+   ]
+  },
+  {
+   "payload": "{\"approval_requests\":[{\"id\":\"a\"}],\"approval_request_id\":\"  \",\"guardApprovalRequestId\":\"g\"}",
+   "ids": [
+    "g"
+   ]
+  },
+  {
+   "payload": "{\"approval_requests\":\"a\",\"guardApprovalRequestId\":5}",
+   "ids": []
+  },
+  {
+   "payload": "{\"approval_requests\":[{\"request_id\":\"a\"},{\"request_id\":\"a\"}]}",
+   "ids": [
+    "a",
+    "a"
+   ]
+  },
+  {
+   "payload": "{\"decision\":\"deny\",\"policy_action\":\"review\",\"reason\":\"r\",\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"why\"}}",
+   "ids": []
+  },
+  {
+   "payload": "{\"reason\":\"r\",\"hookSpecificOutput\":\"not a dict\",\"approval_url\":\"u\"}",
+   "ids": []
+  },
+  {
+   "payload": "{\"hookSpecificOutput\":{\"permissionDecisionReason\":\"why\",\"other\":[1,2]}}",
+   "ids": []
+  }
+ ],
+ "rewrite": [
+  {
+   "payload": "{}",
+   "allowed": true,
+   "stdout": "{\"decision\":\"allow\",\"policy_action\":\"allow\"}"
+  },
+  {
+   "payload": "{}",
+   "allowed": false,
+   "stdout": "{\"decision\":\"deny\",\"policy_action\":\"block\"}"
+  },
+  {
+   "payload": "{\"policy_action\":\"review\",\"approval_request_id\":\" r1 \"}",
+   "allowed": true,
+   "stdout": "{\"policy_action\":\"allow\",\"approval_request_id\":\" r1 \",\"decision\":\"allow\"}"
+  },
+  {
+   "payload": "{\"policy_action\":\"review\",\"approval_request_id\":\" r1 \"}",
+   "allowed": false,
+   "stdout": "{\"policy_action\":\"block\",\"approval_request_id\":\" r1 \",\"decision\":\"deny\"}"
+  },
+  {
+   "payload": "{\"policy_action\":\"review\",\"approval_requests\":[{\"request_id\":\"a\"},\"x\",{\"request_id\":\" \"},{\"request_id\":4},{\"request_id\":\" b \"}]}",
+   "allowed": true,
+   "stdout": "{\"policy_action\":\"allow\",\"approval_requests\":[{\"request_id\":\"a\"},\"x\",{\"request_id\":\" \"},{\"request_id\":4},{\"request_id\":\" b \"}],\"decision\":\"allow\"}"
+  },
+  {
+   "payload": "{\"policy_action\":\"review\",\"approval_requests\":[{\"request_id\":\"a\"},\"x\",{\"request_id\":\" \"},{\"request_id\":4},{\"request_id\":\" b \"}]}",
+   "allowed": false,
+   "stdout": "{\"policy_action\":\"block\",\"approval_requests\":[{\"request_id\":\"a\"},\"x\",{\"request_id\":\" \"},{\"request_id\":4},{\"request_id\":\" b \"}],\"decision\":\"deny\"}"
+  },
+  {
+   "payload": "{\"approval_requests\":[],\"primary_approval_request_id\":\"p\",\"approval_request_id\":\"q\"}",
+   "allowed": true,
+   "stdout": "{\"approval_requests\":[],\"primary_approval_request_id\":\"p\",\"approval_request_id\":\"q\",\"decision\":\"allow\",\"policy_action\":\"allow\"}"
+  },
+  {
+   "payload": "{\"approval_requests\":[],\"primary_approval_request_id\":\"p\",\"approval_request_id\":\"q\"}",
+   "allowed": false,
+   "stdout": "{\"approval_requests\":[],\"primary_approval_request_id\":\"p\",\"approval_request_id\":\"q\",\"decision\":\"deny\",\"policy_action\":\"block\"}"
+  },
+  {
+   "payload": "{\"approval_requests\":[{\"id\":\"a\"}],\"approval_request_id\":\"  \",\"guardApprovalRequestId\":\"g\"}",
+   "allowed": true,
+   "stdout": "{\"approval_requests\":[{\"id\":\"a\"}],\"approval_request_id\":\"  \",\"guardApprovalRequestId\":\"g\",\"decision\":\"allow\",\"policy_action\":\"allow\"}"
+  },
+  {
+   "payload": "{\"approval_requests\":[{\"id\":\"a\"}],\"approval_request_id\":\"  \",\"guardApprovalRequestId\":\"g\"}",
+   "allowed": false,
+   "stdout": "{\"approval_requests\":[{\"id\":\"a\"}],\"approval_request_id\":\"  \",\"guardApprovalRequestId\":\"g\",\"decision\":\"deny\",\"policy_action\":\"block\"}"
+  },
+  {
+   "payload": "{\"approval_requests\":\"a\",\"guardApprovalRequestId\":5}",
+   "allowed": true,
+   "stdout": "{\"approval_requests\":\"a\",\"guardApprovalRequestId\":5,\"decision\":\"allow\",\"policy_action\":\"allow\"}"
+  },
+  {
+   "payload": "{\"approval_requests\":\"a\",\"guardApprovalRequestId\":5}",
+   "allowed": false,
+   "stdout": "{\"approval_requests\":\"a\",\"guardApprovalRequestId\":5,\"decision\":\"deny\",\"policy_action\":\"block\"}"
+  },
+  {
+   "payload": "{\"approval_requests\":[{\"request_id\":\"a\"},{\"request_id\":\"a\"}]}",
+   "allowed": true,
+   "stdout": "{\"approval_requests\":[{\"request_id\":\"a\"},{\"request_id\":\"a\"}],\"decision\":\"allow\",\"policy_action\":\"allow\"}"
+  },
+  {
+   "payload": "{\"approval_requests\":[{\"request_id\":\"a\"},{\"request_id\":\"a\"}]}",
+   "allowed": false,
+   "stdout": "{\"approval_requests\":[{\"request_id\":\"a\"},{\"request_id\":\"a\"}],\"decision\":\"deny\",\"policy_action\":\"block\"}"
+  },
+  {
+   "payload": "{\"decision\":\"deny\",\"policy_action\":\"review\",\"reason\":\"r\",\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"why\"}}",
+   "allowed": true,
+   "stdout": "{\"decision\":\"allow\",\"policy_action\":\"allow\",\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"allow\"}}"
+  },
+  {
+   "payload": "{\"decision\":\"deny\",\"policy_action\":\"review\",\"reason\":\"r\",\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"why\"}}",
+   "allowed": false,
+   "stdout": "{\"decision\":\"deny\",\"policy_action\":\"block\",\"reason\":\"r\",\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"why\"}}"
+  },
+  {
+   "payload": "{\"reason\":\"r\",\"hookSpecificOutput\":\"not a dict\",\"approval_url\":\"u\"}",
+   "allowed": true,
+   "stdout": "{\"hookSpecificOutput\":\"not a dict\",\"approval_url\":\"u\",\"decision\":\"allow\",\"policy_action\":\"allow\"}"
+  },
+  {
+   "payload": "{\"reason\":\"r\",\"hookSpecificOutput\":\"not a dict\",\"approval_url\":\"u\"}",
+   "allowed": false,
+   "stdout": "{\"reason\":\"r\",\"hookSpecificOutput\":\"not a dict\",\"approval_url\":\"u\",\"decision\":\"deny\",\"policy_action\":\"block\"}"
+  },
+  {
+   "payload": "{\"hookSpecificOutput\":{\"permissionDecisionReason\":\"why\",\"other\":[1,2]}}",
+   "allowed": true,
+   "stdout": "{\"hookSpecificOutput\":{\"other\":[1,2],\"permissionDecision\":\"allow\"},\"decision\":\"allow\",\"policy_action\":\"allow\"}"
+  },
+  {
+   "payload": "{\"hookSpecificOutput\":{\"permissionDecisionReason\":\"why\",\"other\":[1,2]}}",
+   "allowed": false,
+   "stdout": "{\"hookSpecificOutput\":{\"permissionDecisionReason\":\"why\",\"other\":[1,2],\"permissionDecision\":\"deny\"},\"decision\":\"deny\",\"policy_action\":\"block\"}"
+  }
+ ],
+ "wait_seconds": [
+  {
+   "config": null,
+   "timeout": 8,
+   "seconds": 3.2
+  },
+  {
+   "config": "",
+   "timeout": 8,
+   "seconds": 3.2
+  },
+  {
+   "config": "approval_wait_timeout_seconds = 2\n",
+   "timeout": 8,
+   "seconds": 2.0
+  },
+  {
+   "config": "approval_wait_timeout_seconds = 0\n",
+   "timeout": 8,
+   "seconds": 0.0
+  },
+  {
+   "config": "approval_wait_timeout_seconds = -1\n",
+   "timeout": 8,
+   "seconds": 3.2
+  },
+  {
+   "config": "approval_wait_timeout_seconds = 1.25 # comment\n",
+   "timeout": 8,
+   "seconds": 1.25
+  },
+  {
+   "config": "approval_wait_timeout_seconds = \"1.5\"\n",
+   "timeout": 8,
+   "seconds": 1.5
+  },
+  {
+   "config": "approval_wait_timeout_seconds = '0.5'\n",
+   "timeout": 8,
+   "seconds": 0.5
+  },
+  {
+   "config": "approval_wait_timeout_seconds = 1_0\n",
+   "timeout": 8,
+   "seconds": 3.2
+  },
+  {
+   "config": "approval_wait_timeout_seconds = 1__0\n",
+   "timeout": 8,
+   "seconds": 3.2
+  },
+  {
+   "config": "approval_wait_timeout_seconds = _1\n",
+   "timeout": 8,
+   "seconds": 3.2
+  },
+  {
+   "config": "approval_wait_timeout_seconds = 1e1\n",
+   "timeout": 8,
+   "seconds": 3.2
+  },
+  {
+   "config": "approval_wait_timeout_seconds = inf\n",
+   "timeout": 8,
+   "seconds": 3.2
+  },
+  {
+   "config": "approval_wait_timeout_seconds = nan\n",
+   "timeout": 8,
+   "seconds": 3.2
+  },
+  {
+   "config": "approval_wait_timeout_seconds = -inf\n",
+   "timeout": 8,
+   "seconds": 3.2
+  },
+  {
+   "config": "approval_wait_timeout_seconds = soon\n",
+   "timeout": 8,
+   "seconds": 3.2
+  },
+  {
+   "config": "approval_wait_timeout_seconds =\n",
+   "timeout": 8,
+   "seconds": 3.2
+  },
+  {
+   "config": "# approval_wait_timeout_seconds = 1\n",
+   "timeout": 8,
+   "seconds": 3.2
+  },
+  {
+   "config": "other = 1\napproval_wait_timeout_seconds = 3\napproval_wait_timeout_seconds = 1\n",
+   "timeout": 8,
+   "seconds": 3.0
+  },
+  {
+   "config": "  approval_wait_timeout_seconds=1.5  \r\n",
+   "timeout": 8,
+   "seconds": 1.5
+  },
+  {
+   "config": "[guard]\napproval_wait_timeout_seconds = 0.75\n",
+   "timeout": 8,
+   "seconds": 0.75
+  },
+  {
+   "config": "approval_wait_timeout_seconds = 1 = 2\n",
+   "timeout": 8,
+   "seconds": 3.2
+  },
+  {
+   "config": "approval_wait_timeout_seconds = +2.\n",
+   "timeout": 8,
+   "seconds": 2.0
+  },
+  {
+   "config": "approval_wait_timeout_seconds = .5\n",
+   "timeout": 8,
+   "seconds": 0.5
+  },
+  {
+   "config": null,
+   "timeout": 0.5,
+   "seconds": 0.2
+  },
+  {
+   "config": "",
+   "timeout": 0.5,
+   "seconds": 0.2
+  },
+  {
+   "config": "approval_wait_timeout_seconds = 2\n",
+   "timeout": 0.5,
+   "seconds": 0.2
+  },
+  {
+   "config": "approval_wait_timeout_seconds = 0\n",
+   "timeout": 0.5,
+   "seconds": 0.0
+  },
+  {
+   "config": "approval_wait_timeout_seconds = -1\n",
+   "timeout": 0.5,
+   "seconds": 0.2
+  },
+  {
+   "config": "approval_wait_timeout_seconds = 1.25 # comment\n",
+   "timeout": 0.5,
+   "seconds": 0.2
+  },
+  {
+   "config": "approval_wait_timeout_seconds = \"1.5\"\n",
+   "timeout": 0.5,
+   "seconds": 0.2
+  },
+  {
+   "config": "approval_wait_timeout_seconds = '0.5'\n",
+   "timeout": 0.5,
+   "seconds": 0.2
+  },
+  {
+   "config": "approval_wait_timeout_seconds = 1_0\n",
+   "timeout": 0.5,
+   "seconds": 0.2
+  },
+  {
+   "config": "approval_wait_timeout_seconds = 1__0\n",
+   "timeout": 0.5,
+   "seconds": 0.2
+  },
+  {
+   "config": "approval_wait_timeout_seconds = _1\n",
+   "timeout": 0.5,
+   "seconds": 0.2
+  },
+  {
+   "config": "approval_wait_timeout_seconds = 1e1\n",
+   "timeout": 0.5,
+   "seconds": 0.2
+  },
+  {
+   "config": "approval_wait_timeout_seconds = inf\n",
+   "timeout": 0.5,
+   "seconds": 0.2
+  },
+  {
+   "config": "approval_wait_timeout_seconds = nan\n",
+   "timeout": 0.5,
+   "seconds": 0.2
+  },
+  {
+   "config": "approval_wait_timeout_seconds = -inf\n",
+   "timeout": 0.5,
+   "seconds": 0.2
+  },
+  {
+   "config": "approval_wait_timeout_seconds = soon\n",
+   "timeout": 0.5,
+   "seconds": 0.2
+  },
+  {
+   "config": "approval_wait_timeout_seconds =\n",
+   "timeout": 0.5,
+   "seconds": 0.2
+  },
+  {
+   "config": "# approval_wait_timeout_seconds = 1\n",
+   "timeout": 0.5,
+   "seconds": 0.2
+  },
+  {
+   "config": "other = 1\napproval_wait_timeout_seconds = 3\napproval_wait_timeout_seconds = 1\n",
+   "timeout": 0.5,
+   "seconds": 0.2
+  },
+  {
+   "config": "  approval_wait_timeout_seconds=1.5  \r\n",
+   "timeout": 0.5,
+   "seconds": 0.2
+  },
+  {
+   "config": "[guard]\napproval_wait_timeout_seconds = 0.75\n",
+   "timeout": 0.5,
+   "seconds": 0.2
+  },
+  {
+   "config": "approval_wait_timeout_seconds = 1 = 2\n",
+   "timeout": 0.5,
+   "seconds": 0.2
+  },
+  {
+   "config": "approval_wait_timeout_seconds = +2.\n",
+   "timeout": 0.5,
+   "seconds": 0.2
+  },
+  {
+   "config": "approval_wait_timeout_seconds = .5\n",
+   "timeout": 0.5,
+   "seconds": 0.2
+  },
+  {
+   "config": null,
+   "timeout": 300,
+   "seconds": 80.0
+  },
+  {
+   "config": "",
+   "timeout": 300,
+   "seconds": 80.0
+  },
+  {
+   "config": "approval_wait_timeout_seconds = 2\n",
+   "timeout": 300,
+   "seconds": 2.0
+  },
+  {
+   "config": "approval_wait_timeout_seconds = 0\n",
+   "timeout": 300,
+   "seconds": 0.0
+  },
+  {
+   "config": "approval_wait_timeout_seconds = -1\n",
+   "timeout": 300,
+   "seconds": 80.0
+  },
+  {
+   "config": "approval_wait_timeout_seconds = 1.25 # comment\n",
+   "timeout": 300,
+   "seconds": 1.25
+  },
+  {
+   "config": "approval_wait_timeout_seconds = \"1.5\"\n",
+   "timeout": 300,
+   "seconds": 1.5
+  },
+  {
+   "config": "approval_wait_timeout_seconds = '0.5'\n",
+   "timeout": 300,
+   "seconds": 0.5
+  },
+  {
+   "config": "approval_wait_timeout_seconds = 1_0\n",
+   "timeout": 300,
+   "seconds": 10.0
+  },
+  {
+   "config": "approval_wait_timeout_seconds = 1__0\n",
+   "timeout": 300,
+   "seconds": 80.0
+  },
+  {
+   "config": "approval_wait_timeout_seconds = _1\n",
+   "timeout": 300,
+   "seconds": 80.0
+  },
+  {
+   "config": "approval_wait_timeout_seconds = 1e1\n",
+   "timeout": 300,
+   "seconds": 10.0
+  },
+  {
+   "config": "approval_wait_timeout_seconds = inf\n",
+   "timeout": 300,
+   "seconds": 80.0
+  },
+  {
+   "config": "approval_wait_timeout_seconds = nan\n",
+   "timeout": 300,
+   "seconds": 80.0
+  },
+  {
+   "config": "approval_wait_timeout_seconds = -inf\n",
+   "timeout": 300,
+   "seconds": 80.0
+  },
+  {
+   "config": "approval_wait_timeout_seconds = soon\n",
+   "timeout": 300,
+   "seconds": 80.0
+  },
+  {
+   "config": "approval_wait_timeout_seconds =\n",
+   "timeout": 300,
+   "seconds": 80.0
+  },
+  {
+   "config": "# approval_wait_timeout_seconds = 1\n",
+   "timeout": 300,
+   "seconds": 80.0
+  },
+  {
+   "config": "other = 1\napproval_wait_timeout_seconds = 3\napproval_wait_timeout_seconds = 1\n",
+   "timeout": 300,
+   "seconds": 3.0
+  },
+  {
+   "config": "  approval_wait_timeout_seconds=1.5  \r\n",
+   "timeout": 300,
+   "seconds": 1.5
+  },
+  {
+   "config": "[guard]\napproval_wait_timeout_seconds = 0.75\n",
+   "timeout": 300,
+   "seconds": 0.75
+  },
+  {
+   "config": "approval_wait_timeout_seconds = 1 = 2\n",
+   "timeout": 300,
+   "seconds": 80.0
+  },
+  {
+   "config": "approval_wait_timeout_seconds = +2.\n",
+   "timeout": 300,
+   "seconds": 2.0
+  },
+  {
+   "config": "approval_wait_timeout_seconds = .5\n",
+   "timeout": 300,
+   "seconds": 0.5
+  }
+ ],
+ "toml_scalar": [
+  {
+   "raw": "a = 1\nkey = \"v\"\n",
+   "key": "key",
+   "value": "v"
+  },
+  {
+   "raw": "key = 'v' # c\n",
+   "key": "key",
+   "value": "v"
+  },
+  {
+   "raw": "key=\"\"x\"\"\n",
+   "key": "key",
+   "value": "x"
+  },
+  {
+   "raw": "key = a=b\n",
+   "key": "key",
+   "value": "a=b"
+  },
+  {
+   "raw": "#key = 1\nkey = 2\n",
+   "key": "key",
+   "value": "2"
+  },
+  {
+   "raw": " key  =  3 \r\nkey = 4",
+   "key": "key",
+   "value": "3"
+  },
+  {
+   "raw": "keys = 1\n",
+   "key": "key",
+   "value": ""
+  },
+  {
+   "raw": "key\n= 1\n",
+   "key": "key",
+   "value": ""
+  },
+  {
+   "raw": "\u000bkey = 5\f\n",
+   "key": "key",
+   "value": "5"
+  },
+  {
+   "raw": "key = 6\u001cother = 7\n",
+   "key": "other",
+   "value": "7"
+  },
+  {
+   "raw": "key = 6\u2028other = 8\n",
+   "key": "other",
+   "value": "8"
+  },
+  {
+   "raw": "",
+   "key": "key",
+   "value": ""
+  }
+ ],
+ "quote": [
+  {
+   "text": "req-1",
+   "quoted": "req-1"
+  },
+  {
+   "text": "a b/c?d=e&f",
+   "quoted": "a%20b%2Fc%3Fd%3De%26f"
+  },
+  {
+   "text": "~._-",
+   "quoted": "~._-"
+  },
+  {
+   "text": "caf\u00e9",
+   "quoted": "caf%C3%A9"
+  },
+  {
+   "text": "%",
+   "quoted": "%25"
+  },
+  {
+   "text": "\ud83d\ude00",
+   "quoted": "%F0%9F%98%80"
+  },
+  {
+   "text": "",
+   "quoted": ""
+  }
+ ]
+}

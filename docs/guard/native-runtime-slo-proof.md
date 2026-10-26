@@ -44,7 +44,7 @@ a 2 percent RSS plateau and a 30-second deadline; the post-c64 peak is compared
 against that steady-state baseline. The resident growth gate remains at most
 12 percent.
 
-Native wheel CI runs the no-environment installed-wheel probe and enforces the
+The nightly native workflow runs the no-environment installed-wheel probe and enforces the
 adapter SLO. Windows remains outside this wave. The stress script exposes
 bounded thread, descriptor, and RSS aggregates. CI runs its `--enforce-soak`
 profile for 100,000 requests over a populated 250,000-receipt store; local
@@ -66,3 +66,34 @@ or writing evidence. Expected policy denials from large source-reference and
 bounded-capacity probes remain visible as `security_denials` and
 `security_denials_by_size`; they do not enter the ordinary warm fail-safe
 numerator.
+
+## Matched warm-path latency baseline
+
+The SLO proof above gates absolute ceilings at the adapter-to-decision
+boundary. It does not compare revisions. The `Warm-path latency baseline`
+workflow (`workflow_dispatch`, measurement only, no threshold or gate) answers a
+different question: how much faster or slower is the installed product on the
+user-visible path between two revisions?
+
+It builds each revision's static Linux native wheel with the nightly
+`linux-build` recipe, installs both into separate environments on one hosted
+runner, and drives only the public command line, so the identical probe code
+runs against either revision:
+
+- Warm hook: install the Claude Code hooks into a throwaway home, then spawn the
+  installed `PreToolUse` handler for a benign Bash payload and time spawn to exit.
+- Warm non-package `tools/call`: install the Codex MCP proxy around a stdlib
+  canary server, keep one session open, and time each `safe_echo` round trip.
+
+Method and noise rules: targets alternate order every round, each round uses a
+fresh Guard home and daemon plus discarded warm-up calls, and the headline
+percentile is the median across rounds (default five) of each round's p95, with
+p50 and p99 reported alongside. A run is flagged noisy when per-round p95 values
+span more than 15 percent of their median, and flagged non-comparable when the
+decision classes of the timed cohorts differ. Client and service CPU, service
+RSS, descriptors and process counts are recorded per call. A bare interpreter
+spawn is timed every round as a same-runner drift indicator.
+
+Do not subtract these numbers from the direct release-gate or installed SLO
+numbers: they measure different boundaries and must not be reported as a
+migration speedup.

@@ -11,8 +11,10 @@ import { ApprovalProofInline, buildApprovalProofCredentials } from "./approval-p
 import { ActionButton, Tag } from "./approval-center-primitives";
 import { GuardModalLayer } from "./guard-modal-layer";
 import type { GuardApprovalGatePublicConfig, PackageFirewallStatusResponse } from "./guard-types";
+import { SupplyChainAuditFailureNotice } from "./supply-chain-audit-failure-notice";
 import { ConnectFlowCard } from "./supply-chain-firewall-views";
-import type { SupplyChainAuditRecoveryGate } from "./supply-chain-audit-recovery";
+import { isStandaloneSyncRecoveryGate, type SupplyChainAuditRecoveryGate } from "./supply-chain-audit-recovery";
+import type { SupplyChainRecoveryOperation } from "./supply-chain-audit-failure";
 
 export type AuditRecoveryModalPhase =
   | "ready"
@@ -26,6 +28,8 @@ type AuditRecoveryModalProps = {
   gate: SupplyChainAuditRecoveryGate;
   phase: AuditRecoveryModalPhase;
   error: string | null;
+  /** Which step produced `error`, so the notice names the right one. */
+  errorOperation?: SupplyChainRecoveryOperation;
   connectError: string | null;
   connectStarting: boolean;
   connectFlow: PackageFirewallStatusResponse["connect_flow"];
@@ -121,6 +125,7 @@ export function AuditRecoveryModal({
   gate,
   phase,
   error,
+  errorOperation = "sync",
   connectError,
   connectStarting,
   connectFlow,
@@ -149,6 +154,7 @@ export function AuditRecoveryModal({
   }, [phase]);
 
   const activeStep = resolveActiveStepIndex(gate, phase);
+  const standaloneSync = isStandaloneSyncRecoveryGate(gate);
   const primaryBusy = phase === "syncing" || phase === "connecting" || phase === "auditing";
   const PrimaryIcon = resolvePrimaryIcon(gate, phase);
   const showConnectFlow =
@@ -176,14 +182,17 @@ export function AuditRecoveryModal({
   }, [approvalGate, approvalPassword, approvalTotpCode, onApprovalSubmit]);
 
   return (
-    <GuardModalLayer ariaLabel="Finish workspace audit setup" onClose={onClose}>
+    <GuardModalLayer
+      ariaLabel={standaloneSync ? "Approve supply-chain intel sync" : "Finish workspace audit setup"}
+      onClose={onClose}
+    >
       <div className="rounded-2xl border border-slate-200 bg-white shadow-xl">
         <div className="border-b border-slate-100 px-5 py-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0 space-y-2">
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-brand-blue">
-                  Workspace audit
+                  {standaloneSync ? "Supply-chain intel" : "Workspace audit"}
                 </p>
                 <Tag tone={resolvePhaseTone(phase)}>{resolvePhaseLabel(phase)}</Tag>
               </div>
@@ -220,7 +229,7 @@ export function AuditRecoveryModal({
               approvalGate={approvalGate}
               approvalPassword={approvalPassword}
               approvalTotpCode={approvalTotpCode}
-              error={error}
+              error={error !== null ? <SupplyChainAuditFailureNotice message={error} approvalStep operation={errorOperation} /> : null}
               submitLabel="Sync supply-chain intel"
               submitBusy={approvalSubmitting}
               onApprovalPasswordChange={handleApprovalPasswordChange}
@@ -258,11 +267,7 @@ export function AuditRecoveryModal({
               })}
             </ol>
 
-            {error !== null ? (
-              <p className="text-sm text-brand-attention" role="alert">
-                {error}
-              </p>
-            ) : null}
+            {error !== null ? <SupplyChainAuditFailureNotice message={error} operation={errorOperation} /> : null}
 
             <div className="flex flex-wrap items-center gap-2">
               <ActionButton variant="primary" onClick={handlePrimaryClick} disabled={primaryBusy}>

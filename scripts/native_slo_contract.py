@@ -16,8 +16,6 @@ import statistics
 from collections.abc import Mapping, MutableMapping, Sequence
 from typing import Final
 
-from codex_plugin_scanner.guard.runtime.hook_review_engine import HOOK_ENGINE_NORMAL_BUDGET_MS
-
 SLO_SCHEMA: Final = "hol-guard.native-installed-slo.v1"
 MIN_RESIDENT_SHARE: Final = 0.99
 MAX_SAFE_FAIL_RATE: Final = 0.0
@@ -26,9 +24,10 @@ MAX_250K_P95_MS: Final = 50.0
 MAX_1M_P95_MS: Final = 120.0
 MAX_5M_P95_MS: Final = 350.0
 # The installed proof measures the complete Python adapter/HTTP/daemon path.
-# Keep its ordinary request budget tied to the existing production hook-engine
-# target instead of applying the direct Rust-runtime latency ceilings here.
-MAX_INSTALLED_ADAPTER_P95_MS: Final = float(HOOK_ENGINE_NORMAL_BUDGET_MS)
+# The retired Python hook engine's normal-request budget is preserved as the
+# installed adapter ceiling instead of the direct Rust-runtime latency
+# ceilings.
+MAX_INSTALLED_ADAPTER_P95_MS: Final = 1000.0
 MAX_INSTALLED_ADAPTER_P99_MS: Final = MAX_INSTALLED_ADAPTER_P95_MS
 MAX_COLD_P95_MS: Final = 150.0
 MAX_READINESS_P95_MS: Final = 400.0
@@ -72,6 +71,62 @@ _SENSITIVE_VALUE_RE: Final = re.compile(
     re.IGNORECASE,
 )
 SAFE_ROUTE_NAMES: Final = frozenset({"native_resident", "native_oneshot", "native_fail_safe", "python_semantic"})
+SAFE_HARNESS_NAMES: Final = frozenset(
+    {
+        "antigravity",
+        "claude-code",
+        "cline",
+        "codex",
+        "copilot",
+        "cursor",
+        "devin",
+        "gemini",
+        "grok",
+        "hermes",
+        "kimi",
+        "omp",
+        "openclaw",
+        "opencode",
+        "paseo",
+        "pi",
+        "zcode",
+    }
+)
+SAFE_EVENT_NAMES: Final = frozenset({"PreToolUse", "PostToolUse"})
+SAFE_SIZE_CLASS_NAMES: Final = frozenset({"1k", "250k", "1m", "5m"})
+SAFE_FAILURE_STAGE_NAMES: Final = frozenset(
+    {
+        "runtime",
+        "runtime_input",
+        "report",
+        "cleanup",
+        "routes",
+        "installed_corpus",
+        "installed_corpus_routes",
+        "cold",
+        "warm",
+        "warm_precondition",
+        "sizes",
+        "size_250k",
+        "size_1m",
+        "size_5m",
+        "recovery",
+        "recovery_precondition",
+        "recovery_stop",
+        "readiness",
+        "serialized_warmup",
+        "capacity_stabilization",
+        "capacity_prewarm",
+        "capacity_prewarm_ready",
+        "concurrent_16",
+        "rss_baseline",
+        "rss_baseline_requests",
+        "rss_peak",
+        "concurrent_64",
+        "unknown",
+    }
+)
+SAFE_FAILURE_WAVE_NAMES: Final = frozenset({"prewarm", "sixteen", "sixty_four"})
 
 # Keep the no-override proof independent from whichever test runner invoked it.
 # Prefixes cover newly introduced diagnostic/test spellings while the explicit
@@ -312,7 +367,12 @@ __all__ = [
     "MIN_RESIDENT_SHARE",
     "PROOF_ENV_KEYS",
     "PROOF_ENV_PREFIXES",
+    "SAFE_EVENT_NAMES",
+    "SAFE_FAILURE_STAGE_NAMES",
+    "SAFE_FAILURE_WAVE_NAMES",
+    "SAFE_HARNESS_NAMES",
     "SAFE_ROUTE_NAMES",
+    "SAFE_SIZE_CLASS_NAMES",
     "SIZE_CLASSES",
     "SLO_SCHEMA",
     "all_gates_pass",

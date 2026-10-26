@@ -110,6 +110,10 @@ def publication_completed(
     """Distinguish a completed release from successful build-only publishing runs."""
     run_id = _positive_id(_mapping(event.get("workflow_run"), "workflow run event").get("id"), "workflow run ID")
     expected_names = _PUBLICATION_JOBS[branch]
+    # A main-ref dispatch can publish an alpha instead of a stable release. Those
+    # jobs never authorize the main-release consumers, whatever their conclusion.
+    alpha_names = _PUBLICATION_JOBS["release/3.0"]
+    alpha_job_seen = False
     publication_jobs: dict[str, dict] = {}
     # Read the original attempt, never a later rerun's jobs, and bound pagination.
     for page in range(1, 11):
@@ -127,6 +131,7 @@ def publication_completed(
             if not isinstance(name, str):
                 raise ValueError("Invalid publishing job name")
             if name not in expected_names:
+                alpha_job_seen = alpha_job_seen or (branch == "main" and name in alpha_names)
                 continue
             if name in publication_jobs:
                 raise ValueError("Duplicate canonical publishing job")
@@ -142,6 +147,8 @@ def publication_completed(
             break
         if len(jobs) != 100:
             raise ValueError("Incomplete publishing job list")
+    if not publication_jobs and alpha_job_seen:
+        return False
     if publication_jobs.keys() != expected_names:
         raise ValueError("Canonical publishing jobs are missing from the completed run")
     conclusions = {job.get("conclusion") for job in publication_jobs.values()}

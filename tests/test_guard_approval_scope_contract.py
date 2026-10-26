@@ -16,7 +16,6 @@ import pytest
 from codex_plugin_scanner.guard.approval_scope_support import (
     APPROVAL_SCOPE_CONTRACT_VERSION,
     request_scope_contract,
-    supported_request_scopes,
 )
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
@@ -127,11 +126,11 @@ def test_scope_contract_is_action_aware(policy_action: GuardAction, expected_all
         assert contract.recommended_allow_scope is None
 
 
-def test_guard_control_cannot_be_browser_allowed() -> None:
+def test_guard_control_review_offers_allow_like_every_review() -> None:
     contract = request_scope_contract(_request("guard-control", action_type="guard_control").to_dict())
 
-    assert contract.allow_scopes == ()
-    assert "current_action_not_overridable" in contract.restrictions
+    assert "artifact" in contract.allow_scopes
+    assert "current_action_not_overridable" not in contract.restrictions
 
 
 @pytest.mark.parametrize("policy_action", ["block", "sandbox-required"])
@@ -180,17 +179,6 @@ def test_recommended_allow_scope_falls_back_to_artifact() -> None:
 
     assert contract.allow_scopes == ("artifact",)
     assert contract.recommended_allow_scope == "artifact"
-
-
-def test_package_context_never_invents_workspace_allow() -> None:
-    request = _request(
-        "package",
-        artifact_id="codex:project:package-request:package",
-        artifact_type="package_request",
-    ).to_dict()
-    request["scanner_evidence"] = [{"portable": True, "schema_version": "package-execution-context.v1"}]
-
-    assert supported_request_scopes(request) == ("artifact",)
 
 
 def test_package_request_can_persist_the_exact_context_bound_action() -> None:
@@ -334,8 +322,7 @@ def test_contract_digest_is_deterministic_and_binds_security_fields() -> None:
         "action_envelope_json": {**baseline_envelope, "raw_command_text": "echo changed"},
     }
     assert (
-        request_scope_contract(raw_command_changed).digest
-        != request_scope_contract(baseline_with_raw_command).digest
+        request_scope_contract(raw_command_changed).digest != request_scope_contract(baseline_with_raw_command).digest
     )
 
 
@@ -380,8 +367,7 @@ def test_contract_digest_ignores_retry_delivery_metadata_but_binds_package_conte
     assert request_scope_contract(retried).digest == first.digest
     assert request_scope_contract({**request, "source_scope": "session"}).digest != first.digest
     assert (
-        request_scope_contract({**request, "config_path": "/workspace/other/.guard/config.toml"}).digest
-        != first.digest
+        request_scope_contract({**request, "config_path": "/workspace/other/.guard/config.toml"}).digest != first.digest
     )
     assert (
         request_scope_contract(
@@ -651,7 +637,9 @@ def test_v2_saved_artifact_allow_persists_only_the_exact_action(tmp_path: Path) 
     )
 
 
-def test_context_bound_saved_allow_requires_the_identical_context_token(tmp_path: Path) -> None:
+def test_context_bound_saved_allow_requires_the_identical_context_token(
+    tmp_path: Path, native_context_digest: Path
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     context_token = build_approval_context_token(
         identity={"harness": "codex", "tool": "Bash"},
@@ -716,7 +704,9 @@ def test_context_bound_saved_allow_requires_the_identical_context_token(tmp_path
     )
 
 
-def test_persisted_exact_action_does_not_resolve_sibling_command_request(tmp_path: Path) -> None:
+def test_persisted_exact_action_does_not_resolve_sibling_command_request(
+    tmp_path: Path, native_context_digest: Path
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     artifact_id = "codex:project:Bash"
 
@@ -789,7 +779,7 @@ def test_exact_action_persistence_accepts_envelope_raw_command_text(tmp_path: Pa
     assert request_scope_contract(row).exact_action_persistence_eligible is True
 
 
-def test_exact_action_persistence_accepts_context_bound_tool_call(tmp_path: Path) -> None:
+def test_exact_action_persistence_accepts_context_bound_tool_call(tmp_path: Path, native_context_digest: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     context_token = build_approval_context_token(
         identity={"server": "browser", "tool": "navigate"},
@@ -812,7 +802,7 @@ def test_exact_action_persistence_accepts_context_bound_tool_call(tmp_path: Path
     assert request_scope_contract(row).exact_action_persistence_eligible is True
 
 
-def test_v2_saved_tool_call_allow_remains_bound_to_exact_context(tmp_path: Path) -> None:
+def test_v2_saved_tool_call_allow_remains_bound_to_exact_context(tmp_path: Path, native_context_digest: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     context_token = build_approval_context_token(
         identity={"server": "browser", "tool": "navigate"},
@@ -1092,10 +1082,10 @@ def test_raced_completed_replay_maps_scope_contract_errors(
     original_get = store.get_approval_request
     call_count = 0
 
-    def raced_get(request_id: str) -> dict[str, object] | None:
+    def raced_get(request_id: str, *, derive_scope: bool = True) -> dict[str, object] | None:
         nonlocal call_count
         call_count += 1
-        current = original_get(request_id)
+        current = original_get(request_id, derive_scope=derive_scope)
         if current is None:
             return None
         if call_count == 1:

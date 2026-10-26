@@ -3,17 +3,25 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sqlite3
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TextIO
 
 from ..daemon.client import GuardDaemonRequestError, load_guard_surface_daemon_client
 from ..runtime.exact_cloud_review import (
+    EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY,
     ExactCloudReviewError,
     disable_exact_cloud_review,
     enable_exact_cloud_review,
     exact_cloud_review_status,
+)
+from ..runtime.native_workspace_review import (
+    NativeWorkspaceReviewError,
+    apply_native_workspace_review_decision,
+    canonical_workspace_review_decision_bytes,
 )
 from ._commands_shared import GuardConfig, GuardStore, HarnessContext
 from .commands_support_interaction import _emit
@@ -103,10 +111,46 @@ def _run_guard_cloud_review_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
-    del workspace, context, config, input_text, output_stream
+    del workspace, context, config, output_stream
     if store is None or guard_home is None:
         raise RuntimeError("Cloud Review requires initialized Guard storage.")
     command = getattr(args, "cloud_review_command", None)
+    if command == "native-apply":
+        # A local explicit Cloud Review disable is a kill switch only. It is
+        # never consulted as cryptographic authority for the native decision.
+        if store.get_sync_payload(EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY) is not None:
+            _emit(
+                "cloud-review",
+                {"status": "error", "error": "native_workspace_review_cloud_review_disabled"},
+                bool(getattr(args, "json", False)),
+            )
+            return 2
+        # This branch is deliberately independent of the legacy exact-review
+        # capability and its Portal/OAuth metadata; Rust is the authority.
+        raw = input_text if isinstance(input_text, str) else sys.stdin.read()
+        if len(raw.encode("utf-8")) > 16 * 1024:
+            _emit("cloud-review", {"status": "error", "error": "native_workspace_review_decision_invalid"}, True)
+            return 2
+        try:
+            decision: object = json.loads(raw)
+            if canonical_workspace_review_decision_bytes(decision) != raw.encode("utf-8"):
+                raise NativeWorkspaceReviewError("native_workspace_review_decision_noncanonical")
+            result = apply_native_workspace_review_decision(
+                store,
+                guard_home,
+                str(getattr(args, "request_id", "")),
+                decision,
+            )
+        except (UnicodeError, ValueError, json.JSONDecodeError) as error:
+            code = (
+                error.code
+                if isinstance(error, NativeWorkspaceReviewError)
+                else "native_workspace_review_decision_invalid"
+            )
+            _emit("cloud-review", {"status": "error", "error": code}, bool(getattr(args, "json", False)))
+            return 2
+        _emit("cloud-review", result, bool(getattr(args, "json", False)))
+        return 0
     pending_requests_requeued = 0
     previously_enabled = False
     capability: dict[str, object] | None = None

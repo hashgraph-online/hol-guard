@@ -118,19 +118,11 @@ def parse_package_identity(*, ecosystem: str, package_name: str, version: str) -
     )
 
 
-def normalize_qualified_package_name(ecosystem: str, package_name: str) -> str:
-    """Return a versionless qualified name without erasing scope boundaries."""
-
-    identity = parse_package_identity(ecosystem=ecosystem, package_name=package_name, version="*")
-    return identity.qualified_name
-
-
 __all__ = [
     "CanonicalPackageIdentity",
     "PackageIdentityError",
     "canonical_package_identity",
     "normalize_ecosystem",
     "normalize_package_component",
-    "normalize_qualified_package_name",
     "parse_package_identity",
 ]

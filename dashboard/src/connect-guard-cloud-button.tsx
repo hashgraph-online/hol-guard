@@ -174,6 +174,7 @@ type ConnectGuardCloudButtonProps = {
   workingLabel?: string;
   connectedLabel?: string;
   className?: string;
+  onConnected?: () => void;
 };
 
 /**
@@ -186,8 +187,16 @@ export function ConnectGuardCloudButton({
   workingLabel = "Starting sign-in…",
   connectedLabel = "Guard Cloud connected",
   className,
+  onConnected,
 }: ConnectGuardCloudButtonProps) {
   const { state, startConnect } = useGuardCloudConnect();
+  const connected = state.status === "connected";
+
+  const onConnectedRef = useRef(onConnected);
+  onConnectedRef.current = onConnected;
+  useEffect(() => {
+    if (connected) onConnectedRef.current?.();
+  }, [connected]);
 
   let buttonLabel = label;
   if (state.status === "working") {

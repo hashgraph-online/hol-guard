@@ -34,7 +34,7 @@ production semantic fallback by merely changing an environment variable.
 
 ## Evidence
 
-The always-selected `Rust authority ownership` workflow runs the cleanup gate
+The nightly native workflow runs the cleanup gate
 and uploads its aggregate JSON report. The report includes scope count,
 ownership counts, LOC snapshot, fixture digest, source importers, package
 exclusions, and the unchanged dependency/entrypoint delta. Windows CI is not a

@@ -26,6 +26,7 @@ import {
 } from "./extension-policy-panel";
 import { quickApplyPermissionIds } from "./protection-center/components/quick-apply-toolbar";
 import { PatternSearchConsole } from "./protection-center/components/pattern-search-console";
+import { catalogReadModelFromCatalog } from "./extension-catalog-v2";
 
 // Every authority action failure maps to plain language with a next step;
 // raw protocol codes never reach the operator.
@@ -90,7 +91,7 @@ const unenrolledMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityN
   onCheckAgain: () => undefined,
   onOpenApprovalSettings: () => undefined,
 }));
-assert.match(unenrolledMarkup, /Finish setting up protection/);
+assert.match(unenrolledMarkup, /Finish extension setup/);
 assert.match(unenrolledMarkup, /command controls enroll/);
 assert.match(unenrolledMarkup, /Copy setup command/);
 assert.doesNotMatch(unenrolledMarkup, /bg-amber-50/, "setup guidance is informational, not a failure");
@@ -120,12 +121,10 @@ const approvalSetupMarkup = renderToStaticMarkup(createElement(ProtectionAuthori
   onCheckAgain: () => undefined,
   onOpenApprovalSettings: () => undefined,
 }));
-assert.match(approvalSetupMarkup, /Set up local approval before enrollment/);
-assert.match(approvalSetupMarkup, /Set up approval/);
-assert.match(approvalSetupMarkup, /Guard Cloud sign-in and account MFA are separate and do not enable this gate/);
-assert.match(approvalSetupMarkup, /Settings &gt; Approval gate/);
-assert.match(approvalSetupMarkup, /Ask for proof on allow decisions/);
-assert.match(approvalSetupMarkup, /Optionally connect an Authenticator app; once enabled, its code replaces the Approval password for every protected action and disables cooldown/);
+assert.match(approvalSetupMarkup, /Set up local approval/);
+assert.match(approvalSetupMarkup, /Open approval settings/);
+assert.match(approvalSetupMarkup, /Guard Cloud is not required/);
+assert.doesNotMatch(approvalSetupMarkup, /enrollment|account MFA|Authenticator app|Check again/);
 assert.doesNotMatch(approvalSetupMarkup, /Authy/);
 assert.doesNotMatch(approvalSetupMarkup, /command controls enroll/);
 assert.doesNotMatch(approvalSetupMarkup, /Copy setup command/);
@@ -137,7 +136,7 @@ const disabledApprovalMarkup = renderToStaticMarkup(createElement(ProtectionAuth
   onCheckAgain: () => undefined,
   onOpenApprovalSettings: () => undefined,
 }));
-assert.match(disabledApprovalMarkup, /Set up local approval before enrollment/);
+assert.match(disabledApprovalMarkup, /Local approval is off/);
 assert.doesNotMatch(disabledApprovalMarkup, /command controls enroll/);
 
 const pendingApprovalMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {
@@ -151,6 +150,49 @@ assert.match(pendingApprovalMarkup, /Checking approval setup/);
 assert.match(pendingApprovalMarkup, /check again/i);
 assert.doesNotMatch(pendingApprovalMarkup, /command controls enroll/);
 assert.doesNotMatch(pendingApprovalMarkup, /Copy setup command/);
+
+const unconfiguredRepairMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {
+  effective: baseEffective,
+  approvalGate: { enabled: false, configured: false, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: false },
+  onAction: () => undefined,
+  onCheckAgain: () => undefined,
+  onOpenApprovalSettings: () => undefined,
+}));
+assert.match(unconfiguredRepairMarkup, /Protection needs repair/);
+assert.match(unconfiguredRepairMarkup, /Set up approval/);
+assert.match(unconfiguredRepairMarkup, /local approval is not ready/);
+assert.doesNotMatch(unconfiguredRepairMarkup, /Repair protection<\/button>/);
+assert.match(unconfiguredRepairMarkup, /recover-authority/, "terminal repair remains the documented fallback");
+
+const disabledGateRepairMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {
+  effective: baseEffective,
+  approvalGate: { enabled: false, configured: true, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: false },
+  onAction: () => undefined,
+  onCheckAgain: () => undefined,
+  onOpenApprovalSettings: () => undefined,
+}));
+assert.match(disabledGateRepairMarkup, /Set up approval/);
+assert.doesNotMatch(disabledGateRepairMarkup, /Repair protection<\/button>/, "a disabled gate cannot supply the repair proof");
+
+const unconfiguredAckMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {
+  effective: { ...baseEffective, health: "degraded-unacknowledged" },
+  approvalGate: { enabled: false, configured: false, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: false },
+  onAction: () => undefined,
+  onCheckAgain: () => undefined,
+  onOpenApprovalSettings: () => undefined,
+}));
+assert.match(unconfiguredAckMarkup, /Set up approval/);
+assert.doesNotMatch(unconfiguredAckMarkup, /Acknowledge limited state<\/button>/);
+
+const unconfiguredAckedMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {
+  effective: { ...baseEffective, health: "degraded-acknowledged" },
+  approvalGate: { enabled: false, configured: false, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null, locked_until: null, fail_closed: true, strict_all_decisions: false, totp_enabled: false },
+  onAction: () => undefined,
+  onCheckAgain: () => undefined,
+  onOpenApprovalSettings: () => undefined,
+}));
+assert.match(unconfiguredAckedMarkup, /Set up approval/);
+assert.match(unconfiguredAckedMarkup, /recover-authority/);
 
 const protectedMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {
   effective: { ...baseEffective, health: "protected" },
@@ -236,7 +278,7 @@ assert.equal(mutationState.effective.layers[0]?.controls.length, 1, "builder mus
 const extension: ExtensionCatalogItem = {
   schema_version: 2, extension_id: "command.git", name: "Git", description: "Protects source-control commands.",
   enabled: true, required: false, trust_class: "first-party", activation: "default-on",
-  publisher: { id: "hol", displayName: "Hashgraph Online" }, icon: { kind: "none" },
+  publisher: { id: "hol", displayName: "HOL" }, icon: { kind: "none" },
   source: "built-in", version: "1.2.3", aliases: ["command.scm"],
   dependencies: [], conflicts: [], delegated_protection: null, ecosystem_ids: ["git"], executables: ["git"],
   project_markers: [".git"], reference_urls: [], action_classes: ["git.history.rewrite"],
@@ -310,6 +352,7 @@ assert.deepEqual(
 // leave silently disabled controls.
 const lockedSearchMarkup = renderToStaticMarkup(createElement(PatternSearchConsole, {
   catalog: [extension],
+  readModel: catalogReadModelFromCatalog({ schema_version: "1.0.0", catalog_digest: "a".repeat(64), extensions: [extension] }),
   effective: { ...effective, health: "recovery-required", failures: [{ code: "fixture-state" }] },
   query: "git",
   onRefresh: () => undefined,
@@ -320,6 +363,7 @@ assert.match(lockedSearchMarkup, /Settings cannot be changed until Guard verifie
 assert.match(lockedSearchMarkup, /aria-pressed="false"[^>]*disabled/, "locked quick-apply controls stay disabled while they explain why");
 const healthySearchMarkup = renderToStaticMarkup(createElement(PatternSearchConsole, {
   catalog: [extension],
+  readModel: catalogReadModelFromCatalog({ schema_version: "1.0.0", catalog_digest: "a".repeat(64), extensions: [extension] }),
   effective,
   query: "git",
   onRefresh: () => undefined,
@@ -408,6 +452,26 @@ const quickApplyToolbarSource = readFileSync(new URL("./protection-center/compon
 const policyEditingLocksSource = readFileSync(new URL("./protection-center/components/policy-editing-locks.tsx", import.meta.url), "utf8");
 const extensionNavigationSource = readFileSync(new URL("./protection-center/extension-navigation.ts", import.meta.url), "utf8");
 assert.match(workspaceHostSource, /data-testid="extensions-workspace"/);
+// A daemon that cannot prepare its verified catalog still serves the legacy
+// catalog from the registry it holds in memory, so the page says what is
+// reduced beside the list instead of replacing the page with an error.
+assert.match(workspaceHostSource, /data-testid="catalog-preparation-degraded"/);
+assert.match(
+  workspaceHostSource,
+  /role="status"[\s\S]{0,200}data-testid="catalog-preparation-degraded"/,
+  "the degraded catalog notice is a status, not an alert that takes the page away",
+);
+assert.match(workspaceHostSource, /CATALOG_PREPARATION_DEGRADED_MESSAGE/);
+assert.match(
+  workspaceHostSource,
+  /const catalog = reusableCatalogModel\(previous, fresh\);/,
+  "model reuse compares the degraded mode too, so the notice cannot outlive the failure",
+);
+assert.match(
+  workspaceHostSource,
+  /const catalogDegraded = state\.kind === "ready" && state\.catalog\.degraded === CATALOG_PREPARATION_FAILED;/,
+  "the notice is derived from a ready state, so it can never stand in for the list",
+);
 assert.match(workspaceHostSource, /pushExtensionHistory/);
 assert.match(workspaceHostSource, /replaceExtensionHistory/);
 assert.match(extensionNavigationSource, /guardAwareHref/);
@@ -415,6 +479,15 @@ assert.match(extensionNavigationSource, /export function pushExtensionHistory/);
 assert.match(extensionNavigationSource, /export function replaceExtensionHistory/);
 assert.match(policyDetailSource, /id="extension-policy-tabpanel"[\s\S]*role="tabpanel"[\s\S]*aria-labelledby="extension-tab-policy"/);
 assert.match(policyDraftSource, /isCurrentExtensionPolicyDraft\(generation, draftGeneration\.current\)\) handleApiError/);
+assert.match(
+  policyDraftSource,
+  /phase === "apply"[\s\S]*protectionChangeErrorMessage\(caught, command, shell\)/,
+  "only apply, which may have committed, uses the uncertain-outcome wording",
+);
+assert.match(policyDraftSource, /knownProtectionChangeMessage\(caught, command, shell\)/);
+assert.match(policyDraftSource, /authorityRecoverySentence\(caught, command, shell\)/);
+assert.match(policyDraftSource, /const terminalCommands = props\.effective\.terminal_commands;/);
+assert.doesNotMatch(policyDraftSource, /setError\(caught instanceof Error \? caught\.message/);
 assert.match(policyDraftSource, /isCurrentExtensionPolicyDraft\(generation, draftGeneration\.current\)[\s\S]*Guard could not rebase this draft/);
 assert.match(
   policyDraftSource,

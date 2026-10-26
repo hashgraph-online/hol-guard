@@ -152,31 +152,42 @@ class RuntimeHookScheduler:
                 cancellation=cancellation,
                 normalized_payload=normalized_payload or b"",
             )
-            self._enqueue(item)
             if byte_reservation is not None:
+                # Validate and claim ownership before publishing queued work.
+                # Reused/released reservations must leave no phantom waiter.
                 byte_reservation.transfer()
             else:
                 self._retained_bytes += payload_bytes
-            self._dispatch()
-            if not item.admitted and self._queue_listener is not None:
-                self._queue_listener()
-            while not item.admitted and item.rejection_reason is None:
-                remaining = resolved_deadline.expires_at - self._monotonic()
-                if remaining <= 0:
-                    if self._remove_queued(item):
-                        self._expired += 1
-                        self._condition.notify_all()
-                    return RuntimeHookAdmission(None, "daemon_hook_deadline_exhausted")
-                if cancellation is not None and cancellation.is_set():
-                    if self._remove_queued(item):
-                        self._cancelled += 1
-                        self._condition.notify_all()
-                    return RuntimeHookAdmission(None, "daemon_hook_deadline_exhausted")
-                _ = self._condition.wait(timeout=min(remaining, 0.05) if cancellation is not None else remaining)
+            self._enqueue(item)
+            try:
                 self._dispatch()
-            if item.rejection_reason is not None:
-                return RuntimeHookAdmission(None, item.rejection_reason)
-            return RuntimeHookAdmission(RuntimeHookPermit(self, item), None)
+                if not item.admitted and self._queue_listener is not None:
+                    self._queue_listener()
+                while not item.admitted and item.rejection_reason is None:
+                    remaining = resolved_deadline.expires_at - self._monotonic()
+                    if remaining <= 0:
+                        if self._remove_queued(item):
+                            self._expired += 1
+                            self._condition.notify_all()
+                        return RuntimeHookAdmission(None, "daemon_hook_deadline_exhausted")
+                    if cancellation is not None and cancellation.is_set():
+                        if self._remove_queued(item):
+                            self._cancelled += 1
+                            self._condition.notify_all()
+                        return RuntimeHookAdmission(None, "daemon_hook_deadline_exhausted")
+                    _ = self._condition.wait(timeout=min(remaining, 0.05) if cancellation is not None else remaining)
+                    self._dispatch()
+                if item.rejection_reason is not None:
+                    return RuntimeHookAdmission(None, item.rejection_reason)
+                return RuntimeHookAdmission(RuntimeHookPermit(self, item), None)
+            except BaseException:
+                # No permit reached the caller. A listener can synchronously
+                # admit this item, so clean up the state it actually owns.
+                if item.admitted:
+                    self.release_permit(item)
+                elif self._remove_queued(item):
+                    self._condition.notify_all()
+                raise
 
     def reserve_bytes(
         self,
@@ -278,10 +289,6 @@ class RuntimeHookScheduler:
         with self._condition:
             self._active_limit = active_limit
             self._dispatch()
-
-    def set_queue_listener(self, listener: Callable[[], None]) -> None:
-        with self._condition:
-            self._queue_listener = listener
 
     def _reject(self, reason_code: RuntimeHookAdmissionReason) -> RuntimeHookAdmission:
         self._rejected[reason_code] = self._rejected.get(reason_code, 0) + 1
@@ -389,8 +396,16 @@ class RuntimeHookScheduler:
         recent = [value for timestamp, value in self._service_time_by_lane[lane] if now - timestamp <= 60.0]
         if len(recent) < _MIN_PREDICTION_SAMPLES:
             return _DEFAULT_SERVICE_SECONDS
-        estimate = self._percentile(deque(recent), 0.95)
-        return min(_MAX_SERVICE_SECONDS, max(_MIN_SERVICE_SECONDS, estimate))
+        estimate = min(_MAX_SERVICE_SECONDS, max(_MIN_SERVICE_SECONDS, self._percentile(deque(recent), 0.95)))
+        if self._active == 0:
+            # Nothing is in flight, so the slow samples describe a stall that
+            # already ended. A rejection leaves no sample of its own, so acting
+            # on them would refuse every hook that spent a moment in policy
+            # readiness and keep the stall's estimate alive for the whole
+            # window. Admit on the cold-start estimate: a review that really
+            # cannot finish still fails safe at its own deadline.
+            return min(estimate, _DEFAULT_SERVICE_SECONDS)
+        return estimate
 
     def _has_competing_client(self, client_key: str) -> bool:
         return any(

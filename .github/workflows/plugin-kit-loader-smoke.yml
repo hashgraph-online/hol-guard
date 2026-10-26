@@ -1,0 +1,58 @@
+name: Plugin Kit loader smoke
+
+# Packages the Plugin Kit fixture for every runtime and loads the output with
+# pinned Claude Code, Gemini CLI and Codex releases. The weekly run catches a
+# runtime changing its manifest format; bump the pinned versions in
+# .github/tools/plugin-kit-validators when it does.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "rust/crates/guard-plugin-kit/**"
+      - "scripts/ci/plugin_kit_loader_smoke.sh"
+      - ".github/tools/plugin-kit-validators/**"
+      - ".github/workflows/plugin-kit-loader-smoke.yml"
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: plugin-kit-loader-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Runtime loaders accept Plugin Kit packages
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install 1.88.0 --profile minimal
+      - name: Cache Plugin Kit dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+        with:
+          workspaces: rust
+          shared-key: plugin-kit-loader-smoke
+      - name: Install pinned runtime CLIs
+        env:
+          NPM_CONFIG_IGNORE_SCRIPTS: "true"
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts --prefix .github/tools/plugin-kit-validators
+          # Claude Code's postinstall only links the platform binary from its
+          # optional dependency; run it explicitly since scripts are disabled.
+          node .github/tools/plugin-kit-validators/node_modules/@anthropic-ai/claude-code/install.cjs
+      - name: Package and load in each runtime
+        run: |
+          bash scripts/ci/plugin_kit_loader_smoke.sh \
+            .github/tools/plugin-kit-validators/node_modules/.bin \
+            "$RUNNER_TEMP/plugin-kit-smoke"

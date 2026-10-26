@@ -1,0 +1,261 @@
+{
+  "extension": {
+    "action_classes": [
+      "Omairc message send command",
+      "Omairc window raise command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews omairc commands that send IRC messages or raise the running window. Read-only inventory commands stay outside these rules.",
+    "ecosystem_ids": [
+      "omairc"
+    ],
+    "executables": [
+      "omairc"
+    ],
+    "extension_id": "command.omairc",
+    "homepage": "https://github.com/fredimachado/omairc",
+    "icon": {
+      "background": "#1D4ED8",
+      "kind": "react-icon",
+      "name": "HiMiniCommandLine"
+    },
+    "license": "MIT",
+    "name": "omairc command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "Omairc message send command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `omairc send`, which delivers a PRIVMSG through a running Omairc window. Incomplete send invocations stay reviewable. `--help` is help only before a target; after the target, or after `--`, it is message text and stays reviewable.",
+        "example_command": "omairc send",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "Omairc message send",
+        "permission_id": "command.omairc.permission.send",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Confirm the network, target, and exact message text before sending.",
+          "Use omairc read, names, status, or connections to inspect state first."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Omairc window raise command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `omairc raise`, which activates the existing Omairc window and changes desktop focus.",
+        "example_command": "omairc raise",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "Omairc window raise",
+        "permission_id": "command.omairc.permission.raise",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Do not raise the window unless the user asked to bring Omairc to the front."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "display_name": "Fredi Machado",
+      "id": "community.fredimachado",
+      "url": "https://github.com/fredimachado"
+    },
+    "reference_urls": [
+      "https://github.com/fredimachado/omairc"
+    ],
+    "required": false,
+    "risk_classes": [
+      "execution",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "Omairc message send command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `omairc send`, which delivers a PRIVMSG through a running Omairc window. Incomplete send invocations stay reviewable. `--help` is help only before a target; after the target, or after `--`, it is message text and stays reviewable.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": false,
+            "executables": [
+              "omairc",
+              "omairc.cmd",
+              "omairc.exe"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [],
+            "interspersed_options_with_values": [
+              "--network"
+            ],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "send"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.omairc.permission.send",
+        "risk_classes": [
+          "network_egress"
+        ],
+        "rule_id": "command.omairc.send",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "omairc",
+                  "omairc.cmd",
+                  "omairc.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [
+                  "--network"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "send",
+                  "--help"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "omairc send command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Confirm the network, target, and exact message text before sending.",
+          "Use omairc read, names, status, or connections to inspect state first."
+        ],
+        "severity": "high",
+        "title": "Omairc message send"
+      },
+      {
+        "action_classes": [
+          "Omairc window raise command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `omairc raise`, which activates the existing Omairc window and changes desktop focus.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": false,
+            "executables": [
+              "omairc",
+              "omairc.cmd",
+              "omairc.exe"
+            ],
+            "fail_secure_unknown_options": true,
+            "forbidden_flags": [],
+            "interspersed_flags": [],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "raise"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.omairc.permission.raise",
+        "risk_classes": [
+          "execution"
+        ],
+        "rule_id": "command.omairc.raise",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "omairc",
+                  "omairc.cmd",
+                  "omairc.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "raise",
+                  "--help"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            "title": "omairc raise command help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Do not raise the window unless the user asked to bring Omairc to the front."
+        ],
+        "severity": "medium",
+        "title": "Omairc window raise"
+      }
+    ],
+    "safer_alternatives": [
+      "Confirm the network, target, and exact message text before sending.",
+      "Use omairc read, names, status, or connections to inspect state first."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

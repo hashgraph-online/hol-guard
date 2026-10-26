@@ -1,0 +1,5 @@
+{
+  "extension": "command.x402shield",
+  "schemaVersion": "guard.extension-trust-binding.v1",
+  "trustClass": "external"
+}

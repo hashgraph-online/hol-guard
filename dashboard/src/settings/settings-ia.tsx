@@ -5,10 +5,12 @@ import {
   HiMiniCircleStack,
   HiMiniLockClosed,
   HiMiniShieldCheck,
+  HiMiniSquares2X2,
 } from "react-icons/hi2";
 
 export type LocalSettingsTabKey =
   | "protection"
+  | "apps"
   | "approval"
   | "notifications"
   | "rules"
@@ -40,6 +42,7 @@ export const localSettingsNavGroups: readonly LocalSettingsNavGroup[] = [
 ] as const;
 
 const ICON_PROTECTION = <HiMiniShieldCheck className="h-4 w-4" aria-hidden="true" />;
+const ICON_APPS = <HiMiniSquares2X2 className="h-4 w-4" aria-hidden="true" />;
 const ICON_APPROVAL = <HiMiniLockClosed className="h-4 w-4" aria-hidden="true" />;
 const ICON_NOTIFICATIONS = <HiMiniBellAlert className="h-4 w-4" aria-hidden="true" />;
 const ICON_RISK = <HiMiniAdjustmentsHorizontal className="h-4 w-4" aria-hidden="true" />;
@@ -53,6 +56,14 @@ export const localSettingsNavItems: readonly LocalSettingsNavItem[] = [
     summary: "Security level, mode, sync, and what Guard pauses.",
     group: "local",
     icon: ICON_PROTECTION,
+  },
+  {
+    key: "apps",
+    label: "Apps",
+    mobileLabel: "Apps",
+    summary: "Choose protection or Watch for each app on this machine.",
+    group: "local",
+    icon: ICON_APPS,
   },
   {
     key: "approval",
@@ -95,6 +106,7 @@ export const localSettingsMobileTabLabels: Record<LocalSettingsTabKey, string> =
 
 export const localSettingsTabLabels: Record<LocalSettingsTabKey, string> = {
   protection: "Protection",
+  apps: "Apps",
   approval: "Approval gate",
   notifications: "Notifications",
   rules: "Protection rules",
@@ -104,6 +116,7 @@ export const localSettingsTabLabels: Record<LocalSettingsTabKey, string> = {
 export function isLocalSettingsTabKey(value: string): value is LocalSettingsTabKey {
   return (
     value === "protection"
+    || value === "apps"
     || value === "approval"
     || value === "notifications"
     || value === "rules"

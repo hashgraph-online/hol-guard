@@ -1,0 +1,81 @@
+{
+  "schemaVersion": "guard.extension-pack.v1",
+  "packId": "business.google-workspace",
+  "status": "proposed",
+  "title": "Google Workspace",
+  "summary": "Groups the reviewed gws and gog command rules for Gmail delivery, Drive and Calendar sharing, destructive changes, exports and account overrides.",
+  "extensions": [
+    {"extensionId": "command.google-workspace.gws", "version": "1.0.0"},
+    {"extensionId": "command.google-workspace.gog", "version": "1.0.0"}
+  ],
+  "operationFamilies": [
+    {
+      "familyId": "mail-send",
+      "title": "Email send, reply and forward",
+      "permissionIds": ["command.google-workspace.gws.permission.send", "command.google-workspace.gog.permission.send"],
+      "roleSuggestions": {"personal": "review", "managed-team": "review"}
+    },
+    {
+      "familyId": "sharing-and-mail-routing",
+      "title": "Sharing, calendar access and mail routing changes",
+      "permissionIds": ["command.google-workspace.gws.permission.share", "command.google-workspace.gog.permission.share"],
+      "roleSuggestions": {"personal": "review", "managed-team": "block"}
+    },
+    {
+      "familyId": "destructive",
+      "title": "Permanent deletes",
+      "permissionIds": ["command.google-workspace.gws.permission.delete"],
+      "roleSuggestions": {"personal": "block", "managed-team": "block"}
+    },
+    {
+      "familyId": "calendar-changes",
+      "title": "Calendar event changes",
+      "permissionIds": ["command.google-workspace.gws.permission.calendar", "command.google-workspace.gog.permission.calendar"],
+      "roleSuggestions": {"personal": "review", "managed-team": "review"}
+    },
+    {
+      "familyId": "export",
+      "title": "Drive downloads and exports",
+      "permissionIds": ["command.google-workspace.gog.permission.export"],
+      "roleSuggestions": {"personal": "review", "managed-team": "review"}
+    },
+    {
+      "familyId": "identity-and-credentials",
+      "title": "Sign-in, credential export and account overrides",
+      "permissionIds": ["command.google-workspace.gws.permission.auth", "command.google-workspace.gog.permission.identity"],
+      "roleSuggestions": {"personal": "review", "managed-team": "block"}
+    },
+    {
+      "familyId": "generic-api",
+      "title": "Generic API, batch and raw requests",
+      "permissionIds": ["command.google-workspace.gog.permission.opaque"],
+      "roleSuggestions": {"personal": "review", "managed-team": "block"}
+    }
+  ],
+  "notCovered": [
+    {"title": "Search and read", "reason": "Reads emit no pack observation and keep the inherited native floor."},
+    {"title": "Draft creation", "reason": "Draft routes emit no pack observation, although a draft already leaves the device."},
+    {"title": "Labels, archive and trash volume", "reason": "No rule counts changes against a volume cap or business budget."},
+    {"title": "Account and audience binding", "reason": "The rules do not resolve the effective account or tell internal recipients from external ones."},
+    {"title": "Workspace MCP servers", "reason": "Remote Workspace MCP tool calls are not part of this pack."}
+  ],
+  "setupRecipes": [
+    {
+      "recipeId": "gws-cli",
+      "title": "Google Workspace CLI (gws)",
+      "extensionIds": ["command.google-workspace.gws"],
+      "documentationPath": "docs/guard/business-apps/gws-command-extension.md"
+    },
+    {
+      "recipeId": "gog-cli",
+      "title": "gog CLI",
+      "extensionIds": ["command.google-workspace.gog"],
+      "documentationPath": "docs/guard/business-apps/gog-command-extension.md"
+    }
+  ],
+  "limitations": [
+    "Selecting the pack does not enable an extension; each one stays inert until local extension control enables it.",
+    "Role suggestions are presentation only and can keep or tighten a baseline floor, never lower it.",
+    "This is a proposed grouping, not a qualified business mode or a protected account journey."
+  ]
+}

@@ -2,17 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-from .manager import (
-    ensure_guard_daemon,
-    guard_daemon_url_for_home,
-    load_guard_daemon_auth_token,
-    load_guard_daemon_url,
-    recover_guard_daemon_after_hook_failure,
-    repair_approval_center_locator,
-    schedule_guard_daemon_recovery,
-)
+from importlib import import_module
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .runtime_repair import repair_guard_daemon_runtime
@@ -32,7 +23,7 @@ __all__ = [
 ]
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> Any:
     if name == "repair_guard_daemon_runtime":
         from .runtime_repair import repair_guard_daemon_runtime
 
@@ -49,4 +40,8 @@ def __getattr__(name: str):
             "GuardSurfaceDaemonClient": GuardSurfaceDaemonClient,
             "load_guard_surface_daemon_client": load_guard_surface_daemon_client,
         }[name]
+    if name in __all__:
+        value = getattr(import_module(".manager", __name__), name)
+        globals()[name] = value
+        return value
     raise AttributeError(name)

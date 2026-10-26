@@ -22,6 +22,9 @@ _NATIVE_ERROR_CODES = frozenset(
         "native_request_too_large",
         "native_response_encode_failed",
         "native_runtime_panicked",
+        "native_context_digest_invalid",
+        "native_context_digest_invalid_json",
+        "native_context_digest_schema_mismatch",
     }
 )
 _NATIVE_LIFECYCLE_ERROR_CODES = NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES
@@ -50,7 +53,12 @@ def response_from_payload(payload: object) -> HookReviewResponse | None:
             "result",
             "receipt",
         }
-        if not required <= set(decoded) or set(decoded) - (required | {"request_id"}):
+        if not required <= set(decoded) or set(decoded) - (
+            required | {"request_id", "harness_response", "containment_route"}
+        ):
+            return None
+        # A PostToolUse answer is never routed into the containment sink.
+        if decoded.get("containment_route", "none") != "none":
             return None
         harness = decoded.get("harness")
         if (

@@ -55,6 +55,11 @@ def test_acknowledged_watch_does_not_queue_unsupported_pi_tools(
 ) -> None:
     edge = _edge(harness, action_type="unknown")
     edge["result"]["reason_code"] = "native_pre_tool_unknown_review"
+    edge["harness_response"] = {
+        "decision": "allow",
+        "reason": "HOL Guard recorded this action under Watch.",
+        "policy_action": "warn",
+    }
     worker, store = _worker(tmp_path, monkeypatch, edge)
     monkeypatch.setattr(worker, "_native_policy_snapshot", lambda *_args, **_kwargs: {"mode": "observe"})
     response = worker.review_http_payload(
@@ -115,7 +120,7 @@ def test_unpresentable_native_action_stays_blocked(
         raise ValueError("fixture-private-value")
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_native_review_approval.normalize_native_review_payload", cannot_describe
+        "codex_plugin_scanner.guard.daemon.native_review_action_envelope.normalize_harness_payload", cannot_describe
     )
     result = worker.review_http_payload(
         payload={"hook_event_name": "PreToolUse", "tool_name": "eval", "tool_input": {"code": "1 + 1"}},

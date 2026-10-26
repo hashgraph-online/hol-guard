@@ -38,6 +38,11 @@ const CAPABILITIES: &[(&str, &str, &str)] = &[
     ),
     (
         "command.git",
+        "command.git.worktree",
+        "command.git.permission.worktree",
+    ),
+    (
+        "command.git",
         "command.git.pull",
         "command.git.permission.pull",
     ),
@@ -256,7 +261,7 @@ mod tests {
         assert_eq!(bound, known);
         assert_eq!(bound.len(), CAPABILITIES.len());
         let program: serde_json::Value =
-            serde_json::from_slice(super::super::EMBEDDED_PROGRAM).unwrap();
+            serde_json::from_slice(super::super::packaged_command_program_bytes()).unwrap();
         for (extension, rule, permission) in CAPABILITIES {
             let row = program["rules"]
                 .as_array()

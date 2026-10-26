@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "guard.extension-listing.v1",
+  "extensionId": "command.omairc",
+  "tagline": "Reviews omairc commands that send IRC messages or raise the running window.",
+  "category": "other",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ],
+  "documentationUrl": "https://github.com/fredimachado/omairc",
+  "tags": ["irc", "omairc"],
+  "maintainerGithubIds": [
+    "29800"
+  ]
+}

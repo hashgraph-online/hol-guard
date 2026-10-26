@@ -17,19 +17,28 @@ import time
 from pathlib import Path
 
 import codex_plugin_scanner
-from codex_plugin_scanner.guard.approval_gate import ApprovalGateInput, update_settings
+from codex_plugin_scanner.guard.approval_gate import update_settings
 from codex_plugin_scanner.guard.config import update_guard_settings
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.native_command_control_authority import AUTHORITY_FILE_NAME
 from codex_plugin_scanner.guard.native_hook_edge import review_raw_hook_native
-from codex_plugin_scanner.guard.native_policy_snapshot_constants import _PUBLISH_TIMEOUT_SECONDS
+from codex_plugin_scanner.guard.native_policy_snapshot_constants import (
+    _PUBLISH_STARTUP_TIMEOUT_SECONDS,
+    _PUBLISH_TIMEOUT_SECONDS,
+)
+from codex_plugin_scanner.guard.native_resident_client import (
+    NATIVE_RESIDENT_CLEANUP_RETRY_INTERVAL_SECONDS as _NATIVE_CLEANUP_RETRY_INTERVAL,
+)
+from codex_plugin_scanner.guard.native_resident_client import (
+    NATIVE_RESIDENT_CLEANUP_TIMEOUT_SECONDS as _DAEMON_CLEANUP_TIMEOUT,
+)
 from codex_plugin_scanner.guard.native_resident_client import (
     close_native_residents,
     native_resident_client_failure_code,
 )
 from codex_plugin_scanner.guard.native_runtime import native_runtime_status
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth
+from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth, layers_to_json
 from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     CONTROL_SCHEMA_VERSION,
     ControlLayerKind,
@@ -39,23 +48,8 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     ExtensionControl,
     ExtensionControlLayer,
 )
-from codex_plugin_scanner.guard.runtime.extension_control_proof import (
-    ExtensionControlMutation,
-    issue_extension_control_proof,
-)
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_base import EncryptedFileSecretStore
-
-_RECEIPT_PERSISTENCE_TIMEOUT_SECONDS = 20.0
-
-_ACTION_RANK = {
-    "allow": 0,
-    "warn": 1,
-    "review": 2,
-    "require-reapproval": 3,
-    "sandbox-required": 4,
-    "block": 5,
-}
 
 
 def require(condition: bool, code: str) -> None:
@@ -63,52 +57,76 @@ def require(condition: bool, code: str) -> None:
         raise RuntimeError(f"installed_native_extensions_failed:{code}")
 
 
-def installed_probe_support():
-    spec = importlib.util.spec_from_file_location(
-        "installed_extension_probe_support", Path(__file__).with_name("installed_extension_probe_support.py")
-    )
-    require(spec is not None and spec.loader is not None, "support_missing")
+def close_native_residents_with_retry(home: Path) -> bool:
+    deadline = time.monotonic() + _DAEMON_CLEANUP_TIMEOUT
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        try:
+            if close_native_residents(home, deadline_monotonic=deadline):
+                return True
+        except (OSError, RuntimeError):
+            pass
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        time.sleep(min(_NATIVE_CLEANUP_RETRY_INTERVAL, remaining))
+
+
+def _sibling(name: str, code: str):
+    spec = importlib.util.spec_from_file_location(name, Path(__file__).with_name(f"{name}.py"))
+    require(spec is not None and spec.loader is not None, code)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 
-_support = installed_probe_support()
+def installed_native_case_runner():
+    module = _sibling("installed_native_extension_case", "case_runner_missing")
+    require(callable(getattr(module, "run_case", None)), "case_runner_missing")
+    return module.run_case
+
+
+run_case = installed_native_case_runner()
+
+
+_support = _sibling("installed_extension_probe_support", "support_missing")
 prove_installed_data_only_authoring = _support.prove_installed_data_only_authoring
 persisted_native_receipt_ids = _support.persisted_native_receipt_ids
 receipt_processed_count = _support.receipt_processed_count
 await_persisted_native_receipt = _support.await_persisted_native_receipt
 receipt_binding_diagnostic = _support.receipt_binding_diagnostic
 policy_readiness_diagnostic = _support.policy_readiness_diagnostic
+policy_request_phase_diagnostic = _support.policy_request_phase_diagnostic
+require_native_http_admission = _support.require_native_http_admission
+serve_release_assets = _support.serve_release_assets
 
 
 def installed_client():
-    spec = importlib.util.spec_from_file_location(
-        "native_extension_installed_client", Path(__file__).with_name("installed_hook_client.py")
-    )
-    require(spec is not None and spec.loader is not None, "client_missing")
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module.installed_hook_request
+    return _sibling("installed_hook_client", "client_missing").installed_hook_request
 
 
 def provision(store: GuardStore) -> None:
+    """Enroll a new home, or keep the empty revision 0 a daemon start enrolled in it."""
     store._extension_control_authority_secret_store = EncryptedFileSecretStore(store.guard_home)
     catalog = BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
     with store._extension_control_authority_lock():
         before = store._read_extension_control_authority_locked(catalog)
-        require(before.health is AuthorityHealth.UNENROLLED, "fixture_not_new")
-        store._bootstrap_extension_control_authority(catalog, key=None)
+        if before.health is AuthorityHealth.UNENROLLED:
+            store._bootstrap_extension_control_authority(catalog, key=None)
+        else:
+            require(before.health is AuthorityHealth.PROTECTED and not before.revision, "fixture_not_new")
         after = store._read_extension_control_authority_locked(catalog)
         require(after.health is AuthorityHealth.PROTECTED and after.revision == 0 and not after.layers, "bootstrap")
 
 
-def commit_controls(store: GuardStore, password: str, controls: tuple[ExtensionControl, ...]) -> int:
-    catalog = BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    before = store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
-    require(before.health is AuthorityHealth.PROTECTED, "mutation_not_protected")
+def commit_controls(service, password: str, controls: tuple[ExtensionControl, ...]) -> int:
+    # Preview prepares optional native packs before the authenticated commit.
+    # A direct store mutation cannot exercise the normal installed enable path.
+    catalog = service.catalog_digest
+    before = service._runtime.current().revision
     layers = (
         ExtensionControlLayer(
             schema_version=CONTROL_SCHEMA_VERSION,
@@ -119,29 +137,19 @@ def commit_controls(store: GuardStore, password: str, controls: tuple[ExtensionC
         ),
     )
     nonce = secrets.token_hex(16)
-    mutation = ExtensionControlMutation(
-        previous_revision=before.revision,
+    payload = dict(
+        previous_revision=before,
         catalog_digest=catalog,
-        layers=layers,
+        layers=json.loads(layers_to_json(layers)),
         actor_id="isolated-installed-probe",
         idempotency_key=nonce,
         nonce=nonce,
     )
-    proof = issue_extension_control_proof(
-        store.guard_home, mutation, approval_gate_input=ApprovalGateInput(password=password), session_nonce=nonce
-    )
-    store.commit_extension_control_layers(
-        layers,
-        catalog_digest=catalog,
-        actor_id=mutation.actor_id,
-        expected_revision=before.revision,
-        idempotency_key=nonce,
-        nonce=nonce,
-        proof=proof,
-    )
-    after = store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
-    require(after.health is AuthorityHealth.PROTECTED and after.revision == before.revision + 1, "mutation_commit")
-    return after.revision
+    approved = service.preview({**payload, "session_nonce": nonce, "approval_password": password})
+    service.apply({**payload, "proof_id": approved["proof_id"]})
+    after = service._runtime.current().revision
+    require(after == before + 1, "mutation_commit")
+    return after
 
 
 def control(kind: ControlTargetKind, target: str, state: ControlState) -> ExtensionControl:
@@ -154,33 +162,32 @@ def ready(
     revision: int,
     *,
     previous_publisher: object | None = None,
+    case_label: str | None = None,
 ) -> dict[str, object]:
     worker = daemon._server.hook_worker
     # This functional fixture awaits a production publication, including a
     # cold Windows restart. Keep one bound for publication and admission, and
     # do not expire before the publisher's own platform timeout. Installed
     # readiness latency is enforced separately by native_slo_contract.
-    deadline = time.monotonic() + max(5.0, _PUBLISH_TIMEOUT_SECONDS)
+    require(_PUBLISH_STARTUP_TIMEOUT_SECONDS >= _PUBLISH_TIMEOUT_SECONDS, "publication_timeout_contract")
+    deadline = time.monotonic() + _PUBLISH_STARTUP_TIMEOUT_SECONDS
     publisher = worker.policy_snapshot_publisher
     publisher.register_workspace(workspace)
     publisher.start()
     # Await asynchronous control publication before measuring hook admission.
     published = publisher.wait_until_ready(deadline)
     if not published:
-        print(
-            json.dumps(
-                {
-                    "schema": "guard.installed-native-extension-readiness-failure.v1",
-                    "stage": "publication",
-                    "publisher": policy_readiness_diagnostic(publisher),
-                    "previous_publisher": (
-                        policy_readiness_diagnostic(previous_publisher) if previous_publisher is not None else None
-                    ),
-                },
-                sort_keys=True,
+        diagnostic = {
+            "schema": "guard.installed-native-extension-readiness-failure.v1",
+            "stage": "publication",
+            "publisher": policy_readiness_diagnostic(publisher),
+            "previous_publisher": (
+                policy_readiness_diagnostic(previous_publisher) if previous_publisher is not None else None
             ),
-            flush=True,
-        )
+        }
+        if case_label is not None:
+            diagnostic["case"] = case_label
+        print(json.dumps(diagnostic, sort_keys=True), flush=True)
     require(published, "policy_not_ready")
     binding = worker.prepare_workspace_policy(workspace, deadline=deadline)
     require(binding is not None, "policy_not_ready")
@@ -194,7 +201,22 @@ def exercise(root: Path) -> dict[str, object]:
     home, workspace = root / "home", root / "work"
     home.mkdir(mode=0o700)
     workspace.mkdir(mode=0o700)
+    bind_windows_state = None
+    if os.name == "nt":
+        from codex_plugin_scanner.guard.native_policy_snapshot_windows_state import (
+            _windows_ensure_private_directory,
+            _windows_private_state_binding,
+        )
+
+        bind_windows_state = _windows_private_state_binding
+        _windows_ensure_private_directory(home)
+        _windows_ensure_private_directory(workspace)
     store = GuardStore(home)
+    if bind_windows_state is not None:
+        # Settings writes start a resident. Create the runtime directory first so
+        # that client pins the directory publication opens, not a missing path.
+        with bind_windows_state(home):
+            pass
     password = secrets.token_urlsafe(32)
     update_guard_settings(home, {"mode": "enforce"})
     update_settings(
@@ -207,6 +229,9 @@ def exercise(root: Path) -> dict[str, object]:
     all_receipts: list[str] = []
     previous_publisher: object | None = None
 
+    def commit(controls):
+        return commit_controls(daemon._server.extension_control_api, password, controls)
+
     def case(
         label: str,
         command: str,
@@ -217,114 +242,49 @@ def exercise(root: Path) -> dict[str, object]:
         minimum_at_least: str | None = None,
         tool_payload: dict[str, object] | None = None,
         permission_id: str | None = None,
-    ) -> dict:
-        binding = ready(daemon, workspace, revision, previous_publisher=previous_publisher)
-        payload = tool_payload or {
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Bash",
-            "tool_input": {"command": command},
-        }
-        payload = {"hook_event_name": "PreToolUse", **payload}
-        raw = review_raw_hook_native(
-            payload=payload,
-            harness="claude-code",
-            event="PreToolUse",
-            guard_home=home,
-            home_dir=root,
-            cwd=workspace,
-            source_ref_external_allowed=False,
-            observe_mode=False,
-            deadline=time.monotonic() + 5,
-            policy_snapshot=binding,
+        matched_permission_id: str | None = None,
+        reason_code: str | None = None,
+    ) -> dict[str, object]:
+        return run_case(
+            label=label,
+            command=command,
+            revision=revision,
+            matched=matched,
+            daemon=daemon,
+            home=home,
+            root=root,
+            workspace=workspace,
+            store=store,
+            previous_publisher=previous_publisher,
+            request=request,
+            rows=rows,
+            all_receipts=all_receipts,
+            ready=ready,
+            review_raw_hook_native=review_raw_hook_native,
+            native_resident_client_failure_code=native_resident_client_failure_code,
+            persisted_native_receipt_ids=persisted_native_receipt_ids,
+            receipt_processed_count=receipt_processed_count,
+            await_persisted_native_receipt=await_persisted_native_receipt,
+            receipt_binding_diagnostic=receipt_binding_diagnostic,
+            policy_request_phase_diagnostic=policy_request_phase_diagnostic,
+            require_native_http_admission=require_native_http_admission,
+            require=require,
+            permission_for_rule_id=lambda rule: daemon._server.extension_control_api._registry.permission_for_rule_id(
+                rule
+            ),
+            minimum=minimum,
+            minimum_at_least=minimum_at_least,
+            tool_payload=tool_payload,
+            permission_id=permission_id,
+            matched_permission_id=matched_permission_id,
+            reason_code=reason_code,
         )
-        if raw is None:
-            print(
-                json.dumps(
-                    {
-                        "schema": "guard.installed-native-extension-failure.v1",
-                        "case": label,
-                        "completed_cases": len(rows),
-                        "control_revision": revision,
-                        "policy_generation": binding["generation"],
-                        "native_failure_code": native_resident_client_failure_code(),
-                    },
-                    sort_keys=True,
-                ),
-                flush=True,
-            )
-        require(raw is not None, f"{label}:native_missing")
-        result = raw["result"]
-        extensions = result.get("command_extensions")
-        require(isinstance(extensions, dict), f"{label}:extension_binding_missing")
-        observations = extensions["observations"]
-        ids = [row["rule_id"] for row in observations]
-        if matched is not None:
-            require(matched in ids, f"{label}:owned_rule_missing")
-        else:
-            require(
-                not any(row["extension_id"] == "command.ollama" for row in observations), f"{label}:external_not_inert"
-            )
-        if permission_id is not None:
-            require(
-                any(row["permission_id"] == permission_id for row in extensions["permission_observations"]),
-                f"{label}:owned_permission_missing",
-            )
-        if minimum is not None:
-            require(result["minimum_action"] == minimum, f"{label}:wrong_floor:{result['minimum_action']}")
-        if minimum_at_least is not None:
-            actual = result["minimum_action"]
-            require(
-                isinstance(actual, str)
-                and actual in _ACTION_RANK
-                and minimum_at_least in _ACTION_RANK
-                and _ACTION_RANK[actual] >= _ACTION_RANK[minimum_at_least],
-                f"{label}:floor_below_{minimum_at_least}:{actual}",
-            )
-        require(result["decision"] == "deny", f"{label}:unsafe_allow")
-        known_receipt_ids = persisted_native_receipt_ids(store)
-        receipt_writer = daemon._server.runtime_hook_evidence_writer
-        receipt_processed_value = receipt_processed_count(receipt_writer)
-        require(receipt_processed_value is not None, f"{label}:receipt_writer_stats")
-        receipt_processed_before = receipt_processed_value
-        response = request(daemon, home, workspace, "claude-code", "PreToolUse", payload)
-        require(isinstance(response, dict), f"{label}:http_missing")
-        # Compatibility hooks execute in the isolated hook process. Its receipt
-        # reaches the parent through the evidence writer, so the parent
-        # worker's mutable last-receipt field cannot identify this request.
-        # Wait for that asynchronous writer to report successful persistence
-        # before querying SQLite, avoiding reader/writer lock churn on Windows.
-        receipt = await_persisted_native_receipt(
-            store,
-            known_receipt_ids,
-            writer=receipt_writer,
-            receipt_processed_before=receipt_processed_before,
-            timeout_seconds=_RECEIPT_PERSISTENCE_TIMEOUT_SECONDS,
-        )
-        require(receipt.get("authority") == "rust", f"{label}:receipt_missing")
-        if receipt.get("command_extensions") != extensions["binding"]:
-            diagnostic = receipt_binding_diagnostic(response, receipt, extensions["binding"], all_receipts)
-            print(json.dumps({"case": label, "completed_cases": len(rows), **diagnostic}, sort_keys=True), flush=True)
-        require(receipt.get("command_extensions") == extensions["binding"], f"{label}:receipt_generation_mismatch")
-        require(receipt["decision"] == result["decision"], f"{label}:http_decision_mismatch")
-        all_receipts.append(receipt["decision_id"])
-        rows.append(
-            {
-                "case": label,
-                "control_revision": revision,
-                "decision": receipt["decision"],
-                "minimum_action": result["minimum_action"],
-                "rule_ids": ids,
-                "permission_ids": [row["permission_id"] for row in extensions["permission_observations"]],
-                "observations": extensions["binding"]["observation_count"],
-            }
-        )
-        return extensions
 
     try:
         daemon.start()
         case("external-off", "ollama rm example-model", 0, matched=None)
         enabled = control(ControlTargetKind.EXTENSION, "command.ollama", ControlState.ENABLED)
-        revision = commit_controls(store, password, (enabled,))
+        revision = commit((enabled,))
         case("external-enabled", "ollama rm example-model", revision, matched="command.ollama.rm")
         safe = case("owned-help", "ollama rm --help", revision, matched="command.ollama.rm")
         owned = next(row for row in safe["observations"] if row["rule_id"] == "command.ollama.rm")
@@ -336,23 +296,43 @@ def exercise(root: Path) -> dict[str, object]:
             matched="command.ollama.rm",
             minimum="block",
         )
-        permission = BUILT_IN_COMMAND_EXTENSION_REGISTRY.permission_for_rule_id("command.ollama.rm")
+        permission = daemon._server.extension_control_api._registry.permission_for_rule_id("command.ollama.rm")
         require(permission is not None, "permission_missing")
-        revision = commit_controls(
-            store,
-            password,
+        revision = commit(
             (enabled, control(ControlTargetKind.PERMISSION, permission.permission_id, ControlState.DISABLED)),
         )
         case("permission-disabled", "ollama rm example-model", revision, matched="command.ollama.rm", minimum="block")
-        revision = commit_controls(
-            store, password, (control(ControlTargetKind.EXTENSION, "command.ollama", ControlState.DISABLED),)
+        worktree_permission = BUILT_IN_COMMAND_EXTENSION_REGISTRY.permission_for_rule_id("command.git.worktree")
+        require(worktree_permission is not None, "worktree_permission_missing")
+        worktree_target = workspace / "native-worktree-target"
+        revision = commit(
+            (control(ControlTargetKind.PERMISSION, worktree_permission.permission_id, ControlState.DISABLED),),
         )
+        worktree_command = (
+            f"sleep 0.01; cd {workspace} && git worktree add {worktree_target} "
+            "-b fixture-native-worktree HEAD 2>&1 | tail -3"
+        )
+        require(not worktree_target.exists(), "worktree_target_preexisting")
+        case(
+            "git-worktree-compound-permission-disabled",
+            worktree_command,
+            revision,
+            matched="command.git.worktree",
+            minimum="block",
+            matched_permission_id=worktree_permission.permission_id,
+            reason_code="native_command_permission_disabled",
+        )
+        # Target commands are never executed by this probe. Native rule,
+        # permission, reason, and persisted-receipt evidence prove denial;
+        # these checks only prove the synthetic fixture did not materialize.
+        require(not worktree_target.exists(), "worktree_target_executed")
+        revision = commit((control(ControlTargetKind.EXTENSION, "command.ollama", ControlState.DISABLED),))
         case("external-disabled", "ollama rm example-model", revision, matched=None)
-        revision = commit_controls(store, password, (enabled,))
+        revision = commit((enabled,))
         case("external-reenabled", "ollama push example-model", revision, matched="command.ollama.push")
         previous_publisher = daemon._server.hook_worker.policy_snapshot_publisher
         daemon.stop()
-        require(close_native_residents(home), "restart_containment")
+        require(close_native_residents_with_retry(home), "restart_containment")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, home_dir=root, workspace_dir=workspace)
         daemon.start()
         case("restart-retains-controls", "ollama rm example-model", revision, matched="command.ollama.rm")
@@ -369,7 +349,7 @@ def exercise(root: Path) -> dict[str, object]:
             )
             for extension in delegated
         )
-        revision = commit_controls(store, password, (enabled, *delegated_controls))
+        revision = commit((enabled, *delegated_controls))
         for extension in delegated:
             permission_id = extension.permissions[0].permission_id
             case(
@@ -381,7 +361,7 @@ def exercise(root: Path) -> dict[str, object]:
                 permission_id=permission_id,
             )
         mcp_enabled = control(ControlTargetKind.EXTENSION, "command.mcp-filesystem", ControlState.ENABLED)
-        revision = commit_controls(store, password, (enabled, mcp_enabled))
+        revision = commit((enabled, mcp_enabled))
         mcp_permission = "command.mcp-filesystem.permission.mcp-filesystem-tool"
         case(
             "mcp-write-blocked",
@@ -404,7 +384,7 @@ def exercise(root: Path) -> dict[str, object]:
             tool_payload={"tool_name": "mcp__filesystem__read_file", "tool_input": {"path": "fixture.txt"}},
         )
         instapods_enabled = control(ControlTargetKind.EXTENSION, "command.mcp-instapods", ControlState.ENABLED)
-        revision = commit_controls(store, password, (enabled, instapods_enabled))
+        revision = commit((enabled, instapods_enabled))
         instapods_permission = "command.mcp-instapods.permission.mcp-instapods-tool"
         case(
             "mcp-instapods-delete-review",
@@ -432,7 +412,7 @@ def exercise(root: Path) -> dict[str, object]:
             permission_id=instapods_permission,
             tool_payload={"tool_name": "mcp__instapods__manage_pod", "tool_input": {"operation": "status"}},
         )
-        revision = commit_controls(store, password, (enabled,))
+        revision = commit((enabled,))
         case(
             "mcp-off",
             "",
@@ -485,13 +465,16 @@ def exercise(root: Path) -> dict[str, object]:
         }
     finally:
         daemon.stop()
-        require(close_native_residents(home), "final_containment")
+        require(close_native_residents_with_retry(home), "final_containment")
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", type=Path, required=True)
+    parser.add_argument("--release-assets", type=Path, help="pack assets exported by this unreleased build")
     args = parser.parse_args()
+    if args.release_assets is not None:
+        serve_release_assets(args.release_assets.resolve(strict=True))
     package = Path(codex_plugin_scanner.__file__).resolve()
     require("site-packages" in package.parts, "not_installed_package")
     status = native_runtime_status()
@@ -501,12 +484,13 @@ def main() -> int:
         "native_feature_missing",
     )
     authoring = prove_installed_data_only_authoring(package)
-    with tempfile.TemporaryDirectory(prefix="hge-", dir=None if os.name == "nt" else "/tmp") as temporary:
-        report = exercise(Path(temporary))
+    with tempfile.TemporaryDirectory(prefix="hge-", dir=Path.home() if os.name == "nt" else "/tmp") as temporary:
+        report = exercise(Path(temporary).resolve())
     report["data_only_authoring"] = authoring
     report["data_only_authoring_receipts_authenticated"] = False
     report["source_sha"] = status.capabilities.build_sha
     report["rule_digest"] = status.capabilities.rule_digest
+    report["pack_release_source"] = "build-export" if args.release_assets is not None else "published-release"
     args.json.write_text(json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report, sort_keys=True))
     return 0

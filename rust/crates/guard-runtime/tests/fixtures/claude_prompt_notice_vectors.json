@@ -1,0 +1,5929 @@
+{
+ "schema": "claude-prompt-notice-vectors.v1",
+ "vectors": [
+  {
+   "name": "require-reapproval/no-classes/reason-plain",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "Guard needs approval for this prompt"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard needs approval for this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/no-classes/reason-punctuated",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "Guard blocked this prompt!"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard blocked this prompt! Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/no-classes/reason-question",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "  Should Claude read secrets?  "
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Should Claude read secrets? Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/no-classes/reason-padded",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "\t Guard flagged this prompt \n"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard flagged this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/no-classes/reason-blank",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "   "
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/no-classes/reason-empty",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": ""
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/no-classes/reason-null",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": null
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/no-classes/reason-missing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/empty/reason-plain",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": []
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard needs approval for this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/empty/reason-punctuated",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": []
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard blocked this prompt! Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/empty/reason-question",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": []
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Should Claude read secrets? Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/empty/reason-padded",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": []
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard flagged this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/empty/reason-blank",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "   ",
+    "prompt_risk_classes": []
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/empty/reason-empty",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "",
+    "prompt_risk_classes": []
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/empty/reason-null",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": null,
+    "prompt_risk_classes": []
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/empty/reason-missing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "prompt_risk_classes": []
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/local-env/reason-plain",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard needs approval for this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/local-env/reason-punctuated",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard blocked this prompt! Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/local-env/reason-question",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Should Claude read secrets? Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/local-env/reason-padded",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard flagged this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/local-env/reason-blank",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "   ",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/local-env/reason-empty",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/local-env/reason-null",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": null,
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/local-env/reason-missing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/sensitive-material/reason-plain",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": [
+     "sensitive_material"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard needs approval for this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/sensitive-material/reason-punctuated",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": [
+     "sensitive_material"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard blocked this prompt! Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/sensitive-material/reason-question",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": [
+     "sensitive_material"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Should Claude read secrets? Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/sensitive-material/reason-padded",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": [
+     "sensitive_material"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard flagged this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/sensitive-material/reason-blank",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "   ",
+    "prompt_risk_classes": [
+     "sensitive_material"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/sensitive-material/reason-empty",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "",
+    "prompt_risk_classes": [
+     "sensitive_material"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/sensitive-material/reason-null",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": null,
+    "prompt_risk_classes": [
+     "sensitive_material"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/sensitive-material/reason-missing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "prompt_risk_classes": [
+     "sensitive_material"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/secret-read/reason-plain",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": [
+     "secret_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard needs approval for this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/secret-read/reason-punctuated",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": [
+     "secret_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard blocked this prompt! Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/secret-read/reason-question",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": [
+     "secret_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Should Claude read secrets? Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/secret-read/reason-padded",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": [
+     "secret_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard flagged this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/secret-read/reason-blank",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "   ",
+    "prompt_risk_classes": [
+     "secret_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/secret-read/reason-empty",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "",
+    "prompt_risk_classes": [
+     "secret_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/secret-read/reason-null",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": null,
+    "prompt_risk_classes": [
+     "secret_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/secret-read/reason-missing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "prompt_risk_classes": [
+     "secret_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/bypass/reason-plain",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "require-reapproval/bypass/reason-punctuated",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "require-reapproval/bypass/reason-question",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "require-reapproval/bypass/reason-padded",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "require-reapproval/bypass/reason-blank",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "   ",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "require-reapproval/bypass/reason-empty",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "require-reapproval/bypass/reason-null",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": null,
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "require-reapproval/bypass/reason-missing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "require-reapproval/bypass-and-secret/reason-plain",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": [
+     "local_env_read",
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "require-reapproval/bypass-and-secret/reason-punctuated",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": [
+     "local_env_read",
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "require-reapproval/bypass-and-secret/reason-question",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": [
+     "local_env_read",
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "require-reapproval/bypass-and-secret/reason-padded",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": [
+     "local_env_read",
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "require-reapproval/bypass-and-secret/reason-blank",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "   ",
+    "prompt_risk_classes": [
+     "local_env_read",
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "require-reapproval/bypass-and-secret/reason-empty",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "",
+    "prompt_risk_classes": [
+     "local_env_read",
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "require-reapproval/bypass-and-secret/reason-null",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": null,
+    "prompt_risk_classes": [
+     "local_env_read",
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "require-reapproval/bypass-and-secret/reason-missing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "prompt_risk_classes": [
+     "local_env_read",
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "require-reapproval/other/reason-plain",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": [
+     "destructive_command"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard needs approval for this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/other/reason-punctuated",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": [
+     "destructive_command"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard blocked this prompt! Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/other/reason-question",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": [
+     "destructive_command"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Should Claude read secrets? Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/other/reason-padded",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": [
+     "destructive_command"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard flagged this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/other/reason-blank",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "   ",
+    "prompt_risk_classes": [
+     "destructive_command"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/other/reason-empty",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "",
+    "prompt_risk_classes": [
+     "destructive_command"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/other/reason-null",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": null,
+    "prompt_risk_classes": [
+     "destructive_command"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/other/reason-missing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "prompt_risk_classes": [
+     "destructive_command"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/odd-items/reason-plain",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": [
+     "",
+     "  ",
+     null,
+     3,
+     {
+      "class": "local_env_read"
+     },
+     " local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard needs approval for this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/odd-items/reason-punctuated",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": [
+     "",
+     "  ",
+     null,
+     3,
+     {
+      "class": "local_env_read"
+     },
+     " local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard blocked this prompt! Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/odd-items/reason-question",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": [
+     "",
+     "  ",
+     null,
+     3,
+     {
+      "class": "local_env_read"
+     },
+     " local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Should Claude read secrets? Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/odd-items/reason-padded",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": [
+     "",
+     "  ",
+     null,
+     3,
+     {
+      "class": "local_env_read"
+     },
+     " local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard flagged this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/odd-items/reason-blank",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "   ",
+    "prompt_risk_classes": [
+     "",
+     "  ",
+     null,
+     3,
+     {
+      "class": "local_env_read"
+     },
+     " local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/odd-items/reason-empty",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "",
+    "prompt_risk_classes": [
+     "",
+     "  ",
+     null,
+     3,
+     {
+      "class": "local_env_read"
+     },
+     " local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/odd-items/reason-null",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": null,
+    "prompt_risk_classes": [
+     "",
+     "  ",
+     null,
+     3,
+     {
+      "class": "local_env_read"
+     },
+     " local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/odd-items/reason-missing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "prompt_risk_classes": [
+     "",
+     "  ",
+     null,
+     3,
+     {
+      "class": "local_env_read"
+     },
+     " local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/not-a-list/reason-plain",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": "local_env_read"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard needs approval for this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/not-a-list/reason-punctuated",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": "local_env_read"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard blocked this prompt! Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/not-a-list/reason-question",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": "local_env_read"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Should Claude read secrets? Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/not-a-list/reason-padded",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": "local_env_read"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard flagged this prompt. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/not-a-list/reason-blank",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "   ",
+    "prompt_risk_classes": "local_env_read"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/not-a-list/reason-empty",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "",
+    "prompt_risk_classes": "local_env_read"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/not-a-list/reason-null",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": null,
+    "prompt_risk_classes": "local_env_read"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/not-a-list/reason-missing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "prompt_risk_classes": "local_env_read"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": " Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    },
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/no-classes/hook-output-existing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "Guard needs approval"
+   },
+   "response": {
+    "systemMessage": "Edge message",
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Edge context"
+    }
+   },
+   "expected": {
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt.",
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard needs approval. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next sensitive action and open a branded approval question.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    }
+   }
+  },
+  {
+   "name": "require-reapproval/local-env/hook-output-existing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "Guard needs approval",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "systemMessage": "Edge message",
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Edge context"
+    }
+   },
+   "expected": {
+    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt.",
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Guard needs approval. Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: 'HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval question to protect you.' Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive action automatically. Instead, tell the user approval is required in Claude to continue."
+    }
+   }
+  },
+  {
+   "name": "require-reapproval/bypass/hook-output-existing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "Guard needs approval",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "systemMessage": "Edge message",
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Edge context"
+    }
+   },
+   "expected": {
+    "systemMessage": "Edge message",
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Edge context"
+    }
+   }
+  },
+  {
+   "name": "require-reapproval/no-classes/hook-output-not-object",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "Guard needs approval"
+   },
+   "response": {
+    "hookSpecificOutput": "UserPromptSubmit",
+    "continue": true
+   },
+   "expected": {
+    "hookSpecificOutput": "UserPromptSubmit",
+    "continue": true,
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/local-env/hook-output-not-object",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "Guard needs approval",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": "UserPromptSubmit",
+    "continue": true
+   },
+   "expected": {
+    "hookSpecificOutput": "UserPromptSubmit",
+    "continue": true,
+    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/bypass/hook-output-not-object",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "Guard needs approval",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": "UserPromptSubmit",
+    "continue": true
+   },
+   "expected": {
+    "hookSpecificOutput": "UserPromptSubmit",
+    "continue": true
+   }
+  },
+  {
+   "name": "require-reapproval/no-classes/no-hook-output",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "Guard needs approval"
+   },
+   "response": {
+    "decision": "block",
+    "reason": "Edge reason"
+   },
+   "expected": {
+    "decision": "block",
+    "reason": "Edge reason",
+    "systemMessage": "HOL Guard intercepted this prompt because it leads to a sensitive action. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/local-env/no-hook-output",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "Guard needs approval",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "decision": "block",
+    "reason": "Edge reason"
+   },
+   "expected": {
+    "decision": "block",
+    "reason": "Edge reason",
+    "systemMessage": "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+   }
+  },
+  {
+   "name": "require-reapproval/bypass/no-hook-output",
+   "result": {
+    "decision": "block",
+    "minimum_action": "require-reapproval",
+    "reason": "Guard needs approval",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "decision": "block",
+    "reason": "Edge reason"
+   },
+   "expected": {
+    "decision": "block",
+    "reason": "Edge reason"
+   }
+  },
+  {
+   "name": "block/no-classes/reason-plain",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "Guard needs approval for this prompt"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard needs approval for this prompt."
+   }
+  },
+  {
+   "name": "block/no-classes/reason-punctuated",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "Guard blocked this prompt!"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard blocked this prompt!"
+   }
+  },
+  {
+   "name": "block/no-classes/reason-question",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "  Should Claude read secrets?  "
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Should Claude read secrets?"
+   }
+  },
+  {
+   "name": "block/no-classes/reason-padded",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "\t Guard flagged this prompt \n"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard flagged this prompt."
+   }
+  },
+  {
+   "name": "block/no-classes/reason-blank",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "   "
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/no-classes/reason-empty",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": ""
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/no-classes/reason-null",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": null
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/no-classes/reason-missing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/empty/reason-plain",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": []
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard needs approval for this prompt."
+   }
+  },
+  {
+   "name": "block/empty/reason-punctuated",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": []
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard blocked this prompt!"
+   }
+  },
+  {
+   "name": "block/empty/reason-question",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": []
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Should Claude read secrets?"
+   }
+  },
+  {
+   "name": "block/empty/reason-padded",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": []
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard flagged this prompt."
+   }
+  },
+  {
+   "name": "block/empty/reason-blank",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "   ",
+    "prompt_risk_classes": []
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/empty/reason-empty",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "",
+    "prompt_risk_classes": []
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/empty/reason-null",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": null,
+    "prompt_risk_classes": []
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/empty/reason-missing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "prompt_risk_classes": []
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/local-env/reason-plain",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard needs approval for this prompt."
+   }
+  },
+  {
+   "name": "block/local-env/reason-punctuated",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard blocked this prompt!"
+   }
+  },
+  {
+   "name": "block/local-env/reason-question",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Should Claude read secrets?"
+   }
+  },
+  {
+   "name": "block/local-env/reason-padded",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard flagged this prompt."
+   }
+  },
+  {
+   "name": "block/local-env/reason-blank",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "   ",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/local-env/reason-empty",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/local-env/reason-null",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": null,
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/local-env/reason-missing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/sensitive-material/reason-plain",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": [
+     "sensitive_material"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard needs approval for this prompt."
+   }
+  },
+  {
+   "name": "block/sensitive-material/reason-punctuated",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": [
+     "sensitive_material"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard blocked this prompt!"
+   }
+  },
+  {
+   "name": "block/sensitive-material/reason-question",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": [
+     "sensitive_material"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Should Claude read secrets?"
+   }
+  },
+  {
+   "name": "block/sensitive-material/reason-padded",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": [
+     "sensitive_material"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard flagged this prompt."
+   }
+  },
+  {
+   "name": "block/sensitive-material/reason-blank",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "   ",
+    "prompt_risk_classes": [
+     "sensitive_material"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/sensitive-material/reason-empty",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "",
+    "prompt_risk_classes": [
+     "sensitive_material"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/sensitive-material/reason-null",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": null,
+    "prompt_risk_classes": [
+     "sensitive_material"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/sensitive-material/reason-missing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "prompt_risk_classes": [
+     "sensitive_material"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/secret-read/reason-plain",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": [
+     "secret_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard needs approval for this prompt."
+   }
+  },
+  {
+   "name": "block/secret-read/reason-punctuated",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": [
+     "secret_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard blocked this prompt!"
+   }
+  },
+  {
+   "name": "block/secret-read/reason-question",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": [
+     "secret_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Should Claude read secrets?"
+   }
+  },
+  {
+   "name": "block/secret-read/reason-padded",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": [
+     "secret_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard flagged this prompt."
+   }
+  },
+  {
+   "name": "block/secret-read/reason-blank",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "   ",
+    "prompt_risk_classes": [
+     "secret_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/secret-read/reason-empty",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "",
+    "prompt_risk_classes": [
+     "secret_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/secret-read/reason-null",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": null,
+    "prompt_risk_classes": [
+     "secret_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/secret-read/reason-missing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "prompt_risk_classes": [
+     "secret_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/bypass/reason-plain",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard needs approval for this prompt."
+   }
+  },
+  {
+   "name": "block/bypass/reason-punctuated",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard blocked this prompt!"
+   }
+  },
+  {
+   "name": "block/bypass/reason-question",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Should Claude read secrets?"
+   }
+  },
+  {
+   "name": "block/bypass/reason-padded",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard flagged this prompt."
+   }
+  },
+  {
+   "name": "block/bypass/reason-blank",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "   ",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/bypass/reason-empty",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/bypass/reason-null",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": null,
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/bypass/reason-missing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/bypass-and-secret/reason-plain",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": [
+     "local_env_read",
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard needs approval for this prompt."
+   }
+  },
+  {
+   "name": "block/bypass-and-secret/reason-punctuated",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": [
+     "local_env_read",
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard blocked this prompt!"
+   }
+  },
+  {
+   "name": "block/bypass-and-secret/reason-question",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": [
+     "local_env_read",
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Should Claude read secrets?"
+   }
+  },
+  {
+   "name": "block/bypass-and-secret/reason-padded",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": [
+     "local_env_read",
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard flagged this prompt."
+   }
+  },
+  {
+   "name": "block/bypass-and-secret/reason-blank",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "   ",
+    "prompt_risk_classes": [
+     "local_env_read",
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/bypass-and-secret/reason-empty",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "",
+    "prompt_risk_classes": [
+     "local_env_read",
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/bypass-and-secret/reason-null",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": null,
+    "prompt_risk_classes": [
+     "local_env_read",
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/bypass-and-secret/reason-missing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "prompt_risk_classes": [
+     "local_env_read",
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/other/reason-plain",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": [
+     "destructive_command"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard needs approval for this prompt."
+   }
+  },
+  {
+   "name": "block/other/reason-punctuated",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": [
+     "destructive_command"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard blocked this prompt!"
+   }
+  },
+  {
+   "name": "block/other/reason-question",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": [
+     "destructive_command"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Should Claude read secrets?"
+   }
+  },
+  {
+   "name": "block/other/reason-padded",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": [
+     "destructive_command"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard flagged this prompt."
+   }
+  },
+  {
+   "name": "block/other/reason-blank",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "   ",
+    "prompt_risk_classes": [
+     "destructive_command"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/other/reason-empty",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "",
+    "prompt_risk_classes": [
+     "destructive_command"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/other/reason-null",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": null,
+    "prompt_risk_classes": [
+     "destructive_command"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/other/reason-missing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "prompt_risk_classes": [
+     "destructive_command"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/odd-items/reason-plain",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": [
+     "",
+     "  ",
+     null,
+     3,
+     {
+      "class": "local_env_read"
+     },
+     " local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard needs approval for this prompt."
+   }
+  },
+  {
+   "name": "block/odd-items/reason-punctuated",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": [
+     "",
+     "  ",
+     null,
+     3,
+     {
+      "class": "local_env_read"
+     },
+     " local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard blocked this prompt!"
+   }
+  },
+  {
+   "name": "block/odd-items/reason-question",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": [
+     "",
+     "  ",
+     null,
+     3,
+     {
+      "class": "local_env_read"
+     },
+     " local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Should Claude read secrets?"
+   }
+  },
+  {
+   "name": "block/odd-items/reason-padded",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": [
+     "",
+     "  ",
+     null,
+     3,
+     {
+      "class": "local_env_read"
+     },
+     " local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard flagged this prompt."
+   }
+  },
+  {
+   "name": "block/odd-items/reason-blank",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "   ",
+    "prompt_risk_classes": [
+     "",
+     "  ",
+     null,
+     3,
+     {
+      "class": "local_env_read"
+     },
+     " local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/odd-items/reason-empty",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "",
+    "prompt_risk_classes": [
+     "",
+     "  ",
+     null,
+     3,
+     {
+      "class": "local_env_read"
+     },
+     " local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/odd-items/reason-null",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": null,
+    "prompt_risk_classes": [
+     "",
+     "  ",
+     null,
+     3,
+     {
+      "class": "local_env_read"
+     },
+     " local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/odd-items/reason-missing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "prompt_risk_classes": [
+     "",
+     "  ",
+     null,
+     3,
+     {
+      "class": "local_env_read"
+     },
+     " local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/not-a-list/reason-plain",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": "local_env_read"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard needs approval for this prompt."
+   }
+  },
+  {
+   "name": "block/not-a-list/reason-punctuated",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": "local_env_read"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard blocked this prompt!"
+   }
+  },
+  {
+   "name": "block/not-a-list/reason-question",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": "local_env_read"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Should Claude read secrets?"
+   }
+  },
+  {
+   "name": "block/not-a-list/reason-padded",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": "local_env_read"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard flagged this prompt."
+   }
+  },
+  {
+   "name": "block/not-a-list/reason-blank",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "   ",
+    "prompt_risk_classes": "local_env_read"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/not-a-list/reason-empty",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "",
+    "prompt_risk_classes": "local_env_read"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/not-a-list/reason-null",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": null,
+    "prompt_risk_classes": "local_env_read"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/not-a-list/reason-missing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "prompt_risk_classes": "local_env_read"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "block/no-classes/hook-output-existing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "Guard needs approval"
+   },
+   "response": {
+    "systemMessage": "Edge message",
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Edge context"
+    }
+   },
+   "expected": {
+    "systemMessage": "Guard needs approval.",
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Edge context"
+    }
+   }
+  },
+  {
+   "name": "block/local-env/hook-output-existing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "Guard needs approval",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "systemMessage": "Edge message",
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Edge context"
+    }
+   },
+   "expected": {
+    "systemMessage": "Guard needs approval.",
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Edge context"
+    }
+   }
+  },
+  {
+   "name": "block/bypass/hook-output-existing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "Guard needs approval",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "systemMessage": "Edge message",
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Edge context"
+    }
+   },
+   "expected": {
+    "systemMessage": "Guard needs approval.",
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Edge context"
+    }
+   }
+  },
+  {
+   "name": "block/no-classes/hook-output-not-object",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "Guard needs approval"
+   },
+   "response": {
+    "hookSpecificOutput": "UserPromptSubmit",
+    "continue": true
+   },
+   "expected": {
+    "hookSpecificOutput": "UserPromptSubmit",
+    "continue": true,
+    "systemMessage": "Guard needs approval."
+   }
+  },
+  {
+   "name": "block/local-env/hook-output-not-object",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "Guard needs approval",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": "UserPromptSubmit",
+    "continue": true
+   },
+   "expected": {
+    "hookSpecificOutput": "UserPromptSubmit",
+    "continue": true,
+    "systemMessage": "Guard needs approval."
+   }
+  },
+  {
+   "name": "block/bypass/hook-output-not-object",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "Guard needs approval",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": "UserPromptSubmit",
+    "continue": true
+   },
+   "expected": {
+    "hookSpecificOutput": "UserPromptSubmit",
+    "continue": true,
+    "systemMessage": "Guard needs approval."
+   }
+  },
+  {
+   "name": "block/no-classes/no-hook-output",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "Guard needs approval"
+   },
+   "response": {
+    "decision": "block",
+    "reason": "Edge reason"
+   },
+   "expected": {
+    "decision": "block",
+    "reason": "Edge reason",
+    "systemMessage": "Guard needs approval."
+   }
+  },
+  {
+   "name": "block/local-env/no-hook-output",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "Guard needs approval",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "decision": "block",
+    "reason": "Edge reason"
+   },
+   "expected": {
+    "decision": "block",
+    "reason": "Edge reason",
+    "systemMessage": "Guard needs approval."
+   }
+  },
+  {
+   "name": "block/bypass/no-hook-output",
+   "result": {
+    "decision": "block",
+    "minimum_action": "block",
+    "reason": "Guard needs approval",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "decision": "block",
+    "reason": "Edge reason"
+   },
+   "expected": {
+    "decision": "block",
+    "reason": "Edge reason",
+    "systemMessage": "Guard needs approval."
+   }
+  },
+  {
+   "name": "sandbox-required/no-classes/reason-plain",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "Guard needs approval for this prompt"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard needs approval for this prompt."
+   }
+  },
+  {
+   "name": "sandbox-required/no-classes/reason-punctuated",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "Guard blocked this prompt!"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard blocked this prompt!"
+   }
+  },
+  {
+   "name": "sandbox-required/no-classes/reason-question",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "  Should Claude read secrets?  "
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Should Claude read secrets?"
+   }
+  },
+  {
+   "name": "sandbox-required/no-classes/reason-padded",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "\t Guard flagged this prompt \n"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard flagged this prompt."
+   }
+  },
+  {
+   "name": "sandbox-required/no-classes/reason-blank",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "   "
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/no-classes/reason-empty",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": ""
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/no-classes/reason-null",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": null
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/no-classes/reason-missing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/empty/reason-plain",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": []
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard needs approval for this prompt."
+   }
+  },
+  {
+   "name": "sandbox-required/empty/reason-punctuated",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": []
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard blocked this prompt!"
+   }
+  },
+  {
+   "name": "sandbox-required/empty/reason-question",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": []
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Should Claude read secrets?"
+   }
+  },
+  {
+   "name": "sandbox-required/empty/reason-padded",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": []
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard flagged this prompt."
+   }
+  },
+  {
+   "name": "sandbox-required/empty/reason-blank",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "   ",
+    "prompt_risk_classes": []
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/empty/reason-empty",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "",
+    "prompt_risk_classes": []
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/empty/reason-null",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": null,
+    "prompt_risk_classes": []
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/empty/reason-missing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "prompt_risk_classes": []
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/local-env/reason-plain",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard needs approval for this prompt."
+   }
+  },
+  {
+   "name": "sandbox-required/local-env/reason-punctuated",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard blocked this prompt!"
+   }
+  },
+  {
+   "name": "sandbox-required/local-env/reason-question",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Should Claude read secrets?"
+   }
+  },
+  {
+   "name": "sandbox-required/local-env/reason-padded",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard flagged this prompt."
+   }
+  },
+  {
+   "name": "sandbox-required/local-env/reason-blank",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "   ",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/local-env/reason-empty",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/local-env/reason-null",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": null,
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/local-env/reason-missing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/sensitive-material/reason-plain",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": [
+     "sensitive_material"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard needs approval for this prompt."
+   }
+  },
+  {
+   "name": "sandbox-required/sensitive-material/reason-punctuated",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": [
+     "sensitive_material"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard blocked this prompt!"
+   }
+  },
+  {
+   "name": "sandbox-required/sensitive-material/reason-question",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": [
+     "sensitive_material"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Should Claude read secrets?"
+   }
+  },
+  {
+   "name": "sandbox-required/sensitive-material/reason-padded",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": [
+     "sensitive_material"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard flagged this prompt."
+   }
+  },
+  {
+   "name": "sandbox-required/sensitive-material/reason-blank",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "   ",
+    "prompt_risk_classes": [
+     "sensitive_material"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/sensitive-material/reason-empty",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "",
+    "prompt_risk_classes": [
+     "sensitive_material"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/sensitive-material/reason-null",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": null,
+    "prompt_risk_classes": [
+     "sensitive_material"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/sensitive-material/reason-missing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "prompt_risk_classes": [
+     "sensitive_material"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/secret-read/reason-plain",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": [
+     "secret_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard needs approval for this prompt."
+   }
+  },
+  {
+   "name": "sandbox-required/secret-read/reason-punctuated",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": [
+     "secret_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard blocked this prompt!"
+   }
+  },
+  {
+   "name": "sandbox-required/secret-read/reason-question",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": [
+     "secret_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Should Claude read secrets?"
+   }
+  },
+  {
+   "name": "sandbox-required/secret-read/reason-padded",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": [
+     "secret_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard flagged this prompt."
+   }
+  },
+  {
+   "name": "sandbox-required/secret-read/reason-blank",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "   ",
+    "prompt_risk_classes": [
+     "secret_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/secret-read/reason-empty",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "",
+    "prompt_risk_classes": [
+     "secret_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/secret-read/reason-null",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": null,
+    "prompt_risk_classes": [
+     "secret_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/secret-read/reason-missing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "prompt_risk_classes": [
+     "secret_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/bypass/reason-plain",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard needs approval for this prompt."
+   }
+  },
+  {
+   "name": "sandbox-required/bypass/reason-punctuated",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard blocked this prompt!"
+   }
+  },
+  {
+   "name": "sandbox-required/bypass/reason-question",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Should Claude read secrets?"
+   }
+  },
+  {
+   "name": "sandbox-required/bypass/reason-padded",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard flagged this prompt."
+   }
+  },
+  {
+   "name": "sandbox-required/bypass/reason-blank",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "   ",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/bypass/reason-empty",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/bypass/reason-null",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": null,
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/bypass/reason-missing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/bypass-and-secret/reason-plain",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": [
+     "local_env_read",
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard needs approval for this prompt."
+   }
+  },
+  {
+   "name": "sandbox-required/bypass-and-secret/reason-punctuated",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": [
+     "local_env_read",
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard blocked this prompt!"
+   }
+  },
+  {
+   "name": "sandbox-required/bypass-and-secret/reason-question",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": [
+     "local_env_read",
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Should Claude read secrets?"
+   }
+  },
+  {
+   "name": "sandbox-required/bypass-and-secret/reason-padded",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": [
+     "local_env_read",
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard flagged this prompt."
+   }
+  },
+  {
+   "name": "sandbox-required/bypass-and-secret/reason-blank",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "   ",
+    "prompt_risk_classes": [
+     "local_env_read",
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/bypass-and-secret/reason-empty",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "",
+    "prompt_risk_classes": [
+     "local_env_read",
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/bypass-and-secret/reason-null",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": null,
+    "prompt_risk_classes": [
+     "local_env_read",
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/bypass-and-secret/reason-missing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "prompt_risk_classes": [
+     "local_env_read",
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/other/reason-plain",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": [
+     "destructive_command"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard needs approval for this prompt."
+   }
+  },
+  {
+   "name": "sandbox-required/other/reason-punctuated",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": [
+     "destructive_command"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard blocked this prompt!"
+   }
+  },
+  {
+   "name": "sandbox-required/other/reason-question",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": [
+     "destructive_command"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Should Claude read secrets?"
+   }
+  },
+  {
+   "name": "sandbox-required/other/reason-padded",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": [
+     "destructive_command"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard flagged this prompt."
+   }
+  },
+  {
+   "name": "sandbox-required/other/reason-blank",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "   ",
+    "prompt_risk_classes": [
+     "destructive_command"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/other/reason-empty",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "",
+    "prompt_risk_classes": [
+     "destructive_command"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/other/reason-null",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": null,
+    "prompt_risk_classes": [
+     "destructive_command"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/other/reason-missing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "prompt_risk_classes": [
+     "destructive_command"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/odd-items/reason-plain",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": [
+     "",
+     "  ",
+     null,
+     3,
+     {
+      "class": "local_env_read"
+     },
+     " local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard needs approval for this prompt."
+   }
+  },
+  {
+   "name": "sandbox-required/odd-items/reason-punctuated",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": [
+     "",
+     "  ",
+     null,
+     3,
+     {
+      "class": "local_env_read"
+     },
+     " local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard blocked this prompt!"
+   }
+  },
+  {
+   "name": "sandbox-required/odd-items/reason-question",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": [
+     "",
+     "  ",
+     null,
+     3,
+     {
+      "class": "local_env_read"
+     },
+     " local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Should Claude read secrets?"
+   }
+  },
+  {
+   "name": "sandbox-required/odd-items/reason-padded",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": [
+     "",
+     "  ",
+     null,
+     3,
+     {
+      "class": "local_env_read"
+     },
+     " local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard flagged this prompt."
+   }
+  },
+  {
+   "name": "sandbox-required/odd-items/reason-blank",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "   ",
+    "prompt_risk_classes": [
+     "",
+     "  ",
+     null,
+     3,
+     {
+      "class": "local_env_read"
+     },
+     " local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/odd-items/reason-empty",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "",
+    "prompt_risk_classes": [
+     "",
+     "  ",
+     null,
+     3,
+     {
+      "class": "local_env_read"
+     },
+     " local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/odd-items/reason-null",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": null,
+    "prompt_risk_classes": [
+     "",
+     "  ",
+     null,
+     3,
+     {
+      "class": "local_env_read"
+     },
+     " local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/odd-items/reason-missing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "prompt_risk_classes": [
+     "",
+     "  ",
+     null,
+     3,
+     {
+      "class": "local_env_read"
+     },
+     " local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/not-a-list/reason-plain",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "Guard needs approval for this prompt",
+    "prompt_risk_classes": "local_env_read"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard needs approval for this prompt."
+   }
+  },
+  {
+   "name": "sandbox-required/not-a-list/reason-punctuated",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "Guard blocked this prompt!",
+    "prompt_risk_classes": "local_env_read"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard blocked this prompt!"
+   }
+  },
+  {
+   "name": "sandbox-required/not-a-list/reason-question",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "  Should Claude read secrets?  ",
+    "prompt_risk_classes": "local_env_read"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Should Claude read secrets?"
+   }
+  },
+  {
+   "name": "sandbox-required/not-a-list/reason-padded",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "\t Guard flagged this prompt \n",
+    "prompt_risk_classes": "local_env_read"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    },
+    "systemMessage": "Guard flagged this prompt."
+   }
+  },
+  {
+   "name": "sandbox-required/not-a-list/reason-blank",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "   ",
+    "prompt_risk_classes": "local_env_read"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/not-a-list/reason-empty",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "",
+    "prompt_risk_classes": "local_env_read"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/not-a-list/reason-null",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": null,
+    "prompt_risk_classes": "local_env_read"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/not-a-list/reason-missing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "prompt_risk_classes": "local_env_read"
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/no-classes/hook-output-existing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "Guard needs approval"
+   },
+   "response": {
+    "systemMessage": "Edge message",
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Edge context"
+    }
+   },
+   "expected": {
+    "systemMessage": "Guard needs approval.",
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Edge context"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/local-env/hook-output-existing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "Guard needs approval",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "systemMessage": "Edge message",
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Edge context"
+    }
+   },
+   "expected": {
+    "systemMessage": "Guard needs approval.",
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Edge context"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/bypass/hook-output-existing",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "Guard needs approval",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "systemMessage": "Edge message",
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Edge context"
+    }
+   },
+   "expected": {
+    "systemMessage": "Guard needs approval.",
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit",
+     "additionalContext": "Edge context"
+    }
+   }
+  },
+  {
+   "name": "sandbox-required/no-classes/hook-output-not-object",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "Guard needs approval"
+   },
+   "response": {
+    "hookSpecificOutput": "UserPromptSubmit",
+    "continue": true
+   },
+   "expected": {
+    "hookSpecificOutput": "UserPromptSubmit",
+    "continue": true,
+    "systemMessage": "Guard needs approval."
+   }
+  },
+  {
+   "name": "sandbox-required/local-env/hook-output-not-object",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "Guard needs approval",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": "UserPromptSubmit",
+    "continue": true
+   },
+   "expected": {
+    "hookSpecificOutput": "UserPromptSubmit",
+    "continue": true,
+    "systemMessage": "Guard needs approval."
+   }
+  },
+  {
+   "name": "sandbox-required/bypass/hook-output-not-object",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "Guard needs approval",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": "UserPromptSubmit",
+    "continue": true
+   },
+   "expected": {
+    "hookSpecificOutput": "UserPromptSubmit",
+    "continue": true,
+    "systemMessage": "Guard needs approval."
+   }
+  },
+  {
+   "name": "sandbox-required/no-classes/no-hook-output",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "Guard needs approval"
+   },
+   "response": {
+    "decision": "block",
+    "reason": "Edge reason"
+   },
+   "expected": {
+    "decision": "block",
+    "reason": "Edge reason",
+    "systemMessage": "Guard needs approval."
+   }
+  },
+  {
+   "name": "sandbox-required/local-env/no-hook-output",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "Guard needs approval",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "decision": "block",
+    "reason": "Edge reason"
+   },
+   "expected": {
+    "decision": "block",
+    "reason": "Edge reason",
+    "systemMessage": "Guard needs approval."
+   }
+  },
+  {
+   "name": "sandbox-required/bypass/no-hook-output",
+   "result": {
+    "decision": "block",
+    "minimum_action": "sandbox-required",
+    "reason": "Guard needs approval",
+    "prompt_risk_classes": [
+     "guard_bypass_intent"
+    ]
+   },
+   "response": {
+    "decision": "block",
+    "reason": "Edge reason"
+   },
+   "expected": {
+    "decision": "block",
+    "reason": "Edge reason",
+    "systemMessage": "Guard needs approval."
+   }
+  },
+  {
+   "name": "other-action/'allow'",
+   "result": {
+    "decision": "block",
+    "minimum_action": "allow",
+    "reason": "Reason",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "other-action/'warn'",
+   "result": {
+    "decision": "block",
+    "minimum_action": "warn",
+    "reason": "Reason",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "other-action/'review'",
+   "result": {
+    "decision": "block",
+    "minimum_action": "review",
+    "reason": "Reason",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "other-action/''",
+   "result": {
+    "decision": "block",
+    "minimum_action": "",
+    "reason": "Reason",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "other-action/None",
+   "result": {
+    "decision": "block",
+    "minimum_action": null,
+    "reason": "Reason",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  },
+  {
+   "name": "other-action/3",
+   "result": {
+    "decision": "block",
+    "minimum_action": 3,
+    "reason": "Reason",
+    "prompt_risk_classes": [
+     "local_env_read"
+    ]
+   },
+   "response": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   },
+   "expected": {
+    "hookSpecificOutput": {
+     "hookEventName": "UserPromptSubmit"
+    }
+   }
+  }
+ ]
+}

@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 from ..version import __version__
-from .inventory_contract_fingerprints import _stable_snapshot_value, fingerprint_mapping, fingerprint_text
+from .inventory_contract_fingerprints import fingerprint_mapping, fingerprint_text
 from .inventory_contract_mcp import (
     _apply_tool_trust_attestation_metadata,
     _attestation_path_hash,
@@ -21,84 +22,96 @@ from .inventory_contract_mcp import (
 from .inventory_contract_metadata import (
     _aibom_trust_metadata_module,
     _apply_aibom_metadata_enrichment,
-    _apply_source_of_truth_metadata,
-    _bind_skill_document_evidence,
-    _capabilities_for_artifact,
-    _discard_unverified_skill_directory_hash,
     _inventory_item_description_module,
-    _item_kind,
-    _primary_artifact_content_hash,
-    _resolve_item_content_hash,
-    _risk_level,
 )
-from .inventory_contract_models import GuardAgentInventoryItem
+from .inventory_contract_models import (
+    GuardAgentInventoryItem,
+    InventoryCapability,
+    InventoryItemKind,
+    InventorySeverity,
+)
 from .inventory_contract_redaction import _redact_command_value, _safe_artifact_metadata, redact_url
-from .skill_directory_identity import validated_complete_skill_directory_hash
+from .native_inventory_item_classification import InventoryItemClassificationUnavailableError
 
 
-def _item_from_artifact(
+def _artifact_classification_entry(
     harness: str,
     artifact: object,
     *,
     generated_at: str,
     home_dir: Path,
     workspace_dir: Path | None,
+    source_evidence: Mapping[str, object],
     cisco_runs: tuple[object, ...] = (),
-    include_symlinks: bool = True,
-    follow_unsafe_symlinks: bool = False,
-    trust_attestation_context: Mapping[str, object] | None = None,
-) -> GuardAgentInventoryItem:
-    """Convert a native artifact into an inventory item with source and trust metadata."""
+) -> dict[str, object]:
+    """Assemble what the resident needs to classify one native artifact.
+
+    ``source_evidence`` is the resident's first answer about this artifact:
+    the kind its type maps onto, the instruction role an overlay's configured
+    path names, the source of truth behind a symlinked config path, and the
+    hash of its primary document. The two filesystem readings are not derived
+    here, and neither is the kind or the role.
+
+    The result doubles as the classification request entry, so the caller can
+    hand the whole artifact set over in one call.
+    """
     artifact_id = str(getattr(artifact, "artifact_id", "artifact"))
     artifact_type = str(getattr(artifact, "artifact_type", "unknown"))
     name = str(getattr(artifact, "name", artifact_id))
+    item_kind_value = source_evidence.get("item_kind")
+    if not isinstance(item_kind_value, str) or not item_kind_value:
+        raise InventoryItemClassificationUnavailableError
     safe_metadata = _safe_artifact_metadata(artifact, home_dir=home_dir, workspace_dir=workspace_dir)
-    item_kind = _item_kind(artifact_type)
+    instruction_role = source_evidence.get("instruction_role")
     safe_metadata = _apply_aibom_metadata_enrichment(
         artifact,
         captured_at=generated_at,
-        item_kind=item_kind,
+        item_kind=cast("InventoryItemKind", item_kind_value),
         metadata=safe_metadata,
         home_dir=home_dir,
         workspace_dir=workspace_dir,
+        instruction_role=instruction_role if isinstance(instruction_role, str) else None,
         cisco_runs=cisco_runs,
     )
-    if include_symlinks:
-        safe_metadata = _apply_source_of_truth_metadata(
-            artifact,
-            harness=harness,
-            item_kind=item_kind,
-            metadata=safe_metadata,
-            home_dir=home_dir,
-            workspace_dir=workspace_dir,
-            follow_unsafe_symlinks=follow_unsafe_symlinks,
-        )
-    primary_content_hash = _primary_artifact_content_hash(
-        artifact,
-        artifact_type=artifact_type,
-        home_dir=home_dir,
-        workspace_dir=workspace_dir,
-    )
-    if artifact_type == "skill":
-        safe_metadata = _bind_skill_document_evidence(
-            safe_metadata,
-            primary_content_hash=primary_content_hash,
-        )
-        safe_metadata = _discard_unverified_skill_directory_hash(safe_metadata)
-    semantic_text = fingerprint_mapping(
-        {
-            "artifact_id": artifact_id,
-            "artifact_type": artifact_type,
-            "name": name,
-            "metadata": _stable_snapshot_value(safe_metadata),
-        }
-    )
-    if artifact_type == "skill":
-        content_hash = validated_complete_skill_directory_hash(safe_metadata) or primary_content_hash or semantic_text
-    elif artifact_type == "instruction":
-        content_hash = primary_content_hash or semantic_text
-    else:
-        content_hash = _resolve_item_content_hash(safe_metadata, semantic_text)
+    source_of_truth = source_evidence.get("source_of_truth")
+    if isinstance(source_of_truth, dict):
+        safe_metadata = {**safe_metadata, "sourceOfTruth": source_of_truth}
+    primary_hash_value = source_evidence.get("primary_content_hash")
+    entry: dict[str, object] = {
+        "harness": harness,
+        "artifact_id": artifact_id,
+        "artifact_type": artifact_type,
+        "name": name,
+        "metadata": safe_metadata,
+    }
+    if isinstance(primary_hash_value, str) and primary_hash_value:
+        entry["primary_content_hash"] = primary_hash_value
+    return entry
+
+
+def _item_from_artifact(
+    harness: str,
+    artifact: object,
+    *,
+    home_dir: Path,
+    workspace_dir: Path | None,
+    entry: Mapping[str, object],
+    classification: Mapping[str, object],
+    trust_attestation_context: Mapping[str, object] | None = None,
+) -> GuardAgentInventoryItem:
+    """Convert a classified native artifact into an inventory item.
+
+    ``entry`` is what ``_artifact_classification_entry`` assembled and
+    ``classification`` is the resident's answer for it. The item's kind,
+    capabilities, risk level and content hash are read from that answer, and
+    the metadata it publishes is this item's own mapping with the edits the
+    answer asked for, so the key order the scan built survives.
+    """
+    artifact_id = str(entry.get("artifact_id", "artifact"))
+    name = str(entry.get("name", artifact_id))
+    item_kind = cast("InventoryItemKind", classification["item_kind"])
+    content_hash = str(classification["content_hash"])
+    safe_metadata = _classified_metadata(entry, classification)
     from .runtime.trust_attestation import (
         GuardTrustAttestationSigningConfig,
         apply_trust_attestation_metadata,
@@ -195,11 +208,28 @@ def _item_from_artifact(
         description=description,
         source_fingerprint=fingerprint_mapping({"harness": harness, "artifact_id": artifact_id}),
         content_hash=content_hash,
-        capability_categories=_capabilities_for_artifact(artifact_type, safe_metadata),
-        risk_level=_risk_level(safe_metadata),
+        capability_categories=tuple(cast("Sequence[InventoryCapability]", classification["capability_categories"])),
+        risk_level=cast("InventorySeverity", classification["risk_level"]),
         scanner_sources=("hol-detector",),
         metadata=safe_metadata,
     )
+
+
+def _classified_metadata(
+    entry: Mapping[str, object],
+    classification: Mapping[str, object],
+) -> dict[str, object]:
+    """Apply the resident's metadata edits to this item's own mapping.
+
+    The resident answers with the keys to drop and the keys to write rather
+    than a rewritten mapping, so an item that was not changed keeps the exact
+    mapping the scan built, in the order it built it.
+    """
+    metadata = dict(cast("Mapping[str, object]", entry.get("metadata", {})))
+    for key in cast("Sequence[str]", classification.get("metadata_removals", ())):
+        metadata.pop(key, None)
+    metadata.update(cast("Mapping[str, object]", classification.get("metadata_updates", {})))
+    return metadata
 
 
 def _mcp_tool_items_from_artifact(

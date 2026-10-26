@@ -8,18 +8,21 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import local_supply_chain as local_supply_chain_module
+from codex_plugin_scanner.guard import supply_chain_cloud_audit as cloud_audit_module
 from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.daemon import server as daemon_server
 from codex_plugin_scanner.guard.local_supply_chain import (
+    evaluate_package_request_artifact,
+    managed_install_audit_workspace_dirs,
+)
+from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.supply_chain_workspace_audit import (
     audit_receipt_metadata,
     build_workspace_audit_payload,
-    managed_install_audit_workspace_dirs,
     resolve_supply_chain_audit_workspace_dir,
 )
-from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
-from codex_plugin_scanner.guard.store import GuardStore
+from tests.daemon_control_patching import patch_daemon_global
+from tests.native_workspace import bind_workspace
 from tests.test_guard_headless_daemon_api import (
     _dashboard_token_for,
     _read_json_response,
@@ -96,7 +99,7 @@ def _audit_payload_for_workspace(
     store = GuardStore(home_dir)
     _seed_premium_entitlement(store)
     if monkeypatch is not None:
-        monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+        bind_workspace(store, WORKSPACE_ID)
         store.cache_supply_chain_bundle(
             WORKSPACE_ID,
             _bundle_response(
@@ -439,7 +442,7 @@ def test_daemon_workspace_audit_uses_managed_install_workspace_when_cwd_is_not_a
     store.set_managed_install("codex", True, str(workspace_dir), {}, WORKSPACE_AUDIT_NOW)
     _seed_premium_entitlement(store)
     monkeypatch.setattr(
-        local_supply_chain_module,
+        cloud_audit_module,
         "_run_cloud_workspace_audit",
         lambda **_kwargs: (None, {"code": "cloud_timeout", "message": "Cloud unavailable."}),
     )
@@ -550,7 +553,7 @@ def test_workspace_audit_lockfile_evaluation_preserves_dependency_path_and_fix_v
         ),
     )
     store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    bind_workspace(store, WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         _bundle_response(
@@ -601,7 +604,7 @@ def test_daemon_workspace_audit_persists_receipt_and_queues_cloud_sync(
     store = GuardStore(tmp_path / "guard-home")
     _seed_premium_entitlement(store)
     monkeypatch.setattr(
-        local_supply_chain_module,
+        cloud_audit_module,
         "_run_cloud_workspace_audit",
         lambda **_kwargs: (None, {"code": "cloud_timeout", "message": "Cloud unavailable."}),
     )
@@ -618,7 +621,7 @@ def test_daemon_workspace_audit_persists_receipt_and_queues_cloud_sync(
         sync_finished.set()
         return {"synced_at": WORKSPACE_AUDIT_NOW, "receipts_stored": 1}
 
-    monkeypatch.setattr(daemon_server, "sync_local_guard_cloud_proof", fake_sync_local_guard_cloud_proof, raising=False)
+    patch_daemon_global(monkeypatch, "sync_local_guard_cloud_proof", fake_sync_local_guard_cloud_proof, raising=False)
     monkeypatch.chdir(workspace_dir)
 
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
@@ -703,7 +706,7 @@ def test_daemon_workspace_audit_accepts_an_explicit_project_folder(
     store = GuardStore(tmp_path / "guard-home")
     _seed_premium_entitlement(store)
     monkeypatch.setattr(
-        local_supply_chain_module,
+        cloud_audit_module,
         "_run_cloud_workspace_audit",
         lambda **_kwargs: (None, {"code": "cloud_timeout", "message": "Cloud unavailable."}),
     )
@@ -870,20 +873,6 @@ def test_audit_receipt_metadata_includes_full_package_inventory() -> None:
     assert isinstance(findings, list)
     assert len(findings) == 1
     assert findings[0]["name"] == "risky-lib"
-
-
-def test_workspace_files_discovers_nested_manifests(tmp_path: Path) -> None:
-    workspace_dir = tmp_path / "workspace"
-    nested = workspace_dir / "dashboard"
-    nested.mkdir(parents=True)
-    _write_text(nested / "package.json", '{"name":"dashboard","dependencies":{}}')
-    _write_text(workspace_dir / "pyproject.toml", "[project]\nname = 'root'\n")
-
-    manifest_paths, lockfile_paths = local_supply_chain_module._workspace_files(workspace_dir)
-
-    assert "pyproject.toml" in manifest_paths
-    assert "dashboard/package.json" in manifest_paths
-    assert lockfile_paths == ()
 
 
 def test_workspace_audit_without_inventory_marks_incomplete_and_sync_required(

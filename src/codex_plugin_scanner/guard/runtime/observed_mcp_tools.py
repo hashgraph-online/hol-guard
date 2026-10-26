@@ -7,16 +7,20 @@ endpoint. Catalog discovery never grants authority or invents a launch command.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from hashlib import sha256
 from typing import TYPE_CHECKING
 
+from ..adapters.contracts import display_name_for
+from ..local_cli_errors import LocalCliCatalogLimitError
 from ..native_policy_snapshot_codec import _normalized_harness_selector_v3
-from ..native_policy_snapshot_constants import POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS
-from .local_cli_commands import MAX_LOCAL_CLI_COMMANDS, OTHER_COMMAND_ID, LocalCliCommand
+from ..native_policy_snapshot_constants import POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS, NativePolicySnapshotError
+from ..store_local_cli_retention import LocalCliReplaySkippedError, later_timestamp
+from .local_cli_commands import MAX_LOCAL_CLI_COMMANDS, LocalCliCommand
 from .local_cli_identity import UnlistedCliIdentity
 from .mcp_protection import McpServerIdentity, build_mcp_server_identity
+from .time_support import parse_utc_timestamp
 
 if TYPE_CHECKING:
     from ..store import GuardStore
@@ -26,6 +30,10 @@ MAX_OBSERVED_MCP_RECEIPTS = 2000
 MAX_OBSERVED_MCP_SERVERS = 40
 MAX_OBSERVED_MCP_TOOLS = min(128, MAX_LOCAL_CLI_COMMANDS - 1)
 _TOKEN = re.compile(r"[A-Za-z0-9_.-]{1,120}\Z")
+# Oh My Pi joins server and tool with one underscore after turning the
+# server's dashes into underscores, so the boundary is only recoverable from
+# the servers the harness is configured with.
+_FLATTENED_NAME_HARNESSES = frozenset({"omp"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,8 +70,17 @@ class ObservedMcpTool:
         )
 
 
-def observed_mcp_tool(harness: object, tool_name: object) -> ObservedMcpTool | None:
-    """Parse a fully qualified MCP name; retain the connector boundary."""
+def observed_mcp_tool(
+    harness: object,
+    tool_name: object,
+    configured_servers: Sequence[str] = (),
+) -> ObservedMcpTool | None:
+    """Parse a fully qualified MCP name; retain the connector boundary.
+
+    ``configured_servers`` names the servers configured on ``harness``. Only a
+    harness that flattens ``mcp__<server>_<tool>`` consults it, and a name that
+    matches none of them is parsed as any other, never guessed at.
+    """
 
     if not isinstance(harness, str) or not isinstance(tool_name, str):
         return None
@@ -74,6 +91,12 @@ def observed_mcp_tool(harness: object, tool_name: object) -> ObservedMcpTool | N
     if canonical_harness is None:
         return None
     harness = canonical_harness
+    # A `__` after the server is the boundary every harness marks itself, so it
+    # keeps its established parse; only an unmarked name needs the servers.
+    if harness in _FLATTENED_NAME_HARNESSES and "__" not in tool_name[5:]:
+        flattened = _flattened_tool(harness, tool_name, configured_servers)
+        if flattened is not None:
+            return flattened
     parts = tool_name[5:].split("__")
     if len(parts) < 2 or any(not _TOKEN.fullmatch(part) for part in parts):
         return None
@@ -97,29 +120,108 @@ def observed_mcp_tool(harness: object, tool_name: object) -> ObservedMcpTool | N
     )
 
 
-def tools_from_receipts(receipts: Sequence[Mapping[str, object]]) -> tuple[ObservedMcpTool, ...]:
-    """Read only the tool label and harness from a bounded receipt batch."""
+def _flattened_tool(harness: str, tool_name: str, configured_servers: Sequence[str]) -> ObservedMcpTool | None:
+    rest = tool_name[5:]
+    owners: dict[str, set[str]] = {}
+    for name in configured_servers:
+        if _TOKEN.fullmatch(name):
+            owners.setdefault(name.replace("-", "_"), set()).add(name)
+    # Names that flatten alike (`foo-bar`, `foo_bar`) cannot be told apart from
+    # a call, so neither owns it.
+    candidates = sorted(
+        ((flat, next(iter(names))) for flat, names in owners.items() if len(names) == 1 and not flat.endswith("_")),
+        key=lambda pair: (-len(pair[0]), pair[0]),
+    )
+    for flat, name in candidates:
+        name_part = rest[len(flat) + 1 :]
+        # An empty or underscore-led remainder is not a tool name here.
+        if not rest.startswith(flat + "_") or not name_part or name_part.startswith("_"):
+            continue
+        # The namespace keeps the configured spelling, as a configured remote
+        # server's does, so both resolve to one connector.
+        namespace = "mcp__" + name + "__"
+        if len(name_part) > 120 or len(namespace) > 155 or not _TOKEN.fullmatch(name_part):
+            continue
+        return ObservedMcpTool(
+            harness=harness,
+            namespace=namespace,
+            name=name_part,
+            qualified_name=tool_name,
+            server_name=name,
+        )
+    return None
 
-    tools: dict[tuple[str, str], ObservedMcpTool] = {}
+
+def _receipt_tools(
+    receipts: Sequence[Mapping[str, object]],
+    configured_servers: Mapping[str, Sequence[str]],
+) -> Iterator[tuple[ObservedMcpTool, Mapping[str, object]]]:
     for receipt in receipts[:MAX_OBSERVED_MCP_RECEIPTS]:
         label = receipt.get("raw_command_text")
         label = label[5:] if isinstance(label, str) and label.startswith("tool:") else receipt.get("artifact_name")
-        tool = observed_mcp_tool(receipt.get("harness"), label)
+        harness = receipt.get("harness")
+        canonical = _normalized_harness_selector_v3(harness.strip().lower()) if isinstance(harness, str) else None
+        tool = observed_mcp_tool(harness, label, configured_servers.get(canonical or "", ()))
         if tool is not None:
-            tools[(tool.harness, tool.qualified_name)] = tool
+            yield tool, receipt
+
+
+def tools_from_receipts(
+    receipts: Sequence[Mapping[str, object]],
+    configured_servers: Mapping[str, Sequence[str]] | None = None,
+) -> tuple[ObservedMcpTool, ...]:
+    """Read only the tool label and harness from a bounded receipt batch."""
+
+    tools: dict[tuple[str, str], ObservedMcpTool] = {}
+    for tool, _receipt in _receipt_tools(receipts, configured_servers or {}):
+        tools[(tool.harness, tool.qualified_name)] = tool
     return tuple(tools.values())
 
 
-def discover_observed_mcp_tools(store: GuardStore, *, seen_at: str) -> None:
-    """Backfill connector suggestions. Existing grants and tool states survive."""
+def _latest_seen_by_connector(
+    batches: Sequence[tuple[Sequence[Mapping[str, object]], tuple[str, ...]]],
+    configured_servers: Mapping[str, Sequence[str]],
+) -> dict[tuple[str, str], str]:
+    """Return the newest history timestamp for each harness connector."""
 
+    latest: dict[tuple[str, str], str] = {}
+    for records, time_keys in batches:
+        for tool, record in _receipt_tools(records, configured_servers):
+            # A retried request refreshes last_seen_at, not created_at.
+            stamp = next((value for key in time_keys if (value := record.get(key))), None)
+            if isinstance(stamp, str) and parse_utc_timestamp(stamp) is not None:
+                key = (tool.harness, tool.namespace)
+                latest[key] = later_timestamp(latest.get(key), stamp)
+    return latest
+
+
+def discover_observed_mcp_tools(
+    store: GuardStore,
+    *,
+    seen_at: str,
+    configured_servers: Mapping[str, Sequence[str]] | None = None,
+) -> int:
+    """Backfill connector suggestions. Existing grants and tool states survive.
+
+    ``configured_servers`` maps a harness to the server names it is configured
+    with, for harnesses whose tool names do not mark where the server ends.
+    """
+
+    configured = configured_servers or {}
     groups: dict[tuple[str, str], list[ObservedMcpTool]] = {}
     # Native receipts deliberately omit tool names. Paused native requests
     # retain the display label, so they are also a discovery source; resolving
     # a request must not make its connector disappear from the picker.
-    records = store.list_approval_requests(status=None, limit=MAX_OBSERVED_MCP_RECEIPTS)
-    observed = tools_from_receipts(records) + tools_from_receipts(
-        store.list_receipts(limit=MAX_OBSERVED_MCP_RECEIPTS),
+    # The resident projects both histories to the tool label, the harness and
+    # the timestamps parsed below. Reading whole approval rows and whole
+    # receipts here encoded a long history past the native response cap, and
+    # the scan failed rather than discovering connectors.
+    records, receipts = store.observed_mcp_history(limit=MAX_OBSERVED_MCP_RECEIPTS)
+    observed = tools_from_receipts(records, configured) + tools_from_receipts(receipts, configured)
+    # Replay records each connector at its own history time, so it can age
+    # out and stays forgotten until the harness uses it again.
+    latest_seen = _latest_seen_by_connector(
+        ((records, ("last_seen_at", "created_at")), (receipts, ("timestamp",))), configured
     )
     for tool in observed:
         key = (tool.harness, tool.namespace)
@@ -128,17 +230,24 @@ def discover_observed_mcp_tools(store: GuardStore, *, seen_at: str) -> None:
         group = groups.setdefault(key, [])
         if tool not in group and len(group) < MAX_OBSERVED_MCP_TOOLS:
             group.append(tool)
-    for tools in groups.values():
+    saturated = 0
+    for key, tools in groups.items():
         first = tools[0]
         server = first.server_identity
-        cli_id = store.ensure_local_mcp_observation(
-            first.identity,
-            seen_at=seen_at,
-            server_identity_hash=server.identity_hash,
-            server_command=server.command,
-            server_args_hash=server.args_hash,
-            source_label=f"{first.harness.title()} · observed tools",
-        )
+        history_seen_at = latest_seen.get(key, seen_at)
+        try:
+            cli_id = store.ensure_local_mcp_observation(
+                first.identity,
+                seen_at=history_seen_at,
+                replayed=True,
+                replay_now=seen_at,
+                server_identity_hash=server.identity_hash,
+                server_command=server.command,
+                server_args_hash=server.args_hash,
+                source_label=f"{display_name_for(first.harness)} · observed tools",
+            )
+        except LocalCliReplaySkippedError:
+            continue
         catalog = [
             LocalCliCommand(
                 command_id=tool.command_id,
@@ -150,58 +259,25 @@ def discover_observed_mcp_tools(store: GuardStore, *, seen_at: str) -> None:
         ]
         # There is no allow-all fallback for an observed connector. Its catalog
         # is incomplete; unseen tools must retain their normal review.
-        store.merge_local_cli_commands(cli_id, catalog, limit=MAX_OBSERVED_MCP_TOOLS)
+        try:
+            store.merge_local_cli_commands(cli_id, catalog, limit=MAX_OBSERVED_MCP_TOOLS)
+        except LocalCliCatalogLimitError:
+            # Keep this connector's prior choices, continue other connectors,
+            # and let the caller report incomplete coverage.
+            saturated += 1
+            continue
+    return saturated
 
 
 def native_observed_mcp_tool_actions(store: GuardStore) -> dict[str, str]:
     """Compile exact operator choices into the authenticated native policy.
 
     Only catalogued tools can be allowed. The fallback may block new tools,
-    but cannot grant permission to tools the operator has never seen.
+    but cannot grant permission to tools the operator has never seen. The
+    guard store resident reads the grants and compiles the selectors.
     """
 
-    actions: dict[str, str] = {}
-    for item in store.list_local_cli_items():
-        if item.get("surface") != "mcp" or item.get("stale") is True:
-            continue
-        cli_id = item.get("cli_id")
-        if not isinstance(cli_id, str):
-            continue
-        observation = store.find_local_mcp_observation(cli_id=cli_id)
-        marker = observation.get("server_command") if observation is not None else None
-        if not isinstance(marker, str) or not marker.startswith(OBSERVED_MCP_PREFIX):
-            continue
-        harness, separator, namespace = marker[len(OBSERVED_MCP_PREFIX) :].partition(":")
-        if not separator:
-            continue
-        example = observed_mcp_tool(harness, namespace + "probe")
-        if example is None or example.namespace != namespace:
-            continue
-        server = example.server_identity
-        if item.get("identity_hash") != server.identity_hash:
-            continue
-        grant = store.read_local_mcp_grant(server.identity_hash)
-        if grant is None:
-            continue
-        if grant.get("state") == "blocked":
-            actions[f"{harness}:{namespace}*"] = "block"
-            continue
-        states = grant.get("command_states")
-        commands = grant.get("commands")
-        if not isinstance(states, Mapping) or not isinstance(commands, list):
-            continue
-        if states.get(OTHER_COMMAND_ID) == "block":
-            actions[f"{harness}:{namespace}*"] = "block"
-        for command in commands:
-            if not isinstance(command, LocalCliCommand) or command.command_id == OTHER_COMMAND_ID:
-                continue
-            tool = observed_mcp_tool(harness, command.usage)
-            if tool is None or tool.namespace != namespace or tool.command_id != command.command_id:
-                continue
-            state = states.get(command.command_id)
-            if state in {"allow", "block"}:
-                actions[f"{harness}:{tool.qualified_name}"] = str(state)
-    return bound_native_mcp_tool_actions(actions)
+    return bound_native_mcp_tool_actions(store.read_observed_mcp_tool_actions())
 
 
 def bound_native_mcp_tool_actions(
@@ -209,12 +285,15 @@ def bound_native_mcp_tool_actions(
     *,
     required_blocks: frozenset[str] = frozenset(),
 ) -> dict[str, str]:
-    """Keep configured restrictions, then namespace blocks, tool blocks and allows."""
+    """Retain every restriction; reject capacity that would discard a floor."""
+
+    if sum(action in {"block", "review"} for action in actions.values()) > POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS:
+        raise NativePolicySnapshotError("native_mcp_permission_capacity_exceeded")
 
     ordered = sorted(
         actions,
         key=lambda key: (
-            actions[key] != "block",
+            actions[key] not in {"block", "review"},
             key not in required_blocks,
             not key.endswith("*"),
             key,

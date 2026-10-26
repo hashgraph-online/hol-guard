@@ -17,19 +17,7 @@ SignalFamily = Literal[
 ]
 EvidenceSource = Literal["artifact", "prompt", "history", "cloud"]
 TransportKind = Literal["local", "remote", "hybrid"]
-ProvenanceSourceKind = Literal["none", "self-declared", "signed", "attested", "curated"]
-PublisherTrust = Literal["unknown", "known-good", "revoked", "flagged"]
 GuardVerdictAction = Literal["allow", "warn", "block", "require_reapproval", "sandbox_required"]
-CapabilityDeltaType = Literal[
-    "new_network_host",
-    "publisher_changed",
-    "transport_changed",
-    "secret_scope_expanded",
-    "filesystem_scope_expanded",
-    "subprocess_added",
-    "approval_surface_changed",
-    "interpreter_changed",
-]
 ReviewPriority = Literal["low", "medium", "high", "critical"]
 PromptRequestClass = Literal[
     "secret_read",
@@ -89,49 +77,6 @@ class CapabilitySet:
 
 
 @dataclass(frozen=True, slots=True)
-class CapabilityDelta:
-    """Semantic change in artifact capability between two versions."""
-
-    delta_type: CapabilityDeltaType
-    before: str | None
-    after: str | None
-    severity: int
-    explanation: str
-
-    def to_dict(self) -> dict[str, object]:
-        return asdict(self)
-
-
-@dataclass(frozen=True, slots=True)
-class ProvenanceBundle:
-    """Publisher and attestation context used to enrich local decisions."""
-
-    source_kind: ProvenanceSourceKind = "none"
-    publisher_trust: PublisherTrust = "unknown"
-    signature_verified: bool = False
-    attestation_verified: bool = False
-    evidence_refs: tuple[str, ...] = ()
-
-    def to_dict(self) -> dict[str, object]:
-        return asdict(self)
-
-
-@dataclass(frozen=True, slots=True)
-class HistoryContext:
-    """Prior local history for an artifact and publisher."""
-
-    first_seen_at: str | None = None
-    last_seen_at: str | None = None
-    prior_approvals: int = 0
-    prior_incidents: int = 0
-    prior_blocks: int = 0
-    publisher_trust: PublisherTrust = "unknown"
-
-    def to_dict(self) -> dict[str, object]:
-        return asdict(self)
-
-
-@dataclass(frozen=True, slots=True)
 class RemediationAction:
     """Suggested next step attached to a verdict."""
 
@@ -158,25 +103,4 @@ class PromptRequest:
     def to_dict(self) -> dict[str, object]:
         payload = asdict(self)
         payload["remediation"] = [item.to_dict() for item in self.remediation]
-        return payload
-
-
-@dataclass(frozen=True, slots=True)
-class GuardVerdict:
-    """Final explainable decision prior to scoped policy override."""
-
-    action: GuardVerdictAction
-    severity: int
-    confidence: float
-    reasons: tuple[str, ...]
-    recommended_next_actions: tuple[str, ...]
-    suppressible: bool
-    review_priority: ReviewPriority
-    evidence_sources: tuple[EvidenceSource, ...]
-    provenance_state: ProvenanceSourceKind
-    capability_delta: tuple[CapabilityDelta, ...] = ()
-
-    def to_dict(self) -> dict[str, object]:
-        payload = asdict(self)
-        payload["capability_delta"] = [item.to_dict() for item in self.capability_delta]
         return payload

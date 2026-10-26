@@ -162,15 +162,18 @@ function resolveRememberSentence(policy: GuardPolicyDecision, commandLabel: stri
   const app = harnessDisplayName(policy.harness);
   const folder = policy.workspace_label?.trim() || resolveWorkspaceLabel(policy.workspace);
   const verb = policy.action === "block" ? "block" : "allow";
+  // Exact commands can run to tens of kilobytes; the row quotes the start
+  // and the inspector carries the full text.
+  const label = commandLabel.length > 140 ? `${commandLabel.slice(0, 137).trimEnd()}…` : commandLabel;
 
   if (policy.scope === "artifact") {
-    return `Guard will ${verb} "${commandLabel}" the next time ${app} retries this exact action.`;
+    return `Guard will ${verb} "${label}" the next time ${app} retries this exact action.`;
   }
   if (policy.scope === "workspace") {
-    return `Guard will ${verb} "${commandLabel}" every time ${app} runs it in ${folder}.`;
+    return `Guard will ${verb} "${label}" every time ${app} runs it in ${folder}.`;
   }
   if (policy.scope === "harness") {
-    return `Guard will ${verb} "${commandLabel}" every time ${app} runs a matching action.`;
+    return `Guard will ${verb} "${label}" every time ${app} runs a matching action.`;
   }
   if (policy.scope === "publisher") {
     const publisher = policy.publisher?.trim() || "this publisher";
@@ -264,6 +267,28 @@ function resolveProjectLabel(policy: GuardPolicyDecision): string | null {
     return null;
   }
   return resolveWorkspaceLabel(workspace);
+}
+
+/**
+ * The exact action text the user approved, when the decision carries it.
+ * Only artifact-scoped rules bind one exact action; broader scopes inherit the
+ * newest family command, which is an example rather than the rule's binding.
+ * A command that equals the rule's own reason is the source-context reason
+ * fallback — descriptive text, not an action.
+ */
+export function resolveExactApprovedAction(policy: GuardPolicyDecision): string | null {
+  if (policy.scope !== "artifact") {
+    return null;
+  }
+  const command = policy.remembered_command?.trim();
+  if (
+    !command ||
+    isScannerGeneratedPolicyLabel(command) ||
+    command === policy.reason?.trim()
+  ) {
+    return null;
+  }
+  return command;
 }
 
 export function resolvePolicyDisplay(policy: GuardPolicyDecision): PolicyDisplay {

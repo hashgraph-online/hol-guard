@@ -8,11 +8,6 @@ from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     risk_classes_for_command_action,
 )
-from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
-from codex_plugin_scanner.guard.runtime.command_structured_matchers import (
-    LeadingOperandCountMatcher,
-    OptionValueKeyMatcher,
-)
 from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     CONTROL_SCHEMA_VERSION,
     ControlLayerKind,
@@ -191,7 +186,10 @@ def test_remote_rules_feed_runtime_hooks(tmp_path: Path) -> None:
         tmp_path,
     )
     for command in native_floor_cases:
-        assert real_native_command_evaluation(command, cwd=tmp_path).evaluation.minimum_action == "block"
+        # RSYNC_RSH steers the remote shell exactly like `rsync -e`, so it never
+        # runs silently: it stops at the remote-shell rule's review or stricter.
+        action = real_native_command_evaluation(command, cwd=tmp_path).evaluation.minimum_action
+        assert action in {"review", "block"}, command
 
 
 def _essh_control_layer(state: ControlState) -> ExtensionControlLayer:
@@ -311,7 +309,9 @@ REMOTE_SAFE_COMMANDS: tuple[str, ...] = (
 
 def test_remote_observer_and_preview_commands_remain_safe(tmp_path: Path) -> None:
     upload_cases = tuple(command for command in REMOTE_SAFE_COMMANDS if command.startswith(("scp ", "rsync ")))
-    assert_safe_command_cases(tuple(command for command in REMOTE_SAFE_COMMANDS if command not in upload_cases), tmp_path)
+    assert_safe_command_cases(
+        tuple(command for command in REMOTE_SAFE_COMMANDS if command not in upload_cases), tmp_path
+    )
     for command in upload_cases:
         assert real_native_command_evaluation(command, cwd=tmp_path).evaluation.minimum_action in {"review", "block"}
 
@@ -338,43 +338,6 @@ def test_remote_extensions_publish_official_references() -> None:
         assert extension is not None
         assert extension.reference_urls
         assert all(url.startswith("https://") for url in extension.reference_urls)
-
-
-def test_leading_operand_matcher_consumes_separate_long_option_value(tmp_path: Path) -> None:
-    matcher = LeadingOperandCountMatcher(
-        executables=frozenset({"remote-admin"}),
-        minimum_operands=2,
-        options_with_values=frozenset({"--profile"}),
-    )
-    command = parse_shell_command("remote-admin --profile production delete item", cwd=tmp_path, home_dir=tmp_path)
-
-    assert matcher.match(command)
-
-
-def test_leading_operand_matcher_parses_numeric_clustered_flags(tmp_path: Path) -> None:
-    matcher = LeadingOperandCountMatcher(
-        executables=frozenset({"remote-admin"}),
-        minimum_operands=2,
-        forbidden_flags=frozenset({"-N"}),
-    )
-    command = parse_shell_command("remote-admin -4N host action", cwd=tmp_path, home_dir=tmp_path)
-
-    assert matcher.match(command) == ()
-
-
-def test_option_key_matcher_prefers_longest_overlapping_option(tmp_path: Path) -> None:
-    matcher = OptionValueKeyMatcher(
-        executables=frozenset({"remote-admin"}),
-        option_names=frozenset({"-o", "-option"}),
-        value_keys=frozenset({"proxycommand"}),
-    )
-    command = parse_shell_command(
-        "remote-admin -optionProxyCommand='sh -c id' host",
-        cwd=tmp_path,
-        home_dir=tmp_path,
-    )
-
-    assert matcher.match(command)
 
 
 def test_remote_execution_actions_publish_risk_classes() -> None:
@@ -404,40 +367,3 @@ def test_rsync_option_values_cannot_forge_dry_run(tmp_path: Path) -> None:
 
         assert payload["status"] == "review", command
         assert payload["controlling_rule_id"] == "command.remote.rsync.deletion", command
-
-
-def test_leading_subcommand_matcher_ignores_interleaved_options_by_default(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.runtime.command_database_matchers import LeadingSubcommandMatcher
-
-    strict = LeadingSubcommandMatcher(
-        executables=frozenset({"remote-admin"}),
-        subcommands=("hosts", "remove"),
-        options_with_values=frozenset({"--theme"}),
-    )
-    tolerant = LeadingSubcommandMatcher(
-        executables=frozenset({"remote-admin"}),
-        subcommands=("hosts", "remove"),
-        options_with_values=frozenset({"--theme"}),
-        interleaved_options_with_values=frozenset({"--theme"}),
-    )
-    interleaved = parse_shell_command("remote-admin hosts --theme dark remove web-1", cwd=tmp_path, home_dir=tmp_path)
-    plain = parse_shell_command("remote-admin hosts remove web-1", cwd=tmp_path, home_dir=tmp_path)
-
-    assert strict.match(interleaved) == ()
-    assert tolerant.match(interleaved)
-    assert strict.match(plain)
-    assert tolerant.match(plain)
-
-
-def test_leading_subcommand_matcher_exit_flags_stop_before_delimiter(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.runtime.command_database_matchers import LeadingSubcommandMatcher
-
-    matcher = LeadingSubcommandMatcher(
-        executables=frozenset({"remote-admin"}),
-        subcommands=("run",),
-        forbidden_flags_before_delimiter=frozenset({"-h", "--help"}),
-    )
-    for exiting in ("remote-admin --help run web", "remote-admin run --help", "remote-admin -h run"):
-        assert matcher.match(parse_shell_command(exiting, cwd=tmp_path, home_dir=tmp_path)) == (), exiting
-    for executing in ("remote-admin run web -- --help", "remote-admin run web -- uptime"):
-        assert matcher.match(parse_shell_command(executing, cwd=tmp_path, home_dir=tmp_path)), executing

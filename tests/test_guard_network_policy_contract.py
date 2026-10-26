@@ -14,7 +14,6 @@ from codex_plugin_scanner.guard.runtime.network_policy_contract import (
     EnforcementGrade,
     FailureMode,
     NetworkAction,
-    NetworkEvidence,
     NetworkFlowRequest,
     NetworkPolicy,
     NetworkProtocol,
@@ -205,36 +204,6 @@ def test_backend_advertisement_is_versioned_and_bounded() -> None:
             capabilities=frozenset({BackendCapability.DENY_ALL}),
             maximum_grade=EnforcementGrade.DESTINATION_ENFORCED,
             healthy_until_epoch_ms=100,
-        )
-
-
-def test_evidence_rejects_raw_destination() -> None:
-    evidence = NetworkEvidence(
-        flow_id="flow.alpha",
-        process_tree_digest=_DIGEST,
-        destination_digest=_DIGEST,
-        protocol=NetworkProtocol.TCP,
-        port=443,
-        action=NetworkAction.DENY,
-        policy_digest=_DIGEST,
-        backend_digest=_DIGEST,
-        grade=EnforcementGrade.DESTINATION_ENFORCED,
-        observed_at_epoch_ms=1,
-    )
-    assert evidence.raw_destination is None
-    with pytest.raises(ValueError, match="separate opt-in"):
-        NetworkEvidence(
-            flow_id="flow.alpha",
-            process_tree_digest=_DIGEST,
-            destination_digest=_DIGEST,
-            protocol=NetworkProtocol.TCP,
-            port=443,
-            action=NetworkAction.DENY,
-            policy_digest=_DIGEST,
-            backend_digest=_DIGEST,
-            grade=EnforcementGrade.DESTINATION_ENFORCED,
-            observed_at_epoch_ms=1,
-            raw_destination="api.example.com",
         )
 
 

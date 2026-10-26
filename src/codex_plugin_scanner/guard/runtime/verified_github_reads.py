@@ -19,28 +19,9 @@ from typing import IO, Final, cast
 from ..mdm.contracts import ManagedNetworkPolicy
 from ..mdm.network import active_network_policy, managed_opener
 from ..mdm.network_urlopen import ManagedOpener
-from .effect_contract import (
-    ContainmentRequirement,
-    DecisionBasis,
-    EffectAssessment,
-    EffectBlastRadius,
-    EffectConfidence,
-    EffectEvidenceSource,
-    EffectKind,
-    EffectReversibility,
-    EffectTargetScope,
-    ProofRequirement,
-    ProofRoute,
-)
-from .effect_decision import (
-    DecisionFactor,
-    DecisionFactorSource,
-    EffectDecision,
-    EffectDecisionRequest,
-    FinalDisposition,
-    PositiveProof,
-    evaluate_effect_decision,
-)
+from ..native_verified_read_decision import NativeVerifiedReadDecisionError, github_public_read_decision
+from .effect_contract import ProofRequirement, ProofRoute
+from .effect_decision import EffectDecision, FinalDisposition, PositiveProof
 from .verified_read_common import verified_read_digest
 from .verified_read_execution import VERIFIED_READ_POLICY_VERSION
 
@@ -134,7 +115,10 @@ def try_read_verified_public_github_pull_request(
         pull_payload=pull_payload,
         stdout=stdout,
     )
-    decision = _decision(proof)
+    try:
+        decision = _decision(proof)
+    except NativeVerifiedReadDecisionError:
+        return None
     if decision.disposition is not FinalDisposition.SILENT_VERIFIED:
         return None
     return VerifiedGitHubReadResult(stdout, proof, decision)
@@ -274,29 +258,15 @@ def _proof(
 
 
 def _decision(proof: PositiveProof) -> EffectDecision:
-    factors = tuple(
-        DecisionFactor(
-            source=DecisionFactorSource.EFFECT,
-            reason_code=f"verified-{kind.value}",
-            basis=DecisionBasis("allow", ProofRoute.VERIFIED),
-            operation_ref="operation:github-public-pull-request-view",
-            producer_ref="executor:verified-github-read-v1",
-            evidence_digest=proof.binding_digest,
-            assessment=EffectAssessment(
-                kind,
-                EffectTargetScope.REMOTE_RESOURCE,
-                EffectReversibility.REVERSIBLE,
-                EffectBlastRadius.SINGLE_RESOURCE,
-                EffectEvidenceSource.RUNTIME,
-                EffectConfidence.EXACT,
-                ContainmentRequirement.NONE,
-                _REQUIREMENTS,
-            ),
-            proof=proof,
-        )
-        for kind in (EffectKind.NETWORK_READ, EffectKind.REMOTE_STATE_READ)
-    )
-    return evaluate_effect_decision(EffectDecisionRequest(factors=factors))
+    """Ask the resident whether this proven public read may run silently.
+
+    Both effect factors and the operation they name are fixed by the executor
+    that produced the proof, so only the binding digest crosses. Composing the
+    decision here as well would be a second place a verified read can be
+    declared allowed.
+    """
+
+    return github_public_read_decision(binding_digest=proof.binding_digest)
 
 
 def _source_digest() -> str:

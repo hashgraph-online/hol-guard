@@ -1,0 +1,1 @@
+"""Internal cursor adapter helpers."""

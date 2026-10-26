@@ -2,7 +2,8 @@
 
 For changes under `contributions/command-sources/`,
 `tests/fixtures/command-source-*.v1.json`, or
-`contracts/extensions/trust-class-map.v1.json`, verify that:
+`contracts/extensions/trust/*.v1.json` (per-extension trust bindings), verify
+that:
 
 - the source, fixture, external trust mapping, generated descriptor, native
   program, catalog, and package-resource updates identify the same extension;

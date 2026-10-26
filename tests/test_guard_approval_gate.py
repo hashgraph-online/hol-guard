@@ -54,8 +54,11 @@ from codex_plugin_scanner.guard.runtime.self_approval import _AGENT_ENV_MARKERS
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.totp import TotpSecretStore, _temporary_atomic_path, totp_code_at_counter
 from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
+from tests.native_permission_plan_stub import answer_persist_plans
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
 from tests.support.network import stub_authenticated_urlopen
+
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
 
 @pytest.fixture(autouse=True)
@@ -131,6 +134,11 @@ def _trust_local_policy_rows(monkeypatch: pytest.MonkeyPatch) -> None:
         return PolicyIntegrityVerificationResult(status="valid")
 
     monkeypatch.setattr(GuardStore, "_policy_integrity_result_for_row", _valid_policy_row)
+    monkeypatch.setattr(
+        GuardStore,
+        "_policy_integrity_results_for_rows",
+        lambda self, rows, **_: [PolicyIntegrityVerificationResult(status="valid") for _ in rows],
+    )
 
 
 def _enable_gate(store: GuardStore, *, cooldown_seconds: int = 0, strict_all_decisions: bool = False) -> None:
@@ -527,6 +535,45 @@ def test_approval_gate_cooldown_works_expires_and_revokes(tmp_path: Path) -> Non
     with pytest.raises(ApprovalGateError) as revoked:
         _approve(store, "req-cooldown-revoked", now="2026-04-11T00:16:03+00:00")
     assert revoked.value.code == "approval_gate_required"
+
+
+def test_approval_gate_cooldown_reuse_expires_at_exact_boundary(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    _enable_gate(store, cooldown_seconds=900)
+
+    first = require_approval_decision(
+        store.guard_home,
+        action="allow",
+        scope="artifact",
+        subject="cooldown-start",
+        approval_gate_input=ApprovalGateInput(password=PASSWORD, use_cooldown=True),
+        now="2026-04-11T00:00:00+00:00",
+    )
+    assert first is not None
+    assert first.password_verified is True
+    assert first.used_cooldown is False
+
+    before_boundary = require_approval_decision(
+        store.guard_home,
+        action="allow",
+        scope="artifact",
+        subject="cooldown-before-boundary",
+        approval_gate_input=None,
+        now="2026-04-11T00:14:59+00:00",
+    )
+    assert before_boundary is not None
+    assert before_boundary.used_cooldown is True
+
+    with pytest.raises(ApprovalGateError) as expired:
+        require_approval_decision(
+            store.guard_home,
+            action="allow",
+            scope="artifact",
+            subject="cooldown-at-boundary",
+            approval_gate_input=None,
+            now="2026-04-11T00:15:00+00:00",
+        )
+    assert expired.value.code == "approval_gate_required"
 
 
 def test_approval_gate_cooldown_opt_out_does_not_start_session(tmp_path: Path) -> None:
@@ -1889,7 +1936,7 @@ def test_approval_gate_allow_once_requires_password_prompt(tmp_path: Path, monke
     _enable_gate(store)
     prompt_calls = 0
 
-    def _approval_gate_input(_guard_home: Path) -> ApprovalGateInput:
+    def _approval_gate_input(_guard_home: Path, **_kwargs: object) -> ApprovalGateInput:
         nonlocal prompt_calls
         prompt_calls += 1
         return ApprovalGateInput(password=PASSWORD)
@@ -2075,7 +2122,10 @@ def test_approval_gate_runtime_mcp_remembered_inline_allow_queues_fallback(
     assert store.list_policy_decisions("codex") == []
 
 
-def test_approval_gate_native_permission_persistence_cannot_bypass(tmp_path: Path) -> None:
+def test_approval_gate_native_permission_persistence_cannot_bypass(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    answer_persist_plans(monkeypatch)
     store = _store(tmp_path)
     _enable_gate(store)
 
@@ -2092,7 +2142,10 @@ def test_approval_gate_native_permission_persistence_cannot_bypass(tmp_path: Pat
     assert store.list_policy_decisions("claude-code") == []
 
 
-def test_approval_gate_native_permission_failure_queues_guard_fallback(tmp_path: Path) -> None:
+def test_approval_gate_native_permission_failure_queues_guard_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    answer_persist_plans(monkeypatch)
     store = _store(tmp_path)
     _enable_gate(store)
     artifact = GuardArtifact(

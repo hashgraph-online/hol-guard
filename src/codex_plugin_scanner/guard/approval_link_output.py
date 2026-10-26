@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from contextlib import suppress
 from pathlib import Path
-from typing import TextIO
 
 from .approval_hook_copy import (
     _SIGNED_APPROVAL_LINK_UNAVAILABLE,
@@ -14,32 +11,6 @@ from .approval_hook_copy import (
     is_loopback_approval_url,
     with_approval_review_url,
 )
-
-
-def open_authenticated_approval_link(
-    review_url: str | None,
-    *,
-    guard_home: Path | None,
-    authenticate: Callable[..., str | None],
-    unavailable_message: str,
-    open_browser: Callable[[str], object],
-    output_stream: TextIO,
-) -> None:
-    """Print and open an approval link only after local authentication."""
-
-    if not review_url:
-        return
-    browser_url = authenticate(review_url, guard_home=guard_home)
-    if browser_url is None:
-        print(unavailable_message, file=output_stream, flush=True)
-        return
-    print(
-        f"HOL Guard is waiting for approval in your browser: {browser_url}",
-        file=output_stream,
-        flush=True,
-    )
-    with suppress(Exception):
-        open_browser(browser_url)
 
 
 def native_review_reason(
@@ -65,4 +36,6 @@ def native_review_reason(
     return f"{stripped_reason} Open HOL Guard to approve or keep this blocked: {signed_url}."
 
 
-__all__ = ["native_review_reason", "open_authenticated_approval_link"]
+__all__ = [
+    "native_review_reason",
+]

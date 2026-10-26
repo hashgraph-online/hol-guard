@@ -207,9 +207,7 @@ def test_truthy_or_effective_safe_variants_remain_quiet(command: str, tmp_path: 
 
 
 def test_container_argument_named_help_remains_runtime_execution(tmp_path: Path) -> None:
-    evaluation = real_native_command_evaluation(
-        "docker run alpine --help", cwd=tmp_path, home_dir=tmp_path
-    ).evaluation
+    evaluation = real_native_command_evaluation("docker run alpine --help", cwd=tmp_path, home_dir=tmp_path).evaluation
 
     assert evaluation.matched
     assert evaluation.controlling_action_class == "docker-sensitive command"

@@ -65,8 +65,9 @@ POLICY_AUTHORITY = Path("rust/crates/guard-runtime/src/policy_store_authority.rs
 RESIDENT_PROTOCOL = Path("rust/crates/guard-runtime/src/resident_protocol.rs")
 MANAGED_RESIDENT = Path("rust/crates/guard-runtime/src/managed_resident.rs")
 MANAGED_OWNER_LOCK = Path("rust/crates/guard-runtime/src/managed_resident_owner_lock.rs")
-WORKFLOW = Path(".github/workflows/rust-authority-ownership.yml")
+WORKFLOW = Path(".github/actions/ci-job-quality/action.yml")
 PUBLISH_WORKFLOW = Path(".github/workflows/publish.yml")
+RELEASE_WHEEL_WORKFLOW = Path(".github/workflows/release-native-wheel.yml")
 ENROLLMENT_DOC = Path("docs/guard/native-approval-enrollment.md")
 
 OBSOLETE_FILES: Final = (
@@ -323,14 +324,17 @@ def _check_release_root(root: Path, *, require_environment: bool) -> None:
 def _check_ownership_contract(root: Path) -> None:
     workflow = _read(root / WORKFLOW)
     if "native_approval_contract_gate.py" not in workflow:
-        raise RuntimeError("Rust authority workflow does not run the approval-specific gate")
+        raise RuntimeError("required quality job does not run the approval-specific gate")
     if "--root ." not in workflow:
         raise RuntimeError("approval gate invocation is not rooted at the checkout")
     publish = _read(root / PUBLISH_WORKFLOW)
-    if "--require-release-root" not in publish:
+    if "uses: ./" + RELEASE_WHEEL_WORKFLOW.as_posix() not in publish:
+        raise RuntimeError("release workflow does not invoke the native wheel workflow")
+    wheel = _read(root / RELEASE_WHEEL_WORKFLOW)
+    if "--require-release-root" not in wheel:
         raise RuntimeError("release workflow does not gate the external approval enrollment root")
     for name in ("HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX", "HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX"):
-        if name not in publish:
+        if name not in wheel:
             raise RuntimeError(f"release workflow does not pass the pinned enrollment root: {name}")
     managed = _read(root / MANAGED_RESIDENT)
     owner_lock = _read(root / MANAGED_OWNER_LOCK)

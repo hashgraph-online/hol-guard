@@ -1,0 +1,2071 @@
+[
+ {
+  "fn": "split_namespace_name",
+  "input": "@scope/pkg",
+  "output": [
+   "@scope",
+   "pkg"
+  ]
+ },
+ {
+  "fn": "split_namespace_name",
+  "input": "@scope/sub/pkg",
+  "output": [
+   "@scope",
+   "sub/pkg"
+  ]
+ },
+ {
+  "fn": "split_namespace_name",
+  "input": "plain-pkg",
+  "output": [
+   null,
+   "plain-pkg"
+  ]
+ },
+ {
+  "fn": "split_namespace_name",
+  "input": "  @sp/pkg  ",
+  "output": [
+   "@sp",
+   "pkg"
+  ]
+ },
+ {
+  "fn": "split_namespace_name",
+  "input": "@noslash",
+  "output": [
+   null,
+   "@noslash"
+  ]
+ },
+ {
+  "fn": "split_namespace_name",
+  "input": "@/",
+  "output": [
+   "@",
+   ""
+  ]
+ },
+ {
+  "fn": "split_namespace_name",
+  "input": "\u001c@a/b\u001f",
+  "output": [
+   "@a",
+   "b"
+  ]
+ },
+ {
+  "fn": "split_namespace_name",
+  "input": "@scope/",
+  "output": [
+   "@scope",
+   ""
+  ]
+ },
+ {
+  "fn": "split_namespace_name",
+  "input": "",
+  "output": [
+   null,
+   ""
+  ]
+ },
+ {
+  "fn": "split_namespace_name",
+  "input": "  ",
+  "output": [
+   null,
+   ""
+  ]
+ },
+ {
+  "fn": "split_namespace_name",
+  "input": "a/b/c",
+  "output": [
+   null,
+   "a/b/c"
+  ]
+ },
+ {
+  "fn": "split_namespace_name",
+  "input": "@scope\\back",
+  "output": [
+   null,
+   "@scope\\back"
+  ]
+ },
+ {
+  "fn": "inventory_from_purl",
+  "input": "pkg:npm/%40scope/name@1.2.3",
+  "output": {
+   "ecosystem": "npm",
+   "name": "name",
+   "namespace": "@scope",
+   "version": "1.2.3"
+  }
+ },
+ {
+  "fn": "inventory_from_purl",
+  "input": "pkg:maven/org.g/a@1.0?x=y#z",
+  "output": {
+   "ecosystem": "maven",
+   "name": "a",
+   "namespace": "org.g",
+   "version": "1.0"
+  }
+ },
+ {
+  "fn": "inventory_from_purl",
+  "input": "pkg:deb/debian/curl@7.0",
+  "output": null
+ },
+ {
+  "fn": "inventory_from_purl",
+  "input": "pkg:npm/@scope/name",
+  "output": null
+ },
+ {
+  "fn": "inventory_from_purl",
+  "input": "pkg:npm/name",
+  "output": {
+   "ecosystem": "npm",
+   "name": "name",
+   "namespace": null,
+   "version": null
+  }
+ },
+ {
+  "fn": "inventory_from_purl",
+  "input": "pkg:npm/name@",
+  "output": {
+   "ecosystem": "npm",
+   "name": "name",
+   "namespace": null,
+   "version": null
+  }
+ },
+ {
+  "fn": "inventory_from_purl",
+  "input": "pkg:npm/name@",
+  "output": {
+   "ecosystem": "npm",
+   "name": "name",
+   "namespace": null,
+   "version": null
+  }
+ },
+ {
+  "fn": "inventory_from_purl",
+  "input": "pkg:pypi/",
+  "output": null
+ },
+ {
+  "fn": "inventory_from_purl",
+  "input": "notpkg:npm/a",
+  "output": null
+ },
+ {
+  "fn": "inventory_from_purl",
+  "input": "pkg:npm//a@1",
+  "output": {
+   "ecosystem": "npm",
+   "name": "a",
+   "namespace": null,
+   "version": "1"
+  }
+ },
+ {
+  "fn": "inventory_from_purl",
+  "input": "pkg:golang/github.com/x/y@v1.2.3",
+  "output": {
+   "ecosystem": "go",
+   "name": "y",
+   "namespace": "github.com/x",
+   "version": "v1.2.3"
+  }
+ },
+ {
+  "fn": "inventory_from_purl",
+  "input": "pkg:gem/rails%20x@1",
+  "output": {
+   "ecosystem": "rubygems",
+   "name": "rails x",
+   "namespace": null,
+   "version": "1"
+  }
+ },
+ {
+  "fn": "inventory_from_purl",
+  "input": "pkg:cargo/serde@%C3%A9",
+  "output": {
+   "ecosystem": "cargo",
+   "name": "serde",
+   "namespace": null,
+   "version": "\u00e9"
+  }
+ },
+ {
+  "fn": "inventory_from_purl",
+  "input": "pkg:npm/a%ZZ",
+  "output": {
+   "ecosystem": "npm",
+   "name": "a%ZZ",
+   "namespace": null,
+   "version": null
+  }
+ },
+ {
+  "fn": "inventory_from_purl",
+  "input": "PKG:npm/a",
+  "output": null
+ },
+ {
+  "fn": "inventory_from_purl",
+  "input": "pkg:composer/vendor/pkg@2.0",
+  "output": {
+   "ecosystem": "packagist",
+   "name": "pkg",
+   "namespace": "vendor",
+   "version": "2.0"
+  }
+ },
+ {
+  "fn": "inventory_from_purl",
+  "input": "pkg:npm/@scope/name@1.0-beta+build",
+  "output": null
+ },
+ {
+  "fn": "inventory_from_purl",
+  "input": null,
+  "output": null
+ },
+ {
+  "fn": "inventory_from_purl",
+  "input": "",
+  "output": null
+ },
+ {
+  "fn": "merge_inventory_item",
+  "input": [
+   {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "a",
+    "namespace": "@s",
+    "range": "^1",
+    "version": null
+   },
+   {
+    "direct": false,
+    "ecosystem": "npm",
+    "name": "a",
+    "namespace": "@s",
+    "range": null,
+    "version": "1.2.3"
+   }
+  ],
+  "output": [
+   {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "a",
+    "namespace": "@s",
+    "range": "^1",
+    "version": "1.2.3"
+   }
+  ]
+ },
+ {
+  "fn": "merge_inventory_item",
+  "input": [
+   {
+    "direct": false,
+    "ecosystem": "npm",
+    "name": "b",
+    "namespace": null,
+    "range": null,
+    "version": "2.0"
+   },
+   {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "a",
+    "namespace": "@s",
+    "range": "^1",
+    "version": null
+   },
+   {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "b",
+    "namespace": null,
+    "range": "~2",
+    "version": null
+   }
+  ],
+  "output": [
+   {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "b",
+    "namespace": null,
+    "range": "~2",
+    "version": "2.0"
+   },
+   {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "a",
+    "namespace": "@s",
+    "range": "^1",
+    "version": null
+   }
+  ]
+ },
+ {
+  "fn": "merge_inventory_item",
+  "input": [
+   {
+    "direct": false,
+    "ecosystem": "pypi",
+    "name": "z",
+    "namespace": null,
+    "range": null,
+    "version": "1"
+   },
+   {
+    "direct": false,
+    "ecosystem": "npm",
+    "name": "z",
+    "namespace": null,
+    "range": null,
+    "version": "1"
+   },
+   {
+    "direct": false,
+    "ecosystem": "pypi",
+    "name": "z",
+    "namespace": "ns",
+    "range": null,
+    "version": "9"
+   }
+  ],
+  "output": [
+   {
+    "direct": false,
+    "ecosystem": "pypi",
+    "name": "z",
+    "namespace": null,
+    "range": null,
+    "version": "1"
+   },
+   {
+    "direct": false,
+    "ecosystem": "npm",
+    "name": "z",
+    "namespace": null,
+    "range": null,
+    "version": "1"
+   },
+   {
+    "direct": false,
+    "ecosystem": "pypi",
+    "name": "z",
+    "namespace": "ns",
+    "range": null,
+    "version": "9"
+   }
+  ]
+ },
+ {
+  "fn": "merge_inventory_item",
+  "input": [
+   {
+    "direct": 1,
+    "ecosystem": "npm",
+    "name": "c",
+    "namespace": null,
+    "range": 5,
+    "version": false
+   },
+   {
+    "direct": "",
+    "ecosystem": "npm",
+    "name": "c",
+    "namespace": null,
+    "range": "^9",
+    "version": "3"
+   }
+  ],
+  "output": [
+   {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "c",
+    "namespace": null,
+    "range": 5,
+    "version": false
+   }
+  ]
+ },
+ {
+  "fn": "merge_inventory_item",
+  "input": [
+   {
+    "direct": 0,
+    "ecosystem": "npm",
+    "name": "d",
+    "namespace": null,
+    "range": null,
+    "version": null
+   }
+  ],
+  "output": [
+   {
+    "direct": false,
+    "ecosystem": "npm",
+    "name": "d",
+    "namespace": null,
+    "range": null,
+    "version": null
+   }
+  ]
+ },
+ {
+  "fn": "inventory_key",
+  "input": {
+   "ecosystem": "npm",
+   "name": "a",
+   "namespace": "@s"
+  },
+  "output": [
+   "npm",
+   "@s",
+   "a"
+  ]
+ },
+ {
+  "fn": "inventory_key",
+  "input": {
+   "ecosystem": "npm",
+   "name": "a",
+   "namespace": 5
+  },
+  "output": [
+   "npm",
+   null,
+   "a"
+  ]
+ },
+ {
+  "fn": "inventory_key",
+  "input": {
+   "ecosystem": "npm",
+   "name": "a",
+   "namespace": null
+  },
+  "output": [
+   "npm",
+   null,
+   "a"
+  ]
+ },
+ {
+  "fn": "inventory_key",
+  "input": {
+   "ecosystem": "npm",
+   "name": "a"
+  },
+  "output": [
+   "npm",
+   null,
+   "a"
+  ]
+ },
+ {
+  "fn": "inventory_key",
+  "input": {
+   "ecosystem": "npm",
+   "name": "a",
+   "namespace": "  "
+  },
+  "output": [
+   "npm",
+   "  ",
+   "a"
+  ]
+ },
+ {
+  "fn": "inventory_item_from_sbom_component",
+  "input": {
+   "name": "left-pad",
+   "purl": null,
+   "version": "1.0"
+  },
+  "output": {
+   "direct": false,
+   "ecosystem": "unsupported",
+   "name": "left-pad",
+   "namespace": null,
+   "range": null,
+   "version": "1.0"
+  }
+ },
+ {
+  "fn": "inventory_item_from_sbom_component",
+  "input": {
+   "name": "x",
+   "purl": "pkg:npm/@s/x@2.0",
+   "version": "1.0"
+  },
+  "output": {
+   "direct": false,
+   "ecosystem": "unsupported",
+   "name": "x",
+   "namespace": null,
+   "range": null,
+   "version": "1.0"
+  }
+ },
+ {
+  "fn": "inventory_item_from_sbom_component",
+  "input": {
+   "name": null,
+   "purl": "pkg:npm/y@1",
+   "version": null
+  },
+  "output": {
+   "direct": false,
+   "ecosystem": "npm",
+   "name": "y",
+   "namespace": null,
+   "range": null,
+   "version": "1"
+  }
+ },
+ {
+  "fn": "inventory_item_from_sbom_component",
+  "input": {
+   "name": 5,
+   "purl": null,
+   "version": null
+  },
+  "output": null
+ },
+ {
+  "fn": "inventory_item_from_sbom_component",
+  "input": {
+   "name": "  ",
+   "purl": null,
+   "version": null
+  },
+  "output": null
+ },
+ {
+  "fn": "inventory_item_from_sbom_component",
+  "input": {
+   "name": "n",
+   "purl": null,
+   "version": "   "
+  },
+  "output": {
+   "direct": false,
+   "ecosystem": "unsupported",
+   "name": "n",
+   "namespace": null,
+   "range": null,
+   "version": ""
+  }
+ },
+ {
+  "fn": "inventory_item_from_sbom_component",
+  "input": {
+   "name": "n",
+   "purl": null,
+   "version": 7
+  },
+  "output": {
+   "direct": false,
+   "ecosystem": "unsupported",
+   "name": "n",
+   "namespace": null,
+   "range": null,
+   "version": null
+  }
+ },
+ {
+  "fn": "inventory_item_from_sbom_component",
+  "input": {
+   "name": "n",
+   "purl": "pkg:deb/x@1",
+   "version": "1"
+  },
+  "output": {
+   "direct": false,
+   "ecosystem": "unsupported",
+   "name": "n",
+   "namespace": null,
+   "range": null,
+   "version": "1"
+  }
+ },
+ {
+  "fn": "inventory_item_from_sbom_component",
+  "input": {
+   "name": "n",
+   "purl": "bad",
+   "version": "1"
+  },
+  "output": {
+   "direct": false,
+   "ecosystem": "unsupported",
+   "name": "n",
+   "namespace": null,
+   "range": null,
+   "version": "1"
+  }
+ },
+ {
+  "fn": "inventory_item_from_sbom_component",
+  "input": {
+   "name": "\u001cn\u001f",
+   "purl": null,
+   "version": "\u001c1\u001f"
+  },
+  "output": {
+   "direct": false,
+   "ecosystem": "unsupported",
+   "name": "n",
+   "namespace": null,
+   "range": null,
+   "version": "1"
+  }
+ },
+ {
+  "fn": "inventory_item_from_sbom_component",
+  "input": {
+   "name": null,
+   "purl": null,
+   "version": null
+  },
+  "output": null
+ },
+ {
+  "fn": "inventory_item_from_sbom_component",
+  "input": {
+   "name": "p",
+   "purl": "pkg:maven/g/p@3",
+   "version": "9"
+  },
+  "output": {
+   "direct": false,
+   "ecosystem": "maven",
+   "name": "p",
+   "namespace": "g",
+   "range": null,
+   "version": "3"
+  }
+ },
+ {
+  "fn": "inventory_from_cyclonedx",
+  "input": {
+   "bomFormat": "CycloneDX",
+   "components": [
+    {
+     "name": "b",
+     "purl": "pkg:npm/b@2",
+     "version": "2"
+    },
+    {
+     "name": "a",
+     "purl": "pkg:npm/a@1",
+     "version": "1"
+    },
+    {
+     "name": "a",
+     "purl": "pkg:npm/a@1",
+     "version": "9"
+    },
+    "notdict",
+    {
+     "name": "nopurl",
+     "version": "3"
+    },
+    {
+     "name": null,
+     "purl": "pkg:pypi/zz@1"
+    },
+    {
+     "version": "5"
+    },
+    {
+     "name": "dup",
+     "purl": "pkg:npm/dup@1",
+     "version": "1"
+    },
+    {
+     "name": "dup",
+     "purl": "bad-purl",
+     "version": "2"
+    }
+   ]
+  },
+  "output": [
+   {
+    "direct": false,
+    "ecosystem": "npm",
+    "name": "b",
+    "namespace": null,
+    "range": null,
+    "version": "2"
+   },
+   {
+    "direct": false,
+    "ecosystem": "npm",
+    "name": "a",
+    "namespace": null,
+    "range": null,
+    "version": "1"
+   },
+   {
+    "direct": false,
+    "ecosystem": "unsupported",
+    "name": "nopurl",
+    "namespace": null,
+    "range": null,
+    "version": "3"
+   },
+   {
+    "direct": false,
+    "ecosystem": "pypi",
+    "name": "zz",
+    "namespace": null,
+    "range": null,
+    "version": "1"
+   },
+   {
+    "direct": false,
+    "ecosystem": "npm",
+    "name": "dup",
+    "namespace": null,
+    "range": null,
+    "version": "1"
+   },
+   {
+    "direct": false,
+    "ecosystem": "unsupported",
+    "name": "dup",
+    "namespace": null,
+    "range": null,
+    "version": "2"
+   }
+  ]
+ },
+ {
+  "fn": "inventory_from_cyclonedx",
+  "input": {
+   "bomFormat": "CycloneDX"
+  },
+  "output": []
+ },
+ {
+  "fn": "inventory_from_cyclonedx",
+  "input": {
+   "components": "nope"
+  },
+  "output": []
+ },
+ {
+  "fn": "inventory_from_spdx",
+  "input": {
+   "packages": [
+    {
+     "externalRefs": [
+      {
+       "referenceLocator": "pkg:npm/b@2",
+       "referenceType": "purl"
+      }
+     ],
+     "name": "b",
+     "versionInfo": "2"
+    },
+    {
+     "externalRefs": [
+      {
+       "referenceLocator": "x",
+       "referenceType": "OTHER"
+      },
+      {
+       "referenceLocator": "pkg:pypi/a@1",
+       "referenceType": "Purl"
+      }
+     ],
+     "name": "a",
+     "versionInfo": "1"
+    },
+    {
+     "externalRefs": [
+      {
+       "referenceLocator": "pkg:pypi/a@1",
+       "referenceType": "purl"
+      }
+     ],
+     "name": "a",
+     "versionInfo": "9"
+    },
+    {
+     "name": "norefs",
+     "versionInfo": "1"
+    },
+    {
+     "externalRefs": [
+      {
+       "referenceLocator": "",
+       "referenceType": "purl"
+      }
+     ],
+     "name": "emptyref"
+    },
+    {
+     "externalRefs": [
+      {
+       "referenceLocator": "pkg:deb/x@1",
+       "referenceType": "purl"
+      },
+      {
+       "referenceLocator": "pkg:npm/multi@2",
+       "referenceType": "purl"
+      }
+     ],
+     "name": "multi"
+    },
+    "notdict",
+    {
+     "externalRefs": [
+      {
+       "referenceLocator": "pkg:npm/z@1",
+       "referenceType": 5
+      },
+      {
+       "referenceLocator": 9,
+       "referenceType": "purl"
+      },
+      {
+       "referenceLocator": "pkg:maven/g/nonstr@1",
+       "referenceType": "purl"
+      }
+     ],
+     "name": "nonstrref"
+    }
+   ],
+   "spdxVersion": "SPDX-2.3"
+  },
+  "output": [
+   {
+    "direct": false,
+    "ecosystem": "npm",
+    "name": "b",
+    "namespace": null,
+    "range": null,
+    "version": "2"
+   },
+   {
+    "direct": false,
+    "ecosystem": "pypi",
+    "name": "a",
+    "namespace": null,
+    "range": null,
+    "version": "1"
+   },
+   {
+    "direct": false,
+    "ecosystem": "unsupported",
+    "name": "norefs",
+    "namespace": null,
+    "range": null,
+    "version": "1"
+   },
+   {
+    "direct": false,
+    "ecosystem": "unsupported",
+    "name": "emptyref",
+    "namespace": null,
+    "range": null,
+    "version": null
+   },
+   {
+    "direct": false,
+    "ecosystem": "unsupported",
+    "name": "multi",
+    "namespace": null,
+    "range": null,
+    "version": null
+   },
+   {
+    "direct": false,
+    "ecosystem": "maven",
+    "name": "nonstr",
+    "namespace": "g",
+    "range": null,
+    "version": "1"
+   }
+  ]
+ },
+ {
+  "fn": "inventory_from_spdx",
+  "input": {
+   "spdxVersion": "x"
+  },
+  "output": []
+ },
+ {
+  "fn": "inventory_from_sbom_text",
+  "input": {
+   "bomFormat": "CycloneDX",
+   "components": [
+    {
+     "name": "a",
+     "purl": "pkg:npm/a@1"
+    }
+   ]
+  },
+  "output": {
+   "ok": [
+    {
+     "direct": false,
+     "ecosystem": "npm",
+     "name": "a",
+     "namespace": null,
+     "range": null,
+     "version": "1"
+    }
+   ]
+  }
+ },
+ {
+  "fn": "inventory_from_sbom_text",
+  "input": {
+   "packages": [
+    {
+     "name": "s",
+     "versionInfo": "1"
+    }
+   ],
+   "spdxVersion": "SPDX-2.2"
+  },
+  "output": {
+   "ok": [
+    {
+     "direct": false,
+     "ecosystem": "unsupported",
+     "name": "s",
+     "namespace": null,
+     "range": null,
+     "version": "1"
+    }
+   ]
+  }
+ },
+ {
+  "fn": "inventory_from_sbom_text",
+  "input": {
+   "other": true
+  },
+  "output": {
+   "err": "Unsupported SBOM format"
+  }
+ },
+ {
+  "fn": "inventory_from_sbom_text",
+  "input": [
+   1,
+   2
+  ],
+  "output": {
+   "err": "SBOM payload must be an object"
+  }
+ },
+ {
+  "fn": "inventory_from_sbom_text",
+  "input": {
+   "bomFormat": "cyclonedx",
+   "packages": [
+    {
+     "name": "s"
+    }
+   ],
+   "spdxVersion": "SPDX-2.2"
+  },
+  "output": {
+   "ok": [
+    {
+     "direct": false,
+     "ecosystem": "unsupported",
+     "name": "s",
+     "namespace": null,
+     "range": null,
+     "version": null
+    }
+   ]
+  }
+ },
+ {
+  "fn": "inventory_from_sbom_text",
+  "input": {
+   "bomFormat": "CycloneDX",
+   "components": [
+    {
+     "name": "c"
+    }
+   ],
+   "packages": [
+    {
+     "name": "s"
+    }
+   ],
+   "spdxVersion": "x"
+  },
+  "output": {
+   "ok": [
+    {
+     "direct": false,
+     "ecosystem": "unsupported",
+     "name": "c",
+     "namespace": null,
+     "range": null,
+     "version": null
+    }
+   ]
+  }
+ },
+ {
+  "fn": "inventory_from_sbom_text",
+  "input": {
+   "bomFormat": "nope",
+   "spdxVersion": ""
+  },
+  "output": {
+   "err": "Unsupported SBOM format"
+  }
+ },
+ {
+  "fn": "inventory_from_sbom_text",
+  "input": {
+   "spdxVersion": 0
+  },
+  "output": {
+   "err": "Unsupported SBOM format"
+  }
+ },
+ {
+  "fn": "inventory_from_sbom_text",
+  "input": {
+   "spdxVersion": []
+  },
+  "output": {
+   "err": "Unsupported SBOM format"
+  }
+ },
+ {
+  "fn": "inventory_from_sbom_text",
+  "input": {
+   "bomFormat": "x",
+   "spdxVersion": null
+  },
+  "output": {
+   "err": "Unsupported SBOM format"
+  }
+ },
+ {
+  "fn": "target_from_inventory_item",
+  "input": {
+   "ecosystem": "npm",
+   "name": "a",
+   "namespace": "@s",
+   "range": null,
+   "version": "1.2.3"
+  },
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "npm",
+   "editable": false,
+   "extras": [],
+   "package_name": "@s/a",
+   "raw_spec": "@s/a@1.2.3",
+   "raw_spec_hash": "c7e5d9cab7ba8b18e8a94b028fff0d0fbf856c259e9ea01f6a5ca8f7b5a7e915",
+   "requested_specifier": "1.2.3",
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_from_inventory_item",
+  "input": {
+   "ecosystem": "npm",
+   "name": "a",
+   "namespace": "@s",
+   "range": "^1.0",
+   "version": null
+  },
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "npm",
+   "editable": false,
+   "extras": [],
+   "package_name": "@s/a",
+   "raw_spec": "@s/a@^1.0",
+   "raw_spec_hash": "554d04f8810898934e3c8cd66bb3d4843274fd1118b28a8b1b85123672c43ed0",
+   "requested_specifier": "^1.0",
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_from_inventory_item",
+  "input": {
+   "ecosystem": "npm",
+   "name": "a",
+   "namespace": null,
+   "range": null,
+   "version": null
+  },
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "npm",
+   "editable": false,
+   "extras": [],
+   "package_name": "a",
+   "raw_spec": "a",
+   "raw_spec_hash": "ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb",
+   "requested_specifier": null,
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_from_inventory_item",
+  "input": {
+   "ecosystem": "pypi",
+   "name": "b",
+   "namespace": null,
+   "range": null,
+   "version": "2.0"
+  },
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "pypi",
+   "editable": false,
+   "extras": [],
+   "package_name": "b2.0",
+   "raw_spec": "b2.0",
+   "raw_spec_hash": "d919065069f019fc0be7019194daa6951b50fc0c70476633cbf66af1a627095e",
+   "requested_specifier": null,
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_from_inventory_item",
+  "input": {
+   "ecosystem": "pypi",
+   "name": "b",
+   "namespace": null,
+   "range": ">=1",
+   "version": null
+  },
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "pypi",
+   "editable": false,
+   "extras": [],
+   "package_name": "b",
+   "raw_spec": "b>=1",
+   "raw_spec_hash": "a05fa91a138e1ba87888285e8f6cf754eda73e5f95739283fc2ef72f584ddb63",
+   "requested_specifier": ">=1",
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_from_inventory_item",
+  "input": {
+   "ecosystem": "maven",
+   "name": "c",
+   "namespace": "org.g",
+   "range": null,
+   "version": "3"
+  },
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "maven",
+   "editable": false,
+   "extras": [],
+   "package_name": "org.g/c:3",
+   "raw_spec": "org.g/c:3",
+   "raw_spec_hash": "a4c65a66cde65b981685286bd089ba22029cf1195556849e11316f60dd8a1f6e",
+   "requested_specifier": null,
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_from_inventory_item",
+  "input": {
+   "ecosystem": "maven",
+   "name": "c",
+   "namespace": "org.g",
+   "range": "[1,2)",
+   "version": null
+  },
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "maven",
+   "editable": false,
+   "extras": [],
+   "package_name": "org.g/c:[1,2)",
+   "raw_spec": "org.g/c:[1,2)",
+   "raw_spec_hash": "af1905299996a67efe3388283d9aa4743b9e33852cbe6eade8ed9a8b6c1ab137",
+   "requested_specifier": null,
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_from_inventory_item",
+  "input": {
+   "ecosystem": "packagist",
+   "name": "d",
+   "namespace": "ven",
+   "range": null,
+   "version": "4"
+  },
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "packagist",
+   "editable": false,
+   "extras": [],
+   "package_name": "ven/d",
+   "raw_spec": "ven/d:4",
+   "raw_spec_hash": "e91fc919acccf16942bed4f1c7da74873af2ff48ee519894b84f7c166a5d8335",
+   "requested_specifier": "4",
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_from_inventory_item",
+  "input": {
+   "ecosystem": "cargo",
+   "name": "e",
+   "namespace": null,
+   "range": null,
+   "version": "5"
+  },
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "cargo",
+   "editable": false,
+   "extras": [],
+   "package_name": "e",
+   "raw_spec": "e@5",
+   "raw_spec_hash": "3f213c8354347e961ad57c687def78a4730d2bdedaf10fd0eb3d2d5ba18111be",
+   "requested_specifier": "5",
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_from_inventory_item",
+  "input": {
+   "ecosystem": "cargo",
+   "name": "e",
+   "namespace": null,
+   "range": "^5",
+   "version": null
+  },
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "cargo",
+   "editable": false,
+   "extras": [],
+   "package_name": "e",
+   "raw_spec": "e@^5",
+   "raw_spec_hash": "23b5dcc0d827b4319a5719c0a87f79d8d061ceb9121f42aa820fbbcf6ec3d621",
+   "requested_specifier": "^5",
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_from_inventory_item",
+  "input": {
+   "ecosystem": "npm",
+   "name": "a",
+   "namespace": "@s",
+   "range": "r",
+   "version": 7
+  },
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "npm",
+   "editable": false,
+   "extras": [],
+   "package_name": "@s/a",
+   "raw_spec": "@s/a@r",
+   "raw_spec_hash": "c38122b847a721818f0dd922cd0e02c644a479b9ac9de64ad750aa12e2ff9c0d",
+   "requested_specifier": "r",
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_from_inventory_item",
+  "input": {
+   "ecosystem": "npm",
+   "name": "e",
+   "namespace": "",
+   "range": null,
+   "version": "1"
+  },
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "npm",
+   "editable": false,
+   "extras": [],
+   "package_name": "/e",
+   "raw_spec": "/e@1",
+   "raw_spec_hash": "2b413fbee366f868133c9a2ca597c376bb747560404d0361c250027739736128",
+   "requested_specifier": "1",
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_from_inventory_item",
+  "input": {
+   "ecosystem": "npm",
+   "name": "e",
+   "namespace": 5,
+   "range": null,
+   "version": "1"
+  },
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "npm",
+   "editable": false,
+   "extras": [],
+   "package_name": "e",
+   "raw_spec": "e@1",
+   "raw_spec_hash": "c65105c4bcb776fe44f1105649b2bb9f2a8c42dfb209f0d5dfc332bcc27f6acd",
+   "requested_specifier": "1",
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_from_manifest_dependency",
+  "input": [
+   "npm",
+   "lodash",
+   "4.17.21"
+  ],
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "npm",
+   "editable": false,
+   "extras": [],
+   "package_name": "lodash",
+   "raw_spec": "lodash@4.17.21",
+   "raw_spec_hash": "adaac4144887ebc2c1b682380ff385210f681fc58b4bc1ef3986148cf8dcd28a",
+   "requested_specifier": "4.17.21",
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_from_manifest_dependency",
+  "input": [
+   "npm",
+   " lodash ",
+   " "
+  ],
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "npm",
+   "editable": false,
+   "extras": [],
+   "package_name": "lodash",
+   "raw_spec": "lodash",
+   "raw_spec_hash": "94a755535d135f12850ccd5848d10cc7266bbcdb74ad22c7817228ce7abaa506",
+   "requested_specifier": null,
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_from_manifest_dependency",
+  "input": [
+   "npm",
+   "@s/p",
+   "^1"
+  ],
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "npm",
+   "editable": false,
+   "extras": [],
+   "package_name": "@s/p",
+   "raw_spec": "@s/p@^1",
+   "raw_spec_hash": "583ec815a3e4a0beb406c1df4ac42130ee121cba7360e85fdb3391a07dee98e9",
+   "requested_specifier": "^1",
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_from_manifest_dependency",
+  "input": [
+   "pypi",
+   "requests",
+   "2.0"
+  ],
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "pypi",
+   "editable": false,
+   "extras": [],
+   "package_name": "requests2.0",
+   "raw_spec": "requests2.0",
+   "raw_spec_hash": "92dee5149131890e9b1c0b7a158576d34d0530ea3546cc198b04bf307b4ad2fa",
+   "requested_specifier": null,
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_from_manifest_dependency",
+  "input": [
+   "pypi",
+   "flask",
+   ""
+  ],
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "pypi",
+   "editable": false,
+   "extras": [],
+   "package_name": "flask",
+   "raw_spec": "flask",
+   "raw_spec_hash": "b87aa5270772708aeaed24ad65681618c398f238e7b3bed393af852738243377",
+   "requested_specifier": null,
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_from_manifest_dependency",
+  "input": [
+   "pypi",
+   " django ",
+   " >=4 "
+  ],
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "pypi",
+   "editable": false,
+   "extras": [],
+   "package_name": "django",
+   "raw_spec": "django>=4",
+   "raw_spec_hash": "6593af0ddab802aa5138cf1cf92ba865ec417d4990a8dabd6494c480da26f8a2",
+   "requested_specifier": ">=4",
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_from_manifest_dependency",
+  "input": [
+   "maven",
+   "org.g:a",
+   "1.0"
+  ],
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "maven",
+   "editable": false,
+   "extras": [],
+   "package_name": "org.g:a",
+   "raw_spec": "org.g:a:1.0",
+   "raw_spec_hash": "4f68f031f4cb58b055be4a158e26cc6976396e0364b22af0a011f40c8df34aec",
+   "requested_specifier": "1.0",
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_from_manifest_dependency",
+  "input": [
+   "maven",
+   "g:b",
+   ""
+  ],
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "maven",
+   "editable": false,
+   "extras": [],
+   "package_name": "g:b",
+   "raw_spec": "g:b",
+   "raw_spec_hash": "b1b7c6e34bfbd33c55f17e97a8d857ec2fbfecda782cc1ea04686d09b51d347e",
+   "requested_specifier": null,
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_from_manifest_dependency",
+  "input": [
+   "packagist",
+   "vendor/pkg",
+   "2.0"
+  ],
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "packagist",
+   "editable": false,
+   "extras": [],
+   "package_name": "vendor/pkg",
+   "raw_spec": "vendor/pkg:2.0",
+   "raw_spec_hash": "b3910cfa5b1bef92feae331d94c4b1b2f63fac7553201cd3e9331403a4f215bf",
+   "requested_specifier": "2.0",
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_from_manifest_dependency",
+  "input": [
+   "packagist",
+   "v/p",
+   ""
+  ],
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "packagist",
+   "editable": false,
+   "extras": [],
+   "package_name": "v/p",
+   "raw_spec": "v/p",
+   "raw_spec_hash": "0513fff8dbeaece9b50a865b9a0d5907cfef0d3747d72715328ec95541c2fe48",
+   "requested_specifier": null,
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_from_manifest_dependency",
+  "input": [
+   "cargo",
+   "serde",
+   "1.0"
+  ],
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "cargo",
+   "editable": false,
+   "extras": [],
+   "package_name": "serde",
+   "raw_spec": "serde@1.0",
+   "raw_spec_hash": "bc2149445df3da13bbae0e797508a114ac4825536a939fed5230637061943081",
+   "requested_specifier": "1.0",
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_from_manifest_dependency",
+  "input": [
+   "cargo",
+   "tokio",
+   ""
+  ],
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "cargo",
+   "editable": false,
+   "extras": [],
+   "package_name": "tokio",
+   "raw_spec": "tokio",
+   "raw_spec_hash": "434de5e6a47f94752708362f575012e50855c5de6eb557564c9d7ae267b35e4c",
+   "requested_specifier": null,
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_from_manifest_dependency",
+  "input": [
+   "go",
+   "example.com/m",
+   "v1"
+  ],
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "go",
+   "editable": false,
+   "extras": [],
+   "package_name": "example.com/m",
+   "raw_spec": "example.com/m@v1",
+   "raw_spec_hash": "6b7af580054e4ceaa40e5a6295b6a6a45e4fcce5ab0ef167601e36cf919a1683",
+   "requested_specifier": "v1",
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_from_manifest_dependency",
+  "input": [
+   "rubygems",
+   "rails",
+   "7"
+  ],
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "rubygems",
+   "editable": false,
+   "extras": [],
+   "package_name": "rails",
+   "raw_spec": "rails@7",
+   "raw_spec_hash": "c0d28eb0b9227c6e0d2fe0d980fa7a3c3015e7c6338aad180c95c216269aaaa5",
+   "requested_specifier": "7",
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_from_manifest_dependency",
+  "input": [
+   "\u001cnpm",
+   "a",
+   "1"
+  ],
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "\u001cnpm",
+   "editable": false,
+   "extras": [],
+   "package_name": "a",
+   "raw_spec": "a@1",
+   "raw_spec_hash": "e351959bb58dfbb89901bf27c4657a616b9ce7d782a702df1bd3c4ac8dd3f9ba",
+   "requested_specifier": "1",
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_for_package_spec",
+  "input": [
+   "npm",
+   "lodash@4"
+  ],
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "npm",
+   "editable": false,
+   "extras": [],
+   "package_name": "lodash",
+   "raw_spec": "lodash@4",
+   "raw_spec_hash": "df4f6ac15f8811aa3a022284fcba1e6b4f266e414c39b3682996ffe8d20d0a06",
+   "requested_specifier": "4",
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_for_package_spec",
+  "input": [
+   "npm",
+   "@s/p@^1"
+  ],
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "npm",
+   "editable": false,
+   "extras": [],
+   "package_name": "@s/p",
+   "raw_spec": "@s/p@^1",
+   "raw_spec_hash": "583ec815a3e4a0beb406c1df4ac42130ee121cba7360e85fdb3391a07dee98e9",
+   "requested_specifier": "^1",
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_for_package_spec",
+  "input": [
+   "pypi",
+   "requests>=2"
+  ],
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "pypi",
+   "editable": false,
+   "extras": [],
+   "package_name": "requests",
+   "raw_spec": "requests>=2",
+   "raw_spec_hash": "7b7744ecf5e5f6b14edb5d94bcfe026ef38fabe119e77b4d667e82baa04500da",
+   "requested_specifier": ">=2",
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_for_package_spec",
+  "input": [
+   "pypi",
+   "flask"
+  ],
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "pypi",
+   "editable": false,
+   "extras": [],
+   "package_name": "flask",
+   "raw_spec": "flask",
+   "raw_spec_hash": "b87aa5270772708aeaed24ad65681618c398f238e7b3bed393af852738243377",
+   "requested_specifier": null,
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_for_package_spec",
+  "input": [
+   "maven",
+   "g:a:1"
+  ],
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "maven",
+   "editable": false,
+   "extras": [],
+   "package_name": "g:a",
+   "raw_spec": "g:a:1",
+   "raw_spec_hash": "d429ef9f754edf949b7173e65f422971688ccc2d407b3de13c30dafb25c25d53",
+   "requested_specifier": "1",
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_for_package_spec",
+  "input": [
+   "packagist",
+   "v/p:2"
+  ],
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "packagist",
+   "editable": false,
+   "extras": [],
+   "package_name": "v/p",
+   "raw_spec": "v/p:2",
+   "raw_spec_hash": "8eee617c8c3e667a1ca0959a12f3ac19a6a8d9742a7a7bb95e81de2f311e6054",
+   "requested_specifier": "2",
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_for_package_spec",
+  "input": [
+   "cargo",
+   "serde@1"
+  ],
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "cargo",
+   "editable": false,
+   "extras": [],
+   "package_name": "serde",
+   "raw_spec": "serde@1",
+   "raw_spec_hash": "fe439b9aa92b13f13e7795820870fa621aeb4c171f20e27d59bffdd9170670ab",
+   "requested_specifier": "1",
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "target_for_package_spec",
+  "input": [
+   "go",
+   "x@v1"
+  ],
+  "output": {
+   "alias": null,
+   "dependency_group": null,
+   "ecosystem": "go",
+   "editable": false,
+   "extras": [],
+   "package_name": "x",
+   "raw_spec": "x@v1",
+   "raw_spec_hash": "951d3a02685e227a2d3a19a62e3847183a31b0254f8c41fc4f6057e79eb1ac20",
+   "requested_specifier": "v1",
+   "source_identity": null,
+   "source_invalid_reason": null,
+   "source_kind": null,
+   "source_repository": null,
+   "source_revision_kind": null,
+   "source_url": null
+  }
+ },
+ {
+  "fn": "package_manager_for_scan",
+  "input": [
+   "pkg/package.json",
+   "requirements.txt"
+  ],
+  "output": "npm"
+ },
+ {
+  "fn": "package_manager_for_scan",
+  "input": [
+   "requirements.txt",
+   "package.json"
+  ],
+  "output": "pip"
+ },
+ {
+  "fn": "package_manager_for_scan",
+  "input": [
+   "a/b/Cargo.toml"
+  ],
+  "output": "cargo"
+ },
+ {
+  "fn": "package_manager_for_scan",
+  "input": [
+   "deep/nested/build.gradle.kts",
+   "Gemfile"
+  ],
+  "output": "maven"
+ },
+ {
+  "fn": "package_manager_for_scan",
+  "input": [
+   "unknown.txt",
+   "go.mod"
+  ],
+  "output": "go"
+ },
+ {
+  "fn": "package_manager_for_scan",
+  "input": [
+   "composer.json"
+  ],
+  "output": "composer"
+ },
+ {
+  "fn": "package_manager_for_scan",
+  "input": [],
+  "output": "workspace"
+ },
+ {
+  "fn": "package_manager_for_scan",
+  "input": [
+   "bun.lock",
+   "package-lock.json"
+  ],
+  "output": "workspace"
+ },
+ {
+  "fn": "package_manager_for_scan",
+  "input": [
+   "dir/package.json/inner"
+  ],
+  "output": "workspace"
+ },
+ {
+  "fn": "package_manager_for_scan",
+  "input": [
+   "Pipfile"
+  ],
+  "output": "pip"
+ }
+]

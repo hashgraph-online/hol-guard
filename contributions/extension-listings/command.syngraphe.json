@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "command.syngraphe",
+  "tagline": "Reviewed HOL Guard coverage for Syngraphe repository context operations.",
+  "summary": "Reviews shared repository context initialization, document creation, state archiving, and agent policy creation through syngraphe or syg.",
+  "category": "specialized-tools",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy."
+  ],
+  "documentationUrl": "https://github.com/suffro/syngraphe",
+  "contributors": [
+    {
+      "githubId": "46894435",
+      "githubLogin": "suffro",
+      "roles": ["author"]
+    }
+  ],
+  "originalContributions": [
+    {
+      "kind": "pull-request",
+      "url": "https://github.com/hashgraph-online/hol-guard/pull/2929"
+    }
+  ],
+  "upstream": {
+    "name": "Syngraphe",
+    "url": "https://github.com/suffro/syngraphe"
+  },
+  "maintainerGithubIds": ["46894435"]
+}

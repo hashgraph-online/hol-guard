@@ -8,3 +8,4 @@ dist
 tests
 action
 *.pyc
+rust/target

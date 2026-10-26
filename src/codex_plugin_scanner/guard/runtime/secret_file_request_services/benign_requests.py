@@ -1,367 +1,42 @@
-"""Explicitly benign request classification and artifact construction."""
+"""Artifact construction for sensitive native tool-action requests."""
 
 from __future__ import annotations
 
-import hashlib
-import json
-import os
-import shlex
-from pathlib import Path
-
 from ...models import GuardArtifact
+from ...native_tool_action_identity import tool_action_request_artifact_id
 from ...redaction import redact_text
 from ..command_decision_adapter import effect_decision_to_dict
 from ..command_evaluation import CompositeCommandEvaluation, evaluate_command
-from ..command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY, risk_classes_for_command_action
+from ..command_extensions import risk_classes_for_command_action
 from ..command_model import parse_shell_command
-from ..direct_vitest import direct_local_typescript_execution_context
 from ..effect_contract import UncertaintyKind
-from ..effect_decision import EffectDecisionRequest, evaluate_effect_decision
-from ..extension_control_contract import ControlSurface, ExtensionControlLayer
-from ..extension_control_resolver import resolve_extension_controls
-from ..extension_control_runtime import ExtensionControlRuntimeSnapshot, current_extension_control_snapshot
-from ..github_actions_read_workflow import is_nonexecuting_github_actions_read_workflow
-from ..github_capability_contract import GitHubCommandAssessment
-from ..github_capability_interaction import github_capability_requires_confirmation
-from ..read_only_git_audit import is_read_only_git_ancestry_audit
-from ..routine_setup_commands import is_safe_codex_memory_registry_search, is_safe_git_worktree_add
-from ..shell_command_wrappers import normalize_transparent_shell_command
-from ..shell_secret_reads import assess_shell_reads
-from .agent_guidance_reads import is_benign_agent_guidance_read
-from .constants_core import _PATH_KEYS, _PATH_LIST_KEYS, _SHELL_TOOL_NAMES
-from .destructive_shell_detection import _shell_command_names_from_parts
-from .developer_routines import (
-    _looks_like_safe_cli_metadata_command,
-    _looks_like_safe_compound_developer_inspection,
-    _looks_like_safe_kubernetes_inventory_command,
-    _safe_dependency_symlink_execution_context,
+from ..effect_decision import DecisionFactorSource, DecisionReason, EffectDecision, FinalDisposition
+from ..extension_control_contract import ExtensionControlLayer
+from ..extension_control_runtime import ExtensionControlRuntimeSnapshot
+from .request_models import ToolActionRequestMatch, tool_action_risk_summary
+
+# Artifact discovery can run before an authenticated native result exists, and
+# the sensitive request still has to be preserved at a review floor. The
+# resident cannot be asked for that floor: this branch exists precisely because
+# the native side produced nothing. Running the Python evaluator here would be
+# a second place a floor is decided, so the decision is pinned instead. It is
+# exactly what the Rust evaluator returns for an empty request carrying
+# `unsupported-input`, and `pinned_unavailable_evidence_floor` in `guard-command`
+# fails if the two ever drift.
+_UNSUPPORTED_INPUT_REASON = DecisionReason(
+    source=DecisionFactorSource.POLICY,
+    reason_code=f"uncertainty.{UncertaintyKind.UNSUPPORTED_INPUT.value}",
+    action_floor="review",
+    segment_ref=None,
+    operation_ref=None,
 )
-from .git_routines import (
-    _looks_like_safe_git_branch_switch_command,
-    _looks_like_safe_git_status_command,
-    _looks_like_safe_standalone_git_routine,
+_NATIVE_EVIDENCE_UNAVAILABLE_DECISION = EffectDecision(
+    action="review",
+    disposition=FinalDisposition.REVIEW,
+    controlling_reasons=(_UNSUPPORTED_INPUT_REASON,),
+    reasons=(_UNSUPPORTED_INPUT_REASON,),
+    proof_routes=frozenset(),
 )
-from .github_pr_ephemeral_body import gh_pr_create_uses_safe_ephemeral_body
-from .github_shell_capabilities import (
-    _ShellTokenWithQuoteContext,
-    classify_github_shell_capabilities,
-    github_argument_token_has_untrusted_expansion,
-)
-from .interpreter_identity import _python_interpreter_executable_identities
-from .interpreter_observers import (
-    _looks_like_benign_interpreter_wait,
-    _looks_like_benign_interpreter_wait_chain,
-    _looks_like_read_only_interpreter_command,
-    _looks_like_safe_read_only_lookup_command,
-)
-from .request_artifacts import _candidate_command_texts
-from .request_models import ToolActionRequestMatch, _normalize_tool_name, tool_action_risk_summary
-from .routine_directory_creation import is_safe_routine_directory_creation
-from .sensitive_read_pipeline import _runtime_read_root_texts
-from .shell_quote_tokens import shell_token_segments, shell_tokens_preserving_quote_context
-from .shell_static_safety import _path_text_is_within_root_text, _without_safe_inspection_redirections
-from .shell_stdin_sources import (
-    _cat_reads_local_file,
-    _cat_stdout_payloads,
-    _echo_stdout_payload,
-    _printf_stdout_payloads,
-)
-from .shell_tokenization import _iter_shell_command_segments, _shell_segment_primary_command, _split_shell_parts
-
-
-def is_explicitly_benign_native_file_read_request(
-    tool_name: object,
-    arguments: object,
-    *,
-    cwd: Path | None = None,
-    home_dir: Path | None = None,
-) -> bool:
-    """Recognize one existing, non-sensitive native ``Read`` target."""
-
-    if _normalize_tool_name(tool_name) != "read" or not isinstance(arguments, dict):
-        return False
-    typed_arguments: dict[str, object] = {key: value for key, value in arguments.items() if isinstance(key, str)}
-    if any(key in typed_arguments for key in _PATH_LIST_KEYS):
-        return False
-    candidates = [
-        value.strip() for key in _PATH_KEYS if isinstance((value := typed_arguments.get(key)), str) and value.strip()
-    ]
-    if len(candidates) != 1:
-        return False
-    target = candidates[0]
-    if not target or any(marker in target for marker in ("$", "`", "<", ">", "|", ";", "&", "\x00")):
-        return False
-
-    from ..source_paths import source_path_is_allowed
-
-    decision = source_path_is_allowed(target, cwd=cwd, home_dir=home_dir)
-    resolved = decision.resolved_path
-    try:
-        return decision.allowed and resolved is not None and resolved.is_file()
-    except OSError:
-        return False
-
-
-def is_explicitly_benign_tool_action_request(
-    tool_name: object,
-    arguments: object,
-    *,
-    cwd: Path | None = None,
-    home_dir: Path | None = None,
-) -> bool:
-    normalized_tool_name = _normalize_tool_name(tool_name)
-    if normalized_tool_name not in _SHELL_TOOL_NAMES:
-        return False
-    found_benign_candidate = False
-    for command_text in _candidate_command_texts(arguments):
-        raw_command_text = command_text
-        if assess_shell_reads(command_text, cwd=cwd, home_dir=home_dir).requires_review:
-            return False
-        interpreter_evidence = _python_interpreter_executable_identities(
-            command_text,
-            cwd=cwd,
-            home_dir=home_dir,
-        )
-        if any(evidence.get("trust") not in {"trusted_guard", "trusted_system"} for evidence in interpreter_evidence):
-            return False
-        if normalized_tool_name in _SHELL_TOOL_NAMES:
-            normalization = normalize_transparent_shell_command(command_text, cwd=cwd, home_dir=home_dir)
-            command_text = normalization.normalized_command
-            if normalization.wrapper_chain:
-                raw_github_assessment = classify_github_shell_capabilities(raw_command_text, home_dir=home_dir)
-                if raw_github_assessment is not None and github_capability_requires_confirmation(raw_github_assessment):
-                    return False
-                normalized_parts = _split_shell_parts(command_text)
-                normalized_segments = _iter_shell_command_segments(normalized_parts)
-                invokes_guard = any(
-                    _shell_segment_primary_command(segment)[0] == "hol-guard" for segment in normalized_segments
-                )
-                if invokes_guard and command_text != raw_command_text:
-                    return False
-        stripped_command = command_text.strip()
-        if not stripped_command:
-            continue
-        if is_nonexecuting_github_actions_read_workflow(stripped_command, cwd=cwd):
-            found_benign_candidate = True
-            continue
-        if gh_pr_create_uses_safe_ephemeral_body(stripped_command):
-            found_benign_candidate = True
-            continue
-        github_assessment = classify_github_shell_capabilities(stripped_command, home_dir=home_dir)
-        if github_assessment is not None and github_capability_requires_confirmation(github_assessment):
-            return False
-        control_snapshot = current_extension_control_snapshot()
-        if github_assessment is not None and control_snapshot is not None:
-            permissions = tuple(
-                permission
-                for capability in github_assessment.capabilities
-                if (permission := BUILT_IN_COMMAND_EXTENSION_REGISTRY.permission_for_typed_capability(capability))
-                is not None
-            )
-            control_resolution = resolve_extension_controls(
-                control_snapshot.layers,
-                BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-                extension_ids=tuple(sorted({permission.extension_id for permission in permissions})),
-                permission_ids=tuple(sorted({permission.permission_id for permission in permissions})),
-                surface=ControlSurface.COMMAND_EVALUATION,
-                authority_failure=control_snapshot.authority_failure,
-            )
-            if control_resolution.blocked:
-                return False
-        if _quote_aware_direct_github_read_is_safe(stripped_command, assessment=github_assessment):
-            found_benign_candidate = True
-            continue
-        if home_dir is not None and is_benign_agent_guidance_read(stripped_command, cwd, home_dir):
-            found_benign_candidate = True
-            continue
-        parts = _split_shell_parts(stripped_command)
-        if not parts:
-            return False
-        parsed_command_names = list(_shell_command_names_from_parts(parts))
-        if _looks_like_benign_interpreter_wait(stripped_command, parts, parsed_command_names):
-            found_benign_candidate = True
-            continue
-        if _looks_like_benign_interpreter_wait_chain(stripped_command, parts):
-            found_benign_candidate = True
-            continue
-        if _looks_like_read_only_interpreter_command(stripped_command, parts, parsed_command_names):
-            found_benign_candidate = True
-            continue
-        if _looks_like_safe_read_only_lookup_command(
-            stripped_command,
-            parts,
-            home_dir=home_dir,
-        ):
-            found_benign_candidate = True
-            continue
-        if _looks_like_safe_existence_probe(stripped_command, cwd=cwd, home_dir=home_dir):
-            found_benign_candidate = True
-            continue
-        if is_safe_routine_directory_creation(stripped_command, cwd=cwd, home_dir=home_dir):
-            found_benign_candidate = True
-            continue
-        if _looks_like_safe_cli_metadata_command(stripped_command, parts, cwd=cwd):
-            found_benign_candidate = True
-            continue
-        if _looks_like_safe_git_branch_switch_command(stripped_command, parts, cwd=cwd):
-            found_benign_candidate = True
-            continue
-        if _looks_like_safe_git_status_command(stripped_command, parts, cwd=cwd):
-            found_benign_candidate = True
-            continue
-        if _looks_like_safe_standalone_git_routine(stripped_command, cwd=cwd, home_dir=home_dir):
-            found_benign_candidate = True
-            continue
-        if home_dir is not None and is_safe_git_worktree_add(
-            stripped_command,
-            cwd=cwd,
-            home_dir=home_dir,
-        ):
-            found_benign_candidate = True
-            continue
-        if home_dir is not None and is_safe_codex_memory_registry_search(
-            stripped_command,
-            cwd=cwd,
-            home_dir=home_dir,
-        ):
-            found_benign_candidate = True
-            continue
-        if home_dir is not None and (
-            direct_local_typescript_execution_context(
-                stripped_command,
-                cwd=cwd,
-                home_dir=home_dir,
-            )
-        ):
-            found_benign_candidate = True
-            continue
-        if (
-            home_dir is not None
-            and _safe_dependency_symlink_execution_context(
-                stripped_command,
-                cwd=cwd,
-                home_dir=home_dir,
-            )
-            is not None
-        ):
-            found_benign_candidate = True
-            continue
-        if home_dir is not None and _looks_like_safe_compound_developer_inspection(
-            stripped_command,
-            cwd=cwd,
-            home_dir=home_dir,
-        ):
-            found_benign_candidate = True
-            continue
-        if home_dir is not None and is_read_only_git_ancestry_audit(
-            stripped_command,
-            cwd=cwd,
-            home_dir=home_dir,
-        ):
-            found_benign_candidate = True
-            continue
-        if _looks_like_safe_kubernetes_inventory_command(stripped_command, parts, cwd=cwd):
-            found_benign_candidate = True
-            continue
-        return False
-    return found_benign_candidate
-
-
-def _quote_aware_direct_github_read_is_safe(
-    command_text: str,
-    *,
-    assessment: GitHubCommandAssessment | None,
-) -> bool:
-    if assessment is None:
-        return False
-    segments = shell_token_segments(shell_tokens_preserving_quote_context(command_text))
-    if len(segments) != 1 or not segments[0] or segments[0][0].raw != "gh":
-        return False
-    segment = segments[0]
-    plain_segment = [token.plain for token in segment]
-    command_name, command_index = _shell_segment_primary_command(plain_segment)
-    if command_name != "gh" or command_index != 0:
-        return False
-    if _without_safe_inspection_redirections(plain_segment[1:]) is None:
-        return False
-    return not any(github_argument_token_has_untrusted_expansion(token.raw) for token in segment[1:])
-
-
-def _looks_like_safe_existence_probe(
-    command_text: str,
-    *,
-    cwd: Path | None,
-    home_dir: Path | None,
-) -> bool:
-    """Recognize a metadata-only local path existence check with literal output."""
-
-    try:
-        lexer = shlex.shlex(command_text, posix=True, punctuation_chars=";&|<>()")
-        lexer.whitespace_split = True
-        lexer.commenters = ""
-        parts = list(lexer)
-    except ValueError:
-        return False
-    if len(parts) != 9 or parts[:2] != ["test", "-e"]:
-        return False
-    if parts[3:] != ["&&", "echo", "exists", "||", "echo", "absent"]:
-        return False
-    target = parts[2]
-    if any(marker in target for marker in ("$", "`", "*", "?", "[", "]", "{", "}")):
-        return False
-    try:
-        candidate = Path(target).expanduser()
-        if not candidate.is_absolute():
-            if cwd is None:
-                return False
-            if ".." in candidate.parts:
-                return False
-            candidate = cwd / candidate
-        resolved = candidate.resolve(strict=False)
-        allowed_roots = tuple(root.resolve() for root in (cwd, home_dir) if root is not None)
-    except (OSError, RuntimeError):
-        return False
-    return bool(allowed_roots) and any(resolved.is_relative_to(root) for root in allowed_roots)
-
-
-def _skip_shell_wrapper_options(segment: list[_ShellTokenWithQuoteContext], index: int) -> int:
-    while index < len(segment) and segment[index].plain.startswith("-"):
-        index += 1
-    return index
-
-
-def _shell_stdout_payloads(
-    segment: list[str],
-    *,
-    cwd: Path | None,
-    home_dir: Path | None,
-    allowed_roots: tuple[Path, ...] | None = None,
-) -> tuple[tuple[str, Path | None], ...]:
-    command_name, command_index = _shell_segment_primary_command(segment)
-    if command_name is None or command_index is None:
-        return ()
-    segment_args = segment[command_index + 1 :]
-    if command_name == "printf":
-        payloads = _printf_stdout_payloads(segment_args)
-        return tuple((payload, cwd) for payload in payloads)
-    if command_name == "echo":
-        payload = _echo_stdout_payload(segment_args)
-        return ((payload, cwd),) if payload else ()
-    if command_name == "cat":
-        return _cat_stdout_payloads(segment_args, cwd=cwd, home_dir=home_dir, allowed_roots=allowed_roots)
-    return ()
-
-
-def _shell_stdout_uses_local_file(
-    segment: list[str],
-    *,
-    cwd: Path | None,
-    home_dir: Path | None,
-) -> bool:
-    command_name, command_index = _shell_segment_primary_command(segment)
-    if command_name != "cat" or command_index is None:
-        return False
-    return _cat_reads_local_file(segment[command_index + 1 :], cwd=cwd, home_dir=home_dir)
 
 
 def build_tool_action_request_artifact(
@@ -374,6 +49,7 @@ def build_tool_action_request_artifact(
     extension_control_snapshot: ExtensionControlRuntimeSnapshot | None = None,
     native_extension_evidence: object | None = None,
     native_evaluation: CompositeCommandEvaluation | None = None,
+    extension_allow_hint: dict[str, object] | None = None,
 ) -> GuardArtifact:
     """Build a Guard artifact for a sensitive native tool action request."""
 
@@ -417,31 +93,14 @@ def build_tool_action_request_artifact(
             if request.raw_command_text is None and request.canonical_command is not None
             else parse_shell_command(policy_command)
         )
-        decision_plane = evaluate_effect_decision(
-            EffectDecisionRequest(
-                factors=(),
-                uncertainties=(UncertaintyKind.UNSUPPORTED_INPUT,),
-            )
-        )
+        decision_plane = _NATIVE_EVIDENCE_UNAVAILABLE_DECISION
         control_resolution = {"blocked": True, "failures": ["native-evidence-unavailable"]}
         command_rule_matches = []
         risk_classes = list(risk_classes_for_command_action(request.action_class))
     wrapper_chain = tuple(dict.fromkeys((*command.wrapper_chain, *request.wrapper_chain)))
-    fingerprint_payload = {
-        "harness": harness,
-        "tool_name": request.normalized_tool_name,
-        "command_text": request.command_text,
-        "action_class": request.action_class,
-        "shell_execution_context_hash": request.shell_execution_context_hash,
-        "interpreter_executable_identities": request.interpreter_executable_identities,
-    }
-    if request.script_read_identity_sha256 is not None:
-        fingerprint_payload["script_read_identity_sha256"] = request.script_read_identity_sha256
-    if request.restricted_profile_version is not None:
-        fingerprint_payload["restricted_profile_version"] = request.restricted_profile_version
-    if request.pytest_config_identity_sha256 is not None:
-        fingerprint_payload["pytest_config_identity_sha256"] = request.pytest_config_identity_sha256
-    fingerprint = hashlib.sha256(json.dumps(fingerprint_payload, sort_keys=True).encode("utf-8")).hexdigest()
+    # The artifact id is the key a saved approval for this action is stored
+    # under, so the resident derives it and this side never recomputes it.
+    artifact_id = tool_action_request_artifact_id(harness, request, source_scope=source_scope)
     display_command_text = redact_text(request.command_text).text
     display_raw_command_text = (
         redact_text(request.raw_command_text).text if request.raw_command_text is not None else None
@@ -470,7 +129,7 @@ def build_tool_action_request_artifact(
             "effective_cwd": effective_cwds[-1] if effective_cwds else None,
         }
     return GuardArtifact(
-        artifact_id=f"{harness}:{source_scope}:tool-action:{fingerprint}",
+        artifact_id=artifact_id,
         name=f"{request.tool_name} {request.action_class}",
         harness=harness,
         artifact_type="tool_action_request",
@@ -507,6 +166,11 @@ def build_tool_action_request_artifact(
             ),
             **({"reason_code": request.reason_code} if request.reason_code is not None else {}),
             **(
+                {"extension_allow_hint": extension_allow_hint}
+                if evidence_available and extension_allow_hint is not None
+                else {}
+            ),
+            **(
                 {"script_read_identity_sha256": request.script_read_identity_sha256}
                 if request.script_read_identity_sha256 is not None
                 else {}
@@ -541,18 +205,6 @@ def build_tool_action_request_artifact(
     )
 
 
-def _path_is_within_roots(path: Path, roots: tuple[Path, ...]) -> bool:
-    path_text = os.path.realpath(os.fspath(path))
-    root_texts = _runtime_read_root_texts(roots)
-    return any(_path_text_is_within_root_text(path_text, root_text) for root_text in root_texts)
-
-
 __all__ = [
-    "_path_is_within_roots",
-    "_shell_stdout_payloads",
-    "_shell_stdout_uses_local_file",
-    "_skip_shell_wrapper_options",
     "build_tool_action_request_artifact",
-    "is_explicitly_benign_native_file_read_request",
-    "is_explicitly_benign_tool_action_request",
 ]

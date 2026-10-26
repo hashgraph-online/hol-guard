@@ -1,3 +1,4 @@
+import { recordBusinessQueueReadResult } from "./business-review-queue-status";
 import {
   GUARD_ACTION_TYPES,
   GUARD_DECISION_V2_ACTIONS,
@@ -11,6 +12,7 @@ import { computeTrendBuckets } from "./evidence/evidence-metrics";
 import { normalizeOperatorHealth } from "./operator-health";
 import { canonicalizeGuardDaemonOrigin, standardGuardDaemonOrigin } from "./guard-daemon-origin";
 import { normalizeProtectionHealth, protectionHeadlineFor } from "./protection-health";
+import { checkReasonMapValue } from "./protection-repair-reasons";
 import { normalizeSupplyChainRepairResult } from "./supply-chain-repair-result";
 export { normalizeOperatorHealth } from "./operator-health";
 import {
@@ -71,6 +73,7 @@ import type {
   SupplyChainSnapshot,
   GuardSettingsPayload,
   GuardSettingsExport,
+  GuardHarnessPosturePatch,
   GuardSettings,
   GuardUpdateScheduleResult,
   GuardDaemonReconnectAuthorization,
@@ -93,6 +96,9 @@ import {
   demoPresentationSettings,
   isGuardDemoMode
 } from "./guard-demo";
+import { normalizeApprovalExtensionCoverage } from "./approval-extension-coverage";
+import { normalizeApprovalExtensionRecommendation } from "./approval-extension-recommendation";
+import { observeDashboardBuild } from "./dashboard-build";
 
 const GUARD_TOKEN_PARAM = "guard-token";
 const GUARD_DAEMON_PARAM = "guardDaemon";
@@ -125,7 +131,11 @@ type RawGuardApprovalRequest = Omit<
   | "recommended_scope_by_action"
   | "scope_restrictions"
   | "task_capability_eligibility"
+  | "extension_recommendation"
+  | "extension_coverage"
 > & {
+  extension_recommendation?: unknown;
+  extension_coverage?: unknown;
   action_envelope_json?: unknown;
   decision_v2_json?: unknown;
   policy_action?: unknown;
@@ -150,6 +160,8 @@ type RawGuardInventoryItem = Omit<GuardInventoryItem, "last_policy_action"> & {
 };
 
 type ApprovalRequestListPayload = {
+  native_business_queue_error?: unknown;
+  native_business_queue_checked?: unknown;
   items?: RawGuardApprovalRequest[] | null;
   next_cursor?: unknown;
   total_pending_count?: unknown;
@@ -450,7 +462,7 @@ async function fetchGuardDaemonCandidateJson(
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), GUARD_DAEMON_PROBE_TIMEOUT_MS);
   try {
-    const response = await fetch(input, { ...init, signal: controller.signal });
+    const response = await daemonFetch(input, { ...init, signal: controller.signal });
     const payload: unknown = await response.json();
     return { response, payload };
   } finally {
@@ -670,7 +682,7 @@ export async function prepareGuardDaemonReconnect(): Promise<GuardDaemonReconnec
     guardDaemonReconnectDiagnostic = "dashboard_reconnect_prepare_origin_unavailable";
     throw new Error("Guard could not identify the authenticated daemon for a secure reconnect.");
   }
-  let response = await fetch(`${daemonOrigin}/v1/update/reconnect/prepare`, withGuardAuthForToken({
+  let response = await daemonFetch(`${daemonOrigin}/v1/update/reconnect/prepare`, withGuardAuthForToken({
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: "{}",
@@ -680,7 +692,7 @@ export async function prepareGuardDaemonReconnect(): Promise<GuardDaemonReconnec
     const refreshedToken = await initializeGuardDashboardSessionAtOrigin(daemonOrigin, guardToken);
     if (refreshedToken && refreshedToken !== guardToken) {
       saveGuardToken(refreshedToken);
-      response = await fetch(`${daemonOrigin}/v1/update/reconnect/prepare`, withGuardAuthForToken({
+      response = await daemonFetch(`${daemonOrigin}/v1/update/reconnect/prepare`, withGuardAuthForToken({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: "{}",
@@ -990,6 +1002,14 @@ function withGuardAuth(init?: RequestInit): RequestInit | undefined {
   return withGuardAuthForToken(init, readGuardToken());
 }
 
+// Every daemon response names the dashboard bundle it serves; note it so a tab
+// left running an older bundle after a Guard update can load the current one.
+async function daemonFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const response = await fetch(input, init);
+  observeDashboardBuild(response);
+  return response;
+}
+
 function withGuardAuthForToken(
   init: RequestInit | undefined,
   guardToken: string | null,
@@ -1005,10 +1025,10 @@ function withGuardAuthForToken(
   };
 }
 
-async function fetchWithGuardAuth(input: RequestInfo, init?: RequestInit): Promise<Response> {
+export async function fetchWithGuardAuth(input: RequestInfo, init?: RequestInit): Promise<Response> {
   const requestInput = guardApiInput(input);
   const guardToken = readGuardToken();
-  const response = await fetch(requestInput, withGuardAuthForToken(init, guardToken));
+  const response = await daemonFetch(requestInput, withGuardAuthForToken(init, guardToken));
   if (response.status !== 401 || !guardToken || input instanceof Request) {
     return response;
   }
@@ -1017,7 +1037,7 @@ async function fetchWithGuardAuth(input: RequestInfo, init?: RequestInit): Promi
     return response;
   }
   saveGuardToken(refreshedGuardToken);
-  return fetch(requestInput, withGuardAuthForToken(init, refreshedGuardToken));
+  return daemonFetch(requestInput, withGuardAuthForToken(init, refreshedGuardToken));
 }
 
 export async function fetchCommandActivityApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
@@ -1042,12 +1062,65 @@ export async function fetchExtensionControlApi(input: RequestInfo, init?: Reques
   return fetchWithGuardAuth(input, init);
 }
 
+export async function fetchExtensionCatalogV2Api(input: string, init?: RequestInit): Promise<Response> {
+  const approvedPath =
+    /^\/v2\/extension-controls\/catalog\/(?:index|permissions|extensions\/command\.[a-z0-9.-]+(?:\/(?:permissions|rules|mcp-tools))?)(?:\?[^#]*)?$/.test(
+      input,
+    );
+  if (!approvedPath) {
+    throw new Error("Invalid extension catalog API path");
+  }
+  return fetchWithGuardAuth(input, init);
+}
+
+/** Partition key for in-memory read caches: one daemon origin and session. */
+export function guardApiCacheScope(): string {
+  return `${readGuardDaemonOrigin() ?? ""}|${readGuardToken() ?? ""}`;
+}
+
 export async function fetchLocalCliApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
   const approvedPath =
     typeof input === "string" &&
-    /^\/v1\/local-clis(?:\/(?:preview|apply|recognize|discover))?$/.test(input);
+    /^\/v1\/local-clis(?:\/(?:preview|apply|recognize|discover|forget|provider-actions|provider-workflows|registry-search|registry-setup|refresh-job|skills|mcp-skills))?$/.test(input);
   if (!approvedPath) {
     throw new Error("Invalid local CLI API path");
+  }
+  return fetchWithGuardAuth(input, init);
+}
+
+/**
+ * Sponsored extension discovery: authenticated daemon routes only. The
+ * browser never calls Guard Cloud directly (connect-src stays 'self'), and
+ * these fixed paths are the whole allowlist.
+ */
+export async function fetchExtensionDiscoveryApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
+  const approvedPath =
+    typeof input === "string" &&
+    /^\/v1\/discovery\/extensions\/(?:placements|renders|events|settings)$/.test(input);
+  if (!approvedPath) {
+    throw new Error("Invalid extension discovery API path");
+  }
+  return fetchWithGuardAuth(input, init);
+}
+
+/**
+ * Release archive: the daemon projects hol.org's published feed through the
+ * native runtime and serves it locally. The browser never reaches hol.org
+ * (connect-src stays 'self'), and these two paths are the whole allowlist.
+ */
+export async function fetchReleaseFeedApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
+  const approvedPath =
+    typeof input === "string" &&
+    /^\/v1\/releases\/(?:index|release)(?:\?[A-Za-z0-9=&_.-]*)?$/.test(input);
+  if (!approvedPath) {
+    throw new Error("Invalid release feed API path");
+  }
+  return fetchWithGuardAuth(input, init);
+}
+
+export async function fetchPluginUpdatesApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
+  if (input !== "/v1/plugins/updates" && input !== "/v1/plugins/updates/dismiss") {
+    throw new Error("Invalid plugin updates API path");
   }
   return fetchWithGuardAuth(input, init);
 }
@@ -1071,7 +1144,7 @@ function parseDashboardSessionToken(payload: unknown): string | null {
 
 async function refreshGuardDashboardSession(guardToken: string, signal?: AbortSignal | null): Promise<string | null> {
   try {
-    const response = await fetch(guardApiInput("/v1/initialize"), {
+    const response = await daemonFetch(guardApiInput("/v1/initialize"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -1445,7 +1518,14 @@ function parseOptionalString(value: unknown): string | null {
 }
 
 export function normalizeApprovalRequest(item: RawGuardApprovalRequest): GuardApprovalRequest {
-  const { decision_contract_error: rawContractError, ...baseItem } = item;
+  const {
+    decision_contract_error: rawContractError,
+    extension_recommendation: rawExtensionRecommendation,
+    extension_coverage: rawExtensionCoverage,
+    ...baseItem
+  } = item;
+  const extensionRecommendation = normalizeApprovalExtensionRecommendation(rawExtensionRecommendation);
+  const extensionCoverage = normalizeApprovalExtensionCoverage(rawExtensionCoverage);
   const policyAction = normalizeGuardAction(item.policy_action);
   const decisionV2 = parseDecisionV2(item.decision_v2_json);
   const actionEnvelope = parseActionEnvelope(item.action_envelope_json);
@@ -1512,6 +1592,10 @@ export function normalizeApprovalRequest(item: RawGuardApprovalRequest): GuardAp
   const scopeRestrictions = parseStringList(item.scope_restrictions);
   return {
     ...baseItem,
+    superseded_by_request_id: item.status === "expired"
+      && typeof item.superseded_by_request_id === "string"
+      && /^[A-Za-z0-9-]{1,64}$/.test(item.superseded_by_request_id)
+      ? item.superseded_by_request_id : undefined,
     policy_action: failClosedPolicyAction,
     recommended_scope: isDecisionScope(item.recommended_scope) ? item.recommended_scope : null,
     allowed_scopes: allowedScopes ?? undefined,
@@ -1539,6 +1623,10 @@ export function normalizeApprovalRequest(item: RawGuardApprovalRequest): GuardAp
     task_capability_eligibility: hasScopeContract ? taskCapabilityEligibility : undefined,
     action_envelope_json: hasDecisionContractError ? null : actionEnvelope,
     decision_v2_json: hasDecisionContractError ? null : decisionV2,
+    ...(extensionRecommendation !== null && !hasDecisionContractError
+      ? { extension_recommendation: extensionRecommendation }
+      : {}),
+    ...(extensionCoverage !== null && !hasDecisionContractError ? { extension_coverage: extensionCoverage } : {}),
     ...(hasDecisionContractError
       ? { decision_contract_error: AUTHORITATIVE_DECISION_INCONSISTENT }
       : {}),
@@ -1560,6 +1648,7 @@ function normalizeApprovalPage(
   payload: ApprovalRequestListPayload,
   statusFallback: GuardApprovalPageStatus = "pending"
 ): GuardApprovalPage {
+  recordBusinessQueueReadResult(payload);
   return {
     items: normalizeApprovalRequests(payload.items),
     next_cursor: isStringOrNull(payload.next_cursor) ? payload.next_cursor : null,
@@ -2220,6 +2309,7 @@ export async function fetchSettings(): Promise<GuardSettingsPayload> {
         },
         approval_wait_timeout_seconds: 120,
         approval_surface_policy: "attention-aware",
+        blocked_request_mode: "safe-alternative",
         approval_browser_delay_seconds: 20,
         approval_browser_immediate_severity: "critical",
         telemetry: false,
@@ -2234,6 +2324,7 @@ export async function fetchSettings(): Promise<GuardSettingsPayload> {
 export type CloudReviewSettingsStatus = {
   enabled: boolean;
   connected: boolean;
+  reconnect_required: boolean;
   reason: string | null;
   expires_at: string | null;
   workspace_id: string | null;
@@ -2264,10 +2355,36 @@ export async function changeCloudReviewSettings(input: {
   });
 }
 
-export async function updateSettings(settings: Partial<GuardSettings>): Promise<GuardSettingsPayload> {
+function applyHarnessPosturePatch(
+  current: GuardSettings["harness_postures"],
+  patch: GuardHarnessPosturePatch,
+): NonNullable<GuardSettings["harness_postures"]> {
+  const next = { ...(current ?? {}) };
+  for (const [harness, posture] of Object.entries(patch)) {
+    if (posture === null) delete next[harness];
+    else next[harness] = posture;
+  }
+  return next;
+}
+
+export type GuardSettingsUpdate = Omit<Partial<GuardSettings>, "harness_postures"> & {
+  harness_postures?: GuardHarnessPosturePatch;
+};
+
+export async function updateSettings(settings: GuardSettingsUpdate): Promise<GuardSettingsPayload> {
   if (isGuardDemoMode()) {
     const current = await fetchSettings();
-    return { ...current, settings: { ...current.settings, ...settings } };
+    const { harness_postures: posturePatch, ...rest } = settings;
+    return {
+      ...current,
+      settings: {
+        ...current.settings,
+        ...rest,
+        ...(posturePatch === undefined
+          ? {}
+          : { harness_postures: applyHarnessPosturePatch(current.settings.harness_postures, posturePatch) }),
+      },
+    };
   }
   return readJson<GuardSettingsPayload>("/v1/settings", {
     method: "POST",
@@ -2333,6 +2450,24 @@ export async function resetSettings(proof?: ApprovalGateWriteProof): Promise<Gua
       ...(proof?.approval_totp_code ? { approval_totp_code: proof.approval_totp_code } : {}),
     })
   });
+}
+
+export async function fetchBusinessReviewSummary(
+  requestId: string, signal?: AbortSignal,
+): Promise<import("./business-review-summary").BusinessReviewSummary | null> {
+  if (isGuardDemoMode()) return null;
+  const response = await fetchWithGuardAuth(
+    `/v1/requests/${encodeURIComponent(requestId)}/business-summary`,
+    { signal, cache: "no-store" },
+  );
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) throw new Error("Saved business details are unavailable.");
+  const { parseBusinessReviewSummary } = await import("./business-review-summary");
+  const summary = parseBusinessReviewSummary(await response.json(), requestId);
+  if (!summary) throw new Error("Saved business details are unavailable.");
+  return summary;
 }
 
 export async function fetchRequest(requestId: string): Promise<GuardApprovalRequest> {
@@ -2995,7 +3130,7 @@ export async function revokeApprovalGateCooldown(password: string, totpCode?: st
   if (isGuardDemoMode()) {
     return fetchSettings();
   }
-  const response = await fetch(guardApiInput("/v1/approval-gate/cooldown/revoke"), withGuardAuth({
+  const response = await daemonFetch(guardApiInput("/v1/approval-gate/cooldown/revoke"), withGuardAuth({
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -3243,6 +3378,7 @@ export class GuardProtectionRepairError extends Error {
   readonly failedCheckIds: string[];
   readonly failedHarnesses: string[];
   readonly pendingCheckIds: string[];
+  readonly checkReasons: Record<string, string>;
 
   constructor(status: number, payload: Record<string, unknown> | null) {
     const message = payload === null ? null : stringValue(payload.message);
@@ -3254,6 +3390,7 @@ export class GuardProtectionRepairError extends Error {
     this.failedCheckIds = stringArrayValue(payload?.failed_check_ids);
     this.failedHarnesses = stringArrayValue(payload?.failed_harnesses);
     this.pendingCheckIds = stringArrayValue(payload?.pending_check_ids);
+    this.checkReasons = checkReasonMapValue(payload?.check_reasons);
   }
 }
 
@@ -3403,6 +3540,51 @@ export async function scheduleGuardUpdate(
     scheduled: booleanValue(payload.scheduled),
     message: stringValue(payload.message) ?? undefined,
     error: stringValue(payload.error) ?? undefined,
+  };
+}
+
+export type GuardDesktopHandoffResult = {
+  handoff_requested: boolean;
+  latest_version: string | null;
+};
+
+/**
+ * Asks the daemon to record an update request for the HOL Guard app. The
+ * dashboard inside the Desktop window cannot call the app updater itself;
+ * Desktop watches for the request and opens its own visible update flow,
+ * which re-verifies the release before installing anything.
+ */
+export async function requestGuardDesktopHandoff(): Promise<GuardDesktopHandoffResult> {
+  if (isGuardDemoMode()) {
+    return { handoff_requested: false, latest_version: null };
+  }
+  // Bounded: an unanswered request must release the banner into its
+  // failure state instead of disabling its actions forever.
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 10_000);
+  let response: Response;
+  try {
+    response = await fetchWithGuardAuth("/v1/update", {
+      method: "POST",
+      redirect: "error",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ handoff_to_desktop: true }),
+      signal: controller.signal,
+    });
+  } finally {
+    window.clearTimeout(timeout);
+  }
+  const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!response.ok) {
+    const message =
+      stringValue(payload.message) ??
+      stringValue(payload.error) ??
+      `Guard update failed with ${response.status}`;
+    throw new Error(message);
+  }
+  return {
+    handoff_requested: payload.handoff_requested === true,
+    latest_version: stringValue(payload.latest_version),
   };
 }
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from packaging.version import InvalidVersion, Version
@@ -23,12 +24,16 @@ from .update_desktop_core import (
     pypi_desktop_core_versions,
     select_desktop_core_latest,
 )
+from .update_release_candidates import live_release_candidates
 
 _DAEMON_REFRESH_FAILED = "HOL Guard was updated, but its daemon could not be restarted safely."
 _APPLY_FAILURE_FALLBACK = "HOL Guard could not apply the signed Core update. The installed version stays in place."
 _APPLY_FAILURE_MESSAGES = {
     "desktop_core_download_failed": (
         "This Core build is not available for Desktop yet. The installed version stays in place."
+    ),
+    "desktop_core_asset_missing": (
+        "This Core build is not published for Desktop yet. The installed version stays in place."
     ),
     "desktop_core_integrity_mismatch": (
         "The downloaded Core did not match its signed manifest. The installed version stays in place."
@@ -66,11 +71,14 @@ def refine_desktop_version_check(
     *,
     candidates: list[str],
     include_alpha: bool,
+    alpha_is_live: Callable[[str], bool] | None = None,
 ) -> dict[str, object]:
     status = str(version_check.get("status") or "")
     source = str(version_check.get("source") or "")
     if status == "unavailable" or source not in {"pypi", "desktop_core"}:
         return version_check
+    if include_alpha and alpha_is_live is not None:
+        candidates = live_release_candidates(candidates, alpha_is_live=alpha_is_live)
     known = [item.strip() for item in candidates if item.strip()]
     latest = version_check.get("latest_version")
     if isinstance(latest, str) and latest.strip() and latest.strip() not in known:
@@ -100,10 +108,17 @@ def desktop_core_apply_failure_message(reason_code: str) -> str:
     return _APPLY_FAILURE_MESSAGES.get(reason_code, _APPLY_FAILURE_FALLBACK)
 
 
+def _alpha_liveness_checker(network_policy: ManagedNetworkPolicy | None) -> Callable[[str], bool]:
+    from . import update_commands as commands
+
+    return commands._alpha_liveness_checker(network_policy)
+
+
 def finalize_desktop_update_status(
     payload: dict[str, object],
     *,
     pypi_payload: object,
+    network_policy: ManagedNetworkPolicy | None = None,
 ) -> dict[str, object]:
     if payload.get("installer") != "desktop":
         return payload
@@ -118,6 +133,7 @@ def finalize_desktop_update_status(
         version_check,
         candidates=candidates,
         include_alpha=include_alpha,
+        alpha_is_live=_alpha_liveness_checker(network_policy) if include_alpha else None,
     )
     latest_version = refined.get("latest_version")
     payload["version_check"] = refined
@@ -165,6 +181,7 @@ def run_desktop_managed_update(
             include_alpha=include_alpha,
         ),
         include_alpha=include_alpha,
+        alpha_is_live=commands._alpha_liveness_checker(network_policy) if include_alpha else None,
     )
     payload["version_check"] = version_check
     already_current = (
@@ -190,6 +207,9 @@ def run_desktop_managed_update(
             current_version=current_version,
             version_check=version_check,
             context=context,
+            store=store,
+            workspace=workspace,
+            now=now,
             daemon_refresh_required=daemon_refresh_required,
         )
     if target_version is None:
@@ -283,6 +303,9 @@ def _desktop_already_current(
     current_version: str,
     version_check: dict[str, object],
     context: HarnessContext | None,
+    store: GuardStore | None,
+    workspace: str | None,
+    now: str | None,
     daemon_refresh_required: bool,
 ) -> tuple[dict[str, object], int]:
     from . import update_commands as commands
@@ -291,13 +314,14 @@ def _desktop_already_current(
     payload["changed"] = False
     payload["resulting_version"] = current_version
     payload["message"] = commands.already_current_update_message(version_check)
-    if context is not None and daemon_refresh_required:
+    restart = _converge_installs(payload, context=context, store=store, workspace=workspace, now=now)
+    if context is not None and (daemon_refresh_required or restart):
         return _refresh_or_fail(
             payload,
             context=context,
             executable=Path(sys.executable).resolve(),
             minimum_version=current_version,
-            required=True,
+            required=daemon_refresh_required or restart,
         )
     return payload, 0
 
@@ -344,27 +368,43 @@ def _desktop_apply_target(
         if applied.changed
         else commands.already_current_update_message(version_check)
     )
-    if context is not None and store is not None and now is not None:
-        repaired_installs, repair_notes = commands._repair_supported_harnesses_in_process(
-            context=context,
-            store=store,
-            workspace=workspace,
-            now=now,
-            dry_run=False,
-        )
-        if repair_notes:
-            payload["notes"] = [*commands._payload_notes(payload), *repair_notes]
-        if repaired_installs:
-            payload["managed_installs"] = repaired_installs
-    if context is not None and (applied.changed or daemon_refresh_required):
+    restart = _converge_installs(payload, context=context, store=store, workspace=workspace, now=now)
+    if context is not None and (applied.changed or daemon_refresh_required or restart):
         return _refresh_or_fail(
             payload,
             context=context,
             executable=applied.executable,
             minimum_version=applied.version,
-            required=daemon_refresh_required,
+            required=daemon_refresh_required or restart,
         )
     return payload, 0
+
+
+def _converge_installs(
+    payload: dict[str, object],
+    *,
+    context: HarnessContext | None,
+    store: GuardStore | None,
+    workspace: str | None,
+    now: str | None,
+) -> bool:
+    """Repair hooks and retire superseded installs; return whether to restart the daemon."""
+
+    from . import update_commands as commands
+    from .desktop_converge import converge_notes, repair_hooks_then_converge
+
+    if context is None or store is None or now is None:
+        return False
+    converged, repaired_installs, repair_notes = repair_hooks_then_converge(
+        context, store=store, workspace=workspace, now=now
+    )
+    if repaired_installs:
+        payload["managed_installs"] = repaired_installs
+    payload["converge"] = converged
+    notes = [*repair_notes, *converge_notes(converged)]
+    if notes:
+        payload["notes"] = [*commands._payload_notes(payload), *notes]
+    return bool(converged.get("daemon_restart_required"))
 
 
 def _refresh_or_fail(

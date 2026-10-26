@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.local_cli_trust import apply_local_mcp_extension_decision, utc_now
+from codex_plugin_scanner.guard.local_cli_trust import utc_now
 from codex_plugin_scanner.guard.mcp_tool_calls import (
     build_tool_call_artifact,
     build_tool_call_hash,
@@ -31,8 +31,11 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
 from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
-from codex_plugin_scanner.guard.runtime.mcp_server_grants import apply_contributed_mcp_decision
 from codex_plugin_scanner.guard.store import GuardStore
+
+from .local_cli_native_fixture import native_local_cli_grant_resident, native_test_guard_home  # noqa: F401
+from .mcp_extension_driver import apply_contributed_mcp_decision, apply_local_mcp_extension_decision
+from .mcp_policy_catalog_fixture import admit_mcp_layers
 
 
 def _identity():
@@ -84,11 +87,17 @@ def _layer(
 class _AuthorityStore:
     def __init__(self, layers: tuple[ExtensionControlLayer, ...] = ()) -> None:
         self.layers = layers
+        self.guard_home = native_test_guard_home()
+        self.path = self.guard_home / "guard.db"
+        admit_mcp_layers(self, layers)
 
-    def read_local_mcp_grant(self, *_args: object, **_kwargs: object) -> None:
-        return None
+    def has_local_cli_grant_rules(self) -> bool:
+        """No device grant rows exist, so an unavailable resident cannot hide one."""
+        return False
 
-    def read_extension_control_authority_for_registry(self, registry: object) -> ExtensionControlAuthorityView:
+    def read_extension_control_authority_for_registry(
+        self, registry: object, **_kwargs
+    ) -> ExtensionControlAuthorityView:
         digest = getattr(registry, "catalog_digest", "0" * 64)
         assert isinstance(digest, str)
         return ExtensionControlAuthorityView(
@@ -115,13 +124,10 @@ def test_enabled_filesystem_keeps_read_on_review() -> None:
     assert apply_contributed_mcp_decision(enabled, artifact, "review") is None
 
 
-def test_local_mcp_path_reasserts_enabled_review_default(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.runtime.mcp_server_grants.mcp_tool_state",
-        lambda *_args, **_kwargs: "review",
-    )
-    artifact = _artifact(_identity(), "write_file")
-    enabled = _AuthorityStore((_layer(ControlLayerKind.LOCAL_ADMIN, "command.mcp-filesystem", ControlState.ENABLED),))
+def test_local_mcp_path_reasserts_enabled_review_default() -> None:
+    identity = build_mcp_server_identity(config_path="", command="uvx", args=("agenthub-gateway",), transport="stdio")
+    artifact = _artifact(identity, "ask")
+    enabled = _AuthorityStore((_layer(ControlLayerKind.LOCAL_ADMIN, "command.mcp-agenthub", ControlState.ENABLED),))
     reviewed = apply_local_mcp_extension_decision(enabled, artifact, "review")
     assert reviewed is not None
     assert reviewed[0] == "review"
@@ -134,23 +140,34 @@ def test_signed_cloud_enable_does_not_activate_mcp_contribution() -> None:
     assert apply_contributed_mcp_decision(cloud, artifact, "review") is None
 
 
-def test_global_lockdown_suppresses_allow(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.runtime.mcp_server_grants.mcp_tool_state",
-        lambda *_args, **_kwargs: "allow",
+def test_request_layers_cannot_activate_an_unadmitted_optional_pack() -> None:
+    store = _AuthorityStore()
+    store.layers = (_layer(ControlLayerKind.LOCAL_ADMIN, "command.mcp-filesystem", ControlState.ENABLED),)
+    assert apply_contributed_mcp_decision(store, _artifact(_identity(), "write_file"), "allow") is None
+
+
+def test_admitted_catalog_decision_does_not_depend_on_request_layers() -> None:
+    store = _AuthorityStore((_layer(ControlLayerKind.LOCAL_ADMIN, "command.mcp-filesystem", ControlState.ENABLED),))
+    store.layers = ()
+    decision = apply_contributed_mcp_decision(store, _artifact(_identity(), "write_file"), "allow")
+    assert decision is not None and decision[:2] == ("block", "catalog-mcp-extension")
+
+
+def test_global_lockdown_suppresses_allow() -> None:
+    identity = build_mcp_server_identity(config_path="", command="uvx", args=("enola-cli",), transport="stdio")
+    artifact = _artifact(identity, "query_facts")
+    layer = _layer(ControlLayerKind.LOCAL_ADMIN, "command.mcp-enola", ControlState.ENABLED)
+    allowed = apply_contributed_mcp_decision(_AuthorityStore((layer,)), artifact, "review")
+    assert allowed is not None
+    assert allowed[0] == "allow"
+    locked = _layer(ControlLayerKind.LOCAL_ADMIN, "command.mcp-enola", ControlState.ENABLED, lockdown=True)
+    decision = apply_contributed_mcp_decision(_AuthorityStore((locked,)), artifact, "review")
+    assert decision is not None
+    assert decision == (
+        "block",
+        "catalog-mcp-extension",
+        "This MCP tool is blocked by its authenticated extension authority.",
     )
-    artifact = _artifact(_identity(), "read_file")
-    locked = _AuthorityStore(
-        (
-            _layer(
-                ControlLayerKind.LOCAL_ADMIN,
-                "command.mcp-filesystem",
-                ControlState.ENABLED,
-                lockdown=True,
-            ),
-        )
-    )
-    assert apply_contributed_mcp_decision(locked, artifact, "review") is None
 
 
 def test_missing_tool_identity_does_not_apply_other_defaults() -> None:
@@ -243,21 +260,24 @@ def test_custom_mcp_block_overrides_base_allow(tmp_path: Path) -> None:
 
 def test_evaluate_write_file_blocks_after_local_enable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     identity = _identity()
-    store = GuardStore(tmp_path / "guard-home")
+    layers = (_layer(ControlLayerKind.LOCAL_ADMIN, "command.mcp-filesystem", ControlState.ENABLED),)
+    authority = _AuthorityStore(layers)
+    store = GuardStore(authority.guard_home)
+    config = replace(_config(tmp_path), guard_home=authority.guard_home)
     view = ExtensionControlAuthorityView(
         health=AuthorityHealth.PROTECTED,
         revision=1,
         catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-        layers=(_layer(ControlLayerKind.LOCAL_ADMIN, "command.mcp-filesystem", ControlState.ENABLED),),
+        layers=layers,
     )
-    monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry: view)
+    monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry, **_kwargs: view)
     artifact = _artifact(identity, "write_file")
     arguments = {"path": "notes.txt", "contents": "hi"}
     decision = evaluate_tool_call(
         store=store,
-        config=_config(tmp_path),
+        config=config,
         artifact=artifact,
-        artifact_hash=build_tool_call_hash(artifact, arguments, workspace=tmp_path, config=_config(tmp_path)),
+        artifact_hash=build_tool_call_hash(artifact, arguments, workspace=tmp_path, config=config),
         arguments=arguments,
         claim_saved_approval=False,
     )

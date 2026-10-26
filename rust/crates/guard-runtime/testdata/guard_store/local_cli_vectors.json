@@ -1,0 +1,3803 @@
+{
+ "now": "2026-10-10T12:00:00+00:00",
+ "order_by": {
+  "local_cli_command": "cli_id, command_id",
+  "local_cli_forgotten": "identity_hash",
+  "local_cli_grant": "cli_id",
+  "local_cli_observation": "cli_id",
+  "local_cli_retention_state": "singleton",
+  "local_mcp_catalog": "cli_id",
+  "local_mcp_provider_action": "cli_id, identity_hash, provider, tool_slug",
+  "local_mcp_provider_authority": "cli_id, identity_hash",
+  "local_mcp_tool_authority": "cli_id, identity_hash, tool_name",
+  "local_mcp_workflow_proposal": "cli_id, identity_hash, proposal_id"
+ },
+ "scenarios": [
+  {
+   "name": "record_insert_update_and_throttle",
+   "seed": {
+    "local_cli_command": [],
+    "local_cli_forgotten": [],
+    "local_cli_grant": [],
+    "local_cli_observation": [],
+    "local_cli_retention_state": [],
+    "local_mcp_catalog": [],
+    "local_mcp_provider_action": [],
+    "local_mcp_provider_authority": [],
+    "local_mcp_tool_authority": [],
+    "local_mcp_workflow_proposal": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "first sighting",
+     "method": "record_local_cli_observation",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.alpha",
+        "example_label": "alpha",
+        "help_status": "ok",
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "alpha",
+        "observed_count": 1,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": "/opt/bin/alpha",
+        "surface": "cli"
+       }
+      ],
+      "local_cli_retention_state": [
+       {
+        "last_pruned_at": "2026-10-01T00:00:00+00:00",
+        "singleton": 1
+       }
+      ]
+     },
+     "wire_args": {
+      "cli_id": "local-cli.alpha",
+      "clock": "<NOW>",
+      "example_label": "alpha",
+      "help_status": "ok",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "alpha",
+      "only_if_missing": false,
+      "replayed_at": null,
+      "seen_at": "2026-10-01T00:00:00+00:00",
+      "server_args_hash": null,
+      "server_command": null,
+      "server_identity_hash": null,
+      "source_path": "/opt/bin/alpha",
+      "surface": "cli"
+     }
+    },
+    {
+     "error": null,
+     "label": "same day keeps the prune throttle",
+     "method": "record_local_cli_observation",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.alpha",
+        "example_label": "alpha",
+        "help_status": "ok",
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T18:00:00+00:00",
+        "name": "alpha",
+        "observed_count": 2,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": "/opt/bin/alpha",
+        "surface": "cli"
+       }
+      ]
+     },
+     "wire_args": {
+      "cli_id": "local-cli.alpha",
+      "clock": "<NOW>",
+      "example_label": "alpha",
+      "help_status": null,
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "alpha",
+      "only_if_missing": false,
+      "replayed_at": null,
+      "seen_at": "2026-10-01T18:00:00+00:00",
+      "server_args_hash": null,
+      "server_command": null,
+      "server_identity_hash": null,
+      "source_path": null,
+      "surface": "bogus"
+     }
+    },
+    {
+     "error": null,
+     "label": "identity change keeps stored optionals",
+     "method": "record_local_cli_observation",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.alpha",
+        "example_label": "py alpha",
+        "help_status": "ok",
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "interpreter_name": "python3",
+        "kind": "script",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "alpha",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": "node",
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": "/opt/bin/alpha",
+        "surface": "cli"
+       }
+      ],
+      "local_cli_retention_state": [
+       {
+        "last_pruned_at": "2026-10-03T00:00:00+00:00",
+        "singleton": 1
+       }
+      ]
+     },
+     "wire_args": {
+      "cli_id": "local-cli.alpha",
+      "clock": "<NOW>",
+      "example_label": "py alpha",
+      "help_status": null,
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "interpreter_name": "python3",
+      "kind": "script",
+      "name": "alpha",
+      "only_if_missing": false,
+      "replayed_at": null,
+      "seen_at": "2026-10-03T00:00:00+00:00",
+      "server_args_hash": null,
+      "server_command": "node",
+      "server_identity_hash": null,
+      "source_path": null,
+      "surface": "cli"
+     }
+    },
+    {
+     "error": null,
+     "label": "zulu instant",
+     "method": "record_local_cli_observation",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.alpha",
+        "example_label": "py alpha",
+        "help_status": "ok",
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "interpreter_name": "python3",
+        "kind": "script",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "alpha",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": "node",
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": "/opt/bin/alpha",
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.beta",
+        "example_label": "beta",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-04T00:00:00Z",
+        "name": "beta",
+        "observed_count": 1,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "package-scripts"
+       }
+      ],
+      "local_cli_retention_state": [
+       {
+        "last_pruned_at": "2026-10-04T00:00:00+00:00",
+        "singleton": 1
+       }
+      ]
+     },
+     "wire_args": {
+      "cli_id": "local-cli.beta",
+      "clock": "<NOW>",
+      "example_label": "beta",
+      "help_status": null,
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "beta",
+      "only_if_missing": false,
+      "replayed_at": null,
+      "seen_at": "2026-10-04T00:00:00Z",
+      "server_args_hash": null,
+      "server_command": null,
+      "server_identity_hash": null,
+      "source_path": null,
+      "surface": "package-scripts"
+     }
+    },
+    {
+     "error": null,
+     "label": "padded offset instant",
+     "method": "record_local_cli_observation",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.alpha",
+        "example_label": "py alpha",
+        "help_status": "ok",
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "interpreter_name": "python3",
+        "kind": "script",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "alpha",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": "node",
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": "/opt/bin/alpha",
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.beta",
+        "example_label": "beta",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-04T00:00:00Z",
+        "name": "beta",
+        "observed_count": 1,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "package-scripts"
+       },
+       {
+        "cli_id": "local-cli.gamma",
+        "example_label": "gamma",
+        "help_status": null,
+        "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "  2026-10-06T05:30:00+05:30 ",
+        "name": "gamma",
+        "observed_count": 1,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ],
+      "local_cli_retention_state": [
+       {
+        "last_pruned_at": "2026-10-06T00:00:00+00:00",
+        "singleton": 1
+       }
+      ]
+     },
+     "wire_args": {
+      "cli_id": "local-cli.gamma",
+      "clock": "<NOW>",
+      "example_label": "gamma",
+      "help_status": null,
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "gamma",
+      "only_if_missing": false,
+      "replayed_at": null,
+      "seen_at": "  2026-10-06T05:30:00+05:30 ",
+      "server_args_hash": null,
+      "server_command": null,
+      "server_identity_hash": null,
+      "source_path": null,
+      "surface": "mcp"
+     }
+    },
+    {
+     "error": null,
+     "label": "naive instant",
+     "method": "record_local_cli_observation",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.alpha",
+        "example_label": "py alpha",
+        "help_status": "ok",
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "interpreter_name": "python3",
+        "kind": "script",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "alpha",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": "node",
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": "/opt/bin/alpha",
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.beta",
+        "example_label": "beta",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-04T00:00:00Z",
+        "name": "beta",
+        "observed_count": 1,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "package-scripts"
+       },
+       {
+        "cli_id": "local-cli.delta",
+        "example_label": "delta",
+        "help_status": null,
+        "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-08T00:00:00",
+        "name": "delta",
+        "observed_count": 1,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.gamma",
+        "example_label": "gamma",
+        "help_status": null,
+        "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "  2026-10-06T05:30:00+05:30 ",
+        "name": "gamma",
+        "observed_count": 1,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ],
+      "local_cli_retention_state": [
+       {
+        "last_pruned_at": "2026-10-08T00:00:00+00:00",
+        "singleton": 1
+       }
+      ]
+     },
+     "wire_args": {
+      "cli_id": "local-cli.delta",
+      "clock": "<NOW>",
+      "example_label": "delta",
+      "help_status": null,
+      "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "delta",
+      "only_if_missing": false,
+      "replayed_at": null,
+      "seen_at": "2026-10-08T00:00:00",
+      "server_args_hash": null,
+      "server_command": null,
+      "server_identity_hash": null,
+      "source_path": null,
+      "surface": "cli"
+     }
+    },
+    {
+     "error": null,
+     "label": "unparsable falls back to the clock",
+     "method": "record_local_cli_observation",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.alpha",
+        "example_label": "py alpha",
+        "help_status": "ok",
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "interpreter_name": "python3",
+        "kind": "script",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "alpha",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": "node",
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": "/opt/bin/alpha",
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.beta",
+        "example_label": "beta",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-04T00:00:00Z",
+        "name": "beta",
+        "observed_count": 1,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "package-scripts"
+       },
+       {
+        "cli_id": "local-cli.delta",
+        "example_label": "delta",
+        "help_status": null,
+        "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-08T00:00:00",
+        "name": "delta",
+        "observed_count": 1,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.epsilon",
+        "example_label": "epsilon",
+        "help_status": null,
+        "identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "not a timestamp",
+        "name": "epsilon",
+        "observed_count": 1,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.gamma",
+        "example_label": "gamma",
+        "help_status": null,
+        "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "  2026-10-06T05:30:00+05:30 ",
+        "name": "gamma",
+        "observed_count": 1,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ],
+      "local_cli_retention_state": [
+       {
+        "last_pruned_at": "2026-10-10T12:00:00+00:00",
+        "singleton": 1
+       }
+      ]
+     },
+     "wire_args": {
+      "cli_id": "local-cli.epsilon",
+      "clock": "<NOW>",
+      "example_label": "epsilon",
+      "help_status": null,
+      "identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "epsilon",
+      "only_if_missing": false,
+      "replayed_at": null,
+      "seen_at": "not a timestamp",
+      "server_args_hash": null,
+      "server_command": null,
+      "server_identity_hash": null,
+      "source_path": null,
+      "surface": "cli"
+     }
+    },
+    {
+     "error": null,
+     "label": "",
+     "method": "sql",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_retention_state": []
+     },
+     "sql": [
+      [
+       "delete from local_cli_retention_state",
+       []
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "clock fallback on update",
+     "method": "record_local_cli_observation",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.alpha",
+        "example_label": "py alpha",
+        "help_status": "ok",
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "interpreter_name": "python3",
+        "kind": "script",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "alpha",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": "node",
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": "/opt/bin/alpha",
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.beta",
+        "example_label": "beta",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-04T00:00:00Z",
+        "name": "beta",
+        "observed_count": 1,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "package-scripts"
+       },
+       {
+        "cli_id": "local-cli.delta",
+        "example_label": "delta",
+        "help_status": null,
+        "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-08T00:00:00",
+        "name": "delta",
+        "observed_count": 1,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.epsilon",
+        "example_label": "epsilon",
+        "help_status": null,
+        "identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "still not a timestamp",
+        "name": "epsilon",
+        "observed_count": 2,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.gamma",
+        "example_label": "gamma",
+        "help_status": null,
+        "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "  2026-10-06T05:30:00+05:30 ",
+        "name": "gamma",
+        "observed_count": 1,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ],
+      "local_cli_retention_state": [
+       {
+        "last_pruned_at": "2026-10-10T12:00:00+00:00",
+        "singleton": 1
+       }
+      ]
+     },
+     "wire_args": {
+      "cli_id": "local-cli.epsilon",
+      "clock": "<NOW>",
+      "example_label": "epsilon",
+      "help_status": null,
+      "identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "epsilon",
+      "only_if_missing": false,
+      "replayed_at": null,
+      "seen_at": "still not a timestamp",
+      "server_args_hash": null,
+      "server_command": null,
+      "server_identity_hash": null,
+      "source_path": null,
+      "surface": "cli"
+     }
+    }
+   ]
+  },
+  {
+   "name": "record_rejects_and_prunes",
+   "seed": {
+    "local_cli_command": [],
+    "local_cli_forgotten": [],
+    "local_cli_grant": [],
+    "local_cli_observation": [],
+    "local_cli_retention_state": [],
+    "local_mcp_catalog": [],
+    "local_mcp_provider_action": [],
+    "local_mcp_provider_authority": [],
+    "local_mcp_tool_authority": [],
+    "local_mcp_workflow_proposal": []
+   },
+   "steps": [
+    {
+     "error": {
+      "message": "invalid local CLI id",
+      "message_exact": true,
+      "type": "ValueError"
+     },
+     "label": "invalid id",
+     "method": "record_local_cli_observation",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {
+      "cli_id": "local-cli.Bad_Name",
+      "clock": "<NOW>",
+      "example_label": "Bad_Name",
+      "help_status": null,
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "Bad_Name",
+      "only_if_missing": false,
+      "replayed_at": null,
+      "seen_at": "2026-10-01T00:00:00+00:00",
+      "server_args_hash": null,
+      "server_command": null,
+      "server_identity_hash": null,
+      "source_path": null,
+      "surface": "cli"
+     }
+    },
+    {
+     "error": {
+      "message": "invalid local CLI id",
+      "message_exact": true,
+      "type": "ValueError"
+     },
+     "label": "trailing newline id",
+     "method": "record_local_cli_observation",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {
+      "cli_id": "local-cli.x\n",
+      "clock": "<NOW>",
+      "example_label": "x",
+      "help_status": null,
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "x",
+      "only_if_missing": false,
+      "replayed_at": null,
+      "seen_at": "2026-10-01T00:00:00+00:00",
+      "server_args_hash": null,
+      "server_command": null,
+      "server_identity_hash": null,
+      "source_path": null,
+      "surface": "cli"
+     }
+    },
+    {
+     "error": null,
+     "label": "",
+     "method": "sql",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_command": [
+       {
+        "cli_id": "local-cli.stale",
+        "command_id": "other",
+        "description": "Other commands",
+        "name": "Other",
+        "parent_id": null,
+        "sort_index": 0,
+        "usage": "tool \u2026"
+       }
+      ],
+      "local_cli_grant": [
+       {
+        "cli_id": "local-cli.enrolled-mcp",
+        "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "revision": 1,
+        "state": "allowed",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "cli_id": "local-cli.kept",
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "revision": 1,
+        "state": "allowed",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       }
+      ],
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.enrolled-mcp",
+        "example_label": "enrolled-mcp",
+        "help_status": null,
+        "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "enrolled-mcp",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.garbled",
+        "example_label": "garbled",
+        "help_status": null,
+        "identity_hash": "3333333333333333333333333333333333333333333333333333333333333333",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "garbled",
+        "name": "garbled",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.kept",
+        "example_label": "kept",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "kept",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.legacy-sibling",
+        "example_label": "legacy-sibling",
+        "help_status": null,
+        "identity_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "legacy-sibling",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.recent",
+        "example_label": "recent",
+        "help_status": null,
+        "identity_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-09-11T00:00:00+00:00",
+        "name": "recent",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.sibling-mcp",
+        "example_label": "sibling-mcp",
+        "help_status": null,
+        "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "sibling-mcp",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.stale",
+        "example_label": "stale",
+        "help_status": null,
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "stale",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       }
+      ],
+      "local_cli_retention_state": [
+       {
+        "last_pruned_at": "2026-09-30T13:00:00Z",
+        "singleton": 1
+       }
+      ],
+      "local_mcp_catalog": [
+       {
+        "catalog_json": "{}",
+        "cli_id": "local-cli.stale",
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "last_complete_at": null,
+        "revision": 1,
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       }
+      ],
+      "local_mcp_provider_action": [
+       {
+        "authority_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "cli_id": "local-cli.stale",
+        "description": "desc",
+        "full_schema": 1,
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "input_schema_json": "{}",
+        "provider": "composio",
+        "revision": 1,
+        "source_tool": "tool",
+        "tool_slug": "SLUG",
+        "toolkit": "kit",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       }
+      ],
+      "local_mcp_provider_authority": [
+       {
+        "cli_id": "local-cli.stale",
+        "digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+       }
+      ],
+      "local_mcp_tool_authority": [
+       {
+        "authority_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "catalog_revision": 1,
+        "cli_id": "local-cli.stale",
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "tool_name": "read"
+       }
+      ],
+      "local_mcp_workflow_proposal": [
+       {
+        "cli_id": "local-cli.stale",
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "proposal_id": "p1",
+        "proposal_json": "{}",
+        "seen_at": "2026-10-01T00:00:00+00:00"
+       }
+      ]
+     },
+     "sql": [
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash) values (?, ?, 'executable', ?, null, ?, 3, ?, ?, ?, null, null)",
+       [
+        "local-cli.stale",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "stale",
+        "stale",
+        "2026-08-02T00:00:00+00:00",
+        "cli",
+        null
+       ]
+      ],
+      [
+       "insert into local_cli_command values (?, 'other', 'Other', 'tool \u2026', 'Other commands', null, 0)",
+       [
+        "local-cli.stale"
+       ]
+      ],
+      [
+       "insert into local_mcp_catalog values (?, ?, '{}', 1, ?, null)",
+       [
+        "local-cli.stale",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "2026-10-01T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_mcp_tool_authority values (?, ?, 'read', 1, ?)",
+       [
+        "local-cli.stale",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+       ]
+      ],
+      [
+       "insert into local_mcp_provider_action values (?, ?, 'composio', 'SLUG', 'kit', 'desc', '{}', ?, 1, 'tool', 1, ?)",
+       [
+        "local-cli.stale",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "2026-10-01T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_mcp_provider_authority values (?, ?, ?)",
+       [
+        "local-cli.stale",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+       ]
+      ],
+      [
+       "insert into local_mcp_workflow_proposal values (?, ?, 'p1', '{}', ?)",
+       [
+        "local-cli.stale",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "2026-10-01T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash) values (?, ?, 'executable', ?, null, ?, 3, ?, ?, ?, null, null)",
+       [
+        "local-cli.kept",
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "kept",
+        "kept",
+        "2026-08-02T00:00:00+00:00",
+        "cli",
+        null
+       ]
+      ],
+      [
+       "insert into local_cli_grant (cli_id, identity_hash, state, revision, updated_at) values (?, ?, 'allowed', 1, ?)",
+       [
+        "local-cli.kept",
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "2026-10-01T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash) values (?, ?, 'executable', ?, null, ?, 3, ?, ?, ?, null, null)",
+       [
+        "local-cli.enrolled-mcp",
+        "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "enrolled-mcp",
+        "enrolled-mcp",
+        "2026-08-02T00:00:00+00:00",
+        "mcp",
+        "5555555555555555555555555555555555555555555555555555555555555555"
+       ]
+      ],
+      [
+       "insert into local_cli_grant (cli_id, identity_hash, state, revision, updated_at) values (?, ?, 'allowed', 1, ?)",
+       [
+        "local-cli.enrolled-mcp",
+        "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "2026-10-01T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash) values (?, ?, 'executable', ?, null, ?, 3, ?, ?, ?, null, null)",
+       [
+        "local-cli.sibling-mcp",
+        "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "sibling-mcp",
+        "sibling-mcp",
+        "2026-08-02T00:00:00+00:00",
+        "mcp",
+        "5555555555555555555555555555555555555555555555555555555555555555"
+       ]
+      ],
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash) values (?, ?, 'executable', ?, null, ?, 3, ?, ?, ?, null, null)",
+       [
+        "local-cli.legacy-sibling",
+        "1111111111111111111111111111111111111111111111111111111111111111",
+        "legacy-sibling",
+        "legacy-sibling",
+        "2026-08-02T00:00:00+00:00",
+        "mcp",
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+       ]
+      ],
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash) values (?, ?, 'executable', ?, null, ?, 3, ?, ?, ?, null, null)",
+       [
+        "local-cli.recent",
+        "2222222222222222222222222222222222222222222222222222222222222222",
+        "recent",
+        "recent",
+        "2026-09-11T00:00:00+00:00",
+        "cli",
+        null
+       ]
+      ],
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash) values (?, ?, 'executable', ?, null, ?, 3, ?, ?, ?, null, null)",
+       [
+        "local-cli.garbled",
+        "3333333333333333333333333333333333333333333333333333333333333333",
+        "garbled",
+        "garbled",
+        "garbled",
+        "cli",
+        null
+       ]
+      ],
+      [
+       "insert into local_cli_retention_state values (1, ?)",
+       [
+        "2026-09-30T13:00:00Z"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "throttled: inside a day of the last prune",
+     "method": "record_local_cli_observation",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.enrolled-mcp",
+        "example_label": "enrolled-mcp",
+        "help_status": null,
+        "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "enrolled-mcp",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.fresh",
+        "example_label": "fresh",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "fresh",
+        "observed_count": 1,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.garbled",
+        "example_label": "garbled",
+        "help_status": null,
+        "identity_hash": "3333333333333333333333333333333333333333333333333333333333333333",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "garbled",
+        "name": "garbled",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.kept",
+        "example_label": "kept",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "kept",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.legacy-sibling",
+        "example_label": "legacy-sibling",
+        "help_status": null,
+        "identity_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "legacy-sibling",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.recent",
+        "example_label": "recent",
+        "help_status": null,
+        "identity_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-09-11T00:00:00+00:00",
+        "name": "recent",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.sibling-mcp",
+        "example_label": "sibling-mcp",
+        "help_status": null,
+        "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "sibling-mcp",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.stale",
+        "example_label": "stale",
+        "help_status": null,
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "stale",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       }
+      ]
+     },
+     "wire_args": {
+      "cli_id": "local-cli.fresh",
+      "clock": "<NOW>",
+      "example_label": "fresh",
+      "help_status": null,
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "fresh",
+      "only_if_missing": false,
+      "replayed_at": null,
+      "seen_at": "2026-10-01T00:00:00+00:00",
+      "server_args_hash": null,
+      "server_command": null,
+      "server_identity_hash": null,
+      "source_path": null,
+      "surface": "cli"
+     }
+    },
+    {
+     "error": null,
+     "label": "exactly a day later prunes expired rows",
+     "method": "record_local_cli_observation",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_command": [],
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.enrolled-mcp",
+        "example_label": "enrolled-mcp",
+        "help_status": null,
+        "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "enrolled-mcp",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.fresh",
+        "example_label": "fresh",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T13:00:00+00:00",
+        "name": "fresh",
+        "observed_count": 2,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.garbled",
+        "example_label": "garbled",
+        "help_status": null,
+        "identity_hash": "3333333333333333333333333333333333333333333333333333333333333333",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "garbled",
+        "name": "garbled",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.kept",
+        "example_label": "kept",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "kept",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.recent",
+        "example_label": "recent",
+        "help_status": null,
+        "identity_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-09-11T00:00:00+00:00",
+        "name": "recent",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.sibling-mcp",
+        "example_label": "sibling-mcp",
+        "help_status": null,
+        "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "sibling-mcp",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ],
+      "local_cli_retention_state": [
+       {
+        "last_pruned_at": "2026-10-01T13:00:00+00:00",
+        "singleton": 1
+       }
+      ],
+      "local_mcp_catalog": [],
+      "local_mcp_provider_action": [],
+      "local_mcp_provider_authority": [],
+      "local_mcp_tool_authority": [],
+      "local_mcp_workflow_proposal": []
+     },
+     "wire_args": {
+      "cli_id": "local-cli.fresh",
+      "clock": "<NOW>",
+      "example_label": "fresh",
+      "help_status": null,
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "fresh",
+      "only_if_missing": false,
+      "replayed_at": null,
+      "seen_at": "2026-10-01T13:00:00+00:00",
+      "server_args_hash": null,
+      "server_command": null,
+      "server_identity_hash": null,
+      "source_path": null,
+      "surface": "cli"
+     }
+    },
+    {
+     "error": null,
+     "label": "",
+     "method": "sql",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_retention_state": [
+       {
+        "last_pruned_at": "nonsense",
+        "singleton": 1
+       }
+      ]
+     },
+     "sql": [
+      [
+       "update local_cli_retention_state set last_pruned_at = 'nonsense'",
+       []
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "unparsable last prune runs again",
+     "method": "record_local_cli_observation",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.enrolled-mcp",
+        "example_label": "enrolled-mcp",
+        "help_status": null,
+        "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "enrolled-mcp",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.fresh",
+        "example_label": "fresh",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T13:00:01+00:00",
+        "name": "fresh",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.garbled",
+        "example_label": "garbled",
+        "help_status": null,
+        "identity_hash": "3333333333333333333333333333333333333333333333333333333333333333",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "garbled",
+        "name": "garbled",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.kept",
+        "example_label": "kept",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "kept",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.recent",
+        "example_label": "recent",
+        "help_status": null,
+        "identity_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-09-11T00:00:00+00:00",
+        "name": "recent",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.sibling-mcp",
+        "example_label": "sibling-mcp",
+        "help_status": null,
+        "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "sibling-mcp",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ],
+      "local_cli_retention_state": [
+       {
+        "last_pruned_at": "2026-10-01T13:00:01+00:00",
+        "singleton": 1
+       }
+      ]
+     },
+     "wire_args": {
+      "cli_id": "local-cli.fresh",
+      "clock": "<NOW>",
+      "example_label": "fresh",
+      "help_status": null,
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "fresh",
+      "only_if_missing": false,
+      "replayed_at": null,
+      "seen_at": "2026-10-01T13:00:01+00:00",
+      "server_args_hash": null,
+      "server_command": null,
+      "server_identity_hash": null,
+      "source_path": null,
+      "surface": "cli"
+     }
+    }
+   ]
+  },
+  {
+   "name": "record_only_if_missing_replay",
+   "seed": {
+    "local_cli_command": [],
+    "local_cli_forgotten": [],
+    "local_cli_grant": [],
+    "local_cli_observation": [],
+    "local_cli_retention_state": [],
+    "local_mcp_catalog": [],
+    "local_mcp_provider_action": [],
+    "local_mcp_provider_authority": [],
+    "local_mcp_tool_authority": [],
+    "local_mcp_workflow_proposal": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "",
+     "method": "sql",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_forgotten": [
+       {
+        "forgotten_at": "2026-10-05T00:00:00Z",
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+       },
+       {
+        "forgotten_at": "not a time",
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+       }
+      ],
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.old",
+        "example_label": "old",
+        "help_status": null,
+        "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "old",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.present",
+        "example_label": "present",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "present",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       }
+      ]
+     },
+     "sql": [
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash) values (?, ?, 'executable', ?, null, ?, 3, ?, ?, ?, null, null)",
+       [
+        "local-cli.present",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "present",
+        "present",
+        "2026-10-01T00:00:00+00:00",
+        "cli",
+        null
+       ]
+      ],
+      [
+       "insert into local_cli_forgotten values (?, ?)",
+       [
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "2026-10-05T00:00:00Z"
+       ]
+      ],
+      [
+       "insert into local_cli_forgotten values (?, ?)",
+       [
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "not a time"
+       ]
+      ],
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash) values (?, ?, 'executable', ?, null, ?, 3, ?, ?, ?, null, null)",
+       [
+        "local-cli.old",
+        "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "old",
+        "old",
+        "2026-08-02T00:00:00+00:00",
+        "cli",
+        null
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "existing row is left alone",
+     "method": "record_local_cli_observation",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {
+      "cli_id": "local-cli.present",
+      "clock": "<NOW>",
+      "example_label": "present",
+      "help_status": null,
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "present",
+      "only_if_missing": true,
+      "replayed_at": null,
+      "seen_at": "2026-10-03T00:00:00+00:00",
+      "server_args_hash": null,
+      "server_command": null,
+      "server_identity_hash": null,
+      "source_path": null,
+      "surface": "cli"
+     }
+    },
+    {
+     "error": null,
+     "label": "seen at the forget instant",
+     "method": "record_local_cli_observation",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {
+      "cli_id": "local-cli.forgot",
+      "clock": "<NOW>",
+      "example_label": "forgot",
+      "help_status": null,
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "forgot",
+      "only_if_missing": true,
+      "replayed_at": null,
+      "seen_at": "2026-10-05T00:00:00+00:00",
+      "server_args_hash": null,
+      "server_command": null,
+      "server_identity_hash": null,
+      "source_path": null,
+      "surface": "cli"
+     }
+    },
+    {
+     "error": null,
+     "label": "seen after forget via offset",
+     "method": "record_local_cli_observation",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.forgot",
+        "example_label": "forgot",
+        "help_status": null,
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-04T23:00:00-02:00",
+        "name": "forgot",
+        "observed_count": 1,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.old",
+        "example_label": "old",
+        "help_status": null,
+        "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "old",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.present",
+        "example_label": "present",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "present",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       }
+      ]
+     },
+     "wire_args": {
+      "cli_id": "local-cli.forgot",
+      "clock": "<NOW>",
+      "example_label": "forgot",
+      "help_status": null,
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "forgot",
+      "only_if_missing": true,
+      "replayed_at": null,
+      "seen_at": "2026-10-04T23:00:00-02:00",
+      "server_args_hash": null,
+      "server_command": null,
+      "server_identity_hash": null,
+      "source_path": null,
+      "surface": "cli"
+     }
+    },
+    {
+     "error": null,
+     "label": "unparsable forget time allows",
+     "method": "record_local_cli_observation",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.forgot",
+        "example_label": "forgot",
+        "help_status": null,
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-04T23:00:00-02:00",
+        "name": "forgot",
+        "observed_count": 1,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.garbled-forget",
+        "example_label": "garbled-forget",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "garbled-forget",
+        "observed_count": 1,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.old",
+        "example_label": "old",
+        "help_status": null,
+        "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "old",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.present",
+        "example_label": "present",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "present",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       }
+      ]
+     },
+     "wire_args": {
+      "cli_id": "local-cli.garbled-forget",
+      "clock": "<NOW>",
+      "example_label": "garbled-forget",
+      "help_status": null,
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "garbled-forget",
+      "only_if_missing": true,
+      "replayed_at": null,
+      "seen_at": "2026-10-03T00:00:00+00:00",
+      "server_args_hash": null,
+      "server_command": null,
+      "server_identity_hash": null,
+      "source_path": null,
+      "surface": "cli"
+     }
+    },
+    {
+     "error": null,
+     "label": "older than the window",
+     "method": "record_local_cli_observation",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {
+      "cli_id": "local-cli.expired",
+      "clock": "<NOW>",
+      "example_label": "expired",
+      "help_status": null,
+      "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "expired",
+      "only_if_missing": true,
+      "replayed_at": null,
+      "seen_at": "2026-08-02T00:00:00+00:00",
+      "server_args_hash": null,
+      "server_command": null,
+      "server_identity_hash": null,
+      "source_path": null,
+      "surface": "cli"
+     }
+    },
+    {
+     "error": null,
+     "label": "window measured from replayed_at",
+     "method": "record_local_cli_observation",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.expired",
+        "example_label": "expired",
+        "help_status": null,
+        "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "expired",
+        "observed_count": 1,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.forgot",
+        "example_label": "forgot",
+        "help_status": null,
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-04T23:00:00-02:00",
+        "name": "forgot",
+        "observed_count": 1,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.garbled-forget",
+        "example_label": "garbled-forget",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "garbled-forget",
+        "observed_count": 1,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.old",
+        "example_label": "old",
+        "help_status": null,
+        "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "old",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.present",
+        "example_label": "present",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "present",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       }
+      ]
+     },
+     "wire_args": {
+      "cli_id": "local-cli.expired",
+      "clock": "<NOW>",
+      "example_label": "expired",
+      "help_status": null,
+      "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "expired",
+      "only_if_missing": true,
+      "replayed_at": "2026-08-20T00:00:00Z",
+      "seen_at": "2026-08-02T00:00:00+00:00",
+      "server_args_hash": null,
+      "server_command": null,
+      "server_identity_hash": null,
+      "source_path": null,
+      "surface": "cli"
+     }
+    },
+    {
+     "error": null,
+     "label": "unparsable seen is allowed",
+     "method": "record_local_cli_observation",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.expired",
+        "example_label": "expired",
+        "help_status": null,
+        "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "expired",
+        "observed_count": 1,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.forgot",
+        "example_label": "forgot",
+        "help_status": null,
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-04T23:00:00-02:00",
+        "name": "forgot",
+        "observed_count": 1,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.garbled-forget",
+        "example_label": "garbled-forget",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "garbled-forget",
+        "observed_count": 1,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.old",
+        "example_label": "old",
+        "help_status": null,
+        "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "old",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.present",
+        "example_label": "present",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "present",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.unparsed",
+        "example_label": "unparsed",
+        "help_status": null,
+        "identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "whenever",
+        "name": "unparsed",
+        "observed_count": 1,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       }
+      ]
+     },
+     "wire_args": {
+      "cli_id": "local-cli.unparsed",
+      "clock": "<NOW>",
+      "example_label": "unparsed",
+      "help_status": null,
+      "identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "unparsed",
+      "only_if_missing": true,
+      "replayed_at": null,
+      "seen_at": "whenever",
+      "server_args_hash": null,
+      "server_command": null,
+      "server_identity_hash": null,
+      "source_path": null,
+      "surface": "cli"
+     }
+    },
+    {
+     "error": null,
+     "label": "listed identity always refreshes",
+     "method": "record_local_cli_observation",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.expired",
+        "example_label": "expired",
+        "help_status": null,
+        "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "expired",
+        "observed_count": 1,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.forgot",
+        "example_label": "forgot",
+        "help_status": null,
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-04T23:00:00-02:00",
+        "name": "forgot",
+        "observed_count": 1,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.garbled-forget",
+        "example_label": "garbled-forget",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "garbled-forget",
+        "observed_count": 1,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.listed-hash",
+        "example_label": "listed-hash",
+        "help_status": null,
+        "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "listed-hash",
+        "observed_count": 1,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.old",
+        "example_label": "old",
+        "help_status": null,
+        "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "old",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.present",
+        "example_label": "present",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "present",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.unparsed",
+        "example_label": "unparsed",
+        "help_status": null,
+        "identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "whenever",
+        "name": "unparsed",
+        "observed_count": 1,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       }
+      ]
+     },
+     "wire_args": {
+      "cli_id": "local-cli.listed-hash",
+      "clock": "<NOW>",
+      "example_label": "listed-hash",
+      "help_status": null,
+      "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "interpreter_name": null,
+      "kind": "executable",
+      "name": "listed-hash",
+      "only_if_missing": true,
+      "replayed_at": null,
+      "seen_at": "2026-08-02T00:00:00+00:00",
+      "server_args_hash": null,
+      "server_command": null,
+      "server_identity_hash": null,
+      "source_path": null,
+      "surface": "cli"
+     }
+    }
+   ]
+  },
+  {
+   "name": "forget_refusals_and_success",
+   "seed": {
+    "local_cli_command": [],
+    "local_cli_forgotten": [],
+    "local_cli_grant": [],
+    "local_cli_observation": [],
+    "local_cli_retention_state": [],
+    "local_mcp_catalog": [],
+    "local_mcp_provider_action": [],
+    "local_mcp_provider_authority": [],
+    "local_mcp_tool_authority": [],
+    "local_mcp_workflow_proposal": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "",
+     "method": "sql",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_command": [
+       {
+        "cli_id": "local-cli.gone",
+        "command_id": "other",
+        "description": "Other commands",
+        "name": "Other",
+        "parent_id": null,
+        "sort_index": 0,
+        "usage": "tool \u2026"
+       },
+       {
+        "cli_id": "local-cli.other",
+        "command_id": "other",
+        "description": "Other commands",
+        "name": "Other",
+        "parent_id": null,
+        "sort_index": 0,
+        "usage": "tool \u2026"
+       }
+      ],
+      "local_cli_grant": [
+       {
+        "cli_id": "local-cli.granted",
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "revision": 1,
+        "state": "allowed",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "cli_id": "local-cli.server-owner",
+        "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "revision": 1,
+        "state": "allowed",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       }
+      ],
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.gone",
+        "example_label": "gone",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "gone",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.granted",
+        "example_label": "granted",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "granted",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.other",
+        "example_label": "other",
+        "help_status": null,
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "other",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.server-owner",
+        "example_label": "server-owner",
+        "help_status": null,
+        "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "server-owner",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.server-peer",
+        "example_label": "server-peer",
+        "help_status": null,
+        "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "server-peer",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ],
+      "local_mcp_catalog": [
+       {
+        "catalog_json": "{}",
+        "cli_id": "local-cli.gone",
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "last_complete_at": null,
+        "revision": 1,
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "catalog_json": "{}",
+        "cli_id": "local-cli.other",
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "last_complete_at": null,
+        "revision": 1,
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       }
+      ],
+      "local_mcp_provider_action": [
+       {
+        "authority_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "cli_id": "local-cli.gone",
+        "description": "desc",
+        "full_schema": 1,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "input_schema_json": "{}",
+        "provider": "composio",
+        "revision": 1,
+        "source_tool": "tool",
+        "tool_slug": "SLUG",
+        "toolkit": "kit",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "authority_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "cli_id": "local-cli.other",
+        "description": "desc",
+        "full_schema": 1,
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "input_schema_json": "{}",
+        "provider": "composio",
+        "revision": 1,
+        "source_tool": "tool",
+        "tool_slug": "SLUG",
+        "toolkit": "kit",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       }
+      ],
+      "local_mcp_provider_authority": [
+       {
+        "cli_id": "local-cli.gone",
+        "digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+       },
+       {
+        "cli_id": "local-cli.other",
+        "digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+       }
+      ],
+      "local_mcp_tool_authority": [
+       {
+        "authority_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "catalog_revision": 1,
+        "cli_id": "local-cli.gone",
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "tool_name": "read"
+       },
+       {
+        "authority_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "catalog_revision": 1,
+        "cli_id": "local-cli.other",
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "tool_name": "read"
+       }
+      ],
+      "local_mcp_workflow_proposal": [
+       {
+        "cli_id": "local-cli.gone",
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "proposal_id": "p1",
+        "proposal_json": "{}",
+        "seen_at": "2026-10-01T00:00:00+00:00"
+       },
+       {
+        "cli_id": "local-cli.other",
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "proposal_id": "p1",
+        "proposal_json": "{}",
+        "seen_at": "2026-10-01T00:00:00+00:00"
+       }
+      ]
+     },
+     "sql": [
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash) values (?, ?, 'executable', ?, null, ?, 3, ?, ?, ?, null, null)",
+       [
+        "local-cli.gone",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "gone",
+        "gone",
+        "2026-10-01T00:00:00+00:00",
+        "cli",
+        null
+       ]
+      ],
+      [
+       "insert into local_cli_command values (?, 'other', 'Other', 'tool \u2026', 'Other commands', null, 0)",
+       [
+        "local-cli.gone"
+       ]
+      ],
+      [
+       "insert into local_mcp_catalog values (?, ?, '{}', 1, ?, null)",
+       [
+        "local-cli.gone",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "2026-10-01T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_mcp_tool_authority values (?, ?, 'read', 1, ?)",
+       [
+        "local-cli.gone",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+       ]
+      ],
+      [
+       "insert into local_mcp_provider_action values (?, ?, 'composio', 'SLUG', 'kit', 'desc', '{}', ?, 1, 'tool', 1, ?)",
+       [
+        "local-cli.gone",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "2026-10-01T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_mcp_provider_authority values (?, ?, ?)",
+       [
+        "local-cli.gone",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+       ]
+      ],
+      [
+       "insert into local_mcp_workflow_proposal values (?, ?, 'p1', '{}', ?)",
+       [
+        "local-cli.gone",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "2026-10-01T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_cli_command values (?, 'other', 'Other', 'tool \u2026', 'Other commands', null, 0)",
+       [
+        "local-cli.other"
+       ]
+      ],
+      [
+       "insert into local_mcp_catalog values (?, ?, '{}', 1, ?, null)",
+       [
+        "local-cli.other",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "2026-10-01T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_mcp_tool_authority values (?, ?, 'read', 1, ?)",
+       [
+        "local-cli.other",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+       ]
+      ],
+      [
+       "insert into local_mcp_provider_action values (?, ?, 'composio', 'SLUG', 'kit', 'desc', '{}', ?, 1, 'tool', 1, ?)",
+       [
+        "local-cli.other",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "2026-10-01T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_mcp_provider_authority values (?, ?, ?)",
+       [
+        "local-cli.other",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+       ]
+      ],
+      [
+       "insert into local_mcp_workflow_proposal values (?, ?, 'p1', '{}', ?)",
+       [
+        "local-cli.other",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "2026-10-01T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash) values (?, ?, 'executable', ?, null, ?, 3, ?, ?, ?, null, null)",
+       [
+        "local-cli.other",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "other",
+        "other",
+        "2026-10-01T00:00:00+00:00",
+        "cli",
+        null
+       ]
+      ],
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash) values (?, ?, 'executable', ?, null, ?, 3, ?, ?, ?, null, null)",
+       [
+        "local-cli.granted",
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "granted",
+        "granted",
+        "2026-10-01T00:00:00+00:00",
+        "cli",
+        null
+       ]
+      ],
+      [
+       "insert into local_cli_grant (cli_id, identity_hash, state, revision, updated_at) values (?, ?, 'allowed', 1, ?)",
+       [
+        "local-cli.granted",
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "2026-10-01T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash) values (?, ?, 'executable', ?, null, ?, 3, ?, ?, ?, null, null)",
+       [
+        "local-cli.server-owner",
+        "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "server-owner",
+        "server-owner",
+        "2026-10-01T00:00:00+00:00",
+        "mcp",
+        "5555555555555555555555555555555555555555555555555555555555555555"
+       ]
+      ],
+      [
+       "insert into local_cli_grant (cli_id, identity_hash, state, revision, updated_at) values (?, ?, 'allowed', 1, ?)",
+       [
+        "local-cli.server-owner",
+        "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "2026-10-01T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash) values (?, ?, 'executable', ?, null, ?, 3, ?, ?, ?, null, null)",
+       [
+        "local-cli.server-peer",
+        "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "server-peer",
+        "server-peer",
+        "2026-10-01T00:00:00+00:00",
+        "mcp",
+        "5555555555555555555555555555555555555555555555555555555555555555"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": {
+      "message": "invalid_cli_id",
+      "message_exact": true,
+      "type": "ValueError"
+     },
+     "label": "invalid id",
+     "method": "forget_local_cli_observation",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {
+      "cli_id": "local-cli.Bad",
+      "clock": "<NOW>",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+     }
+    },
+    {
+     "error": {
+      "message": "local_cli_not_found",
+      "message_exact": true,
+      "type": "ValueError"
+     },
+     "label": "not found",
+     "method": "forget_local_cli_observation",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {
+      "cli_id": "local-cli.missing",
+      "clock": "<NOW>",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+     }
+    },
+    {
+     "error": {
+      "message": "identity_changed",
+      "message_exact": true,
+      "type": "ValueError"
+     },
+     "label": "identity changed",
+     "method": "forget_local_cli_observation",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {
+      "cli_id": "local-cli.gone",
+      "clock": "<NOW>",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+     }
+    },
+    {
+     "error": {
+      "message": "local_cli_enrolled",
+      "message_exact": true,
+      "type": "ValueError"
+     },
+     "label": "enrolled",
+     "method": "forget_local_cli_observation",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {
+      "cli_id": "local-cli.granted",
+      "clock": "<NOW>",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+     }
+    },
+    {
+     "error": {
+      "message": "local_cli_shared_server_enrolled",
+      "message_exact": true,
+      "type": "ValueError"
+     },
+     "label": "shares an enrolled server",
+     "method": "forget_local_cli_observation",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {
+      "cli_id": "local-cli.server-peer",
+      "clock": "<NOW>",
+      "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+     }
+    },
+    {
+     "error": null,
+     "label": "forgotten",
+     "method": "forget_local_cli_observation",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_command": [
+       {
+        "cli_id": "local-cli.other",
+        "command_id": "other",
+        "description": "Other commands",
+        "name": "Other",
+        "parent_id": null,
+        "sort_index": 0,
+        "usage": "tool \u2026"
+       }
+      ],
+      "local_cli_forgotten": [
+       {
+        "forgotten_at": "2026-10-10T12:00:00+00:00",
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+       }
+      ],
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.granted",
+        "example_label": "granted",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "granted",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.other",
+        "example_label": "other",
+        "help_status": null,
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "other",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.server-owner",
+        "example_label": "server-owner",
+        "help_status": null,
+        "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "server-owner",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.server-peer",
+        "example_label": "server-peer",
+        "help_status": null,
+        "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "server-peer",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ],
+      "local_mcp_catalog": [
+       {
+        "catalog_json": "{}",
+        "cli_id": "local-cli.other",
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "last_complete_at": null,
+        "revision": 1,
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       }
+      ],
+      "local_mcp_provider_action": [
+       {
+        "authority_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "cli_id": "local-cli.other",
+        "description": "desc",
+        "full_schema": 1,
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "input_schema_json": "{}",
+        "provider": "composio",
+        "revision": 1,
+        "source_tool": "tool",
+        "tool_slug": "SLUG",
+        "toolkit": "kit",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       }
+      ],
+      "local_mcp_provider_authority": [
+       {
+        "cli_id": "local-cli.other",
+        "digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+       }
+      ],
+      "local_mcp_tool_authority": [
+       {
+        "authority_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "catalog_revision": 1,
+        "cli_id": "local-cli.other",
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "tool_name": "read"
+       }
+      ],
+      "local_mcp_workflow_proposal": [
+       {
+        "cli_id": "local-cli.other",
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "proposal_id": "p1",
+        "proposal_json": "{}",
+        "seen_at": "2026-10-01T00:00:00+00:00"
+       }
+      ]
+     },
+     "wire_args": {
+      "cli_id": "local-cli.gone",
+      "clock": "<NOW>",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+     }
+    },
+    {
+     "error": {
+      "message": "local_cli_not_found",
+      "message_exact": true,
+      "type": "ValueError"
+     },
+     "label": "already forgotten",
+     "method": "forget_local_cli_observation",
+     "native_payload": null,
+     "post_changed": {},
+     "wire_args": {
+      "cli_id": "local-cli.gone",
+      "clock": "<NOW>",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+     }
+    },
+    {
+     "error": null,
+     "label": "",
+     "method": "sql",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.gone",
+        "example_label": "gone",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "gone",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.granted",
+        "example_label": "granted",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "granted",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.other",
+        "example_label": "other",
+        "help_status": null,
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "other",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.server-owner",
+        "example_label": "server-owner",
+        "help_status": null,
+        "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "server-owner",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.server-peer",
+        "example_label": "server-peer",
+        "help_status": null,
+        "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "server-peer",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ]
+     },
+     "sql": [
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash) values (?, ?, 'executable', ?, null, ?, 3, ?, ?, ?, null, null)",
+       [
+        "local-cli.gone",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "gone",
+        "gone",
+        "2026-10-03T00:00:00+00:00",
+        "cli",
+        null
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "forget again refreshes the stamp",
+     "method": "forget_local_cli_observation",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.granted",
+        "example_label": "granted",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "granted",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.other",
+        "example_label": "other",
+        "help_status": null,
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "other",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.server-owner",
+        "example_label": "server-owner",
+        "help_status": null,
+        "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "server-owner",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       },
+       {
+        "cli_id": "local-cli.server-peer",
+        "example_label": "server-peer",
+        "help_status": null,
+        "identity_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-01T00:00:00+00:00",
+        "name": "server-peer",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": "5555555555555555555555555555555555555555555555555555555555555555",
+        "source_label": null,
+        "source_path": null,
+        "surface": "mcp"
+       }
+      ]
+     },
+     "wire_args": {
+      "cli_id": "local-cli.gone",
+      "clock": "<NOW>",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+     }
+    }
+   ]
+  },
+  {
+   "name": "replay_gate",
+   "seed": {
+    "local_cli_command": [],
+    "local_cli_forgotten": [],
+    "local_cli_grant": [],
+    "local_cli_observation": [],
+    "local_cli_retention_state": [],
+    "local_mcp_catalog": [],
+    "local_mcp_provider_action": [],
+    "local_mcp_provider_authority": [],
+    "local_mcp_tool_authority": [],
+    "local_mcp_workflow_proposal": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "",
+     "method": "sql",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_forgotten": [
+       {
+        "forgotten_at": "2026-10-05T00:00:00+00:00",
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+       }
+      ],
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.listed",
+        "example_label": "listed",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "listed",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       }
+      ]
+     },
+     "sql": [
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash) values (?, ?, 'executable', ?, null, ?, 3, ?, ?, ?, null, null)",
+       [
+        "local-cli.listed",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "listed",
+        "listed",
+        "2026-08-02T00:00:00+00:00",
+        "cli",
+        null
+       ]
+      ],
+      [
+       "insert into local_cli_forgotten values (?, ?)",
+       [
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "2026-10-05T00:00:00+00:00"
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "listed",
+     "method": "local_cli_replay_allowed",
+     "native_payload": true,
+     "post_changed": {},
+     "wire_args": {
+      "clock": "<NOW>",
+      "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "now": null,
+      "seen_at": "garbage"
+     }
+    },
+    {
+     "error": null,
+     "label": "before forget",
+     "method": "local_cli_replay_allowed",
+     "native_payload": false,
+     "post_changed": {},
+     "wire_args": {
+      "clock": "<NOW>",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "now": null,
+      "seen_at": "2026-10-04T00:00:00Z"
+     }
+    },
+    {
+     "error": null,
+     "label": "after forget",
+     "method": "local_cli_replay_allowed",
+     "native_payload": true,
+     "post_changed": {},
+     "wire_args": {
+      "clock": "<NOW>",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "now": null,
+      "seen_at": "2026-10-06T00:00:00Z"
+     }
+    },
+    {
+     "error": null,
+     "label": "unparsable seen against a forget",
+     "method": "local_cli_replay_allowed",
+     "native_payload": false,
+     "post_changed": {},
+     "wire_args": {
+      "clock": "<NOW>",
+      "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "now": null,
+      "seen_at": "nope"
+     }
+    },
+    {
+     "error": null,
+     "label": "unparsable seen without a forget",
+     "method": "local_cli_replay_allowed",
+     "native_payload": true,
+     "post_changed": {},
+     "wire_args": {
+      "clock": "<NOW>",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "now": null,
+      "seen_at": "nope"
+     }
+    },
+    {
+     "error": null,
+     "label": "expired against the clock",
+     "method": "local_cli_replay_allowed",
+     "native_payload": false,
+     "post_changed": {},
+     "wire_args": {
+      "clock": "<NOW>",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "now": null,
+      "seen_at": "2026-08-02T00:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "inside the window of an explicit now",
+     "method": "local_cli_replay_allowed",
+     "native_payload": true,
+     "post_changed": {},
+     "wire_args": {
+      "clock": "<NOW>",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "now": "2026-08-15T00:00:00Z",
+      "seen_at": "2026-08-02T00:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "unparsable now falls back to the clock",
+     "method": "local_cli_replay_allowed",
+     "native_payload": false,
+     "post_changed": {},
+     "wire_args": {
+      "clock": "<NOW>",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "now": "later",
+      "seen_at": "2026-08-02T00:00:00+00:00"
+     }
+    },
+    {
+     "error": null,
+     "label": "exactly at the cutoff",
+     "method": "local_cli_replay_allowed",
+     "native_payload": true,
+     "post_changed": {},
+     "wire_args": {
+      "clock": "<NOW>",
+      "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "now": null,
+      "seen_at": "2026-09-10T12:00:00+00:00"
+     }
+    }
+   ]
+  },
+  {
+   "name": "prune_inactive",
+   "seed": {
+    "local_cli_command": [],
+    "local_cli_forgotten": [],
+    "local_cli_grant": [],
+    "local_cli_observation": [],
+    "local_cli_retention_state": [],
+    "local_mcp_catalog": [],
+    "local_mcp_provider_action": [],
+    "local_mcp_provider_authority": [],
+    "local_mcp_tool_authority": [],
+    "local_mcp_workflow_proposal": []
+   },
+   "steps": [
+    {
+     "error": null,
+     "label": "",
+     "method": "sql",
+     "native_payload": null,
+     "post_changed": {
+      "local_cli_command": [
+       {
+        "cli_id": "local-cli.old",
+        "command_id": "other",
+        "description": "Other commands",
+        "name": "Other",
+        "parent_id": null,
+        "sort_index": 0,
+        "usage": "tool \u2026"
+       }
+      ],
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.edge",
+        "example_label": "edge",
+        "help_status": null,
+        "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-09-10T12:00:00Z",
+        "name": "edge",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.mid",
+        "example_label": "mid",
+        "help_status": null,
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-09-11T00:00:00+00:00",
+        "name": "mid",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.new",
+        "example_label": "new",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "new",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.old",
+        "example_label": "old",
+        "help_status": null,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-08-02T00:00:00+00:00",
+        "name": "old",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       }
+      ],
+      "local_mcp_catalog": [
+       {
+        "catalog_json": "{}",
+        "cli_id": "local-cli.old",
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "last_complete_at": null,
+        "revision": 1,
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       }
+      ],
+      "local_mcp_provider_action": [
+       {
+        "authority_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "cli_id": "local-cli.old",
+        "description": "desc",
+        "full_schema": 1,
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "input_schema_json": "{}",
+        "provider": "composio",
+        "revision": 1,
+        "source_tool": "tool",
+        "tool_slug": "SLUG",
+        "toolkit": "kit",
+        "updated_at": "2026-10-01T00:00:00+00:00"
+       }
+      ],
+      "local_mcp_provider_authority": [
+       {
+        "cli_id": "local-cli.old",
+        "digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+       }
+      ],
+      "local_mcp_tool_authority": [
+       {
+        "authority_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "catalog_revision": 1,
+        "cli_id": "local-cli.old",
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "tool_name": "read"
+       }
+      ],
+      "local_mcp_workflow_proposal": [
+       {
+        "cli_id": "local-cli.old",
+        "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "proposal_id": "p1",
+        "proposal_json": "{}",
+        "seen_at": "2026-10-01T00:00:00+00:00"
+       }
+      ]
+     },
+     "sql": [
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash) values (?, ?, 'executable', ?, null, ?, 3, ?, ?, ?, null, null)",
+       [
+        "local-cli.old",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "old",
+        "old",
+        "2026-08-02T00:00:00+00:00",
+        "cli",
+        null
+       ]
+      ],
+      [
+       "insert into local_cli_command values (?, 'other', 'Other', 'tool \u2026', 'Other commands', null, 0)",
+       [
+        "local-cli.old"
+       ]
+      ],
+      [
+       "insert into local_mcp_catalog values (?, ?, '{}', 1, ?, null)",
+       [
+        "local-cli.old",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "2026-10-01T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_mcp_tool_authority values (?, ?, 'read', 1, ?)",
+       [
+        "local-cli.old",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+       ]
+      ],
+      [
+       "insert into local_mcp_provider_action values (?, ?, 'composio', 'SLUG', 'kit', 'desc', '{}', ?, 1, 'tool', 1, ?)",
+       [
+        "local-cli.old",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "2026-10-01T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_mcp_provider_authority values (?, ?, ?)",
+       [
+        "local-cli.old",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+       ]
+      ],
+      [
+       "insert into local_mcp_workflow_proposal values (?, ?, 'p1', '{}', ?)",
+       [
+        "local-cli.old",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "2026-10-01T00:00:00+00:00"
+       ]
+      ],
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash) values (?, ?, 'executable', ?, null, ?, 3, ?, ?, ?, null, null)",
+       [
+        "local-cli.mid",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "mid",
+        "mid",
+        "2026-09-11T00:00:00+00:00",
+        "cli",
+        null
+       ]
+      ],
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash) values (?, ?, 'executable', ?, null, ?, 3, ?, ?, ?, null, null)",
+       [
+        "local-cli.new",
+        "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "new",
+        "new",
+        "2026-10-03T00:00:00+00:00",
+        "cli",
+        null
+       ]
+      ],
+      [
+       "insert into local_cli_observation (cli_id, identity_hash, kind, name, interpreter_name, example_label, observed_count, last_seen_at, surface, server_identity_hash, server_command, server_args_hash) values (?, ?, 'executable', ?, null, ?, 3, ?, ?, ?, null, null)",
+       [
+        "local-cli.edge",
+        "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "edge",
+        "edge",
+        "2026-09-10T12:00:00Z",
+        "cli",
+        null
+       ]
+      ]
+     ],
+     "wire_args": null
+    },
+    {
+     "error": null,
+     "label": "throttled first run records the clock",
+     "method": "prune_inactive_local_cli_observations",
+     "native_payload": [
+      "local-cli.old"
+     ],
+     "post_changed": {
+      "local_cli_command": [],
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.edge",
+        "example_label": "edge",
+        "help_status": null,
+        "identity_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-09-10T12:00:00Z",
+        "name": "edge",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.mid",
+        "example_label": "mid",
+        "help_status": null,
+        "identity_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-09-11T00:00:00+00:00",
+        "name": "mid",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       },
+       {
+        "cli_id": "local-cli.new",
+        "example_label": "new",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "new",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       }
+      ],
+      "local_cli_retention_state": [
+       {
+        "last_pruned_at": "2026-10-10T12:00:00+00:00",
+        "singleton": 1
+       }
+      ],
+      "local_mcp_catalog": [],
+      "local_mcp_provider_action": [],
+      "local_mcp_provider_authority": [],
+      "local_mcp_tool_authority": [],
+      "local_mcp_workflow_proposal": []
+     },
+     "wire_args": {
+      "clock": "<NOW>",
+      "now": null,
+      "retention_days": 30,
+      "throttle": true
+     }
+    },
+    {
+     "error": null,
+     "label": "throttled again is skipped",
+     "method": "prune_inactive_local_cli_observations",
+     "native_payload": [],
+     "post_changed": {},
+     "wire_args": {
+      "clock": "<NOW>",
+      "now": null,
+      "retention_days": 30,
+      "throttle": true
+     }
+    },
+    {
+     "error": null,
+     "label": "explicit now and a short window",
+     "method": "prune_inactive_local_cli_observations",
+     "native_payload": [
+      "local-cli.mid",
+      "local-cli.edge"
+     ],
+     "post_changed": {
+      "local_cli_observation": [
+       {
+        "cli_id": "local-cli.new",
+        "example_label": "new",
+        "help_status": null,
+        "identity_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "interpreter_name": null,
+        "kind": "executable",
+        "last_seen_at": "2026-10-03T00:00:00+00:00",
+        "name": "new",
+        "observed_count": 3,
+        "server_args_hash": null,
+        "server_command": null,
+        "server_identity_hash": null,
+        "source_label": null,
+        "source_path": null,
+        "surface": "cli"
+       }
+      ]
+     },
+     "wire_args": {
+      "clock": "<NOW>",
+      "now": "2026-10-05T00:00:00+00:00",
+      "retention_days": 7,
+      "throttle": false
+     }
+    },
+    {
+     "error": null,
+     "label": "nothing left to prune",
+     "method": "prune_inactive_local_cli_observations",
+     "native_payload": [],
+     "post_changed": {},
+     "wire_args": {
+      "clock": "<NOW>",
+      "now": null,
+      "retention_days": 30,
+      "throttle": false
+     }
+    }
+   ]
+  }
+ ],
+ "schema": "guard-store-local-cli-vectors.v1",
+ "schema_sql": [
+  "CREATE TABLE local_cli_observation (\n            cli_id text primary key,\n            identity_hash text not null,\n            kind text not null check (kind in ('executable', 'script')),\n            name text not null,\n            interpreter_name text,\n            example_label text not null,\n            observed_count integer not null check (observed_count >= 1),\n            last_seen_at text not null,\n            source_path text,\n            help_status text,\n            surface text not null default 'cli' check (surface in ('cli', 'mcp', 'package-scripts')),\n            server_identity_hash text,\n            server_command text,\n            server_args_hash text,\n            source_label text\n        )",
+  "CREATE TABLE local_cli_grant (\n            cli_id text primary key,\n            identity_hash text not null,\n            state text not null check (state in ('allowed', 'blocked')),\n            revision integer not null check (revision >= 1),\n            updated_at text not null\n        )",
+  "CREATE TABLE local_cli_command (\n            cli_id text not null,\n            command_id text not null,\n            name text not null,\n            usage text not null,\n            description text not null,\n            parent_id text,\n            sort_index integer not null check (sort_index >= 0),\n            primary key (cli_id, command_id)\n        )",
+  "CREATE TABLE local_mcp_tool_authority (\n            cli_id text not null, identity_hash text not null, tool_name text not null,\n            catalog_revision integer not null, authority_hash text not null,\n            primary key (cli_id, identity_hash, tool_name)\n        )",
+  "CREATE TABLE local_mcp_workflow_proposal (\n            cli_id text not null, identity_hash text not null, proposal_id text not null,\n            proposal_json text not null, seen_at text not null,\n            primary key (cli_id, identity_hash, proposal_id)\n        )",
+  "CREATE TABLE local_mcp_catalog (\n            cli_id text primary key,\n            identity_hash text not null,\n            catalog_json text not null,\n            revision integer not null check (revision >= 1),\n            updated_at text not null,\n            last_complete_at text\n        )",
+  "CREATE TABLE local_mcp_provider_authority (\n            cli_id text not null, identity_hash text not null, digest text not null,\n            primary key (cli_id, identity_hash)\n        )",
+  "CREATE TABLE local_mcp_provider_action (\n            cli_id text not null,\n            identity_hash text not null,\n            provider text not null check (provider = 'composio'),\n            tool_slug text not null,\n            toolkit text not null,\n            description text not null,\n            input_schema_json text not null,\n            authority_hash text not null,\n            full_schema integer not null check (full_schema in (0, 1)),\n            source_tool text not null,\n            revision integer not null check (revision >= 1),\n            updated_at text not null,\n            primary key (cli_id, identity_hash, provider, tool_slug)\n        )",
+  "CREATE TABLE local_cli_forgotten (identity_hash text primary key, forgotten_at text not null)",
+  "CREATE TABLE local_cli_retention_state (singleton integer primary key check (singleton = 1), last_pruned_at text not null)"
+ ],
+ "source": "guard"
+}

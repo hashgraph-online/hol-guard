@@ -1,0 +1,42 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.asdecided",
+  "version": "1.0.0",
+  "name": "AsDecided MCP",
+  "description": "Read-only repository requirements, decisions, designs, roadmaps, and prompts for coding agents. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.asdecided",
+    "displayName": "AsDecided",
+    "url": "https://github.com/asdecided/core"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCommandLine", "background": "#0F172A" },
+  "homepage": "https://github.com/asdecided/core",
+  "license": "Apache-2.0",
+  "launch": {
+    "kind": "direct-command",
+    "command": "decided-mcp"
+  },
+  "riskClasses": ["external-repository-read"],
+  "tools": [
+    { "name": "get_summary", "state": "inherit" },
+    { "name": "search_artifacts", "state": "inherit" },
+    { "name": "retrieve_grounding", "state": "inherit" },
+    { "name": "get_artifact", "state": "inherit" },
+    { "name": "get_related", "state": "inherit" },
+    { "name": "find_decisions", "state": "inherit" },
+    { "name": "other", "state": "inherit" }
+  ],
+  "referenceUrls": [
+    "https://github.com/asdecided/core",
+    "https://github.com/asdecided/core/blob/main/docs/mcp.md",
+    "https://github.com/asdecided/core/blob/main/docs/security.md",
+    "https://crates.io/crates/decided-mcp"
+  ],
+  "saferAlternatives": [
+    "Use decided-mcp --root /path/to/repository to limit the served corpus to the intended repository.",
+    "Keep read-only tools on inherited policy; reading repository knowledge can still disclose private project information.",
+    "Use the local stdio transport for this contribution. Shared HTTP deployments need their own endpoint and access controls."
+  ]
+}

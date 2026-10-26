@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
+from ..adapters.hook_input_reader import read_stdin_text
 from ..adapters.kimi_hooks import normalize_kimi_prompt
 
 
@@ -27,16 +27,13 @@ def load_hook_payload(
     if event_file:
         raw = Path(event_file).read_text(encoding="utf-8")
     else:
-        raw = input_text.strip() if isinstance(input_text, str) else sys.stdin.read().strip()
+        raw = input_text.strip() if isinstance(input_text, str) else read_stdin_text()[0].strip()
     if not raw:
         return {}
     payload = json.loads(raw)
     if not isinstance(payload, dict):
         return {}
     if normalize:
-        from ..runtime.hook_payload_reference import hydrate_hook_payload_reference
-
-        payload = hydrate_hook_payload_reference(payload)
         return normalize_hook_payload(payload, harness=harness)
     return payload
 

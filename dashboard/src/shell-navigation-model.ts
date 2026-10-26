@@ -7,6 +7,7 @@ import {
   HiMiniInbox,
   HiMiniInformationCircle,
   HiMiniPuzzlePiece,
+  HiMiniRocketLaunch,
   HiMiniShieldCheck,
   HiMiniSquares2X2,
 } from "react-icons/hi2";
@@ -21,7 +22,7 @@ import type {
 } from "./guard-types";
 
 export type NavigationGroup = "primary" | "manage" | "support";
-export type NavigationView = Exclude<AppView, "app-detail" | "audit" | "feed-health">;
+export type NavigationView = Exclude<AppView, "app-detail" | "audit" | "feed-health" | "workspaces" | "protection-repair">;
 
 export type ShellNavigationItem = {
   href: string;
@@ -81,21 +82,12 @@ export const SHELL_NAV_ITEMS: readonly ShellNavigationItem[] = [
     icon: HiMiniShieldCheck,
   },
   {
-    href: "/evidence",
-    label: "Evidence",
-    shortLabel: "Evidence",
-    description: "Receipts, commands, and security insights",
-    view: "evidence",
-    group: "primary",
-    icon: HiMiniDocumentText,
-  },
-  {
     href: "/extensions",
     label: "Extensions",
     shortLabel: "Extensions",
     description: "Tools and capabilities protected on this device",
     view: "extensions",
-    group: "manage",
+    group: "primary",
     icon: HiMiniPuzzlePiece,
   },
   {
@@ -126,6 +118,24 @@ export const SHELL_NAV_ITEMS: readonly ShellNavigationItem[] = [
     icon: HiMiniAdjustmentsHorizontal,
   },
   {
+    href: "/evidence",
+    label: "Evidence",
+    shortLabel: "Evidence",
+    description: "Receipts, commands, and security insights",
+    view: "evidence",
+    group: "manage",
+    icon: HiMiniDocumentText,
+  },
+  {
+    href: "/releases",
+    label: "Releases",
+    shortLabel: "Releases",
+    description: "Published versions and what each one changed",
+    view: "releases",
+    group: "support",
+    icon: HiMiniRocketLaunch,
+  },
+  {
     href: "/about",
     label: "About",
     shortLabel: "About",
@@ -136,7 +146,7 @@ export const SHELL_NAV_ITEMS: readonly ShellNavigationItem[] = [
   },
 ] as const;
 
-const MOBILE_PRIMARY_VIEWS = new Set<NavigationView>(["home", "inbox", "fleet", "evidence"]);
+const MOBILE_PRIMARY_VIEWS = new Set<NavigationView>(["home", "inbox", "fleet", "extensions"]);
 
 export const NAVIGATION_GROUPS: ReadonlyArray<{ id: NavigationGroup; label: string }> = [
   { id: "primary", label: "Guard" },
@@ -146,7 +156,8 @@ export const NAVIGATION_GROUPS: ReadonlyArray<{ id: NavigationGroup; label: stri
 
 export function canonicalNavigationView(view: AppView): NavigationView {
   if (view === "app-detail") return "fleet";
-  if (view === "audit" || view === "feed-health") return "supply-chain";
+  if (view === "audit" || view === "feed-health" || view === "workspaces") return "supply-chain";
+  if (view === "protection-repair") return "extensions";
   return view;
 }
 

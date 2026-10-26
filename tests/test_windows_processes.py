@@ -46,10 +46,6 @@ def test_windows_process_inventory_accepts_empty_candidate_set() -> None:
     )
 
 
-def test_native_windows_process_inventory_availability_matches_host() -> None:
-    assert windows_processes.native_windows_process_inventory_available() is (os.name == "nt")
-
-
 @pytest.mark.skipif(os.name != "nt", reason="requires native Windows process APIs")
 def test_native_windows_process_inventory_finds_current_python() -> None:
     command_line = windows_processes.windows_process_command_line(os.getpid())

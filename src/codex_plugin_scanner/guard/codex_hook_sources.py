@@ -49,7 +49,21 @@ def strict_json_object(path: Path, *, label: str) -> dict[str, object]:
     if not path.is_file():
         return {}
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=_unique_json_object)
+        data = path.read_bytes()
+    except OSError as exc:
+        raise RuntimeError(
+            f"{CODEX_HOOK_INVENTORY_SOURCE_UNREADABLE}: Guard could not read {label} at {path}. Repair file "
+            "permissions before retrying install."
+        ) from exc
+    return parse_json_object(data, path=path, label=label)
+
+
+def parse_json_object(data: bytes | None, *, path: Path, label: str) -> dict[str, object]:
+    """Apply the inventory parser to an already captured source generation."""
+    if data is None:
+        return {}
+    try:
+        payload = json.loads(data.decode("utf-8"), object_pairs_hook=_unique_json_object)
     except _DuplicateJsonKeyError as exc:
         raise RuntimeError(
             f"{CODEX_HOOK_INVENTORY_SOURCE_DUPLICATE}: Guard found duplicate key {exc.key!r} in {label} at "
@@ -82,14 +96,22 @@ def strict_toml_object(path: Path, *, label: str) -> dict[str, object]:
     if not path.is_file():
         return {}
     try:
-        with path.open("rb") as handle:
-            payload = tomllib.load(handle)
+        data = path.read_bytes()
     except OSError as exc:
         raise RuntimeError(
             f"{CODEX_HOOK_INVENTORY_SOURCE_UNREADABLE}: Guard could not read {label} at {path}. Repair file "
             "permissions before retrying install."
         ) from exc
-    except tomllib.TOMLDecodeError as exc:
+    return parse_toml_object(data, path=path, label=label)
+
+
+def parse_toml_object(data: bytes | None, *, path: Path, label: str) -> dict[str, object]:
+    """Parse the captured TOML bytes without reopening the config path."""
+    if data is None:
+        return {}
+    try:
+        payload = tomllib.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
         reason = (
             CODEX_HOOK_INVENTORY_SOURCE_DUPLICATE
             if "overwrite" in str(exc).lower()

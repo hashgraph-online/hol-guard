@@ -1,6 +1,8 @@
 import { resolveHomeProtectionStatus, resolveLastBlockedInstall, resolveIntelStaleness } from "./home-protection-module";
 import { buildSupplyChainStats } from "./supply-chain-workspace";
-import { deriveFrontendAuditResults } from "./audit-workspace";
+import { auditPriorityBadgeLabel } from "./audit-priority-badge";
+import { collectPackageBlockReceipts } from "./supply-chain-protection-stats";
+import { deriveFrontendAuditResults, type AuditResult } from "./audit-workspace";
 import { groupPoliciesByHarness, resolveSecurityModeCopy } from "./policy-workspace";
 import { resolveFeedSourceMode, resolveFeedStaleness } from "./feed-health-workspace";
 import type { GuardRuntimeSnapshot, GuardManagedInstall, GuardReceipt, GuardPolicyDecision, PackageManagerProtection } from "./guard-types";
@@ -174,13 +176,24 @@ assert(
 
 const recentDate = new Date(Date.now() - 1000).toISOString();
 const olderDate = new Date(Date.now() - 10000).toISOString();
+const newestDate = new Date(Date.now() - 500).toISOString();
+const packageBlock = (timestamp: string): GuardReceipt => ({
+  ...makeReceipt("block", timestamp),
+  harness: "package-firewall",
+});
 const lastBlocked = resolveLastBlockedInstall([
-  makeInstall(false, olderDate),
-  makeInstall(false, recentDate),
-  makeInstall(true, recentDate),
+  packageBlock(olderDate),
+  packageBlock(recentDate),
+  { ...makeReceipt("allow", newestDate), harness: "package-firewall" },
+  // A blocked tool call that is not a package install.
+  makeReceipt("block", newestDate),
 ]);
 assert(lastBlocked !== null, "SCRG159-E: should find a blocked install");
-assert(lastBlocked!.updated_at === recentDate, "SCRG159-F: should return the most recent blocked install");
+assert(lastBlocked!.timestamp === recentDate, "SCRG159-F: should return the most recent blocked install");
+assert(
+  resolveLastBlockedInstall([makeReceipt("block", recentDate)]) === null,
+  "SCRG159-F2: a blocked receipt that is not a package install is not a blocked install",
+);
 
 const intelResult = resolveIntelStaleness(baseSnapshot);
 assert(!intelResult.stale, "SCRG159-G: no receipts should not be stale");
@@ -202,7 +215,36 @@ const snapshotWithInstalls = {
 const statsWithInstalls = buildSupplyChainStats(snapshotWithInstalls);
 assert(statsWithInstalls.totalApps === 2, "SCRG160-C: 2 managed installs");
 assert(statsWithInstalls.activeApps === 1, "SCRG160-D: 1 active app");
-assert(statsWithInstalls.preventedInstalls === 1, "SCRG160-E: 1 prevented install");
+assert(
+  statsWithInstalls.preventedInstalls === 0,
+  "SCRG160-E: an inactive connected app is not a blocked install",
+);
+assert(
+  buildSupplyChainStats({
+    ...snapshotWithInstalls,
+    latest_receipts: [packageBlock(recentDate), makeReceipt("block", recentDate), makeReceipt("allow", recentDate)],
+  }).preventedInstalls === 1,
+  "SCRG160-E2: prevented installs count package block receipts only",
+);
+const olderBlock = packageBlock(olderDate);
+const crowdedSnapshot = {
+  ...snapshotWithInstalls,
+  // Newer receipts have pushed the package block out of the snapshot.
+  latest_receipts: [makeReceipt("allow", recentDate)],
+};
+assert(
+  buildSupplyChainStats(crowdedSnapshot, [olderBlock, makeReceipt("allow", recentDate)]).preventedInstalls === 1,
+  "SCRG160-E3: a package block outside the snapshot still counts once the receipt page loads",
+);
+assert(
+  buildSupplyChainStats({ ...crowdedSnapshot, latest_receipts: [olderBlock] }, [olderBlock]).preventedInstalls === 1,
+  "SCRG160-E4: a block present in both the snapshot and the receipt page counts once",
+);
+assert(
+  resolveLastBlockedInstall(collectPackageBlockReceipts(crowdedSnapshot, [olderBlock]))?.receipt_id ===
+    olderBlock.receipt_id,
+  "SCRG160-E5: Home finds the last block from the loaded receipt page",
+);
 assert(statsWithInstalls.protectedManagers === 1, "SCRG160-F: 1 protected manager");
 assert(statsWithInstalls.unprotectedManagers === 1, "SCRG160-G: 1 unprotected manager");
 
@@ -367,3 +409,28 @@ const oldSnapshot = { ...baseSnapshot, latest_receipts: [oldReceipt] };
 const oldStaleness = resolveFeedStaleness(oldSnapshot);
 assert(oldStaleness.stale, "SCRG165-G: 8-day-old receipt is stale");
 assert(oldStaleness.ageLabel.includes("stale"), "SCRG165-H: stale label mentions stale");
+
+const auditResult = (id: string, severity: AuditResult["severity"], resolved = false): AuditResult => ({
+  id,
+  severity,
+  title: id,
+  detail: "",
+  harness: "all",
+  workspace: null,
+  timestamp: new Date().toISOString(),
+  remediation: null,
+  remediationAction: null,
+  resolved,
+  evidenceHref: null,
+});
+const highOnlyBadge = auditPriorityBadgeLabel(
+  [auditResult("a", "high"), auditResult("b", "high"), auditResult("c", "medium")],
+  new Set(),
+);
+assert(highOnlyBadge === "2 high priority", "SCRG161-H: high results are not labelled critical");
+assert(
+  auditPriorityBadgeLabel([auditResult("a", "critical"), auditResult("b", "high", true), auditResult("c", "high")], new Set(["c"])) ===
+    "1 high priority",
+  "SCRG161-I: resolved results drop out of the badge",
+);
+assert(auditPriorityBadgeLabel([auditResult("a", "low")], new Set()) === null, "SCRG161-J: no badge without high priority results");

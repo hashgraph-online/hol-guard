@@ -17,6 +17,7 @@ import {
   SiApachemaven,
   SiBorgbackup,
   SiCircleci,
+  SiCloudflare,
   SiComposer,
   SiDebian,
   SiDocker,
@@ -153,6 +154,7 @@ const BRAND_ICONS: Record<ExtensionBrandSlug, MarkIcon> = {
   borg: SiBorgbackup,
   velero: VeleroMark,
   openssh: SiOpenbsd,
+  cloudflare: SiCloudflare,
 };
 
 const FALLBACK_ICONS: Record<ExtensionBrandFallback, MarkIcon> = {

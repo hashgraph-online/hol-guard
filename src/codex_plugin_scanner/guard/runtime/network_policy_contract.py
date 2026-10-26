@@ -353,46 +353,6 @@ class BackendAdvertisement:
             raise ValueError("healthy_until_epoch_ms must be positive")
 
 
-@dataclass(frozen=True, slots=True)
-class NetworkEvidence:
-    flow_id: str
-    process_tree_digest: str
-    destination_digest: str
-    protocol: NetworkProtocol
-    port: int
-    action: NetworkAction
-    policy_digest: str
-    backend_digest: str
-    grade: EnforcementGrade
-    observed_at_epoch_ms: int
-    raw_destination: str | None = None
-    schema_version: str = NETWORK_EVIDENCE_SCHEMA_VERSION
-
-    def __post_init__(self) -> None:
-        if self.schema_version != NETWORK_EVIDENCE_SCHEMA_VERSION:
-            raise ValueError("unsupported network evidence schema version")
-        require_id(self.flow_id, "flow_id")
-        for name, value in (
-            ("process_tree_digest", self.process_tree_digest),
-            ("destination_digest", self.destination_digest),
-            ("policy_digest", self.policy_digest),
-            ("backend_digest", self.backend_digest),
-        ):
-            require_digest(value, name)
-        if not isinstance(cast(object, self.protocol), NetworkProtocol):
-            raise ValueError("protocol must be exact")
-        if type(self.port) is not int or not 1 <= self.port <= 65535:
-            raise ValueError("port must be within 1..65535")
-        if not isinstance(cast(object, self.action), NetworkAction):
-            raise ValueError("action must be exact")
-        if not isinstance(cast(object, self.grade), EnforcementGrade):
-            raise ValueError("grade must be exact")
-        if type(self.observed_at_epoch_ms) is not int or self.observed_at_epoch_ms <= 0:
-            raise ValueError("observed_at_epoch_ms must be positive")
-        if self.raw_destination is not None:
-            raise ValueError("raw destinations require the separate opt-in privacy service")
-
-
 def canonical_destination(kind: DestinationKind, value: object) -> str:
     """Return one comparison-safe destination or reject ambiguous input."""
 

@@ -153,3 +153,26 @@ export function isAllowedGuardAction(value: unknown): boolean {
 export function isBlockedGuardAction(value: unknown): boolean {
   return guardActionDisposition(value) === "blocked";
 }
+
+export type GuardReviewIntent = "setup" | "approve";
+
+/**
+ * Shared review vocabulary. A setup review decides a whole local tool once on
+ * this device; an approval decides one paused action.
+ */
+export const GUARD_REVIEW_INTENT_COPY: Readonly<Record<GuardReviewIntent, Readonly<{
+  label: string;
+  action: string;
+  scope: string;
+}>>> = {
+  setup: {
+    label: "Needs setup",
+    action: "Set up once",
+    scope: "Decides every call to this tool on this device.",
+  },
+  approve: {
+    label: "Needs review",
+    action: "Approve this",
+    scope: "Decides only this paused action.",
+  },
+};

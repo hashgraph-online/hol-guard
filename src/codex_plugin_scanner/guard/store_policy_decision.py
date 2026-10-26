@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from .policy_integrity import is_remote_policy_source
-from .store_policy_source_context import build_policy_source_context_index
 
 
 def get_policy_decision_payload(
@@ -28,21 +27,7 @@ def get_policy_decision_payload(
         row = connection.execute(query, (decision_id, approval_gate_policy_source)).fetchone()
         if row is None:
             return None
-        source_context_index = build_policy_source_context_index(
-            connection,
-            items=[
-                (
-                    str(row["harness"]),
-                    str(row["artifact_id"]) if row["artifact_id"] is not None else None,
-                    str(row["artifact_hash"]) if row["artifact_hash"] is not None else None,
-                )
-            ],
-        )
-        payload = store._policy_decision_dict_from_row(
-            connection,
-            row,
-            source_context_index=source_context_index,
-        )
+        payload = store._policy_decision_dict_from_row(row)
         if not is_remote_policy_source(row["source"]):
             generation = state.get("generation")
             trusted_generation = (
@@ -59,4 +44,22 @@ def get_policy_decision_payload(
             payload["integrity_message"] = integrity_result.message
             payload["integrity_mode"] = state.get("mode")
             payload["integrity_enforcement"] = state.get("enforcement")
-        return payload
+    store._attach_policy_source_contexts([payload])
+    return payload
+
+
+def policy_decision_hash_exists(store, *, harness: str, artifact_id: str, artifact_hash: str) -> bool:
+    """Cheaply report whether any artifact-scoped decision names this exact hash.
+
+    The full lookup refreshes integrity state and dispatches to the native
+    resolver, so hot hook paths use this read-only probe to skip it when no
+    exact decision could possibly match.
+    """
+
+    query = """
+        select 1 from policy_decisions
+        where harness in (?, '*') and scope = 'artifact' and artifact_id = ? and artifact_hash = ?
+        limit 1
+    """
+    with store._connect() as connection:
+        return connection.execute(query, (harness, artifact_id, artifact_hash)).fetchone() is not None

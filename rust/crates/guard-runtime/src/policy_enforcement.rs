@@ -8,178 +8,103 @@
 //! weaker policy value and it never reads configuration or request content
 //! outside the native edge.
 //!
-//! `warn` is an allow-with-warning action, not a deny. In `observe` mode a
-//! policy-only floor is surfaced as a warning (so it cannot deny execution),
-//! while an intrinsic native floor is preserved. Intrinsic `block` remains
-//! hard in every mode.
+//! `warn` is an allow-with-warning action, not a deny. In `observe` mode no
+//! post-tool outcome stops the harness: the response is rewritten to an
+//! allow-original warn that records the canonical output digest and the
+//! observed intrinsic action.
 
 use guard_contracts::{
     GuardHookPayloadKindV2, HookReviewResponseV1, NativeHookRequestV1, PreToolActionTypeV1,
     PreToolResultV1,
 };
-use guard_policy_snapshot::{EffectiveNativePolicyV3, PolicySnapshotV3};
+use guard_policy_snapshot::PolicySnapshotV3;
 use serde_json::Value;
 
 #[path = "policy_enforcement_facts.rs"]
 mod policy_enforcement_facts;
+#[path = "policy_enforcement_helpers.rs"]
+mod policy_enforcement_helpers;
+#[path = "policy_enforcement_matrix.rs"]
+mod policy_enforcement_matrix;
+#[path = "policy_enforcement_mcp_provider.rs"]
+mod policy_enforcement_mcp_provider;
 #[path = "policy_enforcement_policy.rs"]
 mod policy_enforcement_policy;
+#[path = "policy_enforcement_reason.rs"]
+mod policy_enforcement_reason;
+pub(crate) use policy_enforcement_matrix::{validate_pre_tool_result_matrix, ActionFloor};
+
+/// Recheck business rules above the authenticated native receipt's intrinsic
+/// floor. This validates review eligibility; it grants no execution authority.
+pub(crate) fn ensure_business_review_permitted(
+    snapshot: &PolicySnapshotV3,
+    facts: &guard_contracts::BusinessActionV1,
+    intrinsic: &str,
+) -> Result<(), String> {
+    let binding = snapshot
+        .business_policy
+        .as_ref()
+        .ok_or_else(|| "native_workspace_review_business_invalid".to_owned())?;
+    if binding.budgets.is_some() {
+        return Err("native_business_budget_executor_unavailable".to_owned());
+    }
+    let intrinsic = ActionFloor::parse(intrinsic)
+        .ok_or_else(|| "native_workspace_review_business_invalid".to_owned())?;
+    let policy = policy_enforcement_business::CompiledBusinessPolicy::new(binding)?;
+    if binding.budgets.is_some() {
+        return Err("native_business_budget_executor_unavailable".into());
+    }
+    let floor = policy.floor(intrinsic, Some(facts));
+    if floor.action >= ActionFloor::SandboxRequired {
+        return Err("native_workspace_review_business_blocked".to_owned());
+    }
+    Ok(())
+}
 
 use policy_enforcement_facts::{
-    payload_facts, post_action_type, preferred_tool_name, risk_classes, PolicyFacts,
+    classify_tool_name, collect_fact_maps, payload_facts, preferred_tool_name, PATH_KEYS,
 };
-pub(crate) use policy_enforcement_policy::validate_pre_tool_result_matrix;
-use policy_enforcement_policy::{
-    action_rank, join_action, policy_map_action, CompiledEffectivePolicy,
+use policy_enforcement_helpers::{
+    action_rank, join_action, normalized_harness, policy_floor_with_cause, FloorCause, FloorInput,
 };
+use policy_enforcement_policy::CompiledEffectivePolicy;
+use policy_enforcement_reason::{policy_override_reason, NO_SCRIPT_INSTALL_ALTERNATIVE};
 
 #[path = "policy_enforcement_admission.rs"]
 mod policy_enforcement_admission;
 pub(crate) use policy_enforcement_admission::AdmittedPolicySnapshot;
+pub(crate) use policy_enforcement_helpers::risk_action;
+
+#[path = "policy_enforcement_business.rs"]
+mod policy_enforcement_business;
 
 #[cfg(test)]
 #[path = "policy_enforcement_tests.rs"]
-mod tests;
-const VALID_ACTIONS: &[&str] = &[
-    "allow",
-    "warn",
-    "review",
-    "require-reapproval",
-    "sandbox-required",
-    "block",
-];
-
-const VALID_RISK_KEYS: &[&str] = &[
-    "local_secret_read",
-    "credential_exfiltration",
-    "data_flow_exfiltration",
-    "destructive_shell",
-    "encoded_execution",
-    "network_egress",
-    "prompt_injection",
-    "mcp_dangerous_tool",
-    "malicious_skill",
-    "package_script",
-    "persistence",
-    "guard_bypass",
-    "cloud_advisory",
-    "encoded_exfiltration",
-    "execution",
-    "supply_chain",
-    "policy_bypass",
-];
-
+pub(crate) mod tests;
 const MAX_SELECTOR_VALUE_BYTES: usize = 4 * 1024;
 const MAX_FACT_DEPTH: usize = 32;
 const MAX_FACT_NODES: usize = 2_048;
 
-fn canonical_harness(value: &str) -> Option<&str> {
-    let normalized = value.trim().to_ascii_lowercase().replace('_', "-");
-    match normalized.as_str() {
-        "claude" => Some("claude-code"),
-        "cline-cli" | "cline-vscode" => Some("cline"),
-        "kimi-code" | "kimi-cli" => Some("kimi"),
-        "grok-build" | "grok-build-cli" | "xai-grok" => Some("grok"),
-        "pi-agent" | "pi-coding-agent" => Some("pi"),
-        "oh-my-pi" => Some("omp"),
-        "zai" | "z-code" | "zai-zcode" => Some("zcode"),
-        "devin-cli" | "cognition-devin" => Some("devin"),
-        _ => None,
-    }
-}
-
-fn normalized_harness(value: &str) -> String {
-    let normalized = value.trim().to_ascii_lowercase().replace('_', "-");
-    canonical_harness(&normalized)
-        .unwrap_or(normalized.as_str())
-        .to_owned()
-}
-
-fn policy_floor(
-    policy: &EffectiveNativePolicyV3,
-    compiled: &CompiledEffectivePolicy,
-    harness: &str,
-    action_type: PreToolActionTypeV1,
-    facts: &PolicyFacts,
-    reason_code: &str,
-) -> Result<String, String> {
-    let mut floor = policy.default_action.clone();
-    if let Some(action) = compiled.harness_actions.get(harness) {
-        floor = join_action(&floor, action)?;
-    }
-    if matches!(
-        action_type,
-        PreToolActionTypeV1::Command | PreToolActionTypeV1::ProcessService
-    ) {
-        floor = join_action(&floor, &policy.subprocess_action)?;
-    }
-    if matches!(
-        action_type,
-        PreToolActionTypeV1::Network | PreToolActionTypeV1::Browser
-    ) {
-        floor = join_action(&floor, &policy.new_network_domain_action)?;
-    }
-    if action_type == PreToolActionTypeV1::Unknown {
-        // An unknown PostToolUse operation has no safe automatic allow
-        // proof, even when the configured default is permissive.
-        floor = join_action(&floor, "review")?;
-    }
-    if facts.changed_hash {
-        floor = join_action(&floor, &policy.changed_hash_action)?;
-    }
-    if facts.publisher_relevant && facts.publisher.is_none() {
-        floor = join_action(&floor, &policy.unknown_publisher_action)?;
-    }
-    if let Some(artifact) = facts.artifact.as_deref() {
-        if let Some(action) = policy_map_action(&policy.artifact_actions, artifact)? {
-            floor = join_action(&floor, &action)?;
-        }
-    }
-    if let Some(publisher) = facts.publisher.as_deref() {
-        if let Some(action) = policy_map_action(&policy.publisher_actions, publisher)? {
-            floor = join_action(&floor, &action)?;
-        }
-    }
-    let harness_risks = compiled.harness_risk_actions.get(harness);
-    for risk in risk_classes(action_type, facts.sensitive_target, reason_code) {
-        if let Some(action) = policy_map_action(&policy.risk_actions, risk)? {
-            floor = join_action(&floor, &action)?;
-        }
-        if let Some(harness_map) = harness_risks {
-            if let Some(action) = policy_map_action(harness_map, risk)? {
-                floor = join_action(&floor, &action)?;
-            }
-        }
-    }
-    Ok(floor)
-}
-
-fn policy_override_reason(action: &str) -> (&'static str, &'static str) {
-    match action {
-        "block" => (
-            "native_policy_block",
-            "HOL Guard blocked this hook action under the installed native policy.",
-        ),
-        "sandbox-required" => (
-            "native_policy_sandbox_required",
-            "HOL Guard requires sandbox enforcement under the installed native policy.",
-        ),
-        "require-reapproval" => (
-            "native_policy_reapproval_required",
-            "HOL Guard requires fresh approval under the installed native policy.",
-        ),
-        "review" => (
-            "native_policy_review_required",
-            "HOL Guard requires review under the installed native policy.",
-        ),
-        _ => (
-            "native_policy_warning",
-            "HOL Guard raised this action under the installed native policy.",
-        ),
-    }
-}
-
 /// Apply the authenticated policy to a generic native PreTool result.
+/// A package-manager install proven to run no lifecycle scripts has nothing
+/// for the `package_script` risk setting to govern. The proof is the native
+/// command authority's; every other floor and intrinsic review still applies.
+fn package_scripts_disabled(payload: &Value, result: &PreToolResultV1) -> bool {
+    result.action.action_type == PreToolActionTypeV1::Package
+        && (result.reason_code == LOCKFILE_INSTALL_REASON
+            || (result.reason_code == "native_package_review"
+                && guard_command::pretool::generic::extract_untrusted_command_context(payload)
+                    .ok()
+                    .and_then(|context| context.command)
+                    .is_some_and(|command| {
+                        guard_command::pretool::no_script_install_command(&command)
+                    })))
+}
+
+/// The native allow for a frozen install whose lockfile pins every package
+/// and integrity hash and whose lifecycle scripts are off.
+const LOCKFILE_INSTALL_REASON: &str = "native_exact_safe_lockfile_install";
+
 pub(crate) fn apply_pre_tool_policy(
     snapshot: &AdmittedPolicySnapshot,
     payload: &Value,
@@ -189,9 +114,20 @@ pub(crate) fn apply_pre_tool_policy(
         return Err("native_policy_mode_invalid".to_owned());
     }
     validate_pre_tool_result_matrix(&result)?;
+    policy_enforcement_business::guard_untrusted_business_context(snapshot, payload, &mut result)?;
     let harness = normalized_harness(&result.action.harness);
-    let mut facts = payload_facts(payload, result.action.action_type, &result.reason_code)?;
+    let mut facts = payload_facts(
+        payload,
+        &harness,
+        result.action.action_type,
+        &result.reason_code,
+    )?;
     facts.sensitive_target |= result.action.sensitive_target;
+    let benign_prompt = result.action.event == "UserPromptSubmit"
+        && result.action.action_type == PreToolActionTypeV1::Prompt
+        && result.explicitly_benign
+        && result.reason_code == "native_prompt_benign"
+        && !facts.sensitive_target;
     if result.action.action_type == PreToolActionTypeV1::McpTool {
         // Tool arguments can themselves contain `tool_name` (dispatchers are
         // common). They are data, never the outer tool's authority selector.
@@ -212,6 +148,42 @@ pub(crate) fn apply_pre_tool_policy(
             None => None,
         };
         if let Some(tool) = tool {
+            let composio_name = tool
+                .rsplit("__")
+                .next()
+                .unwrap_or(&tool)
+                .to_ascii_lowercase();
+            let composio_execution = composio_name.starts_with("composio_")
+                && !matches!(
+                    composio_name.as_str(),
+                    "composio_search_tools" | "composio_get_tool_schemas"
+                );
+            if composio_execution && action_rank(&result.minimum_action) < action_rank("review") {
+                result.minimum_action = "review".into();
+                result.policy_action = "review".into();
+                result.decision = "deny".into();
+                result.explicitly_benign = false;
+                result.reason_code = "native_composio_action_review".into();
+                result.reason =
+                    "Review the underlying Composio actions and account before execution.".into();
+            }
+            if let Some(reason) = policy_enforcement_mcp_provider::denied_provider_execution(
+                &snapshot.effective_policy.mcp_provider_actions,
+                &harness,
+                &tool,
+                payload,
+            ) {
+                result.minimum_action = "block".into();
+                result.policy_action = "block".into();
+                result.decision = "deny".into();
+                result.explicitly_benign = false;
+                result.reason_code = reason.into();
+                result.reason = if reason == "native_composio_denied_batch_member" {
+                    "This batch includes an action denied for this connection. No batch member may execute."
+                } else {
+                    "Guard cannot enforce this connection's action denies inside opaque execution. Use an explicit batch."
+                }.into();
+            }
             let choice = guard_policy_snapshot::observed_mcp_tool_action(
                 &snapshot.effective_policy.mcp_tool_actions,
                 &harness,
@@ -225,7 +197,18 @@ pub(crate) fn apply_pre_tool_policy(
                 result.reason_code = "native_custom_mcp_tool_block".into();
                 result.reason =
                     "This MCP tool is blocked by a custom extension on this device.".into();
+            } else if choice == Some("review")
+                && action_rank(&result.minimum_action) < action_rank("review")
+            {
+                result.minimum_action = "review".into();
+                result.policy_action = "review".into();
+                result.decision = "deny".into();
+                result.explicitly_benign = false;
+                result.reason_code = "native_custom_mcp_tool_review".into();
+                result.reason =
+                    "This MCP tool requires approval under its custom extension settings.".into();
             } else if choice == Some("allow")
+                && !composio_execution
                 && result.minimum_action == "review"
                 && result.reason_code == "native_mcp_tool_review"
                 && result.action.bounded
@@ -256,13 +239,31 @@ pub(crate) fn apply_pre_tool_policy(
             }
         }
     }
-    let policy_floor = policy_floor(
+    // A proven frozen install fetches only the packages and integrity hashes
+    // the project already committed, and runs none of their code, so it
+    // chooses no new publisher. That proof satisfies the default unknown
+    // publisher review; a stronger publisher action and every other floor
+    // still apply.
+    if result.reason_code == LOCKFILE_INSTALL_REASON
+        && result.action.action_type == PreToolActionTypeV1::Package
+        && facts.publisher.is_none()
+        && facts.artifact.is_none()
+        && snapshot.effective_policy.unknown_publisher_action == "review"
+    {
+        facts.publisher_relevant = false;
+    }
+    let (policy_floor, floor_cause) = policy_floor_with_cause(
         &snapshot.effective_policy,
         &snapshot.compiled,
         &harness,
         result.action.action_type,
-        &facts,
-        &result.reason_code,
+        &FloorInput {
+            facts: &facts,
+            reason_code: &result.reason_code,
+            prompt_classes: &result.prompt_risk_classes,
+            benign_prompt,
+            package_scripts_disabled: package_scripts_disabled(payload, &result),
+        },
     )?;
     let effective = join_action(&result.minimum_action, &policy_floor)?;
     let policy_raised = action_rank(&effective) > action_rank(&result.minimum_action);
@@ -279,7 +280,15 @@ pub(crate) fn apply_pre_tool_policy(
             && intrinsic_rank <= action_rank("warn").unwrap_or(1)
             && output.decision == "allow";
         if policy_only_warning {
-            output.reason_code = "native_policy_observed".to_owned();
+            // Only a warn floor over a proven allow is the silent policy
+            // warning. A stronger floor, or one over an intrinsic warning,
+            // keeps a rendered code so the harness still sees it.
+            output.reason_code = if output.minimum_action == "allow" && effective == "warn" {
+                "native_policy_warning"
+            } else {
+                "native_policy_observed_floor"
+            }
+            .to_owned();
             output.reason =
                 "HOL Guard observed a stricter installed native policy floor.".to_owned();
             output.policy_action = "warn".to_owned();
@@ -302,9 +311,21 @@ pub(crate) fn apply_pre_tool_policy(
     }
 
     if policy_raised {
-        let (reason_code, reason) = policy_override_reason(&effective);
+        let (reason_code, reason) = policy_override_reason(
+            &effective,
+            Some(floor_cause),
+            output.action.action_type == guard_contracts::PreToolActionTypeV1::Prompt,
+        );
         output.reason_code = reason_code.to_owned();
-        output.reason = reason.to_owned();
+        output.reason = reason;
+        if floor_cause == FloorCause::Risk("package_script")
+            && output.action.action_type == guard_contracts::PreToolActionTypeV1::Package
+            && output.action.operation == guard_contracts::PreToolOperationV1::Install
+            && guard_command::pretool::held_command_installs(payload)
+        {
+            output.reason.push(' ');
+            output.reason.push_str(NO_SCRIPT_INSTALL_ALTERNATIVE);
+        }
     }
     output.policy_action = effective.clone();
     output.minimum_action = effective.clone();
@@ -318,87 +339,10 @@ pub(crate) fn apply_pre_tool_policy(
     Ok(output)
 }
 
-/// Apply the authenticated policy to a Rust-owned PostTool result. The
-/// source/content decision is intrinsic and therefore remains strongest even
-/// when the configured policy says `allow`.
-pub(crate) fn apply_post_tool_policy(
-    snapshot: &AdmittedPolicySnapshot,
-    request: &NativeHookRequestV1,
-    payload_kind: GuardHookPayloadKindV2,
-    mut response: HookReviewResponseV1,
-) -> Result<HookReviewResponseV1, String> {
-    if !matches!(snapshot.mode.as_str(), "enforce" | "observe") {
-        return Err("native_policy_mode_invalid".to_owned());
-    }
-    let action_type = post_action_type(request, payload_kind)?;
-    let intrinsic = response
-        .observed_policy_action
-        .as_deref()
-        .or(response.policy_action.as_deref())
-        .unwrap_or(if response.decision == "deny" {
-            "block"
-        } else if response.model_output_action == "replace_with_reviewed_excerpt" {
-            "review"
-        } else {
-            "allow"
-        })
-        .to_owned();
-    if action_rank(&intrinsic).is_none() {
-        return Err("native_post_tool_policy_invalid_result".to_owned());
-    }
-    let facts = payload_facts(&request.payload, action_type, &response.reason_code)?;
-    let floor = policy_floor(
-        &snapshot.effective_policy,
-        &snapshot.compiled,
-        &normalized_harness(&request.harness),
-        action_type,
-        &facts,
-        &response.reason_code,
-    )?;
-    let effective = join_action(&intrinsic, &floor)?;
-    response.policy_action = Some(effective.clone());
-    if snapshot.mode == "observe" && intrinsic != "block" {
-        return Ok(response);
-    }
-    if snapshot.mode == "observe" && intrinsic == "block" && response.decision == "allow" {
-        // Observe suppresses policy-only floors, but it cannot turn an
-        // intrinsic native source/content block into an allow.
-        let mut denied = HookReviewResponseV1::deny(
-            response.reason_code.clone(),
-            "HOL Guard retained an intrinsic native block in observe mode.",
-        );
-        denied.policy_action = Some("block".to_owned());
-        denied.observed_policy_action = Some("block".to_owned());
-        denied.observe_mode = true;
-        return Ok(denied);
-    }
-    if effective == "allow" {
-        return Ok(response);
-    }
-    if effective == "warn" && response.decision == "allow" {
-        if intrinsic != "warn" {
-            response.reason_code = "native_policy_warning".to_owned();
-            response.reason = Some(
-                "HOL Guard raised a non-blocking warning under the installed native policy."
-                    .to_owned(),
-            );
-            response.notice = "warning".to_owned();
-        }
-        return Ok(response);
-    }
-    if intrinsic == "review"
-        && effective == "review"
-        && response.decision == "allow"
-        && response.model_output_action == "replace_with_reviewed_excerpt"
-    {
-        // A reviewed excerpt already satisfies the intrinsic review floor.
-        return Ok(response);
-    }
-    if intrinsic == "block" && response.decision == "deny" {
-        return Ok(response);
-    }
-    let (reason_code, reason) = policy_override_reason(&effective);
-    let mut denied = HookReviewResponseV1::deny(reason_code, reason);
-    denied.policy_action = Some(effective);
-    Ok(denied)
-}
+#[path = "policy_enforcement_omp_eval.rs"]
+mod eval_output;
+#[path = "policy_enforcement_post.rs"]
+mod post;
+#[cfg(test)]
+pub(crate) use post::apply_post_tool_policy;
+pub(crate) use post::apply_post_tool_policy_with_delivery;

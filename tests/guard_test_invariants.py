@@ -165,7 +165,7 @@ TEST_INVARIANTS: Final[tuple[TestInvariant, ...]] = (
     ),
     TestInvariant(
         "GUARD-INV-021",
-        "tests/test_guard_command_critical_floors.py::test_security_critical_commands_retain_exact_floors",
+        "tests/test_guard_command_critical_floors.py::test_real_native_critical_floor_matches_frozen_baseline",
         "command-floor-corpus",
         "Critical destructive, secret, managed-service, and self-protection command floors remain exact.",
         ("security_critical", "regression", "parser", "policy", "release"),

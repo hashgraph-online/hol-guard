@@ -66,6 +66,8 @@ def test_scan_step_summary_includes_complete_finding_details(monkeypatch, tmp_pa
     assert "- Max severity: info" in summary
     assert "- Findings: 1" in summary
     assert "### Finding details" in summary
+    assert "### Contributor review pathway" in summary
+    assert "Review does not grant approval or change the scan result." in summary
     assert "#### 1. INFO - Informational scanner finding" in summary
     assert "- Rule ID: TEST-INFO-001" in summary
     assert "- Category: Security" in summary

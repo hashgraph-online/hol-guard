@@ -22,7 +22,15 @@ pub(super) fn publish_marker(
         "phase": phase, "effective_digest": if phase == "committed" { Some(&binding.effective_digest) } else { None },
         "recovery": authority.recovery,
     });
-    let mut bytes = b"hol-guard.native-command-control-authority.v1\0".to_vec();
+    let domain = if let Some(digest) = &binding.active_security_digest {
+        value["schema"] = "guard.native-command-control-authority.v3".into();
+        value["active_security_digest"] = digest.clone().into();
+        value["pack_program_digest"] = binding.program_digest.clone().into();
+        b"hol-guard.native-command-control-authority.v3\0".as_slice()
+    } else {
+        b"hol-guard.native-command-control-authority.v1\0".as_slice()
+    };
+    let mut bytes = domain.to_vec();
     bytes.extend(canonical_json_bytes(&value).unwrap());
     value["mac"] = hex::encode(
         ring::hmac::sign(

@@ -8,16 +8,10 @@ from ..models import GuardArtifact, HarnessDetection
 from ..shims import install_guard_shim, remove_guard_shim
 from .base import HarnessAdapter, HarnessContext
 from .paseo_config import PaseoProvider, paseo_config_path, paseo_providers, require_local_path
-from .paseo_install import (
-    install_native,
-    native_context,
-    preflight_native,
-    protection_paths,
-    provider_status,
-    read_receipt,
-    receipt_path,
-    write_receipt,
-)
+from .paseo_install import native_context, preflight_native, provider_status, read_receipt, receipt_path
+
+# isort: split
+from .paseo_install import install_native, protection_paths, write_receipt
 
 PASEO_COVERAGE_LIMIT = (
     "Paseo delegates tool execution to native providers. Guard protects supported providers through their native "
@@ -72,10 +66,12 @@ class PaseoHarnessAdapter(HarnessAdapter):
             warnings = (str(error),)
         return HarnessDetection(self.harness, bool(paths) or available, available, paths, artifacts, warnings)
 
-    def install(self, context: HarnessContext) -> dict[str, object]:
-        """Install shared native hooks and publish a receipt only after their proofs verify."""
+    def preflight_management(self, context: HarnessContext, *, operation: str) -> None:
+        if operation == "install":
+            self._prepare_install_targets(context)
+
+    def _prepare_install_targets(self, context: HarnessContext) -> tuple[tuple[PaseoProvider, ...], list[str]]:
         providers = paseo_providers(context)
-        path = receipt_path(context)
         # Reinstall every available supported native provider, including drifted
         # installations. An empty receipt intentionally makes each a fresh target.
         rows = _provider_rows(providers, context, {})
@@ -90,6 +86,14 @@ class PaseoHarnessAdapter(HarnessAdapter):
             preflight_native(target, context)
         for shim in self.guard_launcher_paths(native_context(context)):
             require_local_path(context.guard_home, shim, home_dir=context.home_dir)
+        return providers, targets
+
+    def install(self, context: HarnessContext) -> dict[str, object]:
+        """Install shared native hooks and publish a receipt only after their proofs verify."""
+        # Repeat preparation under the shared owner; the earlier read-only
+        # rejection does not authorize mutation or make this result immutable.
+        providers, targets = self._prepare_install_targets(context)
+        path = receipt_path(context)
         # Keep the last verified receipt until atomic replacement succeeds.
         proofs: dict[str, object] = {}
         for target in targets:

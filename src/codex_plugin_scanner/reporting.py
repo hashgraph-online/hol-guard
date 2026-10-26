@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+from .contributor_review import build_contributor_review, contributor_review_lines
 from .markdown_support import escape_markdown_text
 from .models import GRADE_LABELS, SEVERITY_ORDER, Finding, ScanResult, Severity, severity_from_value
 from .version import __version__
@@ -83,6 +84,7 @@ def build_json_payload(
 
     payload: dict[str, object] = {
         "schema_version": "scan-result.v1",
+        "contributorReview": build_contributor_review(result),
         "tool_version": __version__,
         "profile": profile,
         "policy_pass": policy_pass,
@@ -301,6 +303,7 @@ def format_markdown(result: ScanResult) -> str:
             f"{escape_markdown_text(integration.message)}"
         )
 
+    lines.extend(contributor_review_lines(result.findings))
     return "\n".join(lines)
 
 

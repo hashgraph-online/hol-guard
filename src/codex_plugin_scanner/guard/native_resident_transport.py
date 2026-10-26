@@ -6,6 +6,7 @@ import os
 import selectors
 import threading
 import time
+from collections.abc import Callable
 from contextlib import suppress
 
 
@@ -82,9 +83,15 @@ def _write_frame_with_stoppable_worker(
     frame: bytes,
     *,
     deadline_monotonic: float,
+    launch_worker: Callable[[threading.Thread], bool] | None,
 ) -> bool:
     """Bound platforms whose anonymous pipes are not selector-friendly."""
 
+    # Only the process owner may launch a fallback writer: it must retain the
+    # thread until process teardown unblocks it. Closing a BufferedWriter from
+    # this timeout path can wait indefinitely for the writer's buffer lock.
+    if launch_worker is None or time.monotonic() >= deadline_monotonic:
+        return False
     finished = threading.Event()
     failed = False
 
@@ -101,22 +108,22 @@ def _write_frame_with_stoppable_worker(
             finished.set()
 
     worker = threading.Thread(target=write, name="hol-guard-native-client-writer", daemon=True)
-    worker.start()
+    if not launch_worker(worker):
+        return False
     remaining = deadline_monotonic - time.monotonic()
     if remaining <= 0 or not finished.wait(timeout=remaining):
-        # Closing the descriptor wakes a blocked BufferedWriter on the
-        # platforms where selector-based pipe writes are unavailable.
-        close = getattr(stdin, "close", None)
-        if callable(close):
-            with suppress(Exception):
-                close()
-        worker.join(timeout=0.05)
         return False
-    worker.join()
+    worker.join(timeout=max(0.0, deadline_monotonic - time.monotonic()))
     return not failed
 
 
-def write_frame(stdin: object, frame: bytes, *, deadline_monotonic: float) -> bool:
+def write_frame(
+    stdin: object,
+    frame: bytes,
+    *,
+    deadline_monotonic: float,
+    launch_worker: Callable[[threading.Thread], bool] | None = None,
+) -> bool:
     """Write a complete frame within a monotonic deadline."""
 
     nonblocking_result = _write_frame_nonblocking(
@@ -130,6 +137,7 @@ def write_frame(stdin: object, frame: bytes, *, deadline_monotonic: float) -> bo
         stdin,
         frame,
         deadline_monotonic=deadline_monotonic,
+        launch_worker=launch_worker,
     )
 
 

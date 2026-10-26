@@ -1,0 +1,579 @@
+{
+  "extension": {
+    "action_classes": [
+      "answerLoops self-hosted instance setup command",
+      "answerLoops agent skill install command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews answerLoops CLI commands that start a self-hosted instance with Docker Compose or download agent skill files into ./.claude/skills/. Help and usage output are not reviewed.",
+    "ecosystem_ids": [],
+    "executables": [
+      "answerloops"
+    ],
+    "extension_id": "command.answerloops",
+    "homepage": "https://github.com/answerLoops/answerLoops",
+    "icon": {
+      "kind": "none"
+    },
+    "license": null,
+    "name": "answerLoops CLI command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "answerLoops self-hosted instance setup command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `answerloops setup`, which clones the answerLoops repository when not run inside a checkout, writes a .env file with generated secrets, and starts a self-hosted instance with `docker compose -f docker-compose.ghcr.yml up -d` using the published image. With `--with-skills` it also downloads Claude Code skills into ./.claude/skills/. Covers the installed bin and npx, bunx, npm exec, pnpm dlx and yarn dlx launches of @answerloops/agent-sdk.",
+        "example_command": "answerloops setup --dir ./answerLoops",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "answerLoops self-hosted setup",
+        "permission_id": "command.answerloops.permission.setup",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Confirm the target directory and that starting Docker containers on this machine is intended before running setup.",
+          "Run `answerloops --help` to review what setup will do first."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "answerLoops agent skill install command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `answerloops skills <name...>`, which downloads the named skill files from the answerLoops GitHub repository's main branch and writes them into ./.claude/skills/<name>/, where a coding agent loads them as instructions in later sessions. Existing files at those paths are overwritten. Covers the installed bin and npx, bunx, npm exec, pnpm dlx and yarn dlx launches of @answerloops/agent-sdk.",
+        "example_command": "answerloops skills answerloops-setup answerloops-operate",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "answerLoops agent skill install",
+        "permission_id": "command.answerloops.permission.skills",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Read the skill files under skills/ in the answerLoops repository before installing them into ./.claude/skills/."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "display_name": "Community",
+      "id": "community.answerloops",
+      "url": "https://github.com/answerLoops"
+    },
+    "reference_urls": [
+      "https://github.com/answerLoops/answerLoops/blob/main/packages/agent-sdk/src/cli/index.ts",
+      "https://github.com/answerLoops/answerLoops/blob/main/packages/agent-sdk/src/cli/setup.ts",
+      "https://github.com/answerLoops/answerLoops/blob/main/packages/agent-sdk/src/cli/skills.ts"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "execution",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "answerLoops self-hosted instance setup command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `answerloops setup`, which clones the answerLoops repository when not run inside a checkout, writes a .env file with generated secrets, and starts a self-hosted instance with `docker compose -f docker-compose.ghcr.yml up -d` using the published image. With `--with-skills` it also downloads Claude Code skills into ./.claude/skills/. Covers the installed bin and npx, bunx, npm exec, pnpm dlx and yarn dlx launches of @answerloops/agent-sdk.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "answerloops",
+                  "answerloops.cmd",
+                  "answerloops.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "setup"
+                  ]
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "npx",
+                  "npx.cmd",
+                  "npx.exe",
+                  "bunx",
+                  "bunx.cmd",
+                  "bunx.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--silent",
+                  "--stream",
+                  "--use-stderr",
+                  "--workspace-root",
+                  "--yes",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--dir",
+                  "--filter",
+                  "--package",
+                  "--reporter",
+                  "--workspace",
+                  "-C",
+                  "-F",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "@answerloops/agent-sdk",
+                    "setup"
+                  ],
+                  [
+                    "@answerloops/agent-sdk@latest",
+                    "setup"
+                  ],
+                  [
+                    "answerloops",
+                    "setup"
+                  ]
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "npm",
+                  "npm.cmd",
+                  "npm.exe",
+                  "pnpm",
+                  "pnpm.cmd",
+                  "pnpm.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--silent",
+                  "--stream",
+                  "--use-stderr",
+                  "--workspace-root",
+                  "--yes",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--dir",
+                  "--filter",
+                  "--package",
+                  "--reporter",
+                  "--workspace",
+                  "-C",
+                  "-F",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "exec",
+                    "@answerloops/agent-sdk",
+                    "setup"
+                  ],
+                  [
+                    "exec",
+                    "@answerloops/agent-sdk@latest",
+                    "setup"
+                  ],
+                  [
+                    "exec",
+                    "answerloops",
+                    "setup"
+                  ]
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "pnpm",
+                  "pnpm.cmd",
+                  "pnpm.exe",
+                  "yarn",
+                  "yarn.cmd",
+                  "yarn.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--silent",
+                  "--stream",
+                  "--use-stderr",
+                  "--workspace-root",
+                  "--yes",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--dir",
+                  "--filter",
+                  "--package",
+                  "--reporter",
+                  "--workspace",
+                  "-C",
+                  "-F",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "answerloops",
+                    "setup"
+                  ],
+                  [
+                    "dlx",
+                    "@answerloops/agent-sdk",
+                    "setup"
+                  ],
+                  [
+                    "dlx",
+                    "@answerloops/agent-sdk@latest",
+                    "setup"
+                  ]
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.answerloops.permission.setup",
+        "risk_classes": [
+          "destructive_shell",
+          "execution",
+          "network_egress"
+        ],
+        "rule_id": "command.answerloops.setup",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Confirm the target directory and that starting Docker containers on this machine is intended before running setup.",
+          "Run `answerloops --help` to review what setup will do first."
+        ],
+        "severity": "medium",
+        "title": "answerLoops self-hosted setup"
+      },
+      {
+        "action_classes": [
+          "answerLoops agent skill install command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `answerloops skills <name...>`, which downloads the named skill files from the answerLoops GitHub repository's main branch and writes them into ./.claude/skills/<name>/, where a coding agent loads them as instructions in later sessions. Existing files at those paths are overwritten. Covers the installed bin and npx, bunx, npm exec, pnpm dlx and yarn dlx launches of @answerloops/agent-sdk.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "answerloops",
+                  "answerloops.cmd",
+                  "answerloops.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "skills"
+                  ]
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "npx",
+                  "npx.cmd",
+                  "npx.exe",
+                  "bunx",
+                  "bunx.cmd",
+                  "bunx.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--silent",
+                  "--stream",
+                  "--use-stderr",
+                  "--workspace-root",
+                  "--yes",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--dir",
+                  "--filter",
+                  "--package",
+                  "--reporter",
+                  "--workspace",
+                  "-C",
+                  "-F",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "@answerloops/agent-sdk",
+                    "skills"
+                  ],
+                  [
+                    "@answerloops/agent-sdk@latest",
+                    "skills"
+                  ],
+                  [
+                    "answerloops",
+                    "skills"
+                  ]
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "npm",
+                  "npm.cmd",
+                  "npm.exe",
+                  "pnpm",
+                  "pnpm.cmd",
+                  "pnpm.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--silent",
+                  "--stream",
+                  "--use-stderr",
+                  "--workspace-root",
+                  "--yes",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--dir",
+                  "--filter",
+                  "--package",
+                  "--reporter",
+                  "--workspace",
+                  "-C",
+                  "-F",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "exec",
+                    "@answerloops/agent-sdk",
+                    "skills"
+                  ],
+                  [
+                    "exec",
+                    "@answerloops/agent-sdk@latest",
+                    "skills"
+                  ],
+                  [
+                    "exec",
+                    "answerloops",
+                    "skills"
+                  ]
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "pnpm",
+                  "pnpm.cmd",
+                  "pnpm.exe",
+                  "yarn",
+                  "yarn.cmd",
+                  "yarn.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--silent",
+                  "--stream",
+                  "--use-stderr",
+                  "--workspace-root",
+                  "--yes",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--dir",
+                  "--filter",
+                  "--package",
+                  "--reporter",
+                  "--workspace",
+                  "-C",
+                  "-F",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "answerloops",
+                    "skills"
+                  ],
+                  [
+                    "dlx",
+                    "@answerloops/agent-sdk",
+                    "skills"
+                  ],
+                  [
+                    "dlx",
+                    "@answerloops/agent-sdk@latest",
+                    "skills"
+                  ]
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.answerloops.permission.skills",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.answerloops.skills",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Read the skill files under skills/ in the answerLoops repository before installing them into ./.claude/skills/."
+        ],
+        "severity": "medium",
+        "title": "answerLoops agent skill install"
+      }
+    ],
+    "safer_alternatives": [
+      "Confirm the target directory and that starting Docker containers on this machine is intended before running setup.",
+      "Read the skill files under skills/ in the answerLoops repository before installing them into ./.claude/skills/."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

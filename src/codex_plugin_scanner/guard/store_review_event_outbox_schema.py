@@ -149,6 +149,7 @@ def review_event_payload_json(
     event_type: str,
     occurred_at: str,
     continuation_result: Mapping[str, object] | None = None,
+    native_replay: bool = False,
 ) -> str:
     """Build the canonical immutable event payload from a complete request row."""
 
@@ -170,6 +171,8 @@ def review_event_payload_json(
     }
     if continuation_result is not None:
         payload["continuationResult"] = dict(continuation_result)
+    if event_type == "review.request.snapshot_requeued":
+        payload["nativeReplay"] = native_replay
     return json.dumps(payload, sort_keys=True, separators=(",", ":"))
 
 

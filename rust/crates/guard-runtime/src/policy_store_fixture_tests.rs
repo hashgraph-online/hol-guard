@@ -21,6 +21,8 @@ pub(super) fn policy() -> EffectiveNativePolicyV3 {
         publisher_actions: BTreeMap::new(),
         artifact_actions: BTreeMap::new(),
         mcp_tool_actions: BTreeMap::new(),
+        mcp_provider_actions: BTreeMap::new(),
+        mcp_provider_catalog_hash: None,
         sandbox_analysis: "off".into(),
         receipt_redaction_level: "full".into(),
     }

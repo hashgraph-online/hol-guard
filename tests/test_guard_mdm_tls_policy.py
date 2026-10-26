@@ -5,6 +5,7 @@ import hashlib
 import ssl
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from cryptography import x509
@@ -97,3 +98,28 @@ def test_guard_runtime_contains_no_tls_verification_bypass() -> None:
                     if target.attr == "verify_mode" and isinstance(value, ast.Attribute) and value.attr == "CERT_NONE":
                         violations.append(f"{path}: CERT_NONE")
     assert violations == []
+
+
+def test_native_trust_export_includes_lazy_system_capath_roots(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    pem, der = _test_ca()
+    capath = tmp_path / "system-roots"
+    capath.mkdir()
+    (capath / "1234abcd.0").write_bytes(pem)
+    # Unrelated data and ambient trust overrides must never be exported.
+    (capath / "unrelated.txt").write_text("not a certificate")
+    ambient_pem, ambient_der = _test_ca()
+    ambient = tmp_path / "ambient.pem"
+    ambient.write_bytes(ambient_pem)
+    monkeypatch.setenv("SSL_CERT_FILE", str(ambient))
+    monkeypatch.setenv("SSL_CERT_DIR", str(tmp_path))
+    monkeypatch.setattr(trust_module.sys, "platform", "linux")
+    monkeypatch.setattr(
+        trust_module.ssl, "get_default_verify_paths", lambda: SimpleNamespace(openssl_capath=str(capath))
+    )
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.load_verify_locations(capath=str(capath))
+    assert der not in context.get_ca_certs(binary_form=True)
+    roots = trust_module.export_managed_trust_roots(context)
+    assert der in roots
+    assert ambient_der not in roots
+    assert context.check_hostname and context.verify_mode == ssl.CERT_REQUIRED

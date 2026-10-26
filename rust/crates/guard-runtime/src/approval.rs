@@ -47,6 +47,10 @@ use approval_context::{
     valid_binding, ApprovalContext,
 };
 
+pub(crate) fn binding_digest(label: &str, values: &[&str]) -> Result<String, String> {
+    approval_context::binding_digest(label, values)
+}
+
 fn encode_approval_response<T: Serialize>(value: &T) -> Result<Vec<u8>, String> {
     let encoded = crate::encode_response(value)?;
     if encoded.len() > NATIVE_APPROVAL_RESPONSE_MAX_BYTES {

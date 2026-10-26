@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from tests.release_workflow_helpers import PUBLISH_WORKFLOW, ROOT, load_workflow
+import json
+
+from tests.release_workflow_helpers import PUBLISH_WORKFLOW, ROOT, load_workflow, native_wheel_job
 
 
 def test_alpha_reservation_waits_for_native_assemble() -> None:
@@ -26,14 +28,17 @@ def test_unpublished_alpha_reservation_is_released_when_publish_fails() -> None:
     assert "Not Found" in script
 
 
-def test_native_guard_wheel_timeout_covers_musl_builds() -> None:
-    native = load_workflow(PUBLISH_WORKFLOW)["jobs"]["build-native-guard-wheels"]
-    assert native["timeout-minutes"] == 45
+def test_native_guard_wheel_timeout_covers_in_job_release_compiles() -> None:
+    native = native_wheel_job()
+    assert native["timeout-minutes"] == 90
 
 
 def test_windows_native_guard_wheel_uses_reproducible_linker_mode() -> None:
-    native = load_workflow(PUBLISH_WORKFLOW)["jobs"]["build-native-guard-wheels"]
-    windows = next(row for row in native["strategy"]["matrix"]["include"] if row["platform_tag"] == "win_amd64")
+    jobs = load_workflow(PUBLISH_WORKFLOW)["jobs"]
+    native = native_wheel_job()
+    selector = next(step for step in jobs["build"]["steps"] if step.get("id") == "native_wheel_matrix")
+    legs = json.loads(selector["env"]["NATIVE_WHEEL_MATRIX"])
+    windows = [row for row in legs if row["platform_tag"] in {"win_amd64", "win_arm64"}]
     build = next(step for step in native["steps"] if step.get("name") == "Build version-matched runtime")
-    assert windows["rustflags"] == "-C link-arg=/Brepro"
+    assert [row["rustflags"] for row in windows] == ["-C link-arg=/Brepro"] * 2
     assert build["env"]["RUSTFLAGS"] == "${{ matrix.rustflags }}"

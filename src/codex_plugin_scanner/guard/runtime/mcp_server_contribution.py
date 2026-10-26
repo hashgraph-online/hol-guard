@@ -7,14 +7,13 @@ import sys
 from collections.abc import Mapping
 from functools import lru_cache
 from importlib import resources
-from ipaddress import IPv6Address, ip_address
 from pathlib import Path
 from typing import Final, cast
-from urllib.parse import urlsplit, urlunsplit
 
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 
+from ..native_cli_runtime_support import cli_runtime_support
 from .extension_contribution import frozen_package_data
 
 _SCHEMA_VERSION: Final = "guard.mcp-server-contribution.v1"
@@ -31,12 +30,21 @@ _ALLOWED_ICON_NAMES: Final = frozenset(
 _ALLOWED_LAUNCHERS: Final = frozenset({"bunx", "npx", "npm", "pnpm", "uvx", "yarn", "pipx"})
 _TOOL_STATES: Final = frozenset({"inherit", "allow", "review", "block"})
 _REMOTE_TOOL_STATES: Final = frozenset({"inherit", "review", "block"})
-_REMOTE_MCP_URL_MAX_LENGTH: Final = 260
-_HEX_DIGITS: Final = frozenset("0123456789abcdefABCDEF")
-_UNRESERVED_PATH_CHARS: Final = frozenset("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
-_SUB_DELIMITERS: Final = frozenset("!$&'()*+,;=")
-_REMOTE_PATH_CHARS: Final = _UNRESERVED_PATH_CHARS | _SUB_DELIMITERS | frozenset(":@/")
-_REMOTE_QUERY_CHARS: Final = _REMOTE_PATH_CHARS | frozenset("?")
+
+
+def _bound_grammar(operation: str, value: object) -> str | None:
+    """Ask the resident for one contributed-MCP grammar answer.
+
+    The grammar itself lives in the native runtime; a value that is not a
+    string cannot be one of its inputs, so it is rejected here rather than
+    sent. Nothing about the answer is recomputed or repaired locally.
+    """
+    if not isinstance(value, str):
+        return None
+    result = cli_runtime_support(operation, {"value": value})
+    if result is not None and not isinstance(result, str):
+        raise ValueError("native_cli_runtime_support_result_invalid")
+    return result
 
 
 def contributions_dir() -> Path:
@@ -47,158 +55,46 @@ def catalog_id_for_mcp_id(mcp_id: str) -> str:
     return f"command.mcp-{mcp_id.removeprefix('mcp.')}"
 
 
+def direct_mcp_command_name(value: object) -> str | None:
+    """Recognize a portable executable basename for tightening-only MCP defaults.
+
+    Paths may be POSIX or Windows, independent of the host running Guard.
+    Backslashes are treated as path separators on every host, including POSIX,
+    so matching follows portable configured-command syntax rather than host
+    filesystem basename semantics. This is catalog selection, never executable
+    authentication or saved approval.
+    """
+    return _bound_grammar("direct_command_name", value)
+
+
 def _normalized_tool_name(name: object) -> str:
     compact = "".join(ch.lower() if ch.isalnum() else "-" for ch in str(name).strip()).strip("-")
     return "-".join(part for part in compact.split("-") if part)
 
 
-def _valid_dns_hostname(host: str) -> bool:
-    if len(host) > 253 or not host.isascii():
-        return False
-    labels = host.split(".")
-    return all(
-        1 <= len(label) <= 63
-        and label[0].isalnum()
-        and label[-1].isalnum()
-        and all(ch.isalnum() or ch == "-" for ch in label)
-        for label in labels
-    )
-
-
-def _normalized_remote_component(
-    value: str,
-    *,
-    allowed_chars: frozenset[str],
-    empty_default: str,
-) -> str | None:
-    candidate = value or empty_default
-    output: list[str] = []
-    index = 0
-    while index < len(candidate):
-        character = candidate[index]
-        if character != "%":
-            if character not in allowed_chars:
-                return None
-            output.append(character)
-            index += 1
-            continue
-        if index + 2 >= len(candidate):
-            return None
-        escape = candidate[index + 1 : index + 3]
-        if any(character not in _HEX_DIGITS for character in escape):
-            return None
-        decoded = chr(int(escape, 16))
-        if ord(decoded) < 0x20 or ord(decoded) == 0x7F:
-            return None
-        if decoded in _UNRESERVED_PATH_CHARS:
-            output.append(decoded)
-        else:
-            output.append(f"%{escape.upper()}")
-        index += 3
-    return "".join(output)
-
-
-def _remove_remote_dot_segments(path: str) -> str:
-    segments = path.split("/")
-    resolved: list[str] = []
-    for segment in segments:
-        if segment == "..":
-            if resolved:
-                resolved.pop()
-        elif segment != ".":
-            resolved.append(segment)
-    if segments[-1] in {".", ".."}:
-        resolved.append("")
-    normalized = "/".join(resolved) or "/"
-    if path.startswith("/") and not normalized.startswith("/"):
-        normalized = f"/{normalized}"
-    return normalized
-
-
-def _normalized_remote_path(path: str) -> str | None:
-    normalized = _normalized_remote_component(path, allowed_chars=_REMOTE_PATH_CHARS, empty_default="/")
-    if normalized is None:
-        return None
-    return _remove_remote_dot_segments(normalized)
-
-
-def _normalized_remote_query(query: str) -> str | None:
-    return _normalized_remote_component(query, allowed_chars=_REMOTE_QUERY_CHARS, empty_default="")
-
-
 def normalized_remote_mcp_url(value: object) -> str | None:
-    if not isinstance(value, str):
-        return None
-    if not value or value != value.strip() or not value.isascii():
-        return None
-    if any(ord(character) <= 0x20 or ord(character) == 0x7F for character in value):
-        return None
-    candidate = value
-    try:
-        parsed = urlsplit(candidate)
-    except ValueError:
-        return None
-    if (
-        parsed.scheme.lower() != "https"
-        or not parsed.hostname
-        or parsed.username is not None
-        or parsed.password is not None
-        or parsed.fragment
-    ):
-        return None
-    try:
-        port = parsed.port
-    except ValueError:
-        return None
-    if port not in {None, 443}:
-        return None
-    raw_host = parsed.hostname.lower()
-    if raw_host.endswith(".."):
-        return None
-    host = raw_host[:-1] if raw_host.endswith(".") else raw_host
-    if not host:
-        return None
-    try:
-        address = ip_address(host)
-    except ValueError:
-        if all(ch.isdigit() or ch == "." for ch in host):
-            return None
-        if host == "localhost" or host.endswith(".localhost") or "." not in host or not _valid_dns_hostname(host):
-            return None
-    else:
-        if isinstance(address, IPv6Address) and address.ipv4_mapped is not None:
-            address = address.ipv4_mapped
-        if not address.is_global:
-            return None
-        host = str(address)
-    netloc = f"[{host}]" if ":" in host else host
-    path = _normalized_remote_path(parsed.path)
-    query = _normalized_remote_query(parsed.query)
-    if path is None or query is None:
-        return None
-    endpoint = urlunsplit(("https", netloc, path, "", ""))
-    if len(endpoint) > _REMOTE_MCP_URL_MAX_LENGTH:
-        return None
-    return urlunsplit(("https", netloc, path, query, ""))
+    """Normalize a configured remote MCP URL, keeping its validated query."""
+    return _bound_grammar("remote_url", value)
 
 
 def remote_mcp_endpoint_identity(value: object) -> str | None:
-    normalized = normalized_remote_mcp_url(value)
-    if normalized is None:
-        return None
-    return normalized.partition("?")[0]
+    """Identify the launch endpoint a configured remote MCP URL points at."""
+    return _bound_grammar("remote_endpoint_identity", value)
 
 
 def normalized_remote_server_name(value: object) -> str | None:
-    if not isinstance(value, str):
-        return None
-    normalized = " ".join(value.strip().casefold().split())
-    return normalized or None
+    """Fold a contributed remote server name to its comparison form."""
+    return _bound_grammar("remote_server_name", value)
 
 
 def load_mcp_contribution_payloads(root: Path | None = None) -> tuple[dict[str, object], ...]:
     if root is not None:
         return _load_from_directory(root)
+    from ..catalog_delivery.installed_bundle import compatibility_payloads
+
+    bundled = compatibility_payloads("mcp")
+    if bundled is not None:
+        return bundled
     packaged = _load_packaged_payloads()
     if packaged:
         return packaged
@@ -235,6 +131,12 @@ def validate_mcp_contribution(payload: Mapping[str, object], *, filename: str = 
     if launch_kind == "package-launcher":
         if launch.get("command") not in _ALLOWED_LAUNCHERS:
             raise ValueError(f"{filename} launch command is not an allowlisted package launcher")
+    elif launch_kind == "direct-command":
+        command = launch.get("command")
+        if not isinstance(command, str) or direct_mcp_command_name(command) != command:
+            raise ValueError(
+                f"{filename} direct command must be a canonical lowercase executable basename, not a generic launcher"
+            )
     elif launch_kind == "remote-http":
         if normalized_remote_mcp_url(launch.get("url")) is None:
             raise ValueError(
@@ -270,10 +172,8 @@ def validate_mcp_contribution(payload: Mapping[str, object], *, filename: str = 
             raise ValueError(f"{filename} declares unsupported MCP tool state {state!r}")
         if launch_kind == "remote-http" and state not in _REMOTE_TOOL_STATES:
             raise ValueError(f"{filename} remote HTTP contributions cannot declare allow defaults")
-
-
-def mcp_catalog_ids(root: Path | None = None) -> frozenset[str]:
-    return frozenset(catalog_id_for_mcp_id(str(item["id"])) for item in load_mcp_contribution_payloads(root))
+        if launch_kind == "direct-command" and state == "allow":
+            raise ValueError(f"{filename} direct-command contributions cannot declare allow defaults")
 
 
 def mcp_tool_state(payload: Mapping[str, object], tool_name: str) -> str:
@@ -293,30 +193,6 @@ def mcp_tool_state(payload: Mapping[str, object], tool_name: str) -> str:
         if normalized == wanted and state in _TOOL_STATES:
             return cast(str, state)
     return fallback
-
-
-def mcp_payload_for_catalog_id(extension_id: str) -> dict[str, object] | None:
-    return _contribution_index().get(extension_id)
-
-
-def catalog_mcp_fields(extension_id: str) -> dict[str, object] | None:
-    payload = _contribution_index().get(extension_id)
-    if payload is None:
-        return None
-    launch = payload.get("launch")
-    tools = payload.get("tools")
-    if not isinstance(launch, dict) or not isinstance(tools, list):
-        return None
-    return {
-        "surface": "mcp",
-        "mcp_launch": dict(launch),
-        "mcp_tools": [dict(item) for item in tools if isinstance(item, dict)],
-    }
-
-
-def reset_mcp_contribution_cache() -> None:
-    _contribution_index.cache_clear()
-    _validator.cache_clear()
 
 
 def _load_from_directory(directory: Path) -> tuple[dict[str, object], ...]:
@@ -357,6 +233,7 @@ def _load_packaged_payloads() -> tuple[dict[str, object], ...]:
 
 def _finalize_payloads(payloads: tuple[dict[str, object], ...]) -> tuple[dict[str, object], ...]:
     packages: dict[str, str] = {}
+    commands: dict[str, str] = {}
     remote_urls: dict[str, str] = {}
     remote_names: dict[str, str] = {}
     ids: set[str] = set()
@@ -379,6 +256,15 @@ def _finalize_payloads(payloads: tuple[dict[str, object], ...]) -> tuple[dict[st
             if previous is not None:
                 raise ValueError(f"duplicate MCP launch package {package} for {previous} and {mcp_id}")
             packages[key] = mcp_id
+            continue
+        if launch.get("kind") == "direct-command":
+            command = launch.get("command")
+            if not isinstance(command, str) or direct_mcp_command_name(command) != command:
+                raise ValueError(f"{mcp_id} has invalid direct command")
+            previous = commands.get(command)
+            if previous is not None:
+                raise ValueError(f"duplicate MCP direct command {command} for {previous} and {mcp_id}")
+            commands[command] = mcp_id
             continue
         if launch.get("kind") != "remote-http":
             raise ValueError(f"{mcp_id} has unsupported launch metadata")
@@ -404,16 +290,6 @@ def _finalize_payloads(payloads: tuple[dict[str, object], ...]) -> tuple[dict[st
                 raise ValueError(f"duplicate MCP remote server name {raw_name} for {previous_name} and {mcp_id}")
             remote_names[server_name] = mcp_id
     return payloads
-
-
-@lru_cache(maxsize=1)
-def _contribution_index() -> dict[str, dict[str, object]]:
-    index: dict[str, dict[str, object]] = {}
-    for payload in load_mcp_contribution_payloads():
-        mcp_id = payload.get("id")
-        if isinstance(mcp_id, str):
-            index[catalog_id_for_mcp_id(mcp_id)] = payload
-    return index
 
 
 @lru_cache(maxsize=1)

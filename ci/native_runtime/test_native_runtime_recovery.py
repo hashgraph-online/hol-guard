@@ -20,6 +20,7 @@ from codex_plugin_scanner.guard.native_policy_test_support import native_policy_
 from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.native_runtime import native_runtime_status, review_post_tool_native
 from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest
+from scripts.native_resident_stop_bound import RESIDENT_STOP_TIMEOUT_SECONDS
 
 _NATIVE_BINARY = os.environ.get("HOL_GUARD_NATIVE_BINARY")
 
@@ -81,7 +82,7 @@ def test_auto_rejects_version_mismatched_runtime(tmp_path: Path, monkeypatch: py
     monkeypatch.setenv("HOL_GUARD_NATIVE", "auto")
     monkeypatch.setattr(native_runtime, "_runtime_candidates", lambda: (runtime,))
     monkeypatch.setattr(native_runtime, "_python_package_version", lambda: "test")
-    native_runtime._capabilities_for_identity.cache_clear()
+    native_runtime._clear_capabilities_probe_state()
     status = native_runtime_status()
     assert status.available is True
     assert status.compatible is False
@@ -205,7 +206,7 @@ def test_native_clients_share_one_generation_across_processes(tmp_path: Path) ->
             (str(runtime), "resident-stop", "--state-dir", str(state_dir)),
             check=False,
             capture_output=True,
-            timeout=5,
+            timeout=RESIDENT_STOP_TIMEOUT_SECONDS,
         )
         for process in processes:
             if process.poll() is None:

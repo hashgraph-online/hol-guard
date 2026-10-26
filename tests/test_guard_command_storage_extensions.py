@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from codex_plugin_scanner.guard.runtime.command_storage_extensions import STORAGE_COMMAND_RULES
 from tests.command_extension_contracts import assert_reviewed_command_cases, assert_safe_command_cases
 from tests.native_command_test_support import (
     extract_sensitive_tool_action_request_native_test as extract_sensitive_tool_action_request,
@@ -297,23 +296,6 @@ def test_storage_safe_segment_does_not_hide_later_deletion(tmp_path: Path) -> No
     assert isinstance(rules, list)
     rule_ids = [rule["rule_id"] for rule in rules if isinstance(rule, dict) and "rule_id" in rule]
     assert rule_ids == ["command.storage.minio.deletion"]
-
-
-def test_storage_read_permissions_keep_executable_matchers() -> None:
-    read_rule_ids = {
-        "command.storage.aws-s3.ls",
-        "command.storage.aws-s3.get",
-        "command.storage.google-cloud.ls",
-        "command.storage.google-cloud.cat",
-        "command.storage.azure-blob.list",
-        "command.storage.minio.ls",
-        "command.storage.minio.cat",
-    }
-    rules = {rule.rule_id: rule for rule in STORAGE_COMMAND_RULES}
-    for rule_id in read_rule_ids:
-        rule = rules[rule_id]
-        assert rule.matcher is not None
-        assert rule.default_mode == "disabled"
 
 
 def test_storage_catalog_lists_supported_terminal_commands() -> None:

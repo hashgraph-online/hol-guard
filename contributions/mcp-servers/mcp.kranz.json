@@ -1,0 +1,147 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.kranz",
+  "version": "1.0.0",
+  "name": "Kranz MCP",
+  "description": "Reviews Kranz MCP action execution, runtime and service lifecycle changes, configuration reloads, and retained log or completed-run deletion. Read-only tools inherit Guard policy; unknown tools require review. Off until enabled locally.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "community.kranz",
+    "displayName": "Community",
+    "url": "https://github.com/kranz-org/kranz"
+  },
+  "icon": {
+    "kind": "none"
+  },
+  "homepage": "https://kranz-org.github.io/kranz/reference/mcp",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "kranz"
+  },
+  "riskClasses": [
+    "external-command-execution",
+    "external-runtime-lifecycle",
+    "external-service-lifecycle",
+    "external-configuration-change",
+    "external-retained-evidence-deletion"
+  ],
+  "tools": [
+    {
+      "name": "runtimes",
+      "state": "inherit"
+    },
+    {
+      "name": "up",
+      "state": "review"
+    },
+    {
+      "name": "down",
+      "state": "review"
+    },
+    {
+      "name": "status",
+      "state": "inherit"
+    },
+    {
+      "name": "runs",
+      "state": "inherit"
+    },
+    {
+      "name": "run_delete",
+      "state": "review"
+    },
+    {
+      "name": "changes",
+      "state": "inherit"
+    },
+    {
+      "name": "plan",
+      "state": "inherit"
+    },
+    {
+      "name": "graph",
+      "state": "inherit"
+    },
+    {
+      "name": "ports",
+      "state": "inherit"
+    },
+    {
+      "name": "port_inspect",
+      "state": "inherit"
+    },
+    {
+      "name": "logs",
+      "state": "inherit"
+    },
+    {
+      "name": "wait",
+      "state": "inherit"
+    },
+    {
+      "name": "health",
+      "state": "inherit"
+    },
+    {
+      "name": "action_list",
+      "state": "inherit"
+    },
+    {
+      "name": "action_info",
+      "state": "inherit"
+    },
+    {
+      "name": "action_result",
+      "state": "inherit"
+    },
+    {
+      "name": "doctor",
+      "state": "inherit"
+    },
+    {
+      "name": "start",
+      "state": "review"
+    },
+    {
+      "name": "stop",
+      "state": "review"
+    },
+    {
+      "name": "restart",
+      "state": "review"
+    },
+    {
+      "name": "action_run",
+      "state": "review"
+    },
+    {
+      "name": "action_cancel",
+      "state": "review"
+    },
+    {
+      "name": "reload",
+      "state": "review"
+    },
+    {
+      "name": "logs_clear",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/kranz-org/kranz/releases/tag/v0.16.5",
+    "https://github.com/kranz-org/kranz/blob/v0.16.5/docs/reference/mcp.md",
+    "https://github.com/kranz-org/kranz/blob/v0.16.5/internal/mcp/tools.go",
+    "https://github.com/kranz-org/kranz/blob/v0.16.5/internal/mcp/lifecycle_tools.go"
+  ],
+  "saferAlternatives": [
+    "Use plan and action_info to inspect the exact services, dependent services, action parameters, and command before a mutation.",
+    "Use status, health, runs, logs, and action_result for observation instead of restarting services or deleting retained evidence.",
+    "Keep Kranz confirmations and plan-bound tokens: Guard review does not replace runtime ownership checks or confirmation requirements."
+  ]
+}

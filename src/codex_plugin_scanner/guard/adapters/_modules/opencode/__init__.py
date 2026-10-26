@@ -1,0 +1,1 @@
+"""Internal opencode adapter helpers."""

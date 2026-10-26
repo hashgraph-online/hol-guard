@@ -1,7 +1,20 @@
 use super::{CommandSegmentV1, CompatibilityObservations};
 
+#[path = "git_allow_scope.rs"]
+mod git_allow_scope;
+#[path = "git_fetch.rs"]
+mod git_fetch;
+#[path = "git_hooks_path.rs"]
+mod git_hooks_path;
+pub(crate) use git_allow_scope::{
+    repository_routes_verified, runs_configured_program, subcommand_settles_uncertainty,
+};
+use git_hooks_path::hooks_path_names_no_hooks;
+pub(crate) use git_hooks_path::rooted_hooks_inert;
+
 const RULES: &[(&str, &str)] = &[
     ("branch", "command.git.branch"),
+    ("worktree", "command.git.worktree"),
     ("pull", "command.git.pull"),
     ("push", "command.git.push"),
     ("clone", "command.git.clone"),
@@ -36,7 +49,7 @@ fn command_index(arguments: &[String]) -> Option<usize> {
         } else if ((argument.starts_with("-c") || argument.starts_with("-C")) && argument.len() > 2)
             || matches!(
                 argument.as_str(),
-                "--no-pager"
+                "-P" | "--no-pager"
                     | "--paginate"
                     | "--bare"
                     | "--no-replace-objects"
@@ -61,29 +74,300 @@ fn bounded_inspection(arguments: &[String]) -> bool {
     if arguments == ["rev-parse", "--show-toplevel"] {
         return true;
     }
-    let [command, mode, patch] = arguments else {
+    let Some((command, rest)) = arguments.split_first() else {
         return false;
     };
-    // These fixed built-ins cannot be replaced by aliases. This admits their
-    // capability attribution only; patch read and workspace proofs remain the
-    // responsibility of the ordinary command decision, not this classifier.
-    command == "apply"
-        && mode == "--check"
-        && !patch.is_empty()
-        && patch.len() <= 4096
-        && !patch.starts_with(['-', '/', '\\'])
-        && patch
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || b"._-/".contains(&byte))
-        && patch
-            .split('/')
-            .all(|part| !matches!(part, "" | "." | ".."))
+    // These fixed built-ins cannot be replaced by aliases. The check grammar
+    // proves the invocation writes nothing, whichever of its options the
+    // caller spelled. This admits their capability attribution only; patch
+    // read and workspace proofs remain the responsibility of the ordinary
+    // command decision, not this classifier.
+    (command == "apply" && crate::pretool::git_apply_check::is_check_only(rest))
+        // A stash listing and a `show` of one entry print; every other
+        // stash spelling moves work and keeps its workspace attribution.
+        || (command == "stash" && crate::pretool::git_stash_reads::read_form(rest))
+        // A submodule status prints the recorded commit of each submodule the
+        // superproject's index names; the recursive walk and every other
+        // submodule spelling move work and keep their attribution.
+        || (command == "submodule" && crate::pretool::git_submodule_reads::read_form(rest))
+        // A bisect session's log and a note's listing print; every other
+        // spelling of either moves a ref, writes the notes ref or runs a
+        // program the text names, and keeps its attribution.
+        || (matches!(command.as_str(), "bisect" | "notes")
+            && crate::pretool::git_side_record_reads::read_form(command, rest))
 }
 
-pub(super) fn observe(
+/// A staged-index diff that prints to stdout like `git diff HEAD`, which the
+/// ordinary diff proof already admits. The staged content is no more private
+/// than the working tree beside it, so the shared read proof (configuration
+/// probe, textconv and sensitive-pathspec screens) decides it. Forms that
+/// write a file or compare against another revision keep the index owner.
+fn bounded_cached_diff(arguments: &[String]) -> bool {
+    arguments
+        .iter()
+        .take_while(|argument| argument.as_str() != "--")
+        .all(|argument| {
+            let option = argument.as_str();
+            matches!(
+                option,
+                "--cached"
+                    | "--staged"
+                    | "HEAD"
+                    | "--check"
+                    | "--stat"
+                    | "--numstat"
+                    | "--shortstat"
+                    | "--summary"
+                    | "--name-only"
+                    | "--name-status"
+                    | "--patch"
+                    | "-p"
+                    | "--quiet"
+                    | "--exit-code"
+                    | "--no-color"
+                    | "--color=never"
+                    | "--no-ext-diff"
+                    | "--no-textconv"
+            ) || option
+                .strip_prefix("-U")
+                .or_else(|| option.strip_prefix("--unified="))
+                .is_some_and(|lines| {
+                    !lines.is_empty()
+                        && lines.len() <= 6
+                        && lines.bytes().all(|b| b.is_ascii_digit())
+                })
+        })
+}
+
+fn read_only_plumbing(arguments: &[String]) -> bool {
+    let Some((command, rest)) = arguments.split_first() else {
+        return false;
+    };
+    // Git ignores aliases that shadow built-ins, so these names always run the
+    // read-only built-in. Forms that read arbitrary files, run configured
+    // drivers, touch the network, or write are excluded.
+    match command.as_str() {
+        "rev-parse" | "merge-base" | "show-ref" | "ls-tree" | "for-each-ref" => true,
+        "cat-file" => crate::pretool::git_object_reads::read_form(command, rest),
+        // These listings only print, and their grammars already exclude the
+        // forms that run a configured program; the read proof still decides.
+        "shortlog" | "check-ignore" | "count-objects" | "check-attr" | "sparse-checkout" => {
+            crate::pretool::git_listing_reads::read_form(command, rest)
+        }
+        "rev-list" => !rest.iter().any(|argument| {
+            matches!(argument.as_str(), "--output" | "-o") || argument.starts_with("--output=")
+        }),
+        "symbolic-ref" => {
+            let operands: Vec<&String> = rest
+                .iter()
+                .filter(|argument| !matches!(argument.as_str(), "-q" | "--quiet" | "--short"))
+                .collect();
+            operands.len() == 1 && !operands[0].starts_with('-')
+        }
+        "config" if crate::pretool::git_config_reads::read_form(rest).is_some() => true,
+        "config" => {
+            let mut reads = false;
+            for argument in rest {
+                let option = argument.split('=').next().unwrap_or(argument);
+                match option {
+                    "--get" | "--get-all" | "--get-regexp" | "--get-urlmatch" | "--list" | "-l" => {
+                        reads = true;
+                    }
+                    "--local" | "--global" | "--system" | "--worktree" | "--show-origin"
+                    | "--show-scope" | "--name-only" | "--null" | "-z" | "--type" | "--bool"
+                    | "--int" | "--path" | "--default" | "--includes" | "--no-includes" => {}
+                    _ if option.starts_with('-') => return false,
+                    _ => {}
+                }
+            }
+            reads
+        }
+        _ => false,
+    }
+}
+
+pub(super) fn inspection_arguments<'a>(
+    arguments: &'a [String],
+    context: crate::pretool::PathContext<'_>,
+) -> Option<&'a [String]> {
+    let remaining = routed(arguments, context, true)?;
+    let subcommand = remaining.first().map(String::as_str);
+    let admitted = match subcommand {
+        Some(
+            "status" | "diff" | "log" | "show" | "blame" | "describe" | "reflog" | "branch"
+            | "hash-object" | "rev-parse" | "merge-base" | "ls-files" | "remote" | "worktree"
+            | "config" | "grep" | "ls-tree" | "cat-file" | "show-ref" | "for-each-ref" | "rev-list"
+            | "shortlog" | "check-ignore" | "count-objects" | "check-attr",
+        ) => true,
+        // A tag listing, a clean preview and a patch check only print, but the
+        // same three subcommands also write a tag, remove a file and patch the
+        // tree, so each is admitted only in the spelling its own grammar
+        // proves.
+        Some("tag") => crate::pretool::git_tag_listing::is_listing(&remaining[1..]),
+        Some("clean") => crate::pretool::git_clean_preview::is_dry_run(&remaining[1..]),
+        Some("apply") => crate::pretool::git_apply_check::is_check_only(&remaining[1..]),
+        // `stash` reaches the worktree in every spelling but the two that
+        // print: a listing and a `show` of one entry.
+        Some("stash") => crate::pretool::git_stash_reads::read_form(&remaining[1..]),
+        Some("submodule") => crate::pretool::git_submodule_reads::read_form(&remaining[1..]),
+        // A bisect session and a commit's notes each print in one grammar and
+        // write in every other, so each is admitted only in that grammar.
+        Some(record @ ("bisect" | "notes")) => {
+            crate::pretool::git_side_record_reads::read_form(record, &remaining[1..])
+        }
+        // `sparse-checkout` prints the patterns the tree is narrowed to in one
+        // spelling and changes that narrowing in every other.
+        Some("sparse-checkout") => {
+            crate::pretool::git_listing_reads::read_form("sparse-checkout", &remaining[1..])
+        }
+        _ => false,
+    };
+    admitted.then_some(remaining)
+}
+
+pub(super) fn fetch_origin_shaped(arguments: &[String]) -> bool {
+    git_fetch::origin_shaped_arguments(arguments)
+}
+
+/// Whether a refresh's operands name a reach the proof can follow, and whether
+/// that reach is every configured remote rather than `origin` alone.
+pub(super) fn fetch_reach(arguments: &[String]) -> Option<bool> {
+    git_fetch::reach(arguments).map(|reach| reach == git_fetch::Reach::EveryRemote)
+}
+
+pub(super) fn routed_arguments<'a>(
+    arguments: &'a [String],
+    context: crate::pretool::PathContext<'_>,
+) -> Option<&'a [String]> {
+    routed(arguments, context, false)
+}
+
+/// `inspection` additionally admits read-only routing and hardening options
+/// (`--git-dir=<bare repository>`, a `core.hooksPath` that names no hooks)
+/// that proofs for operations which run hooks must keep refusing.
+fn routed<'a>(
+    arguments: &'a [String],
+    context: crate::pretool::PathContext<'_>,
+    inspection: bool,
+) -> Option<&'a [String]> {
+    let mut index = 0;
+    let mut saw_change_directory = false;
+    let mut saw_git_dir = false;
+    let mut without_repository = false;
+    while let Some(argument) = arguments.get(index) {
+        if matches!(
+            argument.as_str(),
+            "-P" | "--no-pager" | "--no-optional-locks"
+        ) {
+            index += 1;
+            continue;
+        }
+        if argument == "-c" {
+            let (key, value) = arguments.get(index + 1)?.split_once('=')?;
+            let boolean = value.to_ascii_lowercase();
+            let safe = match key.to_ascii_lowercase().as_str() {
+                "core.fsmonitor" => matches!(boolean.as_str(), "false" | "0" | "no" | "off"),
+                "core.hookspath" => {
+                    inspection && hooks_path_names_no_hooks(value, context.cwd, arguments)
+                }
+                "core.quotepath" => matches!(
+                    boolean.as_str(),
+                    "true" | "false" | "1" | "0" | "yes" | "no" | "on" | "off"
+                ),
+                _ => false,
+            };
+            if !safe {
+                return None;
+            }
+            index += 2;
+            continue;
+        }
+        let git_dir = match argument.as_str() {
+            "--git-dir" if inspection => {
+                index += 1;
+                Some(arguments.get(index)?.as_str())
+            }
+            _ => argument.strip_prefix("--git-dir=").filter(|_| inspection),
+        };
+        if let Some(git_dir) = git_dir {
+            // A repository named by `--git-dir` is a read route like `-C`.
+            if saw_change_directory
+                || saw_git_dir
+                || !crate::pretool::safe_directory_target(git_dir)
+                || !crate::pretool::git_dir_route_within_scope(git_dir, context)
+            {
+                return None;
+            }
+            saw_git_dir = true;
+            index += 1;
+            continue;
+        }
+        let target = if argument == "-C" {
+            if saw_git_dir {
+                return None;
+            }
+            index += 1;
+            arguments.get(index)?.as_str()
+        } else {
+            break;
+        };
+        if saw_change_directory && !std::path::Path::new(target).is_absolute() {
+            return None;
+        }
+        // A read that discovers no repository below `-C` only prints an
+        // error, so it needs no repository proof. Operations that write still
+        // have to land in a checkout the route proofs admit.
+        if !crate::pretool::safe_directory_target(target) {
+            return None;
+        }
+        if !crate::pretool::git_route_within_workspace(target, context) {
+            if !(inspection && crate::pretool::git_route_without_repository(target, context)) {
+                return None;
+            }
+            without_repository = true;
+        }
+        // Like `cd`, an absolute Windows target must be its exact canonical
+        // spelling. A route that only prints `fatal:` is admitted for a
+        // directory that is not there, which has no canonical spelling of its
+        // own, so there the proof holds the deepest name that does exist.
+        #[cfg(windows)]
+        if std::path::Path::new(target).is_absolute()
+            && !if without_repository {
+                crate::pretool::directory_targets::exact_drive_target_with_absent_tail(target)
+            } else {
+                crate::pretool::directory_targets::exact_existing_drive_target(target)
+            }
+        {
+            return None;
+        }
+        saw_change_directory = true;
+        index += 1;
+    }
+    let rest = arguments.get(index..)?;
+    if without_repository && crate::pretool::reads_without_repository(rest) {
+        return None;
+    }
+    Some(rest)
+}
+
+#[cfg(test)]
+pub(super) fn observe_with_context(
     segment: &CommandSegmentV1,
     index: usize,
     result: &mut CompatibilityObservations,
+    context: crate::pretool::PathContext<'_>,
+) {
+    observe_with_contexts(segment, index, result, context, context);
+}
+
+/// `proof_context` is where native proofs ran this segment: the directory a
+/// verified leading `cd` entered, or `context` itself.
+pub(super) fn observe_with_contexts(
+    segment: &CommandSegmentV1,
+    index: usize,
+    result: &mut CompatibilityObservations,
+    context: crate::pretool::PathContext<'_>,
+    proof_context: crate::pretool::PathContext<'_>,
 ) {
     let arguments = &segment.arguments;
     if arguments
@@ -101,13 +385,71 @@ pub(super) fn observe(
         return;
     };
     let command = arguments[command_index].as_str();
-    if command_index == 0 && bounded_inspection(arguments) {
+    let inspection = inspection_arguments(arguments, context)
+        .filter(|_| crate::pretool::directory_targets::drive_targets_quoted(segment))
+        .filter(|_| crate::pretool::directory_targets::home_targets_unquoted(segment));
+    // A remote operation behind proven `-C` routes names its subcommand
+    // exactly, like the bare form; its own floors then apply.
+    let routed_remote = command_index != 0
+        && matches!(command, "push" | "fetch" | "pull")
+        && routed_arguments(arguments, context)
+            .filter(|_| crate::pretool::directory_targets::drive_targets_quoted(segment))
+            .filter(|_| crate::pretool::directory_targets::home_targets_unquoted(segment))
+            .is_some_and(|remaining| remaining.first().map(String::as_str) == Some(command));
+    let plumbing = (command_index == 0 && read_only_plumbing(arguments))
+        || inspection.is_some_and(read_only_plumbing);
+    if plumbing {
+        // The command stays read-only, but a disabled Git permission or
+        // extension can still block it.
+        result.permission("command.git.permission.ls-files", index, false);
+    }
+    // A proven pure listing is read-only inspection, not branch mutation.
+    let branch_listing = command == "branch"
+        && inspection.is_some_and(|remaining| {
+            crate::pretool::git_branch_listing::is_listing(&remaining[1..])
+        });
+    // Printing object ids of named files writes nothing to the repository.
+    let hash_read = command == "hash-object"
+        && inspection.is_some_and(|remaining| {
+            crate::pretool::git_hash_object::read_operands(&remaining[1..]).is_some()
+        });
+    // `init` is a built-in, so no alias can replace it. Creating a repository
+    // in the current directory or one absolute target with only a quiet flag
+    // or an initial branch name touches none of the porcelain owners above;
+    // the native proof still decides the target. Templates, separate git
+    // directories and other options keep every owner uncertain.
+    let plain_init = command_index == 0
+        && command == "init"
+        && (crate::pretool::init_arguments(&arguments[1..]).is_some()
+            || crate::pretool::git_init_target::target(&arguments[1..])
+                .is_some_and(crate::pretool::git_init_target::absolute_target));
+    // A plain configuration write sets a key Git never runs; its own proof
+    // still decides the repository.
+    let plain_config_write = command == "config"
+        && crate::pretool::directory_targets::drive_targets_quoted(segment)
+        && crate::pretool::directory_targets::home_targets_unquoted(segment)
+        && routed_arguments(arguments, context).is_some_and(|remaining| {
+            remaining.first().map(String::as_str) == Some("config")
+                && crate::pretool::git_config_reads::writes::plain_write(&remaining[1..]).is_some()
+        });
+    if plumbing
+        || plain_config_write
+        || branch_listing
+        || hash_read
+        || plain_init
+        || (command_index == 0 && bounded_inspection(arguments))
+        || inspection.is_some_and(bounded_inspection)
+    {
         return;
     }
     if let Some((_, rule)) = RULES.iter().find(|(name, _)| *name == command) {
         // Attribution is deliberately stronger than legacy Python's inert
         // matcher=None porcelain entries: disabling a permission must work.
-        result.rule(rule, index, command_index != 0);
+        result.rule(
+            rule,
+            index,
+            command_index != 0 && inspection.is_none() && !routed_remote,
+        );
     } else if !matches!(
         command,
         "switch"
@@ -118,7 +460,6 @@ pub(super) fn observe(
             | "commit"
             | "mv"
             | "rm"
-            | "worktree"
             | "tag"
             | "clean"
             | "rebase"
@@ -135,60 +476,33 @@ pub(super) fn observe(
         }
     }
     if command == "fetch" {
-        // Proving a named origin requires repository/configuration bindings
-        // unavailable in CanonicalCommandV1. Never claim the Python exemption.
-        result.rule("command.git.unverified-fetch", index, true);
+        // Repository/configuration bindings are unavailable in
+        // CanonicalCommandV1, so Guard still never proves the fetch benign.
+        // A plain named-origin refresh is a definite review rule, though, so an
+        // explicit Allow of its permission can settle it. Every wrapped,
+        // option-prefixed, URL, or otherwise non-exact form stays uncertain.
+        // The hook's native proof already checked the repository's origin,
+        // transport, credential helpers and hooks for exactly this segment.
+        // A trailing `2>&1` only merges the fetch's progress into stdout.
+        let stripped = crate::pretool::without_stderr_merge(segment);
+        let refresh = stripped.as_ref().unwrap_or(segment);
+        let plain = git_fetch::plain_refresh(refresh, command_index).is_some()
+            || (routed_remote && git_fetch::routed_refresh(refresh, command_index).is_some());
+        if !(plain && crate::pretool::verified_origin_operation(refresh, proof_context)) {
+            result.rule("command.git.unverified-fetch", index, !plain);
+        }
     }
     if command == "diff"
         && arguments[command_index + 1..]
             .iter()
             .take_while(|argument| argument.as_str() != "--")
             .any(|argument| matches!(argument.as_str(), "--cached" | "--staged"))
+        && !inspection.is_some_and(|remaining| bounded_cached_diff(&remaining[1..]))
     {
         result.rule("command.git.index-inspection", index, true);
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn observations(command: &str) -> CompatibilityObservations {
-        let model = crate::parse_command(
-            &serde_json::from_value(serde_json::json!({"command": command})).unwrap(),
-        )
-        .unwrap();
-        let mut result = CompatibilityObservations::default();
-        observe(&model.segments[0], 0, &mut result);
-        result
-    }
-
-    #[test]
-    fn fixed_read_only_inspections_do_not_invent_unrelated_git_owners() {
-        for command in [
-            "git rev-parse --show-toplevel",
-            "git apply --check workspace/patches/change.patch",
-        ] {
-            assert!(observations(command).rule_matches.is_empty(), "{command}");
-        }
-    }
-
-    #[test]
-    fn inspection_exemption_does_not_cover_execution_routing_or_mutation() {
-        for command in [
-            "git -c alias.apply=payload apply --check change.patch",
-            "git rev-parse --git-dir",
-            "git apply change.patch",
-            "git apply --check --unsafe-paths change.patch",
-            "git apply --check ../change.patch",
-            "git apply --check -",
-        ] {
-            let result = observations(command);
-            assert!(!result.rule_matches.is_empty(), "{command}");
-            assert!(
-                result.rule_matches.iter().all(|item| item.uncertainty),
-                "{command}"
-            );
-        }
-    }
-}
+#[path = "git_tests.rs"]
+mod tests;

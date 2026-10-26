@@ -1,0 +1,645 @@
+{
+ "approval_code": "0a1b2c3d4e5f",
+ "guard_home": "/home/user/.hol-guard",
+ "now": "2026-03-01T13:00:00.654321+00:00",
+ "scenarios": [
+  {
+   "binding": "rb-1",
+   "calls": [
+    {
+     "create_key": true,
+     "now": "2026-03-01T13:00:00.654321+00:00",
+     "op": "claude_record_notice",
+     "payload": {
+      "approval_code": "0a1b2c3d4e5f",
+      "approval_header": "HOL Guard",
+      "approval_options": [
+       "Allow once",
+       "Allow during this session",
+       "Keep blocked"
+      ],
+      "approval_question": "HOL Guard intercepted this sensitive action (approval code: 0a1b2c3d4e5f). What should Claude do?",
+      "artifact_hash": "rb-1",
+      "artifact_id": "claude-code:native-pretool:Bash",
+      "artifact_name": "Bash",
+      "artifact_type": "tool_call",
+      "command": "rm -rf build",
+      "config_path": "/work/space",
+      "raw_command_text": "rm -rf build",
+      "reason": "Deletes files.",
+      "saved_at": "2026-03-01T13:00:00.654321+00:00",
+      "session_id": "sess-1",
+      "source_scope": "project",
+      "tool_name": "Bash"
+     },
+     "session_id": "sess-1",
+     "tool_name": "Bash"
+    }
+   ],
+   "harness": "claude-code",
+   "name": "bash_command",
+   "payload": {
+    "session_id": "sess-1",
+    "tool_input": {
+     "command": "rm -rf build"
+    },
+    "tool_name": "Bash"
+   },
+   "result": {
+    "decision": "review",
+    "minimum_action": "require-reapproval",
+    "reason": "Deletes files."
+   },
+   "workspace": "/work/space"
+  },
+  {
+   "binding": "rb-2",
+   "calls": [
+    {
+     "create_key": true,
+     "now": "2026-03-01T13:00:00.654321+00:00",
+     "op": "claude_record_notice",
+     "payload": {
+      "approval_code": "0a1b2c3d4e5f",
+      "approval_header": "HOL Guard",
+      "approval_options": [
+       "Allow once",
+       "Allow during this session",
+       "Keep blocked"
+      ],
+      "approval_question": "HOL Guard intercepted this sensitive action (approval code: 0a1b2c3d4e5f). What should Claude do?",
+      "artifact_hash": "rb-2",
+      "artifact_id": "claude-code:native-pretool:Bash",
+      "artifact_name": "Bash",
+      "artifact_type": "tool_call",
+      "command": "  ls -la  ",
+      "config_path": "/work/space",
+      "raw_command_text": "  ls -la  ",
+      "reason": "Deletes files.",
+      "saved_at": "2026-03-01T13:00:00.654321+00:00",
+      "session_id": "sess-2",
+      "source_scope": "project",
+      "tool_name": "Bash"
+     },
+     "session_id": "sess-2",
+     "tool_name": "Bash"
+    }
+   ],
+   "harness": "claude-code",
+   "name": "stripped_session_and_tool",
+   "payload": {
+    "session_id": "  sess-2 \n",
+    "tool_input": {
+     "command": "  ls -la  "
+    },
+    "tool_name": " Bash "
+   },
+   "result": {
+    "decision": "review",
+    "minimum_action": "require-reapproval",
+    "reason": "Deletes files."
+   },
+   "workspace": "/work/space"
+  },
+  {
+   "binding": "rb-1",
+   "calls": [],
+   "harness": "claude-code",
+   "name": "no_session",
+   "payload": {
+    "tool_input": {
+     "command": "rm -rf build"
+    },
+    "tool_name": "Bash"
+   },
+   "result": {
+    "decision": "review",
+    "minimum_action": "require-reapproval",
+    "reason": "Deletes files."
+   },
+   "workspace": "/work/space"
+  },
+  {
+   "binding": "rb-1",
+   "calls": [],
+   "harness": "claude-code",
+   "name": "blank_session",
+   "payload": {
+    "session_id": " \t ",
+    "tool_input": {
+     "command": "rm -rf build"
+    },
+    "tool_name": "Bash"
+   },
+   "result": {
+    "decision": "review",
+    "minimum_action": "require-reapproval",
+    "reason": "Deletes files."
+   },
+   "workspace": "/work/space"
+  },
+  {
+   "binding": "rb-1",
+   "calls": [],
+   "harness": "claude-code",
+   "name": "numeric_session",
+   "payload": {
+    "session_id": 7,
+    "tool_input": {
+     "command": "rm -rf build"
+    },
+    "tool_name": "Bash"
+   },
+   "result": {
+    "decision": "review",
+    "minimum_action": "require-reapproval",
+    "reason": "Deletes files."
+   },
+   "workspace": "/work/space"
+  },
+  {
+   "binding": "rb-3",
+   "calls": [
+    {
+     "create_key": true,
+     "now": "2026-03-01T13:00:00.654321+00:00",
+     "op": "claude_record_notice",
+     "payload": {
+      "approval_code": "0a1b2c3d4e5f",
+      "approval_header": "HOL Guard",
+      "approval_options": [
+       "Allow once",
+       "Allow during this session",
+       "Keep blocked"
+      ],
+      "approval_question": "HOL Guard intercepted this sensitive action (approval code: 0a1b2c3d4e5f). What should Claude do?",
+      "artifact_hash": "rb-3",
+      "artifact_id": "claude-code:native-pretool:Write",
+      "artifact_name": "Write",
+      "artifact_type": "tool_call",
+      "command": "artifact:claude-code:native-pretool:Write",
+      "config_path": "/work/space",
+      "reason": "Deletes files.",
+      "saved_at": "2026-03-01T13:00:00.654321+00:00",
+      "session_id": "sess-3",
+      "source_scope": "project",
+      "tool_name": "Write"
+     },
+     "session_id": "sess-3",
+     "tool_name": "Write"
+    }
+   ],
+   "harness": "claude-code",
+   "name": "no_command",
+   "payload": {
+    "session_id": "sess-3",
+    "tool_input": {
+     "file_path": "/work/space/a.txt"
+    },
+    "tool_name": "Write"
+   },
+   "result": {
+    "decision": "review",
+    "minimum_action": "require-reapproval",
+    "reason": "Deletes files."
+   },
+   "workspace": "/work/space"
+  },
+  {
+   "binding": null,
+   "calls": [
+    {
+     "create_key": true,
+     "now": "2026-03-01T13:00:00.654321+00:00",
+     "op": "claude_record_notice",
+     "payload": {
+      "approval_code": "0a1b2c3d4e5f",
+      "approval_header": "HOL Guard",
+      "approval_options": [
+       "Allow once",
+       "Allow during this session",
+       "Keep blocked"
+      ],
+      "approval_question": "HOL Guard intercepted this sensitive action (approval code: 0a1b2c3d4e5f). What should Claude do?",
+      "artifact_hash": "claude-code:native-pretool:Bash",
+      "artifact_id": "claude-code:native-pretool:Bash",
+      "artifact_name": "Bash",
+      "artifact_type": "tool_call",
+      "command": "rm -rf build",
+      "config_path": "/work/space",
+      "raw_command_text": "rm -rf build",
+      "reason": "Deletes files.",
+      "saved_at": "2026-03-01T13:00:00.654321+00:00",
+      "session_id": "sess-4",
+      "source_scope": "project",
+      "tool_name": "Bash"
+     },
+     "session_id": "sess-4",
+     "tool_name": "Bash"
+    }
+   ],
+   "harness": "claude-code",
+   "name": "no_binding",
+   "payload": {
+    "session_id": "sess-4",
+    "tool_input": {
+     "command": "rm -rf build"
+    },
+    "tool_name": "Bash"
+   },
+   "result": {
+    "decision": "review",
+    "minimum_action": "require-reapproval",
+    "reason": "Deletes files."
+   },
+   "workspace": "/work/space"
+  },
+  {
+   "binding": "",
+   "calls": [
+    {
+     "create_key": true,
+     "now": "2026-03-01T13:00:00.654321+00:00",
+     "op": "claude_record_notice",
+     "payload": {
+      "approval_code": "0a1b2c3d4e5f",
+      "approval_header": "HOL Guard",
+      "approval_options": [
+       "Allow once",
+       "Allow during this session",
+       "Keep blocked"
+      ],
+      "approval_question": "HOL Guard intercepted this sensitive action (approval code: 0a1b2c3d4e5f). What should Claude do?",
+      "artifact_hash": "claude-code:native-pretool:Bash",
+      "artifact_id": "claude-code:native-pretool:Bash",
+      "artifact_name": "Bash",
+      "artifact_type": "tool_call",
+      "command": "rm -rf build",
+      "config_path": "/work/space",
+      "raw_command_text": "rm -rf build",
+      "reason": "Deletes files.",
+      "saved_at": "2026-03-01T13:00:00.654321+00:00",
+      "session_id": "sess-4",
+      "source_scope": "project",
+      "tool_name": "Bash"
+     },
+     "session_id": "sess-4",
+     "tool_name": "Bash"
+    }
+   ],
+   "harness": "claude-code",
+   "name": "empty_binding",
+   "payload": {
+    "session_id": "sess-4",
+    "tool_input": {
+     "command": "rm -rf build"
+    },
+    "tool_name": "Bash"
+   },
+   "result": {
+    "decision": "review",
+    "minimum_action": "require-reapproval",
+    "reason": "Deletes files."
+   },
+   "workspace": "/work/space"
+  },
+  {
+   "binding": "rb-5",
+   "calls": [
+    {
+     "create_key": true,
+     "now": "2026-03-01T13:00:00.654321+00:00",
+     "op": "claude_record_notice",
+     "payload": {
+      "approval_code": "0a1b2c3d4e5f",
+      "approval_header": "HOL Guard",
+      "approval_options": [
+       "Allow once",
+       "Allow during this session",
+       "Keep blocked"
+      ],
+      "approval_question": "HOL Guard intercepted this sensitive action (approval code: 0a1b2c3d4e5f). What should Claude do?",
+      "artifact_hash": "rb-5",
+      "artifact_id": "claude-code:native-pretool:Bash",
+      "artifact_name": "Bash",
+      "artifact_type": "tool_call",
+      "command": "rm -rf build",
+      "config_path": "/work/space",
+      "raw_command_text": "rm -rf build",
+      "reason": "HOL Guard requires review before this action can execute.",
+      "saved_at": "2026-03-01T13:00:00.654321+00:00",
+      "session_id": "sess-5",
+      "source_scope": "project",
+      "tool_name": "Bash"
+     },
+     "session_id": "sess-5",
+     "tool_name": "Bash"
+    }
+   ],
+   "harness": "claude-code",
+   "name": "default_reason",
+   "payload": {
+    "session_id": "sess-5",
+    "tool_input": {
+     "command": "rm -rf build"
+    },
+    "tool_name": "Bash"
+   },
+   "result": {
+    "decision": "review",
+    "minimum_action": "require-reapproval"
+   },
+   "workspace": "/work/space"
+  },
+  {
+   "binding": "rb-5",
+   "calls": [
+    {
+     "create_key": true,
+     "now": "2026-03-01T13:00:00.654321+00:00",
+     "op": "claude_record_notice",
+     "payload": {
+      "approval_code": "0a1b2c3d4e5f",
+      "approval_header": "HOL Guard",
+      "approval_options": [
+       "Allow once",
+       "Allow during this session",
+       "Keep blocked"
+      ],
+      "approval_question": "HOL Guard intercepted this sensitive action (approval code: 0a1b2c3d4e5f). What should Claude do?",
+      "artifact_hash": "rb-5",
+      "artifact_id": "claude-code:native-pretool:Bash",
+      "artifact_name": "Bash",
+      "artifact_type": "tool_call",
+      "command": "rm -rf build",
+      "config_path": "/work/space",
+      "raw_command_text": "rm -rf build",
+      "reason": "HOL Guard requires review before this action can execute.",
+      "saved_at": "2026-03-01T13:00:00.654321+00:00",
+      "session_id": "sess-5",
+      "source_scope": "project",
+      "tool_name": "Bash"
+     },
+     "session_id": "sess-5",
+     "tool_name": "Bash"
+    }
+   ],
+   "harness": "claude-code",
+   "name": "empty_reason",
+   "payload": {
+    "session_id": "sess-5",
+    "tool_input": {
+     "command": "rm -rf build"
+    },
+    "tool_name": "Bash"
+   },
+   "result": {
+    "decision": "review",
+    "minimum_action": "require-reapproval",
+    "reason": ""
+   },
+   "workspace": "/work/space"
+  },
+  {
+   "binding": "rb-6",
+   "calls": [
+    {
+     "create_key": true,
+     "now": "2026-03-01T13:00:00.654321+00:00",
+     "op": "claude_record_notice",
+     "payload": {
+      "approval_code": "0a1b2c3d4e5f",
+      "approval_header": "HOL Guard",
+      "approval_options": [
+       "Allow once",
+       "Allow during this session",
+       "Keep blocked"
+      ],
+      "approval_question": "HOL Guard intercepted this sensitive action (approval code: 0a1b2c3d4e5f). What should Claude do?",
+      "artifact_hash": "rb-6",
+      "artifact_id": "claude-code:native-pretool:Bash",
+      "artifact_name": "Bash",
+      "artifact_type": "tool_call",
+      "command": "make",
+      "config_path": "/work/space",
+      "raw_command_text": "make",
+      "reason": "Deletes files.",
+      "saved_at": "2026-03-01T13:00:00.654321+00:00",
+      "session_id": "sess-6",
+      "source_scope": "project"
+     },
+     "session_id": "sess-6",
+     "tool_name": null
+    }
+   ],
+   "harness": "claude-code",
+   "name": "camel_tool_name",
+   "payload": {
+    "session_id": "sess-6",
+    "toolName": "Bash",
+    "tool_input": {
+     "command": "make"
+    }
+   },
+   "result": {
+    "decision": "review",
+    "minimum_action": "require-reapproval",
+    "reason": "Deletes files."
+   },
+   "workspace": "/work/space"
+  },
+  {
+   "binding": "rb-7",
+   "calls": [
+    {
+     "create_key": true,
+     "now": "2026-03-01T13:00:00.654321+00:00",
+     "op": "claude_record_notice",
+     "payload": {
+      "approval_code": "0a1b2c3d4e5f",
+      "approval_header": "HOL Guard",
+      "approval_options": [
+       "Allow once",
+       "Allow during this session",
+       "Keep blocked"
+      ],
+      "approval_question": "HOL Guard intercepted this sensitive action (approval code: 0a1b2c3d4e5f). What should Claude do?",
+      "artifact_hash": "rb-7",
+      "artifact_id": "claude-code:native-pretool:Shell",
+      "artifact_name": "Shell",
+      "artifact_type": "tool_call",
+      "command": "make test",
+      "config_path": "/work/space",
+      "raw_command_text": "make test",
+      "reason": "Deletes files.",
+      "saved_at": "2026-03-01T13:00:00.654321+00:00",
+      "session_id": "sess-7",
+      "source_scope": "project"
+     },
+     "session_id": "sess-7",
+     "tool_name": null
+    }
+   ],
+   "harness": "claude-code",
+   "name": "blank_tool_name_falls_back",
+   "payload": {
+    "arguments": {
+     "cmd": "make test"
+    },
+    "session_id": "sess-7",
+    "tool": "Shell",
+    "tool_name": "  "
+   },
+   "result": {
+    "decision": "review",
+    "minimum_action": "require-reapproval",
+    "reason": "Deletes files."
+   },
+   "workspace": "/work/space"
+  },
+  {
+   "binding": "rb-8",
+   "calls": [
+    {
+     "create_key": true,
+     "now": "2026-03-01T13:00:00.654321+00:00",
+     "op": "claude_record_notice",
+     "payload": {
+      "approval_code": "0a1b2c3d4e5f",
+      "approval_header": "HOL Guard",
+      "approval_options": [
+       "Allow once",
+       "Allow during this session",
+       "Keep blocked"
+      ],
+      "approval_question": "HOL Guard intercepted this sensitive action (approval code: 0a1b2c3d4e5f). What should Claude do?",
+      "artifact_hash": "rb-8",
+      "artifact_id": "claude-code:native-pretool:Bash",
+      "artifact_name": "Bash",
+      "artifact_type": "tool_call",
+      "command": "git push",
+      "config_path": "/work/space",
+      "raw_command_text": "git push",
+      "reason": "Deletes files.",
+      "saved_at": "2026-03-01T13:00:00.654321+00:00",
+      "session_id": "sess-8",
+      "source_scope": "project",
+      "tool_name": "Bash"
+     },
+     "session_id": "sess-8",
+     "tool_name": "Bash"
+    }
+   ],
+   "harness": "claude-code",
+   "name": "command_from_payload",
+   "payload": {
+    "session_id": "sess-8",
+    "shellCommand": "git push",
+    "tool_name": "Bash"
+   },
+   "result": {
+    "decision": "review",
+    "minimum_action": "require-reapproval",
+    "reason": "Deletes files."
+   },
+   "workspace": "/work/space"
+  },
+  {
+   "binding": "rb-9",
+   "calls": [
+    {
+     "create_key": true,
+     "now": "2026-03-01T13:00:00.654321+00:00",
+     "op": "claude_record_notice",
+     "payload": {
+      "approval_code": "0a1b2c3d4e5f",
+      "approval_header": "HOL Guard",
+      "approval_options": [
+       "Allow once",
+       "Allow during this session",
+       "Keep blocked"
+      ],
+      "approval_question": "HOL Guard intercepted this sensitive action (approval code: 0a1b2c3d4e5f). What should Claude do?",
+      "artifact_hash": "rb-9",
+      "artifact_id": "claude-code:native-pretool:Bash",
+      "artifact_name": "Bash",
+      "artifact_type": "tool_call",
+      "command": "echo café — 日本 🔒",
+      "config_path": "/work/space",
+      "raw_command_text": "echo café — 日本 🔒",
+      "reason": "Review café — 日本 🔒.",
+      "saved_at": "2026-03-01T13:00:00.654321+00:00",
+      "session_id": "sess-9",
+      "source_scope": "project",
+      "tool_name": "Bash"
+     },
+     "session_id": "sess-9",
+     "tool_name": "Bash"
+    }
+   ],
+   "harness": "claude-code",
+   "name": "unicode_text",
+   "payload": {
+    "session_id": "sess-9",
+    "tool_input": {
+     "command": "echo café — 日本 🔒"
+    },
+    "tool_name": "Bash"
+   },
+   "result": {
+    "decision": "review",
+    "minimum_action": "require-reapproval",
+    "reason": "Review café — 日本 🔒."
+   },
+   "workspace": "/work/space"
+  },
+  {
+   "binding": "rb-10",
+   "calls": [
+    {
+     "create_key": true,
+     "now": "2026-03-01T13:00:00.654321+00:00",
+     "op": "claude_record_notice",
+     "payload": {
+      "approval_code": "0a1b2c3d4e5f",
+      "approval_header": "HOL Guard",
+      "approval_options": [
+       "Allow once",
+       "Allow during this session",
+       "Keep blocked"
+      ],
+      "approval_question": "HOL Guard intercepted this sensitive action (approval code: 0a1b2c3d4e5f). What should Claude do?",
+      "artifact_hash": "rb-10",
+      "artifact_id": "claude-code:native-pretool:tool",
+      "artifact_name": "tool",
+      "artifact_type": "tool_call",
+      "command": "make",
+      "config_path": "/work/space",
+      "raw_command_text": "make",
+      "reason": "Deletes files.",
+      "saved_at": "2026-03-01T13:00:00.654321+00:00",
+      "session_id": "sess-10",
+      "source_scope": "project"
+     },
+     "session_id": "sess-10",
+     "tool_name": null
+    }
+   ],
+   "harness": "claude-code",
+   "name": "no_tool_name",
+   "payload": {
+    "session_id": "sess-10",
+    "tool_input": {
+     "command": "make"
+    }
+   },
+   "result": {
+    "decision": "review",
+    "minimum_action": "require-reapproval",
+    "reason": "Deletes files."
+   },
+   "workspace": "/work/space"
+  }
+ ],
+ "schema": "guard-claude-review-notice-vectors.v1"
+}

@@ -9,14 +9,13 @@ import pytest
 
 from codex_plugin_scanner.guard.shims import (
     activate_package_shims,
-    build_shim_content_hash,
     get_path_order_status,
-    get_real_binary_info,
     install_package_shims,
     package_shim_status,
     repair_package_shims,
     uninstall_package_shims,
 )
+from tests.shim_execution_helpers import build_shim_content_hash
 
 
 def _make_context(tmp_path: Path):
@@ -150,30 +149,6 @@ class TestScrg265PathOrderVerification:
         assert result["path_broken"] is True
         assert result["foreign_shim_bypass"] is True
         assert result["foreign_shim_path"] == str(evil_shim)
-
-
-class TestScrg268RealBinaryInfo:
-    """SCRG268: real binary info recorded safely (hash, mtime), no private path in Cloud."""
-
-    def test_get_real_binary_info_returns_hash_and_mtime(self, tmp_path: Path) -> None:
-        real_bin = tmp_path / "npm"
-        real_bin.write_bytes(b"#!/bin/sh\necho npm")
-        real_bin.chmod(0o755)
-        info = get_real_binary_info(str(real_bin))
-        assert info["found"] is True
-        assert len(info["content_hash"]) == 64
-        assert info["mtime"] > 0
-
-    def test_get_real_binary_info_not_found(self, tmp_path: Path) -> None:
-        info = get_real_binary_info(str(tmp_path / "nonexistent"))
-        assert info["found"] is False
-        assert info["content_hash"] is None
-
-    def test_real_binary_info_redacts_private_path_prefix(self, tmp_path: Path) -> None:
-        real_bin = tmp_path / "npm"
-        real_bin.write_bytes(b"#!/bin/sh")
-        info = get_real_binary_info(str(real_bin), redact_path_prefix=str(tmp_path))
-        assert str(tmp_path) not in info.get("path_display", "")
 
 
 class TestScrg269ShimTamperDetection:
@@ -373,19 +348,3 @@ class TestScrg267FixtureAllManagers:
         assert detail["real_binary_path"] == str(real_binary)
         assert detail["path_index"] == 0
         assert detail["real_binary_path_index"] == 1
-
-
-class TestScrg270DaemonShimCoverage:
-    """SCRG270: daemon snapshot includes shim coverage."""
-
-    def test_daemon_snapshot_route_includes_shim_coverage(self, tmp_path: Path) -> None:
-        from codex_plugin_scanner.guard.daemon.server import _build_snapshot_payload
-
-        ctx = _make_context(tmp_path)
-        install_package_shims(ctx, managers=("npm", "pip"))
-        snapshot = _build_snapshot_payload(ctx)
-        assert "package_manager_coverage" in snapshot
-        coverage = snapshot["package_manager_coverage"]
-        assert "shims_installed" in coverage
-        assert "npm" in coverage["shims_installed"]
-        assert "pip" in coverage["shims_installed"]

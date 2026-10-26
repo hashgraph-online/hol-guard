@@ -1,0 +1,547 @@
+{
+  "schema": "guard.command-extension-source.v1",
+  "extension": {
+    "extension_id": "command.envseal",
+    "version": "1.0.0",
+    "name": "EnvSeal command protection",
+    "description": "Reviews EnvSeal CLI commands that inject decrypted secrets into a child process, revoke recipient access and re-encrypt the vault, or rotate the vault encryption key. Read-only inventory commands (list, recipient ls) are not covered and remain automatic.",
+    "action_classes": [
+      "EnvSeal run with secret injection command",
+      "EnvSeal recipient revoke command",
+      "EnvSeal rotate encryption key command"
+    ],
+    "risk_classes": [
+      "execution",
+      "destructive_shell"
+    ],
+    "safer_alternatives": [
+      "Use envseal list and envseal recipient ls for read-only inventory without side effects.",
+      "Review recipient and rotation changes before applying them to a shared vault."
+    ],
+    "reference_urls": [
+      "https://github.com/viswajith275/EnvSeal-CLI",
+      "https://github.com/viswajith275/EnvSeal-CLI/releases/tag/v6.2.1"
+    ],
+    "required": false,
+    "source": "built-in",
+    "aliases": [],
+    "dependencies": [],
+    "conflicts": [],
+    "ecosystem_ids": [
+      "envseal"
+    ],
+    "executables": [
+      "envseal",
+      "envseal.cmd",
+      "envseal.exe"
+    ],
+    "project_markers": [],
+    "publisher": {
+      "id": "community.envseal",
+      "display_name": "Community",
+      "url": "https://github.com/viswajith275/EnvSeal-CLI"
+    },
+    "homepage": "https://github.com/viswajith275/EnvSeal-CLI",
+    "icon": {
+      "kind": "none"
+    },
+    "license": "MIT",
+    "delegated_protection": null,
+    "permissions": [
+      {
+        "permission_id": "command.envseal.permission.run",
+        "implementation_version": "1.0.0",
+        "label": "EnvSeal run with secret injection",
+        "description": "Identifies envseal run (alias exec), which decrypts vault secrets and injects them into a child process environment.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "EnvSeal run with secret injection command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Use envseal list to confirm which keys exist before running a command with secrets injected.",
+          "Prefer scoped tokens (envseal token) for CI instead of unrestricted local identity."
+        ],
+        "example_command": "envseal run -- npm start",
+        "family": null,
+        "fixed_reason": null,
+        "replacement_permission_id": null
+      },
+      {
+        "permission_id": "command.envseal.permission.recipient-rm",
+        "implementation_version": "1.0.0",
+        "label": "EnvSeal recipient revoke",
+        "description": "Identifies envseal recipient rm (alias recipient remove), which revokes a recipient and re-encrypts the vault.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "EnvSeal recipient revoke command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Confirm the target with envseal recipient ls before revoking.",
+          "After revoke, rotate the actual upstream credentials; vault re-encryption is not a memory wipe of historic Git ciphertext."
+        ],
+        "example_command": "envseal recipient rm @teammate",
+        "family": null,
+        "fixed_reason": null,
+        "replacement_permission_id": null
+      },
+      {
+        "permission_id": "command.envseal.permission.rotate",
+        "implementation_version": "1.0.0",
+        "label": "EnvSeal rotate encryption key",
+        "description": "Identifies envseal rotate, which rotates the vault encryption key and invalidates existing scoped tokens.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "EnvSeal rotate encryption key command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Rotate only when intentional (compromised key, departed collaborator, or planned key lifecycle).",
+          "Re-mint CI tokens after rotate; previous tokens become unreadable."
+        ],
+        "example_command": "envseal rotate",
+        "family": null,
+        "fixed_reason": null,
+        "replacement_permission_id": null
+      }
+    ],
+    "rules": [
+      {
+        "rule_id": "command.envseal.run",
+        "rule_version": "1.0.0",
+        "permission_id": "command.envseal.permission.run",
+        "title": "EnvSeal run with secret injection",
+        "description": "Identifies envseal run / exec, which decrypts vault secrets and injects them into a child process. Includes v6.2.1 --clear isolation.",
+        "severity": "high",
+        "risk_classes": [
+          "execution"
+        ],
+        "action_classes": [
+          "EnvSeal run with secret injection command"
+        ],
+        "safer_alternatives": [
+          "Use envseal list to inspect key names without decrypting values into a process.",
+          "Prefer scoped CI tokens over unrestricted local identity when possible."
+        ],
+        "default_mode": "review",
+        "family": null,
+        "native_capability": null,
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": ["envseal", "envseal.cmd", "envseal.exe"],
+                "subcommands": ["run"],
+                "allow_leading_options": true,
+                "leading_options_with_values": ["-e", "--env"],
+                "interspersed_options_with_values": [
+                  "-g", "--group", "-t", "--tag", "--token",
+                  "--override", "--global-group", "--global-tag",
+                  "-e", "--env"
+                ],
+                "interspersed_flags": [
+                  "--clear", "--with-global", "--global", "-G", "--no-env"
+                ],
+                "fail_secure_unknown_options": true,
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "forbidden_flags": [],
+                "inverse_flag_pairs": [],
+                "options_with_values": []
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": ["envseal", "envseal.cmd", "envseal.exe"],
+                "subcommands": ["exec"],
+                "allow_leading_options": true,
+                "leading_options_with_values": ["-e", "--env"],
+                "interspersed_options_with_values": [
+                  "-g", "--group", "-t", "--tag", "--token",
+                  "--override", "--global-group", "--global-tag",
+                  "-e", "--env"
+                ],
+                "interspersed_flags": [
+                  "--clear", "--with-global", "--global", "-G", "--no-env"
+                ],
+                "fail_secure_unknown_options": true,
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "forbidden_flags": [],
+                "inverse_flag_pairs": [],
+                "options_with_values": []
+              }
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "EnvSeal run help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": ["envseal", "envseal.cmd", "envseal.exe"],
+                    "subcommands": ["run"],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": ["-e", "--env"],
+                    "interspersed_options_with_values": [],
+                    "interspersed_flags": [],
+                    "fail_secure_unknown_options": true,
+                    "required_flags": ["--help"],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "forbidden_flags": [],
+                    "inverse_flag_pairs": [],
+                    "options_with_values": []
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": ["envseal", "envseal.cmd", "envseal.exe"],
+                    "subcommands": ["exec"],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": ["-e", "--env"],
+                    "interspersed_options_with_values": [],
+                    "interspersed_flags": [],
+                    "fail_secure_unknown_options": true,
+                    "required_flags": ["--help"],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "forbidden_flags": [],
+                    "inverse_flag_pairs": [],
+                    "options_with_values": []
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-help",
+            "title": "EnvSeal run short help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": ["envseal", "envseal.cmd", "envseal.exe"],
+                    "subcommands": ["run"],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": ["-e", "--env"],
+                    "interspersed_options_with_values": [],
+                    "interspersed_flags": [],
+                    "fail_secure_unknown_options": true,
+                    "required_flags": ["-h"],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "forbidden_flags": [],
+                    "inverse_flag_pairs": [],
+                    "options_with_values": []
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": ["envseal", "envseal.cmd", "envseal.exe"],
+                    "subcommands": ["exec"],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": ["-e", "--env"],
+                    "interspersed_options_with_values": [],
+                    "interspersed_flags": [],
+                    "fail_secure_unknown_options": true,
+                    "required_flags": ["-h"],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "forbidden_flags": [],
+                    "inverse_flag_pairs": [],
+                    "options_with_values": []
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "rule_id": "command.envseal.recipient-rm",
+        "rule_version": "1.0.0",
+        "permission_id": "command.envseal.permission.recipient-rm",
+        "title": "EnvSeal recipient revoke",
+        "description": "Identifies envseal recipient rm / recipient remove, which revokes access and re-encrypts the vault.",
+        "severity": "high",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "action_classes": [
+          "EnvSeal recipient revoke command"
+        ],
+        "safer_alternatives": [
+          "Confirm recipients with envseal recipient ls before revoking.",
+          "Rotate upstream credentials after revoke; historic Git ciphertext is not wiped."
+        ],
+        "default_mode": "review",
+        "family": null,
+        "native_capability": null,
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": ["envseal", "envseal.cmd", "envseal.exe"],
+                "subcommands": ["recipient", "rm"],
+                "allow_leading_options": true,
+                "leading_options_with_values": ["-e", "--env"],
+                "interspersed_options_with_values": ["-e", "--env"],
+                "interspersed_flags": ["--global", "-G", "--no-env"],
+                "fail_secure_unknown_options": true,
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "forbidden_flags": [],
+                "inverse_flag_pairs": [],
+                "options_with_values": []
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "executables": ["envseal", "envseal.cmd", "envseal.exe"],
+                "subcommands": ["recipient", "remove"],
+                "allow_leading_options": true,
+                "leading_options_with_values": ["-e", "--env"],
+                "interspersed_options_with_values": ["-e", "--env"],
+                "interspersed_flags": ["--global", "-G", "--no-env"],
+                "fail_secure_unknown_options": true,
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "forbidden_flags": [],
+                "inverse_flag_pairs": [],
+                "options_with_values": []
+              }
+            }
+          ]
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "EnvSeal recipient rm help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": ["envseal", "envseal.cmd", "envseal.exe"],
+                    "subcommands": ["recipient", "rm"],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": ["-e", "--env"],
+                    "interspersed_options_with_values": [],
+                    "interspersed_flags": [],
+                    "fail_secure_unknown_options": true,
+                    "required_flags": ["--help"],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "forbidden_flags": [],
+                    "inverse_flag_pairs": [],
+                    "options_with_values": []
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": ["envseal", "envseal.cmd", "envseal.exe"],
+                    "subcommands": ["recipient", "remove"],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": ["-e", "--env"],
+                    "interspersed_options_with_values": [],
+                    "interspersed_flags": [],
+                    "fail_secure_unknown_options": true,
+                    "required_flags": ["--help"],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "forbidden_flags": [],
+                    "inverse_flag_pairs": [],
+                    "options_with_values": []
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "variant_id": "short-help",
+            "title": "EnvSeal recipient rm short help",
+            "matcher": {
+              "op": "any.v1",
+              "config": {},
+              "matchers": [
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": ["envseal", "envseal.cmd", "envseal.exe"],
+                    "subcommands": ["recipient", "rm"],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": ["-e", "--env"],
+                    "interspersed_options_with_values": [],
+                    "interspersed_flags": [],
+                    "fail_secure_unknown_options": true,
+                    "required_flags": ["-h"],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "forbidden_flags": [],
+                    "inverse_flag_pairs": [],
+                    "options_with_values": []
+                  }
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": ["envseal", "envseal.cmd", "envseal.exe"],
+                    "subcommands": ["recipient", "remove"],
+                    "allow_leading_options": true,
+                    "leading_options_with_values": ["-e", "--env"],
+                    "interspersed_options_with_values": [],
+                    "interspersed_flags": [],
+                    "fail_secure_unknown_options": true,
+                    "required_flags": ["-h"],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "forbidden_flags": [],
+                    "inverse_flag_pairs": [],
+                    "options_with_values": []
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "rule_id": "command.envseal.rotate",
+        "rule_version": "1.0.0",
+        "permission_id": "command.envseal.permission.rotate",
+        "title": "EnvSeal rotate encryption key",
+        "description": "Identifies envseal rotate, which rotates the vault encryption key and invalidates existing tokens.",
+        "severity": "high",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "action_classes": [
+          "EnvSeal rotate encryption key command"
+        ],
+        "safer_alternatives": [
+          "Rotate only for intentional key lifecycle or compromise response.",
+          "Re-mint CI tokens after rotate."
+        ],
+        "default_mode": "review",
+        "family": null,
+        "native_capability": null,
+        "matcher": {
+          "op": "executable.v1",
+          "config": {
+            "executables": ["envseal", "envseal.cmd", "envseal.exe"],
+            "subcommands": ["rotate"],
+            "allow_leading_options": true,
+            "leading_options_with_values": ["-e", "--env"],
+            "interspersed_options_with_values": ["-e", "--env"],
+            "interspersed_flags": ["--global", "-G", "--no-env"],
+            "fail_secure_unknown_options": true,
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "forbidden_flags": [],
+            "inverse_flag_pairs": [],
+            "options_with_values": []
+          }
+        },
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "EnvSeal rotate help",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": ["envseal", "envseal.cmd", "envseal.exe"],
+                "subcommands": ["rotate"],
+                "allow_leading_options": true,
+                "leading_options_with_values": ["-e", "--env"],
+                "interspersed_options_with_values": [],
+                "interspersed_flags": [],
+                "fail_secure_unknown_options": true,
+                "required_flags": ["--help"],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "forbidden_flags": [],
+                "inverse_flag_pairs": [],
+                "options_with_values": []
+              }
+            }
+          },
+          {
+            "variant_id": "short-help",
+            "title": "EnvSeal rotate short help",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": ["envseal", "envseal.cmd", "envseal.exe"],
+                "subcommands": ["rotate"],
+                "allow_leading_options": true,
+                "leading_options_with_values": ["-e", "--env"],
+                "interspersed_options_with_values": [],
+                "interspersed_flags": [],
+                "fail_secure_unknown_options": true,
+                "required_flags": ["-h"],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "forbidden_flags": [],
+                "inverse_flag_pairs": [],
+                "options_with_values": []
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

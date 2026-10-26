@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.runtime.command_cloud_azure_operation_matrix import (
+from tests.cloud_operation_fixtures import (
     AZURE_DESTRUCTIVE_COMMAND_PATHS,
-    azure_destructive_command_matchers,
 )
 from tests.command_extension_contracts import (
     assert_review_required_cases,
@@ -40,17 +39,6 @@ def test_azure_matrix_is_exactly_one_hundred_unique_operations() -> None:
         for path in AZURE_DESTRUCTIVE_COMMAND_PATHS
         for token in path
     )
-
-
-def test_azure_matrix_compiles_to_one_path_set_matcher() -> None:
-    """Compile all Azure paths into one fail-secure matcher."""
-
-    matchers = azure_destructive_command_matchers(
-        global_options_with_values=frozenset({"--subscription"}),
-        global_flags=frozenset({"--only-show-errors"}),
-    )
-    assert len(matchers) == 1
-    assert len(matchers[0].paths) == 100
 
 
 def test_azure_matrix_feeds_inspection_and_runtime_hooks(tmp_path: Path) -> None:

@@ -14,8 +14,6 @@ from codex_plugin_scanner.guard.runtime.native_command_extension_evidence import
 
 
 def test_missing_snapshot_does_not_query_or_evaluate(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(bridge, "current_extension_control_snapshot", lambda: None)
-
     def forbidden(*_args: object, **_kwargs: object) -> None:
         pytest.fail("unbound diagnostics queried or evaluated a command")
 
@@ -54,6 +52,32 @@ def test_projection_receives_exact_native_response_and_snapshot(
     assert reviewed is not None
     assert reviewed.evaluation is result
     assert reviewed.payload is payload and reviewed.snapshot is snapshot
+
+
+def test_a_review_asks_the_resident_for_the_evidence_it_is_resolved_against(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """``evaluate_command`` refuses a review without ``command_extensions``.
+
+    The bare pre-tool review carries none, so a review that did not ask for it
+    was never resolved: the review inbox showed no extension setup guidance
+    and ``command explain`` had no diagnosis.
+    """
+    asked: list[object] = []
+
+    def review(*_args: object, **kwargs: object) -> None:
+        asked.append(kwargs.get("extension_evidence"))
+
+    monkeypatch.setattr(bridge, "review_pre_tool_native", review)
+    snapshot = SimpleNamespace(authority_failure=None)
+    assert (
+        bridge.native_command_review(
+            "docker context use staging", guard_home=tmp_path, extension_control_snapshot=snapshot
+        )
+        is None
+    )
+    assert asked == [True]
 
 
 def test_projection_cannot_weaken_native_hard_block(
@@ -111,7 +135,12 @@ def test_inspection_native_evaluation_failure_preserves_block_without_reparsing(
     def forbidden(*_args: object, **_kwargs: object) -> None:
         pytest.fail("failed native inspection reparsed or classified the command")
 
-    monkeypatch.setattr(command_inspection, "parse_shell_command", forbidden)
+    # The inspection module no longer owns a parser. A failed native evaluation
+    # must still not call the Python parser or rebuild a tool-action artifact.
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.command_model.parse_shell_command",
+        forbidden,
+    )
     monkeypatch.setattr(command_inspection, "extract_sensitive_tool_action_request", forbidden)
     monkeypatch.setattr(command_inspection, "build_tool_action_request_artifact", forbidden)
     result = command_inspection.inspect_command(command, cwd=tmp_path, home_dir=tmp_path, guard_home=tmp_path)

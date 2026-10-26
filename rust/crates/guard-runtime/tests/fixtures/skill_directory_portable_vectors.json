@@ -1,0 +1,1935 @@
+{
+  "byte_paths": [
+    {
+      "documents_hex": [
+        "534b494c4c2e6d64"
+      ],
+      "entry_hex": "534b494c4c2e6d64",
+      "identity": {
+        "directory_hash": "sha256:e4bb2c1b9b8d06f5b0dbe9ed09826273793b737663a3d0c6630f09126c3b0fb6",
+        "entry_count": 1,
+        "failure_reason": null,
+        "incomplete_state_hash": null,
+        "primary_content_hash": "sha256:7e98df7437f1b50bc0ea2ba7180f28bdb7a043cd2c6045e1783124cdba2fdcc5",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "complete",
+        "total_bytes": 10
+      },
+      "root_hex": "6f7264696e617279"
+    }
+  ],
+  "discover": [
+    {
+      "entries": [
+        {
+          "mode": "0755",
+          "path": "skills",
+          "type": "dir"
+        }
+      ],
+      "expected": {
+        "documents_hex": [],
+        "issues": []
+      },
+      "name": "empty_root",
+      "root": "skills"
+    },
+    {
+      "entries": [],
+      "expected": {
+        "documents_hex": [],
+        "issues": []
+      },
+      "name": "missing_root",
+      "root": "skills"
+    },
+    {
+      "entries": [
+        {
+          "content": "x\n",
+          "mode": "0644",
+          "path": "skills",
+          "type": "file"
+        }
+      ],
+      "expected": {
+        "documents_hex": [],
+        "issues": [
+          {
+            "failure_reason": "root_not_directory",
+            "identity": {
+              "directory_hash": null,
+              "entry_count": 0,
+              "failure_reason": "root_not_directory",
+              "incomplete_state_hash": "sha256:d6e3cd3e9806c1d6dc70a500858b3acce60ce791bffd0b9c9c01cbe97156eb55",
+              "primary_content_hash": null,
+              "schema_version": "guard.skill-directory-identity.v1",
+              "status": "incomplete",
+              "total_bytes": 0
+            },
+            "issue_id": "9f4e6ce087d46c82",
+            "relative_path_hex": "2e"
+          }
+        ]
+      },
+      "name": "root_is_file",
+      "root": "skills"
+    },
+    {
+      "entries": [
+        {
+          "mode": "0755",
+          "path": "real",
+          "type": "dir"
+        },
+        {
+          "path": "skills",
+          "target": {
+            "base_relative": "real"
+          },
+          "type": "symlink"
+        }
+      ],
+      "expected": {
+        "documents_hex": [],
+        "issues": [
+          {
+            "failure_reason": "symlink_directory_unsupported",
+            "identity": {
+              "directory_hash": null,
+              "entry_count": 0,
+              "failure_reason": "symlink_directory_unsupported",
+              "incomplete_state_hash": "sha256:348cae7ead384eeffaf026f01382d4105e23e1a26fe7662ff87a1e52891b0f3e",
+              "primary_content_hash": null,
+              "schema_version": "guard.skill-directory-identity.v1",
+              "status": "incomplete",
+              "total_bytes": 0
+            },
+            "issue_id": "f3afb602bb9bb266",
+            "relative_path_hex": "2e"
+          }
+        ]
+      },
+      "name": "root_is_symlink_dir",
+      "root": "skills"
+    },
+    {
+      "entries": [
+        {
+          "path": "skills",
+          "target": "nowhere",
+          "type": "symlink"
+        }
+      ],
+      "expected": {
+        "documents_hex": [],
+        "issues": [
+          {
+            "failure_reason": "symlink_broken",
+            "identity": {
+              "directory_hash": null,
+              "entry_count": 0,
+              "failure_reason": "symlink_broken",
+              "incomplete_state_hash": "sha256:a833cb99f3dc2973f43c6021ae7eb74529b5d1eab6ee81e301a9e7c173cc1c15",
+              "primary_content_hash": null,
+              "schema_version": "guard.skill-directory-identity.v1",
+              "status": "incomplete",
+              "total_bytes": 0
+            },
+            "issue_id": "4bcf032c7b11d491",
+            "relative_path_hex": "2e"
+          }
+        ]
+      },
+      "name": "root_is_symlink_broken",
+      "root": "skills"
+    },
+    {
+      "entries": [
+        {
+          "content": "a\n",
+          "mode": "0644",
+          "path": "skills/a/SKILL.md",
+          "type": "file"
+        },
+        {
+          "content": "b\n",
+          "mode": "0644",
+          "path": "skills/group/b/SKILL.md",
+          "type": "file"
+        },
+        {
+          "content": "c\n",
+          "mode": "0644",
+          "path": "skills/group/c/SKILL.md",
+          "type": "file"
+        },
+        {
+          "content": "ignored\n",
+          "mode": "0644",
+          "path": "skills/a/nested/SKILL.md",
+          "type": "file"
+        },
+        {
+          "content": "l\n",
+          "mode": "0644",
+          "path": "skills/loose.txt",
+          "type": "file"
+        }
+      ],
+      "expected": {
+        "documents_hex": [
+          "612f534b494c4c2e6d64",
+          "67726f75702f622f534b494c4c2e6d64",
+          "67726f75702f632f534b494c4c2e6d64"
+        ],
+        "issues": []
+      },
+      "name": "flat_and_grouped",
+      "root": "skills"
+    },
+    {
+      "entries": [
+        {
+          "content": "r\n",
+          "mode": "0644",
+          "path": "skills/SKILL.md",
+          "type": "file"
+        },
+        {
+          "content": "s\n",
+          "mode": "0644",
+          "path": "skills/sub/SKILL.md",
+          "type": "file"
+        }
+      ],
+      "expected": {
+        "documents_hex": [
+          "534b494c4c2e6d64"
+        ],
+        "issues": []
+      },
+      "name": "root_has_primary",
+      "root": "skills"
+    },
+    {
+      "entries": [
+        {
+          "mode": "0755",
+          "path": "skills/a/SKILL.md",
+          "type": "dir"
+        }
+      ],
+      "expected": {
+        "documents_hex": [
+          "612f534b494c4c2e6d64"
+        ],
+        "issues": []
+      },
+      "name": "primary_is_dir_counts_as_found",
+      "root": "skills"
+    },
+    {
+      "entries": [
+        {
+          "mode": "0755",
+          "path": "real",
+          "type": "dir"
+        },
+        {
+          "path": "skills/dirlink",
+          "target": {
+            "base_relative": "real"
+          },
+          "type": "symlink"
+        },
+        {
+          "path": "skills/dangling",
+          "target": "nowhere",
+          "type": "symlink"
+        },
+        {
+          "path": "skills/filelink",
+          "target": "plain.txt",
+          "type": "symlink"
+        },
+        {
+          "content": "p\n",
+          "mode": "0644",
+          "path": "skills/plain.txt",
+          "type": "file"
+        },
+        {
+          "path": "skills/a",
+          "target": "b",
+          "type": "symlink"
+        },
+        {
+          "path": "skills/b",
+          "target": "a",
+          "type": "symlink"
+        },
+        {
+          "content": "ok\n",
+          "mode": "0644",
+          "path": "skills/ok/SKILL.md",
+          "type": "file"
+        }
+      ],
+      "expected": {
+        "documents_hex": [
+          "6f6b2f534b494c4c2e6d64"
+        ],
+        "issues": [
+          {
+            "failure_reason": "symlink_loop",
+            "identity": {
+              "directory_hash": null,
+              "entry_count": 0,
+              "failure_reason": "symlink_loop",
+              "incomplete_state_hash": "sha256:796f085a6692609436803e342da4a4c5191adb88a0d2a27c5a4f43fe5c082b6b",
+              "primary_content_hash": null,
+              "schema_version": "guard.skill-directory-identity.v1",
+              "status": "incomplete",
+              "total_bytes": 0
+            },
+            "issue_id": "dc9e1d4f9c250ee7",
+            "relative_path_hex": "61"
+          },
+          {
+            "failure_reason": "symlink_loop",
+            "identity": {
+              "directory_hash": null,
+              "entry_count": 0,
+              "failure_reason": "symlink_loop",
+              "incomplete_state_hash": "sha256:796f085a6692609436803e342da4a4c5191adb88a0d2a27c5a4f43fe5c082b6b",
+              "primary_content_hash": null,
+              "schema_version": "guard.skill-directory-identity.v1",
+              "status": "incomplete",
+              "total_bytes": 0
+            },
+            "issue_id": "198d36683df42e68",
+            "relative_path_hex": "62"
+          },
+          {
+            "failure_reason": "symlink_broken",
+            "identity": {
+              "directory_hash": null,
+              "entry_count": 0,
+              "failure_reason": "symlink_broken",
+              "incomplete_state_hash": "sha256:a833cb99f3dc2973f43c6021ae7eb74529b5d1eab6ee81e301a9e7c173cc1c15",
+              "primary_content_hash": null,
+              "schema_version": "guard.skill-directory-identity.v1",
+              "status": "incomplete",
+              "total_bytes": 0
+            },
+            "issue_id": "2a28885ecdb7c4f1",
+            "relative_path_hex": "64616e676c696e67"
+          },
+          {
+            "failure_reason": "symlink_directory_unsupported",
+            "identity": {
+              "directory_hash": null,
+              "entry_count": 0,
+              "failure_reason": "symlink_directory_unsupported",
+              "incomplete_state_hash": "sha256:348cae7ead384eeffaf026f01382d4105e23e1a26fe7662ff87a1e52891b0f3e",
+              "primary_content_hash": null,
+              "schema_version": "guard.skill-directory-identity.v1",
+              "status": "incomplete",
+              "total_bytes": 0
+            },
+            "issue_id": "478630d5d770b718",
+            "relative_path_hex": "6469726c696e6b"
+          },
+          {
+            "failure_reason": "root_not_directory",
+            "identity": {
+              "directory_hash": null,
+              "entry_count": 0,
+              "failure_reason": "root_not_directory",
+              "incomplete_state_hash": "sha256:d6e3cd3e9806c1d6dc70a500858b3acce60ce791bffd0b9c9c01cbe97156eb55",
+              "primary_content_hash": null,
+              "schema_version": "guard.skill-directory-identity.v1",
+              "status": "incomplete",
+              "total_bytes": 0
+            },
+            "issue_id": "9fa875a35c7e858c",
+            "relative_path_hex": "66696c656c696e6b"
+          }
+        ]
+      },
+      "name": "symlinked_dirs",
+      "root": "skills"
+    },
+    {
+      "entries": [
+        {
+          "content": "n\n",
+          "mode": "0644",
+          "path": "skills/cafe\u0301/SKILL.md",
+          "type": "file"
+        },
+        {
+          "content": "j\n",
+          "mode": "0644",
+          "path": "skills/\u65e5\u672c/SKILL.md",
+          "type": "file"
+        }
+      ],
+      "expected": {
+        "documents_hex": [
+          "63616665cc812f534b494c4c2e6d64",
+          "e697a5e69cac2f534b494c4c2e6d64"
+        ],
+        "issues": []
+      },
+      "name": "unicode_names",
+      "root": "skills"
+    },
+    {
+      "entries": [
+        {
+          "mode": "0755",
+          "path": "skills/a\\b",
+          "type": "dir"
+        },
+        {
+          "content": "ok\n",
+          "mode": "0644",
+          "path": "skills/ok/SKILL.md",
+          "type": "file"
+        }
+      ],
+      "expected": {
+        "documents_hex": [
+          "6f6b2f534b494c4c2e6d64"
+        ],
+        "issues": [
+          {
+            "failure_reason": "invalid_relative_path",
+            "identity": {
+              "directory_hash": null,
+              "entry_count": 0,
+              "failure_reason": "invalid_relative_path",
+              "incomplete_state_hash": "sha256:788c2a7347da1e1ebbcbd53350e74497827e98b1ecec429f18a82a8f869a9517",
+              "primary_content_hash": null,
+              "schema_version": "guard.skill-directory-identity.v1",
+              "status": "incomplete",
+              "total_bytes": 0
+            },
+            "issue_id": "474105e38c716e47",
+            "relative_path_hex": "615c62"
+          }
+        ]
+      },
+      "name": "backslash_dir",
+      "root": "skills"
+    },
+    {
+      "entries": [
+        {
+          "content": "x\n",
+          "mode": "0644",
+          "path": "skills/a/b/c/x.txt",
+          "type": "file"
+        }
+      ],
+      "expected": {
+        "documents_hex": [],
+        "issues": [
+          {
+            "failure_reason": "max_depth_exceeded",
+            "identity": {
+              "directory_hash": null,
+              "entry_count": 0,
+              "failure_reason": "max_depth_exceeded",
+              "incomplete_state_hash": "sha256:3c079305adfe8981dfd916eae4c82ee24d94138b906ed308af7486ce916aacbc",
+              "primary_content_hash": null,
+              "schema_version": "guard.skill-directory-identity.v1",
+              "status": "incomplete",
+              "total_bytes": 0
+            },
+            "issue_id": "3c4a94c14867a400",
+            "relative_path_hex": "612f622f63"
+          }
+        ]
+      },
+      "limits": {
+        "max_depth": 2
+      },
+      "name": "depth_exceeded",
+      "root": "skills"
+    },
+    {
+      "entries": [
+        {
+          "content": "x\n",
+          "mode": "0644",
+          "path": "skills/a/b/SKILL.md",
+          "type": "file"
+        }
+      ],
+      "expected": {
+        "documents_hex": [
+          "612f622f534b494c4c2e6d64"
+        ],
+        "issues": []
+      },
+      "limits": {
+        "max_depth": 2
+      },
+      "name": "depth_ok",
+      "root": "skills"
+    },
+    {
+      "entries": [
+        {
+          "content": "a\n",
+          "mode": "0644",
+          "path": "skills/a/SKILL.md",
+          "type": "file"
+        },
+        {
+          "content": "b\n",
+          "mode": "0644",
+          "path": "skills/b/SKILL.md",
+          "type": "file"
+        },
+        {
+          "content": "c\n",
+          "mode": "0644",
+          "path": "skills/c/SKILL.md",
+          "type": "file"
+        },
+        {
+          "content": "d\n",
+          "mode": "0644",
+          "path": "skills/d.txt",
+          "type": "file"
+        }
+      ],
+      "expected": {
+        "documents_hex": [],
+        "issues": [
+          {
+            "failure_reason": "max_entries_exceeded",
+            "identity": {
+              "directory_hash": null,
+              "entry_count": 0,
+              "failure_reason": "max_entries_exceeded",
+              "incomplete_state_hash": "sha256:ccb8ad7d8e0c2e56c00a8c69ea483c1b6d05b4d5585d0e0555869e4990223e39",
+              "primary_content_hash": null,
+              "schema_version": "guard.skill-directory-identity.v1",
+              "status": "incomplete",
+              "total_bytes": 0
+            },
+            "issue_id": "c2a406b0902079e7",
+            "relative_path_hex": "2e"
+          }
+        ]
+      },
+      "limits": {
+        "max_entries": 2
+      },
+      "name": "entries_exceeded",
+      "root": "skills"
+    }
+  ],
+  "inspect": [
+    {
+      "document": "skills/example/SKILL.md",
+      "entries": [
+        {
+          "content": "# Example skill\n",
+          "mode": "0644",
+          "path": "skills/example/SKILL.md",
+          "type": "file"
+        }
+      ],
+      "expected": {
+        "directory_hash": "sha256:26ea31f16837159ad8252f0b761966d9d11eb7c98290209641f680d3ae3ef19a",
+        "entry_count": 1,
+        "failure_reason": null,
+        "incomplete_state_hash": null,
+        "primary_content_hash": "sha256:7735052563b8b9be8019d9fad8b23af5b32b58af9fbf6da687ed895d77a77153",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "complete",
+        "total_bytes": 16
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": "sha256:eb5b4e3ef1a17923f9256833d6e7bf0e42c4d6ddd7d75240733f3704a93cb70d",
+        "entry_count": 1,
+        "failure_reason": null,
+        "incomplete_state_hash": null,
+        "primary_content_hash": "sha256:7735052563b8b9be8019d9fad8b23af5b32b58af9fbf6da687ed895d77a77153",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "complete",
+        "total_bytes": 16
+      },
+      "name": "basic"
+    },
+    {
+      "document": "skills/example/SKILL.md",
+      "entries": [
+        {
+          "mode": "0700",
+          "path": "skills/example",
+          "type": "dir"
+        },
+        {
+          "content": "# x\n",
+          "mode": "0600",
+          "path": "skills/example/SKILL.md",
+          "type": "file"
+        }
+      ],
+      "expected": {
+        "directory_hash": "sha256:2974cbe497546fd4945d44ad3a4aed13a19cde7309719fee5ae05724f1f2de50",
+        "entry_count": 1,
+        "failure_reason": null,
+        "incomplete_state_hash": null,
+        "primary_content_hash": "sha256:253b610bd786f2543252c8d4b45bb40eb375882587f825cb9ce1fd1241f66f1e",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "complete",
+        "total_bytes": 4
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": "sha256:9e42632ec90a82f27cb4ad34aa93875bbe5c652bdd3a9527e6261090fb2deb59",
+        "entry_count": 1,
+        "failure_reason": null,
+        "incomplete_state_hash": null,
+        "primary_content_hash": "sha256:253b610bd786f2543252c8d4b45bb40eb375882587f825cb9ce1fd1241f66f1e",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "complete",
+        "total_bytes": 4
+      },
+      "name": "root_mode_700"
+    },
+    {
+      "document": "skills/example/SKILL.md",
+      "entries": [
+        {
+          "content": "# nested\n",
+          "mode": "0644",
+          "path": "skills/example/SKILL.md",
+          "type": "file"
+        },
+        {
+          "content": "#!/bin/sh\necho hi\n",
+          "mode": "0755",
+          "path": "skills/example/scripts/run.sh",
+          "type": "file"
+        },
+        {
+          "mode": "0755",
+          "path": "skills/example/assets",
+          "type": "dir"
+        },
+        {
+          "mode": "0755",
+          "path": "skills/example/assets/empty",
+          "type": "dir"
+        },
+        {
+          "content": "x\n",
+          "content_hex": "00ff10fe80",
+          "mode": "0644",
+          "path": "skills/example/assets/data.bin",
+          "type": "file"
+        }
+      ],
+      "expected": {
+        "directory_hash": "sha256:765175cdb35e417f8f6de290b6ea208ede1c6d06e942ce21e5e40c5677162f23",
+        "entry_count": 6,
+        "failure_reason": null,
+        "incomplete_state_hash": null,
+        "primary_content_hash": "sha256:74f9052e0ced72a79007b1d0c539101f93eab0e791dd5ae9e88450bcac580d09",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "complete",
+        "total_bytes": 32
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": "sha256:e471ad00720151ff3c630958b32d2dee32c63002a24e691f39f9876518a5f46c",
+        "entry_count": 6,
+        "failure_reason": null,
+        "incomplete_state_hash": null,
+        "primary_content_hash": "sha256:74f9052e0ced72a79007b1d0c539101f93eab0e791dd5ae9e88450bcac580d09",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "complete",
+        "total_bytes": 32
+      },
+      "name": "nested"
+    },
+    {
+      "document": "skills/example/SKILL.md",
+      "entries": [
+        {
+          "content": "\u00e9\u3042\n",
+          "mode": "0644",
+          "path": "skills/example/SKILL.md",
+          "type": "file"
+        },
+        {
+          "content": "nfd\n",
+          "mode": "0644",
+          "path": "skills/example/cafe\u0301.txt",
+          "type": "file"
+        },
+        {
+          "content": "jp\n",
+          "mode": "0644",
+          "path": "skills/example/\u65e5\u672c/\u8a9e.md",
+          "type": "file"
+        },
+        {
+          "content": "e\n",
+          "mode": "0644",
+          "path": "skills/example/emoji-\ud83d\ude00.txt",
+          "type": "file"
+        }
+      ],
+      "expected": {
+        "directory_hash": "sha256:40b363d034849c8a96b1ecd3e514de5cb49b889de99d39ab9537dfd76c6bc476",
+        "entry_count": 5,
+        "failure_reason": null,
+        "incomplete_state_hash": null,
+        "primary_content_hash": "sha256:53424f5d121302905c61c94637755b0a6113b64589e01769a6a999b7900933a8",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "complete",
+        "total_bytes": 15
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": "sha256:d1f5284888dd464740e219bad8f6868aee9c5860e366448bc3c98428700b2354",
+        "entry_count": 5,
+        "failure_reason": null,
+        "incomplete_state_hash": null,
+        "primary_content_hash": "sha256:53424f5d121302905c61c94637755b0a6113b64589e01769a6a999b7900933a8",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "complete",
+        "total_bytes": 15
+      },
+      "name": "unicode_nfd_and_cjk"
+    },
+    {
+      "document": "skills/example/skill.md",
+      "entries": [
+        {
+          "content": "lower\n",
+          "mode": "0644",
+          "path": "skills/example/skill.md",
+          "type": "file"
+        }
+      ],
+      "expected": {
+        "directory_hash": "sha256:ff74ecfafb3927fd50bd68e7d8cedbd6b4fca1fe8f113e5277d85b90028baa13",
+        "entry_count": 1,
+        "failure_reason": null,
+        "incomplete_state_hash": null,
+        "primary_content_hash": "sha256:b908e4daaf9d57fe9cb551a689a35c9a9e0fac85fdf11faaa0a1ba0e5efc06fd",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "complete",
+        "total_bytes": 6
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": "sha256:3b52f53717a0202ad022ef02f3e205c8cf9c7e94d5f7493a7bd3910144a40805",
+        "entry_count": 1,
+        "failure_reason": null,
+        "incomplete_state_hash": null,
+        "primary_content_hash": "sha256:b908e4daaf9d57fe9cb551a689a35c9a9e0fac85fdf11faaa0a1ba0e5efc06fd",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "complete",
+        "total_bytes": 6
+      },
+      "name": "lower_primary_name"
+    },
+    {
+      "document": "skills/example/SKILL.md",
+      "entries": [
+        {
+          "content": "# a\n",
+          "mode": "0644",
+          "path": "skills/example/SKILL.md",
+          "type": "file"
+        },
+        {
+          "path": "skills/example/alias.md",
+          "target": "SKILL.md",
+          "type": "symlink"
+        }
+      ],
+      "expected": {
+        "directory_hash": "sha256:86fb9d98a3339623d40094cc849ec97b79805ed209bd91167c8f0add0edeb631",
+        "entry_count": 2,
+        "failure_reason": null,
+        "incomplete_state_hash": null,
+        "primary_content_hash": "sha256:fd99dedae7c3f7532f8a65d60f811a05dc9dc3e1c5936b0c554c98aafdad8c10",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "complete",
+        "total_bytes": 8
+      },
+      "expected_linux": {
+        "directory_hash": "sha256:96e5ca8e3b7b1b0ac866a73c1817b96e55c287ac2bbc4bbe1e4fdd446b653b3a"
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": "sha256:04d1f0b5ce10788383af56394c4542a79744ffbd622263e929bbfcf5e1b03b36",
+        "entry_count": 2,
+        "failure_reason": null,
+        "incomplete_state_hash": null,
+        "primary_content_hash": "sha256:fd99dedae7c3f7532f8a65d60f811a05dc9dc3e1c5936b0c554c98aafdad8c10",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "complete",
+        "total_bytes": 8
+      },
+      "name": "symlink_to_file_same_dir"
+    },
+    {
+      "document": "skills/example/SKILL.md",
+      "entries": [
+        {
+          "content": "# a\n",
+          "mode": "0644",
+          "path": "skills/example/SKILL.md",
+          "type": "file"
+        },
+        {
+          "path": "skills/example/alias.md",
+          "target": "./SKILL.md",
+          "type": "symlink"
+        }
+      ],
+      "expected": {
+        "directory_hash": "sha256:3603cee3d73b9a893cf06662319d704b3cadf4457f45238012cdfd10b49e8e02",
+        "entry_count": 2,
+        "failure_reason": null,
+        "incomplete_state_hash": null,
+        "primary_content_hash": "sha256:fd99dedae7c3f7532f8a65d60f811a05dc9dc3e1c5936b0c554c98aafdad8c10",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "complete",
+        "total_bytes": 8
+      },
+      "expected_linux": {
+        "directory_hash": "sha256:8dccf00590482bf9e3e9b6a45152c439d02a95d06fed5b89447c4d05207c0b6c"
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": "sha256:2122f1943d93aac95ce521d34c6a31008f978344d39665f6175e63cd08f9bc41",
+        "entry_count": 2,
+        "failure_reason": null,
+        "incomplete_state_hash": null,
+        "primary_content_hash": "sha256:fd99dedae7c3f7532f8a65d60f811a05dc9dc3e1c5936b0c554c98aafdad8c10",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "complete",
+        "total_bytes": 8
+      },
+      "name": "symlink_dot_slash"
+    },
+    {
+      "document": "skills/example/SKILL.md",
+      "entries": [
+        {
+          "content": "# a\n",
+          "mode": "0644",
+          "path": "skills/example/SKILL.md",
+          "type": "file"
+        },
+        {
+          "path": "skills/example/sub/up.md",
+          "target": "../SKILL.md",
+          "type": "symlink"
+        }
+      ],
+      "expected": {
+        "directory_hash": "sha256:e11025986fc104314d86431cb63c09ece5bd0f5861e27ec03aee868dae7de6a0",
+        "entry_count": 3,
+        "failure_reason": null,
+        "incomplete_state_hash": null,
+        "primary_content_hash": "sha256:fd99dedae7c3f7532f8a65d60f811a05dc9dc3e1c5936b0c554c98aafdad8c10",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "complete",
+        "total_bytes": 8
+      },
+      "expected_linux": {
+        "directory_hash": "sha256:eb7b5585ff537c6294c69888a795e0d21510f6449d0abcf3d9bfa6eaba56925e"
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": "sha256:de1d112d85e7410d4d6bde370ec370ffc8a9494385b803f41bc8c75b6c5c8553",
+        "entry_count": 3,
+        "failure_reason": null,
+        "incomplete_state_hash": null,
+        "primary_content_hash": "sha256:fd99dedae7c3f7532f8a65d60f811a05dc9dc3e1c5936b0c554c98aafdad8c10",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "complete",
+        "total_bytes": 8
+      },
+      "name": "symlink_from_subdir"
+    },
+    {
+      "document": "skills/example/SKILL.md",
+      "entries": [
+        {
+          "content": "# a\n",
+          "mode": "0644",
+          "path": "skills/example/SKILL.md",
+          "type": "file"
+        },
+        {
+          "content": "real\n",
+          "mode": "0644",
+          "path": "skills/example/data/real.txt",
+          "type": "file"
+        },
+        {
+          "path": "skills/example/link.txt",
+          "target": "data/real.txt",
+          "type": "symlink"
+        }
+      ],
+      "expected": {
+        "directory_hash": "sha256:22a78561a7a41cd649f007f54efc21855038d4d0da2734f9789a2101337ee496",
+        "entry_count": 4,
+        "failure_reason": null,
+        "incomplete_state_hash": null,
+        "primary_content_hash": "sha256:fd99dedae7c3f7532f8a65d60f811a05dc9dc3e1c5936b0c554c98aafdad8c10",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "complete",
+        "total_bytes": 14
+      },
+      "expected_linux": {
+        "directory_hash": "sha256:602d0e024a621b01f33e7204615f7ad48146e8908170adafb81fbed0462f849d"
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": "sha256:61a22a55fe43993e6e503209ca6faa1b5db8a9d66d2cbac84700c28867a0dc82",
+        "entry_count": 4,
+        "failure_reason": null,
+        "incomplete_state_hash": null,
+        "primary_content_hash": "sha256:fd99dedae7c3f7532f8a65d60f811a05dc9dc3e1c5936b0c554c98aafdad8c10",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "complete",
+        "total_bytes": 14
+      },
+      "name": "symlink_to_other_file"
+    },
+    {
+      "document": "skills/example/SKILL.md",
+      "entries": [
+        {
+          "content": "# a\n",
+          "mode": "0644",
+          "path": "skills/example/SKILL.md",
+          "type": "file"
+        },
+        {
+          "path": "skills/example/dangling",
+          "target": "nowhere",
+          "type": "symlink"
+        }
+      ],
+      "expected": {
+        "directory_hash": null,
+        "entry_count": 2,
+        "failure_reason": "symlink_broken",
+        "incomplete_state_hash": "sha256:faf8ddb21e8d0268397c65b8ffb0c1096c532ec3baeba384feeb7a0495207fee",
+        "primary_content_hash": "sha256:fd99dedae7c3f7532f8a65d60f811a05dc9dc3e1c5936b0c554c98aafdad8c10",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 4
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": null,
+        "entry_count": 2,
+        "failure_reason": "symlink_broken",
+        "incomplete_state_hash": "sha256:faf8ddb21e8d0268397c65b8ffb0c1096c532ec3baeba384feeb7a0495207fee",
+        "primary_content_hash": "sha256:fd99dedae7c3f7532f8a65d60f811a05dc9dc3e1c5936b0c554c98aafdad8c10",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 4
+      },
+      "name": "symlink_broken"
+    },
+    {
+      "document": "skills/example/SKILL.md",
+      "entries": [
+        {
+          "content": "# a\n",
+          "mode": "0644",
+          "path": "skills/example/SKILL.md",
+          "type": "file"
+        },
+        {
+          "path": "skills/example/a",
+          "target": "b",
+          "type": "symlink"
+        },
+        {
+          "path": "skills/example/b",
+          "target": "a",
+          "type": "symlink"
+        }
+      ],
+      "expected": {
+        "directory_hash": null,
+        "entry_count": 3,
+        "failure_reason": "symlink_loop",
+        "incomplete_state_hash": "sha256:6665ec7c4cca40e992a26d00e895712adc00875a8a44e0ecf53fffdc7ba3fb7c",
+        "primary_content_hash": "sha256:fd99dedae7c3f7532f8a65d60f811a05dc9dc3e1c5936b0c554c98aafdad8c10",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 4
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": null,
+        "entry_count": 3,
+        "failure_reason": "symlink_loop",
+        "incomplete_state_hash": "sha256:6665ec7c4cca40e992a26d00e895712adc00875a8a44e0ecf53fffdc7ba3fb7c",
+        "primary_content_hash": "sha256:fd99dedae7c3f7532f8a65d60f811a05dc9dc3e1c5936b0c554c98aafdad8c10",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 4
+      },
+      "name": "symlink_loop"
+    },
+    {
+      "document": "skills/example/SKILL.md",
+      "entries": [
+        {
+          "content": "# a\n",
+          "mode": "0644",
+          "path": "skills/example/SKILL.md",
+          "type": "file"
+        },
+        {
+          "content": "o\n",
+          "mode": "0644",
+          "path": "outside.txt",
+          "type": "file"
+        },
+        {
+          "path": "skills/example/esc",
+          "target": "../../outside.txt",
+          "type": "symlink"
+        }
+      ],
+      "expected": {
+        "directory_hash": null,
+        "entry_count": 2,
+        "failure_reason": "symlink_escape",
+        "incomplete_state_hash": "sha256:020fec8e254bdcc293c16f7a275258c68358c751835a03f3c1cc15e3e768b04d",
+        "primary_content_hash": "sha256:fd99dedae7c3f7532f8a65d60f811a05dc9dc3e1c5936b0c554c98aafdad8c10",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 4
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": null,
+        "entry_count": 2,
+        "failure_reason": "symlink_escape",
+        "incomplete_state_hash": "sha256:020fec8e254bdcc293c16f7a275258c68358c751835a03f3c1cc15e3e768b04d",
+        "primary_content_hash": "sha256:fd99dedae7c3f7532f8a65d60f811a05dc9dc3e1c5936b0c554c98aafdad8c10",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 4
+      },
+      "name": "symlink_escape_relative"
+    },
+    {
+      "document": "skills/example/SKILL.md",
+      "entries": [
+        {
+          "content": "# a\n",
+          "mode": "0644",
+          "path": "skills/example/SKILL.md",
+          "type": "file"
+        },
+        {
+          "content": "o\n",
+          "mode": "0644",
+          "path": "outside.txt",
+          "type": "file"
+        },
+        {
+          "path": "skills/example/esc",
+          "target": {
+            "base_relative": "outside.txt"
+          },
+          "type": "symlink"
+        }
+      ],
+      "expected": {
+        "directory_hash": null,
+        "entry_count": 2,
+        "failure_reason": "symlink_escape",
+        "incomplete_state_hash": "sha256:020fec8e254bdcc293c16f7a275258c68358c751835a03f3c1cc15e3e768b04d",
+        "primary_content_hash": "sha256:fd99dedae7c3f7532f8a65d60f811a05dc9dc3e1c5936b0c554c98aafdad8c10",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 4
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": null,
+        "entry_count": 2,
+        "failure_reason": "symlink_escape",
+        "incomplete_state_hash": "sha256:020fec8e254bdcc293c16f7a275258c68358c751835a03f3c1cc15e3e768b04d",
+        "primary_content_hash": "sha256:fd99dedae7c3f7532f8a65d60f811a05dc9dc3e1c5936b0c554c98aafdad8c10",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 4
+      },
+      "name": "symlink_escape_absolute"
+    },
+    {
+      "document": "skills/example/SKILL.md",
+      "entries": [
+        {
+          "content": "# a\n",
+          "mode": "0644",
+          "path": "skills/example/SKILL.md",
+          "type": "file"
+        },
+        {
+          "mode": "0755",
+          "path": "skills/example/real",
+          "type": "dir"
+        },
+        {
+          "content": "x\n",
+          "mode": "0644",
+          "path": "skills/example/real/x.txt",
+          "type": "file"
+        },
+        {
+          "path": "skills/example/dirlink",
+          "target": "real",
+          "type": "symlink"
+        }
+      ],
+      "expected": {
+        "directory_hash": null,
+        "entry_count": 4,
+        "failure_reason": "symlink_directory_unsupported",
+        "incomplete_state_hash": "sha256:b198a23361bbaaee86a1e9a1e727bc0ac6577f531053eeb6ef1c0443971c9957",
+        "primary_content_hash": "sha256:fd99dedae7c3f7532f8a65d60f811a05dc9dc3e1c5936b0c554c98aafdad8c10",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 6
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": null,
+        "entry_count": 4,
+        "failure_reason": "symlink_directory_unsupported",
+        "incomplete_state_hash": "sha256:b198a23361bbaaee86a1e9a1e727bc0ac6577f531053eeb6ef1c0443971c9957",
+        "primary_content_hash": "sha256:fd99dedae7c3f7532f8a65d60f811a05dc9dc3e1c5936b0c554c98aafdad8c10",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 6
+      },
+      "name": "symlink_directory"
+    },
+    {
+      "document": "skills/example/SKILL.md",
+      "entries": [
+        {
+          "mode": "0755",
+          "path": "skills/example",
+          "type": "dir"
+        },
+        {
+          "content": "o\n",
+          "mode": "0644",
+          "path": "skills/example/OTHER.md",
+          "type": "file"
+        }
+      ],
+      "expected": {
+        "directory_hash": null,
+        "entry_count": 1,
+        "failure_reason": "primary_missing",
+        "incomplete_state_hash": "sha256:04946057e5f7313ae8a49c50a03f05d9bf1d5c416a74ef3a268b7c08647f2859",
+        "primary_content_hash": null,
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 0
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": null,
+        "entry_count": 1,
+        "failure_reason": "primary_missing",
+        "incomplete_state_hash": "sha256:04946057e5f7313ae8a49c50a03f05d9bf1d5c416a74ef3a268b7c08647f2859",
+        "primary_content_hash": null,
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 0
+      },
+      "name": "primary_missing"
+    },
+    {
+      "document": "skills/example/SKILL.md",
+      "entries": [
+        {
+          "mode": "0755",
+          "path": "skills/example/SKILL.md",
+          "type": "dir"
+        }
+      ],
+      "expected": {
+        "directory_hash": null,
+        "entry_count": 1,
+        "failure_reason": "primary_missing",
+        "incomplete_state_hash": "sha256:04946057e5f7313ae8a49c50a03f05d9bf1d5c416a74ef3a268b7c08647f2859",
+        "primary_content_hash": null,
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 0
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": null,
+        "entry_count": 1,
+        "failure_reason": "primary_missing",
+        "incomplete_state_hash": "sha256:04946057e5f7313ae8a49c50a03f05d9bf1d5c416a74ef3a268b7c08647f2859",
+        "primary_content_hash": null,
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 0
+      },
+      "name": "primary_is_directory"
+    },
+    {
+      "document": "skills/example/SKILL.md",
+      "entries": [
+        {
+          "content": "r\n",
+          "mode": "0644",
+          "path": "skills/example/real.md",
+          "type": "file"
+        },
+        {
+          "path": "skills/example/SKILL.md",
+          "target": "real.md",
+          "type": "symlink"
+        }
+      ],
+      "expected": {
+        "directory_hash": null,
+        "entry_count": 2,
+        "failure_reason": "primary_symlink_unsupported",
+        "incomplete_state_hash": "sha256:26da603eed50a3c6b22f7d0a84204fb45d11673903d6ed9f6f40e10fd930464f",
+        "primary_content_hash": null,
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 0
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": null,
+        "entry_count": 2,
+        "failure_reason": "primary_symlink_unsupported",
+        "incomplete_state_hash": "sha256:26da603eed50a3c6b22f7d0a84204fb45d11673903d6ed9f6f40e10fd930464f",
+        "primary_content_hash": null,
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 0
+      },
+      "name": "primary_symlink"
+    },
+    {
+      "document": "skills/example/SKILL.md",
+      "entries": [
+        {
+          "mode": "0755",
+          "path": "skills",
+          "type": "dir"
+        }
+      ],
+      "expected": {
+        "directory_hash": null,
+        "entry_count": 0,
+        "failure_reason": "root_missing",
+        "incomplete_state_hash": "sha256:f3dc35b75931784fa96d06b2b969160f48d0d26613b63bb13e6e03fe729f3b7a",
+        "primary_content_hash": null,
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 0
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": null,
+        "entry_count": 0,
+        "failure_reason": "root_missing",
+        "incomplete_state_hash": "sha256:f3dc35b75931784fa96d06b2b969160f48d0d26613b63bb13e6e03fe729f3b7a",
+        "primary_content_hash": null,
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 0
+      },
+      "name": "root_missing"
+    },
+    {
+      "document": "skills/example/SKILL.md",
+      "entries": [
+        {
+          "content": "not a dir\n",
+          "mode": "0644",
+          "path": "skills/example",
+          "type": "file"
+        }
+      ],
+      "expected": {
+        "directory_hash": null,
+        "entry_count": 0,
+        "failure_reason": "root_not_directory",
+        "incomplete_state_hash": "sha256:d6e3cd3e9806c1d6dc70a500858b3acce60ce791bffd0b9c9c01cbe97156eb55",
+        "primary_content_hash": null,
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 0
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": null,
+        "entry_count": 0,
+        "failure_reason": "root_not_directory",
+        "incomplete_state_hash": "sha256:d6e3cd3e9806c1d6dc70a500858b3acce60ce791bffd0b9c9c01cbe97156eb55",
+        "primary_content_hash": null,
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 0
+      },
+      "name": "root_is_file"
+    },
+    {
+      "document": "skills/example/SKILL.md",
+      "entries": [
+        {
+          "content": "# a\n",
+          "mode": "0644",
+          "path": "realdir/SKILL.md",
+          "type": "file"
+        },
+        {
+          "path": "skills/example",
+          "target": {
+            "base_relative": "realdir"
+          },
+          "type": "symlink"
+        }
+      ],
+      "expected": {
+        "directory_hash": null,
+        "entry_count": 0,
+        "failure_reason": "symlink_directory_unsupported",
+        "incomplete_state_hash": "sha256:348cae7ead384eeffaf026f01382d4105e23e1a26fe7662ff87a1e52891b0f3e",
+        "primary_content_hash": null,
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 0
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": null,
+        "entry_count": 0,
+        "failure_reason": "symlink_directory_unsupported",
+        "incomplete_state_hash": "sha256:348cae7ead384eeffaf026f01382d4105e23e1a26fe7662ff87a1e52891b0f3e",
+        "primary_content_hash": null,
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 0
+      },
+      "name": "root_is_symlink"
+    },
+    {
+      "document": "skills/link/x/SKILL.md",
+      "entries": [
+        {
+          "content": "# a\n",
+          "mode": "0644",
+          "path": "real/x/SKILL.md",
+          "type": "file"
+        },
+        {
+          "path": "skills/link",
+          "target": {
+            "base_relative": "real"
+          },
+          "type": "symlink"
+        }
+      ],
+      "expected": {
+        "directory_hash": null,
+        "entry_count": 0,
+        "failure_reason": "symlink_directory_unsupported",
+        "incomplete_state_hash": "sha256:348cae7ead384eeffaf026f01382d4105e23e1a26fe7662ff87a1e52891b0f3e",
+        "primary_content_hash": null,
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 0
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": null,
+        "entry_count": 0,
+        "failure_reason": "symlink_directory_unsupported",
+        "incomplete_state_hash": "sha256:348cae7ead384eeffaf026f01382d4105e23e1a26fe7662ff87a1e52891b0f3e",
+        "primary_content_hash": null,
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 0
+      },
+      "name": "parent_symlink"
+    },
+    {
+      "document": "other/SKILL.md",
+      "entries": [
+        {
+          "mode": "0755",
+          "path": "skills",
+          "type": "dir"
+        },
+        {
+          "content": "# a\n",
+          "mode": "0644",
+          "path": "other/SKILL.md",
+          "type": "file"
+        }
+      ],
+      "expected": {
+        "directory_hash": null,
+        "entry_count": 0,
+        "failure_reason": "symlink_escape",
+        "incomplete_state_hash": "sha256:6a39d8ae1c383c98ae816ee96133472527cbd633cca6504dcdee248349df7ff3",
+        "primary_content_hash": null,
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 0
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": null,
+        "entry_count": 0,
+        "failure_reason": "symlink_escape",
+        "incomplete_state_hash": "sha256:6a39d8ae1c383c98ae816ee96133472527cbd633cca6504dcdee248349df7ff3",
+        "primary_content_hash": null,
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 0
+      },
+      "name": "document_outside_scope",
+      "scope": "skills"
+    },
+    {
+      "document": "skills/example/SKILL.md",
+      "entries": [
+        {
+          "content": "# a\n",
+          "mode": "0644",
+          "path": "skills/example/SKILL.md",
+          "type": "file"
+        },
+        {
+          "path": "skills/example/pipe",
+          "type": "fifo"
+        }
+      ],
+      "expected": {
+        "directory_hash": null,
+        "entry_count": 0,
+        "failure_reason": "special_file",
+        "incomplete_state_hash": "sha256:70def1b6f7fc14aa396e054221c581a9b40b14a0fa9271405f4febef891d6b29",
+        "primary_content_hash": null,
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 0
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": null,
+        "entry_count": 0,
+        "failure_reason": "special_file",
+        "incomplete_state_hash": "sha256:70def1b6f7fc14aa396e054221c581a9b40b14a0fa9271405f4febef891d6b29",
+        "primary_content_hash": null,
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 0
+      },
+      "name": "special_file_fifo"
+    },
+    {
+      "document": "skills/example/SKILL.md",
+      "entries": [
+        {
+          "content": "# a\n",
+          "mode": "0644",
+          "path": "skills/example/SKILL.md",
+          "type": "file"
+        },
+        {
+          "content": "1\n",
+          "mode": "0644",
+          "path": "skills/example/a\\b.txt",
+          "type": "file"
+        }
+      ],
+      "expected": {
+        "directory_hash": null,
+        "entry_count": 0,
+        "failure_reason": "invalid_relative_path",
+        "incomplete_state_hash": "sha256:788c2a7347da1e1ebbcbd53350e74497827e98b1ecec429f18a82a8f869a9517",
+        "primary_content_hash": null,
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 0
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": null,
+        "entry_count": 0,
+        "failure_reason": "invalid_relative_path",
+        "incomplete_state_hash": "sha256:788c2a7347da1e1ebbcbd53350e74497827e98b1ecec429f18a82a8f869a9517",
+        "primary_content_hash": null,
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 0
+      },
+      "name": "backslash_name"
+    },
+    {
+      "document": "skills/example/SKILL.md",
+      "entries": [
+        {
+          "content": "# a\n",
+          "mode": "0644",
+          "path": "skills/example/SKILL.md",
+          "type": "file"
+        },
+        {
+          "content": "c\n",
+          "mode": "0644",
+          "path": "skills/example/a/b/c.txt",
+          "type": "file"
+        }
+      ],
+      "expected": {
+        "directory_hash": "sha256:cd1b3068195f94ae2b402a53e64f0794b8934d037c2ab512fa1bed4933099fea",
+        "entry_count": 4,
+        "failure_reason": null,
+        "incomplete_state_hash": null,
+        "primary_content_hash": "sha256:fd99dedae7c3f7532f8a65d60f811a05dc9dc3e1c5936b0c554c98aafdad8c10",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "complete",
+        "total_bytes": 6
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": "sha256:35d9097d7d880e5b40889265d3b7f59635111b66f7a40f9f4ebf9c33a655b78b",
+        "entry_count": 4,
+        "failure_reason": null,
+        "incomplete_state_hash": null,
+        "primary_content_hash": "sha256:fd99dedae7c3f7532f8a65d60f811a05dc9dc3e1c5936b0c554c98aafdad8c10",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "complete",
+        "total_bytes": 6
+      },
+      "limits": {
+        "max_depth": 3
+      },
+      "name": "limit_depth_ok"
+    },
+    {
+      "document": "skills/example/SKILL.md",
+      "entries": [
+        {
+          "content": "# a\n",
+          "mode": "0644",
+          "path": "skills/example/SKILL.md",
+          "type": "file"
+        },
+        {
+          "content": "c\n",
+          "mode": "0644",
+          "path": "skills/example/a/b/c.txt",
+          "type": "file"
+        }
+      ],
+      "expected": {
+        "directory_hash": null,
+        "entry_count": 0,
+        "failure_reason": "max_depth_exceeded",
+        "incomplete_state_hash": "sha256:3c079305adfe8981dfd916eae4c82ee24d94138b906ed308af7486ce916aacbc",
+        "primary_content_hash": null,
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 0
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": null,
+        "entry_count": 0,
+        "failure_reason": "max_depth_exceeded",
+        "incomplete_state_hash": "sha256:3c079305adfe8981dfd916eae4c82ee24d94138b906ed308af7486ce916aacbc",
+        "primary_content_hash": null,
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 0
+      },
+      "limits": {
+        "max_depth": 2
+      },
+      "name": "limit_depth_exceeded"
+    },
+    {
+      "document": "skills/example/SKILL.md",
+      "entries": [
+        {
+          "content": "# a\n",
+          "mode": "0644",
+          "path": "skills/example/SKILL.md",
+          "type": "file"
+        },
+        {
+          "content": "b\n",
+          "mode": "0644",
+          "path": "skills/example/b.txt",
+          "type": "file"
+        }
+      ],
+      "expected": {
+        "directory_hash": "sha256:7842db93a55aa3d295482c20821144ce37d3d2ebcdb9460be72631da0088692b",
+        "entry_count": 2,
+        "failure_reason": null,
+        "incomplete_state_hash": null,
+        "primary_content_hash": "sha256:fd99dedae7c3f7532f8a65d60f811a05dc9dc3e1c5936b0c554c98aafdad8c10",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "complete",
+        "total_bytes": 6
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": "sha256:18dcd44e3e65e1a621540e29431422247f2861e6f2199dc7a481521ab2b0c058",
+        "entry_count": 2,
+        "failure_reason": null,
+        "incomplete_state_hash": null,
+        "primary_content_hash": "sha256:fd99dedae7c3f7532f8a65d60f811a05dc9dc3e1c5936b0c554c98aafdad8c10",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "complete",
+        "total_bytes": 6
+      },
+      "limits": {
+        "max_entries": 2
+      },
+      "name": "limit_entries_ok"
+    },
+    {
+      "document": "skills/example/SKILL.md",
+      "entries": [
+        {
+          "content": "# a\n",
+          "mode": "0644",
+          "path": "skills/example/SKILL.md",
+          "type": "file"
+        },
+        {
+          "content": "b\n",
+          "mode": "0644",
+          "path": "skills/example/b.txt",
+          "type": "file"
+        },
+        {
+          "content": "c\n",
+          "mode": "0644",
+          "path": "skills/example/c.txt",
+          "type": "file"
+        }
+      ],
+      "expected": {
+        "directory_hash": null,
+        "entry_count": 0,
+        "failure_reason": "max_entries_exceeded",
+        "incomplete_state_hash": "sha256:ccb8ad7d8e0c2e56c00a8c69ea483c1b6d05b4d5585d0e0555869e4990223e39",
+        "primary_content_hash": null,
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 0
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": null,
+        "entry_count": 0,
+        "failure_reason": "max_entries_exceeded",
+        "incomplete_state_hash": "sha256:ccb8ad7d8e0c2e56c00a8c69ea483c1b6d05b4d5585d0e0555869e4990223e39",
+        "primary_content_hash": null,
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 0
+      },
+      "limits": {
+        "max_entries": 2
+      },
+      "name": "limit_entries_exceeded"
+    },
+    {
+      "document": "skills/example/SKILL.md",
+      "entries": [
+        {
+          "content": "# a\n",
+          "mode": "0644",
+          "path": "skills/example/SKILL.md",
+          "type": "file"
+        },
+        {
+          "content": "zzzzzzzzzzzzzzzzzzzz",
+          "mode": "0644",
+          "path": "skills/example/big.bin",
+          "type": "file"
+        }
+      ],
+      "expected": {
+        "directory_hash": null,
+        "entry_count": 2,
+        "failure_reason": "max_file_bytes_exceeded",
+        "incomplete_state_hash": "sha256:3d36eff1eea534848f87388a5d05f6cba7f88a83dc895b0e1be0264afa3fa80b",
+        "primary_content_hash": "sha256:fd99dedae7c3f7532f8a65d60f811a05dc9dc3e1c5936b0c554c98aafdad8c10",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 4
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": null,
+        "entry_count": 2,
+        "failure_reason": "max_file_bytes_exceeded",
+        "incomplete_state_hash": "sha256:3d36eff1eea534848f87388a5d05f6cba7f88a83dc895b0e1be0264afa3fa80b",
+        "primary_content_hash": "sha256:fd99dedae7c3f7532f8a65d60f811a05dc9dc3e1c5936b0c554c98aafdad8c10",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 4
+      },
+      "limits": {
+        "max_file_bytes": 10
+      },
+      "name": "limit_file_bytes_exceeded"
+    },
+    {
+      "document": "skills/example/SKILL.md",
+      "entries": [
+        {
+          "content": "zzzzzzzzzzzzzzzzzzzz",
+          "mode": "0644",
+          "path": "skills/example/SKILL.md",
+          "type": "file"
+        }
+      ],
+      "expected": {
+        "directory_hash": null,
+        "entry_count": 1,
+        "failure_reason": "max_file_bytes_exceeded",
+        "incomplete_state_hash": "sha256:1b8d28fac8f7aa5db62d24c6582f972069f0a1981c674d7f8f5519a1384fe260",
+        "primary_content_hash": null,
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 0
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": null,
+        "entry_count": 1,
+        "failure_reason": "max_file_bytes_exceeded",
+        "incomplete_state_hash": "sha256:1b8d28fac8f7aa5db62d24c6582f972069f0a1981c674d7f8f5519a1384fe260",
+        "primary_content_hash": null,
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 0
+      },
+      "limits": {
+        "max_file_bytes": 10
+      },
+      "name": "limit_file_bytes_primary_exceeded"
+    },
+    {
+      "document": "skills/example/SKILL.md",
+      "entries": [
+        {
+          "content": "aaaaaa",
+          "mode": "0644",
+          "path": "skills/example/SKILL.md",
+          "type": "file"
+        },
+        {
+          "content": "bbbbbb",
+          "mode": "0644",
+          "path": "skills/example/b.bin",
+          "type": "file"
+        }
+      ],
+      "expected": {
+        "directory_hash": null,
+        "entry_count": 2,
+        "failure_reason": "max_total_bytes_exceeded",
+        "incomplete_state_hash": "sha256:01d060a49cf062f101e50cea7e816cf7bfe656080ffe97d079af8e587dfb2cdb",
+        "primary_content_hash": "sha256:ed02457b5c41d964dbd2f2a609d63fe1bb7528dbe55e1abf5b52c249cd735797",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 6
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": null,
+        "entry_count": 2,
+        "failure_reason": "max_total_bytes_exceeded",
+        "incomplete_state_hash": "sha256:01d060a49cf062f101e50cea7e816cf7bfe656080ffe97d079af8e587dfb2cdb",
+        "primary_content_hash": "sha256:ed02457b5c41d964dbd2f2a609d63fe1bb7528dbe55e1abf5b52c249cd735797",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 6
+      },
+      "limits": {
+        "max_total_bytes": 10
+      },
+      "name": "limit_total_bytes_exceeded"
+    },
+    {
+      "document": "skills/example/SKILL.md",
+      "entries": [
+        {
+          "content": "aaaaaa",
+          "mode": "0644",
+          "path": "skills/example/SKILL.md",
+          "type": "file"
+        },
+        {
+          "path": "skills/example/alias.md",
+          "target": "SKILL.md",
+          "type": "symlink"
+        }
+      ],
+      "expected": {
+        "directory_hash": null,
+        "entry_count": 2,
+        "failure_reason": "max_total_bytes_exceeded",
+        "incomplete_state_hash": "sha256:01d060a49cf062f101e50cea7e816cf7bfe656080ffe97d079af8e587dfb2cdb",
+        "primary_content_hash": "sha256:ed02457b5c41d964dbd2f2a609d63fe1bb7528dbe55e1abf5b52c249cd735797",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 6
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": null,
+        "entry_count": 2,
+        "failure_reason": "max_total_bytes_exceeded",
+        "incomplete_state_hash": "sha256:01d060a49cf062f101e50cea7e816cf7bfe656080ffe97d079af8e587dfb2cdb",
+        "primary_content_hash": "sha256:ed02457b5c41d964dbd2f2a609d63fe1bb7528dbe55e1abf5b52c249cd735797",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 6
+      },
+      "limits": {
+        "max_total_bytes": 10
+      },
+      "name": "limit_total_symlink_double_count"
+    },
+    {
+      "document": "skills/example/SKILL.md",
+      "entries": [
+        {
+          "content": "",
+          "mode": "0644",
+          "path": "skills/example/SKILL.md",
+          "type": "file"
+        }
+      ],
+      "expected": {
+        "directory_hash": null,
+        "entry_count": 0,
+        "failure_reason": "max_entries_exceeded",
+        "incomplete_state_hash": "sha256:ccb8ad7d8e0c2e56c00a8c69ea483c1b6d05b4d5585d0e0555869e4990223e39",
+        "primary_content_hash": null,
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 0
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": null,
+        "entry_count": 0,
+        "failure_reason": "max_entries_exceeded",
+        "incomplete_state_hash": "sha256:ccb8ad7d8e0c2e56c00a8c69ea483c1b6d05b4d5585d0e0555869e4990223e39",
+        "primary_content_hash": null,
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 0
+      },
+      "limits": {
+        "max_entries": 0
+      },
+      "name": "limit_zero"
+    },
+    {
+      "document": "skills/example/SKILL.md",
+      "entries": [
+        {
+          "content": "",
+          "mode": "0644",
+          "path": "skills/example/SKILL.md",
+          "type": "file"
+        }
+      ],
+      "expected": {
+        "directory_hash": "sha256:b70edbcad673ca91066085467625b3266e3964c77353723246434373b9f809a3",
+        "entry_count": 1,
+        "failure_reason": null,
+        "incomplete_state_hash": null,
+        "primary_content_hash": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "complete",
+        "total_bytes": 0
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": "sha256:2a36eb88db9e26f2bcc9c04e5c3e3ea171b3dcfa267507281884ec8a6c185e87",
+        "entry_count": 1,
+        "failure_reason": null,
+        "incomplete_state_hash": null,
+        "primary_content_hash": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "complete",
+        "total_bytes": 0
+      },
+      "name": "empty_primary"
+    },
+    {
+      "document": "skills/example/SKILL.md",
+      "entries": [
+        {
+          "content": "aaaa",
+          "mode": "0644",
+          "path": "skills/example/SKILL.md",
+          "type": "file"
+        },
+        {
+          "content": "bbbb",
+          "mode": "0644",
+          "path": "skills/example/b.txt",
+          "type": "file"
+        },
+        {
+          "path": "skills/example/c.lnk",
+          "target": "b.txt",
+          "type": "symlink"
+        }
+      ],
+      "expected": {
+        "directory_hash": null,
+        "entry_count": 3,
+        "failure_reason": "max_total_bytes_exceeded",
+        "incomplete_state_hash": "sha256:20695620149f3f2bf899823571c4984dd2aba12e4c01feef4cdee397912811ac",
+        "primary_content_hash": "sha256:61be55a8e2f6b4e172338bddf184d6dbee29c98853e0a0485ecee7f27b9af0b4",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 8
+      },
+      "expected_windows_mode_projection": {
+        "directory_hash": null,
+        "entry_count": 3,
+        "failure_reason": "max_total_bytes_exceeded",
+        "incomplete_state_hash": "sha256:20695620149f3f2bf899823571c4984dd2aba12e4c01feef4cdee397912811ac",
+        "primary_content_hash": "sha256:61be55a8e2f6b4e172338bddf184d6dbee29c98853e0a0485ecee7f27b9af0b4",
+        "schema_version": "guard.skill-directory-identity.v1",
+        "status": "incomplete",
+        "total_bytes": 8
+      },
+      "limits": {
+        "max_total_bytes": 10
+      },
+      "name": "total_exceeded_after_symlink_state"
+    }
+  ],
+  "platform": "darwin",
+  "schema": "guard.skill-directory-portable-parity.v1",
+  "source_sha256": {
+    "native_skill_directory_identity.py": "8d97e399b957a9cd42d7a2e4129ee36abd174c5dac3595c83482b976ba59103d",
+    "portable_skill_directory_discovery.py": "b1789e9c9984282d3477befa8a28c1e21d4504d616781ea12bad9ba5e4ab6eaf",
+    "portable_skill_directory_identity.py": "75835799760e43464f58ba6adebc9e31ccb128d0538d4cd679490f7cf2e7a5b2",
+    "portable_skill_directory_support.py": "bae0167a22c48559d49c10a37da8829e90e9a07b8e0377e657baad8d863af915",
+    "skill_directory_discovery.py": "9e10610144fd841bb0ade909b7dae8fc0993c39daffaaf6d78d879b14cac8583",
+    "skill_directory_identity.py": "d87c71bb4a338a35e5b38cc714accdfb267e7836e3d42537d004365458e48c85"
+  }
+}

@@ -1,9 +1,10 @@
 name: Guard Harness Smoke
 
+# Manual only. Every job targets self-hosted `guard` runners, which are not
+# registered, so a nightly schedule only queued runs that never started.
+# Dispatch this workflow when a matching runner is online.
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "17 7 * * *"
 
 permissions:
   contents: read
@@ -20,7 +21,7 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           enable-cache: true
       - name: Prepare Guard environment
@@ -58,7 +59,7 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           enable-cache: true
       - name: Prepare Guard environment
@@ -87,7 +88,7 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           enable-cache: true
       - name: Prepare Guard environment

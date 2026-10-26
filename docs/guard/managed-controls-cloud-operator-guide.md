@@ -21,7 +21,12 @@ An operator can inspect only the device-local catalog/control contract with:
 ```bash
 set -o pipefail
 hol-guard command controls status | jq -e '{revision, catalog_digest, health}'
-hol-guard command controls list | jq -e '{schema_version, control_schema_version, catalog_digest}'
+# Catalog-read v2 daemons return the index summary; older daemons return the v1 catalog.
+hol-guard command controls list | jq -e '
+  if .native_catalog_digest != null
+  then {schema_version, native_catalog_digest, snapshot_id, total_count}
+  else {schema_version, control_schema_version, catalog_digest}
+  end'
 ```
 
 These projections prove device-local state only. Cloud compatibility requires authenticated runtime-session capability, schema, catalog-digest, authority-revision, and effective-projection evidence.

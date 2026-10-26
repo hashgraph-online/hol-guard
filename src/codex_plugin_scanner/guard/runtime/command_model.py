@@ -2,31 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
-from .command_segment_parsing import shell_tokens_without_redirects
-from .command_structure import (
-    CommandRedirect,
-    EmbeddedCommand,
-    build_command_security_identity,
-    extract_command_redirects,
-)
-from .command_tokens import executable_name, leading_environment, shell_tokens
-from .data_flow import (
-    ShellHeredoc,
-    extract_command_segments,
-    extract_command_substitution_spans,
-    extract_expanded_heredoc_substitution_spans,
-    extract_heredocs,
-    extract_pipes,
-    mask_heredoc_bodies,
-)
-from .shell_command_wrappers import (
-    SHELL_COMMAND_NORMALIZE_MAX_BYTES,
-    normalize_transparent_shell_command,
-)
+from ..native_rich_command_model import request, string_tuple
+from .command_structure import CommandRedirect, EmbeddedCommand, build_command_security_identity
 
 CommandDialect = Literal["posix", "powershell", "cmd", "argv", "unknown"]
 CommandTransport = Literal["shell_string", "argv", "embedded_script"]
@@ -35,8 +16,6 @@ ParseConfidence = Literal["exact", "fallback", "uncertain"]
 MAX_COMMAND_BYTES = 32_768
 MAX_COMMAND_SEGMENTS = 128
 MAX_COMMAND_TOKENS = 2_048
-
-_SHELL_SCRIPT_EXECUTABLES = frozenset({"ash", "bash", "dash", "sh", "zsh"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,18 +35,13 @@ class CommandSegment:
     end: int
 
     def to_dict(self) -> dict[str, object]:
-        return {
-            "text": self.text,
-            "tokens": list(self.tokens),
-            "executable": self.executable,
-            "arguments": list(self.arguments),
-            "environment_names": list(self.environment_names),
-            "wrapper_chain": list(self.wrapper_chain),
-            "path_overridden": self.path_overridden,
-            "execution_context": self.execution_context,
-            "pipeline_index": self.pipeline_index,
-            "span": {"source": "normalized", "start": self.start, "end": self.end},
+        value: dict[str, object] = {
+            item.name: list(value) if isinstance(value := getattr(self, item.name), tuple) else value
+            for item in fields(self)
+            if item.name not in {"start", "end"}
         }
+        value["span"] = {"source": "normalized", "start": self.start, "end": self.end}
+        return value
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,6 +59,7 @@ class CanonicalCommand:
     embedded_commands: tuple[EmbeddedCommand, ...]
     confidence: ParseConfidence
     uncertainty_reason: str | None = None
+    _bound_identity: tuple[object, str] | None = field(default=None, repr=False, compare=False)
 
     @property
     def path_overridden(self) -> bool:
@@ -94,7 +69,10 @@ class CanonicalCommand:
     def security_identity(self) -> str:
         """Return a versioned identity over the complete executable structure."""
 
-        return build_command_security_identity(
+        material = self._identity_material()
+        if self._bound_identity is not None and self._bound_identity[0] == material:
+            return self._bound_identity[1]
+        identity = build_command_security_identity(
             normalized_text=self.normalized_text,
             dialect=self.dialect,
             transport=self.transport,
@@ -103,20 +81,23 @@ class CanonicalCommand:
             redirects=self.redirects,
             embedded_commands=self.embedded_commands,
         )
+        object.__setattr__(self, "_bound_identity", (material, identity))
+        return identity
+
+    def _identity_material(self) -> object:
+        return tuple(getattr(self, item.name) for item in fields(self) if item.compare)
 
     def to_dict(self) -> dict[str, object]:
         return {
-            "normalized_text": self.normalized_text,
-            "dialect": self.dialect,
-            "transport": self.transport,
-            "extraction_provenance": self.extraction_provenance,
-            "wrapper_chain": list(self.wrapper_chain),
+            **{
+                item.name: list(value) if isinstance(value := getattr(self, item.name), tuple) else value
+                for item in fields(self)
+                if item.compare and item.name not in {"raw_text", "segments", "redirects", "embedded_commands"}
+            },
             "segments": [segment.to_dict() for segment in self.segments],
             "redirects": [redirect.to_dict() for redirect in self.redirects],
             "embedded_commands": [embedded.to_dict() for embedded in self.embedded_commands],
             "security_identity": self.security_identity,
-            "confidence": self.confidence,
-            "uncertainty_reason": self.uncertainty_reason,
             "path_overridden": self.path_overridden,
         }
 
@@ -131,359 +112,45 @@ def parse_shell_command(
     extraction_provenance: str = "guard-shell",
     normalize_wrappers: bool = True,
 ) -> CanonicalCommand:
-    """Parse one command without expansion, execution, or persistent state."""
-
-    raw_text = command.strip()
-    if not raw_text:
-        raise ValueError("Command text cannot be empty")
-    if dialect != "posix" or transport != "shell_string":
-        return CanonicalCommand(
-            raw_text=raw_text,
-            normalized_text=raw_text,
-            dialect=dialect,
-            transport=transport,
-            extraction_provenance=extraction_provenance,
-            wrapper_chain=(),
-            segments=(),
-            redirects=(),
-            embedded_commands=(),
-            confidence="uncertain",
-            uncertainty_reason=f"unsupported_{dialect}_{transport}",
-        )
-    command_bytes = len(raw_text) if len(raw_text) > MAX_COMMAND_BYTES else len(raw_text.encode("utf-8"))
-    if command_bytes > MAX_COMMAND_BYTES:
-        return CanonicalCommand(
-            raw_text=raw_text,
-            normalized_text=raw_text,
-            dialect=dialect,
-            transport=transport,
-            extraction_provenance=extraction_provenance,
-            wrapper_chain=(),
-            segments=(),
-            redirects=(),
-            embedded_commands=(),
-            confidence="uncertain",
-            uncertainty_reason="command_byte_limit_exceeded",
-        )
-
-    if normalize_wrappers:
-        normalization = normalize_transparent_shell_command(raw_text, cwd=cwd, home_dir=home_dir)
-        normalized_text = normalization.normalized_command
-        wrapper_chain = normalization.wrapper_chain
-    else:
-        # Source inspection needs the original executable, redirections and
-        # shell command-string boundaries, not a transparent-wrapper rewrite.
-        normalized_text = raw_text
-        wrapper_chain = ()
-    confidence: ParseConfidence = "exact"
-    uncertainty_reason: str | None = None
-    if command_bytes > SHELL_COMMAND_NORMALIZE_MAX_BYTES:
-        confidence = "uncertain"
-        uncertainty_reason = "wrapper_normalization_limit_exceeded"
-
-    heredocs = extract_heredocs(normalized_text)
-    masked_command = mask_heredoc_bodies(normalized_text, heredocs)
-    command_redirects = extract_command_redirects(masked_command, heredocs)
-    segment_texts = _execution_segment_texts(masked_command)
-    if len(segment_texts) > MAX_COMMAND_SEGMENTS:
-        return CanonicalCommand(
-            raw_text=raw_text,
-            normalized_text=normalized_text,
-            dialect=dialect,
-            transport=transport,
-            extraction_provenance=extraction_provenance,
-            wrapper_chain=wrapper_chain,
-            segments=(),
-            redirects=(),
-            embedded_commands=(),
-            confidence="uncertain",
-            uncertainty_reason="command_segment_limit_exceeded",
-        )
-
-    segments: list[CommandSegment] = []
-    segment_wrappers: list[str] = []
-    cursor = 0
-    total_tokens = 0
-    for execution_context, pipeline_index, segment_text, source_offset in segment_texts:
-        tokens, exact = shell_tokens(segment_text)
-        total_tokens += len(tokens)
-        if total_tokens > MAX_COMMAND_TOKENS:
-            return CanonicalCommand(
-                raw_text=raw_text,
-                normalized_text=normalized_text,
-                dialect=dialect,
-                transport=transport,
-                extraction_provenance=extraction_provenance,
-                wrapper_chain=wrapper_chain,
-                segments=tuple(segments),
-                redirects=(),
-                embedded_commands=(),
-                confidence="uncertain",
-                uncertainty_reason="command_token_limit_exceeded",
-            )
-        if not exact and confidence == "exact":
-            confidence = "fallback"
-            uncertainty_reason = "malformed_shell_quoting"
-        start = normalized_text.find(segment_text, max(cursor, source_offset))
-        if start < 0:
-            start = normalized_text.find(segment_text)
-        if start < 0:
-            start = min(cursor, len(normalized_text))
-        end = min(start + len(segment_text), len(normalized_text))
-        cursor = end
-        command_tokens = shell_tokens_without_redirects(
-            segment_text,
-            source_offset=start,
-            redirects=command_redirects,
-        )
-        environment_names, executable_index, wrappers = leading_environment(command_tokens)
-        for wrapper in wrappers:
-            if wrapper not in segment_wrappers:
-                segment_wrappers.append(wrapper)
-        executable = command_tokens[executable_index] if executable_index < len(command_tokens) else None
-        arguments = command_tokens[executable_index + 1 :] if executable is not None else ()
-        segments.append(
-            CommandSegment(
-                text=segment_text,
-                tokens=tokens,
-                executable=executable,
-                arguments=arguments,
-                environment_names=environment_names,
-                wrapper_chain=wrappers,
-                path_overridden="PATH" in environment_names,
-                execution_context=execution_context,
-                pipeline_index=pipeline_index,
-                start=start,
-                end=end,
-            )
-        )
-
-    embedded_commands, embedded_segments = _embedded_execution(
-        normalized_text,
-        heredocs=heredocs,
-        top_level_segments=tuple(segments),
-        cwd=cwd,
-        home_dir=home_dir,
+    """Parse through the resident; native unavailability has no semantic fallback."""
+    value = request(
+        "parse",
+        {
+            "command": command,
+            "cwd": str(cwd) if cwd is not None else None,
+            "home_dir": str(home_dir) if home_dir is not None else None,
+            "dialect": dialect,
+            "transport": transport,
+            "extraction_provenance": extraction_provenance,
+            "normalize_wrappers": normalize_wrappers,
+        },
     )
-    segments.extend(embedded_segments)
-    if len(segments) > MAX_COMMAND_SEGMENTS or sum(len(segment.tokens) for segment in segments) > MAX_COMMAND_TOKENS:
-        confidence = "uncertain"
-        uncertainty_reason = "embedded_command_limit_exceeded"
-    return CanonicalCommand(
-        raw_text=raw_text,
-        normalized_text=normalized_text,
-        dialect=dialect,
-        transport=transport,
-        extraction_provenance=extraction_provenance,
-        wrapper_chain=(*wrapper_chain, *segment_wrappers),
-        segments=tuple(segments),
-        redirects=command_redirects,
-        embedded_commands=embedded_commands,
-        confidence=confidence,
-        uncertainty_reason=uncertainty_reason,
+    return _canonical_from_wire(value)
+
+
+def _canonical_from_wire(value: dict[str, Any]) -> CanonicalCommand:
+    """Present a validated native model without deriving command semantics."""
+    identity = value["security_identity"]
+    value = {item.name: value[item.name] for item in fields(CanonicalCommand) if item.compare and item.name in value}
+    segments = []
+    for raw_segment in value["segments"]:
+        segment = {
+            item.name: raw_segment[item.name] for item in fields(CommandSegment) if item.name not in {"start", "end"}
+        }
+        span = raw_segment["span"]
+        segment.update(start=span["start"], end=span["end"])
+        for name in ("tokens", "arguments", "environment_names", "wrapper_chain"):
+            segment[name] = string_tuple(segment[name])
+        segments.append(CommandSegment(**segment))
+    redirects = tuple(
+        CommandRedirect(r["operator"], r["target"], r["span"]["start"], r["span"]["end"]) for r in value["redirects"]
     )
-
-
-def _execution_segment_texts(command: str, *, context_prefix: str = "top") -> tuple[tuple[str, int, str, int], ...]:
-    segments: list[tuple[str, int, str, int]] = []
-    cursor = 0
-    for group_index, command_segment in enumerate(extract_command_segments(command)):
-        source_offset = command.find(command_segment, cursor)
-        if source_offset < 0:
-            source_offset = cursor
-        cursor = source_offset + len(command_segment)
-        execution_context = f"{context_prefix}:{group_index}"
-        pipes = extract_pipes(command_segment)
-        if not pipes:
-            stripped = command_segment.strip()
-            if stripped:
-                segments.append((execution_context, 0, stripped, source_offset))
-            continue
-        pipe_parts = [pipes[0].left, *(pipe.right for pipe in pipes)]
-        part_cursor = source_offset
-        for index, part in enumerate(pipe_parts):
-            stripped = part.strip()
-            if not stripped:
-                continue
-            part_offset = command.find(stripped, part_cursor)
-            if part_offset < 0:
-                part_offset = part_cursor
-            segments.append((execution_context, index, stripped, part_offset))
-            part_cursor = part_offset + len(stripped)
-    return tuple(segments)
-
-
-def _embedded_execution(
-    command: str,
-    *,
-    heredocs: tuple[ShellHeredoc, ...],
-    top_level_segments: tuple[CommandSegment, ...],
-    cwd: Path | None,
-    home_dir: Path | None,
-) -> tuple[tuple[EmbeddedCommand, ...], tuple[CommandSegment, ...]]:
-    embedded: list[EmbeddedCommand] = []
-    segments: list[CommandSegment] = []
-    _append_substitution_execution(
-        command,
-        source_offset=0,
-        context_prefix="substitution",
-        excluded_ranges=tuple((heredoc.body_start, heredoc.end) for heredoc in heredocs),
-        embedded=embedded,
-        segments=segments,
-        depth=0,
-        cwd=cwd,
-        home_dir=home_dir,
+    embedded = tuple(
+        EmbeddedCommand(e["kind"], e["text"], e["execution_context"], e["span"]["start"], e["span"]["end"])
+        for e in value["embedded_commands"]
     )
-
-    for index, heredoc in enumerate(heredocs):
-        owner = next(
-            (segment for segment in top_level_segments if segment.start <= heredoc.operator_start <= segment.end),
-            None,
-        )
-        executable = executable_name(owner.executable) if owner is not None else None
-        if executable not in _SHELL_SCRIPT_EXECUTABLES:
-            if not heredoc.quoted:
-                _append_substitution_execution(
-                    heredoc.body,
-                    source_offset=heredoc.body_start,
-                    context_prefix=f"heredoc:{index}:substitution",
-                    excluded_ranges=(),
-                    embedded=embedded,
-                    segments=segments,
-                    depth=0,
-                    expanded_heredoc=True,
-                    cwd=cwd,
-                    home_dir=home_dir,
-                )
-            continue
-        context = f"heredoc:{index}"
-        embedded.append(
-            EmbeddedCommand(
-                kind="heredoc",
-                text=heredoc.body,
-                execution_context=context,
-                start=heredoc.body_start,
-                end=heredoc.body_end,
-            )
-        )
-        segments.extend(
-            _segments_for_embedded(
-                heredoc.body,
-                execution_context=context,
-                source_offset=heredoc.body_start,
-                cwd=cwd,
-                home_dir=home_dir,
-            )
-        )
-        _append_substitution_execution(
-            heredoc.body,
-            source_offset=heredoc.body_start,
-            context_prefix=f"{context}:substitution",
-            excluded_ranges=(),
-            embedded=embedded,
-            segments=segments,
-            depth=0,
-            cwd=cwd,
-            home_dir=home_dir,
-        )
-    return tuple(embedded), tuple(segments)
-
-
-def _append_substitution_execution(
-    command: str,
-    *,
-    source_offset: int,
-    context_prefix: str,
-    excluded_ranges: tuple[tuple[int, int], ...],
-    embedded: list[EmbeddedCommand],
-    segments: list[CommandSegment],
-    depth: int,
-    cwd: Path | None,
-    home_dir: Path | None,
-    expanded_heredoc: bool = False,
-) -> None:
-    if depth >= 4:
-        return
-    extractor = extract_expanded_heredoc_substitution_spans if expanded_heredoc else extract_command_substitution_spans
-    for index, substitution in enumerate(extractor(command)):
-        absolute_start = source_offset + substitution.body_start
-        if any(start <= absolute_start < end for start, end in excluded_ranges):
-            continue
-        context = f"{context_prefix}:{index}"
-        embedded.append(
-            EmbeddedCommand(
-                kind="substitution",
-                text=substitution.body,
-                execution_context=context,
-                start=absolute_start,
-                end=source_offset + substitution.body_end,
-            )
-        )
-        segments.extend(
-            _segments_for_embedded(
-                substitution.body,
-                execution_context=context,
-                source_offset=absolute_start,
-                cwd=cwd,
-                home_dir=home_dir,
-            )
-        )
-        _append_substitution_execution(
-            substitution.body,
-            source_offset=absolute_start,
-            context_prefix=f"{context}:nested",
-            excluded_ranges=(),
-            embedded=embedded,
-            segments=segments,
-            depth=depth + 1,
-            cwd=cwd,
-            home_dir=home_dir,
-        )
-
-
-def _segments_for_embedded(
-    command: str,
-    *,
-    execution_context: str,
-    source_offset: int,
-    cwd: Path | None,
-    home_dir: Path | None,
-) -> tuple[CommandSegment, ...]:
-    results: list[CommandSegment] = []
-    normalization = normalize_transparent_shell_command(command, cwd=cwd, home_dir=home_dir)
-    heredocs = extract_heredocs(normalization.normalized_command)
-    redirects = extract_command_redirects(
-        mask_heredoc_bodies(normalization.normalized_command, heredocs),
-        heredocs,
-    )
-    for context, pipeline_index, segment_text, local_offset in _execution_segment_texts(
-        normalization.normalized_command,
-        context_prefix=execution_context,
-    ):
-        tokens, _exact = shell_tokens(segment_text)
-        command_tokens = shell_tokens_without_redirects(
-            segment_text,
-            source_offset=local_offset,
-            redirects=redirects,
-        )
-        environment_names, executable_index, wrappers = leading_environment(command_tokens)
-        executable = command_tokens[executable_index] if executable_index < len(command_tokens) else None
-        arguments = command_tokens[executable_index + 1 :] if executable is not None else ()
-        original_offset = command.find(segment_text)
-        start = source_offset + (original_offset if original_offset >= 0 else local_offset)
-        results.append(
-            CommandSegment(
-                text=segment_text,
-                tokens=tokens,
-                executable=executable,
-                arguments=arguments,
-                environment_names=environment_names,
-                wrapper_chain=(*normalization.wrapper_chain, *wrappers),
-                path_overridden="PATH" in environment_names,
-                execution_context=context,
-                pipeline_index=pipeline_index,
-                start=start,
-                end=start + len(segment_text),
-            )
-        )
-    return tuple(results)
+    value.update(segments=tuple(segments), redirects=redirects, embedded_commands=embedded)
+    value["wrapper_chain"] = string_tuple(value["wrapper_chain"])
+    model = CanonicalCommand(**value)
+    object.__setattr__(model, "_bound_identity", (model._identity_material(), identity))
+    return model

@@ -1,0 +1,27 @@
+apiVersion: guard.hashgraphonline.com/v1alpha1
+kind: GuardPolicy
+metadata:
+  id: policy.parity-commands
+  name: Command rules for decision parity
+  revision: 1
+spec:
+  defaults:
+    mode: enforce
+    defaultAction: warn
+  rules:
+    - id: block-docker
+      enabled: true
+      effect: block
+      description: Containers are not allowed from agent shells.
+      match:
+        commands:
+          combinator: any
+          conditions:
+            - field: command
+              operator: startsWith
+              value: docker
+      lifetime:
+        mode: permanent
+      provenance:
+        source: builder
+        createdAt: 2026-10-14T00:00:00Z

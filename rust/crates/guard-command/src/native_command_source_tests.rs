@@ -4,47 +4,10 @@ use crate::{parse_command, CommandModelRequestV1};
 use guard_contracts::NativeCommandControlBindingV1;
 
 const EXAMPLE: &[u8] = include_bytes!("../tests/fixtures/command-source-example.v1.json");
-const TRUST: &[u8] = include_bytes!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/../../../contracts/extensions/trust-class-map.v1.json"
-));
+const TRUST: &[u8] = guard_command_catalog_data::TRUST_MAP_JSON;
 
-#[test]
-fn offline_parity_compares_full_native_evidence_and_rejects_real_differences() {
-    let mut baseline = compiled().program;
-    baseline["authoring_semantics_digest"] = serde_json::json!("a".repeat(64));
-    baseline.as_object_mut().unwrap().remove("program_digest");
-    baseline["program_digest"] = serde_json::json!(digest_canonical_bytes(
-        PROGRAM_DOMAIN,
-        &serde_json::to_vec(&baseline).unwrap()
-    ));
-    let mut request = serde_json::json!({
-        "schema":"guard.command-extension-parity.v1",
-        "baseline_program":baseline,
-        "build":{"schema":"guard.command-extension-build.v1","base":"packaged",
-            "sources":[serde_json::from_slice::<Value>(EXAMPLE).unwrap()],
-            "trust":serde_json::from_slice::<Value>(TRUST).unwrap()},
-        "cases":[{"id":"git-reset","payload":{"tool_name":"Bash","tool_input":{"command":"git reset --hard"}},
-            "controls":[],"managed_controls":[]}]
-    });
-    let result = compare_programs(&serde_json::to_vec(&request).unwrap()).unwrap();
-    assert_eq!(result["ok"], true, "{result}");
-    for rule in request["baseline_program"]["rules"].as_array_mut().unwrap() {
-        rule["rule_version"] = serde_json::json!("9.9.9");
-    }
-    let baseline = &mut request["baseline_program"];
-    baseline.as_object_mut().unwrap().remove("program_digest");
-    baseline["program_digest"] = serde_json::json!(digest_canonical_bytes(
-        PROGRAM_DOMAIN,
-        &serde_json::to_vec(baseline).unwrap()
-    ));
-    let result = compare_programs(&serde_json::to_vec(&request).unwrap()).unwrap();
-    assert_eq!(result["ok"], false);
-    assert_ne!(
-        result["cases"][0]["baseline"],
-        result["cases"][0]["candidate"]
-    );
-}
+#[path = "native_command_source_parity_tests.rs"]
+mod parity;
 
 fn compiled() -> CompiledSourceCatalog {
     compile_addition(&[EXAMPLE], TRUST).unwrap()
@@ -309,15 +272,32 @@ const REMOTE_MCP: &[u8] = include_bytes!(concat!(
 
 #[test]
 fn canonical_mcp_inputs_preserve_native_fields_and_remain_opt_in() {
-    let baseline: Value = serde_json::from_slice(EMBEDDED_PROGRAM).unwrap();
+    let baseline: Value = serde_json::from_slice(packaged_command_program_bytes()).unwrap();
+    let mut metadata =
+        serde_json::from_slice::<Value>(crate::native_command_catalog::embedded_catalog_bytes())
+            .unwrap()["catalog"]
+            .as_array()
+            .unwrap()
+            .clone();
     for bytes in [FILESYSTEM_MCP, REMOTE_MCP] {
         let lowered = mcp::lower(bytes).unwrap();
-        let original = baseline["extensions"]
+        assert!(!baseline["extensions"]
             .as_array()
             .unwrap()
             .iter()
-            .find(|row| row["extension_id"] == lowered.document.extension.extension_id)
-            .unwrap();
+            .any(|row| row["extension_id"] == lowered.document.extension.extension_id));
+        let ids = BTreeSet::from([lowered.document.extension.extension_id.clone()]);
+        let permissions = lowered
+            .document
+            .extension
+            .permissions
+            .iter()
+            .map(|permission| permission.permission_id.clone())
+            .collect();
+        let pack = catalog::compile_pack(&[], &[bytes], TRUST, (&ids, &permissions)).unwrap();
+        let original = &pack.program["extensions"][0];
+        assert_eq!(original["activation"], "opt-in");
+        metadata.extend(pack.catalog.as_array().unwrap().iter().cloned());
         assert_eq!(lowered.wire, original["mcp"]);
         assert_eq!(
             lowered.document.extension.permissions[0].permission_id,
@@ -337,8 +317,12 @@ fn canonical_mcp_inputs_preserve_native_fields_and_remain_opt_in() {
     assert_eq!(output.catalog[0]["permissions"][0]["configurable"], false);
     assert!(output.descriptors.is_empty());
     source["launch"]["package"] = serde_json::json!("@modelcontextprotocol/server-filesystem");
+    let context = baseline::ValidationBase {
+        catalog: metadata,
+        programs: vec![],
+    };
     assert!(matches!(
-        compile_addition_with_mcp(&[], &[&serde_json::to_vec(&source).unwrap()], TRUST),
+        context.prepare(&[], &[&serde_json::to_vec(&source).unwrap()], false),
         Err("command_source_mcp_package_duplicate")
     ));
 }
@@ -357,4 +341,216 @@ fn canonical_mcp_sources_reject_remote_allow_and_unknown_fields() {
         mcp::lower(&serde_json::to_vec(&source).unwrap()),
         Err("command_source_mcp_contract_invalid")
     ));
+}
+
+#[test]
+fn direct_mcp_compiles_and_only_tightens_locally_enabled_mcp_calls() {
+    let mut source: Value = serde_json::from_slice(FILESYSTEM_MCP).unwrap();
+    source["id"] = serde_json::json!("mcp.native-fixture");
+    source["launch"] = serde_json::json!({"kind":"direct-command","command":"fixture-mcp"});
+    let bytes = serde_json::to_vec(&source).unwrap();
+    let output = compile_addition_with_mcp(&[], &[&bytes], TRUST).unwrap();
+    assert_eq!(output.catalog[0]["trust_class"], "external");
+    assert_eq!(output.catalog[0]["activation"], "opt-in");
+    assert_eq!(
+        output.catalog[0]["permissions"][0]["example_command"],
+        "fixture-mcp"
+    );
+    let program = Arc::new(
+        NativeCommandProgram::from_packaged_bytes(&serde_json::to_vec(&output.program).unwrap())
+            .unwrap(),
+    );
+    for (kind, state, tool, observed) in [
+        (
+            "local-admin",
+            "enabled",
+            "mcp__native-fixture__write_file",
+            true,
+        ),
+        (
+            "local-admin",
+            "disabled",
+            "mcp__native-fixture__write_file",
+            false,
+        ),
+        (
+            "signed-cloud",
+            "enabled",
+            "mcp__native-fixture__write_file",
+            false,
+        ),
+        ("local-admin", "enabled", "Bash", false),
+        (
+            "local-admin",
+            "enabled",
+            "mcp__unrelated__write_file",
+            false,
+        ),
+    ] {
+        let mut binding: NativeCommandControlBindingV1 = serde_json::from_value(serde_json::json!({
+            "schema":"guard.native-command-control-binding.v1",
+            "program_digest":program.program_digest,"catalog_digest":program.catalog_digest,
+            "trust_digest":program.trust_digest,"health":"protected","revision":1,
+            "managed_revision":0,"effective_digest":"",
+            "layers":[{"schema_version":"1.0.0","kind":kind,"catalog_digest":program.catalog_digest,
+                "global_lockdown":false,"controls":[{"target_kind":"extension",
+                "target_id":"command.mcp-native-fixture","state":state}]}]
+        })).unwrap();
+        binding.effective_digest = binding.compute_effective_digest().unwrap();
+        let controls =
+            CompiledNativeCommandControls::for_program(&binding, program.clone()).unwrap();
+        let model = parse_command(&CommandModelRequestV1 {
+            command: "fixture-mcp --root /tmp/example".into(),
+            dialect: "posix".into(),
+            transport: "shell_string".into(),
+            extraction_provenance: "native-mcp-test".into(),
+        })
+        .unwrap();
+        let intrinsic = crate::pretool::evaluate_pre_tool_envelope(
+            "claude-code",
+            "PreToolUse",
+            &serde_json::json!({"tool_name":tool,"tool_input":{}}),
+        );
+        let result = controls.apply_with_tool(
+            Some(&model),
+            intrinsic,
+            Some(tool),
+            &["fixture-mcp".into()],
+            None,
+        );
+        let evidence = result.command_extensions.as_ref().unwrap();
+        assert!(evidence.evaluation_error.is_none());
+        assert_eq!(
+            evidence.binding.observation_count > 0,
+            observed,
+            "{kind}/{state}/{tool}"
+        );
+        if observed {
+            assert_eq!(result.minimum_action, "block");
+        }
+    }
+    let mut duplicate = source.clone();
+    duplicate["id"] = serde_json::json!("mcp.duplicate-native-fixture");
+    assert!(matches!(
+        compile_addition_with_mcp(
+            &[],
+            &[&bytes, &serde_json::to_vec(&duplicate).unwrap()],
+            TRUST
+        ),
+        Err("command_source_mcp_command_duplicate")
+    ));
+    source["tools"][0]["state"] = serde_json::json!("allow");
+    assert!(matches!(
+        mcp::lower(&serde_json::to_vec(&source).unwrap()),
+        Err("command_source_mcp_tool_invalid")
+    ));
+}
+
+#[test]
+fn direct_mcp_rejects_noncanonical_commands_and_launch_arguments() {
+    let mut source: Value = serde_json::from_slice(FILESYSTEM_MCP).unwrap();
+    source["launch"] = serde_json::json!({"kind":"direct-command","command":"fixture-mcp"});
+    for command in [
+        "",
+        "../fixture-mcp",
+        "/bin/fixture-mcp",
+        "fixture-mcp.exe",
+        "fixture-mcp.cmd",
+        "fixture-mcp.bat",
+        "fixture-mcp --serve",
+        "Fixture",
+        "sh",
+        "bash",
+        "node",
+        "python",
+        "docker",
+        "npx",
+        "uv",
+        "cargo",
+        "python3.11",
+        "pythonw",
+        "py",
+        "nodejs",
+        "node20",
+        "java17",
+        "lua5.4",
+        "ksh",
+        "csh",
+        "tcsh",
+        "tsx",
+        "ts-node",
+        "sudo",
+        "busybox",
+        "é",
+        "a..b",
+        "a.",
+        "-a",
+        "a\n",
+        &"a".repeat(129),
+    ] {
+        source["launch"]["command"] = serde_json::json!(command);
+        assert!(
+            matches!(
+                mcp::lower(&serde_json::to_vec(&source).unwrap()),
+                Err("command_source_mcp_launcher_invalid")
+            ),
+            "{command}"
+        );
+    }
+    source["launch"]["command"] = serde_json::json!("fixture-mcp");
+    source["launch"]["args"] = serde_json::json!(["--serve"]);
+    assert!(matches!(
+        mcp::lower(&serde_json::to_vec(&source).unwrap()),
+        Err("command_source_mcp_contract_invalid")
+    ));
+}
+
+#[test]
+fn first_party_display_name_does_not_change_trust_digest() {
+    let mut trust: Value = serde_json::from_slice(TRUST).unwrap();
+    trust["classes"]["first-party"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!("command.example-cli"));
+    let shown = compile_addition(&[EXAMPLE], &serde_json::to_vec(&trust).unwrap()).unwrap();
+    assert_eq!(shown.catalog[0]["publisher"]["id"], "hol");
+    assert_eq!(shown.catalog[0]["publisher"]["displayName"], "HOL");
+    trust["publishers"]["hol"]["displayName"] = serde_json::json!("Hashgraph Online");
+    let previous = compile_addition(&[EXAMPLE], &serde_json::to_vec(&trust).unwrap()).unwrap();
+    assert_eq!(
+        previous.catalog[0]["publisher"]["displayName"],
+        "Hashgraph Online"
+    );
+    assert_eq!(
+        shown.program["trust_digest"],
+        previous.program["trust_digest"]
+    );
+    trust["classes"]["first-party"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|id| id != "command.example-cli");
+    trust["classes"]["trusted-library"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!("command.example-cli"));
+    let moved = compile_addition(&[EXAMPLE], &serde_json::to_vec(&trust).unwrap()).unwrap();
+    assert_ne!(shown.program["trust_digest"], moved.program["trust_digest"]);
+}
+
+#[test]
+fn external_publisher_display_name_changes_trust_digest() {
+    let mut source: Value = serde_json::from_slice(EXAMPLE).unwrap();
+    source["extension"]["publisher"] = serde_json::json!({
+        "id":"community.example","display_name":"Example Contributor"
+    });
+    let named = compile_addition(&[&serde_json::to_vec(&source).unwrap()], TRUST).unwrap();
+    source["extension"]["publisher"]["display_name"] = serde_json::json!("Renamed Contributor");
+    let renamed = compile_addition(&[&serde_json::to_vec(&source).unwrap()], TRUST).unwrap();
+    assert_eq!(named.catalog[0]["trust_class"], "external");
+    assert_ne!(
+        named.program["trust_digest"],
+        renamed.program["trust_digest"]
+    );
+    source["extension"]["publisher"]["id"] = serde_json::json!("hol");
+    assert!(compile_addition(&[&serde_json::to_vec(&source).unwrap()], TRUST).is_err());
 }

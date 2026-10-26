@@ -1,5 +1,5 @@
 import { HiMiniExclamationTriangle, HiMiniInformationCircle } from "react-icons/hi2";
-import { resolveSecondaryRiskSummary } from "./approval-center-utils";
+import { isWatchOnlyObservation, resolveSecondaryRiskSummary } from "./approval-center-utils";
 import {
   deriveDataFlowEvidence,
   deriveEncodedLayerSignals,
@@ -16,7 +16,7 @@ import { ScannerEvidenceSection } from "./scanner-evidence-badge";
 export function buildTopAlertItems(item: GuardApprovalRequest): EvidenceItem[] {
   const items: EvidenceItem[] = [];
   const secondaryRiskSummary = resolveSecondaryRiskSummary(item);
-  const pauseReason = whyPaused(item);
+  const pauseReason = isWatchOnlyObservation(item) ? null : whyPaused(item);
   if (secondaryRiskSummary) {
     items.push({
       id: "secondary-risk",

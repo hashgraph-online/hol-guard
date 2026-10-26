@@ -20,6 +20,9 @@ _MAX_RUNTIME_BYTES = 128 * 1024 * 1024
 _MAX_MANIFEST_BYTES = 16 * 1024
 _SHA40 = 40
 _SHA64 = 64
+_BUNDLE_SCHEMA = "guard.command-pack-bundle.v1"
+_BUNDLE_PATH = "codex_plugin_scanner/guard/contracts/data/extensions/command-pack-bundle/command-pack-bundle.v1.json"
+_BUNDLE_KEYS = frozenset({"schema", "path", "sha256", "length", "source_sha", "engine"})
 
 
 class NativeRuntimeStageError(ValueError):
@@ -102,7 +105,7 @@ def _decode_manifest(payload: bytes) -> dict[str, object]:
         or runtime_size <= 0
     ):
         raise NativeRuntimeStageError("native runtime manifest failed identity checks")
-    return {
+    manifest: dict[str, object] = {
         "schema": schema,
         "protocol_version": protocol_version,
         "package_version": package_version.strip(),
@@ -113,6 +116,28 @@ def _decode_manifest(payload: bytes) -> dict[str, object]:
         "runtime_sha256": runtime_sha256,
         "runtime_size": runtime_size,
     }
+    # Native requires the runtime and source compiler manifests to carry the
+    # same command pack bundle binding. Dropping it here left the installed
+    # catalog unloadable and Extensions unavailable (#5419).
+    if "command_pack_bundle" in decoded:
+        manifest["command_pack_bundle"] = _bundle_binding(decoded["command_pack_bundle"], source_sha=source_sha)
+    return manifest
+
+
+def _bundle_binding(value: object, *, source_sha: object) -> dict[str, object]:
+    if (
+        not isinstance(value, dict)
+        or set(value) != _BUNDLE_KEYS
+        or value["schema"] != _BUNDLE_SCHEMA
+        or value["path"] != _BUNDLE_PATH
+        or not _is_lower_hex(value["sha256"], _SHA64)
+        or type(value["length"]) is not int
+        or value["length"] <= 0
+        or value["source_sha"] != source_sha
+        or not _is_lower_hex(value["engine"], _SHA64)
+    ):
+        raise NativeRuntimeStageError("native runtime command pack bundle binding failed identity checks")
+    return dict(value)
 
 
 def _runtime_member_name(names: set[str]) -> str:

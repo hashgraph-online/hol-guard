@@ -7,34 +7,29 @@ read user configuration or credentials, install hooks, or change policy.
 
 from __future__ import annotations
 
-import contextlib
 import copy
 import hashlib
 import os
 import platform
 import re
-import secrets
 import shutil
 import stat
-import tempfile
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast
 
-from .evaluation_contracts import (
-    EvaluationContractError,
-    EvaluationProfile,
-    validate_evaluation_profile,
-)
+from . import evaluation_cleanup as _cleanup
+from .evaluation_contracts import EvaluationContractError, EvaluationProfile, validate_evaluation_profile
 from .evaluation_host_probe import check_host_version
+from .evaluation_scope import _safe_temp_parent
 
 EvaluationSetupStatus = Literal["passed", "blocked_environment", "not_run"]
 EvaluationPhase = Literal["preflight", "setup"]
+EvaluationExecutionMode = Literal["installed", "synthetic_adapter"]
 EVALUATION_SETUP_SCHEMA_VERSION = "guard.evaluation-setup.v1"
 
-_OWNED_ROOT_PREFIX = "hol-guard-eval-"
-_MARKER_NAME = ".hol-guard-evaluation-owned"
+_DESCRIPTOR_CLEANUP_UNAVAILABLE_REASON = "descriptor_cleanup_unavailable"
 
 
 def _check(
@@ -93,6 +88,8 @@ class EvaluationSetup:
     report: EvaluationPreflightReport
     root_path: Path | None = None
     marker_token: str | None = None
+    root_identity: tuple[int, int] | None = None
+    workspace_identity: tuple[int, int] | None = None
 
     @property
     def guard_home(self) -> Path | None:
@@ -117,7 +114,11 @@ class EvaluationSetup:
 
         if self.root_path is None or self.marker_token is None:
             return False
-        return _remove_owned_root(self.root_path, self.marker_token)
+        return _cleanup.remove_owned_root(
+            self.root_path,
+            self.marker_token,
+            expected_root_identity=self.root_identity,
+        )
 
 
 def _profile_payload(profile: object) -> dict[str, object]:
@@ -197,38 +198,6 @@ def _observed_privilege() -> str:
     return "unknown"
 
 
-def _safe_temp_parent(path: Path) -> bool:
-    """Require a private owned directory below the process temporary root."""
-
-    try:
-        if "\x00" in str(path) or path.is_symlink() or not path.is_dir():
-            return False
-        candidate = os.path.realpath(os.fspath(path))
-    except (OSError, RuntimeError):
-        return False
-
-    if os.name == "nt":
-        if candidate.startswith("\\\\"):
-            return False
-        temp_root = os.path.normcase(os.path.normpath(os.path.realpath(tempfile.gettempdir())))
-        candidate_normalized = os.path.normcase(os.path.normpath(candidate))
-        try:
-            return (
-                candidate_normalized != temp_root and os.path.commonpath((candidate_normalized, temp_root)) == temp_root
-            )
-        except ValueError:
-            return False
-
-    root = os.path.realpath(tempfile.gettempdir())
-    try:
-        if os.path.commonpath((candidate, root)) != root or candidate == root:
-            return False
-        details = path.stat()
-        return details.st_uid == os.getuid() and stat.S_IMODE(details.st_mode) & 0o077 == 0
-    except (OSError, ValueError):
-        return False
-
-
 def _resolve_host_executable(value: str) -> Path | None:
     if not value or value != value.strip() or "\x00" in value:
         return None
@@ -300,6 +269,7 @@ def preflight_evaluation(
     host_executable: str | Path | None = None,
     artifact_paths: Mapping[str, str | Path] | None = None,
     allow_host_execution: bool = False,
+    execution_mode: EvaluationExecutionMode = "installed",
 ) -> EvaluationPreflightReport:
     """Validate a profile and its declared local prerequisites.
 
@@ -309,6 +279,15 @@ def preflight_evaluation(
     inside an isolated evaluation VM; the redirected environment is not a
     filesystem or network sandbox.
     """
+
+    if execution_mode not in ("installed", "synthetic_adapter"):
+        return _report(
+            "not_run",
+            "preflight",
+            _profile_id(profile),
+            [_check("execution_mode", "not_run", reason="execution_mode_invalid")],
+            reason="execution_mode_invalid",
+        )
 
     profile_id = _profile_id(profile)
     try:
@@ -391,63 +370,46 @@ def preflight_evaluation(
         )
     )
 
-    declared_executable = host_executable
-    if declared_executable is None:
-        declared_executable = cast(str | None, host.get("executable"))
-    if declared_executable is None or not str(declared_executable):
-        checks.append(_check("host_executable", "not_run", reason="host_executable_not_declared"))
-        return _report("not_run", "preflight", profile_id, checks, reason="host_executable_not_declared")
-    executable = _resolve_host_executable(os.fspath(declared_executable))
-    if executable is None:
-        checks.append(_check("host_executable", "blocked_environment", reason="host_executable_missing"))
-        return _report("blocked_environment", "preflight", profile_id, checks, reason="host_executable_missing")
-    checks.append(_check("host_executable", "passed"))
+    if execution_mode == "synthetic_adapter":
+        checks.append(_check("host_executable", "not_run", reason="synthetic_adapter_mode"))
+        checks.append(_check("host_version", "not_run", reason="synthetic_adapter_mode"))
+    else:
+        declared_executable = host_executable
+        if declared_executable is None:
+            declared_executable = cast(str | None, host.get("executable"))
+        if declared_executable is None or not str(declared_executable):
+            checks.append(_check("host_executable", "not_run", reason="host_executable_not_declared"))
+            return _report("not_run", "preflight", profile_id, checks, reason="host_executable_not_declared")
+        executable = _resolve_host_executable(os.fspath(declared_executable))
+        if executable is None:
+            checks.append(_check("host_executable", "blocked_environment", reason="host_executable_missing"))
+            return _report("blocked_environment", "preflight", profile_id, checks, reason="host_executable_missing")
+        checks.append(_check("host_executable", "passed"))
+        if not allow_host_execution:
+            checks.append(_check("host_version", "not_run", reason="isolated_host_execution_not_enabled"))
+            return _report("not_run", "preflight", profile_id, checks, reason="isolated_host_execution_not_enabled")
 
-    if not allow_host_execution:
-        checks.append(_check("host_version", "not_run", reason="isolated_host_execution_not_enabled"))
-        return _report("not_run", "preflight", profile_id, checks, reason="isolated_host_execution_not_enabled")
+        version = str(host["version"])
+        limits = cast(Mapping[str, object], payload["resourceLimits"])
+        version_ok, version_reason = check_host_version(
+            executable,
+            version,
+            timeout_seconds=float(cast(int, limits["maxDurationSeconds"])),
+            output_limit_bytes=cast(int, limits["maxOutputBytes"]),
+        )
+        if not version_ok:
+            checks.append(_check("host_version", "blocked_environment", reason=version_reason))
+            return _report("blocked_environment", "preflight", profile_id, checks, reason=version_reason)
+        checks.append(_check("host_version", "passed"))
 
-    version = str(host["version"])
-    limits = cast(Mapping[str, object], payload["resourceLimits"])
-    version_ok, version_reason = check_host_version(
-        executable,
-        version,
-        timeout_seconds=float(cast(int, limits["maxDurationSeconds"])),
-        output_limit_bytes=cast(int, limits["maxOutputBytes"]),
-    )
-    if not version_ok:
-        checks.append(_check("host_version", "blocked_environment", reason=version_reason))
-        return _report("blocked_environment", "preflight", profile_id, checks, reason=version_reason)
-    checks.append(_check("host_version", "passed"))
-
-    artifact_results, artifact_status, artifact_reason = _artifact_checks(payload, artifact_paths)
-    checks.extend(artifact_results)
-    if artifact_status != "passed":
-        return _report(artifact_status, "preflight", profile_id, checks, reason=artifact_reason)
+    if execution_mode == "synthetic_adapter":
+        checks.append(_check("artifacts", "not_run", reason="synthetic_adapter_mode"))
+    else:
+        artifact_results, artifact_status, artifact_reason = _artifact_checks(payload, artifact_paths)
+        checks.extend(artifact_results)
+        if artifact_status != "passed":
+            return _report(artifact_status, "preflight", profile_id, checks, reason=artifact_reason)
     return _report("passed", "preflight", profile_id, checks)
-
-
-def _remove_owned_root(root_path: Path, marker_token: str) -> bool:
-    try:
-        if root_path.name.startswith(_OWNED_ROOT_PREFIX) is False:
-            raise EvaluationContractError("evaluation setup path has an invalid ownership name")
-        if not _safe_temp_parent(root_path.parent):
-            raise EvaluationContractError("evaluation setup path is outside a temporary root")
-        if root_path.is_symlink():
-            raise EvaluationContractError("evaluation setup path must not be a symlink")
-        if not root_path.exists():
-            return False
-        marker = root_path / _MARKER_NAME
-        if not marker.is_file() or marker.is_symlink():
-            raise EvaluationContractError("evaluation setup ownership marker is missing")
-        if marker.read_text(encoding="utf-8") != marker_token:
-            raise EvaluationContractError("evaluation setup ownership marker does not match")
-        if hasattr(os, "getuid") and root_path.stat().st_uid != os.getuid():
-            raise EvaluationContractError("evaluation setup is owned by another user")
-        shutil.rmtree(root_path)
-        return True
-    except (OSError, UnicodeError) as exc:
-        raise EvaluationContractError("unable to clean up evaluation setup") from exc
 
 
 def setup_evaluation(
@@ -457,77 +419,20 @@ def setup_evaluation(
     artifact_paths: Mapping[str, str | Path] | None = None,
     parent_dir: str | Path | None = None,
     allow_host_execution: bool = False,
+    execution_mode: EvaluationExecutionMode = "installed",
 ) -> EvaluationSetup:
     """Preflight and allocate a fresh private temporary evaluation setup."""
 
-    preflight = preflight_evaluation(
+    from .evaluation_setup import setup_evaluation as allocate_setup
+
+    return allocate_setup(
         profile,
         host_executable=host_executable,
         artifact_paths=artifact_paths,
+        parent_dir=parent_dir,
         allow_host_execution=allow_host_execution,
+        execution_mode=execution_mode,
     )
-    if preflight.status != "passed":
-        return EvaluationSetup(report=replace(preflight, phase="setup"))
-
-    try:
-        payload = _profile_payload(profile)
-        target_scope = cast(Mapping[str, object], payload["targetScope"])
-        declared_root = Path(cast(str, target_scope["rootPath"]))
-    except EvaluationContractError:
-        return EvaluationSetup(report=replace(preflight, phase="setup", status="not_run", reason="invalid_profile"))
-    try:
-        base = Path(parent_dir) if parent_dir is not None else declared_root
-        parent_matches = base.resolve() == declared_root.resolve()
-    except (OSError, RuntimeError, ValueError, TypeError):
-        parent_matches = False
-        base = declared_root
-    if not parent_matches or not _safe_temp_parent(base):
-        report = replace(
-            preflight,
-            phase="setup",
-            status="blocked_environment",
-            reason="setup_parent_outside_profile_scope",
-            checks=(
-                *preflight.checks,
-                _check("setup_parent", "blocked_environment", reason="setup_parent_outside_profile_scope"),
-            ),
-        )
-        return EvaluationSetup(report=report)
-
-    root_path: Path | None = None
-    marker_token = secrets.token_hex(16)
-    try:
-        root_path = Path(tempfile.mkdtemp(prefix=_OWNED_ROOT_PREFIX, dir=base))
-        _ = root_path.chmod(0o700)
-        marker = root_path / _MARKER_NAME
-        _ = marker.write_text(marker_token, encoding="utf-8")
-        _ = marker.chmod(0o600)
-        guard_home = root_path / "guard-home"
-        workspace = root_path / "workspace"
-        guard_home.mkdir(mode=0o700)
-        workspace.mkdir(mode=0o700)
-        report = replace(
-            preflight,
-            phase="setup",
-            guard_home=str(guard_home),
-            workspace=str(workspace),
-            owned_root=str(root_path),
-            checks=(*preflight.checks, _check("setup", "passed")),
-        )
-        return EvaluationSetup(report=report, root_path=root_path, marker_token=marker_token)
-    except (OSError, RuntimeError) as exc:
-        if root_path is not None and root_path.exists():
-            with contextlib.suppress(EvaluationContractError):
-                _ = _remove_owned_root(root_path, marker_token)
-        report = replace(
-            preflight,
-            phase="setup",
-            status="blocked_environment",
-            reason="setup_unavailable",
-            checks=(*preflight.checks, _check("setup", "blocked_environment", reason="setup_unavailable")),
-        )
-        del exc
-        return EvaluationSetup(report=report)
 
 
 def cleanup_interrupted_evaluation_setup(
@@ -555,11 +460,26 @@ def cleanup_interrupted_evaluation_setup(
     candidate_parent = os.path.normcase(os.path.realpath(candidate.parent))
     if candidate_parent != declared_path:
         raise EvaluationContractError("evaluation recovery path is outside the profile target scope")
-    return _remove_owned_root(candidate, marker_token)
+    if candidate.is_symlink():
+        raise EvaluationContractError("evaluation setup path must not be a symlink")
+    try:
+        candidate_details = candidate.stat(follow_symlinks=False)
+    except FileNotFoundError:
+        return False
+    except OSError as exc:
+        raise EvaluationContractError("unable to inspect evaluation setup path") from exc
+    if not stat.S_ISDIR(candidate_details.st_mode):
+        raise EvaluationContractError("evaluation setup path is not a directory")
+    return _cleanup.remove_owned_root(
+        candidate,
+        marker_token,
+        expected_root_identity=(candidate_details.st_dev, candidate_details.st_ino),
+    )
 
 
 __all__ = [
     "EVALUATION_SETUP_SCHEMA_VERSION",
+    "EvaluationExecutionMode",
     "EvaluationPreflightReport",
     "EvaluationSetup",
     "cleanup_interrupted_evaluation_setup",

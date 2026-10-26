@@ -4,21 +4,36 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.gemini import GeminiHarnessAdapter
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
+from codex_plugin_scanner.guard.runtime import wrapper_run as wrapper_run
+from codex_plugin_scanner.guard.runtime import wrapper_run_finish
 from codex_plugin_scanner.guard.store import GuardStore
+
+pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
 
 
 def test_fresh_approval_survives_unchanged_incomplete_skill_redetection(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
+    from codex_plugin_scanner.guard.native_policy_snapshot_publisher import (
+        provision_native_verifier_key_for_store,
+    )
+
     home_dir = tmp_path / "home"
+    store = GuardStore(home_dir)
+    store.ensure_policy_integrity_ready_for_write(
+        harness="gemini",
+        now="2026-07-19T00:00:00Z",
+    )
+    provision_native_verifier_key_for_store(store)
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True)
     skill_dir = home_dir / ".gemini" / "skills" / "review"
@@ -49,20 +64,24 @@ def test_fresh_approval_survives_unchanged_incomplete_skill_redetection(
         return evaluation
 
     launch_calls: list[object] = []
-    monkeypatch.setattr(guard_runner_module, "detect_harness", detect)
+    native_subprocess_run = subprocess.run
+    monkeypatch.setattr(wrapper_run, "detect_harness", detect)
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
-        "run",
-        lambda *args, **kwargs: (
-            launch_calls.append((args, kwargs))
-            or subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+        wrapper_run_finish,
+        "subprocess",
+        SimpleNamespace(
+            run=lambda *args, **kwargs: (
+                launch_calls.append((args, kwargs))
+                or subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+            )
         ),
     )
+    assert subprocess.run is native_subprocess_run
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "gemini",
         context,
-        GuardStore(home_dir),
+        store,
         GuardConfig(guard_home=home_dir, workspace=workspace_dir),
         dry_run=False,
         passthrough_args=[],

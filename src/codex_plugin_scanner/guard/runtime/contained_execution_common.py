@@ -2,12 +2,66 @@
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import json
 import os
+import stat
 from pathlib import Path
 
+from ..file_identity import content_stat_identity
+
 _ALLOWED_ENVIRONMENT_KEYS = ("LANG", "LC_ALL", "LC_CTYPE", "NO_COLOR", "TERM")
+_MAX_EXECUTABLE_BYTES = 256 * 1024 * 1024
+
+
+def file_sha256(path: str) -> str:
+    """Hash one non-symlinked regular file without following a replacement link."""
+
+    no_follow: int = getattr(os, "O_NOFOLLOW", 0)
+    leaf_metadata = None
+    if not no_follow:
+        leaf_metadata = os.lstat(path)
+        if stat.S_ISLNK(leaf_metadata.st_mode):
+            raise ValueError("executable must not be a symlink")
+        if not stat.S_ISREG(leaf_metadata.st_mode) or leaf_metadata.st_size > _MAX_EXECUTABLE_BYTES:
+            raise ValueError("executable must be a bounded regular file")
+
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NONBLOCK", 0) | no_follow
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as exc:
+        if no_follow and exc.errno == errno.ELOOP:
+            raise ValueError("executable must not be a symlink") from exc
+        raise
+    try:
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode) or before.st_size > _MAX_EXECUTABLE_BYTES:
+            raise ValueError("executable must be a bounded regular file")
+        before_identity = content_stat_identity(before)
+        if leaf_metadata is not None and content_stat_identity(leaf_metadata) != before_identity:
+            raise ValueError("executable identity changed before hashing")
+
+        digest = hashlib.sha256()
+        read_bytes = 0
+        while chunk := os.read(descriptor, 1024 * 1024):
+            read_bytes += len(chunk)
+            if read_bytes > _MAX_EXECUTABLE_BYTES:
+                raise ValueError("executable must be a bounded regular file")
+            digest.update(chunk)
+
+        if read_bytes != before.st_size:
+            raise ValueError("executable identity changed while hashing")
+        after = os.fstat(descriptor)
+        after_identity = content_stat_identity(after)
+        if after_identity != before_identity:
+            raise ValueError("executable identity changed while hashing")
+        final_path = os.lstat(path)
+        if not stat.S_ISREG(final_path.st_mode) or content_stat_identity(final_path) != after_identity:
+            raise ValueError("executable identity changed while hashing")
+        return digest.hexdigest()
+    finally:
+        os.close(descriptor)
 
 
 def canonical_existing_directory(path: Path) -> Path:
@@ -38,4 +92,5 @@ __all__ = [
     "canonical_existing_directory",
     "clean_containment_environment",
     "containment_binding_digest",
+    "file_sha256",
 ]

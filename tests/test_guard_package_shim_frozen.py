@@ -14,28 +14,13 @@ from codex_plugin_scanner.guard import shims as guard_shims_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 
 
-def test_frozen_package_shim_uses_direct_protect_command(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(guard_shims_module.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(
-        guard_shims_module.sys,
-        "executable",
-        "/Applications/HOL Guard.app/Contents/MacOS/hol-guard",
-    )
-    context = HarnessContext(
-        home_dir=tmp_path / "home",
-        workspace_dir=tmp_path / "workspace",
-        guard_home=tmp_path / "guard-home",
-    )
-
-    source = guard_shims_module._build_package_manager_python_shim(context, "npm")
-    command_line = next(line for line in source.splitlines() if line.startswith("base_command = "))
-    command = ast.literal_eval(command_line.split("=", 1)[1].strip())
-
-    assert f"{guard_shims_module.FROZEN_PACKAGE_SHIM_SENTINEL} = True" in source
-    assert command[0] == "/Applications/HOL Guard.app/Contents/MacOS/hol-guard"
-    assert command[1:4] == ["protect", "--package-shim-ui", "--guard-home"]
-    assert "-c" not in command
-    assert "codex_plugin_scanner.cli" not in command
+def _expose_real_npm(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    real_bin = tmp_path / "real-bin"
+    real_bin.mkdir(exist_ok=True)
+    npm = real_bin / "npm"
+    npm.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    npm.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{real_bin}{os.pathsep}{os.environ.get('PATH', '')}")
 
 
 def test_frozen_package_shim_install_uses_quoted_shell_wrapper(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -49,11 +34,7 @@ def test_frozen_package_shim_install_uses_quoted_shell_wrapper(tmp_path: Path, m
         workspace_dir=tmp_path / "workspace",
         guard_home=tmp_path / "guard-home",
     )
-    monkeypatch.setattr(
-        guard_shims_module,
-        "_detect_system_package_managers",
-        lambda _context, path_env=None: (["npm"], []),
-    )
+    _expose_real_npm(tmp_path, monkeypatch)
 
     guard_shims_module.install_package_shims(context, managers=("npm",))
 
@@ -82,11 +63,7 @@ def test_frozen_package_shim_status_fails_when_sidecar_is_tampered(
         workspace_dir=tmp_path / "workspace",
         guard_home=tmp_path / "guard-home",
     )
-    monkeypatch.setattr(
-        guard_shims_module,
-        "_detect_system_package_managers",
-        lambda _context, path_env=None: (["npm"], []),
-    )
+    _expose_real_npm(tmp_path, monkeypatch)
 
     guard_shims_module.install_package_shims(context, managers=("npm",))
     sidecar = context.guard_home / "package-shims" / "bin" / ".npm.py"
@@ -119,11 +96,7 @@ def test_frozen_package_shim_wrapper_uses_current_hol_guard_shim(
         workspace_dir=tmp_path / "workspace",
         guard_home=tmp_path / "guard-home",
     )
-    monkeypatch.setattr(
-        guard_shims_module,
-        "_detect_system_package_managers",
-        lambda _context, path_env=None: (["npm"], []),
-    )
+    _expose_real_npm(tmp_path, monkeypatch)
 
     guard_shims_module.install_package_shims(context, managers=("npm",))
 
@@ -145,8 +118,6 @@ def test_package_shim_status_repairs_trusted_old_runtime_binding(
     monkeypatch: pytest.MonkeyPatch,
     stale_binding: str,
 ) -> None:
-    from codex_plugin_scanner.guard import package_shim_frozen
-
     core_dir = tmp_path / "core"
     versioned = core_dir / "versions" / "3.0.151" / "hol-guard"
     versioned.parent.mkdir(parents=True)
@@ -170,19 +141,19 @@ def test_package_shim_status_repairs_trusted_old_runtime_binding(
         workspace_dir=tmp_path / "workspace",
         guard_home=tmp_path / "guard-home",
     )
-    monkeypatch.setattr(
-        guard_shims_module,
-        "_detect_system_package_managers",
-        lambda _context, path_env=None: (["npm"], []),
-    )
+    _expose_real_npm(tmp_path, monkeypatch)
 
-    with monkeypatch.context() as old_runtime:
-        old_runtime.setattr(guard_shims_module, "package_shim_interpreter", lambda: str(old_bundle))
-        old_runtime.setattr(package_shim_frozen, "package_shim_interpreter", lambda: str(old_bundle))
-        guard_shims_module.install_package_shims(context, managers=("npm",))
+    guard_shims_module.install_package_shims(context, managers=("npm",))
     shim_dir = context.guard_home / "package-shims" / "bin"
     wrapper_path = shim_dir / "npm"
     sidecar_path = shim_dir / ".npm.py"
+    # Resident generation uses the resolved frozen CLI. Plant the trusted
+    # predecessor so status sees an old binding instead of the fresh one.
+    for installed_path in (wrapper_path, sidecar_path):
+        installed_path.write_text(
+            installed_path.read_text(encoding="utf-8").replace(str(current), str(old_bundle)),
+            encoding="utf-8",
+        )
     if stale_binding == "wrapper":
         wrapper_path.write_text(
             "\n".join(
@@ -259,11 +230,7 @@ def test_package_shim_status_does_not_classify_trusted_runtime_tampering_as_stal
         workspace_dir=tmp_path / "workspace",
         guard_home=tmp_path / "guard-home",
     )
-    monkeypatch.setattr(
-        guard_shims_module,
-        "_detect_system_package_managers",
-        lambda _context, path_env=None: (["npm"], []),
-    )
+    _expose_real_npm(tmp_path, monkeypatch)
 
     with monkeypatch.context() as old_runtime:
         old_runtime.setattr(guard_shims_module, "package_shim_interpreter", lambda: str(old_bundle))
@@ -327,11 +294,7 @@ def test_package_shim_status_does_not_trust_untrusted_sidecar_base_command(
         workspace_dir=tmp_path / "workspace",
         guard_home=tmp_path / "guard-home",
     )
-    monkeypatch.setattr(
-        guard_shims_module,
-        "_detect_system_package_managers",
-        lambda _context, path_env=None: (["npm"], []),
-    )
+    _expose_real_npm(tmp_path, monkeypatch)
 
     guard_shims_module.install_package_shims(context, managers=("npm",))
     sidecar_path = context.guard_home / "package-shims" / "bin" / ".npm.py"
@@ -377,11 +340,7 @@ def test_package_shim_status_keeps_trusted_runtime_code_drift_tampered(
         workspace_dir=tmp_path / "workspace",
         guard_home=tmp_path / "guard-home",
     )
-    monkeypatch.setattr(
-        guard_shims_module,
-        "_detect_system_package_managers",
-        lambda _context, path_env=None: (["npm"], []),
-    )
+    _expose_real_npm(tmp_path, monkeypatch)
 
     from codex_plugin_scanner.guard import package_shim_frozen
 
@@ -411,11 +370,7 @@ def test_package_shim_status_stale_when_wrapper_interpreter_is_missing(
         workspace_dir=tmp_path / "workspace",
         guard_home=tmp_path / "guard-home",
     )
-    monkeypatch.setattr(
-        guard_shims_module,
-        "_detect_system_package_managers",
-        lambda _context, path_env=None: (["npm"], []),
-    )
+    _expose_real_npm(tmp_path, monkeypatch)
     guard_shims_module.install_package_shims(context, managers=("npm",))
     wrapper_path = context.guard_home / "package-shims" / "bin" / "npm"
     python_path = context.guard_home / "package-shims" / "bin" / ".npm.py"
@@ -453,11 +408,7 @@ def test_package_shim_status_stale_when_wrapper_interpreter_is_untrusted(
         workspace_dir=tmp_path / "workspace",
         guard_home=tmp_path / "guard-home",
     )
-    monkeypatch.setattr(
-        guard_shims_module,
-        "_detect_system_package_managers",
-        lambda _context, path_env=None: (["npm"], []),
-    )
+    _expose_real_npm(tmp_path, monkeypatch)
     guard_shims_module.install_package_shims(context, managers=("npm",))
     wrapper_path = context.guard_home / "package-shims" / "bin" / "npm"
     python_path = context.guard_home / "package-shims" / "bin" / ".npm.py"
@@ -534,48 +485,3 @@ def test_resolve_frozen_package_shim_path_rejects_untrusted_files(
     )
 
     assert guard_shims_module.resolve_frozen_package_shim_path([str(outsider)]) is None
-
-
-@pytest.mark.skipif(os.name == "nt", reason="POSIX execute bits are not enforced on Windows")
-def test_package_shim_interpreter_runnable_rejects_non_executable_launcher(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.package_shim_frozen import package_shim_interpreter_runnable
-
-    interpreter = tmp_path / "hol-guard"
-    interpreter.write_text("", encoding="utf-8")
-    interpreter.chmod(0o600)
-    sidecar = tmp_path / ".npm.py"
-    wrapper = f'#!/bin/sh\nexec {shlex.quote(str(interpreter))} {shlex.quote(str(sidecar))} "$@"\n'.encode()
-
-    assert package_shim_interpreter_runnable(wrapper) is False
-
-
-def test_package_shim_interpreter_runnable_accepts_executable_launcher(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from codex_plugin_scanner.guard import package_shim_frozen
-    from codex_plugin_scanner.guard.package_shim_frozen import package_shim_interpreter_runnable
-
-    interpreter = tmp_path / "hol-guard"
-    interpreter.write_text("", encoding="utf-8")
-    interpreter.chmod(0o755)
-    monkeypatch.setattr(
-        package_shim_frozen,
-        "trusted_frozen_guard_cli_paths",
-        lambda: frozenset({str(interpreter.resolve())}),
-    )
-    sidecar = tmp_path / ".npm.py"
-    wrapper = f'#!/bin/sh\nexec {shlex.quote(str(interpreter))} {shlex.quote(str(sidecar))} "$@"\n'.encode()
-
-    assert package_shim_interpreter_runnable(wrapper) is True
-
-
-def test_package_shim_interpreter_runnable_rejects_untrusted_executable_launcher(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.package_shim_frozen import package_shim_interpreter_runnable
-
-    interpreter = tmp_path / "untrusted-python"
-    interpreter.write_text("", encoding="utf-8")
-    interpreter.chmod(0o755)
-    sidecar = tmp_path / ".npm.py"
-    wrapper = f'#!/bin/sh\nexec {shlex.quote(str(interpreter))} {shlex.quote(str(sidecar))} "$@"\n'.encode()
-
-    assert package_shim_interpreter_runnable(wrapper) is False

@@ -12,8 +12,9 @@ fn model(command: &str) -> CanonicalCommandV1 {
 }
 
 fn binding(controls: &[(&str, &str, &str)], managed: bool) -> NativeCommandControlBindingV1 {
-    let program = packaged_command_program().unwrap();
+    let program = crate::native_command_program::authored_test_support::full_program();
     let mut binding = NativeCommandControlBindingV1 {
+        active_security_digest: None,
         schema: NATIVE_COMMAND_CONTROL_BINDING_SCHEMA.into(),
         authority: None,
         program_digest: program.program_digest.clone(),
@@ -51,7 +52,7 @@ fn decision(
     command: &str,
     binding: &NativeCommandControlBindingV1,
 ) -> guard_contracts::PreToolResultV1 {
-    let controls = CompiledNativeCommandControls::new(binding).unwrap();
+    let controls = authored_controls(binding).unwrap();
     evaluate_pre_tool_envelope_with_extensions(
         "claude-code",
         "PreToolUse",
@@ -63,29 +64,77 @@ fn decision(
     )
 }
 
+fn authored_controls(
+    binding: &NativeCommandControlBindingV1,
+) -> Result<CompiledNativeCommandControls, &'static str> {
+    CompiledNativeCommandControls::for_program(
+        binding,
+        crate::native_command_program::authored_test_support::full_program(),
+    )
+}
+
+#[test]
+fn the_embedded_artifact_compiles_to_the_fully_admitted_program() {
+    let bytes = packaged_command_program_bytes();
+    let embedded = NativeCommandProgram::from_embedded_artifact(bytes).unwrap();
+    let admitted = NativeCommandProgram::from_packaged_bytes(bytes).unwrap();
+    assert_eq!(format!("{embedded:?}"), format!("{admitted:?}"));
+    // A blob that fails its build-time hash decodes to no bytes and stays closed.
+    assert_eq!(
+        NativeCommandProgram::from_embedded_artifact(&[]).unwrap_err(),
+        "native_command_program_json_invalid"
+    );
+}
+
 #[test]
 fn packaged_program_is_admitted_once_and_exposes_explicit_coverage() {
     let first = packaged_command_program().unwrap();
     assert!(Arc::ptr_eq(&first, &packaged_command_program().unwrap()));
-    assert_eq!(first.extensions.len(), 73);
-    assert_eq!(first.rules.len(), 245);
+    let catalog: serde_json::Value =
+        serde_json::from_slice(guard_command_catalog_data::CATALOG_JSON).unwrap();
+    let entries = catalog["catalog"].as_array().unwrap();
+    let mut catalog_ids: Vec<&str> = entries
+        .iter()
+        .map(|entry| entry["extension_id"].as_str().unwrap())
+        .collect();
+    catalog_ids.sort_unstable();
+    let mut program_ids: Vec<String> = first
+        .extensions
+        .iter()
+        .map(|extension| extension.extension_id.clone())
+        .collect();
+    program_ids.sort();
+    assert_eq!(program_ids, catalog_ids);
+    let expected_rules: usize = entries
+        .iter()
+        .map(|entry| entry["rule_count"].as_u64().unwrap() as usize)
+        .sum();
+    assert_eq!(first.rules.len(), expected_rules);
+    let expected_capability_rules: usize = entries
+        .iter()
+        .flat_map(|entry| entry["rules"].as_array().unwrap().iter())
+        .filter(|rule| rule["matcher_kind"].as_str() == Some("native-capability.v1"))
+        .count();
     assert_eq!(
         first
             .rules
             .iter()
             .filter(|rule| rule.matcher.is_none())
             .count(),
-        42
+        expected_capability_rules
     );
-    assert!(first
-        .runtime_coverage()
-        .iter()
-        .any(|(id, supported)| *id == "command.ollama.push" && *supported));
+    // Optional coverage belongs to the full-library fixture, not core packaging.
+    assert!(
+        crate::native_command_program::authored_test_support::full_program()
+            .runtime_coverage()
+            .iter()
+            .any(|(id, supported)| *id == "command.ollama.push" && *supported)
+    );
 }
 
 #[test]
 fn complete_observations_match_independent_python_reference_models() {
-    let program = packaged_command_program().unwrap();
+    let program = crate::native_command_program::authored_test_support::full_program();
     let active = program
         .extensions
         .iter()
@@ -114,11 +163,24 @@ fn complete_observations_match_independent_python_reference_models() {
                     .any(|rule| rule.rule_id == observation.rule_id && rule.matcher.is_some())
             })
             .collect();
+        let expected = serde_json::to_value(
+            case["observations"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|observation| {
+                    program.rules.iter().any(|rule| {
+                        rule.rule_id == observation["rule_id"] && rule.matcher.is_some()
+                    })
+                })
+                .collect::<Vec<_>>(),
+        )
+        .unwrap();
         let value = serde_json::to_value(declarative).unwrap();
-        if value != case["observations"] {
+        if value != expected {
             mismatches.push(format!(
                 "{}\nexpected={}\nactual={}",
-                case["command"], case["observations"], value
+                case["command"], expected, value
             ));
         }
     }
@@ -207,7 +269,7 @@ fn disabled_permission_and_failed_authority_cannot_become_allow() {
         false,
     );
     // Unknown targets are rejected during admission, never silently ignored.
-    assert!(CompiledNativeCommandControls::new(&enabled).is_err());
+    assert!(authored_controls(&enabled).is_err());
 }
 
 #[test]
@@ -264,8 +326,8 @@ fn controls_are_bound_to_program_and_both_independent_revisions() {
         second.binding.observations_digest
     );
     changed.program_digest = "f".repeat(64);
-    assert!(CompiledNativeCommandControls::new(&changed).is_err());
-    let controls = CompiledNativeCommandControls::new(&original).unwrap();
+    assert!(authored_controls(&changed).is_err());
+    let controls = authored_controls(&original).unwrap();
     let result = controls.apply(
         &model("ollama push model"),
         decision("gh api graphql -f query='{ viewer { login } }'", &original),
@@ -282,7 +344,7 @@ fn controls_are_bound_to_program_and_both_independent_revisions() {
 
 #[test]
 fn admission_rejects_tampered_unknown_and_invalid_nodes() {
-    let mut value: Value = serde_json::from_slice(EMBEDDED_PROGRAM).unwrap();
+    let mut value: Value = serde_json::from_slice(packaged_command_program_bytes()).unwrap();
     value["semantic_profile"] = "unqualified-unicode".into();
     let bytes = serde_json::to_vec(&value).unwrap();
     assert_eq!(
@@ -336,9 +398,11 @@ fn graph_depth_proof_cannot_be_bypassed_by_memoized_shared_children() {
 #[test]
 fn compatibility_safe_commands_and_ruleless_permissions_obey_controls() {
     let unrestricted = binding(&[], false);
+    // This wrapper has no verified repository context; extension consent
+    // cannot prove that Git's effective configuration is execution-free.
     assert_eq!(
         decision("git status", &unrestricted).minimum_action,
-        "allow"
+        "require-reapproval"
     );
     for (kind, target, command) in [
         ("extension", "command.git", "git status"),
@@ -352,13 +416,18 @@ fn compatibility_safe_commands_and_ruleless_permissions_obey_controls() {
         ),
         (
             "permission",
-            "command.github.permission.read-local",
+            "command.github.permission.read-remote",
             "gh auth status",
         ),
         (
             "permission",
             "command.github.permission.propose-remote",
             "gh pr create --title title --body body",
+        ),
+        (
+            "permission",
+            "command.github.permission.create-private-remote",
+            "gh repo create todo-app --private --source=.",
         ),
     ] {
         let controlled = binding(&[(kind, target, "disabled")], false);
@@ -375,192 +444,35 @@ fn compatibility_safe_commands_and_ruleless_permissions_obey_controls() {
         .permission_observations
         .iter()
         .any(|item| item.permission_id == "command.github.permission.read-remote"));
-    for command in [
-        "gh api graphql -f query='{ viewer { login } }'",
-        "git rev-parse --git-dir",
-        "docker compose ps",
-    ] {
+    for command in ["git cat-file --batch-check", "docker compose ps"] {
         let result = decision(command, &unrestricted);
-        assert_eq!(result.minimum_action, "block", "{command}");
+        assert_eq!(result.minimum_action, "review", "{command}");
+        assert!(!result.explicitly_benign, "{command}");
         assert!(result.command_extensions.unwrap().binding.uncertainty_count > 0);
     }
 }
 
-#[test]
-fn never_enrolled_defaults_keep_first_party_protection_without_external_activation() {
-    let mut fresh = binding(&[], false);
-    fresh.health = "unenrolled".into();
-    fresh.revision = 0;
-    fresh.managed_revision = 0;
-    fresh.layers.clear();
-    fresh.authority = Some(guard_contracts::NativeCommandControlAuthorityV1 {
-        epoch: 1,
-        mutation_revision: 1,
-        authority_key_id: "0".repeat(64),
-        recovery: None,
-    });
-    fresh.effective_digest = fresh.compute_effective_digest().unwrap();
-    assert_eq!(decision("pwd", &fresh).minimum_action, "allow");
-    assert_eq!(decision("rm -rf /", &fresh).minimum_action, "block");
-    let external = decision("ollama rm model", &fresh);
-    assert_eq!(external.minimum_action, "review");
-    assert!(!external
-        .command_extensions
-        .unwrap()
-        .observations
-        .iter()
-        .any(|item| item.extension_id == "command.ollama"));
-    for fault in 0..4 {
-        let mut invalid = fresh.clone();
-        match fault {
-            0 => invalid.revision = 1,
-            1 => invalid.managed_revision = 1,
-            2 => invalid.authority.as_mut().unwrap().authority_key_id = "a".repeat(64),
-            _ => invalid.authority.as_mut().unwrap().epoch = 2,
-        }
-        invalid.effective_digest = invalid.compute_effective_digest().unwrap();
-        assert_eq!(decision("pwd", &invalid).minimum_action, "block");
-    }
-}
+#[path = "native_command_program_control_tests.rs"]
+mod controls;
 
 #[test]
-fn delegated_packages_have_owned_native_permission_controls() {
-    let program = packaged_command_program().unwrap();
-    let delegated: Vec<_> = program
-        .extensions
-        .iter()
-        .filter(|extension| extension.delegated_protection.as_deref() == Some("package-firewall"))
-        .collect();
-    assert_eq!(delegated.len(), 8);
-    for extension in delegated {
-        let permission = &extension.permissions[0].permission_id;
-        let controls = CompiledNativeCommandControls::new(&binding(
-            &[("permission", permission, "disabled")],
-            false,
-        ))
-        .unwrap();
-        let command = format!("{} install fixture-package", extension.executables[0]);
-        let result = evaluate_pre_tool_envelope_with_extensions(
-            "claude-code",
-            "PreToolUse",
-            &serde_json::json!({"tool_name":"Bash","tool_input":{"command":command}}),
-            Some(&controls),
-            None,
-        );
-        assert_eq!(result.minimum_action, "block", "{}", extension.extension_id);
-        let observations = result.command_extensions.unwrap();
-        assert!(observations
-            .permission_observations
-            .iter()
-            .any(|item| &item.permission_id == permission));
-        let help = format!("{} --help", extension.executables[0]);
-        let result = evaluate_pre_tool_envelope_with_extensions(
-            "claude-code",
-            "PreToolUse",
-            &serde_json::json!({"command":help}),
-            Some(&controls),
-            None,
-        );
-        assert!(!result
-            .command_extensions
-            .unwrap()
-            .permission_observations
-            .iter()
-            .any(|item| &item.permission_id == permission));
-    }
-}
-
-#[test]
-fn native_mcp_defaults_are_opt_in_tightening_only_and_redacted() {
-    let tool = serde_json::json!({"tool_name":"mcp__filesystem__write_file", "tool_input":{"path":"fixture.txt","content":"private-fixture-content"}});
-    let inactive = CompiledNativeCommandControls::new(&binding(&[], false)).unwrap();
-    let off = evaluate_pre_tool_envelope_with_extensions(
-        "claude-code",
-        "PreToolUse",
-        &tool,
-        Some(&inactive),
-        None,
-    );
-    assert_eq!(off.minimum_action, "review");
-    assert!(off
-        .command_extensions
-        .unwrap()
-        .permission_observations
-        .is_empty());
-    let enabled = CompiledNativeCommandControls::new(&binding(
-        &[("extension", "command.mcp-filesystem", "enabled")],
-        false,
+fn program_budget_matches_delivery_manifest() {
+    let manifest: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../../contracts/catalog-delivery/limits.json"
     ))
     .unwrap();
-    let on = evaluate_pre_tool_envelope_with_extensions(
-        "claude-code",
-        "PreToolUse",
-        &tool,
-        Some(&enabled),
-        None,
-    );
-    assert_eq!(on.minimum_action, "block");
-    let observations = on.command_extensions.unwrap();
     assert_eq!(
-        observations.permission_observations[0].mcp_tool.as_deref(),
-        Some("write_file")
+        manifest["max_native_command_program_bytes"].as_u64(),
+        Some(MAX_PROGRAM_BYTES as u64)
     );
-    assert!(observations.permission_observations[0]
-        .matcher_evidence
-        .is_empty());
-    let encoded = serde_json::to_string(&observations).unwrap();
-    assert!(!encoded.contains("private-fixture-content") && !encoded.contains("fixture.txt"));
-    let read = serde_json::json!({"tool_name":"mcp__filesystem__read_file","tool_input":{"path":"fixture.txt"}});
-    let inherited = evaluate_pre_tool_envelope_with_extensions(
-        "claude-code",
-        "PreToolUse",
-        &read,
-        Some(&enabled),
-        None,
-    );
-    assert_eq!(inherited.minimum_action, "review");
-    let managed = CompiledNativeCommandControls::new(&binding(
-        &[("extension", "command.mcp-filesystem", "enabled")],
-        true,
-    ))
-    .unwrap();
-    let not_opted_in = evaluate_pre_tool_envelope_with_extensions(
-        "claude-code",
-        "PreToolUse",
-        &tool,
-        Some(&managed),
-        None,
-    );
-    assert_eq!(not_opted_in.minimum_action, "review");
-    assert!(not_opted_in
-        .command_extensions
-        .unwrap()
-        .permission_observations
-        .is_empty());
+}
 
-    let hosted = CompiledNativeCommandControls::new(&binding(
-        &[("extension", "command.mcp-instapods", "enabled")],
-        false,
-    ))
-    .unwrap();
-    for tool_name in [
-        "mcp__instapods__delete_pod",
-        "mcp__instapods-mcp__exec_command",
-    ] {
-        let hosted_tool =
-            serde_json::json!({"tool_name":tool_name,"tool_input":{"fixture":"synthetic"}});
-        let reviewed = evaluate_pre_tool_envelope_with_extensions(
-            "claude-code",
-            "PreToolUse",
-            &hosted_tool,
-            Some(&hosted),
-            None,
-        );
-        assert_eq!(reviewed.minimum_action, "review", "{tool_name}");
-        let observations = reviewed.command_extensions.unwrap();
-        assert!(observations.permission_observations.iter().any(|item| {
-            item.extension_id == "command.mcp-instapods"
-                && item.permission_id == "command.mcp-instapods.permission.mcp-instapods-tool"
-        }));
-    }
+#[test]
+fn canonical_encoding_sorts_nested_objects_and_preserves_utf8() {
+    let value: Value =
+        serde_json::from_str(r#"{"z":{"β":2,"a":1},"a":["ü",{"b":2,"a":1}]}"#).unwrap();
+    assert_eq!(
+        canonical_json_bytes(&value).unwrap(),
+        r#"{"a":["ü",{"a":1,"b":2}],"z":{"a":1,"β":2}}"#.as_bytes()
+    );
 }

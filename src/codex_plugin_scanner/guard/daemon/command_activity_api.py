@@ -30,6 +30,10 @@ from ..runtime.command_extensions import (
 )
 from ..store import GuardStore
 from ..store_command_activity_api import CommandActivityNotFoundError
+from .command_activity_health_repair import (
+    auto_repair_command_activity_health,
+    command_activity_health_degraded,
+)
 
 _CURSOR_PREFIX: Final = "gca1"
 _LIST_QUERY_KEYS: Final = frozenset(
@@ -251,7 +255,10 @@ def handle_command_activity_analytics(handler: object, query_string: str) -> Non
     target = cast(_Handler, handler)
     try:
         query = parse_command_activity_analytics_query(query_string)
-        payload = target.server.store.command_activity_analytics(query, as_of=datetime.now(timezone.utc).date())
+        store = target.server.store
+        payload = store.command_activity_analytics(query, as_of=datetime.now(timezone.utc).date())
+        if command_activity_health_degraded(payload) and auto_repair_command_activity_health(store):
+            payload = store.command_activity_analytics(query, as_of=datetime.now(timezone.utc).date())
     except ValueError as error:
         target._write_json({"error": str(error)}, status=400)
         return

@@ -14,6 +14,7 @@ import { useModalDialog } from "./use-modal-dialog";
 import {
   type EffectiveExtensionControls,
   type ExtensionCatalogItem,
+  type ExtensionCatalogSummary,
   type ExtensionMutationPreview,
   type ExtensionPermission,
 } from "./extension-controls-api";
@@ -46,9 +47,9 @@ function cloneLayers(effective: EffectiveExtensionControls) {
   return effective.layers.map((layer) => ({ ...layer, controls: layer.controls.map((control) => ({ ...control })) }));
 }
 
-export function extensionPolicyRadioTabStop(
-  choices: Array<{ value: PermissionDraftState; disabled?: boolean }>,
-  state: PermissionDraftState,
+export function extensionPolicyRadioTabStop<T extends string>(
+  choices: Array<{ value: T; disabled?: boolean }>,
+  state: T,
   groupDisabled: boolean,
 ): number {
   if (groupDisabled) return -1;
@@ -124,7 +125,7 @@ function DraftControl(props: {
 
 export function PermissionPolicyRow(props: {
   permission: ExtensionPermission;
-  extension: ExtensionCatalogItem;
+  extension: ExtensionCatalogSummary;
   effective: EffectiveExtensionControls;
   draftState: PermissionDraftState;
   disabled: boolean;
@@ -248,7 +249,7 @@ export function PolicyReviewSheet(props: {
   const [password, setPassword] = useState("");
   const [totpCode, setTotpCode] = useState("");
   const count = props.preview.semantic_preview.changed_target_count;
-  const submitDisabled = isApprovalProofSubmitDisabled(props.approvalGate, { approvalPassword: password, approvalTotpCode: totpCode }, props.busy);
+  const submitDisabled = isApprovalProofSubmitDisabled(props.approvalGate, { approvalPassword: password, approvalTotpCode: totpCode }, props.busy, false, true);
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     if (submitDisabled) return;
@@ -284,14 +285,15 @@ export function PolicyReviewSheet(props: {
             approvalGate={props.approvalGate}
             approvalPassword={password}
             approvalTotpCode={totpCode}
+            requireGate={true}
             onApprovalPasswordChange={(event) => setPassword(event.target.value)}
             onApprovalTotpCodeChange={(event) => setTotpCode(event.target.value)}
           />
         </div>
         {props.error ? <p role="alert" className="mt-3 text-sm text-red-950">{props.error}</p> : null}
-        <div className="sticky bottom-0 mt-4 flex flex-wrap justify-end gap-2 bg-[var(--surface-1)] pb-1 pt-3">
-          <button type="button" disabled={props.busy} onClick={props.onClose} className="min-h-11 rounded-xl border border-[rgba(63,65,116,0.2)] px-4 text-sm font-semibold text-brand-dark">Continue editing</button>
-          <button type="submit" disabled={submitDisabled} className="min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-[#f4f7fb] disabled:opacity-40">
+        <div className="sticky bottom-0 z-10 -mx-5 mt-4 flex flex-wrap items-center justify-end gap-2 bg-[var(--surface-1)] px-5 pb-1 pt-3 sm:-mx-6 sm:px-6">
+          <button type="button" disabled={props.busy} onClick={props.onClose} className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[rgba(63,65,116,0.2)] px-4 text-center text-sm font-semibold text-brand-dark">Continue editing</button>
+          <button type="submit" disabled={submitDisabled} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-brand-blue px-4 text-center text-sm font-semibold text-[#f4f7fb] disabled:opacity-40">
             {props.busy ? "Applying…" : `Apply ${count} reviewed change${count === 1 ? "" : "s"}`}
           </button>
         </div>

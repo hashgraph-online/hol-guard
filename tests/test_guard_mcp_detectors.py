@@ -6,15 +6,16 @@ import time
 from pathlib import Path
 from typing import ClassVar
 
+import pytest
+
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.detectors import (
     DetectorContext,
     DetectorRegistry,
-    McpDescriptionDeceptionDetector,
-    McpToolSchemaRiskDetector,
     register_default_detectors,
 )
+from tests.native_detector_support import NativeDetector
 
 
 def _ctx(tmp_path: Path) -> DetectorContext:
@@ -57,8 +58,9 @@ def _mcp_action(
     )
 
 
+@pytest.mark.usefixtures("native_runtime_detectors_runtime")
 class TestMcpToolSchemaRiskDetector:
-    detector = McpToolSchemaRiskDetector()
+    detector = NativeDetector("mcp.schema-risk")
 
     def _detect(self, mcp_tool: str | None, tmp_path: Path) -> tuple:
         ctx = _ctx(tmp_path)
@@ -103,8 +105,9 @@ class TestMcpToolSchemaRiskDetector:
         assert all(s.false_positive_hint for s in signals)
 
 
+@pytest.mark.usefixtures("native_runtime_detectors_runtime")
 class TestMcpDescriptionDeceptionDetector:
-    detector = McpDescriptionDeceptionDetector()
+    detector = NativeDetector("mcp.description-deception")
 
     def _detect(self, prompt_excerpt: str | None, tmp_path: Path) -> tuple:
         ctx = _ctx(tmp_path)
@@ -170,6 +173,7 @@ class TestMcpDescriptionDeceptionDetector:
         assert len(signals) == 0, "Deception detector must only fire on MCP actions"
 
 
+@pytest.mark.usefixtures("native_runtime_detectors_runtime")
 class TestDetectorSuiteBenignMaliciousMatrix:
     """L243: Detector fixture matrix — benign commands must not produce risk signals."""
 
@@ -278,6 +282,7 @@ class TestDetectorSuiteBenignMaliciousMatrix:
         assert supply_chain_signals, "supply-chain detector missed risky command when prompt_text was also set"
 
 
+@pytest.mark.usefixtures("native_runtime_detectors_runtime")
 class TestDetectorBenchmark:
     """L244: Detector benchmark — 1000 actions under 200ms per action average."""
 
@@ -316,6 +321,7 @@ class TestDetectorBenchmark:
         assert avg_ms < 10.0, f"Average detector latency {avg_ms:.2f}ms exceeds 10ms target"
 
 
+@pytest.mark.usefixtures("native_runtime_detectors_runtime")
 class TestDetectorExplanations:
     """L245: Every ask/block signal must have a user-readable plain_reason."""
 

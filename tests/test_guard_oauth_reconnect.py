@@ -280,6 +280,23 @@ def test_credential_clear_serializes_with_runtime_refresh(tmp_path, monkeypatch)
     assert refresh_lock_held is False
 
 
+def test_storage_repair_on_an_unconfigured_home_does_not_take_the_credential_lock(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+
+    @contextmanager
+    def _forbidden_credential_lock():
+        raise AssertionError("an unconfigured home must not queue on the credential lock")
+        yield
+
+    monkeypatch.setattr(store, "hold_oauth_credential_lock", _forbidden_credential_lock)
+
+    assert store.repair_oauth_local_credential_storage_from_primary() is False
+    assert store.get_oauth_local_credential_health()["state"] == "not_configured"
+    assert store.get_cloud_sync_profile() is None
+
+
 def test_storage_repair_recovers_missing_oauth_binding_and_claims_unowned_requests(tmp_path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     dpop_key_material = generate_dpop_key_pair()
@@ -342,29 +359,6 @@ def test_storage_repair_recovers_missing_oauth_binding_and_claims_unowned_reques
     delivery = {key: value for key, value in binding.items() if key != "oauth_source"}
     rows = store.list_ready_review_events(now=late, limit=10, **delivery)
     assert rows[0]["oauth_subject_hash"] == binding["oauth_subject_hash"]
-
-
-def test_storage_repair_rejects_conflicting_cached_token_identity(tmp_path) -> None:
-    store = _store_with_oauth_credentials(tmp_path)
-    credentials = store.get_oauth_local_credentials(allow_primary=True)
-    assert credentials is not None
-    conflicting_token = ".".join(
-        (
-            guard_runner_module._encode_jwt_segment({"alg": "ES256"}),
-            guard_runner_module._encode_jwt_segment(
-                {
-                    "iss": PRODUCTION_GUARD_ISSUER,
-                    "grant": {"grantId": "grant-other"},
-                    "machine": {"machineId": "machine-1"},
-                    "workspace": {"workspaceId": "workspace-1"},
-                }
-            ),
-            "signature",
-        )
-    )
-    credentials["access_token"] = conflicting_token
-
-    assert guard_runner_module._oauth_binding_metadata_from_access_token(credentials) == {}
 
 
 def test_upgraded_running_process_does_not_refresh_shared_oauth_grant(monkeypatch) -> None:

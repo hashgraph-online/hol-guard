@@ -143,6 +143,123 @@
       "items": {
         "$ref": "#/$defs/skippedTarget"
       }
+    },
+    "contributorReview": {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "purpose",
+        "automaticApproval",
+        "sourceBoundAttestation",
+        "scannerVersion",
+        "findingCount",
+        "distinctEvidenceCount",
+        "groups",
+        "steps"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "contributor-review.v1"
+        },
+        "purpose": {
+          "const": "report-only"
+        },
+        "automaticApproval": {
+          "const": false
+        },
+        "sourceBoundAttestation": {
+          "const": false
+        },
+        "scannerVersion": {
+          "type": "string"
+        },
+        "findingCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "distinctEvidenceCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "groups": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "reportGroup",
+              "ruleId",
+              "severity",
+              "filePath",
+              "lineNumber",
+              "source",
+              "occurrences",
+              "disposition",
+              "category",
+              "title",
+              "description",
+              "remediation"
+            ],
+            "properties": {
+              "reportGroup": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "ruleId": {
+                "type": "string"
+              },
+              "severity": {
+                "$ref": "#/$defs/severity"
+              },
+              "filePath": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "lineNumber": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 1
+              },
+              "source": {
+                "type": "string"
+              },
+              "occurrences": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "disposition": {
+                "const": "not-adjudicated"
+              },
+              "category": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "remediation": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
     }
   },
   "$defs": {

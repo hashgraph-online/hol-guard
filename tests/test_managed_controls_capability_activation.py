@@ -57,7 +57,9 @@ def test_current_and_lkg_negotiation_withhold_authority_capabilities_when_unprot
     bundle = _bundle()
     assert _activate(store, bundle) is True
     unavailable = ExtensionControlAuthorityView(AuthorityHealth.UNENROLLED, 0, "", ())
-    monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry: unavailable)
+    monkeypatch.setattr(
+        store, "read_extension_control_authority_for_registry", lambda _registry, **_kwargs: unavailable
+    )
     current = _managed_controls_negotiated_capabilities(
         store,
         {"managedControlsCapabilities": sorted(_CAPABILITIES)},

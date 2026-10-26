@@ -1,0 +1,134 @@
+"""Regression checks for the worker's extracted native-authority call graph."""
+
+from __future__ import annotations
+
+import runpy
+import shutil
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+GATE = runpy.run_path(str(ROOT / "scripts/ci/rust_pretool_no_python_gate.py"))
+WORKER_DIR = Path("src/codex_plugin_scanner/guard/daemon")
+WORKER_FILES = ("hook_worker.py", "hook_worker_native.py", "hook_worker_native_review.py")
+
+
+@pytest.fixture
+def worker_checkout(tmp_path: Path) -> Path:
+    target = tmp_path / WORKER_DIR
+    target.mkdir(parents=True)
+    for name in WORKER_FILES:
+        shutil.copyfile(ROOT / WORKER_DIR / name, target / name)
+    return tmp_path
+
+
+def test_current_worker_reaches_native_authority_through_review_helper() -> None:
+    assert GATE["_worker_failures"](ROOT) == []
+
+
+@pytest.mark.parametrize(
+    ("filename", "call", "replacement", "expected"),
+    [
+        (
+            "hook_worker_native.py",
+            "return review_native_edge(",
+            "return unavailable_review(",
+            "HookWorkerNativeMixin._review_native_edge does not invoke review_native_edge",
+        ),
+        (
+            "hook_worker_native_review.py",
+            "return _review_native_edge_once(",
+            "return unavailable_review(",
+            "module.review_native_edge does not invoke _review_native_edge_once",
+        ),
+        (
+            "hook_worker_native_review.py",
+            "response, native_used = worker._review_native_edge_with_snapshot(",
+            "response, native_used = worker.unavailable_review(",
+            "module._review_native_edge_once does not invoke _review_native_edge_with_snapshot",
+        ),
+        (
+            "hook_worker_native.py",
+            "edge = self._review_raw_hook_native(",
+            "edge = self.unavailable_review(",
+            "HookWorkerNativeMixin._review_native_edge_with_snapshot does not invoke the native hook edge",
+        ),
+        (
+            "hook_worker.py",
+            "return review_raw_hook_native(",
+            "return unavailable_review(",
+            "HookWorker._review_raw_hook_native does not invoke review_raw_hook_native",
+        ),
+    ],
+)
+def test_missing_native_authority_link_fails_closed(
+    worker_checkout: Path,
+    filename: str,
+    call: str,
+    replacement: str,
+    expected: str,
+) -> None:
+    path = worker_checkout / WORKER_DIR / filename
+    source = path.read_text(encoding="utf-8")
+    assert call in source
+    path.write_text(source.replace(call, replacement, 1), encoding="utf-8")
+    assert expected in GATE["_worker_failures"](worker_checkout)
+
+
+@pytest.mark.parametrize(
+    ("call", "replacement", "expected"),
+    [
+        (
+            "_edge_harness_response(edge)",
+            "unavailable_render(edge)",
+            "does not return the native edge harness response",
+        ),
+        (
+            "        response = _edge_harness_response(edge)\n        mediation =",
+            "        response = harness_json_from_native_post_tool(native_harness, native_result)\n        mediation =",
+            "renders PostToolUse in Python",
+        ),
+    ],
+)
+def test_responses_must_come_from_the_native_edge_rendering(
+    worker_checkout: Path,
+    call: str,
+    replacement: str,
+    expected: str,
+) -> None:
+    path = worker_checkout / WORKER_DIR / "hook_worker_native.py"
+    source = path.read_text(encoding="utf-8")
+    assert call in source
+    path.write_text(source.replace(call, replacement), encoding="utf-8")
+    assert any(expected in failure for failure in GATE["_worker_failures"](worker_checkout))
+
+
+def test_aliased_and_uncalled_post_tool_review_references_are_detected(worker_checkout: Path) -> None:
+    path = worker_checkout / WORKER_DIR / "hook_worker_native.py"
+    source = path.read_text(encoding="utf-8")
+    expected = "worker decides PostToolUse in Python instead of the native edge"
+    path.write_text(
+        source + "\n\nfrom native_edge import review_post_tool as rpt\n\ndef run(payload):\n    return rpt(payload)\n",
+        encoding="utf-8",
+    )
+    assert any(expected in failure for failure in GATE["_worker_failures"](worker_checkout))
+    path.write_text(
+        source + "\n\ndef remember(edge):\n    fn = edge.review_post_tool\n    return fn\n",
+        encoding="utf-8",
+    )
+    assert any(expected in failure for failure in GATE["_worker_failures"](worker_checkout))
+
+
+def test_python_post_tool_review_is_detected_in_code_not_comments(worker_checkout: Path) -> None:
+    path = worker_checkout / WORKER_DIR / "hook_worker_native.py"
+    source = path.read_text(encoding="utf-8")
+    expected = "worker decides PostToolUse in Python instead of the native edge"
+    path.write_text(source + "\n# review_post_tool moved to the native edge.\n", encoding="utf-8")
+    assert not any(expected in failure for failure in GATE["_worker_failures"](worker_checkout))
+    path.write_text(source + "\n\ndef review_post_tool(payload):\n    return payload\n", encoding="utf-8")
+    assert any(expected in failure for failure in GATE["_worker_failures"](worker_checkout))
+
+
+def test_native_pre_and_post_tool_contract_tokens_present() -> None:
+    assert GATE["_contract_failures"](ROOT) == []

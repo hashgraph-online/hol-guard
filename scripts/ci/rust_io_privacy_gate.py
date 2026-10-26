@@ -70,11 +70,6 @@ _SAFE_KEY_EXCEPTIONS: Final = frozenset(
 )
 _SERIALIZERS: Final = (
     (
-        "src/codex_plugin_scanner/guard/daemon/runtime_hook_evidence_journal.py",
-        "serialized",
-        "_CommandActivityRecord",
-    ),
-    (
         "src/codex_plugin_scanner/guard/runtime/hook_enrichment_queue.py",
         "make_receipt_task",
         "HookEnrichmentQueue",
@@ -242,11 +237,6 @@ def _dynamic_failures() -> list[str]:
             failures.append("dynamic privacy probe accepted a raw-content adversarial artifact")
     try:
         from codex_plugin_scanner.guard.daemon.hook_metrics import HookMetricsRecorder
-        from codex_plugin_scanner.guard.daemon.runtime_hook_evidence_writer import _CommandActivityRecord
-        from codex_plugin_scanner.guard.runtime.command_activity_contract import (
-            CorrelationHandle,
-            CorrelationKind,
-        )
         from codex_plugin_scanner.guard.runtime.hook_enrichment_queue import HookEnrichmentQueue
 
         queue_task = HookEnrichmentQueue().make_receipt_task(
@@ -257,21 +247,6 @@ def _dynamic_failures() -> list[str]:
             reason_code="source_full_scan_allow",
             reason="cat /private/source",
             workspace="/Users/alice/private/project",
-        )
-        correlation = CorrelationHandle(
-            kind=CorrelationKind.REQUEST,
-            harness="pi",
-            key_id="probe-key",
-            digest="a" * 64,
-        )
-        evidence = _CommandActivityRecord(
-            record_id="privacy-probe",
-            harness="pi",
-            event="PostToolUse",
-            correlation=correlation,
-            has_command=True,
-            succeeded=True,
-            payload_bytes=32,
         )
         metrics = HookMetricsRecorder()
         metrics.record(
@@ -289,12 +264,10 @@ def _dynamic_failures() -> list[str]:
             fallback_kind="none",
             scanner_bytes=32,
         )
-        runtime_artifacts = (
-            queue_task.payload,
-            json.loads(evidence.serialized()),
-            metrics.snapshot(),
-        )
-        for name, artifact in zip(("queue", "evidence", "metrics"), runtime_artifacts, strict=True):
+        # The evidence record itself is serialized by the Rust writer now, so
+        # this probe covers the Python artifacts that are still built here.
+        runtime_artifacts = (queue_task.payload, metrics.snapshot())
+        for name, artifact in zip(("queue", "metrics"), runtime_artifacts, strict=True):
             failures.extend(f"runtime {name}: {failure}" for failure in validate_artifact(artifact, location=name))
     except (ImportError, TypeError, ValueError, AttributeError) as exc:
         failures.append(f"runtime serializer probe failed: {type(exc).__name__}")

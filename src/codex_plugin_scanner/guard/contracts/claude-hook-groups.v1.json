@@ -1,0 +1,51 @@
+{
+  "schema": "hol-guard.claude-hook-groups.v1",
+  "settings_path": ".claude/settings.json",
+  "markers": {
+    "daemon_hook": "HOL_GUARD_CLAUDE_DAEMON_HOOK",
+    "session_start_hook": "HOL_GUARD_CLAUDE_SESSION_START_HOOK"
+  },
+  "session_start": {
+    "event": "SessionStart",
+    "matchers": ["startup", "resume", "clear", "compact"],
+    "timeout_seconds": 10,
+    "additional_context": "HOL Guard protection is active for this workspace."
+  },
+  "runtime_groups": [
+    {
+      "event": "PreToolUse",
+      "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+      "timeout_seconds": 30,
+      "status_message": "HOL Guard is checking this tool use"
+    },
+    {
+      "event": "PermissionRequest",
+      "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*",
+      "timeout_seconds": 10,
+      "status_message": "HOL Guard is reviewing this approval prompt"
+    },
+    {
+      "event": "PostToolUse",
+      "matcher": "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion",
+      "timeout_seconds": 30,
+      "status_message": null
+    },
+    {
+      "event": "Notification",
+      "matcher": "permission_prompt",
+      "timeout_seconds": 10,
+      "status_message": null
+    },
+    {
+      "event": "Stop",
+      "matcher": null,
+      "timeout_seconds": 10,
+      "status_message": null
+    }
+  ],
+  "pruned_events": ["PermissionDenied", "UserPromptSubmit"],
+  "bridge_config": {
+    "required_keys": ["state_path", "fallback_daemon_url", "fallback_command", "query"],
+    "optional_keys": ["recovery_command"]
+  }
+}

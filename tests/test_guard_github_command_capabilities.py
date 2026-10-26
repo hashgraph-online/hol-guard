@@ -5,9 +5,8 @@ from typing import Final
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.github_capability_contract import GitHubCommandCapability
-from codex_plugin_scanner.guard.runtime.github_command_capabilities import classify_github_cli
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
+from tests.native_github_capability_support import GitHubCommandCapability, github_cli_assessment
 
 
 def _text(*parts: str) -> str:
@@ -44,14 +43,19 @@ GITHUB_CAPABILITY_CASES = (
     (("pr", "create", "--template=body.md"), "content_remote", "github.command.content-mutation"),
     (("pr", "create", "-Tbody.md"), "content_remote", "github.command.content-mutation"),
     (("issue", "list"), "read_remote", "github.command.proven-read"),
-    (("auth", "status"), "read_local", "github.command.local-auth-read"),
+    (("auth", "status"), "read_remote", "github.command.local-auth-read"),
     (("auth", "token"), "secret_remote", "github.command.auth-token-read"),
     (("auth", "status", "--show-token"), "secret_remote", "github.command.auth-token-read"),
     (("auth", "status", "-t"), "secret_remote", "github.command.auth-token-read"),
     (("ssh-key", "list"), "read_remote", "github.command.proven-access-read"),
     (("gpg-key", "list"), "read_remote", "github.command.proven-access-read"),
     (("ssh-key", "delete", "123"), "access_remote", "github.command.access-mutation"),
-    (("run", "cancel", "--help"), "workflow_remote", "github.command.workflow-mutation"),
+    (("run", "cancel", "--help"), "read_local", "github.command.local-help"),
+    (
+        ("run", "rerun", "42", "--job", "--help"),
+        "workflow_remote",
+        "github.command.workflow-mutation",
+    ),
     (
         ("run", "rerun", "31707639186", "--repo", "hashgraph-online/hol-guard", "--failed"),
         "routine_workflow_remote",
@@ -500,6 +504,17 @@ GITHUB_REVIEW_FLOORS: Final[tuple[tuple[str, str], ...]] = (
             "propose_remote",
             "github.command.pr-proposal",
         ),
+        (
+            ("repo", "create", "todo-app", "--private", "--source=.", "--remote", "origin"),
+            "create_private_remote",
+            "github.command.private-repository-creation",
+        ),
+        (("repo", "create", "todo-app", "--public"), "content_remote", "github.command.content-mutation"),
+        (
+            ("repo", "create", "todo-app", "--private", "--source=.", "--push"),
+            "content_remote",
+            "github.command.content-mutation",
+        ),
         (("pr", "create", "--title", "Ready"), "content_remote", "github.command.content-mutation"),
         (("pr", "create", "--fill"), "content_remote", "github.command.content-mutation"),
         (("pr", "create", "-f"), "content_remote", "github.command.content-mutation"),
@@ -518,14 +533,19 @@ GITHUB_REVIEW_FLOORS: Final[tuple[tuple[str, str], ...]] = (
         (("pr", "create", "--template=body.md"), "content_remote", "github.command.content-mutation"),
         (("pr", "create", "-Tbody.md"), "content_remote", "github.command.content-mutation"),
         (("issue", "list"), "read_remote", "github.command.proven-read"),
-        (("auth", "status"), "read_local", "github.command.local-auth-read"),
+        (("auth", "status"), "read_remote", "github.command.local-auth-read"),
         (("auth", "token"), "secret_remote", "github.command.auth-token-read"),
         (("auth", "status", "--show-token"), "secret_remote", "github.command.auth-token-read"),
         (("auth", "status", "-t"), "secret_remote", "github.command.auth-token-read"),
         (("ssh-key", "list"), "read_remote", "github.command.proven-access-read"),
         (("gpg-key", "list"), "read_remote", "github.command.proven-access-read"),
         (("ssh-key", "delete", "123"), "access_remote", "github.command.access-mutation"),
-        (("run", "cancel", "--help"), "workflow_remote", "github.command.workflow-mutation"),
+        (("run", "cancel", "--help"), "read_local", "github.command.local-help"),
+        (
+            ("run", "rerun", "42", "--job", "--help"),
+            "workflow_remote",
+            "github.command.workflow-mutation",
+        ),
         (
             ("--repo", "example/project", "workflow", "view", "release.yml"),
             "read_remote",
@@ -734,10 +754,10 @@ GITHUB_REVIEW_FLOORS: Final[tuple[tuple[str, str], ...]] = (
         (("project-alias",), "unknown", "github.command.extension-or-alias"),
     ),
 )
-def test_classify_github_cli_capabilities(
+def test_github_cli_capability_assessments(
     args: tuple[str, ...], capability: GitHubCommandCapability, reason_code: str
 ) -> None:
-    assessment = classify_github_cli(args)
+    assessment = github_cli_assessment(args)
 
     assert assessment.capability == capability
     assert assessment.reason_code == reason_code
@@ -762,8 +782,8 @@ def test_classify_github_cli_capabilities(
         ("api", "graphql", "-X", "GET", "-f", "query=query { viewer { login } }"),
     ),
 )
-def test_classify_github_cli_rejects_ambiguous_graphql_inputs(args: tuple[str, ...]) -> None:
-    assessment = classify_github_cli(args)
+def test_github_cli_assessment_rejects_ambiguous_graphql_inputs(args: tuple[str, ...]) -> None:
+    assessment = github_cli_assessment(args)
 
     assert assessment.capability == "unknown"
 
@@ -781,7 +801,7 @@ def test_guard_keeps_routine_review_thread_resolution_prompt_free(selection: str
     assert match is None
 
 
-@pytest.mark.parametrize("jq_arguments", (("--jq", ".data"), ("--jq=.data",)))
+@pytest.mark.parametrize("jq_arguments", (("--jq", ".data"), ("--jq=.data",), ("-q", ".data"), ("-q.data",)))
 def test_guard_keeps_routine_review_thread_resolution_with_data_projection_prompt_free(
     jq_arguments: tuple[str, ...],
 ) -> None:
@@ -794,7 +814,7 @@ def test_guard_keeps_routine_review_thread_resolution_with_data_projection_promp
         *jq_arguments,
     )
 
-    assessment = classify_github_cli(args)
+    assessment = github_cli_assessment(args)
 
     assert assessment.capability == "routine_review_thread_remote"
     assert (
@@ -813,12 +833,18 @@ def test_guard_keeps_routine_review_thread_resolution_with_data_projection_promp
 
 @pytest.mark.parametrize(
     "jq_arguments",
-    (("--jq", ".data.viewer"), ("--jq=@filter.jq",), ("--jq", ".data", "--jq", ".data")),
+    (
+        ("--jq", ".data.viewer"),
+        ("--jq=@filter.jq",),
+        ("--jq", ".data", "--jq", ".data"),
+        ("-q", ".data.viewer"),
+        ("-q", ".data", "--jq", ".data"),
+    ),
 )
 def test_guard_reviews_routine_review_thread_resolution_with_other_jq_projections(
     jq_arguments: tuple[str, ...],
 ) -> None:
-    assessment = classify_github_cli(
+    assessment = github_cli_assessment(
         (
             "api",
             "graphql",
@@ -862,6 +888,8 @@ def test_guard_reviews_unbounded_review_thread_response_selections(selection: st
             "'repos/example/project/contents/ci/baseline.json?ref=main'"
         ),
         "gh api graphql -f 'query=query { viewer { login } }' | jq -r '.data.viewer.login'",
+        "gh repo create todo-app --private --source=. --remote origin",
+        'gh repo create todo-app --private -d "A small todo app"',
         (
             "gh api graphql -f 'query=query { viewer { login } }' 2>&1 | "
             "python3 -c \"import json,sys; print(json.load(sys.stdin)['data']['viewer']['login'])\""
@@ -1058,6 +1086,9 @@ def test_guard_keeps_proven_github_reads_prompt_free(tmp_path: Path, command: st
         ('gh issue lock "$ISSUE" --repo "$REPO"', "Unverified GitHub command capability"),
         ('gh pr ready "$(cat number)" -R "$REPO"', "Unverified GitHub command capability"),
         ('gh issue pin "${NUMBER}"', "Unverified GitHub command capability"),
+        ("gh repo create todo-app --public --source=.", "GitHub content mutation command"),
+        ("gh repo create todo-app --private --source=. --push", "GitHub content mutation command"),
+        ("gh repo create example-org/todo-app --private", "GitHub content mutation command"),
     ),
 )
 def test_guard_requires_confirmation_for_github_mutations_and_unverified_compositions(
@@ -1070,3 +1101,31 @@ def test_guard_requires_confirmation_for_github_mutations_and_unverified_composi
     assert match is not None
     assert match.action_class == action_class
     assert "confirm" in match.reason.lower()
+
+
+def test_native_classification_is_memoized_but_failures_are_not(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_github_cli
+    from tests import native_github_capability_support as bridge
+
+    answers: list[native_github_cli.NativeGitHubCliClassification | None] = [
+        None,
+        native_github_cli.NativeGitHubCliClassification("read_remote", "github.read", "ok", ("read_remote",), None),
+    ]
+    calls: list[tuple[str, ...]] = []
+
+    def fake(
+        args: tuple[str, ...] | list[str], **_kwargs: object
+    ) -> native_github_cli.NativeGitHubCliClassification | None:
+        calls.append(tuple(args))
+        return answers[min(len(calls), len(answers)) - 1]
+
+    # The bridge looks the classifier up per call, so patching the source
+    # module is the seam memoization runs behind.
+    monkeypatch.setattr(native_github_cli, "github_cli_classify_native", fake)
+    monkeypatch.setattr(bridge, "_ASSESSMENT_CACHE", {})
+    args = ("pr", "view", "1")
+
+    assert bridge.github_cli_assessment(args).capability == "unknown"
+    assert bridge.github_cli_assessment(args).capability == "read_remote"
+    assert bridge.github_cli_assessment(args).capability == "read_remote"
+    assert len(calls) == 2

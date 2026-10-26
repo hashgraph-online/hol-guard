@@ -1,0 +1,339 @@
+{
+  "extension": {
+    "action_classes": [
+      "AgentBridge forced plugin scaffold command",
+      "AgentBridge run with tool registry command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews AgentBridge CLI commands that can overwrite generated plugin files or execute with an attached app tool registry.",
+    "ecosystem_ids": [
+      "agentbridge"
+    ],
+    "executables": [
+      "agentbridge"
+    ],
+    "extension_id": "command.agentbridge",
+    "homepage": "https://agentbridge.readthedocs.io/en/latest/",
+    "icon": {
+      "background": "#0F172A",
+      "kind": "react-icon",
+      "name": "HiMiniCommandLine"
+    },
+    "license": "MIT",
+    "name": "AgentBridge command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "AgentBridge run with tool registry command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `agentbridge run --tool-registry`, which can attach app-provided Python tools to an agent run. exec and xargs launches are blocked by Guard's wrapper floor.",
+        "example_command": "agentbridge run --manifest examples/refund_agent.yaml --backend mock --tool-registry my_app.tools:build_registry",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "AgentBridge run with tool registry",
+        "permission_id": "command.agentbridge.permission.run-tool-registry",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Run validate or compare before executing with an attached tool registry.",
+          "Review the tool registry module and allowed tool functions before running."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "AgentBridge forced plugin scaffold command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `agentbridge scaffold-plugin --force`, which can overwrite generated plugin files in the target package. exec and xargs launches are blocked by Guard's wrapper floor.",
+        "example_command": "agentbridge scaffold-plugin plugins/agentbridge-demo --backend demo --force",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "AgentBridge forced plugin scaffold",
+        "permission_id": "command.agentbridge.permission.scaffold-plugin-force",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Run scaffold-plugin without --force first and review any existing generated paths.",
+          "Use a new target directory when exploring plugin scaffolds."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "display_name": "Community",
+      "id": "community.agentbridge",
+      "url": "https://github.com/0sparsh2/AgentBridge"
+    },
+    "reference_urls": [
+      "https://agentbridge.readthedocs.io/en/latest/"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "execution"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "AgentBridge run with tool registry command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `agentbridge run --tool-registry`, which can attach app-provided Python tools to an agent run. exec and xargs launches are blocked by Guard's wrapper floor.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "agentbridge",
+                  "agentbridge.cmd",
+                  "agentbridge.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--backend",
+                  "--framework",
+                  "--input",
+                  "--manifest",
+                  "--session-id",
+                  "--tool-registry"
+                ],
+                "required_flags": [
+                  "--tool-registry"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "run"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.agentbridge.permission.run-tool-registry",
+        "risk_classes": [
+          "execution"
+        ],
+        "rule_id": "command.agentbridge.run-tool-registry",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "agentbridge",
+                      "agentbridge.cmd",
+                      "agentbridge.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--backend",
+                      "--framework",
+                      "--input",
+                      "--manifest",
+                      "--session-id",
+                      "--tool-registry"
+                    ],
+                    "required_flags": [
+                      "--tool-registry",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "run"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": ["agentbridge", "agentbridge.cmd", "agentbridge.exe"],
+                    "subcommands": ["run"],
+                    "required_flags": ["--tool-registry", "-h"],
+                    "required_flags_in_all_arguments": true,
+                    "options_with_values": [
+                      "--backend", "--framework", "--input", "--manifest", "--session-id", "--tool-registry"
+                    ],
+                    "allow_leading_options": false,
+                    "fail_secure_unknown_options": true
+                  }
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "AgentBridge run help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Run validate or compare before executing with an attached tool registry.",
+          "Review the tool registry module and allowed tool functions before running."
+        ],
+        "severity": "high",
+        "title": "AgentBridge run with tool registry"
+      },
+      {
+        "action_classes": [
+          "AgentBridge forced plugin scaffold command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `agentbridge scaffold-plugin --force`, which can overwrite generated plugin files in the target package. exec and xargs launches are blocked by Guard's wrapper floor.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "agentbridge",
+                  "agentbridge.cmd",
+                  "agentbridge.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--backend",
+                  "--distribution-name",
+                  "--package-name"
+                ],
+                "required_flags": [
+                  "--force"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "scaffold-plugin"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.agentbridge.permission.scaffold-plugin-force",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.agentbridge.scaffold-plugin-force",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "agentbridge",
+                      "agentbridge.cmd",
+                      "agentbridge.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--backend",
+                      "--distribution-name",
+                      "--package-name"
+                    ],
+                    "required_flags": [
+                      "--force",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "scaffold-plugin"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": ["agentbridge", "agentbridge.cmd", "agentbridge.exe"],
+                    "subcommands": ["scaffold-plugin"],
+                    "required_flags": ["--force", "-h"],
+                    "required_flags_in_all_arguments": true,
+                    "options_with_values": ["--backend", "--distribution-name", "--package-name"],
+                    "allow_leading_options": false,
+                    "fail_secure_unknown_options": true
+                  }
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "AgentBridge scaffold-plugin help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Run scaffold-plugin without --force first and review any existing generated paths.",
+          "Use a new target directory when exploring plugin scaffolds."
+        ],
+        "severity": "high",
+        "title": "AgentBridge forced plugin scaffold"
+      }
+    ],
+    "safer_alternatives": [
+      "Inspect or validate AgentBridge specs before side-effectful runs.",
+      "Avoid --force unless the target scaffold files have been reviewed."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

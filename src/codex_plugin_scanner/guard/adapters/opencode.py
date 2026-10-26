@@ -6,19 +6,26 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING, Literal, overload
 
 from ...ecosystems.opencode import _load_json_or_jsonc
 from ..aibom_detection import extend_detection_with_workspace_aibom
 from ..launcher import merge_guard_launcher_env
 from ..models import HarnessDetection
-from ..shims import install_guard_shim, remove_guard_shim
-from .base import HarnessAdapter, HarnessContext, _command_available, _run_command_probe
+from ..shims import install_guard_shim, prepare_guard_shim, remove_guard_shim
+from ._modules.opencode.opencode_config_lock import opencode_config_lock
+from ._modules.opencode.opencode_install_snapshot import (
+    OpenCodeInstallSnapshotError,
+    load_opencode_install_snapshot,
+    write_json_transaction,
+)
+from .base import HarnessAdapter, HarnessContext, PreparedHarnessInstall, _command_available, _run_command_probe
 from .hook_python import guard_cli_command
+from .mcp_relay_native import mcp_proxy_command
 from .mcp_servers import (
     GUARD_MCP_COMPANION_PREFIX,
     ManagedMcpServer,
     is_guard_proxy_command,
-    is_verified_guard_mcp_companion,
     managed_stdio_servers,
     proxy_cli_args,
     proxy_process_env,
@@ -27,24 +34,26 @@ from .mcp_servers import (
 from .opencode_artifacts import (
     CONFIG_FILENAMES,
     _command_parts,
-    append_config_artifacts,
-    append_directory_artifacts,
-    append_found_path,
     config_paths,
     configured_config_path,
+    native_artifacts,
     runtime_config_path,
     runtime_overlay,
 )
-from .opencode_install_snapshot import (
-    OpenCodeInstallSnapshotError,
-    load_opencode_install_snapshot,
-    write_json_transaction,
+from .opencode_pretool import (
+    global_plugin_path,
+    install_pretool_plugin,
+    managed_plugin_path,
+    pretool_plugin_source,
+    remove_pretool_plugin,
 )
-from .opencode_pretool import install_pretool_plugin, remove_pretool_plugin
 from .state_files import load_backup_payload, load_string_state_payload
 from .workspace_overrides import should_skip_workspace_override
 
 _OPENCODE_SCHEMA = "https://opencode.ai/config.json"
+
+if TYPE_CHECKING:
+    from ..runtime_transition import TransitionFile
 _GUARD_MCP_COMPANION_PREFIX = GUARD_MCP_COMPANION_PREFIX
 _DEFAULT_BASH_PERMISSION: dict[str, object] = {
     "*": "allow",
@@ -142,28 +151,12 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
         return context.home_dir / ".config" / "opencode" / "opencode.json"
 
     def detect(self, context: HarnessContext) -> HarnessDetection:
-        artifacts = []
-        found_paths: list[str] = []
-        seen_artifact_ids: set[str] = set()
+        configs = []
         for config_path in config_paths(context):
             payload, parse_error, _parse_reason = _load_json_or_jsonc(config_path)
-            if parse_error or not payload:
-                continue
-            append_found_path(found_paths, config_path)
-            scope = self._scope_for(context, config_path)
-            append_config_artifacts(
-                artifacts=artifacts,
-                seen_artifact_ids=seen_artifact_ids,
-                scope=scope,
-                config_path=config_path,
-                payload=payload,
-            )
-        append_directory_artifacts(
-            context=context,
-            artifacts=artifacts,
-            found_paths=found_paths,
-            seen_artifact_ids=seen_artifact_ids,
-        )
+            if not parse_error and payload:
+                configs.append((config_path, self._scope_for(context, config_path), payload))
+        artifacts, found_paths = native_artifacts(context, configs)
         detection = HarnessDetection(
             harness=self.harness,
             installed=bool(found_paths) or _command_available(self.executable),
@@ -179,10 +172,35 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
         )
 
     def install(self, context: HarnessContext) -> dict[str, object]:
+        with opencode_config_lock(context.home_dir):
+            return self._install_locked(context)
+
+    def prepare_install(self, context: HarnessContext) -> PreparedHarnessInstall:
+        """Render the whole install without acquiring the write-creating config lock."""
+
+        from .hook_python import disposable_guard_hook_probe
+
+        with disposable_guard_hook_probe():
+            return self._install_locked(context, prepare=True)
+
+    @overload
+    def _install_locked(self, context: HarnessContext, *, prepare: Literal[True]) -> PreparedHarnessInstall: ...
+
+    @overload
+    def _install_locked(self, context: HarnessContext, *, prepare: Literal[False] = False) -> dict[str, object]: ...
+
+    def _install_locked(
+        self, context: HarnessContext, *, prepare: bool = False
+    ) -> dict[str, object] | PreparedHarnessInstall:
+        from ..codex_hook_recovery import _snapshot
+        from ..runtime_transition import TransitionFile
+
+        contents = {path: _snapshot(path) for path in config_paths(context)} if prepare else None
         try:
             snapshot = load_opencode_install_snapshot(
                 context,
                 command_available=_command_available(self.executable),
+                config_contents=contents,
             )
         except OpenCodeInstallSnapshotError as error:
             raise OpenCodeInstallConfigError(str(error)) from error
@@ -204,7 +222,10 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
         target_config_path = self._managed_install_config_path(context)
         target_payload = snapshot.payload_for(target_config_path)
         original_text = None
-        if target_config_path.is_file():
+        if contents is not None:
+            target_before = contents[target_config_path]
+            original_text = target_before.decode("utf-8") if target_before is not None else None
+        elif target_config_path.is_file():
             original_text = target_config_path.read_text(encoding="utf-8")
         backup_path = self._backup_path(context)
         state_path = self._state_path(context, target_config_path)
@@ -251,12 +272,58 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
                 (overlay_path, overlay_payload),
             )
         )
-        try:
-            write_json_transaction(tuple(writes))
-        except OpenCodeInstallSnapshotError as error:
-            raise OpenCodeInstallConfigError(str(error)) from error
-        shim_manifest = install_guard_shim(self.harness, context)
-        plugin_manifest = install_pretool_plugin(context)
+        files: list[TransitionFile] = []
+        if prepare:
+            prepared_shim = prepare_guard_shim(self.harness, context)
+            shim_manifest = prepared_shim.manifest
+            files.extend(prepared_shim.files)
+            assert contents is not None
+            after: dict[Path, bytes | None] = {
+                path: (json.dumps(payload, indent=2) + "\n").encode("utf-8")
+                for path, payload in writes
+                if path != backup_path
+            }
+            backup_before = _snapshot(backup_path)
+            after[backup_path] = (
+                backup_before
+                if backup_before is not None
+                else (
+                    json.dumps({"existed": original_text is not None, "content": original_text}, indent=2) + "\n"
+                ).encode("utf-8")
+            )
+            source = pretool_plugin_source(context).encode("utf-8")
+            managed_plugin = managed_plugin_path(context)
+            global_plugin = global_plugin_path(context)
+            after[managed_plugin] = after[global_plugin] = source
+            plugin_manifest: dict[str, object] = {
+                "managed_plugin_path": str(managed_plugin),
+                "global_plugin_path": str(global_plugin),
+            }
+            for path, payload in contents.items():
+                if path not in after:
+                    after[path] = payload
+            for path, payload in after.items():
+                before = (
+                    contents[path] if path in contents else backup_before if path == backup_path else _snapshot(path)
+                )
+                before_mode = path.stat().st_mode & 0o777 if before is not None else 0o600
+                after_mode = before_mode if path in contents and path != target_config_path else 0o600
+                if path in {managed_plugin, global_plugin}:
+                    after_mode = before_mode if before is not None else 0o644
+                if path == backup_path and backup_before is not None:
+                    after_mode = before_mode
+                change = TransitionFile(
+                    path.resolve(strict=False), before, payload, before_mode=before_mode, after_mode=after_mode
+                )
+                change.payload()
+                files.append(change)
+        else:
+            try:
+                write_json_transaction(tuple(writes))
+            except OpenCodeInstallSnapshotError as error:
+                raise OpenCodeInstallConfigError(str(error)) from error
+            shim_manifest = install_guard_shim(self.harness, context)
+            plugin_manifest = install_pretool_plugin(context)
         raw_notes = shim_manifest.get("notes")
         shim_notes = (
             [str(note) for note in raw_notes if isinstance(note, str)] if isinstance(raw_notes, (list, tuple)) else []
@@ -273,7 +340,7 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
             "Use hol-guard:: MCP servers in OpenCode for Guard-proxied tools, or launch through guard-opencode "
             "or hol-guard run opencode for pre-launch artifact checks and the runtime skill overlay.",
         ]
-        return {
+        manifest: dict[str, object] = {
             "harness": self.harness,
             "active": True,
             "config_path": str(target_config_path),
@@ -289,8 +356,13 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
             "source_config_paths": list(detection.config_paths),
             "notes": notes,
         }
+        return PreparedHarnessInstall(tuple(files), manifest) if prepare else manifest
 
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
+        with opencode_config_lock(context.home_dir):
+            return self._uninstall_locked(context)
+
+    def _uninstall_locked(self, context: HarnessContext) -> dict[str, object]:
         state_path, state_payload = self._state_entry(context)
         target_config_path = self._managed_config_path_from_state(context, state_payload)
         backup_path = self._backup_path_from_state(context, state_payload, target_config_path)
@@ -384,14 +456,16 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
                 continue
             entry: dict[str, object] = {
                 "type": "local",
-                "command": guard_cli_command(
-                    context,
-                    proxy_cli_args(
-                        proxy_command="opencode-mcp-proxy",
-                        guard_home=str(context.guard_home),
-                        server=server,
-                        home=str(context.home_dir) if context.home_dir.resolve() != Path.home().resolve() else None,
-                        workspace=str(context.workspace_dir) if context.workspace_dir is not None else None,
+                "command": mcp_proxy_command(
+                    guard_cli_command(
+                        context,
+                        proxy_cli_args(
+                            proxy_command="opencode-mcp-proxy",
+                            guard_home=str(context.guard_home),
+                            server=server,
+                            home=str(context.home_dir) if context.home_dir.resolve() != Path.home().resolve() else None,
+                            workspace=str(context.workspace_dir) if context.workspace_dir is not None else None,
+                        ),
                     ),
                 ),
                 "enabled": server.enabled,
@@ -431,28 +505,6 @@ class OpenCodeHarnessAdapter(HarnessAdapter):
         return server.source_scope == "project"
 
     _should_skip_workspace_override = staticmethod(should_skip_workspace_override)
-
-    def _workspace_server_names(self, context: HarnessContext) -> set[str]:
-        if context.workspace_dir is None:
-            return set()
-        workspace_server_names: set[str] = set()
-        for config_path in config_paths(context):
-            if not config_path.is_relative_to(context.workspace_dir):
-                continue
-            payload, parse_error, _parse_reason = _load_json_or_jsonc(config_path)
-            if parse_error or not isinstance(payload, dict):
-                continue
-            mcp = payload.get("mcp")
-            if not isinstance(mcp, dict):
-                continue
-            for name, value in mcp.items():
-                if not isinstance(name, str) or not isinstance(value, dict):
-                    continue
-                command, args = _command_parts(value)
-                if is_verified_guard_mcp_companion(name, command, args):
-                    continue
-                workspace_server_names.add(name)
-        return workspace_server_names
 
     @staticmethod
     def _target_config_path(context: HarnessContext) -> Path:
@@ -724,14 +776,16 @@ def _persisted_mcp_with_guard_companions(
         companion_name = _guard_mcp_companion_name(server.name)
         entry: dict[str, object] = {
             "type": "local",
-            "command": guard_cli_command(
-                context,
-                proxy_cli_args(
-                    proxy_command="opencode-mcp-proxy",
-                    guard_home=str(context.guard_home),
-                    server=server,
-                    home=str(context.home_dir) if context.home_dir.resolve() != Path.home().resolve() else None,
-                    workspace=None,
+            "command": mcp_proxy_command(
+                guard_cli_command(
+                    context,
+                    proxy_cli_args(
+                        proxy_command="opencode-mcp-proxy",
+                        guard_home=str(context.guard_home),
+                        server=server,
+                        home=str(context.home_dir) if context.home_dir.resolve() != Path.home().resolve() else None,
+                        workspace=None,
+                    ),
                 ),
             ),
             "enabled": server.enabled,

@@ -145,6 +145,10 @@ def _validate_policy_bundle_keyring(value: object) -> dict[str, object]:
             value,
             require_keyring_contract=True,
         )
+    except trusted_keys.PolicyBundleNativeUnavailableError as exc:
+        raise ManagedPolicyError(
+            "policyBundleKeyring cannot be verified: native policy bundle authority is unavailable"
+        ) from exc
     except ValueError as exc:
         raise ManagedPolicyError("policyBundleKeyring is invalid") from exc
     if not isinstance(value, dict):  # strict loader guarantees this; retained for type narrowing

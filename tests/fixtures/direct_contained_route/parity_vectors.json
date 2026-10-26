@@ -1,0 +1,4602 @@
+{
+ "schema": "guard-direct-contained-route-vectors.v1",
+ "source": "codex_plugin_scanner.guard.adapters.zcode_contained_tests.route_zcode_containment",
+ "cases": [
+  {
+   "name": "profile native_pytest_readonly_containment_required",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
+  },
+  {
+   "name": "profile native_node_test_readonly_containment_required",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_node_test_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "node-test-readonly-v1",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
+  },
+  {
+   "name": "profile native_vitest_readonly_containment_required",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_vitest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "vitest-readonly-v1",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
+  },
+  {
+   "name": "profile native_package_test_readonly_containment_required",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_package_test_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "package-test-readonly-v1",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
+  },
+  {
+   "name": "profile native_python_eval_readonly_containment_required",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_python_eval_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "python-eval-readonly-v1",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
+  },
+  {
+   "name": "profile native_node_eval_readonly_containment_required",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_node_eval_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "node-eval-readonly-v1",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
+  },
+  {
+   "name": "profile native_git_readonly_containment_required",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_git_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "git-readonly-v1",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
+  },
+  {
+   "name": "profile native_node_tool_readonly_containment_required",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_node_tool_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "node-tool-readonly-v1",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
+  },
+  {
+   "name": "profile native_node_build_output_containment_required",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_node_build_output_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "node-build-output-v1",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
+  },
+  {
+   "name": "profile native_workspace_containment_required",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_workspace_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "workspace-contained-v1",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
+  },
+  {
+   "name": "profile mismatch",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "vitest-readonly-v1",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "profile missing",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "observe mode",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    },
+    "observe_mode": true
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "observe mode text",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    },
+    "observe_mode": "true"
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
+  },
+  {
+   "name": "observe mode false",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    },
+    "observe_mode": false
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
+  },
+  {
+   "name": "decision block",
+   "platform": "darwin",
+   "response": {
+    "decision": "block",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "policy review",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "review",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "unknown reason",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_other_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "reason missing",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "reason not text",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": 7,
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "receipt only",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1",
+    "guard_containment_receipt_only": true
+   },
+   "routed": false
+  },
+  {
+   "name": "receipt only text",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1",
+    "guard_containment_receipt_only": "true"
+   },
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
+  },
+  {
+   "name": "camel event",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1",
+    "hookEventName": "PreToolUse"
+   },
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
+  },
+  {
+   "name": "snake event",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "pre_tool_use",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
+  },
+  {
+   "name": "post event",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "event missing",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "null event shadows camel",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": null,
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1",
+    "hookEventName": "PreToolUse"
+   },
+   "routed": false
+  },
+  {
+   "name": "run command tool",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "run_command",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
+  },
+  {
+   "name": "terminal tool",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "run_terminal_command",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
+  },
+  {
+   "name": "lower bash tool",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
+  },
+  {
+   "name": "read tool",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Read",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "camel tool",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1",
+    "toolName": "Bash"
+   },
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
+  },
+  {
+   "name": "camel input",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1",
+    "toolInput": {
+     "command": "npx vitest run"
+    }
+   },
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "npx vitest run"
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {}
+  },
+  {
+   "name": "input missing",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "input list",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": [
+     "pytest"
+    ],
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "command not text",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": 7
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "command missing",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "description": "x"
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "null session shadows camel",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": null,
+    "tool_use_id": "toolu_1",
+    "sessionId": "camel"
+   },
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": null,
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
+  },
+  {
+   "name": "camel session",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "tool_use_id": "toolu_1",
+    "sessionId": "camel"
+   },
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "camel",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
+  },
+  {
+   "name": "camel call",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "toolCallId": "call-camel"
+   },
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "call-camel"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
+  },
+  {
+   "name": "call id wins",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1",
+    "tool_call_id": "call-1",
+    "toolCallId": "call-2"
+   },
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "call-1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
+  },
+  {
+   "name": "no ids",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    }
+   },
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": null,
+    "tool_call_id": null
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
+  },
+  {
+   "name": "quoted command",
+   "platform": "darwin",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -k 'a and b' \"x\"",
+     "extra": {
+      "n": [
+       1,
+       null
+      ]
+     }
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -k 'a and b' \"x\"",
+     "extra": {
+      "n": [
+       1,
+       null
+      ]
+     }
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "extra": {
+     "n": [
+      1,
+      null
+     ]
+    }
+   }
+  },
+  {
+   "name": "profile native_pytest_readonly_containment_required",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "profile native_node_test_readonly_containment_required",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_node_test_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "node-test-readonly-v1",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "profile native_vitest_readonly_containment_required",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_vitest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "vitest-readonly-v1",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "profile native_package_test_readonly_containment_required",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_package_test_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "package-test-readonly-v1",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "profile native_python_eval_readonly_containment_required",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_python_eval_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "python-eval-readonly-v1",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "profile native_node_eval_readonly_containment_required",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_node_eval_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "node-eval-readonly-v1",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "profile native_git_readonly_containment_required",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_git_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "git-readonly-v1",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "profile native_node_tool_readonly_containment_required",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_node_tool_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "node-tool-readonly-v1",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "profile native_node_build_output_containment_required",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_node_build_output_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "node-build-output-v1",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "profile native_workspace_containment_required",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_workspace_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "workspace-contained-v1",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": true,
+   "args": [
+    "guard",
+    "execute-contained-test",
+    "--harness",
+    "claude-code",
+    "--guard-home",
+    "<guard_home>",
+    "--workspace",
+    "<workspace>",
+    "--request-file",
+    "<request>",
+    "--request-sha256",
+    "<sha256>",
+    "--home",
+    "<home>"
+   ],
+   "snapshot_schema": "guard-contained-test-request.v1",
+   "snapshot_payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "cwd": "<workspace>",
+    "session_id": "session-1",
+    "tool_call_id": "toolu_1"
+   },
+   "updated_input": {
+    "description": "Run tests",
+    "timeout": 120
+   }
+  },
+  {
+   "name": "profile mismatch",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "vitest-readonly-v1",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "profile missing",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "observe mode",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    },
+    "observe_mode": true
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "observe mode text",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    },
+    "observe_mode": "true"
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "observe mode false",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    },
+    "observe_mode": false
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "decision block",
+   "platform": "linux",
+   "response": {
+    "decision": "block",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "policy review",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "review",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "unknown reason",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_other_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "reason missing",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "reason not text",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": 7,
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "receipt only",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1",
+    "guard_containment_receipt_only": true
+   },
+   "routed": false
+  },
+  {
+   "name": "receipt only text",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1",
+    "guard_containment_receipt_only": "true"
+   },
+   "routed": false
+  },
+  {
+   "name": "camel event",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1",
+    "hookEventName": "PreToolUse"
+   },
+   "routed": false
+  },
+  {
+   "name": "snake event",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "pre_tool_use",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "post event",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "event missing",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "null event shadows camel",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": null,
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1",
+    "hookEventName": "PreToolUse"
+   },
+   "routed": false
+  },
+  {
+   "name": "run command tool",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "run_command",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "terminal tool",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "run_terminal_command",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "lower bash tool",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "read tool",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Read",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "camel tool",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1",
+    "toolName": "Bash"
+   },
+   "routed": false
+  },
+  {
+   "name": "camel input",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1",
+    "toolInput": {
+     "command": "npx vitest run"
+    }
+   },
+   "routed": false
+  },
+  {
+   "name": "input missing",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "input list",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": [
+     "pytest"
+    ],
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "command not text",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": 7
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "command missing",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "description": "x"
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "null session shadows camel",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": null,
+    "tool_use_id": "toolu_1",
+    "sessionId": "camel"
+   },
+   "routed": false
+  },
+  {
+   "name": "camel session",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "tool_use_id": "toolu_1",
+    "sessionId": "camel"
+   },
+   "routed": false
+  },
+  {
+   "name": "camel call",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "toolCallId": "call-camel"
+   },
+   "routed": false
+  },
+  {
+   "name": "call id wins",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1",
+    "tool_call_id": "call-1",
+    "toolCallId": "call-2"
+   },
+   "routed": false
+  },
+  {
+   "name": "no ids",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    }
+   },
+   "routed": false
+  },
+  {
+   "name": "quoted command",
+   "platform": "linux",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -k 'a and b' \"x\"",
+     "extra": {
+      "n": [
+       1,
+       null
+      ]
+     }
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "profile native_pytest_readonly_containment_required",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "profile native_node_test_readonly_containment_required",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_node_test_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "node-test-readonly-v1",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "profile native_vitest_readonly_containment_required",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_vitest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "vitest-readonly-v1",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "profile native_package_test_readonly_containment_required",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_package_test_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "package-test-readonly-v1",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "profile native_python_eval_readonly_containment_required",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_python_eval_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "python-eval-readonly-v1",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "profile native_node_eval_readonly_containment_required",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_node_eval_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "node-eval-readonly-v1",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "profile native_git_readonly_containment_required",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_git_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "git-readonly-v1",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "profile native_node_tool_readonly_containment_required",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_node_tool_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "node-tool-readonly-v1",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "profile native_node_build_output_containment_required",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_node_build_output_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "node-build-output-v1",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "profile native_workspace_containment_required",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_workspace_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "workspace-contained-v1",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "profile mismatch",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "vitest-readonly-v1",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "profile missing",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "observe mode",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    },
+    "observe_mode": true
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "observe mode text",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    },
+    "observe_mode": "true"
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "observe mode false",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    },
+    "observe_mode": false
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "decision block",
+   "platform": "win32",
+   "response": {
+    "decision": "block",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "policy review",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "review",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "unknown reason",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_other_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "reason missing",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "reason not text",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": 7,
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "receipt only",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1",
+    "guard_containment_receipt_only": true
+   },
+   "routed": false
+  },
+  {
+   "name": "receipt only text",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1",
+    "guard_containment_receipt_only": "true"
+   },
+   "routed": false
+  },
+  {
+   "name": "camel event",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1",
+    "hookEventName": "PreToolUse"
+   },
+   "routed": false
+  },
+  {
+   "name": "snake event",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "pre_tool_use",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "post event",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "event missing",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "null event shadows camel",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": null,
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1",
+    "hookEventName": "PreToolUse"
+   },
+   "routed": false
+  },
+  {
+   "name": "run command tool",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "run_command",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "terminal tool",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "run_terminal_command",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "lower bash tool",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "read tool",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Read",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "camel tool",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1",
+    "toolName": "Bash"
+   },
+   "routed": false
+  },
+  {
+   "name": "camel input",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1",
+    "toolInput": {
+     "command": "npx vitest run"
+    }
+   },
+   "routed": false
+  },
+  {
+   "name": "input missing",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "input list",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": [
+     "pytest"
+    ],
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "command not text",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": 7
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "command missing",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "description": "x"
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  },
+  {
+   "name": "null session shadows camel",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": null,
+    "tool_use_id": "toolu_1",
+    "sessionId": "camel"
+   },
+   "routed": false
+  },
+  {
+   "name": "camel session",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "tool_use_id": "toolu_1",
+    "sessionId": "camel"
+   },
+   "routed": false
+  },
+  {
+   "name": "camel call",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "toolCallId": "call-camel"
+   },
+   "routed": false
+  },
+  {
+   "name": "call id wins",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1",
+    "tool_call_id": "call-1",
+    "toolCallId": "call-2"
+   },
+   "routed": false
+  },
+  {
+   "name": "no ids",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -q tests",
+     "description": "Run tests",
+     "timeout": 120
+    }
+   },
+   "routed": false
+  },
+  {
+   "name": "quoted command",
+   "platform": "win32",
+   "response": {
+    "decision": "deny",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_pytest_readonly_containment_required",
+    "reason": "Guard requires contained execution.",
+    "required_execution_profile": "pytest-readonly-v2",
+    "hookSpecificOutput": {
+     "hookEventName": "PreToolUse",
+     "permissionDecision": "deny",
+     "permissionDecisionReason": "x"
+    }
+   },
+   "payload": {
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+     "command": "pytest -k 'a and b' \"x\"",
+     "extra": {
+      "n": [
+       1,
+       null
+      ]
+     }
+    },
+    "session_id": "session-1",
+    "tool_use_id": "toolu_1"
+   },
+   "routed": false
+  }
+ ],
+ "shlex_join": [
+  {
+   "tokens": [
+    "",
+    "abc",
+    "a b",
+    "it's",
+    "/tmp/x y/z",
+    "-c",
+    "import sys;sys.path.insert(0, '/a b')",
+    "ünï",
+    "a_b@%+=:,./-",
+    "$HOME",
+    "tab\there",
+    "new\nline",
+    "--request-sha256",
+    "C:\\x"
+   ],
+   "joined": "'' abc 'a b' 'it'\"'\"'s' '/tmp/x y/z' -c 'import sys;sys.path.insert(0, '\"'\"'/a b'\"'\"')' 'ünï' a_b@%+=:,./- '$HOME' 'tab\there' 'new\nline' --request-sha256 'C:\\x'"
+  },
+  {
+   "tokens": [
+    ""
+   ],
+   "joined": "''"
+  },
+  {
+   "tokens": [
+    "abc"
+   ],
+   "joined": "abc"
+  },
+  {
+   "tokens": [
+    "a b"
+   ],
+   "joined": "'a b'"
+  },
+  {
+   "tokens": [
+    "it's"
+   ],
+   "joined": "'it'\"'\"'s'"
+  },
+  {
+   "tokens": [
+    "/tmp/x y/z"
+   ],
+   "joined": "'/tmp/x y/z'"
+  },
+  {
+   "tokens": [
+    "-c"
+   ],
+   "joined": "-c"
+  },
+  {
+   "tokens": [
+    "import sys;sys.path.insert(0, '/a b')"
+   ],
+   "joined": "'import sys;sys.path.insert(0, '\"'\"'/a b'\"'\"')'"
+  },
+  {
+   "tokens": [
+    "ünï"
+   ],
+   "joined": "'ünï'"
+  },
+  {
+   "tokens": [
+    "a_b@%+=:,./-"
+   ],
+   "joined": "a_b@%+=:,./-"
+  },
+  {
+   "tokens": [
+    "$HOME"
+   ],
+   "joined": "'$HOME'"
+  },
+  {
+   "tokens": [
+    "tab\there"
+   ],
+   "joined": "'tab\there'"
+  },
+  {
+   "tokens": [
+    "new\nline"
+   ],
+   "joined": "'new\nline'"
+  },
+  {
+   "tokens": [
+    "--request-sha256"
+   ],
+   "joined": "--request-sha256"
+  },
+  {
+   "tokens": [
+    "C:\\x"
+   ],
+   "joined": "'C:\\x'"
+  }
+ ]
+}

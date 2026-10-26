@@ -47,3 +47,10 @@ jobs:
       - name: Verify approval details and password/Authenticator Enter submission
         working-directory: dashboard
         run: bunx playwright test e2e/approval-scope-ui.spec.ts --project chromium
+
+      # A failed connector scan must name its cause and a next action. Without
+      # this step the Extensions banner had no CI coverage at all, which is how
+      # one sentence that fit every failure survived several fixes.
+      - name: Verify the Extensions connector-scan banner names its failure
+        working-directory: dashboard
+        run: bunx playwright test e2e/extension-list-switch.spec.ts --project chromium

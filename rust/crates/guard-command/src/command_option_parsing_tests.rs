@@ -3,6 +3,31 @@
 use super::*;
 use serde::Deserialize;
 
+#[test]
+fn short_value_option_presence_respects_consumption_and_unknown_arity() {
+    let options = BTreeSet::from(["-a".to_owned(), "--body".to_owned()]);
+    let known = BTreeSet::from(["-j".to_owned()]);
+    let required = BTreeSet::from(["-a".to_owned()]);
+    for (arguments, expected) in [
+        (vec!["-a", "synthetic"], true),
+        (vec!["-asynthetic"], true),
+        (vec!["-ja", "synthetic"], true),
+        (vec!["-a"], false),
+        (vec!["-ja"], false),
+        (vec!["-a", "synthetic", "--body"], false),
+        (vec!["--body", "-a"], false),
+        (vec!["--", "-a", "synthetic"], false),
+        (vec!["--future", "-a", "synthetic"], false),
+    ] {
+        let arguments = arguments.into_iter().map(str::to_owned).collect::<Vec<_>>();
+        assert_eq!(
+            flags_present_in_all_option_parses(&arguments, &required, &options, &known),
+            expected,
+            "{arguments:?}"
+        );
+    }
+}
+
 #[derive(Deserialize)]
 struct OracleGroup {
     options: BTreeSet<String>,
@@ -23,9 +48,11 @@ struct OracleCase {
     all_flags: bool,
 }
 
-// Generated directly from the Python reference at c4bd916; includes long
+// Frozen historical vectors from the Python reference at c4bd916; includes long
 // assignment ordering, inverse pairs, consumed help/dry-run operands, short
 // clusters, Unicode classifications, unknown arity, and the `--` boundary.
+// These preserve the pre-migration corpus, not parity with a live Python engine.
+// Native short-value-option behavior is covered by the independent test above.
 #[test]
 fn matches_python_option_oracles() {
     let groups: Vec<OracleGroup> = serde_json::from_str(PYTHON_ORACLES).expect("valid oracle JSON");

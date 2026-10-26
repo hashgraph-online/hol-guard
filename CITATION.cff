@@ -3,7 +3,7 @@ title: "HOL Guard"
 message: "If you reference HOL Guard, please cite this software repository. A scan is not a safety guarantee."
 type: software
 authors:
-  - name: "Hashgraph Online"
+  - name: "HOL"
 url: "https://github.com/hashgraph-online/hol-guard"
 repository-code: "https://github.com/hashgraph-online/hol-guard"
 license: "Apache-2.0"

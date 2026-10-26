@@ -1,0 +1,162 @@
+{
+ "schema": "hol-guard-cursor-native-surrogates.v1",
+ "requests": [
+  {
+   "input": "{\"hook_event_name\":\"beforeShellExecution\",\"command\":\"echo \\ud800\",\"cwd\":\"/nonexistent-\\udc00\"}",
+   "event": "beforeShellExecution",
+   "sent": "{\"hook_event_name\":\"PreToolUse\",\"command\":\"echo \\ud800\",\"cwd\":\"/nonexistent-\\udc00\",\"tool_name\":\"Shell\",\"tool_input\":{\"command\":\"echo \\ud800\",\"working_directory\":\"/nonexistent-\\udc00\"},\"cursor_source_hook_event\":\"beforeShellExecution\"}"
+  },
+  {
+   "input": "{\"hook_event_name\":\"preToolUse\",\"tool_name\":\"Shell\",\"tool_input\":{\"command\":\"ls \\uDBFF\\uDFFF \\udfff\"},\"cwd\":\"/nonexistent-cursor-cwd\"}",
+   "event": "preToolUse",
+   "sent": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Shell\",\"tool_input\":{\"command\":\"ls \\udbff\\udfff \\udfff\"},\"cwd\":\"/nonexistent-cursor-cwd\"}"
+  },
+  {
+   "input": "{\"hook_event_name\":\"beforeMCPExecution\",\"tool_name\":\"x\\ud834\",\"tool_input\":\"{\\\"a\\\": 1}\",\"workspace_roots\":[\"/nonexistent-\\ud800\"]}",
+   "event": "beforeMCPExecution",
+   "sent": "{\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"x\\ud834\",\"tool_input\":{\"a\":1},\"workspace_roots\":[\"/nonexistent-\\ud800\"],\"cursor_source_hook_event\":\"beforeMCPExecution\"}"
+  },
+  {
+   "input": "{\"hook_event_name\":\"beforeReadFile\",\"file_path\":\"/tmp/\\udcff.txt\",\"content\":\"\\ud800\"}",
+   "event": "beforeReadFile",
+   "sent": "{\"hook_event_name\":\"PreToolUse\",\"file_path\":\"/tmp/\\udcff.txt\",\"content\":\"\\ud800\",\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"/tmp/\\udcff.txt\",\"path\":\"/tmp/\\udcff.txt\"}}"
+  },
+  {
+   "input": "{\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"hi \\ud83d\"}",
+   "event": "UserPromptSubmit",
+   "sent": "{\"hook_event_name\":\"UserPromptSubmit\",\"prompt\":\"hi \\ud83d\"}"
+  },
+  {
+   "input": "{\"file_path\":\"/tmp/a\\udead\"}",
+   "event": "beforeReadFile",
+   "sent": "{\"file_path\":\"/tmp/a\\udead\",\"hook_event_name\":\"PreToolUse\",\"tool_name\":\"Read\",\"tool_input\":{\"file_path\":\"/tmp/a\\udead\",\"path\":\"/tmp/a\\udead\"}}"
+  },
+  {
+   "input": "{\"hook_event_name\":\"afterShellExecution\",\"command\":\"ls \\ud800\",\"output\":\"\\udc80\",\"conversation_id\":\"c-1\",\"generation_id\":\"g-1\"}",
+   "event": "afterShellExecution",
+   "sent": "{\"hook_event_name\":\"afterShellExecution\",\"command\":\"ls \\ud800\",\"output\":\"\\udc80\",\"conversation_id\":\"c-1\",\"generation_id\":\"g-1\",\"tool_name\":\"Shell\",\"tool_input\":{\"command\":\"ls \\ud800\"}}"
+  }
+ ],
+ "answers": [
+  {
+   "event": "beforeShellExecution",
+   "response": "{\"policy_action\":\"block\",\"reason\":\"rm \\ud800 denied\"}",
+   "stdout": "{\"permission\": \"deny\", \"user_message\": \"rm \\ud800 denied\", \"agent_message\": \"rm \\ud800 denied\"}\n",
+   "exit_code": 2
+  },
+  {
+   "event": "beforeShellExecution",
+   "response": "{\"policy_action\":\"review\",\"reason\":\" \\udc00 \"}",
+   "stdout": "{\"permission\": \"ask\", \"user_message\": \"\\udc00\", \"agent_message\": \"\\udc00\"}\n",
+   "exit_code": 0
+  },
+  {
+   "event": "beforeShellExecution",
+   "response": "{\"policy_action\":\"sandbox-required\",\"hookSpecificOutput\":{\"permissionDecisionReason\":\"\\udbff\\udbff\"}}",
+   "stdout": "{\"permission\": \"deny\", \"user_message\": \"\\udbff\\udbff\", \"agent_message\": \"\\udbff\\udbff\"}\n",
+   "exit_code": 2
+  },
+  {
+   "event": "beforeShellExecution",
+   "response": "{\"policy_action\":\"allow\",\"reason\":\"\\ud800\"}",
+   "stdout": "{\"permission\": \"allow\"}\n",
+   "exit_code": 0
+  },
+  {
+   "event": "beforeShellExecution",
+   "response": "{\"policy_action\":\"block\",\"decision_v2_json\":{\"user_body\":\"\\ud800\\u00e9\"}}",
+   "stdout": "{\"permission\": \"deny\", \"user_message\": \"\\ud800\\u00e9\", \"agent_message\": \"\\ud800\\u00e9\"}\n",
+   "exit_code": 2
+  },
+  {
+   "event": "preToolUse",
+   "response": "{\"policy_action\":\"block\",\"reason\":\"rm \\ud800 denied\"}",
+   "stdout": "{\"permission\": \"deny\", \"user_message\": \"rm \\ud800 denied\", \"agent_message\": \"rm \\ud800 denied\"}\n",
+   "exit_code": 2
+  },
+  {
+   "event": "preToolUse",
+   "response": "{\"policy_action\":\"review\",\"reason\":\" \\udc00 \"}",
+   "stdout": "{\"permission\": \"deny\", \"user_message\": \"\\udc00\", \"agent_message\": \"\\udc00\"}\n",
+   "exit_code": 2
+  },
+  {
+   "event": "preToolUse",
+   "response": "{\"policy_action\":\"sandbox-required\",\"hookSpecificOutput\":{\"permissionDecisionReason\":\"\\udbff\\udbff\"}}",
+   "stdout": "{\"permission\": \"deny\", \"user_message\": \"\\udbff\\udbff\", \"agent_message\": \"\\udbff\\udbff\"}\n",
+   "exit_code": 2
+  },
+  {
+   "event": "preToolUse",
+   "response": "{\"policy_action\":\"allow\",\"reason\":\"\\ud800\"}",
+   "stdout": "{\"permission\": \"allow\"}\n",
+   "exit_code": 0
+  },
+  {
+   "event": "preToolUse",
+   "response": "{\"policy_action\":\"block\",\"decision_v2_json\":{\"user_body\":\"\\ud800\\u00e9\"}}",
+   "stdout": "{\"permission\": \"deny\", \"user_message\": \"\\ud800\\u00e9\", \"agent_message\": \"\\ud800\\u00e9\"}\n",
+   "exit_code": 2
+  },
+  {
+   "event": "beforeReadFile",
+   "response": "{\"policy_action\":\"block\",\"reason\":\"rm \\ud800 denied\"}",
+   "stdout": "{\"permission\": \"deny\", \"user_message\": \"rm \\ud800 denied\"}\n",
+   "exit_code": 2
+  },
+  {
+   "event": "beforeReadFile",
+   "response": "{\"policy_action\":\"review\",\"reason\":\" \\udc00 \"}",
+   "stdout": "{\"permission\": \"deny\", \"user_message\": \"\\udc00\"}\n",
+   "exit_code": 2
+  },
+  {
+   "event": "beforeReadFile",
+   "response": "{\"policy_action\":\"sandbox-required\",\"hookSpecificOutput\":{\"permissionDecisionReason\":\"\\udbff\\udbff\"}}",
+   "stdout": "{\"permission\": \"deny\", \"user_message\": \"\\udbff\\udbff\"}\n",
+   "exit_code": 2
+  },
+  {
+   "event": "beforeReadFile",
+   "response": "{\"policy_action\":\"allow\",\"reason\":\"\\ud800\"}",
+   "stdout": "{\"permission\": \"allow\"}\n",
+   "exit_code": 0
+  },
+  {
+   "event": "beforeReadFile",
+   "response": "{\"policy_action\":\"block\",\"decision_v2_json\":{\"user_body\":\"\\ud800\\u00e9\"}}",
+   "stdout": "{\"permission\": \"deny\", \"user_message\": \"\\ud800\\u00e9\"}\n",
+   "exit_code": 2
+  },
+  {
+   "event": "beforeSubmitPrompt",
+   "response": "{\"policy_action\":\"block\",\"reason\":\"rm \\ud800 denied\"}",
+   "stdout": "{\"permission\": \"deny\", \"user_message\": \"rm \\ud800 denied\", \"agent_message\": \"rm \\ud800 denied\"}\n",
+   "exit_code": 2
+  },
+  {
+   "event": "beforeSubmitPrompt",
+   "response": "{\"policy_action\":\"review\",\"reason\":\" \\udc00 \"}",
+   "stdout": "{\"permission\": \"ask\", \"user_message\": \"\\udc00\", \"agent_message\": \"\\udc00\"}\n",
+   "exit_code": 0
+  },
+  {
+   "event": "beforeSubmitPrompt",
+   "response": "{\"policy_action\":\"sandbox-required\",\"hookSpecificOutput\":{\"permissionDecisionReason\":\"\\udbff\\udbff\"}}",
+   "stdout": "{\"permission\": \"deny\", \"user_message\": \"\\udbff\\udbff\", \"agent_message\": \"\\udbff\\udbff\"}\n",
+   "exit_code": 2
+  },
+  {
+   "event": "beforeSubmitPrompt",
+   "response": "{\"policy_action\":\"allow\",\"reason\":\"\\ud800\"}",
+   "stdout": "{\"permission\": \"allow\"}\n",
+   "exit_code": 0
+  },
+  {
+   "event": "beforeSubmitPrompt",
+   "response": "{\"policy_action\":\"block\",\"decision_v2_json\":{\"user_body\":\"\\ud800\\u00e9\"}}",
+   "stdout": "{\"permission\": \"deny\", \"user_message\": \"\\ud800\\u00e9\", \"agent_message\": \"\\ud800\\u00e9\"}\n",
+   "exit_code": 2
+  }
+ ]
+}

@@ -1,0 +1,68 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.agent-wire",
+  "version": "1.0.0",
+  "name": "agent-wire",
+  "description": "Gives agents live, token-budgeted Markdown from 31 sites (X, Reddit, GitHub, YouTube, Hacker News, arXiv and more). Saved logins are opt-in, read-only and never reach the model. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.uncoalesced",
+    "displayName": "uncoalesced",
+    "url": "https://github.com/uncoalesced"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniGlobeAlt",
+    "background": "#0F172A"
+  },
+  "homepage": "https://github.com/uncoalesced/agent-wire",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "uvx",
+    "package": "agent-wire-cli"
+  },
+  "riskClasses": [
+    "external-network-read",
+    "external-account-read",
+    "local-file-write"
+  ],
+  "tools": [
+    {
+      "name": "wire_read",
+      "state": "review"
+    },
+    {
+      "name": "wire_search",
+      "state": "review"
+    },
+    {
+      "name": "wire_feed",
+      "state": "review"
+    },
+    {
+      "name": "wire_research",
+      "state": "review"
+    },
+    {
+      "name": "wire_status",
+      "state": "inherit"
+    },
+    {
+      "name": "wire_me",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "inherit"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/uncoalesced/agent-wire",
+    "https://pypi.org/project/agent-wire-cli/"
+  ],
+  "saferAlternatives": [
+    "Skip `wire auth login` to keep agent-wire to public, cookie-free reads; saved sessions are only needed for wire_me and login-only sites."
+  ]
+}

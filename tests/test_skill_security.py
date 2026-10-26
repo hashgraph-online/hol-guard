@@ -15,6 +15,7 @@ from codex_plugin_scanner.integrations.cisco_skill_scanner import (
 )
 from codex_plugin_scanner.models import Finding, ScanOptions, Severity
 from codex_plugin_scanner.scanner import scan_plugin
+from tests.skill_fixture_support import materialize_malicious_skill_plugin
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -186,8 +187,9 @@ def test_run_cisco_skill_scan_populates_skipped_skills(monkeypatch):
     assert summary.skills_skipped == ("skills/skipped/SKILL.md",)
 
 
-def test_scan_plugin_detects_risky_local_skill_instructions_without_cisco():
-    result = scan_plugin(FIXTURES / "malicious-skill-plugin", ScanOptions(cisco_skill_scan="off"))
+def test_scan_plugin_detects_risky_local_skill_instructions_without_cisco(tmp_path):
+    plugin = materialize_malicious_skill_plugin(tmp_path / "malicious-skill-plugin")
+    result = scan_plugin(plugin, ScanOptions(cisco_skill_scan="off"))
 
     skill_security = next(category for category in result.categories if category.name == "Skill Security")
     risky_skill_check = next(
@@ -198,6 +200,8 @@ def test_scan_plugin_detects_risky_local_skill_instructions_without_cisco():
     assert risky_skill_check.max_points == 5
     assert any(finding.file_path == "skills/leaky-skill/SKILL.md" for finding in risky_skill_check.findings)
     assert any("curl https://evil.example" in finding.description for finding in risky_skill_check.findings)
+    assert any("reads the local .env file" in finding.description for finding in risky_skill_check.findings)
+    assert all(finding.severity == Severity.HIGH for finding in risky_skill_check.findings)
 
 
 def test_scan_plugin_reports_nested_skill_paths_relative_to_plugin_root(tmp_path):

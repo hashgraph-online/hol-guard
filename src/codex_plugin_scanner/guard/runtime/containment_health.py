@@ -4,13 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import re
 import sys
-import tempfile
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Final, cast
 
 from .containment_contract import (
@@ -181,11 +180,19 @@ def contained_positive_proof(
     return PositiveProof(base.route, digest, base.satisfied_requirements, enforced=True)
 
 
-def probe_containment_health(*, daemon_fingerprint: str) -> ContainmentHealthEvidence:
-    """Run a fresh execution-owned backend probe in the daemon process."""
+def probe_containment_health(
+    *,
+    daemon_fingerprint: str,
+    guard_home: Path,
+) -> ContainmentHealthEvidence:
+    """Report containment health from the resident's own execution-owned probe.
 
-    from .containment_contract import ContainmentPolicy, ContainmentRequest
-    from .containment_executor import execute_contained, file_sha256
+    The resident selects the backend, runs the enforcement self-probe and builds
+    the evidence, so this never recalculates any of it. A resident that cannot
+    answer is reported as unavailable by raising, not by guessing a verdict here.
+    """
+
+    from ..native_execution import containment_health_probe_native
 
     if _SHA256.fullmatch(daemon_fingerprint) is None:
         raise ValueError("daemon fingerprint must be a lowercase SHA-256 digest")
@@ -199,31 +206,13 @@ def probe_containment_health(*, daemon_fingerprint: str) -> ContainmentHealthEvi
             probe_at=datetime.now(timezone.utc).isoformat(),
             probe_enforced=False,
         )
-    executable = next((path for path in ("/usr/bin/true", "/bin/true") if os.path.isfile(path)), None)
-    if executable is None:
-        raise RuntimeError("containment probe executable is unavailable")
-    with tempfile.TemporaryDirectory(prefix="guard-containment-probe-") as workspace_value:
-        workspace = os.path.realpath(workspace_value)
-        request = ContainmentRequest(
-            argv=(executable,),
-            cwd=workspace,
-            environment=(),
-            policy=ContainmentPolicy(workspace, ()),
-            inputs=(),
-            launch_digest=hashlib.sha256(b"guard-containment-health-probe-v1").hexdigest(),
-            executable_digest=file_sha256(executable),
-            operation_id="health-probe",
-        )
-        result = execute_contained(request, timeout_seconds=5.0)
-    return ContainmentHealthEvidence(
-        backend=result.attestation.backend,
-        backend_digest=result.attestation.backend_digest,
-        policy_contract_digest=CONTAINMENT_POLICY_CONTRACT_DIGEST,
+    payload = containment_health_probe_native(
         daemon_fingerprint=daemon_fingerprint,
-        runtime_fingerprint=daemon_fingerprint,
-        probe_at=datetime.now(timezone.utc).isoformat(),
-        probe_enforced=result.enforced and result.exit_code == 0 and not result.timed_out,
+        guard_home=guard_home,
     )
+    if payload is None:
+        raise RuntimeError("native_containment_health_probe_unavailable")
+    return ContainmentHealthEvidence.from_mapping(payload)
 
 
 def containment_health_signals(

@@ -31,8 +31,8 @@ _VECTOR_PATH = (
     Path(__file__).resolve().parents[1]
     / "contracts/managed-controls/v1/policy-bundle-v2-extension-signature-vector.json"
 )
-_GUARD_RELEASE_CATALOG_DIGEST = "27e46627d1e717ca79088619f3520abc28dbd4d5d5eef7a26bfa293ce8d8b2b2"
-_GUARD_RELEASE_PROJECTION_DIGEST = "sha256:f1659faabc4afed868b3cf5517b5dbbf72781f1ef99fceb7d7d70663ddcd1b64"
+_GUARD_RELEASE_CATALOG_DIGEST = "e27a20311c72def2ca490db1b03a34deaa35860c4c537d453cfa346967293b1f"
+_GUARD_RELEASE_PROJECTION_DIGEST = "sha256:7fb5310f60395b624123872305baa9f4a0d3a996a2dbfba10fa3c0b583dcdad9"
 
 
 class _Response:
@@ -66,18 +66,14 @@ def _bundle() -> dict[str, object]:
 
 
 def test_signed_cloud_extension_projection_matches_shared_vector() -> None:
+    """Verify signed cloud extension projection matches shared vector."""
     vector_path = _VECTOR_PATH.with_name("extension-projection-digest-vector.json")
     vector = json.loads(vector_path.read_text())
 
     assert vector["catalogDigest"] == _GUARD_RELEASE_CATALOG_DIGEST
     assert vector["expectedExtensionProjectionDigest"] == _GUARD_RELEASE_PROJECTION_DIGEST
-    assert (
-        vector["catalogDigest"]
-        == runner.build_builtin_extension_catalog_wire(
-            guard_version="test",
-            generated_at="2026-08-25T12:00:00Z",
-        )["catalogDigest"]
-    )
+    # Fixed crypto input, not a snapshot of the growing production catalog.
+    # Dynamic catalog binding is covered by the delivery/apply tests below.
     assert (
         signed_cloud_extension_projection_json(
             parse_managed_bundle(_bundle()),
@@ -282,7 +278,7 @@ def test_receipt_sync_atomically_accepts_managed_delivery_and_emits_exact_v2_ack
     authority = store.read_extension_control_authority_for_registry(registry)
     runtime = ExtensionControlRuntime(authority)
     wire_digest = runner.build_builtin_extension_catalog_wire(
-        guard_version="test", generated_at="2026-08-25T12:00:00Z"
+        guard_version="test", generated_at="2026-08-25T12:00:00Z", guard_home=store.guard_home
     )["catalogDigest"]
     _device_id, _device_name = runner._guard_device_metadata(store)
     trusted_cloud_device_id = "oauth-machine-managed-controls"
@@ -360,7 +356,7 @@ def test_receipt_sync_rejects_managed_bundle_without_delivery_and_makes_no_ack(
     authority = store.read_extension_control_authority_for_registry(registry)
     runtime = ExtensionControlRuntime(authority)
     wire_digest = runner.build_builtin_extension_catalog_wire(
-        guard_version="test", generated_at="2026-08-25T12:00:00Z"
+        guard_version="test", generated_at="2026-08-25T12:00:00Z", guard_home=store.guard_home
     )["catalogDigest"]
     device_id, _device_name = runner._guard_device_metadata(store)
     store.set_sync_payload(
@@ -405,6 +401,7 @@ def test_atomic_activation_rejects_stale_delivery_after_concurrent_managed_commi
     wire_digest = runner.build_builtin_extension_catalog_wire(
         guard_version="test",
         generated_at="2026-08-25T12:00:00Z",
+        guard_home=store.guard_home,
     )["catalogDigest"]
 
     committed_bundle = _bundle()

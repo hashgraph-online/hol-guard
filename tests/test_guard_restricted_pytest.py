@@ -8,6 +8,7 @@ import shlex
 import socket
 import sys
 import tempfile
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -115,7 +116,9 @@ def test_pytest_artifact_carries_terminal_profile_and_reason(tmp_path: Path) -> 
     }
 
 
-def test_terminal_pytest_profile_cannot_be_downgraded_by_exact_allow(tmp_path: Path) -> None:
+def test_terminal_pytest_profile_cannot_be_downgraded_by_exact_allow(
+    tmp_path: Path, native_approval_reuse_runtime
+) -> None:
     match = extract_sensitive_tool_action_request(
         "Bash",
         {"command": "python3 -m pytest -q"},
@@ -136,10 +139,18 @@ def test_terminal_pytest_profile_cannot_be_downgraded_by_exact_allow(tmp_path: P
         artifact_actions={artifact.artifact_id: "allow"},
     )
 
-    assert _runtime_artifact_policy_action(config, artifact, "codex") == "sandbox-required"
+    assert (
+        _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime)
+        == "sandbox-required"
+    )
 
 
-def test_pytest_contained_cli_dispatches_exact_argv(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+@pytest.mark.parametrize("read_only_workspace", (False, True))
+def test_pytest_contained_cli_dispatches_exact_argv(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    read_only_workspace: bool,
+) -> None:
     observed: dict[str, object] = {}
 
     def fake_run_restricted_pytest(command, **kwargs):
@@ -159,6 +170,7 @@ def test_pytest_contained_cli_dispatches_exact_argv(monkeypatch: pytest.MonkeyPa
             str(tmp_path),
             "--timeout-seconds",
             "45",
+            *(["--read-only-workspace"] if read_only_workspace else []),
             "--",
             sys.executable,
             "-m",
@@ -173,9 +185,31 @@ def test_pytest_contained_cli_dispatches_exact_argv(monkeypatch: pytest.MonkeyPa
         "workspace": tmp_path,
         "cwd": tmp_path,
         "timeout_seconds": 45,
+        "read_only_workspace": read_only_workspace,
     }
 
 
+def test_pytest_contained_cli_workspace_defaults_to_cwd(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    observed: dict[str, object] = {}
+
+    def fake_run_restricted_pytest(command, **kwargs):
+        observed["command"] = command
+        observed.update(kwargs)
+        return 0
+
+    monkeypatch.setattr(restricted_pytest_module, "run_restricted_pytest", fake_run_restricted_pytest)
+    monkeypatch.chdir(tmp_path)
+
+    assert main(["guard", "pytest-contained", "python3", "-m", "pytest", "-q"]) == 0
+    assert observed["command"] == ["python3", "-m", "pytest", "-q"]
+    assert observed["workspace"] == Path.cwd()
+    assert observed["read_only_workspace"] is False
+
+
+@pytest.mark.usefixtures("native_context_digest")
 def test_prepare_restricted_pytest_binds_profile_workspace_and_capabilities(tmp_path: Path) -> None:
     executable = Path(sys.executable)
     workspace = Path.cwd().resolve()
@@ -195,6 +229,7 @@ def test_prepare_restricted_pytest_binds_profile_workspace_and_capabilities(tmp_
     assert "write-outside-workspace-and-private-temp" in evidence["denied_capabilities"]
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_prepare_restricted_pytest_does_not_trust_spoofed_home(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -213,6 +248,7 @@ def test_prepare_restricted_pytest_does_not_trust_spoofed_home(
     assert plan.workspace == workspace
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_linux_profile_unshares_network_and_does_not_mount_shell_toolchain() -> None:
     workspace = Path.cwd().resolve()
     private_root = Path("/tmp/hol-guard-pytest-test")
@@ -241,6 +277,7 @@ def test_linux_profile_unshares_network_and_does_not_mount_shell_toolchain() -> 
     ]
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_macos_profile_grants_only_root_metadata_and_bounded_runtime_reads(tmp_path: Path) -> None:
     workspace = Path.cwd().resolve()
     plan = prepare_restricted_pytest(
@@ -260,7 +297,12 @@ def test_macos_profile_grants_only_root_metadata_and_bounded_runtime_reads(tmp_p
     process_exec_rule = next(line for line in profile.splitlines() if line.startswith("(allow process-exec "))
     assert "(subpath " not in process_exec_rule
 
+    image = tmp_path / "esbuild"
+    profile = _macos_profile(replace(plan, allowed_executables=(image,)), private_root=tmp_path)
+    assert f'(deny file-write* (literal "{image}"))' in profile
 
+
+@pytest.mark.usefixtures("native_context_digest")
 def test_prepare_restricted_pytest_rejects_non_pytest_command() -> None:
     with pytest.raises(RestrictedPytestError) as error:
         prepare_restricted_pytest(
@@ -273,6 +315,7 @@ def test_prepare_restricted_pytest_rejects_non_pytest_command() -> None:
     assert error.value.reason_code == PYTEST_INVALID_COMMAND_REASON_CODE
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_prepare_restricted_pytest_rejects_cwd_outside_workspace(tmp_path: Path) -> None:
     with pytest.raises(RestrictedPytestError) as error:
         prepare_restricted_pytest(
@@ -286,6 +329,7 @@ def test_prepare_restricted_pytest_rejects_cwd_outside_workspace(tmp_path: Path)
     assert error.value.reason_code == PYTEST_INVALID_WORKSPACE_REASON_CODE
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_prepare_restricted_pytest_rejects_broad_workspace_root() -> None:
     with pytest.raises(RestrictedPytestError) as error:
         prepare_restricted_pytest(
@@ -299,6 +343,7 @@ def test_prepare_restricted_pytest_rejects_broad_workspace_root() -> None:
     assert error.value.reason_code == PYTEST_INVALID_WORKSPACE_REASON_CODE
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_prepare_restricted_pytest_rejects_non_python_pytest_entrypoint() -> None:
     workspace = Path.cwd().resolve()
     with tempfile.TemporaryDirectory(prefix=".guard-p35-entrypoint-", dir=workspace) as project_text:
@@ -318,6 +363,7 @@ def test_prepare_restricted_pytest_rejects_non_python_pytest_entrypoint() -> Non
     assert error.value.reason_code == PYTEST_INVALID_COMMAND_REASON_CODE
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_prepare_restricted_pytest_rejects_unrecognized_external_python_runtime(tmp_path: Path) -> None:
     workspace = Path.cwd().resolve()
     external_python = tmp_path / "untrusted-runtime" / "bin" / "python"
@@ -340,6 +386,7 @@ def test_prepare_restricted_pytest_rejects_unrecognized_external_python_runtime(
     assert error.value.reason_code == PYTEST_INVALID_COMMAND_REASON_CODE
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_prepare_restricted_pytest_rejects_unapproved_intermediate_symlink_root(tmp_path: Path) -> None:
     workspace = Path.cwd().resolve()
     intermediate_python = tmp_path / "host-content" / "bin" / "python"
@@ -361,6 +408,7 @@ def test_prepare_restricted_pytest_rejects_unapproved_intermediate_symlink_root(
     assert error.value.reason_code == PYTEST_INVALID_COMMAND_REASON_CODE
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_restricted_pytest_rejects_external_pythonpath_before_backend_runs(tmp_path: Path) -> None:
     workspace = Path.cwd().resolve()
     external = tmp_path.resolve()
@@ -379,6 +427,7 @@ def test_restricted_pytest_rejects_external_pythonpath_before_backend_runs(tmp_p
     assert error.value.reason_code == PYTEST_EXTERNAL_PYTHONPATH_REASON_CODE
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_restricted_pytest_fails_closed_without_platform_backend() -> None:
     with pytest.raises(RestrictedPytestError) as error:
         prepare_restricted_pytest(
@@ -390,6 +439,7 @@ def test_restricted_pytest_fails_closed_without_platform_backend() -> None:
     assert error.value.reason_code == PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_restricted_pytest_fails_closed_when_supported_backend_is_missing(tmp_path: Path) -> None:
     with pytest.raises(RestrictedPytestError) as error:
         prepare_restricted_pytest(
@@ -402,6 +452,7 @@ def test_restricted_pytest_fails_closed_when_supported_backend_is_missing(tmp_pa
     assert error.value.reason_code == PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE
 
 
+@pytest.mark.usefixtures("native_context_digest")
 @pytest.mark.skipif(sys.platform != "darwin", reason="requires the macOS Seatbelt backend")
 @pytest.mark.parametrize("launch_style", ("module", "entrypoint"))
 def test_real_restricted_pytest_blocks_host_sinks_and_preserves_harmless_suite(

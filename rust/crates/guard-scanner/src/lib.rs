@@ -1,5 +1,26 @@
 #![forbid(unsafe_code)]
 
+pub mod git_read;
+pub mod precommit;
+pub mod repository_scanner;
+pub mod secret_detection;
+pub mod staged_scanner;
+
+mod code_cursor;
+mod code_expression;
+mod code_value;
+mod continuation;
+mod field_copy;
+mod guard_link;
+mod masked_value;
+mod match_spans;
+mod prose_answer_value;
+mod reference_value;
+mod self_named_value;
+mod url_credential;
+
+pub use match_spans::scan_match_spans;
+
 use guard_rules::{CONTEXT_CHARS, MAX_MATCHES, MAX_SCAN_BYTES};
 use regex::{Regex, RegexBuilder};
 use std::collections::BTreeMap;
@@ -124,9 +145,24 @@ const PATTERNS: &[PatternDef] = &[
         family: "credential assignment",
         sensitivity: "medium",
         reason: "Guard found credential-looking assignment text.",
-        pattern: r#"[\"']?\b[A-Za-z0-9_-]*(?:api[_-]?key|auth[_-]?token|credential|credentials|npm[_-]?token|private[_-]?key|secret|token|password)\b[\"']?\s*[:=]\s*(?:(?:get_secret\([^\)\r\n]*\)|\{(?:r|result|response|proc|process)\.(?:stderr|stdout)\}|[fF](?:\"\{[A-Za-z_][A-Za-z0-9_.]*\}\"|'\{[A-Za-z_][A-Za-z0-9_.]*\}'))\s*$|\"[^\"\r\n]+\"|'[^'\r\n]+'|[^ \t\r\n\"',}]+)"#,
+        // `pass` and `pwd` count only after `_` or `-` (`DB_PASS`, `WEBDAV_PWD`), so
+        // `bypass`, `compass`, test tallies (`"pass": 12`) and the shell's
+        // `PWD=`/`OLDPWD=` paths stay clean.
+        pattern: r#"[\"']?\b[A-Za-z0-9_-]*(?:api[_-]?key|auth[_-]?token|credential|credentials|npm[_-]?token|private[_-]?key|secret|token|password|passwd|passphrase|access[_-]?key|[_-]pass|[_-]pwd)\b[\"']?\s*[:=]\s*(?:(?:get_secret\([^\)\r\n]*\)|\{(?:r|result|response|proc|process)\.(?:stderr|stdout)\}|[fF](?:\"\{[A-Za-z_][A-Za-z0-9_.]*\}\"|'\{[A-Za-z_][A-Za-z0-9_.]*\}'))\s*$|\"[^\"\r\n]+\"|'[^'\r\n]+'|[^ \t\r\n\"',}]+)"#,
         case_insensitive: true,
         multi_line: true,
+    },
+    PatternDef {
+        classifier: "url-credential",
+        family: "URL credential",
+        sensitivity: "high",
+        reason: "Guard found a password inside a URL.",
+        // `scheme://user:password@host`, as `git remote -v`, `.git/config`, a
+        // database URL or a sync script prints it. `git@host:repo` has no
+        // scheme and `ssh://git@host:22/` has no password, so neither matches.
+        pattern: r#"\b[a-z][a-z0-9+.-]{1,31}://[^\s:/?#@'"<>]{0,128}:[^\s/?#@"<>]{1,256}@[^\s/?#@'"<>]"#,
+        case_insensitive: true,
+        multi_line: false,
     },
 ];
 
@@ -134,6 +170,8 @@ static COMPILED: OnceLock<Vec<Regex>> = OnceLock::new();
 static SAMPLE: OnceLock<Regex> = OnceLock::new();
 static DOC_SAMPLE: OnceLock<Regex> = OnceLock::new();
 static INERT_CODE_EXPRESSION: OnceLock<Regex> = OnceLock::new();
+static DECLARED_SAMPLE_VALUE: OnceLock<Regex> = OnceLock::new();
+static DEPLOYED_VALUE_MARKER: OnceLock<Regex> = OnceLock::new();
 
 fn compiled() -> &'static [Regex] {
     COMPILED.get_or_init(|| {
@@ -168,6 +206,31 @@ fn doc_sample_regex() -> &'static Regex {
     })
 }
 
+/// Values in tests and docs that say outright they are not real, such as
+/// `fictional-report-key` or `stub_token`. Delimiters are explicit because
+/// `\b` treats `_` as a word character.
+fn declared_sample_value_regex() -> &'static Regex {
+    DECLARED_SAMPLE_VALUE.get_or_init(|| {
+        RegexBuilder::new(
+            r"(?:^|[^a-z0-9])(?:fictional|fictitious|bogus|stub|stubbed|mock|mocked|sample|placeholder|fixture|synthetic|redacted|not[-_.]?real)(?:[^a-z0-9]|$)",
+        )
+        .case_insensitive(true)
+        .build()
+        .expect("declared sample rule must compile")
+    })
+}
+
+/// A value that names a deployed environment, such as `fixture-prod-value`,
+/// is not treated as inert even when it also carries a sample word.
+fn deployed_value_marker_regex() -> &'static Regex {
+    DEPLOYED_VALUE_MARKER.get_or_init(|| {
+        RegexBuilder::new(r"(?:^|[^a-z0-9])(?:prod|production|live|staging|stage)(?:[^a-z0-9]|$)")
+            .case_insensitive(true)
+            .build()
+            .expect("deployed value rule must compile")
+    })
+}
+
 fn inert_code_expression_regex() -> &'static Regex {
     INERT_CODE_EXPRESSION.get_or_init(|| {
         Regex::new(
@@ -178,22 +241,16 @@ fn inert_code_expression_regex() -> &'static Regex {
 }
 
 fn suppressible(classifier: &str) -> bool {
-    matches!(classifier, "credential-assignment" | "generic-bearer-token")
+    matches!(
+        classifier,
+        "credential-assignment" | "generic-bearer-token" | "url-credential"
+    )
 }
 
 fn has_long_alphanumeric_run(token: &str) -> bool {
-    let mut run = 0usize;
-    for character in token.chars() {
-        if character.is_ascii_alphanumeric() {
-            run += 1;
-            if run >= 20 {
-                return true;
-            }
-        } else {
-            run = 0;
-        }
-    }
-    false
+    token
+        .split(|character: char| !character.is_ascii_alphanumeric())
+        .any(|run| run.len() >= 20)
 }
 
 fn assignment_value(matched: &str) -> Option<&str> {
@@ -208,18 +265,44 @@ fn assignment_value(matched: &str) -> Option<&str> {
     Some(value)
 }
 
+/// Whether a value substitutes something else when it is used, as in
+/// `mock-${REAL_SECRET}`, `mock-$REAL`, `mock-$(cat key)`, `f"mock-{key}"`
+/// or `` `mock-${key}` ``. Its sample wording then proves nothing.
+fn interpolates(value: &str) -> bool {
+    value.contains(['{', '`'])
+        || value.split('$').skip(1).any(|tail| {
+            tail.starts_with(|next: char| next == '(' || next == '_' || next.is_ascii_alphabetic())
+        })
+}
+
 fn is_sample(
     classifier: &str,
     matched: &str,
+    preceding: &str,
+    continued: bool,
+    rest_of_line: &str,
     suppress_samples: bool,
     documentation_sample_context: bool,
 ) -> bool {
     if !suppressible(classifier) {
         return false;
     }
+    if classifier == "url-credential" {
+        // Only a whole-password stand-in carries no secret. Sample wording in
+        // the account, host or part of the password (`test:…@`, `@example.com`,
+        // `test-Kq7…`) proves nothing.
+        return url_credential::password(matched).is_some_and(url_credential::is_placeholder);
+    }
     if classifier == "credential-assignment"
-        && assignment_value(matched)
-            .is_some_and(|value| inert_code_expression_regex().is_match(value))
+        && (field_copy::is_field_copy(matched, rest_of_line)
+            || guard_link::is_guard_link(matched, preceding)
+            || self_named_value::is_self_named(matched, rest_of_line)
+            || assignment_value(matched).is_some_and(|value| {
+                inert_code_expression_regex().is_match(value) || masked_value::is_masked(value)
+            })
+            || reference_value::is_reference(matched, rest_of_line)
+            || code_value::is_code_value(matched, rest_of_line)
+            || code_expression::is_code_expression(matched, rest_of_line))
     {
         return true;
     }
@@ -239,7 +322,59 @@ fn is_sample(
     if !documentation_sample_context {
         return false;
     }
-    assignment_value(matched).is_some_and(|value| doc_sample_regex().is_match(value))
+    !continued
+        && assignment_value(matched).is_some_and(|value| {
+            doc_sample_regex().is_match(value)
+                || (declared_sample_value_regex().is_match(value)
+                    && !interpolates(value)
+                    && !deployed_value_marker_regex().is_match(value)
+                    && !has_long_alphanumeric_run(value))
+        })
+}
+
+/// The matches of rule `index` in `text` that are not suppressed as samples.
+fn counted_matches<'t>(
+    index: usize,
+    text: &'t str,
+    suppress_samples: bool,
+    documentation_sample_context: bool,
+) -> impl Iterator<Item = regex::Match<'t>> {
+    let classifier = PATTERNS[index].classifier;
+    // A prose answer is read here rather than inside `is_sample`, because it
+    // needs the line's last credential-shaped token, which this scan resolves
+    // once per line.
+    let answers = classifier == "credential-assignment";
+    let mut line_end = 0;
+    let mut last_value = None;
+    compiled()[index].find_iter(text).filter(move |matched| {
+        if matched.end() > line_end {
+            let rest = &text[matched.end()..];
+            line_end = matched.end() + rest.find(['\r', '\n']).unwrap_or(rest.len());
+            last_value = answers
+                .then(|| prose_answer_value::last_value_offset(&text[matched.end()..line_end]))
+                .flatten()
+                .map(|offset| matched.end() + offset);
+        }
+        if answers
+            && prose_answer_value::is_prose_answer(
+                matched.as_str(),
+                &text[matched.end()..line_end],
+                &text[..matched.start()],
+                last_value.is_some_and(|start| start >= matched.end()),
+            )
+        {
+            return false;
+        }
+        !is_sample(
+            classifier,
+            matched.as_str(),
+            &text[..matched.start()],
+            continuation::continues_as_expression(&text[matched.end()..]),
+            &text[matched.end()..line_end],
+            suppress_samples,
+            documentation_sample_context,
+        )
+    })
 }
 
 fn classify_window(
@@ -252,15 +387,9 @@ fn classify_window(
         if found.contains_key(def.classifier) {
             continue;
         }
-        let has_match = compiled()[index].find_iter(text).any(|matched| {
-            !is_sample(
-                def.classifier,
-                matched.as_str(),
-                suppress_samples,
-                documentation_sample_context,
-            )
-        });
-        if has_match {
+        let mut matches =
+            counted_matches(index, text, suppress_samples, documentation_sample_context);
+        if matches.next().is_some() {
             found.insert(
                 def.classifier,
                 ScanMatch {
@@ -471,5 +600,150 @@ mod tests {
                 "{text:?}"
             );
         }
+    }
+
+    fn credential_assignment(text: &str) -> bool {
+        scan_text(text, true, true, MAX_SCAN_BYTES, None)
+            .matches
+            .iter()
+            .any(|matched| matched.classifier == "credential-assignment")
+    }
+
+    #[test]
+    fn password_names_a_secret_search_looks_for_are_credentials() {
+        let value = ["Kq7Xr2", "mWp9Lq4z"].concat();
+        for name in [
+            "PASSWD",
+            "PASSPHRASE",
+            "DB_PASS",
+            "_PASS",
+            "_PWD",
+            "SMTP-PASS",
+            "WEBDAV_PWD",
+            "S3_ACCESS_KEY",
+            "accessKey",
+        ] {
+            for text in [
+                format!("{name}={value}"),
+                format!("config.env:6:{name}={value}"),
+                format!("\"{name}\": \"{value}\""),
+            ] {
+                assert!(credential_assignment(&text), "{text:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn pass_and_pwd_need_a_separator_before_them() {
+        for text in [
+            "PWD=/home/alice/notes",
+            "OLDPWD=/home/alice",
+            "bypass=true",
+            "compass: north",
+            "{\"pass\": 12, \"fail\": 0}",
+        ] {
+            assert!(!credential_assignment(text), "{text:?}");
+        }
+    }
+
+    #[test]
+    fn declared_sample_values_are_suppressed_in_tests_and_docs() {
+        for text in [
+            "process.env.EXAMPLE_SERVICE_API_KEY = 'fictional-report-key';",
+            "const apiKey = 'stub_token'",
+            "password: \"mocked-password\"",
+            "secret = synthetic.value.1",
+            "token = 'not-real-key'",
+        ] {
+            let result = scan_text(text, false, true, MAX_SCAN_BYTES, None);
+            assert!(result.matches.is_empty(), "{text:?}");
+        }
+    }
+
+    #[test]
+    fn declared_sample_words_do_not_hide_real_looking_values() {
+        for text in [
+            // Split so repository secret scanners do not read the fixture as a key.
+            format!(
+                "process.env.EXAMPLE_SERVICE_API_KEY = 'fictional-{}';",
+                ["Q9x7Lm2V", "b8Nc4Rt6", "Yp1Zk3"].concat()
+            ),
+            "const apiKey = 'stubborn-production-key'".to_owned(),
+            "password = 'mockingbird-prod-value'".to_owned(),
+            "credential = 'fixture-prod-value'".to_owned(),
+            "token = 'mock-live-token'".to_owned(),
+        ] {
+            let result = scan_text(&text, false, true, MAX_SCAN_BYTES, None);
+            assert!(
+                result
+                    .matches
+                    .iter()
+                    .any(|matched| matched.classifier == "credential-assignment"),
+                "{text:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn declared_sample_prefixes_of_longer_expressions_are_reported() {
+        for text in [
+            "password = 'mock-' + real_secret",
+            "password = 'mock-' . $real_secret;",
+            "password = 'mock-'.$real_secret;",
+            "password = \"mock-\"$REAL_SECRET",
+            "password = 'mock-' 'real-secret-tail'",
+            "password = 'mock-' || real_secret",
+            "password = 'fixture-value' + real_secret",
+            "const password = 'mock-'\n  + realTail;",
+            "const password = 'mock-'\r\n\r\n  .concat(realTail);",
+            "api_key = 'mock-' \\\n    'real-secret-tail'",
+            "password=\"mock-${REAL_SECRET}\"",
+            "password=\"mock-$REAL_SECRET\"",
+            "password=\"mock-$(cat key)\"",
+        ] {
+            let result = scan_text(text, false, true, MAX_SCAN_BYTES, None);
+            assert!(
+                result
+                    .matches
+                    .iter()
+                    .any(|matched| matched.classifier == "credential-assignment"),
+                "{text:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn declared_sample_values_ending_a_statement_stay_suppressed() {
+        for text in [
+            "const apiKey = 'stub_token'.",
+            "const apiKey = 'stub_token' && run",
+            "call(api_key='stub_token')",
+            "{ \"token\": \"mock-token\", \"other\": 1 }",
+            "const apiKey = 'stub_token';\nconst other = 1;",
+            "api_key: mock-token\n\"next\": 1",
+            "password = 'fixture-value'\n",
+            "+API_KEY = \"fictional-report-key\"\n+OTHER = 1",
+            "password = 'fixture-value'\n...\n",
+            "password = 'fixture-value'\n+ next item",
+            "password = 'fixture-value'\n  ...",
+        ] {
+            let result = scan_text(text, false, true, MAX_SCAN_BYTES, None);
+            assert!(result.matches.is_empty(), "{text:?}");
+        }
+    }
+
+    #[test]
+    fn declared_sample_words_need_documentation_context() {
+        let result = scan_text(
+            "process.env.EXAMPLE_SERVICE_API_KEY = 'fictional-report-key';",
+            true,
+            true,
+            MAX_SCAN_BYTES,
+            None,
+        );
+        assert!(result
+            .matches
+            .iter()
+            .any(|matched| matched.classifier == "credential-assignment"));
     }
 }

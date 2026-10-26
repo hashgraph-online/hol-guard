@@ -11,21 +11,44 @@ pub(crate) struct AdmittedPolicySnapshot {
     pub(super) compiled: CompiledEffectivePolicy,
     pub(crate) command_extensions:
         Option<guard_command::native_command_controls::CompiledNativeCommandControls>,
+    pub(super) business_policy: Option<super::policy_enforcement_business::CompiledBusinessPolicy>,
 }
 
 impl AdmittedPolicySnapshot {
+    #[cfg(test)]
     pub(crate) fn new(snapshot: PolicySnapshotV3) -> Result<Self, String> {
+        Self::with_command_loader(
+            snapshot,
+            guard_command::native_command_controls::CompiledNativeCommandControls::new,
+        )
+    }
+
+    pub(crate) fn with_command_loader(
+        snapshot: PolicySnapshotV3,
+        loader: impl FnOnce(
+            &guard_contracts::NativeCommandControlBindingV1,
+        ) -> Result<
+            guard_command::native_command_controls::CompiledNativeCommandControls,
+            &'static str,
+        >,
+    ) -> Result<Self, String> {
         let compiled = CompiledEffectivePolicy::new(&snapshot.effective_policy)?;
+        let business_policy = snapshot
+            .business_policy
+            .as_ref()
+            .map(super::policy_enforcement_business::CompiledBusinessPolicy::new)
+            .transpose()?;
         let command_extensions = snapshot
             .command_extensions
             .as_ref()
-            .map(guard_command::native_command_controls::CompiledNativeCommandControls::new)
+            .map(loader)
             .transpose()
             .map_err(ToOwned::to_owned)?;
         Ok(Self {
             snapshot,
             compiled,
             command_extensions,
+            business_policy,
         })
     }
 

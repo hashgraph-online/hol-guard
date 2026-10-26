@@ -1,0 +1,3977 @@
+{
+ "cases": [
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [],
+   "found_paths": [],
+   "name": "nothing",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "copilot:global:hook:config:sessionstart:0:command",
+     "artifact_type": "hook",
+     "command": "start",
+     "config_path": "<ROOT>/home/.copilot/config.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "sessionStart",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:global:hook:config:sessionend:0:bash",
+     "artifact_type": "hook",
+     "command": "end",
+     "config_path": "<ROOT>/home/.copilot/config.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "bash"
+     },
+     "name": "sessionEnd",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:global:hook:config:userpromptsubmitted:0:command",
+     "artifact_type": "hook",
+     "command": "prompt",
+     "config_path": "<ROOT>/home/.copilot/config.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "userPromptSubmitted",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:global:hook:config:pretooluse:0:command",
+     "artifact_type": "hook",
+     "command": "pre-cmd",
+     "config_path": "<ROOT>/home/.copilot/config.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:global:hook:config:pretooluse:0:bash",
+     "artifact_type": "hook",
+     "command": "pre-bash",
+     "config_path": "<ROOT>/home/.copilot/config.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "bash"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:global:hook:config:pretooluse:0:powershell",
+     "artifact_type": "hook",
+     "command": "pre-ps",
+     "config_path": "<ROOT>/home/.copilot/config.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "powershell"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:global:hook:config:pretooluse:2:powershell",
+     "artifact_type": "hook",
+     "command": "only-ps",
+     "config_path": "<ROOT>/home/.copilot/config.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "powershell"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:global:hook:config:posttooluse:0:command",
+     "artifact_type": "hook",
+     "command": "post",
+     "config_path": "<ROOT>/home/.copilot/config.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "postToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:global:hook:config:permissionrequest:0:command",
+     "artifact_type": "hook",
+     "command": "perm",
+     "config_path": "<ROOT>/home/.copilot/config.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "permissionRequest",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:global:hook:config:permissionrequestv2:0:command",
+     "artifact_type": "hook",
+     "command": "perm2",
+     "config_path": "<ROOT>/home/.copilot/config.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "permissionRequestV2",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:global:hook:config:erroroccurred:0:command",
+     "artifact_type": "hook",
+     "command": "err",
+     "config_path": "<ROOT>/home/.copilot/config.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "errorOccurred",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.copilot/config.json",
+     "text": "{\"hooks\": {\"preToolUse\": [{\"command\": \"pre-cmd\", \"bash\": \"pre-bash\", \"powershell\": \"pre-ps\"}, 5, {\"bash\": 1, \"powershell\": \"only-ps\"}, {\"type\": \"command\"}], \"sessionStart\": [{\"command\": \"start\"}], \"sessionEnd\": [{\"bash\": \"end\"}], \"userPromptSubmitted\": [{\"command\": \"prompt\"}], \"postToolUse\": [{\"command\": \"post\"}], \"permissionRequest\": [{\"command\": \"perm\"}], \"permissionRequestV2\": [{\"command\": \"perm2\"}], \"errorOccurred\": [{\"command\": \"err\"}], \"PreToolUse\": [{\"command\": \"wrong-case\"}], \"stop\": [{\"command\": \"unknown\"}], \"agentStop\": {\"command\": \"not-a-list\"}}, \"mcpServers\": {\"plain\": {\"command\": \"node\", \"args\": [\"server.js\", 3, null, \"--flag\", true]}, \"listed\": {\"command\": [\"uvx\", 7, \"tool\", \"--x\"], \"args\": [\"--y\"]}, \"empty-list\": {\"command\": [1, null], \"args\": [\"a\"]}, \"numeric\": {\"command\": 5}, \"remote\": {\"url\": \"https://example.test/mcp\", \"env\": {\"TOKEN\": \"t\"}}, \"url-not-text\": {\"url\": 9, \"command\": \"x\"}, \"env-mixed\": {\"command\": \"e\", \"env\": {\"A\": \"1\", \"B\": 2, \"C\": null, \"D\": \"4\"}}, \"environment-only\": {\"command\": \"e2\", \"environment\": {\"Z\": \"z\", \"Y\": \"y\"}}, \"env-not-dict\": {\"command\": \"e3\", \"env\": [\"A\"], \"environment\": {\"Q\": \"q\"}}, \"env-wins\": {\"command\": \"e4\", \"env\": {\"E\": \"env\"}, \"environment\": {\"F\": \"environment\"}}, \"env-neither\": {\"command\": \"e5\", \"env\": \"x\", \"environment\": [1]}, \"not-a-dict\": [\"command\"], \"launcher-proxy\": {\"command\": \"/opt/bin/hol-guard\", \"args\": [\"copilot-mcp-proxy\", \"--server\", \"x\"]}, \"launcher-guard-proxy\": {\"command\": \"HOL-GUARD.EXE\", \"args\": [\"guard\", \"mcp-proxy\"]}, \"launcher-module-proxy\": {\"command\": \"current-hol-guard\", \"args\": [\"-m\", \"codex_plugin_scanner.cli\", \"guard\", \"codex-mcp-proxy\"]}, \"launcher-not-proxy\": {\"command\": \"hol-guard\", \"args\": [\"scan\"]}, \"python-proxy\": {\"command\": \"python3\", \"args\": [\"-m\", \"codex_plugin_scanner.cli\", \"guard\", \"copilot-mcp-proxy\"]}, \"python-no-guard\": {\"command\": \"python3\", \"args\": [\"-m\", \"codex_plugin_scanner.cli\", \"copilot-mcp-proxy\"]}, \"list-proxy\": {\"command\": [\"hol-guard\", \"copilot-mcp-proxy\"]}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.copilot/config.json"
+   ],
+   "name": "hooks_nested_matrix",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "copilot:global:hook:config:sessionstart:0:command",
+     "artifact_type": "hook",
+     "command": "start",
+     "config_path": "<ROOT>/home/.copilot/config.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "sessionStart",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:global:hook:config:sessionend:0:bash",
+     "artifact_type": "hook",
+     "command": "end",
+     "config_path": "<ROOT>/home/.copilot/config.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "bash"
+     },
+     "name": "sessionEnd",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:global:hook:config:userpromptsubmitted:0:command",
+     "artifact_type": "hook",
+     "command": "prompt",
+     "config_path": "<ROOT>/home/.copilot/config.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "userPromptSubmitted",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:global:hook:config:pretooluse:0:command",
+     "artifact_type": "hook",
+     "command": "pre-cmd",
+     "config_path": "<ROOT>/home/.copilot/config.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:global:hook:config:pretooluse:0:bash",
+     "artifact_type": "hook",
+     "command": "pre-bash",
+     "config_path": "<ROOT>/home/.copilot/config.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "bash"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:global:hook:config:pretooluse:0:powershell",
+     "artifact_type": "hook",
+     "command": "pre-ps",
+     "config_path": "<ROOT>/home/.copilot/config.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "powershell"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:global:hook:config:pretooluse:2:powershell",
+     "artifact_type": "hook",
+     "command": "only-ps",
+     "config_path": "<ROOT>/home/.copilot/config.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "powershell"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:global:hook:config:posttooluse:0:command",
+     "artifact_type": "hook",
+     "command": "post",
+     "config_path": "<ROOT>/home/.copilot/config.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "postToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:global:hook:config:permissionrequest:0:command",
+     "artifact_type": "hook",
+     "command": "perm",
+     "config_path": "<ROOT>/home/.copilot/config.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "permissionRequest",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:global:hook:config:permissionrequestv2:0:command",
+     "artifact_type": "hook",
+     "command": "perm2",
+     "config_path": "<ROOT>/home/.copilot/config.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "permissionRequestV2",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:global:hook:config:erroroccurred:0:command",
+     "artifact_type": "hook",
+     "command": "err",
+     "config_path": "<ROOT>/home/.copilot/config.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "errorOccurred",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.copilot/config.json",
+     "text": "{\"version\": 1, \"preToolUse\": [{\"command\": \"pre-cmd\", \"bash\": \"pre-bash\", \"powershell\": \"pre-ps\"}, 5, {\"bash\": 1, \"powershell\": \"only-ps\"}, {\"type\": \"command\"}], \"sessionStart\": [{\"command\": \"start\"}], \"sessionEnd\": [{\"bash\": \"end\"}], \"userPromptSubmitted\": [{\"command\": \"prompt\"}], \"postToolUse\": [{\"command\": \"post\"}], \"permissionRequest\": [{\"command\": \"perm\"}], \"permissionRequestV2\": [{\"command\": \"perm2\"}], \"errorOccurred\": [{\"command\": \"err\"}], \"PreToolUse\": [{\"command\": \"wrong-case\"}], \"stop\": [{\"command\": \"unknown\"}], \"agentStop\": {\"command\": \"not-a-list\"}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.copilot/config.json"
+   ],
+   "name": "hooks_top_level",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "copilot:global:hook:config:posttooluse:0:command",
+     "artifact_type": "hook",
+     "command": "top",
+     "config_path": "<ROOT>/home/.copilot/config.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "postToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.copilot/config.json",
+     "text": "{\"hooks\": [1], \"postToolUse\": [{\"command\": \"top\"}]}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.copilot/config.json"
+   ],
+   "name": "hooks_key_not_object",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.copilot/config.json",
+     "text": "{\"hooks\": {}, \"preToolUse\": [{\"command\": \"top\"}]}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.copilot/config.json"
+   ],
+   "name": "hooks_object_shadows_top_level",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.copilot/config.json",
+     "text": "{\"model\": \"x\"}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.copilot/config.json"
+   ],
+   "name": "config_without_hooks_is_found",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.copilot/config.json",
+     "text": "{}"
+    }
+   ],
+   "found_paths": [],
+   "name": "config_empty_object",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.copilot/config.json",
+     "text": "[{\"hooks\": {}}]"
+    }
+   ],
+   "found_paths": [],
+   "name": "config_top_level_list",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.copilot/config.json",
+     "text": "\"text\""
+    }
+   ],
+   "found_paths": [],
+   "name": "config_top_level_string",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.copilot/config.json",
+     "text": "{not json"
+    }
+   ],
+   "found_paths": [],
+   "name": "config_invalid_json",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.copilot/config.json",
+     "text": ""
+    }
+   ],
+   "found_paths": [],
+   "name": "config_empty_file",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.copilot/config.json",
+     "text": "{\"a\": 1,}"
+    }
+   ],
+   "found_paths": [],
+   "name": "config_trailing_comma",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "hex": "7b2261223a2022c328227d",
+     "mode": 420,
+     "path": "home/.copilot/config.json"
+    }
+   ],
+   "name": "config_invalid_utf8",
+   "no_workspace": false,
+   "refused": true,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "hex": "efbbbf7b22707265546f6f6c557365223a205b7b22636f6d6d616e64223a202278227d5d7d",
+     "mode": 420,
+     "path": "home/.copilot/config.json"
+    }
+   ],
+   "found_paths": [],
+   "name": "config_utf8_bom",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.copilot/config.json",
+     "text": "{\"a\": 99999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999}"
+    }
+   ],
+   "name": "config_integer_over_limit",
+   "no_workspace": false,
+   "refused": true,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.copilot/config.json",
+     "text": "{\"a\": 1} // \n99999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999"
+    }
+   ],
+   "found_paths": [],
+   "name": "config_integer_over_limit_in_comment_fallback",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "copilot:global:hook:config:pretooluse:0:command",
+     "artifact_type": "hook",
+     "command": "x",
+     "config_path": "<ROOT>/home/.copilot/config.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.copilot/config.json",
+     "text": "{\"note\": \"\\ud800\", \"preToolUse\": [{\"command\": \"x\"}]}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.copilot/config.json"
+   ],
+   "name": "config_lone_surrogate_unused_value",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "copilot:global:hook:config:pretooluse:0:command",
+     "artifact_type": "hook",
+     "command": "n",
+     "config_path": "<ROOT>/home/.copilot/config.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.copilot/config.json",
+     "text": "{\"x\": NaN, \"y\": 1e999, \"preToolUse\": [{\"command\": \"n\"}]}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.copilot/config.json"
+   ],
+   "name": "config_nan_and_floats",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 0,
+     "path": "home/.copilot/config.json",
+     "text": "{\"preToolUse\": [{\"command\": \"x\"}]}"
+    }
+   ],
+   "found_paths": [],
+   "name": "config_unreadable",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [
+    "home/.copilot/config.json"
+   ],
+   "files": [],
+   "found_paths": [],
+   "name": "config_is_directory",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "copilot:global:hook:config:sessionstart:0:command",
+     "artifact_type": "hook",
+     "command": "linked",
+     "config_path": "<ROOT>/home/.copilot/config.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "sessionStart",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "real/config.json",
+     "text": "{\"sessionStart\": [{\"command\": \"linked\"}]}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.copilot/config.json"
+   ],
+   "name": "config_symlink",
+   "no_workspace": false,
+   "symlinks": [
+    {
+     "path": "home/.copilot/config.json",
+     "target": "<ROOT>/real/config.json"
+    }
+   ],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [],
+   "found_paths": [],
+   "name": "config_dangling_symlink",
+   "no_workspace": false,
+   "symlinks": [
+    {
+     "path": "home/.copilot/config.json",
+     "target": "<ROOT>/missing.json"
+    }
+   ],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "copilot:global:hook:config:pretooluse:0:command",
+     "artifact_type": "hook",
+     "command": "jsonc-hook",
+     "config_path": "<ROOT>/home/.copilot/config.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.copilot/config.json",
+     "text": "{\n  // leading comment\n  \"mcpServers\": {\n    /* block\n       comment */\n    \"commented\": {\"command\": \"c\", \"args\": [\"http://x//y\", \"/* kept */\"]},\n    \"quoted\": {\"command\": \"q\\\"//\", \"url\": \"https://z/*\"}\n  },\n  \"hooks\": {\"preToolUse\": [{\"command\": \"jsonc-hook\"}]} // trailing\n}\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.copilot/config.json"
+   ],
+   "name": "config_jsonc",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "copilot:global:hook:mcp-config:pretooluse:0:command",
+     "artifact_type": "hook",
+     "command": "jsonc-hook",
+     "config_path": "<ROOT>/home/.copilot/mcp-config.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [
+      "http://x//y",
+      "/* kept */"
+     ],
+     "artifact_id": "copilot:global:commented",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.copilot/mcp-config.json",
+     "harness": "copilot",
+     "metadata": {
+      "env": {}
+     },
+     "name": "commented",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:global:quoted",
+     "artifact_type": "mcp_server",
+     "command": "q\"//",
+     "config_path": "<ROOT>/home/.copilot/mcp-config.json",
+     "harness": "copilot",
+     "metadata": {
+      "env": {}
+     },
+     "name": "quoted",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "http",
+     "url": "https://z/*"
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.copilot/mcp-config.json",
+     "text": "{\n  // leading comment\n  \"mcpServers\": {\n    /* block\n       comment */\n    \"commented\": {\"command\": \"c\", \"args\": [\"http://x//y\", \"/* kept */\"]},\n    \"quoted\": {\"command\": \"q\\\"//\", \"url\": \"https://z/*\"}\n  },\n  \"hooks\": {\"preToolUse\": [{\"command\": \"jsonc-hook\"}]} // trailing\n}\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.copilot/mcp-config.json"
+   ],
+   "name": "mcp_config_jsonc",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "copilot:global:cr",
+     "artifact_type": "mcp_server",
+     "command": "x",
+     "config_path": "<ROOT>/home/.copilot/mcp-config.json",
+     "harness": "copilot",
+     "metadata": {
+      "env": {}
+     },
+     "name": "cr",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.copilot/mcp-config.json",
+     "text": "{// c\r\"mcpServers\": {\"cr\": {\"command\": \"x\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.copilot/mcp-config.json"
+   ],
+   "name": "mcp_config_comment_ended_by_cr",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "copilot:global:crlf",
+     "artifact_type": "mcp_server",
+     "command": "x",
+     "config_path": "<ROOT>/home/.copilot/mcp-config.json",
+     "harness": "copilot",
+     "metadata": {
+      "env": {}
+     },
+     "name": "crlf",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.copilot/mcp-config.json",
+     "text": "{// c\r\n\"mcpServers\": {\"crlf\": {\"command\": \"x\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.copilot/mcp-config.json"
+   ],
+   "name": "mcp_config_comment_ended_by_crlf",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "copilot:global:a",
+     "artifact_type": "mcp_server",
+     "command": "x",
+     "config_path": "<ROOT>/home/.copilot/mcp-config.json",
+     "harness": "copilot",
+     "metadata": {
+      "env": {}
+     },
+     "name": "a",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.copilot/mcp-config.json",
+     "text": "{\"mcpServers\": {\"a\": {\"command\": \"x\"}}} /* open"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.copilot/mcp-config.json"
+   ],
+   "name": "mcp_config_unterminated_block_comment",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "copilot:global:hook:mcp-config:pretooluse:0:command",
+     "artifact_type": "hook",
+     "command": "h",
+     "config_path": "<ROOT>/home/.copilot/mcp-config.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [
+      "server.js",
+      "--flag"
+     ],
+     "artifact_id": "copilot:global:plain",
+     "artifact_type": "mcp_server",
+     "command": "node",
+     "config_path": "<ROOT>/home/.copilot/mcp-config.json",
+     "harness": "copilot",
+     "metadata": {
+      "env": {}
+     },
+     "name": "plain",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [
+      "tool",
+      "--x",
+      "--y"
+     ],
+     "artifact_id": "copilot:global:listed",
+     "artifact_type": "mcp_server",
+     "command": "uvx",
+     "config_path": "<ROOT>/home/.copilot/mcp-config.json",
+     "harness": "copilot",
+     "metadata": {
+      "env": {}
+     },
+     "name": "listed",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [
+      "a"
+     ],
+     "artifact_id": "copilot:global:empty-list",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.copilot/mcp-config.json",
+     "harness": "copilot",
+     "metadata": {
+      "env": {}
+     },
+     "name": "empty-list",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:global:numeric",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.copilot/mcp-config.json",
+     "harness": "copilot",
+     "metadata": {
+      "env": {}
+     },
+     "name": "numeric",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:global:remote",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.copilot/mcp-config.json",
+     "harness": "copilot",
+     "metadata": {
+      "env": {
+       "TOKEN": "t"
+      }
+     },
+     "name": "remote",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "http",
+     "url": "https://example.test/mcp"
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:global:url-not-text",
+     "artifact_type": "mcp_server",
+     "command": "x",
+     "config_path": "<ROOT>/home/.copilot/mcp-config.json",
+     "harness": "copilot",
+     "metadata": {
+      "env": {}
+     },
+     "name": "url-not-text",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:global:env-mixed",
+     "artifact_type": "mcp_server",
+     "command": "e",
+     "config_path": "<ROOT>/home/.copilot/mcp-config.json",
+     "harness": "copilot",
+     "metadata": {
+      "env": {
+       "A": "1",
+       "D": "4"
+      }
+     },
+     "name": "env-mixed",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:global:environment-only",
+     "artifact_type": "mcp_server",
+     "command": "e2",
+     "config_path": "<ROOT>/home/.copilot/mcp-config.json",
+     "harness": "copilot",
+     "metadata": {
+      "env": {
+       "Y": "y",
+       "Z": "z"
+      }
+     },
+     "name": "environment-only",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:global:env-not-dict",
+     "artifact_type": "mcp_server",
+     "command": "e3",
+     "config_path": "<ROOT>/home/.copilot/mcp-config.json",
+     "harness": "copilot",
+     "metadata": {
+      "env": {
+       "Q": "q"
+      }
+     },
+     "name": "env-not-dict",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:global:env-wins",
+     "artifact_type": "mcp_server",
+     "command": "e4",
+     "config_path": "<ROOT>/home/.copilot/mcp-config.json",
+     "harness": "copilot",
+     "metadata": {
+      "env": {
+       "E": "env"
+      }
+     },
+     "name": "env-wins",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:global:env-neither",
+     "artifact_type": "mcp_server",
+     "command": "e5",
+     "config_path": "<ROOT>/home/.copilot/mcp-config.json",
+     "harness": "copilot",
+     "metadata": {
+      "env": {}
+     },
+     "name": "env-neither",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [
+      "scan"
+     ],
+     "artifact_id": "copilot:global:launcher-not-proxy",
+     "artifact_type": "mcp_server",
+     "command": "hol-guard",
+     "config_path": "<ROOT>/home/.copilot/mcp-config.json",
+     "harness": "copilot",
+     "metadata": {
+      "env": {}
+     },
+     "name": "launcher-not-proxy",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [
+      "-m",
+      "codex_plugin_scanner.cli",
+      "copilot-mcp-proxy"
+     ],
+     "artifact_id": "copilot:global:python-no-guard",
+     "artifact_type": "mcp_server",
+     "command": "python3",
+     "config_path": "<ROOT>/home/.copilot/mcp-config.json",
+     "harness": "copilot",
+     "metadata": {
+      "env": {}
+     },
+     "name": "python-no-guard",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.copilot/mcp-config.json",
+     "text": "{\"mcpServers\": {\"plain\": {\"command\": \"node\", \"args\": [\"server.js\", 3, null, \"--flag\", true]}, \"listed\": {\"command\": [\"uvx\", 7, \"tool\", \"--x\"], \"args\": [\"--y\"]}, \"empty-list\": {\"command\": [1, null], \"args\": [\"a\"]}, \"numeric\": {\"command\": 5}, \"remote\": {\"url\": \"https://example.test/mcp\", \"env\": {\"TOKEN\": \"t\"}}, \"url-not-text\": {\"url\": 9, \"command\": \"x\"}, \"env-mixed\": {\"command\": \"e\", \"env\": {\"A\": \"1\", \"B\": 2, \"C\": null, \"D\": \"4\"}}, \"environment-only\": {\"command\": \"e2\", \"environment\": {\"Z\": \"z\", \"Y\": \"y\"}}, \"env-not-dict\": {\"command\": \"e3\", \"env\": [\"A\"], \"environment\": {\"Q\": \"q\"}}, \"env-wins\": {\"command\": \"e4\", \"env\": {\"E\": \"env\"}, \"environment\": {\"F\": \"environment\"}}, \"env-neither\": {\"command\": \"e5\", \"env\": \"x\", \"environment\": [1]}, \"not-a-dict\": [\"command\"], \"launcher-proxy\": {\"command\": \"/opt/bin/hol-guard\", \"args\": [\"copilot-mcp-proxy\", \"--server\", \"x\"]}, \"launcher-guard-proxy\": {\"command\": \"HOL-GUARD.EXE\", \"args\": [\"guard\", \"mcp-proxy\"]}, \"launcher-module-proxy\": {\"command\": \"current-hol-guard\", \"args\": [\"-m\", \"codex_plugin_scanner.cli\", \"guard\", \"codex-mcp-proxy\"]}, \"launcher-not-proxy\": {\"command\": \"hol-guard\", \"args\": [\"scan\"]}, \"python-proxy\": {\"command\": \"python3\", \"args\": [\"-m\", \"codex_plugin_scanner.cli\", \"guard\", \"copilot-mcp-proxy\"]}, \"python-no-guard\": {\"command\": \"python3\", \"args\": [\"-m\", \"codex_plugin_scanner.cli\", \"copilot-mcp-proxy\"]}, \"list-proxy\": {\"command\": [\"hol-guard\", \"copilot-mcp-proxy\"]}}, \"hooks\": {\"preToolUse\": [{\"command\": \"h\"}]}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.copilot/mcp-config.json"
+   ],
+   "name": "mcp_config_matrix",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "copilot:global:s",
+     "artifact_type": "mcp_server",
+     "command": "x",
+     "config_path": "<ROOT>/home/.copilot/mcp-config.json",
+     "harness": "copilot",
+     "metadata": {
+      "env": {}
+     },
+     "name": "s",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.copilot/mcp-config.json",
+     "text": "{\"servers\": {\"s\": {\"command\": \"x\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.copilot/mcp-config.json"
+   ],
+   "name": "mcp_config_servers_only",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "copilot:global:m",
+     "artifact_type": "mcp_server",
+     "command": "m",
+     "config_path": "<ROOT>/home/.copilot/mcp-config.json",
+     "harness": "copilot",
+     "metadata": {
+      "env": {}
+     },
+     "name": "m",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.copilot/mcp-config.json",
+     "text": "{\"servers\": {\"s\": {\"command\": \"s\"}}, \"mcpServers\": {\"m\": {\"command\": \"m\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.copilot/mcp-config.json"
+   ],
+   "name": "mcp_config_both_keys_prefers_mcp_servers",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "copilot:global:s",
+     "artifact_type": "mcp_server",
+     "command": "s",
+     "config_path": "<ROOT>/home/.copilot/mcp-config.json",
+     "harness": "copilot",
+     "metadata": {
+      "env": {}
+     },
+     "name": "s",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.copilot/mcp-config.json",
+     "text": "{\"servers\": {\"s\": {\"command\": \"s\"}}, \"mcpServers\": null}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.copilot/mcp-config.json"
+   ],
+   "name": "mcp_config_both_keys_fallback",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.copilot/mcp-config.json",
+     "text": "{\"servers\": [1], \"mcpServers\": \"x\"}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.copilot/mcp-config.json"
+   ],
+   "name": "mcp_config_neither_object",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "copilot:global:b",
+     "artifact_type": "mcp_server",
+     "command": "4",
+     "config_path": "<ROOT>/home/.copilot/mcp-config.json",
+     "harness": "copilot",
+     "metadata": {
+      "env": {}
+     },
+     "name": "b",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:global:a",
+     "artifact_type": "mcp_server",
+     "command": "3",
+     "config_path": "<ROOT>/home/.copilot/mcp-config.json",
+     "harness": "copilot",
+     "metadata": {
+      "env": {}
+     },
+     "name": "a",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.copilot/mcp-config.json",
+     "text": "{\"mcpServers\": {\"a\": {\"command\": \"1\"}}, \"x\": 1, \"mcpServers\": {\"b\": {\"command\": \"2\"}, \"a\": {\"command\": \"3\"}, \"b\": {\"command\": \"4\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.copilot/mcp-config.json"
+   ],
+   "name": "mcp_config_duplicate_keys",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "copilot:project:m",
+     "artifact_type": "mcp_server",
+     "command": "m",
+     "config_path": "<ROOT>/work/.mcp.json",
+     "harness": "copilot",
+     "metadata": {
+      "env": {}
+     },
+     "name": "m",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.mcp.json",
+     "text": "{\"servers\": {\"w\": {\"command\": \"w\"}}, \"mcpServers\": {\"m\": {\"command\": \"m\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/work/.mcp.json"
+   ],
+   "name": "workspace_mcp_json",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "copilot:project:v",
+     "artifact_type": "mcp_server",
+     "command": "v",
+     "config_path": "<ROOT>/work/.vscode/mcp.json",
+     "harness": "copilot",
+     "metadata": {
+      "env": {}
+     },
+     "name": "v",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.vscode/mcp.json",
+     "text": "{\"servers\": {\"v\": {\"command\": \"v\"}}, \"mcpServers\": {\"m\": {\"command\": \"m\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/work/.vscode/mcp.json"
+   ],
+   "name": "workspace_vscode_mcp_both_keys",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "copilot:project:m",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/work/.vscode/mcp.json",
+     "harness": "copilot",
+     "metadata": {
+      "env": {}
+     },
+     "name": "m",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "http",
+     "url": "https://m"
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.vscode/mcp.json",
+     "text": "{\"servers\": 1, \"mcpServers\": {\"m\": {\"url\": \"https://m\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/work/.vscode/mcp.json"
+   ],
+   "name": "workspace_vscode_mcp_fallback",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "copilot:project:hook:.mcp:pretooluse:0:command",
+     "artifact_type": "hook",
+     "command": "wh",
+     "config_path": "<ROOT>/work/.mcp.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.mcp.json",
+     "text": "{\"hooks\": {\"preToolUse\": [{\"command\": \"wh\"}]}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/work/.mcp.json"
+   ],
+   "name": "workspace_mcp_with_hooks",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "copilot:project:hook:config:pretooluse:0:command",
+     "artifact_type": "hook",
+     "command": "c",
+     "config_path": "<ROOT>/home/.copilot/config.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:project:g",
+     "artifact_type": "mcp_server",
+     "command": "g",
+     "config_path": "<ROOT>/home/.copilot/mcp-config.json",
+     "harness": "copilot",
+     "metadata": {
+      "env": {}
+     },
+     "name": "g",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.copilot/config.json",
+     "text": "{\"preToolUse\": [{\"command\": \"c\"}]}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.copilot/mcp-config.json",
+     "text": "{\"mcpServers\": {\"g\": {\"command\": \"g\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.copilot/config.json",
+    "<ROOT>/home/.copilot/mcp-config.json"
+   ],
+   "name": "workspace_is_home",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": true
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     }
+    ]
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "copilot:global:g",
+     "artifact_type": "mcp_server",
+     "command": "g",
+     "config_path": "<ROOT>/home/.copilot/mcp-config.json",
+     "harness": "copilot",
+     "metadata": {
+      "env": {}
+     },
+     "name": "g",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.copilot/mcp-config.json",
+     "text": "{\"mcpServers\": {\"g\": {\"command\": \"g\"}}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.mcp.json",
+     "text": "{\"mcpServers\": {\"w\": {\"command\": \"w\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.copilot/mcp-config.json"
+   ],
+   "name": "no_workspace",
+   "no_workspace": true,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "hooks",
+      "path": "<ROOT>/work/.github/hooks/.json",
+      "scope": "project"
+     },
+     {
+      "kind": "hooks",
+      "path": "<ROOT>/work/.github/hooks/A.json",
+      "scope": "project"
+     },
+     {
+      "kind": "hooks",
+      "path": "<ROOT>/work/.github/hooks/b.json",
+      "scope": "project"
+     },
+     {
+      "kind": "hooks",
+      "path": "<ROOT>/work/.github/hooks/hol-guard-copilot.json",
+      "scope": "project"
+     },
+     {
+      "kind": "hooks",
+      "path": "<ROOT>/work/.github/hooks/invalid.json",
+      "scope": "project"
+     },
+     {
+      "kind": "hooks",
+      "path": "<ROOT>/work/.github/hooks/jsonc.json",
+      "scope": "project"
+     },
+     {
+      "kind": "hooks",
+      "path": "<ROOT>/work/.github/hooks/multi.dot.json",
+      "scope": "project"
+     },
+     {
+      "kind": "hooks",
+      "path": "<ROOT>/work/.github/hooks/no-hooks.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "copilot:project:hook:.json:pretooluse:0:command",
+     "artifact_type": "hook",
+     "command": "dir-hook",
+     "config_path": "<ROOT>/work/.github/hooks/.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:project:hook:.json:pretooluse:0:bash",
+     "artifact_type": "hook",
+     "command": "dir-bash",
+     "config_path": "<ROOT>/work/.github/hooks/.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "bash"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:project:hook:A:posttooluse:0:powershell",
+     "artifact_type": "hook",
+     "command": "ps",
+     "config_path": "<ROOT>/work/.github/hooks/A.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "powershell"
+     },
+     "name": "postToolUse",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:project:hook:b:pretooluse:0:command",
+     "artifact_type": "hook",
+     "command": "dir-hook",
+     "config_path": "<ROOT>/work/.github/hooks/b.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:project:hook:b:pretooluse:0:bash",
+     "artifact_type": "hook",
+     "command": "dir-bash",
+     "config_path": "<ROOT>/work/.github/hooks/b.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "bash"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:project:hook:hol-guard-copilot:pretooluse:0:command",
+     "artifact_type": "hook",
+     "command": "dir-hook",
+     "config_path": "<ROOT>/work/.github/hooks/hol-guard-copilot.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:project:hook:hol-guard-copilot:pretooluse:0:bash",
+     "artifact_type": "hook",
+     "command": "dir-bash",
+     "config_path": "<ROOT>/work/.github/hooks/hol-guard-copilot.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "bash"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:project:hook:jsonc:sessionstart:0:command",
+     "artifact_type": "hook",
+     "command": "s",
+     "config_path": "<ROOT>/work/.github/hooks/jsonc.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "sessionStart",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:project:hook:multi.dot:pretooluse:0:command",
+     "artifact_type": "hook",
+     "command": "dir-hook",
+     "config_path": "<ROOT>/work/.github/hooks/multi.dot.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:project:hook:multi.dot:pretooluse:0:bash",
+     "artifact_type": "hook",
+     "command": "dir-bash",
+     "config_path": "<ROOT>/work/.github/hooks/multi.dot.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "bash"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [
+    "work/.github/hooks/folder.json"
+   ],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.github/hooks/b.json",
+     "text": "{\"version\": 1, \"hooks\": {\"preToolUse\": [{\"command\": \"dir-hook\", \"bash\": \"dir-bash\"}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.github/hooks/A.json",
+     "text": "{\"postToolUse\": [{\"powershell\": \"ps\"}]}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.github/hooks/no-hooks.json",
+     "text": "{\"version\": 1}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.github/hooks/invalid.json",
+     "text": "{"
+    },
+    {
+     "mode": 420,
+     "path": "work/.github/hooks/notes.txt",
+     "text": "{\"version\": 1, \"hooks\": {\"preToolUse\": [{\"command\": \"dir-hook\", \"bash\": \"dir-bash\"}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.github/hooks/hol-guard-copilot.json",
+     "text": "{\"version\": 1, \"hooks\": {\"preToolUse\": [{\"command\": \"dir-hook\", \"bash\": \"dir-bash\"}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.github/hooks/multi.dot.json",
+     "text": "{\"version\": 1, \"hooks\": {\"preToolUse\": [{\"command\": \"dir-hook\", \"bash\": \"dir-bash\"}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.github/hooks/.json",
+     "text": "{\"version\": 1, \"hooks\": {\"preToolUse\": [{\"command\": \"dir-hook\", \"bash\": \"dir-bash\"}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.github/hooks/nested/inner.json",
+     "text": "{\"version\": 1, \"hooks\": {\"preToolUse\": [{\"command\": \"dir-hook\", \"bash\": \"dir-bash\"}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.github/hooks/jsonc.json",
+     "text": "{\"hooks\": {\"sessionStart\": [{\"command\": \"s\"}]}} // c"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/work/.github/hooks/.json",
+    "<ROOT>/work/.github/hooks/A.json",
+    "<ROOT>/work/.github/hooks/b.json",
+    "<ROOT>/work/.github/hooks/hol-guard-copilot.json",
+    "<ROOT>/work/.github/hooks/jsonc.json",
+    "<ROOT>/work/.github/hooks/multi.dot.json"
+   ],
+   "name": "hooks_dir_matrix",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "hooks",
+      "path": "<ROOT>/work/.github/hooks/linked.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "copilot:project:hook:linked:pretooluse:0:command",
+     "artifact_type": "hook",
+     "command": "dir-hook",
+     "config_path": "<ROOT>/work/.github/hooks/linked.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:project:hook:linked:pretooluse:0:bash",
+     "artifact_type": "hook",
+     "command": "dir-bash",
+     "config_path": "<ROOT>/work/.github/hooks/linked.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "bash"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "real/h.json",
+     "text": "{\"version\": 1, \"hooks\": {\"preToolUse\": [{\"command\": \"dir-hook\", \"bash\": \"dir-bash\"}]}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/work/.github/hooks/linked.json"
+   ],
+   "name": "hooks_dir_symlinked_file",
+   "no_workspace": false,
+   "symlinks": [
+    {
+     "path": "work/.github/hooks/linked.json",
+     "target": "<ROOT>/real/h.json"
+    }
+   ],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "hooks",
+      "path": "<ROOT>/work/.github/hooks/h.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "copilot:project:hook:h:pretooluse:0:command",
+     "artifact_type": "hook",
+     "command": "dir-hook",
+     "config_path": "<ROOT>/work/.github/hooks/h.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:project:hook:h:pretooluse:0:bash",
+     "artifact_type": "hook",
+     "command": "dir-bash",
+     "config_path": "<ROOT>/work/.github/hooks/h.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "bash"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "real/h.json",
+     "text": "{\"version\": 1, \"hooks\": {\"preToolUse\": [{\"command\": \"dir-hook\", \"bash\": \"dir-bash\"}]}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/work/.github/hooks/h.json"
+   ],
+   "name": "hooks_dir_symlinked_dir",
+   "no_workspace": false,
+   "symlinks": [
+    {
+     "path": "work/.github/hooks",
+     "target": "<ROOT>/real"
+    }
+   ],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "hooks",
+      "path": "<ROOT>/work/.github/hooks/ok.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "copilot:project:hook:ok:pretooluse:0:command",
+     "artifact_type": "hook",
+     "command": "dir-hook",
+     "config_path": "<ROOT>/work/.github/hooks/ok.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:project:hook:ok:pretooluse:0:bash",
+     "artifact_type": "hook",
+     "command": "dir-bash",
+     "config_path": "<ROOT>/work/.github/hooks/ok.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "bash"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.github/hooks/ok.json",
+     "text": "{\"version\": 1, \"hooks\": {\"preToolUse\": [{\"command\": \"dir-hook\", \"bash\": \"dir-bash\"}]}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/work/.github/hooks/ok.json"
+   ],
+   "name": "hooks_dir_dangling_symlink",
+   "no_workspace": false,
+   "symlinks": [
+    {
+     "path": "work/.github/hooks/gone.json",
+     "target": "<ROOT>/gone"
+    }
+   ],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.github/hooks",
+     "text": "{}"
+    }
+   ],
+   "found_paths": [],
+   "name": "hooks_dir_is_file",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "hooks",
+      "path": "<ROOT>/work/.github/hooks/bad.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "hex": "ff",
+     "mode": 420,
+     "path": "work/.github/hooks/bad.json"
+    }
+   ],
+   "name": "hooks_dir_invalid_utf8",
+   "no_workspace": false,
+   "refused": true,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     }
+    ]
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.github/hooks/x.json",
+     "text": "{\"version\": 1, \"hooks\": {\"preToolUse\": [{\"command\": \"dir-hook\", \"bash\": \"dir-bash\"}]}}"
+    }
+   ],
+   "found_paths": [],
+   "name": "hooks_dir_without_workspace",
+   "no_workspace": true,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "hooks",
+      "path": "<ROOT>/work/.github/hooks/team.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "copilot:global:hook:config:sessionstart:0:command",
+     "artifact_type": "hook",
+     "command": "global",
+     "config_path": "<ROOT>/home/.copilot/config.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "sessionStart",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:global:g",
+     "artifact_type": "mcp_server",
+     "command": "g",
+     "config_path": "<ROOT>/home/.copilot/mcp-config.json",
+     "harness": "copilot",
+     "metadata": {
+      "env": {}
+     },
+     "name": "g",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:project:w",
+     "artifact_type": "mcp_server",
+     "command": "w",
+     "config_path": "<ROOT>/work/.mcp.json",
+     "harness": "copilot",
+     "metadata": {
+      "env": {}
+     },
+     "name": "w",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:project:v",
+     "artifact_type": "mcp_server",
+     "command": "v",
+     "config_path": "<ROOT>/work/.vscode/mcp.json",
+     "harness": "copilot",
+     "metadata": {
+      "env": {}
+     },
+     "name": "v",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:project:hook:team:pretooluse:0:command",
+     "artifact_type": "hook",
+     "command": "dir-hook",
+     "config_path": "<ROOT>/work/.github/hooks/team.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:project:hook:team:pretooluse:0:bash",
+     "artifact_type": "hook",
+     "command": "dir-bash",
+     "config_path": "<ROOT>/work/.github/hooks/team.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "bash"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.copilot/config.json",
+     "text": "{\"hooks\": {\"sessionStart\": [{\"command\": \"global\"}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.copilot/mcp-config.json",
+     "text": "{\"mcpServers\": {\"g\": {\"command\": \"g\"}}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.mcp.json",
+     "text": "{\"mcpServers\": {\"w\": {\"command\": \"w\"}}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.vscode/mcp.json",
+     "text": "{\"servers\": {\"v\": {\"command\": \"v\"}}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.github/hooks/team.json",
+     "text": "{\"version\": 1, \"hooks\": {\"preToolUse\": [{\"command\": \"dir-hook\", \"bash\": \"dir-bash\"}]}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.copilot/config.json",
+    "<ROOT>/home/.copilot/mcp-config.json",
+    "<ROOT>/work/.mcp.json",
+    "<ROOT>/work/.vscode/mcp.json",
+    "<ROOT>/work/.github/hooks/team.json"
+   ],
+   "name": "everything_together",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "contents": {
+     "<ROOT>/home/.copilot/config.json": "7b2273657373696f6e5374617274223a205b7b22636f6d6d616e64223a20226361707475726564227d5d7d",
+     "<ROOT>/home/.copilot/mcp-config.json": null,
+     "<ROOT>/work/.github/hooks/a.json": "7b22686f6f6b73223a207b22707265546f6f6c557365223a205b7b22636f6d6d616e64223a202263617074757265642d686f6f6b227d5d7d7d",
+     "<ROOT>/work/.github/hooks/none.json": null,
+     "<ROOT>/work/.github/hooks/z.json": "7b22686f6f6b73223a207b22707265546f6f6c557365223a205b7b22636f6d6d616e64223a202263617074757265642d686f6f6b227d5d7d7d",
+     "<ROOT>/work/.mcp.json": "7b226d637053657276657273223a207b22636170223a207b22636f6d6d616e64223a202263227d7d7d",
+     "<ROOT>/work/.vscode/mcp.json": null
+    },
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "hooks",
+      "path": "<ROOT>/work/.github/hooks/a.json",
+      "scope": "project"
+     },
+     {
+      "kind": "hooks",
+      "path": "<ROOT>/work/.github/hooks/none.json",
+      "scope": "project"
+     },
+     {
+      "kind": "hooks",
+      "path": "<ROOT>/work/.github/hooks/z.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "copilot:global:hook:config:sessionstart:0:command",
+     "artifact_type": "hook",
+     "command": "captured",
+     "config_path": "<ROOT>/home/.copilot/config.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "sessionStart",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:project:cap",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/work/.mcp.json",
+     "harness": "copilot",
+     "metadata": {
+      "env": {}
+     },
+     "name": "cap",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:project:hook:a:pretooluse:0:command",
+     "artifact_type": "hook",
+     "command": "captured-hook",
+     "config_path": "<ROOT>/work/.github/hooks/a.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:project:hook:z:pretooluse:0:command",
+     "artifact_type": "hook",
+     "command": "captured-hook",
+     "config_path": "<ROOT>/work/.github/hooks/z.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.copilot/config.json",
+     "text": "{\"preToolUse\": [{\"command\": \"disk\"}]}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.copilot/mcp-config.json",
+     "text": "{\"mcpServers\": {\"disk\": {\"command\": \"disk\"}}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.github/hooks/disk.json",
+     "text": "{\"preToolUse\": [{\"command\": \"disk-hook\"}]}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.copilot/config.json",
+    "<ROOT>/work/.mcp.json",
+    "<ROOT>/work/.github/hooks/a.json",
+    "<ROOT>/work/.github/hooks/z.json"
+   ],
+   "name": "captured_overrides_disk",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "contents": {
+     "<ROOT>/home/.copilot/config.json": null,
+     "<ROOT>/home/.copilot/mcp-config.json": null,
+     "<ROOT>/work/.mcp.json": null,
+     "<ROOT>/work/.vscode/mcp.json": null
+    },
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.copilot/config.json",
+     "text": "{\"preToolUse\": [{\"command\": \"disk\"}]}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.copilot/mcp-config.json",
+     "text": "{\"mcpServers\": {\"disk\": {\"command\": \"disk\"}}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.github/hooks/disk.json",
+     "text": "{\"preToolUse\": [{\"command\": \"disk-hook\"}]}"
+    }
+   ],
+   "found_paths": [],
+   "name": "captured_empty_mapping",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "contents": {
+     "<ROOT>/home/.copilot/config.json": null,
+     "<ROOT>/home/.copilot/mcp-config.json": "7b2f2f20630d226d637053657276657273223a207b226372223a207b22636f6d6d616e64223a202278227d7d7d",
+     "<ROOT>/work/.mcp.json": null,
+     "<ROOT>/work/.vscode/mcp.json": null
+    },
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [],
+   "found_paths": [],
+   "name": "captured_jsonc_cr_not_translated",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "contents": {
+     "<ROOT>/home/.copilot/config.json": "7b0a20202f2f206c656164696e6720636f6d6d656e740a2020226d637053657276657273223a207b0a202020202f2a20626c6f636b0a20202020202020636f6d6d656e74202a2f0a2020202022636f6d6d656e746564223a207b22636f6d6d616e64223a202263222c202261726773223a205b22687474703a2f2f782f2f79222c20222f2a206b657074202a2f225d7d2c0a202020202271756f746564223a207b22636f6d6d616e64223a2022715c222f2f222c202275726c223a202268747470733a2f2f7a2f2a227d0a20207d2c0a202022686f6f6b73223a207b22707265546f6f6c557365223a205b7b22636f6d6d616e64223a20226a736f6e632d686f6f6b227d5d7d202f2f20747261696c696e670a7d0a",
+     "<ROOT>/home/.copilot/mcp-config.json": null,
+     "<ROOT>/work/.mcp.json": "7b0a20202f2f206c656164696e6720636f6d6d656e740a2020226d637053657276657273223a207b0a202020202f2a20626c6f636b0a20202020202020636f6d6d656e74202a2f0a2020202022636f6d6d656e746564223a207b22636f6d6d616e64223a202263222c202261726773223a205b22687474703a2f2f782f2f79222c20222f2a206b657074202a2f225d7d2c0a202020202271756f746564223a207b22636f6d6d616e64223a2022715c222f2f222c202275726c223a202268747470733a2f2f7a2f2a227d0a20207d2c0a202022686f6f6b73223a207b22707265546f6f6c557365223a205b7b22636f6d6d616e64223a20226a736f6e632d686f6f6b227d5d7d202f2f20747261696c696e670a7d0a",
+     "<ROOT>/work/.vscode/mcp.json": null
+    },
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "copilot:global:hook:config:pretooluse:0:command",
+     "artifact_type": "hook",
+     "command": "jsonc-hook",
+     "config_path": "<ROOT>/home/.copilot/config.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:project:hook:.mcp:pretooluse:0:command",
+     "artifact_type": "hook",
+     "command": "jsonc-hook",
+     "config_path": "<ROOT>/work/.mcp.json",
+     "harness": "copilot",
+     "metadata": {
+      "shell": "command"
+     },
+     "name": "preToolUse",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [
+      "http://x//y",
+      "/* kept */"
+     ],
+     "artifact_id": "copilot:project:commented",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/work/.mcp.json",
+     "harness": "copilot",
+     "metadata": {
+      "env": {}
+     },
+     "name": "commented",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "copilot:project:quoted",
+     "artifact_type": "mcp_server",
+     "command": "q\"//",
+     "config_path": "<ROOT>/work/.mcp.json",
+     "harness": "copilot",
+     "metadata": {
+      "env": {}
+     },
+     "name": "quoted",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "http",
+     "url": "https://z/*"
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [],
+   "found_paths": [
+    "<ROOT>/home/.copilot/config.json",
+    "<ROOT>/work/.mcp.json"
+   ],
+   "name": "captured_jsonc",
+   "no_workspace": false,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "contents": {
+     "<ROOT>/home/.copilot/config.json": null,
+     "<ROOT>/home/.copilot/mcp-config.json": null,
+     "<ROOT>/work/.mcp.json": "c328",
+     "<ROOT>/work/.vscode/mcp.json": null
+    },
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [],
+   "name": "captured_invalid_utf8",
+   "no_workspace": false,
+   "refused": true,
+   "symlinks": [],
+   "workspace_is_home": false
+  },
+  {
+   "args": {
+    "contents": {
+     "<ROOT>/home/.copilot/config.json": null,
+     "<ROOT>/home/.copilot/mcp-config.json": null,
+     "<ROOT>/work/.github/hooks/bad.json": "ff",
+     "<ROOT>/work/.mcp.json": null,
+     "<ROOT>/work/.vscode/mcp.json": null
+    },
+    "harness": "copilot",
+    "sources": [
+     {
+      "kind": "config",
+      "path": "<ROOT>/home/.copilot/config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/home/.copilot/mcp-config.json",
+      "scope": "global"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "mcp",
+      "path": "<ROOT>/work/.vscode/mcp.json",
+      "scope": "project"
+     },
+     {
+      "kind": "hooks",
+      "path": "<ROOT>/work/.github/hooks/bad.json",
+      "scope": "project"
+     }
+    ]
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [],
+   "name": "captured_hook_invalid_utf8",
+   "no_workspace": false,
+   "refused": true,
+   "symlinks": [],
+   "workspace_is_home": false
+  }
+ ],
+ "schema": "guard-copilot-vectors.v1"
+}

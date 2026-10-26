@@ -24,12 +24,12 @@ from codex_plugin_scanner.guard.mdm.contracts import ManagedNetworkPolicy
 from codex_plugin_scanner.guard.mdm.managed_file_trust import machine_controlled_file_is_trusted
 from codex_plugin_scanner.guard.mdm.network import (
     ManagedNetworkError,
-    diagnose_endpoint,
     managed_requests_session,
     managed_ssl_context,
     managed_urlopen,
     platform_system_proxies,
 )
+from codex_plugin_scanner.guard.mdm.network_diagnostics import diagnose_endpoint
 
 
 class _FakeResponse:
@@ -216,6 +216,36 @@ def test_authenticated_urlopen_disables_redirects_without_changing_public_downlo
     )
 
     managed_urlopen(request, timeout=5, policy=policy)
+
+    assert any(type(handler).__name__ == "RejectRedirects" for handler in handlers)
+
+
+def test_public_registry_urlopen_can_refuse_redirects_without_authentication(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    policy = ManagedNetworkPolicy()
+    handlers: list[object] = []
+
+    class FakeOpener:
+        def open(self, _request, timeout=None):
+            assert timeout == 5
+            return _FakeResponse()
+
+    monkeypatch.setattr(transport_module, "resolved_network_policy", lambda _policy: (policy, False))
+    monkeypatch.setattr(
+        urllib.request,
+        "build_opener",
+        lambda *items: handlers.extend(items) or FakeOpener(),
+    )
+    monkeypatch.setattr(
+        urllib.request,
+        "urlopen",
+        lambda *_args, **_kwargs: pytest.fail("no-redirect request used redirect-following urlopen"),
+    )
+
+    managed_urlopen(
+        "https://registry.modelcontextprotocol.io/v0.1/servers", timeout=5, policy=policy, allow_redirects=False
+    )
 
     assert any(type(handler).__name__ == "RejectRedirects" for handler in handlers)
 

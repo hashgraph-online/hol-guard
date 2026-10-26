@@ -15,7 +15,8 @@ mod unicode;
 
 pub(crate) use argument_assignments::ArgumentSemantics;
 use argument_assignments::{is_truthy, partition_assignment};
-pub(crate) use unicode::{python_is_alphabetic, python_is_alphanumeric, python_is_whitespace};
+pub use unicode::python_is_alphanumeric;
+pub(crate) use unicode::{python_is_alphabetic, python_is_whitespace};
 
 pub(crate) const MAX_OPTION_PARSE_STATES: usize = 16_384;
 
@@ -240,6 +241,9 @@ fn flag_parse_outcome(
         }
         let shape = option_shape(argument, options_with_values, known_flags);
         for transition in shape.transitions {
+            if shape.fully_known && argument_index + transition.advance > arguments.len() {
+                return ParseOutcome::NoMatch;
+            }
             let assignment = transition
                 .flag_assignments
                 .iter()
@@ -307,6 +311,7 @@ fn short_option_shape(
         let short_option = format!("-{character}");
         let last = characters.peek().is_none();
         if options_with_values.contains(&short_option) {
+            flags.insert(short_option);
             transitions.insert(OptionTransition::with_flags(
                 if last { 2 } else { 1 },
                 &flags,

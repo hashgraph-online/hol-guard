@@ -27,7 +27,7 @@ def exact_review_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Guard
     return store
 
 
-def test_exact_review_lease_waits_for_workspace_keyring(exact_review_store: GuardStore) -> None:
+def test_legacy_exact_review_lease_waits_for_workspace_keyring(exact_review_store: GuardStore) -> None:
     now = datetime.now(timezone.utc).isoformat()
     exact_review_store.set_sync_payload("guard_review_verification_keyring", [], now)
 
@@ -42,7 +42,7 @@ def test_exact_review_lease_waits_for_workspace_keyring(exact_review_store: Guar
     assert command_queue.lease_ready_operations(exact_review_store) == (EXACT_CLOUD_REVIEW_OPERATION,)
 
 
-def test_exact_review_lease_rejects_other_workspace_keyring(exact_review_store: GuardStore) -> None:
+def test_legacy_exact_review_lease_rejects_other_workspace_keyring(exact_review_store: GuardStore) -> None:
     exact_review_store.set_sync_payload(
         "guard_review_verification_keyring",
         review_trusted_keyring_payload(workspace_id="workspace-2"),

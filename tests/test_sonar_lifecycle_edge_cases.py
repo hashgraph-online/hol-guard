@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters import adapter_state_integrity as adapter_state_integrity_module
-from codex_plugin_scanner.guard.adapters import copilot_state_paths
 from codex_plugin_scanner.guard.adapters import cursor_hooks as cursor_hooks_module
+from codex_plugin_scanner.guard.adapters._modules.copilot import copilot_state_paths
 from codex_plugin_scanner.guard.adapters.adapter_state_integrity import (
     adapter_state_is_authenticated,
     authenticate_adapter_state,

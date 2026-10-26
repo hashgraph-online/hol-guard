@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 
@@ -10,17 +11,21 @@ from codex_plugin_scanner.guard.mcp_tool_calls import (
     build_tool_call_artifact,
     build_tool_call_hash,
     evaluate_tool_call,
-    tool_call_risk_categories,
 )
-from codex_plugin_scanner.guard.models import GuardApprovalRequest, HarnessDetection, PolicyDecision
+from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact, HarnessDetection, PolicyDecision
+from codex_plugin_scanner.guard.proxy.runtime_mcp_projection import McpCallProjection, McpCallProjector
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.temporary_mcp_approvals import (
-    eligibility_for_runtime_call,
     parse_temporary_mcp_grant_selection,
     temporary_mcp_approval_payload,
     temporary_mcp_grant_selector,
 )
+
+
+def _projected_call(home: Path, artifact: GuardArtifact, arguments: object) -> McpCallProjection:
+    tool_name = str(artifact.metadata.get("tool_name"))
+    return McpCallProjector(home).project(tool_name, {"name": tool_name, "arguments": arguments}, artifact)
 
 
 def _artifact(*, tool_name: str, identity_suffix: str = "a", schema: object | None = None):
@@ -80,41 +85,16 @@ def _browser_request(artifact, categories: tuple[str, ...]) -> dict[str, object]
     }
 
 
-def test_navigation_url_schema_is_routine_without_false_mismatch(tmp_path) -> None:
+def test_navigation_url_schema_is_routine_without_false_mismatch(tmp_path, native_context_digest: Path) -> None:
     artifact = _artifact(
         tool_name="new_page",
         schema={"type": "object", "properties": {"url": {"type": "string"}}},
     )
     arguments = {"url": "https://hol.org"}
-    categories = tool_call_risk_categories(artifact, arguments)
+    categories = _projected_call(native_context_digest, artifact, arguments).risk_categories
 
     assert categories == ("browser_navigation", "browser_external_domain")
     assert _evaluate(tmp_path, GuardStore(tmp_path / "guard-home"), artifact, arguments).action != "review"
-
-
-def test_navigation_with_unused_script_schema_exposes_timed_access() -> None:
-    from codex_plugin_scanner.guard.runtime.browser_mcp_intent import normalize_browser_mcp_intent
-
-    artifact = _artifact(
-        tool_name="navigate_page",
-        schema={
-            "type": "object",
-            "properties": {
-                "url": {"type": "string"},
-                "initScript": {"type": "string"},
-            },
-        },
-    )
-    arguments = {"type": "url", "url": "http://localhost:3000/guard"}
-    browser_intent = normalize_browser_mcp_intent(artifact, arguments)
-    categories = tool_call_risk_categories(artifact, arguments)
-
-    eligibility = eligibility_for_runtime_call(browser_intent, categories)
-
-    assert categories == ("browser_navigation",)
-    assert eligibility is not None
-    assert eligibility.category == "browser_navigation"
-    assert eligibility.target_label == "localhost"
 
 
 def test_explicit_dangerous_tool_review_policy_overrides_routine_browser_default(tmp_path) -> None:
@@ -215,7 +195,7 @@ def test_queue_persists_browser_intent_for_bounded_grant_controls(tmp_path) -> N
         (("browser_interaction",), True),
     ],
 )
-def test_grant_contract_fails_closed_for_hard_risk(categories, eligible) -> None:
+def test_grant_contract_fails_closed_for_hard_projected_call(categories, eligible) -> None:
     artifact = _artifact(tool_name="click")
     payload = temporary_mcp_approval_payload(_browser_request(artifact, categories))
     assert (payload is not None) is eligible

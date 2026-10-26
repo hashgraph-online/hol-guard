@@ -8,7 +8,9 @@ import {
   extensionStateLabel,
   managedPermissionState,
 } from "../../extension-control-center-model";
-import type { EffectiveExtensionControls, ExtensionCatalogItem } from "../../extension-controls-api";
+import type { CatalogReadModel } from "../../extension-catalog-v2";
+import type { EffectiveExtensionControls, ExtensionCatalogSummary, ExtensionPermission } from "../../extension-controls-api";
+import { type ExtensionPolicyRebaseConflict } from "../../extension-policy-rebase";
 import {
   PermissionPolicyRow,
   PolicyReviewSheet,
@@ -16,16 +18,17 @@ import {
 import { AppliedPolicyToast } from "../../extension-policy-applied-toast";
 import { useResolvedApprovalGate } from "../../use-resolved-approval-gate";
 import { useExtensionPolicyDraft } from "../../use-extension-policy-draft";
-import { COMMAND_PATTERN_DISPLAY_LIMIT, searchCommandPatterns } from "../model/protection-landing";
+import { COMMAND_PATTERN_DISPLAY_LIMIT, searchCommandPatterns, wordMatch } from "../model/protection-landing";
+import { useCatalogPermissionSearch } from "../use-catalog-permission-search";
 import { ProtectionModuleRow } from "./protection-primitives";
 import { ExtensionBrandMark } from "./extension-brand-mark";
 import { QuickApplyToolbar } from "./quick-apply-toolbar";
 import { PolicyEditingLocks } from "./policy-editing-locks";
 
 function CatalogSearchRow(props: {
-  extension: ExtensionCatalogItem;
+  extension: ExtensionCatalogSummary;
   effective: EffectiveExtensionControls;
-  onOpen: (extension: ExtensionCatalogItem) => void;
+  onOpen: (extension: ExtensionCatalogSummary) => void;
 }) {
   const handleOpen = useCallback(() => {
     props.onOpen(props.extension);
@@ -58,15 +61,21 @@ function CatalogSearchRow(props: {
  * the page.
  */
 export function PatternSearchConsole(props: {
-  catalog: readonly ExtensionCatalogItem[];
+  /** Extensions currently visible under the active filters. */
+  catalog: readonly ExtensionCatalogSummary[];
+  readModel: CatalogReadModel;
   effective: EffectiveExtensionControls;
   onRefresh: () => Promise<void> | void;
-  onOpenExtension: (extension: ExtensionCatalogItem) => void;
+  onOpenExtension: (extension: ExtensionCatalogSummary) => void;
   active?: boolean;
   query?: string;
   onQueryChange?: (query: string) => void;
   /** Rendered under the input while the parent hides its own header actions. */
   actionSlot?: ReactNode;
+  /** Rendered beside the search input on wide viewports (e.g. the Filters trigger). */
+  toolbarSlot?: ReactNode;
+  /** Rendered directly under the search row (filter tokens and the popover panel anchor). */
+  subtoolbarSlot?: ReactNode;
 }) {
   const [internalQuery, setInternalQuery] = useState("");
   const query = props.query ?? internalQuery;
@@ -78,10 +87,17 @@ export function PatternSearchConsole(props: {
   const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(null);
   const {
     baseEffective, dirty, preview, previewBusy, applyBusy, reviewOpen,
-    error, stale, refreshRequired, lastApplied, undoLastApplied,
+    error, stale, pendingRebase, refreshRequired, lastApplied, undoLastApplied,
     changedPermissionCount, setReviewOpen, setPermissionState, setPermissionStates,
-    resetDraft, runPreview, apply, permissionState,
+    resetDraft, runPreview, apply, permissionState, rebaseDraft, keepConflicts, useCurrent,
   } = draft;
+  // Rebasing reads one detail record per extension the draft touched, so the
+  // console remembers which tools the edits came from rather than re-reading
+  // the whole catalog when the committed policy moves under an open draft.
+  const touchedExtensionIds = useRef(new Set<string>());
+  const rememberTouched = useCallback((extensionIds: readonly string[]) => {
+    for (const extensionId of extensionIds) touchedExtensionIds.current.add(extensionId);
+  }, []);
 
   useEffect(() => {
     if (!searchActive) return;
@@ -97,32 +113,44 @@ export function PatternSearchConsole(props: {
   }, [searchActive]);
 
   const totalPermissionCount = useMemo(
-    () => props.catalog.reduce((total, extension) => total + extension.permissions.length, 0),
+    () => props.catalog.reduce((total, extension) => total + extension.permission_count, 0),
     [props.catalog],
   );
-  const allMatches = useMemo(
-    () => searchCommandPatterns(props.catalog, query, totalPermissionCount),
-    [props.catalog, query, totalPermissionCount],
-  );
+  const search = useCatalogPermissionSearch(props.readModel, query);
+  const allMatches = useMemo(() => {
+    const visible = new Set(props.catalog.map((extension) => extension.extension_id));
+    const candidates = search.hits.filter((hit) => visible.has(hit.extension.extension_id));
+    return searchCommandPatterns(candidates, query, totalPermissionCount);
+  }, [props.catalog, search.hits, query, totalPermissionCount]);
   const matches = useMemo(() => allMatches.slice(0, COMMAND_PATTERN_DISPLAY_LIMIT), [allMatches]);
   const toolMatches = useMemo(() => {
     const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
     if (!terms.length) return [];
     return props.catalog.filter((extension) => {
-      const text = [extension.name, extension.extension_id, ...extension.executables, ...extension.aliases].join(" ").toLowerCase();
-      return terms.every((term) => text.includes(term));
+      const text = [extension.name, extension.extension_id, ...extension.executables, ...extension.aliases].join(" ");
+      return terms.every((term) => wordMatch(text, term) !== null);
     });
   }, [props.catalog, query]);
   const grouped = useMemo(() => {
-    const groups = new Map<string, { extension: ExtensionCatalogItem; permissionIds: string[] }>();
+    const groups = new Map<string, { extension: ExtensionCatalogSummary; permissions: ExtensionPermission[] }>();
     for (const match of matches) {
-      const group = groups.get(match.extension.extension_id) ?? { extension: match.extension, permissionIds: [] };
-      group.permissionIds.push(match.permission.permission_id);
+      const group = groups.get(match.extension.extension_id) ?? { extension: match.extension, permissions: [] };
+      group.permissions.push(match.permission);
       groups.set(match.extension.extension_id, group);
     }
     return [...groups.values()];
   }, [matches]);
   const involvedPermissions = useMemo(() => allMatches.map((match) => match.permission), [allMatches]);
+  const handleRebase = useCallback(async () => {
+    const extensionIds = touchedExtensionIds.current.size
+      ? [...touchedExtensionIds.current]
+      : grouped.map((group) => group.extension.extension_id);
+    // Every touched tool has to resolve. Dropping the ones whose detail read
+    // failed would rebase the rest onto the latest authority and quietly take
+    // the missing tool's unsaved edits with it, so let the failure reach the
+    // hook, which reports it and leaves the draft alone.
+    await rebaseDraft(() => Promise.all(extensionIds.map((extensionId) => props.readModel.detail(extensionId))));
+  }, [grouped, props.readModel, rebaseDraft]);
   const changeCount = changedPermissionCount;
   const showResults = query.trim().length > 0;
 
@@ -139,7 +167,9 @@ export function PatternSearchConsole(props: {
 
   return <section aria-labelledby="pattern-search-heading" className="mt-6">
     <h2 id="pattern-search-heading" className="sr-only">Search command patterns</h2>
-    <label className="relative block">
+    <div className="relative">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        <label className="relative block min-w-0 flex-1 sm:min-w-60">
       <span className="sr-only">Search command patterns</span>
       <HiMiniMagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-brand-dark/55" aria-hidden="true" />
       <input
@@ -152,7 +182,7 @@ export function PatternSearchConsole(props: {
         onChange={(event) => setQuery(event.target.value.slice(0, 160))}
         placeholder='Search any command Guard watches — "squash", "git push --force", "kubectl"…'
         aria-describedby="pattern-search-hint"
-        className="min-h-12 w-full rounded-2xl border border-[rgba(63,65,116,0.14)] bg-white/85 py-2.5 pl-9 pr-10 text-sm text-brand-dark shadow-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-blue-100"
+        className="min-h-11 w-full rounded-xl border border-[rgba(63,65,116,0.14)] bg-white/85 py-2.5 pl-9 pr-10 text-sm text-brand-dark shadow-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-blue-100"
       />
       {showResults ? (
         <button
@@ -164,7 +194,12 @@ export function PatternSearchConsole(props: {
           <HiMiniXMark className="size-4" aria-hidden="true" />
         </button>
       ) : null}
-    </label>
+        </label>
+        {props.toolbarSlot ? <div className="flex shrink-0 flex-wrap items-center gap-2">{props.toolbarSlot}</div> : null}
+      </div>
+      {props.subtoolbarSlot}
+    </div>
+
     <p id="pattern-search-hint" className={`mt-2 text-xs text-brand-dark/60 ${focused || showResults ? "" : "sr-only"}`}>
       Matches patterns across every tool. Press / to focus search from anywhere on this page.
     </p>
@@ -179,6 +214,10 @@ export function PatternSearchConsole(props: {
       />
     ) : null}
 
+    {showResults && search.error ? (
+      <p role="alert" className="mt-3 text-sm font-medium text-rose-800">{search.error}</p>
+    ) : null}
+
     {showResults ? (
       matches.length || toolMatches.length ? (
         <div className="mt-3">
@@ -189,7 +228,10 @@ export function PatternSearchConsole(props: {
                 effective={baseEffective}
                 disabled={refreshRequired || previewBusy || applyBusy || baseEffective.health !== "protected"}
                 permissionState={permissionState}
-                onApply={setPermissionStates}
+                onApply={(permissionIds, state) => {
+                  rememberTouched(allMatches.map((match) => match.extension.extension_id));
+                  setPermissionStates(permissionIds, state);
+                }}
               />
               {allMatches.length > matches.length ? (
                 <p role="status" className="mt-3 text-xs text-brand-dark/65">
@@ -211,9 +253,7 @@ export function PatternSearchConsole(props: {
                 {group.extension.executables.length ? <code>{group.extension.executables[0]}</code> : null}
                 <span>{extensionDisplayName(group.extension.name)}</span>
               </h3>
-              {group.permissionIds.map((permissionId) => {
-                const permission = group.extension.permissions.find((item) => item.permission_id === permissionId);
-                if (!permission) return null;
+              {group.permissions.map((permission) => {
                 return <PermissionPolicyRow
                   key={permission.permission_id}
                   permission={permission}
@@ -221,7 +261,10 @@ export function PatternSearchConsole(props: {
                   effective={baseEffective}
                   draftState={permissionState(permission.permission_id)}
                   disabled={refreshRequired}
-                  onChange={(state) => setPermissionState(permission.permission_id, state)}
+                  onChange={(state) => {
+                    rememberTouched([group.extension.extension_id]);
+                    setPermissionState(permission.permission_id, state);
+                  }}
                 />;
               })}
             </section>
@@ -244,7 +287,9 @@ export function PatternSearchConsole(props: {
           ) : null}
         </div>
       ) : (
-        <p className="mt-3 text-sm text-brand-dark/75">No command patterns or tools match this search.</p>
+        <p role="status" className="mt-3 text-sm text-brand-dark/75">
+          {search.pending ? "Searching command patterns…" : "No command patterns or tools match this search."}
+        </p>
       )
     ) : null}
 
@@ -275,6 +320,25 @@ export function PatternSearchConsole(props: {
           <HiMiniExclamationTriangle className="mt-0.5 size-5 shrink-0" />
           <span>{error}</span>
         </div>
+        {stale && !pendingRebase ? (
+          <button type="button" disabled={previewBusy} onClick={() => { void handleRebase(); }} className="mt-3 min-h-11 rounded-xl bg-red-800 px-4 text-sm font-semibold text-[#f4f7fb] disabled:opacity-40">Update draft with latest protection</button>
+        ) : null}
+        {pendingRebase ? (
+          <div className="mt-4">
+            <ul className="space-y-2">
+              {pendingRebase.result.conflicts.map((conflict: ExtensionPolicyRebaseConflict) => (
+                <li key={conflict.original_permission_id} className="text-xs text-brand-dark">
+                  <code className="break-all">{conflict.original_permission_id}</code>
+                  <div className="mt-1">{conflict.kind === "removed" ? "Target removed from the current catalog." : `Current ${conflict.latest_state}; your draft requests ${conflict.requested_state}.`}</div>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button type="button" onClick={keepConflicts} className="min-h-11 rounded-xl bg-red-800 px-4 text-sm font-semibold text-[#f4f7fb]">Keep my compatible changes</button>
+              <button type="button" onClick={useCurrent} className="min-h-11 rounded-xl border border-red-300 px-4 text-sm font-semibold text-red-950">Use current protection</button>
+            </div>
+          </div>
+        ) : null}
       </div>
     ) : dirty && !preview ? (
       <div className="mt-4 flex items-start gap-3 text-sm text-brand-dark">

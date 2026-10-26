@@ -15,8 +15,6 @@ from ..policy_document_yaml import MAX_POLICY_BYTES
 from ..store_policy_document import PolicyImportMode
 from .policy_errors import PolicyToolError
 
-_MAX_IDEMPOTENCY_KEY_LENGTH = 128
-_MIN_IDEMPOTENCY_KEY_LENGTH = 8
 _DIGEST_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 _IDEMPOTENCY_KEY_PATTERN = re.compile(r"^[A-Za-z0-9._~-]{8,128}$")
 _REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9]{16,64}$")

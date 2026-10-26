@@ -32,7 +32,7 @@ test("installed dashboard reconciles command analytics, filters, details, health
   await expect(summary.getByText("Commands checked").locator("..").getByText(String(expectedCount), { exact: true })).toBeVisible();
   await expect(summary.getByText("Run results recorded")).toBeVisible();
   await expect(page.getByText("Some commands on this page have a matching result recorded after Guard's decision.")).toBeVisible();
-  await expect(page.getByText("Command activity evidence is degraded. Counts may be incomplete.")).toHaveCount(0);
+  await expect(summary.getByText("Counts may be incomplete.", { exact: false })).toHaveCount(0);
   await expect(page.getByLabel("Command activity records").getByRole("row")).toHaveCount(expectedCount + 1);
   await page.screenshot({ path: testInfo.outputPath("installed-command-activity-overview.png"), fullPage: true });
 

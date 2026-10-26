@@ -477,6 +477,18 @@ def trusted_windows_roaming_appdata() -> Path:
     )
 
 
+def trusted_windows_local_temp() -> Path:
+    """Return the default Temp directory in the current user's profile.
+
+    TEMP changes between processes, and so does the Local AppData known
+    folder, which Windows expands from USERPROFILE. The profile itself comes
+    from the registry, so a file one process writes here can be found by
+    another with a different environment.
+    """
+
+    return _trusted_real_directory(trusted_windows_user_profile() / "AppData" / "Local" / "Temp")
+
+
 def _trusted_windows_known_folder(folder_id_bytes: bytes, *, failure_reason: str) -> Path:
     if os.name != "nt":
         raise OSError(failure_reason)
@@ -539,6 +551,7 @@ def _trusted_real_directory(path: Path) -> Path:
 __all__ = [
     "hold_windows_locked_directory",
     "open_windows_locked_regular_descriptor",
+    "trusted_windows_local_temp",
     "trusted_windows_roaming_appdata",
     "trusted_windows_system_directories",
     "trusted_windows_system_executable",

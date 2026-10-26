@@ -4,6 +4,28 @@ Local harness protection works without signing in to Guard Cloud. Cloud adds syn
 history, visibility, and team controls around the same adapters. See
 [Local Guard vs Guard Cloud](./local-vs-cloud.md).
 
+## Hook verdict exit codes
+
+`guard/cli/native_hook_exit_code.py::native_hook_verdict_exit_code` is the
+authority for verdict exit codes, including `--json` responses. Emitters pass
+the canonical harness, resolved policy action, and normalized hook event;
+they do not maintain independent exit-code tables.
+
+| Harness | Blocking verdict | Nonblocking verdict |
+| --- | --- | --- |
+| Codex, Claude Code, Copilot, Pi, OMP | `0` for `PreToolUse`, `UserPromptSubmit`, and `PermissionRequest`; the JSON envelope carries the denial. `1` for other events, including `PostToolUse`. | `0` |
+| Cursor, Devin, Kimi, Hermes | `2` | `0` |
+| OpenCode, Superagent | `1` | `0` |
+| Grok, ZCode | Adapter-defined event/recording-mode behavior, through the shared authority. | Adapter-defined |
+| Unknown harness | `1` | `0` |
+
+Blocking actions are `review`, `require-reapproval`, `sandbox-required`, and
+`block`. Missing event context does not imply that an envelope will be consumed.
+`PostToolUse` reports a policy violation; it cannot undo an executed tool.
+
+## Harness coverage
+
+
 Current Guard support in this repo:
 
 - `codex`
@@ -26,6 +48,7 @@ Current Guard support in this repo:
   - supports local hook install and uninstall in `.claude/settings.local.json`
   - has native `PreToolUse` and `PermissionRequest` Guard hook coverage; Guard does not install `UserPromptSubmit`, so native prompt submission is not intercepted
   - carries package-manager shell intent and pre-execution block state through the shared Guard runtime envelope before Claude sees the denied tool response
+  - on macOS and Linux, when the bundled runtime supports it, the `SessionStart` hook first checks in the native runtime that the Guard hook entries are already current and the verified daemon is live, and prints the Guard context without starting Python; otherwise it hands the session start to the Python hook, which starts the daemon and refreshes the entries as before
   - is the best current harness for graceful approval deferral
 - `copilot`
   - detects read-only user config in `~/.copilot/config.json` and `~/.copilot/mcp-config.json`
@@ -100,8 +123,8 @@ Current Guard support in this repo:
   - rejects relative, current-directory, workspace, unsafe-owner/mode, and workspace-targeting symlink executables before probing or launch; custom install roots can be selected once with `hol-guard run grok --grok-executable /absolute/path/to/grok`
   - binds an explicit custom selection to its SHA-256 identity and sanitizes code-loader variables and unsafe PATH entries without adding prompts to unchanged launches
   - installs one catch-all `PreToolUse` hook so native tools, `spawn_subagent`, `list_dir`, and `server__tool` MCP names are reviewed once
-  - installs observe-only `UserPromptSubmit`, `SubagentStart`, and `SessionStart` hooks for inventory; Grok ignores deny on those events
-  - installs Guard-managed deny rules and backup hooks in `~/.grok/managed_config.toml` without touching user `~/.grok/config.toml` or `~/.grok/auth`
+  - screens prompts on `UserPromptSubmit` before inference; `SubagentStart` and `SessionStart` remain passive lifecycle hooks
+  - merges deny rules and identical backup hooks into `.grok/config.toml`, preserving unrelated values, comments, and hooks; leaves vendor-managed configuration and authentication intact
   - blocks by returning exit code `2` and Grok-native stdout JSON `{"decision":"deny","reason":"..."}` with approval-center copy in stderr
   - waits on the original PreToolUse hook after queuing an approval, then returns allow so Grok resumes the same tool call
   - surfaces `--always-approve`, `bypassPermissions`, and sandbox `off` as degraded protection states when detected in Grok config
@@ -125,6 +148,42 @@ Current Guard support in this repo:
   - refuses to install when the user config is JSONC (comments or trailing commas) rather than rewriting it lossy
   - blocks by returning exit code `2` and Devin-native stdout JSON `{"decision":"block","reason":"..."}` with a `hookSpecificOutput.permissionDecision: "deny"` envelope; Guard never emits Devin's `decision: "approve"` auto-approve response
   - fails closed (exit `2` deny) when hook input is malformed or the Guard authority denies for `PreToolUse`, `PermissionRequest`, and `UserPromptSubmit`; a timed-out or crashed review continues the session with an allow envelope so a wedged Guard cannot stall Devin, and `PostToolUse` is observation-only
+
+## Reported to Cloud
+
+When a machine is connected to Guard Cloud, [fleet posture](./fleet-posture.md) reports installed items from
+the local inventory. Only five item kinds are reported: `skill`, `mcp_server`, `plugin` (plugins, plugin files
+and extensions), `package` and `hook`. Agents, commands, instructions and rules, prompts, themes, marketplace
+entries, host rows and other settings files stay local, even when Guard detects them. This table lists, per
+harness, the reported kinds that Guard's detectors produce today. `hol-guard extensions list` prints the
+plugin rows from the same local inventory. `hol-guard mcp list` prints the MCP servers the Protect page lists.
+
+| Harness | Reported to Cloud |
+| --- | --- |
+| `codex` | `mcp_server`, `hook`, `skill` |
+| `claude-code` | `mcp_server`, `hook`, `skill` |
+| `copilot` | `mcp_server`, `hook` |
+| `cursor` | `mcp_server`, `hook`, `skill` |
+| `cline` | `mcp_server` |
+| `antigravity` | `mcp_server`, `plugin`, `skill` |
+| `gemini` | `mcp_server`, `plugin`, `hook`, `skill` |
+| `hermes` | `mcp_server`, `skill` |
+| `openclaw` | `mcp_server`, `skill` |
+| `opencode` | `mcp_server`, `plugin`, `skill` |
+| `kimi` | `mcp_server`, `hook`, `skill` |
+| `grok` | `mcp_server`, `hook`, `skill` |
+| `pi` | `plugin`, `package`, `skill` |
+| `omp` (Oh My Pi) | `plugin`, `package`, `skill` |
+| `zcode` | `mcp_server`, `plugin`, `hook`, `skill` |
+| `devin` | `mcp_server`, `hook`, `skill` |
+| `paseo` | none |
+
+For `codex`, `claude-code`, `cursor`, `gemini`, `kimi`, `grok`, `opencode`, `pi`, `omp`, `zcode` and `devin`, `skill`
+rows also come from workspace skill discovery, which runs when Guard has a project workspace.
+
+Items are reported only while reporting is on. With `hol-guard settings set fleet-posture off`, Guard sends
+the inventory digest and no item rows for any harness; managed installs cannot opt out. Item locations are
+sent as keyed hashes, never as raw paths.
 
 Gemini, Antigravity, and shared Codex/AIBOM skill discovery bind approval and
 inventory identity to the complete accepted skill directory rather than only
@@ -241,6 +300,13 @@ replacement/withholding transport.
 | cline | cline | unknown | unknown | local | UserPromptSubmit | native_hook | screening | observe, block, approval | Prompt hook failure is handled by the native bridge's bounded fail-closed behavior. | Cline must invoke the managed UserPromptSubmit hook for prompt screening. | Prompt screening does not prove final model request redaction. | src/codex_plugin_scanner/guard/adapters/cline_hooks.py:_EVENTS | unverified | not_run | None | None | None | None | None | None | None | None | False |
 
 <!-- END GENERATED HARNESS CAPABILITY REPORT: cline -->
+
+## Harness Version Coverage
+
+The dashboard shows whether the installed app version has been tested with the
+running Guard release. Coverage is display-only and never changes enforcement.
+See [Harness version coverage](harness-version-coverage.md) for the states,
+supported apps, and the maintainer evidence-promotion procedure.
 
 ## Rust Authority Boundary
 

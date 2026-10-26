@@ -3,7 +3,8 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { assertSimpleCopySafe, localSettingChoiceLabel, PROTECTION_TERMS, protectionCenterLoadError, simpleCopyViolations } from "./copy/protection-copy";
-import { CatalogFilterBar } from "./components/catalog-filter-bar";
+import { ExtensionsLoadError } from "./protection-workspace-states";
+import { CatalogFilterBar, CatalogFilterTrigger } from "./components/catalog-filter-bar";
 import { ProtectionModuleRow, ProtectionStatusHero, TechnicalDetails } from "./components/protection-primitives";
 import {
   CLOUD_CONNECTED_FIXTURE,
@@ -20,6 +21,12 @@ import {
 import { EMPTY_CATALOG_FILTERS } from "./model/catalog-filters";
 import { groupProtectionModules, protectionCategoryIdForExtension } from "./model/protection-categories";
 import { deriveProtectionStatus } from "./model/protection-presentation";
+import { CustomExtensionsSection } from "./custom-extensions-section";
+import type { LocalCliItem } from "../local-cli-api";
+import { LocalCliDetail } from "./local-clis-panel";
+import { CustomExtensionReviewModal } from "./local-cli-review-modal";
+import { FRESH_TOTP_REQUIRED_MESSAGE, isFreshTotpRequired } from "./local-cli-panel-copy";
+import { LocalCliApiError } from "../local-cli-api";
 
 assert.equal(PROTECTION_TERMS.navigation, "Extensions");
 assert.equal(PROTECTION_TERMS.pageTitle, "Extensions");
@@ -91,11 +98,65 @@ assert.doesNotThrow(() => assertSimpleCopySafe("Guard is protecting source contr
 assert.throws(() => assertSimpleCopySafe("The semantic blast radius changed."), /semantic blast radius/);
 
 assert.equal(protectionCenterLoadError("unauthorized").title, "This view needs a signed local session");
-assert.match(protectionCenterLoadError("unauthorized").detail, /Local protection is still running/);
+assert.match(protectionCenterLoadError("unauthorized").detail, /Open Extensions from the local Guard dashboard/);
 assert.doesNotMatch(protectionCenterLoadError("unauthorized").detail, /^unauthorized$/);
 assert.equal(protectionCenterLoadError("HTTP 401").title, "This view needs a signed local session");
 assert.equal(protectionCenterLoadError("catalog 1401 mismatch").title, "Extensions unavailable");
 assert.match(protectionCenterLoadError("catalog mismatch").detail, /catalog mismatch/);
+
+// A reason code is a record, not a sentence: it never becomes the message the
+// operator reads, and the copy for a permanent failure names the step that
+// clears it rather than offering only a retry that cannot succeed.
+const modelUnavailable = protectionCenterLoadError("catalog_read_model_unavailable");
+assert.doesNotMatch(modelUnavailable.detail, /catalog_read_model_unavailable/);
+assert.doesNotMatch(modelUnavailable.title, /catalog_read_model_unavailable/);
+assert.match(modelUnavailable.detail, /Quit HOL Guard and open it again/);
+assert.equal(modelUnavailable.reference, "catalog_read_model_unavailable");
+
+// A mismatched daemon and runtime cannot be repaired by restarting the same
+// install, and an expired snapshot renders no partial list: the workspace
+// replaces the whole page with this card. Neither detail may claim otherwise.
+const mismatch = protectionCenterLoadError("catalog_snapshot_mismatch");
+assert.doesNotMatch(mismatch.detail, /catalog_snapshot_mismatch/);
+assert.doesNotMatch(mismatch.detail, /open it again|[Tt]ry again/);
+assert.match(mismatch.detail, /Install the latest version/);
+assert.equal(mismatch.reference, "catalog_snapshot_mismatch");
+
+// A preparation that has failed on every recent attempt is deterministic, so
+// restarting the same install reproduces it. This card must not offer a retry.
+const preparationFailed = protectionCenterLoadError("catalog_read_preparation_failed");
+assert.doesNotMatch(preparationFailed.detail, /catalog_read_preparation_failed/);
+assert.doesNotMatch(preparationFailed.detail, /open it again|[Tt]ry again/);
+assert.match(preparationFailed.detail, /Install the latest version/);
+assert.match(preparationFailed.detail, /daemon\.log/);
+assert.equal(preparationFailed.reference, "catalog_read_preparation_failed");
+
+const expired = protectionCenterLoadError("catalog_snapshot_expired");
+assert.doesNotMatch(expired.detail, /partial/);
+assert.match(expired.detail, /Load it again/);
+assert.equal(expired.reference, "catalog_snapshot_expired");
+
+const unknownCode = protectionCenterLoadError("catalog_read_went_sideways");
+assert.doesNotMatch(unknownCode.detail, /catalog_read_went_sideways/);
+assert.equal(unknownCode.reference, "catalog_read_went_sideways");
+assert.equal(protectionCenterLoadError("catalog mismatch").reference, undefined);
+
+// The card already states that local protection continues, so the detail must
+// not repeat it.
+for (const message of ["unauthorized", "catalog_read_model_unavailable", "catalog_read_transport_failed", "catalog_snapshot_expired", "catalog_snapshot_mismatch", "catalog_read_preparation_failed", "catalog mismatch"]) {
+  assert.doesNotMatch(protectionCenterLoadError(message).detail, /[Ll]ocal protection/);
+}
+
+const errorCard = renderToStaticMarkup(createElement(ExtensionsLoadError, {
+  ...protectionCenterLoadError("catalog_read_model_unavailable"),
+  onRetry: () => {},
+}));
+assert.match(errorCard, /Guard cannot open your extension list/);
+assert.match(errorCard, /Reference: <span[^>]*>catalog_read_model_unavailable<\/span>/);
+assert.doesNotMatch(renderToStaticMarkup(createElement(ExtensionsLoadError, {
+  ...protectionCenterLoadError("catalog mismatch"),
+  onRetry: () => {},
+})), /Reference:/);
 
 const hero = renderToStaticMarkup(createElement(ProtectionStatusHero, { status: deriveProtectionStatus(PROTECTION_AUTHORITY_FIXTURES.protected) }));
 assert.match(hero, /Local protection/);
@@ -163,21 +224,38 @@ assert.match(mcpRow, />MCP</);
 assert.match(mcpRow, />External</);
 assert.match(mcpRow, /Off until you turn it on/);
 
-const filterBar = renderToStaticMarkup(createElement(CatalogFilterBar, {
-  catalog: [
-    protectionModuleFixture({ extension_id: "command.git", name: "Git" }),
-    protectionModuleFixture({
-      extension_id: "command.mcp-filesystem",
-      name: "Filesystem MCP",
-      trust_class: "external",
-      surface: "mcp",
-      description: "Reviews official filesystem MCP tools.",
-    }),
-  ],
-  filters: EMPTY_CATALOG_FILTERS,
-  onChange: () => undefined,
-}));
+const filterCatalog = [
+  protectionModuleFixture({ extension_id: "command.git", name: "Git" }),
+  protectionModuleFixture({
+    extension_id: "command.mcp-filesystem",
+    name: "Filesystem MCP",
+    trust_class: "external",
+    surface: "mcp",
+    description: "Reviews official filesystem MCP tools.",
+  }),
+];
+const filterBar = renderToStaticMarkup(createElement("div", { "data-testid": "catalog-filters" },
+  createElement(CatalogFilterTrigger, {
+    open: false,
+    activeCount: 0,
+    panelId: "catalog-filter-panel-test",
+    buttonRef: { current: null },
+    onToggle: () => undefined,
+  }),
+  createElement(CatalogFilterBar, {
+    catalog: filterCatalog,
+    filters: EMPTY_CATALOG_FILTERS,
+    onChange: () => undefined,
+    open: false,
+    onOpenChange: () => undefined,
+    panelId: "catalog-filter-panel-test",
+  }),
+));
 assert.match(filterBar, /data-testid="catalog-filters"/);
+assert.match(filterBar, /aria-expanded="false"/);
+assert.match(filterBar, /aria-controls="catalog-filter-panel-test"/);
+assert.match(filterBar, /id="catalog-filter-panel-test"/);
+assert.match(filterBar, /hidden/);
 assert.match(filterBar, /<legend[^>]*>Trust<\/legend>/);
 assert.match(filterBar, /<legend[^>]*>Kind<\/legend>/);
 assert.match(filterBar, /<legend[^>]*>Area<\/legend>/);
@@ -188,10 +266,178 @@ assert.match(filterBar, />MCP</);
 assert.match(filterBar, />Commands</);
 assert.match(filterBar, />Source control</);
 assert.match(filterBar, /aria-pressed="false"/);
+assert.match(filterBar, /data-testid="catalog-filter-count"/);
 assert.doesNotMatch(filterBar, /Clear filters/);
+
+const filteringBar = renderToStaticMarkup(createElement(CatalogFilterBar, {
+  catalog: filterCatalog,
+  filters: { trusts: ["external"], kinds: [], areas: [] },
+  onChange: () => undefined,
+  open: true,
+  onOpenChange: () => undefined,
+  panelId: "catalog-filter-panel-open",
+}));
+assert.match(filteringBar, /data-testid="catalog-filter-tokens"/);
+assert.match(filteringBar, /Remove External trust filter/);
+assert.match(filteringBar, />Clear filters</);
+assert.match(filteringBar, />Clear all 1 filter</);
+assert.match(filteringBar, /1 of 2 tools/);
+assert.doesNotMatch(filteringBar, /<div id="catalog-filter-panel-open"[^>]*hidden/);
 
 const technical = renderToStaticMarkup(createElement(TechnicalDetails, { children: createElement("code", null, "command.git") }));
 assert.match(technical, /<details/);
 assert.doesNotMatch(technical, / open/);
+
+const baseCustomExtension: LocalCliItem = {
+  cli_id: "local-cli.fixture-abcdef12",
+  name: "Fixture connector",
+  kind: "executable",
+  identity_hash: "a".repeat(64),
+  example_label: "fixture --help",
+  interpreter_name: null,
+  observed_count: 1,
+  last_seen_at: "2026-09-29T00:00:00Z",
+  source_path: null,
+  help_status: "ok",
+  surface: "mcp",
+  server_identity_hash: null,
+  source_label: "ZCode",
+  state: "unset",
+  stale: false,
+  grant_revision: null,
+  authority_revision: 1,
+  suggestable: true,
+  suggestion_score: 1,
+  commands: [],
+};
+
+const customEmpty = renderToStaticMarkup(createElement(CustomExtensionsSection, {
+  items: [], onOpen: () => undefined, onAdd: () => undefined,
+}));
+assert.match(customEmpty, /data-testid="custom-extensions-empty"/);
+assert.match(customEmpty, /No custom extensions yet\./);
+assert.match(customEmpty, />Add custom extension</);
+assert.match(customEmpty, /custom-extensions-heading/);
+assert.doesNotMatch(customEmpty, /Search custom extensions/);
+assert.doesNotMatch(customEmpty, /Show all/);
+
+const customDiscovered = renderToStaticMarkup(createElement(CustomExtensionsSection, {
+  items: [], onOpen: () => undefined, onAdd: () => undefined, discovering: true,
+}));
+assert.match(customDiscovered, /Checking host configuration for connectors…/);
+
+const customMixed = renderToStaticMarkup(createElement(CustomExtensionsSection, {
+  items: [
+    { ...baseCustomExtension, cli_id: "local-cli.enrolled", name: "Enrolled tool", state: "allowed" },
+    { ...baseCustomExtension, cli_id: "local-cli.observed", name: "Observed tool", state: "unset" },
+  ],
+  onOpen: () => undefined, onAdd: () => undefined,
+}));
+assert.match(customMixed, /Needs review · 1/);
+assert.match(customMixed, /Reviewed · 1/);
+assert.doesNotMatch(customMixed, /custom-extensions-empty/);
+
+// A recent authenticator proof lasts about a minute and can lapse while the
+// save dialog is open. Once a save is refused for a missing code, the dialog
+// must show the code field again instead of "recently confirmed" (#5594).
+const recentTotpGate = {
+  enabled: true, configured: true, cooldown_seconds: 0, cooldown_active: false, cooldown_expires_at: null,
+  locked_until: null, fail_closed: false, strict_all_decisions: false,
+  totp_enabled: true, totp_pending: false, totp_recent_satisfied: true,
+};
+const saveDialog = (requireFreshTotp: boolean) => renderToStaticMarkup(createElement(CustomExtensionReviewModal, {
+  item: { ...baseCustomExtension, state: "allowed" },
+  nextState: "allowed",
+  commandChanges: [],
+  providerUpdates: [],
+  busy: false,
+  error: requireFreshTotp ? FRESH_TOTP_REQUIRED_MESSAGE : null,
+  approvalGate: recentTotpGate,
+  requireFreshTotp,
+  onCancel: () => undefined,
+  onConfirm: () => undefined,
+}));
+assert.match(saveDialog(false), /Recently confirmed with your authenticator/);
+assert.doesNotMatch(saveDialog(false), /Authenticator code/);
+assert.match(saveDialog(true), /Authenticator code/);
+assert.match(saveDialog(true), /inputMode="numeric"|inputmode="numeric"/);
+assert.doesNotMatch(saveDialog(true), /Recently confirmed with your authenticator/);
+assert.equal(isFreshTotpRequired(new LocalCliApiError("approval_gate_totp_required", "TOTP code is required.")), true);
+assert.equal(isFreshTotpRequired(new LocalCliApiError("revision_conflict", "Changed.")), false);
+assert.equal(isFreshTotpRequired(new Error("TOTP code is required.")), false);
+
+// One MCP server configured in two apps is two rows. Each names its app
+// beside the server name, and the status line stays whole.
+const customPerApp = renderToStaticMarkup(createElement(CustomExtensionsSection, {
+  items: [
+    { ...baseCustomExtension, cli_id: "local-cli.mcp-claude", name: "truenas-pilot", source_label: "Claude Code" },
+    { ...baseCustomExtension, cli_id: "local-cli.mcp-omp", name: "truenas-pilot", source_label: "Oh My Pi" },
+  ],
+  onOpen: () => undefined, onAdd: () => undefined,
+}));
+assert.match(customPerApp, /data-testid="extension-row-source"[^>]*>Claude Code</);
+assert.match(customPerApp, /data-testid="extension-row-source"[^>]*>Oh My Pi</);
+assert.equal(
+  customPerApp.match(/>Detected · Permissions not configured\. Inspect this connection\.</g)?.length,
+  2,
+);
+
+// When the section search is visible it must render in its own row below the
+// header: the Add action closes the header row and a bounded search label
+// opens the row that follows it — never inside the header's flex container,
+// where a long description squeezes it into a floating box above the heading.
+const customSearched = renderToStaticMarkup(createElement(CustomExtensionsSection, {
+  items: Array.from({ length: 12 }, (_, index) => ({
+    ...baseCustomExtension,
+    cli_id: `local-cli.seeded-${index}`,
+    name: `Seeded tool ${index}`,
+  })),
+  onOpen: () => undefined, onAdd: () => undefined,
+}));
+assert.match(customSearched, /Search custom extensions/);
+const headerClose = customSearched.indexOf(">Add custom extension</button></div>");
+const searchRow = customSearched.indexOf('<div class="mt-4"><label class="relative block w-full max-w-sm">');
+assert.ok(headerClose !== -1, "the Add action must be the header row's last element");
+assert.ok(searchRow > headerClose && searchRow - headerClose < 40,
+  "the search label must open its own row immediately after the header closes");
+
+const customFiltered = renderToStaticMarkup(createElement(CustomExtensionsSection, {
+  items: [], onOpen: () => undefined, onAdd: () => undefined, filteredOut: true,
+  onClearFilters: () => undefined,
+}));
+assert.match(customFiltered, /data-testid="custom-extensions-filter-empty"/);
+assert.match(customFiltered, /No custom extensions match these filters\./);
+assert.match(customFiltered, /Clear filters/);
+assert.doesNotMatch(customFiltered, /No custom extensions yet\./);
+
+for (const state of ["unset", "allowed", "blocked"] as const) {
+  const detail = renderToStaticMarkup(createElement(LocalCliDetail, {
+    item: { ...baseCustomExtension, surface: "mcp", state, name: "Synthetic MCP connector" },
+    revision: 0,
+    continuity: { sync_local_only: true, continuity_enabled: false, summary: "Local fixture" },
+    onBack: () => undefined,
+    onRefresh: async () => undefined,
+  }));
+  assert.match(detail, /data-testid="local-cli-detail"/);
+  assert.match(detail, /Synthetic MCP connector/);
+  assert.match(detail, /Refresh inventory/);
+}
+
+// Detected connections that were never enrolled can be forgotten (issue 3819).
+// Enrolled ones must be removed first, so they never offer Forget.
+const renderDetail = (item: LocalCliItem) => renderToStaticMarkup(createElement(LocalCliDetail, {
+  item,
+  revision: 0,
+  continuity: { sync_local_only: true, continuity_enabled: false, summary: "Local fixture" },
+  onBack: () => undefined,
+  onRefresh: async () => undefined,
+}));
+const detectedDetail = renderDetail({ ...baseCustomExtension, surface: "mcp", state: "unset" });
+assert.match(detectedDetail, /Forget this connection/);
+assert.match(detectedDetail, /Last seen /);
+assert.doesNotMatch(renderDetail({ ...baseCustomExtension, state: "allowed" }), /Forget this connection/);
+assert.doesNotMatch(renderDetail({ ...baseCustomExtension, state: "unset", observed_count: 0 }), /Forget this connection/);
+// Siblings kept for an enrolled connection on the same server cannot be forgotten.
+assert.doesNotMatch(renderDetail({ ...baseCustomExtension, surface: "mcp", state: "unset", shares_enrolled_server: true }), /Forget this connection/);
 
 console.log("protection-center.test.tsx: all assertions passed");

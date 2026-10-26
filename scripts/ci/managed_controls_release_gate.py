@@ -8,7 +8,7 @@ from typing import cast
 
 ROOT = Path(__file__).resolve().parents[2]
 BATCH_DIRECTORY = ROOT / "docs" / "guard" / "managed-controls" / "batches"
-CAPABILITY_MODULE = Path("src") / "codex_plugin_scanner" / "guard" / "runtime" / "extension_catalog_sync.py"
+CAPABILITY_MODULE = Path("src") / "codex_plugin_scanner" / "guard" / "runtime" / "managed_controls_posture_wire.py"
 EXPECTED_BATCHES = tuple(range(3, 18))
 EXPECTED_TASK_START = 31
 EXPECTED_TASK_END = 255

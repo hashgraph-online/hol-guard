@@ -25,6 +25,9 @@ if TYPE_CHECKING:
 
 
 from ..aibom_cli import _AIBOM_CLOUD_SYNC_OPTIONS, AibomCliOptions, AibomExportFormat
+from ..native_aibom_summaries import NativeAibomSummariesError
+from ..native_inventory_url_redaction import NativeInventoryUrlRedactionError
+from ..policy_decision_explain import matched_rule_for_receipt
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
@@ -274,6 +277,7 @@ def _run_guard_history_command(
             "receipt_id": receipt_id,
             "receipt": match,
             "embedded_scripts": embedded_scripts,
+            "matched_rule": matched_rule_for_receipt(store, match),
             "evidence": [
                 {
                     "evidence_id": e.get("evidence_id", ""),
@@ -307,16 +311,36 @@ def _run_guard_inventory_command(
     context = _require_guard_context(context)
     generated_at = _now()
     if getattr(args, "json", False):
-        payload: dict[str, object] = build_inventory_json_payload(
-            store,
-            context,
-            generated_at=generated_at,
-            options=_aibom_cli_options_from_args(args),
-        )
+        try:
+            payload: dict[str, object] = build_inventory_json_payload(
+                store,
+                context,
+                generated_at=generated_at,
+                options=_aibom_cli_options_from_args(args),
+            )
+        except NativeInventoryUrlRedactionError as error:
+            return _inventory_redaction_unavailable("inventory", args, error)
     else:
         payload = {"generated_at": generated_at, "items": store.list_inventory()}
+    if getattr(args, "sync", False):
+        from ..runtime.fleet_posture import request_full_inventory
+
+        request_full_inventory(store, source="cli", now=generated_at)
+        payload["fleet_posture"] = {"next_sync_inventory": "full"}
     _emit("inventory", payload, getattr(args, "json", False))
     return 0
+
+
+def _inventory_redaction_unavailable(
+    kind: str, args: argparse.Namespace, error: NativeInventoryUrlRedactionError
+) -> int:
+    """Refuse an export the resident could not redact, without a Python fallback."""
+
+    if getattr(args, "json", False) or kind in {"aibom", "inventory"}:
+        _emit(kind, {"error": str(error)}, True)
+    else:
+        print(f"Inventory URL redaction is unavailable: {error}", file=sys.stderr)
+    return 1
 
 
 def _run_guard_aibom_command(
@@ -336,12 +360,17 @@ def _run_guard_aibom_command(
     aibom_options = _aibom_cli_options_from_args(args)
     aibom_command = getattr(args, "aibom_command", None)
     if aibom_command == "status":
-        payload = build_aibom_status_payload(
-            store,
-            context,
-            generated_at=generated_at,
-            options=aibom_options,
-        )
+        try:
+            payload = build_aibom_status_payload(
+                store,
+                context,
+                generated_at=generated_at,
+                options=aibom_options,
+            )
+        except NativeInventoryUrlRedactionError as error:
+            return _inventory_redaction_unavailable("aibom.status", args, error)
+        except NativeAibomSummariesError as error:
+            return _aibom_summaries_unavailable("aibom.status", args, error)
         _emit("aibom.status", payload, getattr(args, "json", False))
         return 0
     if aibom_command == "sync":
@@ -389,18 +418,33 @@ def _run_guard_aibom_command(
         return 0
     export_format = getattr(args, "format", "json")
     resolved_format: AibomExportFormat = "markdown" if export_format == "markdown" else "json"
-    payload = build_aibom_export_payload(
-        store,
-        context,
-        generated_at=generated_at,
-        options=aibom_options,
-        export_format=resolved_format,
-    )
+    try:
+        payload = build_aibom_export_payload(
+            store,
+            context,
+            generated_at=generated_at,
+            options=aibom_options,
+            export_format=resolved_format,
+        )
+    except NativeInventoryUrlRedactionError as error:
+        return _inventory_redaction_unavailable("aibom", args, error)
+    except NativeAibomSummariesError as error:
+        return _aibom_summaries_unavailable("aibom", args, error)
     if resolved_format == "markdown" and not getattr(args, "json", False):
         print(str(payload.get("markdown", "")))
         return 0
     _emit("aibom", payload, True)
     return 0
+
+
+def _aibom_summaries_unavailable(kind: str, args: argparse.Namespace, error: NativeAibomSummariesError) -> int:
+    """Fail closed with the resident's code; the counts are never recomputed here."""
+
+    if getattr(args, "json", False) or kind == "aibom":
+        _emit(kind, {"error": str(error)}, True)
+    else:
+        print(f"AIBOM report summaries are unavailable: {error}", file=sys.stderr)
+    return 1
 
 
 def _run_guard_abom_command(
@@ -600,6 +644,50 @@ def _run_guard_policies_command(
     return 0
 
 
+def _run_fleet_posture_setting(
+    args: argparse.Namespace,
+    *,
+    config: GuardConfig,
+    store: GuardStore | None,
+    guard_home: Path,
+) -> int:
+    from ..runtime.fleet_posture import (
+        fleet_posture_managed,
+        fleet_posture_opted_out,
+        set_fleet_posture_reporting,
+    )
+
+    if store is None:
+        from ..store import GuardStore as _GuardStore
+
+        store = _GuardStore(guard_home)
+    enabled = getattr(args, "fleet_posture", "on") == "on"
+    as_json = getattr(args, "json", False)
+    if not enabled and fleet_posture_managed(config):
+        message = "Fleet posture reporting is required on managed installs and cannot be turned off."
+        if as_json:
+            _emit("settings.fleet-posture", {"fleet_posture": "on", "managed": True, "error": message}, True)
+        else:
+            print(message, file=sys.stderr)
+        return 2
+    set_fleet_posture_reporting(store, enabled=enabled, now=_now())
+    _emit(
+        "settings.fleet-posture",
+        {
+            "fleet_posture": "off" if fleet_posture_opted_out(store) else "on",
+            "managed": fleet_posture_managed(config),
+            "detail": (
+                "Guard still reports version, tool protection state and policy status; "
+                "it omits OS version, blind-spot detail and per-item inventory."
+                if not enabled
+                else "Guard reports full fleet posture detail."
+            ),
+        },
+        as_json,
+    )
+    return 0
+
+
 def _run_guard_settings_command(
     args: argparse.Namespace,
     *,
@@ -615,6 +703,8 @@ def _run_guard_settings_command(
         raise RuntimeError("Guard home is required")
     config = _require_guard_config(config)
     settings_sub = getattr(args, "settings_command", None)
+    if settings_sub == "set" and getattr(args, "settings_set_command", None) == "fleet-posture":
+        return _run_fleet_posture_setting(args, config=config, store=store, guard_home=guard_home)
     if settings_sub == "set":
         try:
             config = _update_guard_cli_settings(args=args, config=config, guard_home=guard_home)

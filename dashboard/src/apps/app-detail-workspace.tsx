@@ -44,7 +44,9 @@ import { DEFAULT_FILTER_STATE } from "../evidence/evidence-url-state";
 import type { EvidenceFilterState, EvidenceSortKey } from "../evidence/evidence-types";
 import { CommandActivityWorkspace } from "../command-activity/command-activity-workspace";
 import { protectionHealthFor, useProtectionPresentationState } from "../protection-health";
-import { isHarnessDetected, useHarnessDetection } from "../harness-detection";
+import { isHarnessDetected, useHarnessDetection, versionCompatibilityFor } from "../harness-detection";
+import type { HarnessVersionCompatibility } from "../harness-version-compatibility";
+import { AppVersionCompatibilityCard } from "./app-version-compatibility-card";
 import {
   AppCommandActivityModeTabs,
   type AppActivityMode,
@@ -214,6 +216,10 @@ function TabButton({ tabKey, label, icon: Icon, isActive, tabRefs, onSelect }: T
 
 export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
   const harnessDetection = useHarnessDetection();
+  const versionCompatibility = useMemo(
+    () => versionCompatibilityFor(harnessDetection, props.harness),
+    [harnessDetection, props.harness],
+  );
   const [activeTab, setActiveTab] = useState<TabKey>(readTabFromUrl);
   const [tabDirection, setTabDirection] = useState<"left" | "right">("right");
   const tabRefs = useRef<Record<TabKey, HTMLButtonElement | null>>({ overview: null, activity: null, settings: null });
@@ -460,6 +466,7 @@ export function AppDetailWorkspace(props: AppDetailWorkspaceProps) {
                 harnessInventory={harnessInventory}
                 pendingItems={pendingItems}
                 protection={runtime.supply_chain?.package_manager_protection}
+                versionCompatibility={versionCompatibility}
                 onOpenRequest={props.onOpenRequest}
                 onManagedInstallChanged={props.onManagedInstallChanged}
               />
@@ -536,6 +543,7 @@ function AppOverviewTab(props: {
   harnessInventory: GuardInventoryItem[];
   pendingItems: GuardApprovalRequest[];
   protection: PackageManagerProtection | undefined;
+  versionCompatibility: HarnessVersionCompatibility | null;
   onOpenRequest: (requestId: string) => void;
   onManagedInstallChanged?: () => Promise<void>;
 }) {
@@ -573,6 +581,7 @@ function AppOverviewTab(props: {
             protection={props.protection}
           />
           <div className="space-y-6">
+            <AppVersionCompatibilityCard initial={props.versionCompatibility} />
             <AppFirewallStatusCard protection={props.protection} />
           </div>
         </div>
@@ -676,6 +685,7 @@ function AppOverviewTab(props: {
           </div>
         )}
 
+        <AppVersionCompatibilityCard initial={props.versionCompatibility} />
         <AppFirewallStatusCard protection={props.protection} />
       </section>
     </div>

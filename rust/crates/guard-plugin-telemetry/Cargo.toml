@@ -1,0 +1,20 @@
+[package]
+name = "guard-plugin-telemetry"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+# `hol-guard telemetry plugins`: matches installed agent plugins to public HOL
+# listings on the device and builds the opt-in weekly install report. It reads
+# plugin manifests under the runtime homes the request names, never sends
+# anything itself, and never returns a plugin that is not in the public index.
+[dependencies]
+hex.workspace = true
+hmac.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+
+[lints]
+workspace = true

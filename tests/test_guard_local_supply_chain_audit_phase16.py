@@ -10,6 +10,8 @@ import pytest
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import local_supply_chain as local_supply_chain_module
+from codex_plugin_scanner.guard import supply_chain_cloud_audit as cloud_audit_module
+from codex_plugin_scanner.guard import supply_chain_workspace_audit as workspace_audit_module
 from codex_plugin_scanner.guard.runtime.runner import GuardSyncAuthorizationExpiredError
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.support.network import stub_authenticated_urlopen
@@ -49,22 +51,7 @@ def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-to
 WORKSPACE_ID = "2de4fcb4-a5b2-447a-a67f-21c6eb4c5f3c"
 
 
-def test_normalized_supply_chain_batch_url_preserves_sync_prefix() -> None:
-    assert (
-        local_supply_chain_module._normalized_supply_chain_batch_url(
-            "https://guard.example/api/guard/receipts/sync", WORKSPACE_ID
-        )
-        == f"https://guard.example/api/guard/supply-chain/evaluate/batch?workspaceId={WORKSPACE_ID}"
-    )
-    assert (
-        local_supply_chain_module._normalized_supply_chain_batch_url(
-            "https://guard.example/registry/api/v1/guard/receipts/sync?workspaceId=old", WORKSPACE_ID
-        )
-        == f"https://guard.example/registry/api/v1/guard/supply-chain/evaluate/batch?workspaceId={WORKSPACE_ID}"
-    )
-
-
-def test_cloud_workspace_audit_renews_dpop_proof_for_each_page(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_cloud_workspace_audit_renews_dpop_proof_for_each_page(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     runner = local_supply_chain_module._runtime_runner_module()
     signed_proofs: list[str] = []
     request_bodies: list[dict[str, object]] = []
@@ -127,7 +114,8 @@ def test_cloud_workspace_audit_renews_dpop_proof_for_each_page(monkeypatch: pyte
     monkeypatch.setattr(runner, "_guard_sync_headers", _fake_guard_sync_headers)
     stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
-    response, fallback = local_supply_chain_module._run_cloud_workspace_audit(
+    response, fallback = cloud_audit_module._run_cloud_workspace_audit(
+        store=GuardStore(tmp_path / "guard-home"),
         auth_context={
             "access_token": "token",
             "sync_url": "https://guard.example/api/guard/receipts/sync",
@@ -258,7 +246,7 @@ def test_guard_supply_chain_scan_uses_cloud_batch_for_premium_workspaces(
             None,
         )
 
-    monkeypatch.setattr(local_supply_chain_module, "_run_cloud_workspace_audit", _fake_cloud_audit)
+    monkeypatch.setattr(cloud_audit_module, "_run_cloud_workspace_audit", _fake_cloud_audit)
 
     rc = main(
         [
@@ -455,7 +443,7 @@ def test_guard_supply_chain_audit_alias_accepts_sbom_input(
             None,
         )
 
-    monkeypatch.setattr(local_supply_chain_module, "_run_cloud_workspace_audit", _fake_cloud_audit)
+    monkeypatch.setattr(cloud_audit_module, "_run_cloud_workspace_audit", _fake_cloud_audit)
 
     rc = main(
         [
@@ -493,7 +481,7 @@ def test_guard_supply_chain_scan_falls_back_locally_when_cloud_audit_fails(
     _seed_premium_pairing(store, now="2026-05-25T10:00:00+00:00")
 
     monkeypatch.setattr(
-        local_supply_chain_module,
+        cloud_audit_module,
         "_run_cloud_workspace_audit",
         lambda **_kwargs: (
             None,
@@ -580,7 +568,7 @@ def test_guard_supply_chain_audit_payload_excludes_source_snippets(
             None,
         )
 
-    monkeypatch.setattr(local_supply_chain_module, "_run_cloud_workspace_audit", _fake_cloud_audit)
+    monkeypatch.setattr(cloud_audit_module, "_run_cloud_workspace_audit", _fake_cloud_audit)
 
     rc = main(
         [
@@ -614,7 +602,7 @@ def test_guard_supply_chain_audit_ci_fail_on_high_returns_distinct_exit_code(
     _seed_premium_pairing(store, now="2026-05-25T10:00:00+00:00")
 
     monkeypatch.setattr(
-        local_supply_chain_module,
+        cloud_audit_module,
         "_run_cloud_workspace_audit",
         lambda **_kwargs: (
             {
@@ -703,7 +691,7 @@ def test_guard_supply_chain_audit_before_after_limits_inventory_to_changed_depen
             None,
         )
 
-    monkeypatch.setattr(local_supply_chain_module, "_run_cloud_workspace_audit", _fake_cloud_audit)
+    monkeypatch.setattr(cloud_audit_module, "_run_cloud_workspace_audit", _fake_cloud_audit)
 
     rc = main(
         [
@@ -778,7 +766,7 @@ def test_guard_supply_chain_audit_handles_large_workspace_and_prioritizes_findin
             None,
         )
 
-    monkeypatch.setattr(local_supply_chain_module, "_run_cloud_workspace_audit", _fake_cloud_audit)
+    monkeypatch.setattr(cloud_audit_module, "_run_cloud_workspace_audit", _fake_cloud_audit)
 
     rc = main(
         [
@@ -804,86 +792,7 @@ def test_guard_supply_chain_audit_handles_large_workspace_and_prioritizes_findin
     assert output["evaluation"]["packages"][0]["name"] == "critical-lib"
 
 
-def test_read_sbom_text_rejects_oversized_files(tmp_path: Path) -> None:
-    sbom_path = tmp_path / "oversized-sbom.json"
-    sbom_path.write_text("x" * ((10 * 1024 * 1024) + 1), encoding="utf-8")
-
-    assert local_supply_chain_module._read_sbom_text(sbom_path) is None
-
-
-def test_build_cloud_audit_payload_includes_workspace_context(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    workspace_dir = tmp_path / "workspace"
-    (workspace_dir / ".git").mkdir(parents=True)
-    _write_text(
-        workspace_dir / ".git" / "config",
-        '[remote "origin"]\n\turl = git@github.com:hashgraph-online/hol-points-portal.git\n',
-    )
-    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
-    _write_text(workspace_dir / "pnpm-lock.yaml", "lockfileVersion: '9.0'\n")
-    monkeypatch.setattr(local_supply_chain_module.socket, "gethostname", lambda: "macbook-pro")
-
-    class _Store:
-        def get_sync_payload(self, _key: str) -> dict[str, str]:
-            return {"policy_hash": "policy-hash-1"}
-
-    payload = local_supply_chain_module._build_cloud_audit_payload(
-        workspace_dir=workspace_dir,
-        workspace_id=WORKSPACE_ID,
-        store=_Store(),
-        manifest_paths=("package.json",),
-        lockfile_paths=("pnpm-lock.yaml",),
-        inventory=(
-            {
-                "direct": True,
-                "ecosystem": "npm",
-                "name": "minimist",
-                "version": "1.2.5",
-            },
-        ),
-    )
-
-    assert payload["workspaceContext"] == {
-        "agent": "guard-cli",
-        "codebase": "hashgraph-online/hol-points-portal",
-        "folderPath": local_supply_chain_module._redacted_workspace_folder_path(workspace_dir),
-        "lockfilePaths": ["pnpm-lock.yaml"],
-        "machine": "macbook-pro",
-        "manifestPaths": ["package.json"],
-        "packageManager": "npm",
-        "workspaceName": "workspace",
-    }
-
-
-def test_workspace_context_redacts_path_and_handles_hostname_failure(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    def _raise_os_error() -> str:
-        raise OSError("hostname unavailable")
-
-    monkeypatch.setattr(local_supply_chain_module.socket, "gethostname", _raise_os_error)
-
-    payload = local_supply_chain_module._build_workspace_context_payload(
-        Path("/Users/alice/projects/app"),
-        ("package.json",),
-        ("package-lock.json",),
-    )
-
-    assert payload["codebase"] == "app"
-    assert payload["folderPath"] == "~/projects/app"
-    assert payload["machine"] is None
-    assert local_supply_chain_module._redacted_workspace_folder_path(Path("/workspace/app")) == "…/workspace/app"
-    assert (
-        local_supply_chain_module._codebase_label_from_remote(
-            "git@gitlab.com:team/backend/service.git",
-        )
-        == "team/backend/service"
-    )
-
-
-def test_run_cloud_workspace_audit_falls_back_after_page_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_cloud_workspace_audit_falls_back_after_page_limit(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     class _FakeResponse(io.StringIO):
         def __enter__(self) -> _FakeResponse:
             return self
@@ -912,7 +821,8 @@ def test_run_cloud_workspace_audit_falls_back_after_page_limit(monkeypatch: pyte
         ),
     )
 
-    response, fallback_reason = local_supply_chain_module._run_cloud_workspace_audit(
+    response, fallback_reason = cloud_audit_module._run_cloud_workspace_audit(
+        store=GuardStore(tmp_path / "guard-home"),
         request_payload={
             "commandShape": {
                 "argCount": 3,
@@ -1040,7 +950,7 @@ def test_audit_receipt_metadata_enriches_cloud_advisory_aliases_from_bundle(
         "manifest_paths": ["package.json"],
         "lockfile_paths": ["package-lock.json"],
     }
-    metadata = local_supply_chain_module.audit_receipt_metadata(payload, store=store)
+    metadata = workspace_audit_module.audit_receipt_metadata(payload, store=store)
     findings = metadata["scanner_evidence"]["package_findings"]
     assert findings
     aliases = findings[0].get("advisoryAliases")

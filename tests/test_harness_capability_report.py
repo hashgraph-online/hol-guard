@@ -128,7 +128,7 @@ def test_pi_cline_and_native_hook_rows_stay_separate() -> None:
     } <= omp_events
     grok_rows = {row["event"]: row for row in rows if row["harness"] == "grok"}
     assert grok_rows["PreToolUse"]["mode"] == "blocking"
-    assert grok_rows["UserPromptSubmit"]["mode"] == "observe"
+    assert grok_rows["UserPromptSubmit"]["mode"] == "blocking"
 
     cline_post = [row for row in rows if row["harness"] == "cline" and row["event"] == "PostToolUse"]
     assert {row["transport"] for row in cline_post} == {"native_hook", "agent_plugin"}

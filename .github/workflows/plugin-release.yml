@@ -1,0 +1,122 @@
+name: HOL Plugin Release
+
+# Call this workflow from a plugin repository's release workflow, pinned by
+# commit SHA. HOL accepts release evidence only from this workflow: its
+# verifier checks the GitHub OIDC job_workflow_ref and job_workflow_sha.
+on:
+  workflow_call:
+    inputs:
+      plugin_dir:
+        description: Plugin path inside the caller repository
+        required: false
+        type: string
+        default: "."
+      profile:
+        description: HOL Guard scanner policy profile
+        required: false
+        type: string
+        default: default
+      fail_on_severity:
+        description: Fail the job, after the evidence is attested, if a scanner finding reaches this severity (or none)
+        required: false
+        type: string
+        default: critical
+      fail_on_check_errors:
+        description: Fail when the Plugin Kit check reports errors
+        required: false
+        type: boolean
+        default: true
+      upload_sarif:
+        description: Upload SARIF to GitHub code scanning
+        required: false
+        type: boolean
+        default: false
+      visibility:
+        description: Evidence visibility on HOL, public or private
+        required: false
+        type: string
+        default: public
+      register_release:
+        description: Send the attested evidence to HOL
+        required: false
+        type: boolean
+        default: true
+      offer_line:
+        description: Allow one HOL Blue line in the job summary, at most once in 28 days, for a listing without a membership
+        required: false
+        type: boolean
+        default: true
+    outputs:
+      score:
+        description: Scanner score
+        value: ${{ jobs.release.outputs.score }}
+      check_passed:
+        description: Whether the Plugin Kit check passed
+        value: ${{ jobs.release.outputs.check_passed }}
+      supported_runtimes:
+        description: Number of agent runtimes the Plugin Kit can package this plugin for
+        value: ${{ jobs.release.outputs.supported_runtimes }}
+      sbom_components:
+        description: Number of components in the CycloneDX SBOM, 0 when the release declares no packages
+        value: ${{ jobs.release.outputs.sbom_components }}
+      attestation_url:
+        description: GitHub artifact attestation URL
+        value: ${{ jobs.release.outputs.attestation_url }}
+      release_status:
+        description: HOL registration status
+        value: ${{ jobs.release.outputs.release_status }}
+      release_url:
+        description: HOL releases page for the matched listing, when there is one
+        value: ${{ jobs.release.outputs.release_url }}
+
+# New jobs start without a token grant; writers declare only their own scopes.
+permissions: {}
+
+jobs:
+  release:
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+      security-events: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      score: ${{ steps.release.outputs.score }}
+      check_passed: ${{ steps.release.outputs.check_passed }}
+      supported_runtimes: ${{ steps.release.outputs.supported_runtimes }}
+      sbom_components: ${{ steps.release.outputs.sbom_components }}
+      attestation_url: ${{ steps.release.outputs.attestation_url }}
+      release_status: ${{ steps.release.outputs.release_status }}
+      release_url: ${{ steps.release.outputs.release_url }}
+    steps:
+      - name: Check out caller repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+
+      - name: Scan, check, attest, and register
+        id: release
+        uses: hashgraph-online/hol-guard/plugin-release@6b0c1bedfc13b3a17f7121ed0e71ad3e454f2aab
+        with:
+          plugin_dir: ${{ inputs.plugin_dir }}
+          profile: ${{ inputs.profile }}
+          fail_on_severity: ${{ inputs.fail_on_severity }}
+          fail_on_check_errors: ${{ inputs.fail_on_check_errors }}
+          upload_sarif: ${{ inputs.upload_sarif }}
+          visibility: ${{ inputs.visibility }}
+          register_release: ${{ inputs.register_release }}
+          offer_line: ${{ inputs.offer_line }}
+          release_endpoint: https://hol.org/api/guard/plugins/releases/attestations
+
+      - name: Keep the evidence and SBOM with the run
+        if: ${{ always() && steps.release.outputs.evidence_path != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: hol-plugin-release
+          path: |
+            ${{ runner.temp }}/hol-plugin-release-evidence.json
+            ${{ runner.temp }}/hol-plugin-release-sbom.cdx.json
+          if-no-files-found: ignore
+          retention-days: 90

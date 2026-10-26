@@ -1,0 +1,573 @@
+{
+  "schema": "guard.command-extension-source.v1",
+  "extension": {
+    "action_classes": [
+      "mcp-guard MCP server launch command",
+      "mcp-guard lock approval command",
+      "mcp-guard full-body journal command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews mcp-guard runs that start processes, approve a trust baseline or write message bodies to disk. proxy, test-injection --run and --live (inspect, lock, ui, snapshot save) start the MCP servers named in a config or on the command line, or the given agent script. lock writes the lock file that later runs compare against, so running it approves the current tools, including a changed description. proxy --record-bodies keeps full JSON-RPC messages, which can contain secrets, in the journal. Static audits (inspect, scan, ui, snapshot save and diff without --live), journal export, test-injection without --run, and direct runs with --help or --version (except proxy, whose later arguments go to the server) are not matched by this extension; Guard's default handling for commands no rule matches still applies to them. Covers the mcp-guard and mcp-guard-audit executables (including .cmd/.exe). uvx, uv tool run and pipx run launches of the package are covered by command.package.python.",
+    "ecosystem_ids": [],
+    "executables": [
+      "mcp-guard",
+      "mcp-guard-audit"
+    ],
+    "extension_id": "command.mcpguard",
+    "homepage": "https://github.com/ianewsfr-a11y/mcp-guard",
+    "icon": {
+      "background": "#0F766E",
+      "kind": "react-icon",
+      "name": "HiMiniCommandLine"
+    },
+    "license": "MIT",
+    "name": "mcp-guard command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "mcp-guard MCP server launch command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies mcp-guard runs that start an MCP server or an agent script: proxy, test-injection --run, and --live on inspect, lock, ui and snapshot save.",
+        "example_command": "mcp-guard inspect ~/.cursor/mcp.json --live --yes",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "mcp-guard server launch",
+        "permission_id": "command.mcpguard.permission.server-launch",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Audit the config statically first: mcp-guard inspect CONFIG reads the file and starts nothing.",
+          "Check which command each server entry runs before allowing --live, proxy or test-injection --run."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "mcp-guard lock approval command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies mcp-guard lock, which writes the trusted baseline that later inspect --lock and proxy --lock runs compare against.",
+        "example_command": "mcp-guard lock mcp.json -o mcp-guard.lock",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "mcp-guard lock approval",
+        "permission_id": "command.mcpguard.permission.lock-approve",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Compare first with mcp-guard inspect CONFIG --lock mcp-guard.lock: it lists what changed since the lock was written and writes nothing.",
+          "Approve a new lock only after a person has reviewed those changes."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "mcp-guard full-body journal command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies mcp-guard proxy --record-bodies, which writes full JSON-RPC messages, including arguments and results that can contain secrets, to the journal file.",
+        "example_command": "mcp-guard proxy --record s.jsonl --record-bodies -- node server.js",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "mcp-guard full-body journal",
+        "permission_id": "command.mcpguard.permission.record-bodies",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Record without --record-bodies: the journal then keeps methods, ids, sizes and outcomes only.",
+          "Keep a full-body journal out of version control and delete it after use."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "display_name": "ianewsfr-a11y",
+      "id": "community.ianewsfr-a11y"
+    },
+    "reference_urls": [
+      "https://github.com/ianewsfr-a11y/mcp-guard",
+      "https://pypi.org/project/mcp-guard-audit/"
+    ],
+    "required": false,
+    "risk_classes": [
+      "execution",
+      "network_egress",
+      "local_write",
+      "local_secret_read"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "mcp-guard MCP server launch command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies mcp-guard proxy, test-injection --run, and inspect, lock, ui or snapshot save with --live. They start the MCP servers named in the config or given with --server (any command, or an http(s) URL that is contacted), or run the agent script given to test-injection. Covers the mcp-guard and mcp-guard-audit executables (including .cmd/.exe). uvx, uv tool run and pipx run launches of the package are covered by command.package.python.",
+        "family": null,
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mcp-guard",
+                  "mcp-guard.cmd",
+                  "mcp-guard.exe",
+                  "mcp-guard-audit",
+                  "mcp-guard-audit.cmd",
+                  "mcp-guard-audit.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--server",
+                  "--format",
+                  "-o",
+                  "--output",
+                  "--rules",
+                  "--timeout",
+                  "--lock",
+                  "--fail-on",
+                  "--record",
+                  "--server-name",
+                  "--only",
+                  "--id-salt"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "proxy"
+                ]
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mcp-guard",
+                  "mcp-guard.cmd",
+                  "mcp-guard.exe",
+                  "mcp-guard-audit",
+                  "mcp-guard-audit.cmd",
+                  "mcp-guard-audit.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--server",
+                  "--format",
+                  "-o",
+                  "--output",
+                  "--rules",
+                  "--timeout",
+                  "--lock",
+                  "--fail-on",
+                  "--record",
+                  "--server-name",
+                  "--only",
+                  "--id-salt"
+                ],
+                "required_flags": [
+                  "--live"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "inspect"
+                ]
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mcp-guard",
+                  "mcp-guard.cmd",
+                  "mcp-guard.exe",
+                  "mcp-guard-audit",
+                  "mcp-guard-audit.cmd",
+                  "mcp-guard-audit.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--server",
+                  "--format",
+                  "-o",
+                  "--output",
+                  "--rules",
+                  "--timeout",
+                  "--lock",
+                  "--fail-on",
+                  "--record",
+                  "--server-name",
+                  "--only",
+                  "--id-salt"
+                ],
+                "required_flags": [
+                  "--live"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "lock"
+                ]
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mcp-guard",
+                  "mcp-guard.cmd",
+                  "mcp-guard.exe",
+                  "mcp-guard-audit",
+                  "mcp-guard-audit.cmd",
+                  "mcp-guard-audit.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--server",
+                  "--format",
+                  "-o",
+                  "--output",
+                  "--rules",
+                  "--timeout",
+                  "--lock",
+                  "--fail-on",
+                  "--record",
+                  "--server-name",
+                  "--only",
+                  "--id-salt"
+                ],
+                "required_flags": [
+                  "--live"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "ui"
+                ]
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mcp-guard",
+                  "mcp-guard.cmd",
+                  "mcp-guard.exe",
+                  "mcp-guard-audit",
+                  "mcp-guard-audit.cmd",
+                  "mcp-guard-audit.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--server",
+                  "--format",
+                  "-o",
+                  "--output",
+                  "--rules",
+                  "--timeout",
+                  "--lock",
+                  "--fail-on",
+                  "--record",
+                  "--server-name",
+                  "--only",
+                  "--id-salt"
+                ],
+                "required_flags": [
+                  "--live"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "snapshot",
+                  "save"
+                ]
+              }
+            },
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mcp-guard",
+                  "mcp-guard.cmd",
+                  "mcp-guard.exe",
+                  "mcp-guard-audit",
+                  "mcp-guard-audit.cmd",
+                  "mcp-guard-audit.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--server",
+                  "--format",
+                  "-o",
+                  "--output",
+                  "--rules",
+                  "--timeout",
+                  "--lock",
+                  "--fail-on",
+                  "--record",
+                  "--server-name",
+                  "--only",
+                  "--id-salt"
+                ],
+                "required_flags": [
+                  "--run"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "test-injection"
+                ]
+              }
+            }
+          ]
+        },
+        "native_capability": null,
+        "permission_id": "command.mcpguard.permission.server-launch",
+        "risk_classes": [
+          "execution",
+          "network_egress"
+        ],
+        "rule_id": "command.mcpguard.server-launch",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Audit the config statically first: mcp-guard inspect CONFIG reads the file and starts nothing.",
+          "Check which command each server entry runs before allowing --live, proxy or test-injection --run."
+        ],
+        "severity": "high",
+        "title": "mcp-guard server launch"
+      },
+      {
+        "action_classes": [
+          "mcp-guard lock approval command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies mcp-guard lock. It writes (or with --update, migrates) the lock file that inspect --lock and proxy --lock treat as the approved state, so running it approves the current servers and tools, including a description or annotation that changed since the last lock. Covers the mcp-guard and mcp-guard-audit executables (including .cmd/.exe). uvx, uv tool run and pipx run launches of the package are covered by command.package.python.",
+        "family": null,
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mcp-guard",
+                  "mcp-guard.cmd",
+                  "mcp-guard.exe",
+                  "mcp-guard-audit",
+                  "mcp-guard-audit.cmd",
+                  "mcp-guard-audit.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version"
+                ],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--server",
+                  "--format",
+                  "-o",
+                  "--output",
+                  "--rules",
+                  "--timeout",
+                  "--lock",
+                  "--fail-on",
+                  "--record",
+                  "--server-name",
+                  "--only",
+                  "--id-salt"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "lock"
+                ]
+              }
+            }
+          ]
+        },
+        "native_capability": null,
+        "permission_id": "command.mcpguard.permission.lock-approve",
+        "risk_classes": [
+          "local_write"
+        ],
+        "rule_id": "command.mcpguard.lock-approve",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Compare first with mcp-guard inspect CONFIG --lock mcp-guard.lock: it lists what changed since the lock was written and writes nothing.",
+          "Approve a new lock only after a person has reviewed those changes."
+        ],
+        "severity": "medium",
+        "title": "mcp-guard lock approval"
+      },
+      {
+        "action_classes": [
+          "mcp-guard full-body journal command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies mcp-guard proxy --record-bodies. The journal then keeps every JSON-RPC message in full, including tool arguments and results that can hold tokens or file contents. Without it, the journal keeps no bodies. Covers the mcp-guard and mcp-guard-audit executables (including .cmd/.exe). uvx, uv tool run and pipx run launches of the package are covered by command.package.python.",
+        "family": null,
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "executable.v1",
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mcp-guard",
+                  "mcp-guard.cmd",
+                  "mcp-guard.exe",
+                  "mcp-guard-audit",
+                  "mcp-guard-audit.cmd",
+                  "mcp-guard-audit.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--server",
+                  "--format",
+                  "-o",
+                  "--output",
+                  "--rules",
+                  "--timeout",
+                  "--lock",
+                  "--fail-on",
+                  "--record",
+                  "--server-name",
+                  "--only",
+                  "--id-salt"
+                ],
+                "required_flags": [
+                  "--record-bodies"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "proxy"
+                ]
+              }
+            }
+          ]
+        },
+        "native_capability": null,
+        "permission_id": "command.mcpguard.permission.record-bodies",
+        "risk_classes": [
+          "local_secret_read",
+          "local_write"
+        ],
+        "rule_id": "command.mcpguard.record-bodies",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Record without --record-bodies: the journal then keeps methods, ids, sizes and outcomes only.",
+          "Keep a full-body journal out of version control and delete it after use."
+        ],
+        "severity": "medium",
+        "title": "mcp-guard full-body journal"
+      }
+    ],
+    "safer_alternatives": [
+      "Run mcp-guard inspect CONFIG without --live: a static audit starts nothing.",
+      "Review inspect --lock output before writing a new lock."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  }
+}

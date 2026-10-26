@@ -1,0 +1,381 @@
+{
+  "extension": {
+    "action_classes": [
+      "keibidrop file share command",
+      "keibidrop remote file write command",
+      "keibidrop peer authorization command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews kd commands that share a local file with a peer, write a peer's file to local disk, or set which peer identity the session accepts.",
+    "ecosystem_ids": [
+      "keibidrop"
+    ],
+    "executables": [
+      "kd"
+    ],
+    "extension_id": "command.keibidrop",
+    "homepage": "https://keibidrop.com/",
+    "icon": {
+      "background": "#0E7490",
+      "kind": "react-icon",
+      "name": "HiMiniCloud"
+    },
+    "license": "MPL-2.0",
+    "name": "KeibiDrop command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "keibidrop file share command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `kd add` and `kd add-as`, which add a local file to the set the connected peer can read. `add-as` supplies its own remote name, so the name the peer sees need not be the name on disk.",
+        "example_command": "kd add ./notes.txt",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "KeibiDrop file share",
+        "permission_id": "command.keibidrop.permission.share-file",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Run kd list first to see what this session already shares.",
+          "Run kd status to confirm which peer is connected before sharing.",
+          "Run kd unshare <name> to stop sharing a file."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "keibidrop remote file write command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `kd pull`, `kd pull-async` and `kd bench-pull`, which write a file from the peer to a local path. Given no second argument the destination is the name the peer chose, so the remote side picks the path. The write creates missing parent directories and truncates a file already there. `bench-pull` deletes the destination after measuring it.",
+        "example_command": "kd pull report.mov ./downloads/report.mov",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "KeibiDrop remote file write",
+        "permission_id": "command.keibidrop.permission.pull-file",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Pass an explicit local path so the peer's name cannot pick the destination.",
+          "Run kd list first to see the remote names on offer.",
+          "Read a remote name for path separators before pulling it by name alone."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "keibidrop peer authorization command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `kd register`, which sets the peer this session accepts, from a fingerprint, from an invite link carrying one, or on a local network from a direct address. Everything shared or pulled afterwards goes to or comes from that peer.",
+        "example_command": "kd register <peer-fingerprint>",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "KeibiDrop peer authorization",
+        "permission_id": "command.keibidrop.permission.register-peer",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Compare the code against the one the peer sent over a channel you trust.",
+          "Run kd show fingerprint and confirm both sides hold the other's code.",
+          "Use kd contacts and kd quick-connect for a peer already verified once."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "display_name": "Community",
+      "id": "community.keibisoft",
+      "url": "https://github.com/KeibiSoft/KeibiDrop"
+    },
+    "reference_urls": [
+      "https://github.com/KeibiSoft/KeibiDrop",
+      "https://keibidrop.com/docs/reference/kd-cli.html"
+    ],
+    "required": false,
+    "risk_classes": [
+      "data_flow_exfiltration",
+      "destructive_shell",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "keibidrop file share command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `kd add` and `kd add-as`, which add a local file to the set the connected peer can read. `add-as` supplies its own remote name, so the name the peer sees need not be the name on disk.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "kd",
+                  "kd.cmd",
+                  "kd.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--timeout"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "add"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "kd",
+                  "kd.cmd",
+                  "kd.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--timeout"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "add-as"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.keibidrop.permission.share-file",
+        "risk_classes": [
+          "data_flow_exfiltration",
+          "network_egress"
+        ],
+        "rule_id": "command.keibidrop.share-file",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Run kd list first to see what this session already shares.",
+          "Run kd status to confirm which peer is connected before sharing.",
+          "Run kd unshare <name> to stop sharing a file."
+        ],
+        "severity": "high",
+        "title": "KeibiDrop file share"
+      },
+      {
+        "action_classes": [
+          "keibidrop remote file write command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `kd pull`, `kd pull-async` and `kd bench-pull`, which write a file from the peer to a local path. Given no second argument the destination is the name the peer chose, so the remote side picks the path. The write creates missing parent directories and truncates a file already there. `bench-pull` deletes the destination after measuring it.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "kd",
+                  "kd.cmd",
+                  "kd.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--timeout"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "pull"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "kd",
+                  "kd.cmd",
+                  "kd.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--timeout"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "pull-async"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "kd",
+                  "kd.cmd",
+                  "kd.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--timeout"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "bench-pull"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.keibidrop.permission.pull-file",
+        "risk_classes": [
+          "destructive_shell",
+          "network_egress"
+        ],
+        "rule_id": "command.keibidrop.pull-file",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Pass an explicit local path so the peer's name cannot pick the destination.",
+          "Run kd list first to see the remote names on offer.",
+          "Read a remote name for path separators before pulling it by name alone."
+        ],
+        "severity": "high",
+        "title": "KeibiDrop remote file write"
+      },
+      {
+        "action_classes": [
+          "keibidrop peer authorization command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `kd register`, which sets the peer this session accepts, from a fingerprint, from an invite link carrying one, or on a local network from a direct address. Everything shared or pulled afterwards goes to or comes from that peer.",
+        "family": null,
+        "matcher": {
+          "config": {
+            "allow_leading_options": false,
+            "executables": [
+              "kd",
+              "kd.cmd",
+              "kd.exe"
+            ],
+            "fail_secure_unknown_options": false,
+            "forbidden_flags": [],
+            "interspersed_flags": [],
+            "interspersed_options_with_values": [],
+            "inverse_flag_pairs": [],
+            "leading_options_with_values": [],
+            "options_with_values": [
+              "--timeout"
+            ],
+            "required_flags": [],
+            "required_flags_in_all_arguments": false,
+            "required_option_values": [],
+            "subcommands": [
+              "register"
+            ]
+          },
+          "op": "executable.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.keibidrop.permission.register-peer",
+        "risk_classes": [
+          "data_flow_exfiltration",
+          "network_egress"
+        ],
+        "rule_id": "command.keibidrop.register-peer",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Compare the code against the one the peer sent over a channel you trust.",
+          "Run kd show fingerprint and confirm both sides hold the other's code.",
+          "Use kd contacts and kd quick-connect for a peer already verified once."
+        ],
+        "severity": "high",
+        "title": "KeibiDrop peer authorization"
+      }
+    ],
+    "safer_alternatives": [
+      "Run kd list and kd status to see what is shared and who is connected.",
+      "Give kd pull an explicit local path instead of the peer's name.",
+      "Check a peer code against the one you were sent before registering it."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

@@ -4,40 +4,26 @@
 
 from __future__ import annotations
 
-from ..runtime.command_extensions import risk_classes_for_command_action
-from ..runtime.command_model import parse_shell_command
-from ..runtime.direct_vitest import (
-    direct_local_typescript_execution_context,
-    direct_local_vitest_execution_context,
+from typing import Any
+
+from ..daemon.native_review_allow_hint import reviewed_command_extension_allow_hint
+from ..native_codex_tool_output import codex_tool_output_native
+from ..native_context import bound_context_digest_home
+from ..native_path_anchor import anchor_to_process_directory
+from ..native_prompt import merge_prompt_artifacts
+from ..native_rich_command_model import NativeCommandModelError
+from ..native_runtime_artifact_identity import NativeRuntimeArtifactIdentityError
+from ..native_sensitive_request import (
+    NativeSensitiveRequestError,
+    native_compound_artifact,
+    native_unmodeled_shell_artifact,
 )
-from ..runtime.github_actions_read_workflow import is_nonexecuting_github_actions_read_workflow
-from ..runtime.jsonc import loads_jsonc
-from ..runtime.kubernetes_commands import kubernetes_secret_read_source
+from ..native_tool_action_identity import NativeToolActionIdentityError
+from ..runtime.command_decision_adapter import effect_decision_to_dict
+from ..runtime.direct_vitest import direct_local_typescript_execution_context
 from ..runtime.native_command_evaluation import NativeCommandEvaluation, review_command_native
-from ..runtime.node_semver import node_semver_spec_matches as _routine_semver_spec_matches
-from ..runtime.package_intent_common import PackageExecutionFileEvidence, PackageIntent
-from ..runtime.secret_file_request_services.github_pr_ephemeral_body import (
-    gh_pr_create_uses_safe_ephemeral_body,
-)
-from ..runtime.shell_command_wrappers import normalize_transparent_shell_command
-from ..runtime.shell_execution_context import (
-    model_shell_execution_context,
-    shell_execution_context_metadata,
-    validate_shell_execution_segment,
-)
 from ._commands_shared import *
 from .commands_parser_helpers import *
-from .commands_support_codex_commands import (
-    _codex_command_parts_may_read_local_content,
-    _codex_command_reads_environment_pipeline,
-    _codex_local_secret_source_label,
-    _codex_pipeline_segment_may_read_local_content,
-    _codex_post_tool_command_is_read_only_source_inspection,
-    _codex_post_tool_command_texts,
-    _codex_shell_split,
-    _codex_source_inspection_can_skip_secret_output,
-)
-from .commands_support_codex_git import _codex_git_diff_selection_identity
 from .commands_support_codex_paths import (
     _CODEX_PROMPT_FILE_FINGERPRINT_LENGTH,
     _CODEX_TOOL_RESPONSE_MAX_DEPTH,
@@ -47,29 +33,7 @@ from .commands_support_codex_paths import (
     _with_codex_prompt_display_metadata,
 )
 from .commands_support_codex_prompt_attachments import _codex_prompt_attachment_artifact
-from .commands_support_codex_reads import _split_codex_safe_read_only_pipeline
-from .commands_support_codex_tool_output import (
-    _codex_command_captures_combined_shell_output,
-    _codex_command_is_focused_pytest_verification,
-    _codex_command_references_sensitive_local_source,
-    _codex_existing_local_path_match,
-    _codex_focused_pytest_can_skip_secret_output,
-    _codex_path_token_is_url_path,
-    _codex_sensitive_local_source_matches,
-    _codex_sensitive_path_matches_in_text,
-    _codex_token_is_url,
-    _codex_token_prefix_is_url_scheme,
-    _codex_url_like_local_path_tokens,
-    _dedupe_codex_secret_path_matches,
-)
-from .commands_support_codex_tool_output_messages import (
-    _codex_tool_output_request_summary,
-    _codex_tool_output_runtime_reason,
-    _codex_tool_output_runtime_summary,
-)
-from .commands_support_compound_decision import compound_command_decision_metadata
 from .commands_support_hook_payload import _coalesce_string
-from .commands_support_runtime_policy import _runtime_data_flow_summary
 from .commands_support_runtime_resolution import _canonical_harness_name, _runtime_policy_path
 
 
@@ -95,22 +59,6 @@ def _hook_event_name(payload: dict[str, object]) -> str | None:
             normalized = value.strip()
             return _HOOK_EVENT_NAME_MAP.get(normalized.lower(), normalized)
     return None
-
-
-def _artifact_id_from_event(harness: str, payload: dict[str, object]) -> str:
-    source_scope = _coalesce_string(payload.get("source_scope"), "project")
-    tool_name = payload.get("tool_name")
-    if isinstance(tool_name, str) and tool_name.strip():
-        normalized_tool = tool_name.strip()
-        if _canonical_harness_name(harness) == "claude-code":
-            from ..adapters.claude_code import claude_hook_fallback_artifact_id
-
-            return claude_hook_fallback_artifact_id(source_scope, normalized_tool)
-        return f"{harness}:{source_scope}:{normalized_tool}"
-    event_name = _hook_event_name(payload)
-    if isinstance(event_name, str) and event_name.strip():
-        return f"{harness}:{source_scope}:{event_name.strip().lower()}"
-    return f"{harness}:{source_scope}:hook"
 
 
 def _string_list(value: object | None) -> list[str]:
@@ -151,161 +99,18 @@ def _runtime_hook_raw_command_text(
     return action_envelope.command if action_envelope is not None else None
 
 
-def _merged_prompt_runtime_artifact(harness: str, artifacts: list[GuardArtifact]) -> GuardArtifact:
+def _merged_prompt_runtime_artifact(
+    harness: str, artifacts: list[GuardArtifact], *, guard_home: Path | None = None
+) -> GuardArtifact:
+    """The one review a prompt's guarded requests are held under.
+
+    A single request is its own review and needs no identity derived for it.
+    Two or more are folded by the resident, which owns the merged artifact id
+    the saved approval is keyed by.
+    """
     if len(artifacts) == 1:
         return artifacts[0]
-    prompt_signals: list[str] = []
-    prompt_matched_texts: list[str] = []
-    prompt_request_classes: list[str] = []
-    prompt_display_texts: list[str] = []
-    request_identity = "|".join(sorted(artifact.artifact_id for artifact in artifacts))
-    for artifact in artifacts:
-        metadata = artifact.metadata
-        prompt_signals.extend(_string_list(metadata.get("prompt_signals")))
-        matched_text = metadata.get("prompt_matched_text")
-        if isinstance(matched_text, str) and matched_text.strip():
-            prompt_matched_texts.append(matched_text.strip())
-        display_text = metadata.get("prompt_display_text")
-        if isinstance(display_text, str) and display_text.strip():
-            prompt_display_texts.append(display_text.strip())
-        request_class = metadata.get("prompt_request_class")
-        if isinstance(request_class, str) and request_class.strip():
-            prompt_request_classes.append(request_class.strip())
-    deduped_signals = list(dict.fromkeys(prompt_signals))
-    deduped_matches = list(dict.fromkeys(prompt_matched_texts))
-    deduped_classes = list(dict.fromkeys(prompt_request_classes))
-    deduped_display = list(dict.fromkeys(prompt_display_texts))
-    request_summary = (
-        deduped_display[0] if len(deduped_display) == 1 else "Prompt matches multiple guarded request classes."
-    )
-    return GuardArtifact(
-        artifact_id=f"{harness}:session:prompt:multi:{hashlib.sha256(request_identity.encode('utf-8')).hexdigest()[:24]}",
-        name="prompt multi-signal request",
-        harness=harness,
-        artifact_type="prompt_request",
-        source_scope=artifacts[0].source_scope,
-        config_path=artifacts[0].config_path,
-        metadata={
-            "prompt_signals": deduped_signals,
-            "prompt_summary": "Prompt matches multiple guarded request classes.",
-            "prompt_matched_texts": deduped_matches,
-            "prompt_display_text": request_summary,
-            "prompt_request_classes": deduped_classes,
-            "request_summary": request_summary,
-            "runtime_request_summary": request_summary,
-        },
-    )
-
-
-def _runtime_artifact_declared_risk_classes(artifact: GuardArtifact) -> list[str]:
-    risk_classes: list[str] = []
-    if artifact.artifact_type == "package_request":
-        risk_classes.append("package_script")
-    elif artifact.artifact_type == "file_read_request":
-        risk_classes.append("local_secret_read")
-    metadata_classes = artifact.metadata.get("risk_classes")
-    if isinstance(metadata_classes, list):
-        risk_classes.extend(value.strip() for value in metadata_classes if isinstance(value, str) and value.strip())
-    action_class = artifact.metadata.get("action_class")
-    if artifact.artifact_type == "tool_action_request" and isinstance(action_class, str):
-        risk_classes.extend(risk_classes_for_command_action(action_class))
-    return list(dict.fromkeys(risk_classes))
-
-
-def _routine_local_runner_has_complete_evidence(intent: PackageIntent) -> bool:
-    """Return whether a routine JS runner is already bound to local project state."""
-
-    if intent.package_manager not in {"bunx", "npx"} or len(intent.local_executions) != 1:
-        return False
-    execution = intent.local_executions[0]
-    if execution.package_name not in {"eslint", "jest", "tsc", "vitest"}:
-        return False
-    if len(intent.targets) != 1:
-        return False
-    target = intent.targets[0]
-    if target.raw_spec != execution.package_name or target.requested_specifier is not None:
-        return False
-    if target.source_kind is not None or target.source_url is not None:
-        return False
-    if "--package" in intent.command_tokens or any(token.startswith("--package=") for token in intent.command_tokens):
-        return False
-    if execution.package_name != execution.executable_name or execution.declared_version is None:
-        return False
-    if execution.declared_version.lower().startswith(("file:", "git+", "git://", "github:", "http:", "https:")):
-        return False
-    evidence_files = (execution.manager, execution.local_executable, *execution.manifests, *execution.lockfiles)
-    if not execution.manifests or not execution.lockfiles:
-        return False
-    if any(
-        evidence is None
-        or evidence.status != "available"
-        or evidence.resolved_path is None
-        or evidence.file_identity is None
-        or evidence.content_hash is None
-        for evidence in evidence_files
-    ):
-        return False
-    executable = execution.local_executable
-    if executable is None or executable.resolved_path is None:
-        return False
-    try:
-        workspace = Path(execution.effective_cwd).resolve(strict=True)
-        node_modules = (workspace / "node_modules").resolve(strict=True)
-        package_root = (node_modules / execution.package_name).resolve(strict=True)
-        package_root.relative_to(node_modules)
-        Path(executable.resolved_path).resolve(strict=True).relative_to(package_root)
-    except (OSError, RuntimeError, ValueError):
-        return False
-    return not intent.execution_context_reason_codes and _routine_local_runner_versions_match(
-        workspace,
-        execution.package_name,
-        execution.declared_version,
-        execution.lockfiles,
-    )
-
-
-def _routine_local_runner_versions_match(
-    workspace: Path,
-    package_name: str,
-    declared_version: str,
-    lockfiles: tuple[PackageExecutionFileEvidence, ...],
-) -> bool:
-    try:
-        manifest = json.loads((workspace / "package.json").read_text(encoding="utf-8"))
-        installed = json.loads((workspace / "node_modules" / package_name / "package.json").read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-        return False
-    if not isinstance(manifest, dict) or not isinstance(installed, dict):
-        return False
-    dependency_groups = (manifest.get("dependencies"), manifest.get("devDependencies"))
-    if not any(isinstance(group, dict) and group.get(package_name) == declared_version for group in dependency_groups):
-        return False
-    installed_version = installed.get("version")
-    if installed.get("name") != package_name or not isinstance(installed_version, str):
-        return False
-    locked_versions: set[str] = set()
-    for evidence in lockfiles:
-        if evidence.resolved_path is None:
-            continue
-        try:
-            lock_text = Path(evidence.resolved_path).read_text(encoding="utf-8")
-            lock = loads_jsonc(lock_text) if Path(evidence.resolved_path).name == "bun.lock" else json.loads(lock_text)
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-            return False
-        if not isinstance(lock, dict):
-            return False
-        packages = lock.get("packages")
-        if not isinstance(packages, dict):
-            return False
-        package_lock_entry = packages.get(f"node_modules/{package_name}")
-        if isinstance(package_lock_entry, dict) and isinstance(package_lock_entry.get("version"), str):
-            locked_versions.add(package_lock_entry["version"])
-        bun_entry = packages.get(package_name)
-        if isinstance(bun_entry, list) and bun_entry and isinstance(bun_entry[0], str):
-            prefix = f"{package_name}@"
-            if bun_entry[0].startswith(prefix):
-                locked_versions.add(bun_entry[0][len(prefix) :])
-    return locked_versions == {installed_version} and _routine_semver_spec_matches(declared_version, installed_version)
+    return merge_prompt_artifacts(harness, artifacts, guard_home=guard_home)
 
 
 def _unmodeled_shell_runtime_artifact(
@@ -317,65 +122,10 @@ def _unmodeled_shell_runtime_artifact(
     workspace: Path | None,
     home_dir: Path,
 ) -> GuardArtifact | None:
-    if is_nonexecuting_github_actions_read_workflow(command_text) or gh_pr_create_uses_safe_ephemeral_body(
-        command_text
-    ):
+    review = native_unmodeled_shell_artifact(command_text, workspace=workspace, home_dir=home_dir)
+    if review is None:
         return None
-    canonical_command = parse_shell_command(command_text, cwd=workspace, home_dir=home_dir)
-    execution_context = model_shell_execution_context(command_text, cwd=workspace, workspace_root=workspace)
-    if canonical_command.confidence == "exact" and execution_context.complete:
-        return None
-    if canonical_command.confidence == "exact" and not execution_context.complete:
-        home_execution_context = (
-            direct_local_vitest_execution_context(
-                command_text,
-                cwd=workspace,
-                home_dir=home_dir,
-            )
-            or direct_local_typescript_execution_context(
-                command_text,
-                cwd=workspace,
-                home_dir=home_dir,
-            )
-            or literal_cd_execution_context(
-                command_text,
-                home_dir=home_dir,
-            )
-            or low_risk_compound_developer_execution_context(
-                command_text,
-                home_dir=home_dir,
-            )
-        )
-        if home_execution_context is not None:
-            return None
-        home_execution_context = model_shell_execution_context(
-            command_text, cwd=home_dir, workspace_root=home_dir, home_dir=home_dir
-        )
-        github_assessment = classify_github_shell_capabilities(command_text, home_dir=home_dir)
-        if (
-            github_assessment is not None
-            and not github_capability_requires_confirmation(github_assessment)
-            and shell_execution_context_starts_with_literal_cd(home_execution_context)
-        ):
-            return None
-    context_metadata = shell_execution_context_metadata(execution_context)
-    reason_code = canonical_command.uncertainty_reason
-    if reason_code is None:
-        reason_code = _optional_string(context_metadata.get("shell_execution_context_reason_code"))
-    if reason_code is None:
-        raw_reason_codes = context_metadata.get("shell_execution_context_reason_codes")
-        if isinstance(raw_reason_codes, list):
-            reason_code = next((value for value in raw_reason_codes if isinstance(value, str) and value), None)
-    reason_code = reason_code or "compound_command_incomplete"
-    identity_payload = {
-        "version": 1,
-        "command_security_identity": canonical_command.security_identity,
-        "shell_execution_context_hash": execution_context.context_hash,
-        "reason_code": reason_code,
-    }
-    fingerprint = hashlib.sha256(
-        json.dumps(identity_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
+    fingerprint, metadata = review
     return GuardArtifact(
         artifact_id=f"{harness}:{source_scope}:unmodeled-shell:{fingerprint}",
         name="unmodeled compound shell command",
@@ -383,22 +133,7 @@ def _unmodeled_shell_runtime_artifact(
         artifact_type="tool_action_request",
         source_scope=source_scope,
         config_path=config_path,
-        metadata={
-            "action_class": "unmodeled shell command",
-            "guard_default_action": "require-reapproval",
-            "risk_classes": ["execution"],
-            "request_summary": "Requested a shell command that Guard could not model completely.",
-            "runtime_request_signals": [f"cannot completely model the shell command: {reason_code}"],
-            "runtime_request_summary": "Guard requires one review because part of this shell command is unresolved.",
-            "runtime_request_reason": (
-                "Guard could not prove the complete compound command structure, so it kept the whole command in "
-                "one fail-closed review."
-            ),
-            "command_security_identity": canonical_command.security_identity,
-            "command_parse_confidence": canonical_command.confidence,
-            "command_uncertainty_reason": reason_code,
-            **context_metadata,
-        },
+        metadata=metadata,
     )
 
 
@@ -412,136 +147,56 @@ def _compound_runtime_artifact(
 ) -> GuardArtifact | None:
     if not artifacts:
         return None
-    primary = next((artifact for artifact in artifacts if artifact.artifact_type == "package_request"), artifacts[0])
-    canonical_command = (
-        parse_shell_command(command_text, cwd=workspace, home_dir=home_dir) if command_text is not None else None
-    )
-    requires_full_command_binding = len(artifacts) > 1
-    if canonical_command is not None:
-        requires_full_command_binding = requires_full_command_binding or bool(
-            len(canonical_command.segments) > 1
-            or canonical_command.redirects
-            or canonical_command.embedded_commands
-            or canonical_command.wrapper_chain
-            or canonical_command.confidence != "exact"
-        )
-    if not requires_full_command_binding:
-        return primary
-
-    signals: list[str] = []
-    summaries: list[str] = []
-    reasons: list[str] = []
-    risk_classes: list[str] = []
-    rule_matches: list[dict[str, object]] = []
-    findings: list[dict[str, object]] = []
-    for artifact in artifacts:
-        artifact_risk_classes = _runtime_artifact_declared_risk_classes(artifact)
-        risk_classes.extend(artifact_risk_classes)
-        signals.extend(_string_list(artifact.metadata.get("runtime_request_signals")))
-        summary = _optional_string(artifact.metadata.get("runtime_request_summary"))
-        if summary is not None:
-            summaries.append(summary)
-        reason = _optional_string(artifact.metadata.get("runtime_request_reason"))
-        if reason is not None:
-            reasons.append(reason)
-        raw_rule_matches = artifact.metadata.get("command_rule_matches")
-        if isinstance(raw_rule_matches, list):
-            rule_matches.extend(item for item in raw_rule_matches if isinstance(item, dict))
-        findings.append(
-            {
-                "artifact_id": artifact.artifact_id,
-                "artifact_type": artifact.artifact_type,
-                "risk_classes": artifact_risk_classes,
-                "summary": summary or artifact.name,
-            }
-        )
-
-    deduped_signals = list(dict.fromkeys(signals))
-    deduped_summaries = list(dict.fromkeys(summaries))
-    deduped_reasons = list(dict.fromkeys(reasons))
-    deduped_risk_classes = list(dict.fromkeys(risk_classes))
-    deduped_rule_matches = list(
-        {json.dumps(match, sort_keys=True, separators=(",", ":")): match for match in rule_matches}.values()
-    )
-    segment_coordinates = (
-        [
-            {
-                "index": index,
-                "execution_context": segment.execution_context,
-                "pipeline_index": segment.pipeline_index,
-                "executable": segment.executable,
-                "span": {"source": "normalized", "start": segment.start, "end": segment.end},
-            }
-            for index, segment in enumerate(canonical_command.segments)
-        ]
-        if canonical_command is not None
-        else []
-    )
-    compound_summary = "Compound command findings: " + " ".join(deduped_summaries)
-    metadata = dict(primary.metadata)
-    metadata.update(
-        {
-            "compound_complete": canonical_command is not None and canonical_command.confidence == "exact",
-            "compound_findings": findings,
-            "compound_finding_count": len(findings),
-            "compound_segments": segment_coordinates,
-            "compound_segment_count": len(canonical_command.segments) if canonical_command is not None else 0,
-            "risk_classes": deduped_risk_classes,
-            "request_summary": compound_summary,
-            "runtime_request_signals": deduped_signals,
-            "runtime_request_summary": compound_summary,
-            "runtime_request_reason": " ".join(deduped_reasons),
-            "command_rule_matches": deduped_rule_matches,
-            "command_security_identity": (
-                canonical_command.security_identity if canonical_command is not None else "command-security-unavailable"
-            ),
-            "command_parse_confidence": canonical_command.confidence if canonical_command is not None else "uncertain",
-            "command_uncertainty_reason": (
-                canonical_command.uncertainty_reason if canonical_command is not None else "command_text_unavailable"
-            ),
+    if command_text is None and len(artifacts) == 1:
+        return artifacts[0]
+    if native_review is None:
+        decision: dict[str, object] = {
+            "command_action_floor": "require-reapproval",
+            "command_evaluation_status": "native_unavailable",
         }
+    else:
+        plane = native_review.evaluation.decision_plane
+        decision = {"command_action_floor": plane.action, "command_decision_plane": effect_decision_to_dict(plane)}
+    return native_compound_artifact(
+        artifacts, command_text=command_text, decision=decision, workspace=workspace, home_dir=home_dir
     )
-    if command_text is not None and canonical_command is not None:
-        metadata.update(
-            compound_command_decision_metadata(
-                command_text,
-                native_review=native_review,
-                workspace=workspace,
-                home_dir=home_dir,
-            )
+
+
+def _hook_runtime_artifact(**kwargs: Any) -> GuardArtifact | None:
+    try:
+        with bound_context_digest_home(kwargs.get("guard_home")):
+            return _hook_runtime_artifact_with_native(**kwargs)
+    except (
+        NativeCommandModelError,
+        NativeRuntimeArtifactIdentityError,
+        NativeSensitiveRequestError,
+        NativeToolActionIdentityError,
+    ):
+        harness = _canonical_harness_name(kwargs["harness"])
+        return GuardArtifact(
+            artifact_id=f"{harness}:native-command-unavailable",
+            name="native command runtime unavailable",
+            harness=harness,
+            artifact_type="tool_action_request",
+            source_scope="project",
+            config_path=str(
+                _runtime_policy_path(harness, kwargs["home_dir"], kwargs.get("workspace"), payload=kwargs["payload"])
+            ),
+            metadata={
+                "guard_default_action": "block",
+                "native_command_evaluation_status": "unavailable",
+                "runtime_request_reason": "Native command runtime is unavailable; repair it before retrying.",
+            },
         )
-    if command_text is not None:
-        execution_context = model_shell_execution_context(command_text, cwd=workspace, workspace_root=workspace)
-        if not execution_context.complete:
-            execution_context = literal_cd_execution_context(command_text, home_dir=home_dir) or execution_context
-        metadata.update(shell_execution_context_metadata(execution_context))
-        metadata["compound_complete"] = metadata["compound_complete"] is True and execution_context.complete
-    if metadata["compound_complete"] is not True or metadata.get("shell_execution_context_complete") is False:
-        metadata["guard_default_action"] = "require-reapproval"
-    identity_payload = {
-        "version": 1,
-        "primary_artifact_id": primary.artifact_id,
-        "finding_artifact_ids": [artifact.artifact_id for artifact in artifacts],
-        "command_security_identity": metadata["command_security_identity"],
-    }
-    fingerprint = hashlib.sha256(
-        json.dumps(identity_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
-    artifact_id_prefix = primary.artifact_id.rsplit(":", 1)[0]
-    return replace(
-        primary,
-        artifact_id=f"{artifact_id_prefix}:{fingerprint}",
-        name=f"compound {primary.name}",
-        metadata=metadata,
-    )
 
 
-def _hook_runtime_artifact(
+def _hook_runtime_artifact_with_native(
     *,
     harness: str,
     payload: dict[str, object],
     action_envelope: GuardActionEnvelope | None,
     data_flow_signals: tuple[RiskSignalV2, ...] = (),
+    data_flow_artifact: GuardArtifact | None = None,
     home_dir: Path,
     guard_home: Path,
     workspace: Path | None,
@@ -549,7 +204,7 @@ def _hook_runtime_artifact(
     harness = _canonical_harness_name(harness)
     event_name = _hook_event_name(payload)
     if harness in {"codex", "cline", "pi", "omp"} and event_name == "PostToolUse":
-        output_artifact = _codex_post_tool_output_artifact(
+        output_artifact, read_only = _codex_post_tool_output_review(
             harness=harness,
             payload=payload,
             config_path=str(_runtime_policy_path(harness, home_dir, workspace, payload=payload)),
@@ -559,7 +214,7 @@ def _hook_runtime_artifact(
         )
         if output_artifact is not None:
             return output_artifact
-        if _codex_post_tool_command_is_read_only_source_inspection(payload=payload, cwd=workspace, home_dir=home_dir):
+        if read_only:
             return None
     if event_name == "UserPromptSubmit":
         prompt_text = payload.get("prompt")
@@ -577,7 +232,7 @@ def _hook_runtime_artifact(
                 guard_home=guard_home,
                 workspace_dir=workspace,
             )
-            prompt_requests = extract_prompt_requests(prompt_text)
+            prompt_requests = extract_prompt_requests(prompt_text, guard_home=guard_home)
             if prompt_requests:
                 prompt_artifacts = prompt_requests_to_artifacts(
                     detection=prompt_detection,
@@ -590,7 +245,7 @@ def _hook_runtime_artifact(
                             _with_codex_prompt_display_metadata(artifact, prompt_text=prompt_text)
                             for artifact in prompt_artifacts
                         ]
-                    return _merged_prompt_runtime_artifact(harness, prompt_artifacts)
+                    return _merged_prompt_runtime_artifact(harness, prompt_artifacts, guard_home=guard_home)
             prompt_file_artifact = _codex_prompt_credential_file_artifact(
                 prompt_text=prompt_text,
                 cwd=workspace,
@@ -609,28 +264,26 @@ def _hook_runtime_artifact(
     tool_name = _runtime_hook_tool_name(payload)
     tool_arguments = _runtime_hook_tool_arguments(payload)
     raw_command_text = _runtime_hook_raw_command_text(payload, action_envelope)
-    request = extract_sensitive_file_read_request(
+    source_scope = _coalesce_string(payload.get("source_scope"), "project")
+    config_path = str(_runtime_policy_path(harness, home_dir, workspace, payload=payload))
+    naming = {"harness": harness, "config_path": config_path, "source_scope": source_scope}
+    _read_request, read_artifact = extract_sensitive_file_read_request_artifact(
         tool_name,
         tool_arguments,
         cwd=workspace,
         home_dir=home_dir,
+        **naming,
     )
-    if request is None:
-        request = (
-            extract_sensitive_file_read_request_from_action(action_envelope, cwd=workspace, home_dir=home_dir)
-            if action_envelope is not None
-            else None
+    if read_artifact is None and action_envelope is not None:
+        _read_request, read_artifact = extract_sensitive_file_read_request_artifact_from_action(
+            action_envelope,
+            cwd=workspace,
+            home_dir=home_dir,
+            **naming,
         )
-    source_scope = _coalesce_string(payload.get("source_scope"), "project")
-    config_path = str(_runtime_policy_path(harness, home_dir, workspace, payload=payload))
-    if request is not None:
-        return build_file_read_request_artifact(
-            harness=harness,
-            request=request,
-            config_path=config_path,
-            source_scope=source_scope,
-        )
-    file_write_request = extract_sensitive_file_write_request(
+    if read_artifact is not None:
+        return read_artifact
+    _write_request, write_artifact = extract_sensitive_file_write_request_artifact(
         tool_name,
         tool_arguments,
         cwd=workspace,
@@ -640,14 +293,10 @@ def _hook_runtime_artifact(
             home_dir=home_dir,
             workspace=workspace,
         ),
+        **naming,
     )
-    if file_write_request is not None:
-        return build_file_write_request_artifact(
-            harness=harness,
-            request=file_write_request,
-            config_path=config_path,
-            source_scope=source_scope,
-        )
+    if write_artifact is not None:
+        return write_artifact
     package_intent = None
     if not _post_tool_package_request_was_already_evaluated(payload=payload, action_envelope=action_envelope):
         package_intent = extract_package_intent_request(
@@ -656,6 +305,7 @@ def _hook_runtime_artifact(
             action_envelope_command=action_envelope.command if action_envelope is not None else raw_command_text,
             workspace=workspace,
             home_dir=home_dir,
+            guard_home=guard_home,
         )
     runtime_artifacts: list[GuardArtifact] = []
     native_review = (
@@ -681,7 +331,7 @@ def _hook_runtime_artifact(
         # Test and lint runners execute repository-controlled code. Local
         # identity is evidence, not authority to omit their package review.
         and not (
-            _routine_local_runner_has_complete_evidence(package_intent)
+            package_intent.routine_local_runner
             and all(item.package_name == "tsc" for item in package_intent.local_executions)
         )
     ):
@@ -691,6 +341,7 @@ def _hook_runtime_artifact(
                 intent=package_intent,
                 config_path=config_path,
                 source_scope=source_scope,
+                guard_home=guard_home,
             )
         )
     tool_request = extract_sensitive_tool_action_request(
@@ -711,6 +362,18 @@ def _hook_runtime_artifact(
                 extension_control_snapshot=(native_review.snapshot if native_review is not None else None),
                 native_extension_evidence=(native_review.payload if native_review is not None else None),
                 native_evaluation=(native_review.evaluation if native_review is not None else None),
+                extension_allow_hint=(
+                    reviewed_command_extension_allow_hint(
+                        raw_command_text,
+                        native_result=native_review.payload,
+                        snapshot=native_review.snapshot,
+                        guard_home=guard_home,
+                        cwd=workspace,
+                        home_dir=home_dir,
+                    )
+                    if native_review is not None and raw_command_text is not None
+                    else None
+                ),
             )
         )
     if raw_command_text is not None and (action_envelope is None or action_envelope.action_type == "shell_command"):
@@ -724,16 +387,8 @@ def _hook_runtime_artifact(
         )
         if unmodeled_artifact is not None:
             runtime_artifacts.append(unmodeled_artifact)
-    if action_envelope is not None and data_flow_signals:
-        runtime_artifacts.append(
-            _runtime_data_flow_artifact(
-                harness=harness,
-                action_envelope=action_envelope,
-                data_flow_signals=data_flow_signals,
-                config_path=config_path,
-                source_scope=source_scope,
-            )
-        )
+    if data_flow_artifact is not None:
+        runtime_artifacts.append(data_flow_artifact)
     return _compound_runtime_artifact(
         artifacts=runtime_artifacts,
         command_text=raw_command_text,
@@ -759,92 +414,62 @@ def _runtime_protected_file_write_paths(
     return protected_paths
 
 
-def _runtime_data_flow_artifact(
-    *,
-    harness: str,
-    action_envelope: GuardActionEnvelope,
-    data_flow_signals: tuple[RiskSignalV2, ...],
-    config_path: str,
-    source_scope: str,
-) -> GuardArtifact:
-    command_text = action_envelope.command or action_envelope.tool_name or action_envelope.action_type
-    signal_ids = tuple(signal.signal_id for signal in data_flow_signals)
-    fingerprint = hashlib.sha256(
-        json.dumps(
-            {
-                "command_text": command_text,
-                "signal_ids": signal_ids,
-                "source_scope": source_scope,
-            },
-            sort_keys=True,
-        ).encode("utf-8")
-    ).hexdigest()
-    return GuardArtifact(
-        artifact_id=f"{harness}:{source_scope}:data-flow:{fingerprint}",
-        name=f"{action_envelope.tool_name or 'runtime'} data-flow exfiltration",
-        harness=harness,
-        artifact_type="tool_action_request",
-        source_scope=source_scope,
-        config_path=config_path,
-        metadata={
-            "action_class": "credential exfiltration shell command",
-            "command_text": command_text,
-            "guard_default_action": "require-reapproval",
-            "risk_classes": ["data_flow_exfiltration"],
-            "request_summary": _runtime_data_flow_summary(data_flow_signals),
-            "runtime_request_signals": [signal.plain_reason for signal in data_flow_signals],
-            "runtime_request_summary": _runtime_data_flow_summary(data_flow_signals),
-            "runtime_request_reason": (
-                "Guard detected local-secret data flow in the runtime action before the command could send it away."
-            ),
-        },
-    )
-
-
 _CODEX_PROMPT_SECRET_KEY_MARKERS = ("TOKEN", "SECRET", "PASSWORD", "PASS", "API_KEY", "API-KEY", "AUTH", "CREDENTIAL")
 
 
-def _direct_codex_git_pathspec_identity(command_text: str, *, cwd: Path | None) -> str | None:
-    pipeline = _split_codex_safe_read_only_pipeline(command_text)
-    git_segment = pipeline[0] if pipeline else command_text
+# How large the whole packed request may be once a tool response joins the
+# flattened text, under the resident's own `CODEX_POST_TOOL_OUTPUT_MAX_BYTES`
+# of `6 * 1024 * 1024 - 64 * 1024`. The margin leaves room for the framing the
+# transport adds after this side has encoded the body.
+_CODEX_POST_TOOL_REQUEST_BUDGET = 4 * 1024 * 1024
+
+# How deeply a tool response may nest before this side keeps it back. The
+# resident's walk reads five levels, so nothing below that is scanned anyway,
+# and a response nested past the decoder's own recursion limit would cost the
+# review rather than widen it.
+_CODEX_TOOL_RESPONSE_MAX_NESTING = 64
+
+
+def _codex_json_nesting_exceeds(value: object, limit: int, depth: int = 0) -> bool:
+    """Whether ``value`` nests deeper than ``limit`` containers."""
+
+    if depth > limit:
+        return True
+    if isinstance(value, Mapping):
+        return any(_codex_json_nesting_exceeds(child, limit, depth + 1) for child in value.values())
+    if isinstance(value, (list, tuple)):
+        return any(_codex_json_nesting_exceeds(child, limit, depth + 1) for child in value)
+    return False
+
+
+def _codex_tool_response_within_budget(body: Mapping[str, object], value: object) -> object | None:
+    """The tool response to send whole beside ``body``, or ``None`` when it cannot travel.
+
+    The response is kept back whenever adding it would cost the review rather
+    than widen it: when the packed request would pass the resident's bound,
+    when the response nests past what the decoder accepts, or when it holds
+    something this side cannot encode at all, such as a lone surrogate or a
+    non-finite number. In every one of those cases the request still carries
+    the flattened text every caller sent before the resident could read the
+    response itself.
+    """
+
+    if value is None:
+        return None
+    if _codex_json_nesting_exceeds(value, _CODEX_TOOL_RESPONSE_MAX_NESTING):
+        return None
+    packed = dict(body)
+    packed["tool_response"] = value
     try:
-        parts = shlex.split(git_segment)
-    except ValueError:
+        encoded = json.dumps(packed, ensure_ascii=False, allow_nan=False).encode("utf-8")
+    except (TypeError, ValueError):
         return None
-    if not parts or Path(parts[0]).name != "git":
+    if len(encoded) > _CODEX_POST_TOOL_REQUEST_BUDGET:
         return None
-    return _codex_git_diff_selection_identity(parts[1:], cwd=cwd)
+    return value
 
 
-def _codex_git_pathspec_identity_for_command(command_text: str, *, cwd: Path | None) -> str | None:
-    execution_context = model_shell_execution_context(command_text, cwd=cwd, workspace_root=cwd)
-    if not execution_context.directory_change_present:
-        return _direct_codex_git_pathspec_identity(command_text, cwd=cwd)
-    if not execution_context.complete:
-        return None
-    identities: list[tuple[int, str]] = []
-    for segment in execution_context.segments:
-        if segment.directory_operation is not None:
-            continue
-        segment_cwd, reason = validate_shell_execution_segment(execution_context, segment)
-        if segment_cwd is None or reason is not None:
-            return None
-        identity = _direct_codex_git_pathspec_identity(segment.command_text, cwd=segment_cwd)
-        if identity is not None:
-            identities.append((segment.segment_index, identity))
-    if not identities:
-        return None
-    if len(identities) == 1:
-        return identities[0][1]
-    canonical = json.dumps(
-        {"schema": "codex-git-pathspec-context-v1", "identities": identities},
-        separators=(",", ":"),
-        sort_keys=True,
-    )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-
-
-def _codex_post_tool_output_artifact(
+def _codex_post_tool_output_review(
     *,
     harness: str = "codex",
     payload: dict[str, object],
@@ -852,163 +477,64 @@ def _codex_post_tool_output_artifact(
     source_scope: str,
     cwd: Path | None,
     home_dir: Path | None = None,
-) -> GuardArtifact | None:
+) -> tuple[GuardArtifact | None, bool]:
+    """Review a post-tool output in the resident: the artifact, and whether the commands were read-only."""
+
     canonical_harness = _canonical_harness_name(harness)
     harness_label = {"cline": "Cline", "pi": "Pi", "omp": "Oh My Pi"}.get(canonical_harness, "Codex")
     response_text = _collect_codex_tool_response_text(payload.get("tool_response"))
     stdout_text = _optional_string(payload.get("stdout"))
     if stdout_text:
         response_text = f"{response_text}\n{stdout_text}".strip() if response_text else stdout_text
-    tool_name = _coalesce_string(payload.get("tool_name"), "Bash")
-    command_texts = _codex_post_tool_command_texts(payload)
-    command_text = command_texts[0] if command_texts else tool_name
-    local_source_matches = _codex_sensitive_local_source_matches(command_text, cwd=cwd)
-    normalized_command = normalize_transparent_shell_command(
-        command_text, cwd=cwd, home_dir=home_dir
-    ).normalized_command
-    kubernetes_secret_source = kubernetes_secret_read_source(normalized_command)
-    for candidate_command_text in command_texts[1:]:
-        candidate_local_source_matches = _codex_sensitive_local_source_matches(candidate_command_text, cwd=cwd)
-        candidate_normalized_command = normalize_transparent_shell_command(
-            candidate_command_text, cwd=cwd, home_dir=home_dir
-        ).normalized_command
-        candidate_kubernetes_secret_source = kubernetes_secret_read_source(candidate_normalized_command)
-        candidate_references_local_content = (
-            bool(candidate_local_source_matches)
-            or candidate_kubernetes_secret_source is not None
-            or _codex_command_may_read_local_content(candidate_command_text, cwd=cwd)
-        )
-        if not candidate_references_local_content:
-            continue
-        command_text = candidate_command_text
-        local_source_matches = candidate_local_source_matches
-        normalized_command = candidate_normalized_command
-        kubernetes_secret_source = candidate_kubernetes_secret_source
-        if candidate_kubernetes_secret_source is not None:
-            break
-    sensitive_file_request = extract_sensitive_file_read_request(
-        payload.get("tool_name"),
-        payload.get("tool_input", payload.get("arguments")),
-        cwd=cwd,
-        home_dir=home_dir,
-    )
-    references_local_content = (
-        bool(local_source_matches)
-        or kubernetes_secret_source is not None
-        or sensitive_file_request is not None
-        or _codex_command_may_read_local_content(command_text, cwd=cwd)
-    )
-    content_matches = classify_secret_content(response_text)
-    if not content_matches and references_local_content:
-        content_matches = classify_secret_content(response_text, suppress_samples=False)
-    if not content_matches:
-        return None
-    if _codex_source_inspection_can_skip_secret_output(
-        command_text=command_text,
-        response_text=response_text,
-        content_matches=content_matches,
-        cwd=cwd,
-        home_dir=home_dir,
-        payload=payload,
-    ):
-        return None
-    if _codex_focused_pytest_can_skip_secret_output(
-        command_text=command_text,
-        response_text=response_text,
-        content_matches=content_matches,
-        cwd=cwd,
-        home_dir=home_dir,
-    ):
-        return None
-    merged_output_capture = _codex_command_captures_combined_shell_output(command_text)
-    focused_pytest = _codex_command_is_focused_pytest_verification(command_text)
-    execution_context = model_shell_execution_context(command_text, cwd=cwd, workspace_root=cwd)
-    git_pathspec_selection_identity = _codex_git_pathspec_identity_for_command(normalized_command, cwd=cwd)
-    fingerprint = hashlib.sha256(
-        json.dumps(
-            {
-                "tool_name": tool_name,
-                "command_text": command_text,
-                "output_class": "credential-looking output",
-                "shell_execution_context_hash": (
-                    execution_context.context_hash if execution_context.directory_change_present else None
-                ),
-                "git_pathspec_selection_identity": git_pathspec_selection_identity,
-            },
-            sort_keys=True,
-        ).encode("utf-8")
-    ).hexdigest()
-    local_secret_source = kubernetes_secret_source or _codex_local_secret_source_label(
-        local_source_matches,
-        command_text=command_text,
-    )
-    runtime_default_action = "require-reapproval" if references_local_content else "warn"
-    runtime_request_signals = ["tool output contains credential-looking material"]
-    if references_local_content:
-        source_signal = "command references local secrets"
-        if local_secret_source is not None:
-            source_signal = f"command references local secrets from {local_secret_source}"
-        runtime_request_signals.append(source_signal)
-    local_secret_source = kubernetes_secret_source or _codex_local_secret_source_label(
-        local_source_matches,
-        command_text=command_text,
-    )
-    if local_secret_source is None and sensitive_file_request is not None:
-        local_secret_source = sensitive_file_request.path_match.family
-    request_summary = _codex_tool_output_request_summary(
-        harness_label=harness_label,
-        tool_name=tool_name,
-        command_text=command_text,
-        local_secret_source=local_secret_source,
-        focused_pytest=focused_pytest,
-        merged_output_capture=merged_output_capture,
-    )
-    runtime_request_summary = _codex_tool_output_runtime_summary(
-        local_secret_source,
-        harness_label=harness_label,
-        focused_pytest=focused_pytest,
-        merged_output_capture=merged_output_capture,
-    )
-    metadata: dict[str, object] = {
-        "tool_name": tool_name,
-        "command_text": command_text,
-        "action_class": (
-            (
-                "Kubernetes secret read command"
-                if kubernetes_secret_source is not None
-                else "credential exfiltration shell command"
-            )
-            if references_local_content
-            else "credential-looking tool output"
-        ),
-        "guard_default_action": runtime_default_action,
-        "request_summary": request_summary,
-        "runtime_request_signals": runtime_request_signals,
-        "runtime_request_summary": runtime_request_summary,
-        "runtime_request_reason": _codex_tool_output_runtime_reason(
-            local_secret_source,
-            harness_label=harness_label,
-            focused_pytest=focused_pytest,
-            merged_output_capture=merged_output_capture,
-        ),
+    tool_label = _coalesce_string(payload.get("tool_name"), "Bash")
+    body: dict[str, object] = {
+        "harness_label": harness_label,
+        "tool_label": tool_label,
+        "tool_name": payload.get("tool_name"),
+        "tool_input": payload.get("tool_input"),
+        "arguments": payload.get("arguments"),
+        "tool_input_present": "tool_input" in payload,
+        "response_text": response_text,
+        "cwd": None if cwd is None else anchor_to_process_directory(cwd),
+        "home_dir": None if home_dir is None else anchor_to_process_directory(home_dir),
+        "deadline_ms": 8_000,
     }
-    if execution_context.directory_change_present:
-        metadata.update(shell_execution_context_metadata(execution_context))
-    if git_pathspec_selection_identity is not None:
-        metadata["git_pathspec_selection_identity"] = git_pathspec_selection_identity
-    if merged_output_capture:
-        metadata["output_capture_mode"] = "merged-stderr"
-    if local_secret_source is not None:
-        metadata["secret_source_family"] = local_secret_source
-    return GuardArtifact(
-        artifact_id=f"{canonical_harness}:{source_scope}:tool-output:{fingerprint}",
-        name=f"{tool_name} credential-looking output",
-        harness=canonical_harness,
-        artifact_type="tool_action_request",
-        source_scope=source_scope,
-        config_path=config_path,
-        metadata=metadata,
+    # The flattened text is still sent, because only this side knows what it
+    # appended to the response. The response itself travels whole beside it so
+    # the resident decides what the scan reads, rather than trusting whichever
+    # caller flattened it. It travels only when it fits: the resident refuses a
+    # request over its bound, and a refused review is worse than the flattened
+    # text every caller sent before the resident could read the response.
+    whole_response = _codex_tool_response_within_budget(body, payload.get("tool_response"))
+    if whole_response is not None:
+        body["tool_response"] = whole_response
+    answer = codex_tool_output_native(
+        "post_tool_output",
+        body=body,
+        timeout_seconds=9.0,
     )
+    if not answer.allowed or answer.value is None or answer.error_code is not None:
+        raise NativeSensitiveRequestError(answer.error_code or "native_codex_post_tool_unavailable")
+    decoded = json.loads(answer.value)
+    found = decoded.get("artifact")
+    if found is None:
+        return None, decoded.get("read_only") is True
+    return (
+        GuardArtifact(
+            artifact_id=f"{canonical_harness}:{source_scope}:tool-output:{found['fingerprint']}",
+            name=f"{tool_label} credential-looking output",
+            harness=canonical_harness,
+            artifact_type="tool_action_request",
+            source_scope=source_scope,
+            config_path=config_path,
+            metadata={key: value for key, value in found["metadata"]},
+        ),
+        False,
+    )
+
+
+def _codex_post_tool_output_artifact(**kwargs: Any) -> GuardArtifact | None:
+    return _codex_post_tool_output_review(**kwargs)[0]
 
 
 def _post_tool_package_request_was_already_evaluated(
@@ -1027,66 +553,16 @@ def _post_tool_package_request_was_already_evaluated(
     return pre_execution_result is not None
 
 
-def _codex_text_contains_sensitive_path_token(text: str, *, cwd: Path | None) -> bool:
-    return bool(_codex_sensitive_path_matches_in_text(text, cwd=cwd))
-
-
-def _codex_command_may_read_local_content(command_text: str, *, cwd: Path | None) -> bool:
-    execution_context = model_shell_execution_context(command_text, cwd=cwd, workspace_root=cwd)
-    if execution_context.directory_change_present:
-        if not execution_context.complete:
-            return True
-        for segment in execution_context.segments:
-            if segment.directory_operation is not None:
-                continue
-            segment_cwd, reason = validate_shell_execution_segment(execution_context, segment)
-            if segment_cwd is None or reason is not None:
-                return True
-            if _codex_command_may_read_local_content(segment.command_text, cwd=segment_cwd):
-                return True
-        return False
-    if _codex_command_references_sensitive_local_source(command_text, cwd=cwd):
-        return True
-    if _codex_command_reads_environment_pipeline(command_text):
-        return True
-    if any(marker in command_text for marker in ("$(", "${", "`")):
-        return True
-    pipeline_segments = _split_codex_safe_read_only_pipeline(command_text)
-    if pipeline_segments is not None:
-        return any(
-            _codex_pipeline_segment_may_read_local_content(segment, index=index, cwd=cwd)
-            for index, segment in enumerate(pipeline_segments)
-        )
-    try:
-        parts = _codex_shell_split(command_text)
-    except ValueError:
-        return True
-    return _codex_command_parts_may_read_local_content(parts, cwd=cwd)
-
-
 __all__ = [
     "_CODEX_PROMPT_FILE_FINGERPRINT_LENGTH",
     "_CODEX_PROMPT_SECRET_KEY_MARKERS",
     "_CODEX_TOOL_RESPONSE_MAX_DEPTH",
     "_CODEX_TOOL_RESPONSE_TEXT_LIMIT",
     "_HOOK_EVENT_NAME_MAP",
-    "_artifact_id_from_event",
-    "_codex_command_may_read_local_content",
-    "_codex_command_references_sensitive_local_source",
-    "_codex_existing_local_path_match",
-    "_codex_path_token_is_url_path",
     "_codex_post_tool_output_artifact",
-    "_codex_sensitive_local_source_matches",
-    "_codex_sensitive_path_matches_in_text",
-    "_codex_text_contains_sensitive_path_token",
-    "_codex_token_is_url",
-    "_codex_token_prefix_is_url_scheme",
-    "_codex_url_like_local_path_tokens",
-    "_dedupe_codex_secret_path_matches",
     "_hook_event_name",
     "_hook_runtime_artifact",
     "_merged_prompt_runtime_artifact",
     "_optional_string",
-    "_runtime_data_flow_artifact",
     "_string_list",
 ]

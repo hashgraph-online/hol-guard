@@ -1,0 +1,686 @@
+"""Run real Oh My Pi sessions against an installed, source-bound Guard wheel."""
+
+from __future__ import annotations
+
+import contextlib
+import json
+import os
+import platform
+import re
+import shutil
+import subprocess
+import time
+from collections.abc import Callable, Container, Mapping, Sequence
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+from ci.native_runtime import probe_installed_pi_output as probe
+
+from .agent_configuration import write_agent_configuration
+from .agent_prompt import fixture_authorization
+from .approval_retry_omp import OmpReview
+from .approval_retry_omp import enabled as approval_retry_enabled
+from .approval_rows import approval_rows
+from .business_policy import BUSINESS_CASES, BUSINESS_CLI_CASES, bind_business_snapshot, install_business_policy
+from .case_helpers import (
+    _fixture_replacements,
+    _mixed_read_approval_targets,
+    _scenario_prompt,
+    _scenario_tools,
+    _watch_binding,
+    fixture_system_context,
+    read_case_logs,
+    ready_watch_binding,
+)
+from .case_retry import CaseRetries, case_fixture_name
+from .case_worker import SubprocessCaseWorker
+from .catalog import CATALOG, WATCH_COMMAND, WATCH_PROMPT, Scenario, catalog_digest, load_catalog
+from .cleanup import cleanup_case_resources
+from .contained_core import request_proofs
+from .decision_coverage import profile_coverage
+from .evidence import assess_case, sha256_bytes
+from .extension_adapters import configure_extension_permission_denial, extension_adapter
+from .fixtures import (
+    create_fixture,
+    create_run_root,
+    digest_file,
+    filesystem_checks,
+    remove_native_cache,
+    remove_scratch_checkout,
+    scratch_checkout,
+    stage_directory,
+)
+from .host_process import clean_environment, realistic_environment, run_process
+from .input_evidence import (
+    public_native_extension_evidence,
+    public_native_receipt,
+)
+from .interruptions import KNOWN_GAPS, load_known_gaps, report_sections, stale_gaps
+from .latency import summarize_hook_latency
+from .native_routes import await_native_routes
+from .native_tools import CREDENTIAL_REPORT_CASE, TASK_SCHEMA_CASE, cleanup_private_temp
+from .observed_extension import generate_observed_extension
+from .parallel import HostSlots, Lease, LoadGate, run_scheduled, validate_jobs
+from .provider import InferenceRelay, LoopbackCollector
+from .review_fixtures import GITHUB_REVIEW_CASE, GITHUB_STUB_CASES, WORKTREE_CASE, configure_github_review_controls
+from .runtime_cases import stage_runtime_cases
+from .script_cases import stage_script_cases
+from .session_folder import seed_session_folder, session_cwd
+from .source_identity import source_identity
+from .summary import inference_usage, render_summary_markdown
+from .supply_chain import stage_supply_chain
+
+HERE = Path(__file__).resolve().parent
+REPO = HERE.parents[1]
+# The outcomes a fresh attempt cannot clear. The first two say Guard itself did
+# the wrong thing: it stopped ordinary work, or it let a protected operation
+# through. `task-incomplete` says the scenario's own required effects are missing
+# after Guard allowed the work, which `qualify.retryable` also refuses to retry;
+# continuing past one spends the rest of the catalog on an attempt that can
+# neither pass nor be run again.
+PRODUCT_FAILURES = frozenset({"false-positive", "false-negative", "task-incomplete"})
+
+
+def disqualifying(result: dict[str, Any]) -> bool:
+    """True when this case ended the attempt's chance of passing, so the rest proves nothing.
+
+    A case the model never exercised, a provider round that died, or a host tool
+    that failed with no Guard deny behind it says nothing about Guard. Ending the
+    attempt on one of those spends the whole remaining catalog to learn that the
+    model was uncooperative, and the cases that never run are the ones scheduled
+    last: the protection cases that carry every false-negative proof.
+    """
+    return result["assessment"]["outcome"] in PRODUCT_FAILURES
+
+
+def case_coverage(
+    selected: Sequence[Scenario], catalog: Sequence[Scenario], executed: Container[str]
+) -> dict[str, Any]:
+    """How much of the catalog this run actually executed.
+
+    A run that stopped early used to report only the outcomes of the cases it
+    reached, so a sweep truncated a third of the way through read as a clean
+    record rather than as a truncated one. The ids that never ran are listed
+    here so that gap cannot pass unread.
+    """
+    missing = [scenario.id for scenario in selected if scenario.id not in executed]
+    return {
+        "catalog_cases": len(catalog),
+        "selected_cases": len(selected),
+        "executed_cases": len(selected) - len(missing),
+        "unexecuted_cases": missing,
+    }
+
+
+def run_coverage(
+    selected: Sequence[Scenario], catalog: Sequence[Scenario], completed: Mapping[str, Any]
+) -> dict[str, Any]:
+    """The catalog this run executed and the declared decisions it reached.
+
+    Built in one place because the progress report and the final report both
+    publish it: a final report that rebuilt only the catalog half would drop
+    the decision coverage every intermediate write had already stated, and the
+    summary renders from the final report alone.
+    """
+    return {
+        **case_coverage(selected, catalog, completed),
+        # Which cases reached the decisions they were written for, so a profile
+        # states the coverage it actually drove rather than the coverage it selected.
+        "decision_paths": profile_coverage(selected, completed),
+    }
+
+
+def run_case(
+    scenario: Scenario,
+    *,
+    root: Path,
+    public: Path,
+    executable: str,
+    identity: Any,
+    provider: dict[str, Any],
+    timeout: float,
+    attempt: int = 1,
+) -> dict[str, Any]:
+    """Exercise one independent scenario, retaining failures and all evidence.
+
+    ``attempt`` numbers re-runs of the same case. Each one builds its own fixture,
+    because ``create_fixture`` refuses an existing directory and because a retry
+    that inherited the previous run's disk state would not be a fresh exercise.
+    """
+    from ci.native_runtime import probe_installed_native_extensions as native_probe
+
+    first_contact = scenario.oracle == "native-tools"
+    fixture = create_fixture(
+        root / case_fixture_name(scenario.id, attempt),
+        realistic=first_contact and scenario.id != WORKTREE_CASE,
+        linked_worktree=scenario.id == WORKTREE_CASE,
+        scenario_id=scenario.id,
+    )
+    stage_supply_chain(fixture.workspace, scenario.id)
+    stage_script_cases(fixture.workspace, scenario.id, fixture.home, fixture.canary)
+    stage_runtime_cases(fixture.root / "guard-home", fixture.workspace, scenario.id)
+    seed_session_folder(fixture.home, stage_directory(fixture.root), scenario.id)
+    session = session_cwd(fixture.home, fixture.workspace, scenario.id)
+    private = fixture.root / "private-evidence"
+    private.mkdir(mode=0o700)
+    raw_log, error_log = private / "omp.jsonl", private / "stderr.txt"
+    guard_log = private / "guard.jsonl"
+    case: dict[str, Any] = {
+        "id": scenario.id,
+        "expectation": scenario.expectation,
+        "oracle": scenario.oracle,
+        "events": [],
+        "guard_observations": [],
+        "native_routes": {},
+        "resident_direct_answers": 0,
+        "inference": {"live_rounds": [], "canary_export_violations": 0},
+        "filesystem": {},
+        "egress_requests": [],
+        "approval_delta": 0,
+        "returncode": -1,
+        "timed_out": False,
+        "cleanup_ok": False,
+    }
+    review = None
+    if approval_retry_enabled(scenario):
+        case["profile"] = "approval-retry"
+    daemon = None
+    extension_receipt_ids: set[str] | None = None
+    extension_receipt_writer: Any | None = None
+    extension_receipt_processed_before: int | None = None
+    native_extension_expectation: dict[str, Any] | None = None
+    started = time.monotonic()
+    replacements = _fixture_replacements(fixture)
+    try:
+        if approval_retry_enabled(scenario):
+            review = OmpReview(scenario, fixture, case)
+        with LoopbackCollector() as collector, InferenceRelay(canary=fixture.canary, **provider) as relay:
+            replacements[collector.url] = "{{collector_url}}"
+            rendered = scenario.render(
+                {
+                    "home": str(fixture.home),
+                    "workspace": str(fixture.workspace),
+                    "root": str(fixture.root),
+                    "scratch": str(scratch_checkout(fixture.root)),
+                    "stage": str(stage_directory(fixture.root)),
+                    "collector_url": collector.url,
+                }
+            )
+            prompt = _scenario_prompt(rendered)
+            authorization = fixture_authorization(fixture, collector.url, rendered, session) + (
+                "" if first_contact else "\n" + fixture_system_context(scenario)
+            )
+            case["prompt_sha256"] = sha256_bytes(prompt.encode())
+            case["agent_context_sha256"] = sha256_bytes(authorization.encode())
+            agent_dir = private / "agent"
+            write_agent_configuration(
+                agent_dir,
+                relay,
+                wait_for_tasks=scenario.id
+            in {"omp-native-task-readonly-lookup", TASK_SCHEMA_CASE, CREDENTIAL_REPORT_CASE},
+                memory_bank="learn" in scenario.required_tools,
+                github_tool="github" in scenario.required_tools,
+                structured_tasks=scenario.id == TASK_SCHEMA_CASE,
+            )
+            if scenario.oracle == "watch-command":
+                if scenario.commands != (WATCH_COMMAND,) or scenario.prompt != WATCH_PROMPT:
+                    raise ValueError("Watch fixture contract changed")
+                guard_home = fixture.root / "guard-home"
+                guard_home.mkdir(mode=0o700)
+                (guard_home / "config.toml").write_text('protection_posture = "watch"\nmode = "observe"\n')
+            daemon = probe._start_installed_daemon(
+                guard_home=fixture.root / "guard-home",
+                home=fixture.home,
+                workspace=fixture.workspace,
+                identity=identity,
+                register_workspace_policy=not first_contact,
+            )
+            if scenario.oracle == "blocked-extension":
+                case["extension_control"] = configure_extension_permission_denial(
+                    daemon, fixture.root / "guard-home", extension_adapter(scenario.commands[0])
+                )
+            if scenario.id == GITHUB_REVIEW_CASE:
+                case["extension_control"] = configure_github_review_controls(daemon, fixture.root / "guard-home")
+            if scenario.id in BUSINESS_CASES:
+                case["business_policy"] = install_business_policy(daemon, fixture.root / "guard-home")
+            # Benign first-contact scenarios run with no pre-bound workspace policy, like a fresh install.
+            policy_snapshot = (
+                None if first_contact else probe._prepare_installed_daemon_workspace(daemon, fixture.workspace)
+            )
+            if scenario.id in BUSINESS_CASES:
+                publisher = daemon._server.hook_worker.policy_snapshot_publisher
+                case["business_policy"] = bind_business_snapshot(
+                    case["business_policy"], publisher.current_snapshot(), policy_snapshot
+                )
+            worker = daemon._server.hook_worker
+            if scenario.oracle == "blocked-extension":
+                extension_receipt_ids = native_probe.persisted_native_receipt_ids(worker.store)
+                extension_receipt_writer = daemon._server.runtime_hook_evidence_writer
+                extension_receipt_processed_before = native_probe.receipt_processed_count(extension_receipt_writer)
+                if extension_receipt_processed_before is None:
+                    raise RuntimeError("native receipt writer progress unavailable")
+                expected_edge = native_probe.review_raw_hook_native(
+                    payload={
+                        "hook_event_name": "PreToolUse",
+                        "tool_name": "bash",
+                        "tool_input": {"command": rendered.commands[0]},
+                    },
+                    harness="omp",
+                    event="PreToolUse",
+                    guard_home=fixture.root / "guard-home",
+                    home_dir=fixture.home,
+                    cwd=fixture.workspace,
+                    source_ref_external_allowed=True,
+                    observe_mode=False,
+                    deadline=time.monotonic() + 5,
+                    policy_snapshot=policy_snapshot,
+                )
+                native_extension_expectation = public_native_extension_evidence(expected_edge, replacements)
+                if native_extension_expectation is None:
+                    raise RuntimeError("native extension expectation evidence unavailable")
+            before = worker.store.count_approval_requests(status=None)
+            approval_ids_before = (
+                {
+                    str(row.get("request_id"))
+                    for row in worker.store.list_approval_requests(status=None, limit=200)
+                    if isinstance(row, dict) and row.get("request_id")
+                }
+                if scenario.oracle in {"mixed-read-batch", "native-tools"}
+                else set()
+            )
+            extension = private / "hol-guard.ts"
+            settings = private / "settings.json"
+            settings.write_text("{}\n")
+            generate_observed_extension(
+                extension, guard_home=fixture.root / "guard-home", home=fixture.home, settings_path=settings
+            )
+            case["guard_extension_sha256"] = digest_file(extension)
+            environment = clean_environment(fixture.home, agent_dir, fixture.canary)
+            if first_contact:
+                environment = realistic_environment(environment, fixture.home)
+            if scenario.oracle == "watch-command":
+                environment["GAUNTLET_WATCH_WORKSPACE"] = str(fixture.workspace)
+            if scenario.oracle == "blocked-extension" or scenario.id in BUSINESS_CLI_CASES | GITHUB_STUB_CASES:
+                environment["PATH"] = str(fixture.root / "bin") + os.pathsep + environment["PATH"]
+            environment.update(
+                GUARD_GAUNTLET_OBSERVER_LOG=str(guard_log),
+                GUARD_GAUNTLET_DAEMON_PORT=str(daemon._server.server_address[1]),
+                GUARD_GAUNTLET_HOST_OBSERVER_LOG=str(private / "host.jsonl"),
+            )
+            host_log = private / "host.jsonl"
+            host_log.touch(mode=0o600)
+            command = [
+                executable,
+                "--model",
+                "gauntlet-live/agent",
+                "--cwd",
+                str(session),
+                "--no-extensions",
+                "--extension",
+                str(HERE / "observer.ts"),
+                "--extension",
+                str(extension),
+                "--no-skills",
+                "--no-rules",
+                "--no-lsp",
+                "--no-session",
+                "--no-title",
+                "--append-system-prompt",
+                authorization,
+                "--tools",
+                _scenario_tools(scenario),
+                "--max-time",
+                str(int(timeout)),
+                "--mode",
+                "json",
+                "--print",
+                prompt,
+            ]
+            if scenario.oracle == "watch-command":
+                position = command.index("--extension")
+                command[position:position] = ["--extension", str(HERE / "watch_scope.ts")]
+                case["watch_binding_before"] = ready_watch_binding(worker)
+            approver = review.approver(worker) if review is not None else None
+            with approver or contextlib.nullcontext():
+                case["returncode"], case["timed_out"] = run_process(
+                    command,
+                    cwd=session,
+                    env=environment,
+                    output=raw_log,
+                    error_output=error_log,
+                    timeout=timeout + 15,
+                )
+            time.sleep(0.1)
+            if review is not None and approver is not None:
+                review.collect(case, worker, approver, replacements)
+            if scenario.oracle == "watch-command":
+                case["watch_binding_after"] = _watch_binding(worker.store)
+            case["approval_delta"] = worker.store.count_approval_requests(status=None) - before
+            if first_contact:
+                case["approval_rows"] = approval_rows(worker.store, approval_ids_before)
+            if scenario.oracle == "mixed-read-batch":
+                case["approval_targets"] = _mixed_read_approval_targets(worker.store, approval_ids_before)
+            case["inference"] = relay.evidence(wait_seconds=3)
+            case["egress_requests"] = list(collector.requests)
+            case["raw_transcript_sha256"] = digest_file(raw_log)
+            case["stderr_sha256"] = digest_file(error_log)
+            read_case_logs(case, raw_log, guard_log, replacements, host_log)
+            # A bridged hook is answered either by a live resident, which counts
+            # it itself, or by the daemon, which routes it; read both once the
+            # case's observations say how many answers to account for.
+            case["native_routes"], case["resident_direct_answers"] = await_native_routes(
+                worker, len(case["guard_observations"])
+            )
+            if proofs := request_proofs(host_log, fixture.workspace, replacements):
+                case["contained_request_proofs"] = proofs
+            if scenario.oracle == "blocked-extension":
+                if extension_receipt_ids is None or extension_receipt_writer is None:
+                    raise RuntimeError("native receipt correlation was not initialized")
+                persisted_receipt = native_probe.await_persisted_native_receipt(
+                    worker.store,
+                    extension_receipt_ids,
+                    writer=extension_receipt_writer,
+                    receipt_processed_before=extension_receipt_processed_before,
+                    diagnostic_context={"case": scenario.id},
+                    timeout_seconds=10.0,
+                )
+                processed_after = native_probe.receipt_processed_count(extension_receipt_writer)
+                if (
+                    extension_receipt_processed_before is None
+                    or processed_after is None
+                    or processed_after <= extension_receipt_processed_before
+                ):
+                    raise RuntimeError("native receipt writer did not report completion")
+                observed = [
+                    row.get("native_observation")
+                    for row in case["guard_observations"]
+                    if row.get("event") == "PreToolUse" and isinstance(row.get("native_observation"), dict)
+                ]
+                if len(observed) != 1:
+                    raise RuntimeError("actual OMP observer decision receipt was not unique")
+                observation = observed[0]
+                observer_receipt = observation.get("native_receipt")
+                if not isinstance(observer_receipt, dict):
+                    raise RuntimeError("actual OMP observer decision receipt was missing")
+                case["native_observation"] = observation
+                case["native_observer_receipt"] = observer_receipt
+                case["native_receipt"] = public_native_receipt(persisted_receipt, replacements)
+                case["native_receipt_writer"] = {
+                    "processed_before": extension_receipt_processed_before,
+                    "processed_after": processed_after,
+                }
+                case["native_extension_evidence"] = native_extension_expectation
+            if (
+                digest_file(extension) != case["guard_extension_sha256"]
+                or digest_file(identity.path) != identity.sha256
+            ):
+                raise RuntimeError("installed Guard or its generated extension changed during the session")
+    except Exception as exc:
+        case["execution_error"] = type(exc).__name__
+        (private / "execution-error.txt").write_text(f"{type(exc).__name__}: {exc}\n", encoding="utf-8")
+    finally:
+        case["filesystem"] = filesystem_checks(fixture, scenario.oracle, scenario.id)
+        remove_scratch_checkout(fixture.root)
+        if daemon is not None:
+            case.update(cleanup_case_resources(daemon, identity, fixture.root / "guard-home", private))
+        remove_native_cache(fixture.home)
+    if first_contact:
+        cleanup_private_temp(case.get("events", []))
+    case["elapsed_seconds"] = round(time.monotonic() - started, 3)
+    case["hook_latency"] = summarize_hook_latency(case["guard_observations"])
+    case["assessment"] = assess_case(scenario, case)
+    public.mkdir(parents=True, exist_ok=True)
+    (public / f"{scenario.id}.json").write_text(json.dumps(case, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return case
+
+
+def record_route_failure(report: dict[str, Any], route_health: Callable[[], str | None] | None) -> bool:
+    """Record a provider route that has died, once, and say whether it has.
+
+    A dead route makes every remaining case a harness error with no tool calls,
+    which is zero coverage rather than a result. Stopping on the first case that
+    sees it keeps the failure cheap, and the recorded message carries the
+    adapter's exit code and stderr, so the cause is legible without a second run.
+    The line is printed as well as recorded because the run's own summary is
+    written on the machine under test, while the driver reads only this stream.
+    """
+    if route_health is None:
+        return False
+    if "provider_route_failure" in report:
+        return True
+    failure = route_health()
+    if failure is None:
+        return False
+    report["provider_route_failure"] = failure
+    print(json.dumps({"provider_route_failure": failure}), flush=True)
+    return True
+
+
+def run_suite(
+    *,
+    expected_source_sha: str,
+    output: Path,
+    provider: dict[str, Any],
+    model_timeout: float = 300,
+    selected_ids: list[str] | None = None,
+    omp: str | None = None,
+    work_root: Path | None = None,
+    candidate_sha: str | None = None,
+    jobs: int = 1,
+    fail_fast: bool = False,
+    case_retries: int = 0,
+    host_slots: int | None = None,
+    slot_dir: Path | None = None,
+    max_load: float | None = None,
+    max_load_wait: float = 180.0,
+    profile: str = "core",
+    route_health: Callable[[], str | None] | None = None,
+) -> dict[str, Any]:
+    """Run the complete profile or explicitly label a targeted exploratory run."""
+    if re.fullmatch(r"[0-9a-f]{40}", expected_source_sha) is None:
+        raise ValueError("expected source SHA must be a full Git commit")
+    if profile not in {"core", "approval-retry"}:
+        raise ValueError("OMP session runner supports core and approval-retry profiles")
+    if profile == "approval-retry" and jobs != 1:
+        raise ValueError("approval-retry runs serially")
+    jobs = validate_jobs(jobs)
+    if KNOWN_GAPS.is_file():
+        load_known_gaps()  # a malformed gap file aborts before any case runs
+    output = output.resolve()
+    output.mkdir(mode=0o700, parents=True, exist_ok=False)
+    executable = omp or shutil.which("omp")
+    if not executable or not Path(executable).is_file():
+        raise RuntimeError("install the repository-pinned Oh My Pi CLI before running Gauntlet")
+    for name in ("git", "rg", "curl", "bun"):
+        if shutil.which(name) is None:
+            raise RuntimeError(f"Gauntlet prerequisite is missing: {name}")
+    _, identity, capabilities = probe._probe_native_identity()
+    if capabilities.build_sha != expected_source_sha:
+        raise RuntimeError("installed Guard source SHA does not match the expected build")
+    version = subprocess.check_output([executable, "--version"], text=True, timeout=15).strip()
+    package = json.loads((REPO / "ci/pi-exact-continuation/package.json").read_text())
+    expected_version = package["dependencies"]["@oh-my-pi/pi-coding-agent"]
+    if version != "omp/" + expected_version:
+        raise RuntimeError("Oh My Pi version differs from the repository-pinned SDK")
+    from .approval_retry import CATALOG as APPROVAL_RETRY_CATALOG
+
+    catalog_path = APPROVAL_RETRY_CATALOG if profile == "approval-retry" else CATALOG
+    catalog = load_catalog(catalog_path)
+    if selected_ids and (set(selected_ids) - {scenario.id for scenario in catalog}):
+        raise ValueError("unknown scenario selection")
+    selected = tuple(s for s in catalog if not selected_ids or s.id in selected_ids)
+    parent = (work_root or output.parent).resolve()
+    parent.mkdir(parents=True, exist_ok=True)
+    root = create_run_root(parent)
+    binding = source_identity(REPO, candidate_sha)
+    source_sha = binding["tested_source_sha"]
+    dirty = binding["source_dirty"]
+    report = {
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "schema": "hol.guard-gauntlet.evidence.v1",
+        "name": "Guard Gauntlet",
+        "profile": profile,
+        **binding,
+        "installed_source_sha": capabilities.build_sha,
+        "native_binary_sha256": identity.sha256,
+        "native_rule_digest": capabilities.rule_digest,
+        "guard_version": capabilities.runtime_version,
+        "omp_version": version,
+        "platform": platform.system().lower(),
+        "catalog_sha256": catalog_digest(catalog_path),
+        "runner_files": {p.name: digest_file(p) for p in sorted(HERE.iterdir()) if p.is_file()},
+        "sdk_lock_sha256": digest_file(REPO / "ci/pi-exact-continuation/package-lock.json"),
+        "source_dirty": dirty,
+        "expected_scenarios": [s.id for s in catalog],
+        "full_profile": selected == catalog,
+        "cases": [],
+        # Informational only: scheduling does not change what any case must prove.
+        "jobs": jobs,
+        "fail_fast": fail_fast,
+        "case_retries_allowed": case_retries,
+        "host_slots": host_slots,
+        "max_load": max_load,
+        "max_load_wait": max_load_wait,
+    }
+    slot_pool = (
+        HostSlots(slot_dir or Path.home() / ".cache" / "hol-guard-gauntlet" / "slots", host_slots)
+        if host_slots is not None
+        else None
+    )
+    gate = LoadGate(max_load, max_wait=max_load_wait) if max_load is not None else None
+    completed: dict[str, dict[str, Any]] = {}
+    retries = CaseRetries(case_retries, cases=output / "cases", superseded=output / "superseded")
+
+    def route_failed() -> bool:
+        return record_route_failure(report, route_health)
+
+    def want_retry(scenario_id: str, case: dict[str, Any]) -> bool:
+        """A dead provider route makes every case look retryable; stop instead of re-running.
+
+        ``record_route_failure`` exists so the first case that sees a dead route
+        ends the run cheaply. Without this check that case, and every case in
+        flight beside it, would spend its whole budget against the same dead
+        route before the stop ever landed.
+        """
+        return not route_failed() and retries.should_retry(scenario_id, case)
+
+    def record(scenario: Scenario, case: dict[str, Any]) -> None:
+        """Publish progress in catalog order, whatever order cases finish in."""
+        completed[scenario.id] = {"id": scenario.id, **case}
+        ordered = [completed[s.id] for s in selected if s.id in completed]
+        report["cases"] = [
+            {
+                "id": row["id"],
+                **row["assessment"],
+                "evidence_sha256": digest_file(output / "cases" / f"{row['id']}.json"),
+            }
+            for row in ordered
+        ]
+        report["hook_latency"] = summarize_hook_latency([o for row in ordered for o in row["guard_observations"]])
+        report["inference_usage"] = inference_usage(
+            output / "cases",
+            [scenario.id for scenario in selected if scenario.id in completed],
+            superseded=output / "superseded",
+        )
+        report["case_coverage"] = run_coverage(selected, catalog, completed)
+        report["case_retries"] = retries.history
+        print(json.dumps({"scenario": scenario.id, **case["assessment"]}), flush=True)
+        (output / "summary.json").write_text(json.dumps(report, indent=2) + "\n")
+
+    if jobs == 1:
+        for scenario in selected:
+            while True:
+                while gate is not None and not gate():
+                    time.sleep(1)
+                with slot_pool.acquire() if slot_pool is not None else contextlib.nullcontext():
+                    case = run_case(
+                        scenario,
+                        root=root,
+                        public=output / "cases",
+                        executable=executable,
+                        identity=identity,
+                        provider=provider,
+                        timeout=model_timeout,
+                        attempt=retries.attempt(scenario.id),
+                    )
+                if not want_retry(scenario.id, case):
+                    break
+            record(scenario, case)
+            if route_failed():
+                break
+            if fail_fast and disqualifying(case):
+                break
+    else:
+        workdir = root / "workers"
+        workdir.mkdir(mode=0o700)
+
+        def spawn(scenario: Scenario, lease: Lease | None = None) -> Any:
+            attempt = retries.attempt(scenario.id)
+            return SubprocessCaseWorker(
+                scenario.id,
+                {
+                    "scenario_id": scenario.id,
+                    "root": str(root),
+                    "public": str(output / "cases"),
+                    "executable": executable,
+                    "provider": provider,
+                    "timeout": model_timeout,
+                    "identity_sha256": identity.sha256,
+                    "build_sha": capabilities.build_sha,
+                    "attempt": attempt,
+                },
+                workdir,
+                pass_fds=(lease.fd,) if lease is not None and lease.fd is not None else (),
+                label=case_fixture_name(scenario.id, attempt),
+            )
+
+        (output / "cases").mkdir(parents=True, exist_ok=True)
+        # Ordinary cases run first so the short single-attempt protection cases
+        # fill the tail; evidence stays in catalog order through record().
+        order = [i for i, s in enumerate(selected) if s.expectation == "allow"] + [
+            i for i, s in enumerate(selected) if s.expectation != "allow"
+        ]
+        run_scheduled(
+            selected,
+            jobs=jobs,
+            spawn=spawn,
+            on_complete=lambda index, result: record(selected[index], result),
+            order=order,
+            should_stop=(
+                (lambda _index, result: route_failed() or (fail_fast and disqualifying(result)))
+                if fail_fast or route_health is not None
+                else None
+            ),
+            retry=((lambda index, result: want_retry(selected[index].id, result)) if case_retries else None),
+            cancel_retry=((lambda index, _result: retries.restore(selected[index].id)) if case_retries else None),
+            admit=gate,
+            slots=slot_pool,
+        )
+    # A route that died after the last case still explains that case's failure.
+    route_failed()
+    report["finished_at"] = datetime.now(timezone.utc).isoformat()
+    report.setdefault("inference_usage", inference_usage(output / "cases", (), superseded=output / "superseded"))
+    report["case_coverage"] = run_coverage(selected, catalog, completed)
+    report["stopped_early"] = len(report["cases"]) < len(selected)
+    report.update(report_sections(report["cases"]))
+    report["pass"] = (
+        report["full_profile"]
+        and len(report["cases"]) == len(selected)
+        and all(c["outcome"] == "pass" for c in report["cases"])
+        and (profile == "approval-retry" or not report["interruptions"]["benign_interruptions"])
+        and not stale_gaps(report["known_gaps"])
+    )
+    report["source_unchanged"] = source_identity(REPO, candidate_sha) == binding and report["runner_files"] == {
+        p.name: digest_file(p) for p in sorted(HERE.iterdir()) if p.is_file()
+    }
+    report["merge_qualified"] = (
+        profile == "core"
+        and report["pass"]
+        and not dirty
+        and report["source_unchanged"]
+        and source_sha == capabilities.build_sha
+    )
+    (output / "summary.json").write_text(json.dumps(report, indent=2) + "\n")
+    (output / "summary.md").write_text(render_summary_markdown(report, binding, capabilities.build_sha, version))
+    return report

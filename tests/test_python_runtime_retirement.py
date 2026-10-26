@@ -9,7 +9,31 @@ from zipfile import ZipFile
 import pytest
 
 from scripts.ci.python_capability_cleanup_analysis import _analyze_import_graph
-from scripts.ci.python_runtime_retirement import validate_retired_modules
+from scripts.ci.python_runtime_retirement import validate_retired_bodies, validate_retired_modules
+
+
+def test_retired_body_allows_public_facade_but_rejects_original_private_algorithm(tmp_path: Path) -> None:
+    (tmp_path / "src/example").mkdir(parents=True)
+    (tmp_path / "rust/src").mkdir(parents=True)
+    native = tmp_path / "rust/src/native.rs"
+    native.write_text("// Native authority.\n")
+    facade = tmp_path / "src/example/public_api.py"
+    original = b"def _old_classifier(value): return True\n"
+    record = {
+        "path": "src/example/public_api.py",
+        "source_sha256": hashlib.sha256(original).hexdigest(),
+        "forbidden_symbols": ["_old_classifier"],
+        "native_replacements": ["rust/src/native.rs"],
+    }
+    contract = {"retired_bodies": [record]}
+    facade.write_text("from .native_transport import classify\n")
+    validate_retired_bodies(tmp_path, contract)
+    facade.write_bytes(original)
+    with pytest.raises(RuntimeError, match="body still exists"):
+        validate_retired_bodies(tmp_path, contract)
+    facade.write_text("def _old_classifier(value): return False\n")
+    with pytest.raises(RuntimeError, match="symbol still exists"):
+        validate_retired_bodies(tmp_path, contract)
 
 
 @pytest.fixture
@@ -110,6 +134,42 @@ def test_retirement_requires_native_replacement(retired_repository: tuple[Path, 
     root, _ = retired_repository
     (root / "rust/src/native.rs").unlink()
     with pytest.raises(RuntimeError, match="native replacement is missing"):
+        check(retired_repository)
+
+
+def _dead_code_record(contract: dict[str, object], **overrides: object) -> None:
+    record = contract["retired_modules"][0]
+    record["native_replacements"] = []
+    record["retirement"] = "dead_code"
+    record["removal_reason"] = "Nothing imported it; the tests were the only consumers."
+    record.update(overrides)
+
+
+def test_dead_code_retirement_needs_no_native_replacement(
+    retired_repository: tuple[Path, dict[str, object]],
+) -> None:
+    """Python that reached nobody still has to be recorded, or its path keeps no protection."""
+    _, contract = retired_repository
+    _dead_code_record(contract)
+    evidence = check(retired_repository)
+    assert len(evidence) == 1
+    assert evidence[0]["source_present"] is False
+
+
+def test_dead_code_retirement_requires_a_reason(retired_repository: tuple[Path, dict[str, object]]) -> None:
+    _, contract = retired_repository
+    _dead_code_record(contract, removal_reason="   ")
+    with pytest.raises(RuntimeError, match="removal reason"):
+        check(retired_repository)
+
+
+def test_empty_native_replacements_need_the_dead_code_declaration(
+    retired_repository: tuple[Path, dict[str, object]],
+) -> None:
+    _, contract = retired_repository
+    _dead_code_record(contract)
+    del contract["retired_modules"][0]["retirement"]
+    with pytest.raises(RuntimeError, match="native replacement paths are required"):
         check(retired_repository)
 
 

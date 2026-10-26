@@ -198,6 +198,7 @@ def test_recovery_preserves_authenticated_live_process_when_health_probe_misses(
         "started_at": datetime.now(timezone.utc).isoformat(),
         "pid": 4321,
         "port": 4781,
+        "state_id": "live-generation",
     }
     monkeypatch.setattr(daemon_manager_module, "load_authenticated_daemon_state", lambda _home: state)
     monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", lambda _home: None)
@@ -221,6 +222,46 @@ def test_recovery_preserves_authenticated_live_process_when_health_probe_misses(
     assert recovered == "http://127.0.0.1:4781"
 
 
+def test_recovery_prefers_verified_live_generation_over_stale_locator(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    state = {
+        "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+        "source_root": daemon_manager_module._current_guard_daemon_source_root(),
+        "runtime_fingerprint": daemon_manager_module._current_guard_daemon_runtime_fingerprint(),
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "pid": 4321,
+        "port": 4781,
+        "state_id": "live-generation",
+    }
+    monkeypatch.setattr(daemon_manager_module, "load_authenticated_daemon_state", lambda _home: state)
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "load_guard_daemon_url",
+        lambda _home: "http://127.0.0.1:4782",
+    )
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_running", lambda _pid: True)
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_guard_daemon_pid_matches_command",
+        lambda _pid, expected_guard_home=None: expected_guard_home == guard_home,
+    )
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "ensure_guard_daemon",
+        lambda _home, *, home_dir=None: pytest.fail("a verified live generation must be reused"),
+    )
+
+    recovered = daemon_manager_module.recover_guard_daemon_after_hook_failure(
+        guard_home,
+        failure_kind="overload",
+    )
+
+    assert recovered == "http://127.0.0.1:4781"
+
+
 def test_transport_recovery_preserves_authenticated_process_when_health_probe_misses(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -233,6 +274,7 @@ def test_transport_recovery_preserves_authenticated_process_when_health_probe_mi
         "started_at": datetime.now(timezone.utc).isoformat(),
         "pid": 4321,
         "port": 4781,
+        "state_id": "live-generation",
     }
     monkeypatch.setattr(daemon_manager_module, "load_authenticated_daemon_state", lambda _home: state)
     monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", lambda _home: None)
@@ -273,6 +315,7 @@ def test_transport_recovery_preserves_verified_old_process_when_health_probe_mis
         **_old_generation(),
         "pid": 4321,
         "port": 4781,
+        "state_id": "old-live-generation",
     }
     retired: list[Path] = []
     monkeypatch.setattr(daemon_manager_module, "load_authenticated_daemon_state", lambda _home: state)
@@ -446,6 +489,58 @@ def test_managed_daemon_launch_disables_idle_shutdown(
     )
 
     assert child_env["GUARD_DAEMON_IDLE_TIMEOUT_SECONDS"] == "0"
+
+
+@pytest.mark.parametrize(
+    ("mode", "forwarded"),
+    [("force", True), ("shadow", False), ("auto", False), ("off", False)],
+)
+def test_daemon_launch_forwards_only_a_pinned_native_runtime_override(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mode: str,
+    forwarded: bool,
+) -> None:
+    runtime = tmp_path / "hol-guard-runtime"
+    monkeypatch.setenv("HOL_GUARD_NATIVE", mode)
+    monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", str(runtime))
+
+    child_env = daemon_manager_module._daemon_launcher_env(home_dir=tmp_path)
+
+    if forwarded:
+        assert child_env["HOL_GUARD_NATIVE"] == mode
+        assert child_env["HOL_GUARD_NATIVE_BINARY"] == str(runtime)
+    else:
+        assert "HOL_GUARD_NATIVE" not in child_env
+        assert "HOL_GUARD_NATIVE_BINARY" not in child_env
+
+
+def test_daemon_launch_drops_a_relative_native_runtime_override(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
+    monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", "relative/hol-guard-runtime")
+
+    child_env = daemon_manager_module._daemon_launcher_env(home_dir=tmp_path)
+
+    assert "HOL_GUARD_NATIVE_BINARY" not in child_env
+
+
+def test_daemon_launch_forwards_only_an_absolute_source_compiler_override(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Startup asks the compiler whether a release bundle is installed, so a
+    # source checkout's daemon must see the compiler its caller named.
+    compiler = tmp_path / "guard-command-source"
+    monkeypatch.setenv("HOL_GUARD_NATIVE_SOURCE_COMPILER", str(compiler))
+    monkeypatch.setenv("HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER", "relative/guard-command-source")
+
+    child_env = daemon_manager_module._daemon_launcher_env(home_dir=tmp_path)
+
+    assert child_env["HOL_GUARD_NATIVE_SOURCE_COMPILER"] == str(compiler)
+    assert "HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER" not in child_env
 
 
 def test_ephemeral_daemon_launch_retains_server_idle_default(

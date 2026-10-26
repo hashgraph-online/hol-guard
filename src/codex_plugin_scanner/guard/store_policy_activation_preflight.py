@@ -6,6 +6,7 @@ import json
 import sqlite3
 from collections.abc import Callable, Mapping, Sequence
 
+from .policy_bundle_activation import PrecomputedVerdicts
 from .policy_bundle_parser import policy_bundle_acceptance_checkpoint, policy_bundle_is_version_downgrade
 from .store_custom_extension_continuity import (
     CustomExtensionContinuityMutation,
@@ -64,8 +65,13 @@ def continuity_activation_rejection(
 def policy_checkpoint_rejection(
     connection: sqlite3.Connection,
     policy_bundle: Mapping[str, object],
+    verdicts: PrecomputedVerdicts | None = None,
 ) -> str | None:
-    """Validate the persisted anti-downgrade checkpoint under the write lock."""
+    """Validate the persisted anti-downgrade checkpoint under the write lock.
+
+    With ``verdicts`` the downgrade verdict is never requested from the resident
+    while the lock is held; see ``PrecomputedVerdicts``.
+    """
 
     row = connection.execute(
         "select payload_json from sync_state where state_key = ?",
@@ -79,9 +85,18 @@ def policy_checkpoint_rejection(
         return "policy_bundle_checkpoint_invalid"
     if not isinstance(existing, dict) or not existing:
         return "policy_bundle_checkpoint_invalid"
-    if policy_bundle_is_version_downgrade(existing, dict(policy_bundle)):
-        return "bundle_version_downgrade"
-    return None
+    bundle = dict(policy_bundle)
+    if verdicts is None:
+        downgrade = policy_bundle_is_version_downgrade(existing, bundle)
+    else:
+        downgrade = bool(
+            verdicts.resolve(
+                ("downgrade", str(row["payload_json"])),
+                lambda: policy_bundle_is_version_downgrade(existing, bundle),
+                "policy_bundle_checkpoint_invalid",
+            )
+        )
+    return "bundle_version_downgrade" if downgrade else None
 
 
 def apply_continuity_rejection(

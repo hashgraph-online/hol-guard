@@ -7,25 +7,24 @@ from typing import cast
 
 import yaml
 
+from tests.support.ci_workflow import expand_ci_job_actions
+
 ROOT = Path(__file__).resolve().parents[1]
 RELEASE_BRANCH = "release/3.2"
 
+# The installed Extension Control Center job runs on manual dispatch only, so
+# it is not a pull-request gate on any branch.
 PR_GATE_WORKFLOWS = (
-    ".github/workflows/cline-contract-ci.yml",
     ".github/workflows/ci.yml",
     ".github/workflows/publish.yml",
-    ".github/workflows/native-release-contract.yml",
-    ".github/workflows/native-wheel-ci.yml",
-    ".github/workflows/guard-network-remediation-proof.yml",
-    ".github/workflows/guard-gvisor-reference.yml",
-    ".github/workflows/extension-control-center-installed-ci.yml",
 )
 
 
 def _triggers(relative_path: str) -> dict[str, object]:
+    """Read workflow triggers using the YAML loader handling of the Actions on key."""
     workflow = cast(
         dict[object, object],
-        yaml.safe_load((ROOT / relative_path).read_text(encoding="utf-8")),
+        expand_ci_job_actions(yaml.safe_load((ROOT / relative_path).read_text(encoding="utf-8"))),
     )
     return cast(dict[str, object], workflow[True])
 

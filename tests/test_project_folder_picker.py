@@ -10,7 +10,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.daemon import server as daemon_server
 from codex_plugin_scanner.guard.project_folder_picker import (
     ProjectFolderPickerBusyError,
     ProjectFolderPickerUnavailableError,
@@ -18,6 +17,7 @@ from codex_plugin_scanner.guard.project_folder_picker import (
     interpret_project_folder_picker_result,
     project_folder_picker_command,
 )
+from tests.daemon_control_patching import patch_daemon_global
 from tests.test_guard_headless_daemon_api import _dashboard_token_for, _read_json_response, _request
 from tests.test_guard_phase06_workspace_audit import _seed_premium_entitlement
 
@@ -39,7 +39,9 @@ def test_folder_picker_reports_busy_and_missing_linux_dialog(monkeypatch: pytest
     def runner(*_args, **_kwargs) -> subprocess.CompletedProcess[str]:
         with pytest.raises(ProjectFolderPickerBusyError):
             choose_project_folder(
-                runner=lambda *_a, **_k: subprocess.CompletedProcess(args=["picker"], returncode=0, stdout="/workspace/other"),
+                runner=lambda *_a, **_k: subprocess.CompletedProcess(
+                    args=["picker"], returncode=0, stdout="/workspace/other"
+                ),
                 platform_name="darwin",
             )
         return subprocess.CompletedProcess(args=["picker"], returncode=0, stdout="/workspace/app\n", stderr="")
@@ -142,7 +144,7 @@ def test_daemon_choose_folder_returns_a_validated_path(
 ) -> None:
     selected = tmp_path / "project"
     selected.mkdir()
-    monkeypatch.setattr(daemon_server, "choose_project_folder", lambda: str(selected))
+    patch_daemon_global(monkeypatch, "choose_project_folder", lambda: str(selected))
     store_home = tmp_path / "guard-home"
     from codex_plugin_scanner.guard.store import GuardStore
 
@@ -171,7 +173,7 @@ def test_daemon_choose_folder_reports_cancel(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(daemon_server, "choose_project_folder", lambda: None)
+    patch_daemon_global(monkeypatch, "choose_project_folder", lambda: None)
     from codex_plugin_scanner.guard.store import GuardStore
 
     store = GuardStore(tmp_path / "guard-home")
@@ -206,7 +208,7 @@ def test_daemon_answers_health_while_folder_picker_is_open(
         started.set()
         assert release.wait(timeout=5)
 
-    monkeypatch.setattr(daemon_server, "choose_project_folder", blocked_picker)
+    patch_daemon_global(monkeypatch, "choose_project_folder", blocked_picker)
     from codex_plugin_scanner.guard.store import GuardStore
 
     store = GuardStore(tmp_path / "guard-home")
@@ -246,8 +248,8 @@ def test_daemon_answers_health_while_folder_picker_is_open(
 @pytest.mark.parametrize(
     ("error", "status_code", "code"),
     [
-        (daemon_server.ProjectFolderPickerBusyError(), 409, "folder_picker_busy"),
-        (daemon_server.ProjectFolderPickerUnavailableError(), 503, "folder_picker_unavailable"),
+        (ProjectFolderPickerBusyError(), 409, "folder_picker_busy"),
+        (ProjectFolderPickerUnavailableError(), 503, "folder_picker_unavailable"),
     ],
 )
 def test_daemon_choose_folder_reports_picker_errors(
@@ -260,7 +262,7 @@ def test_daemon_choose_folder_reports_picker_errors(
     def raise_picker() -> str:
         raise error
 
-    monkeypatch.setattr(daemon_server, "choose_project_folder", raise_picker)
+    patch_daemon_global(monkeypatch, "choose_project_folder", raise_picker)
     from codex_plugin_scanner.guard.store import GuardStore
 
     store = GuardStore(tmp_path / "guard-home")
@@ -287,7 +289,7 @@ def test_daemon_choose_folder_rejects_an_unusable_path(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(daemon_server, "choose_project_folder", lambda: "/definitely/not/a/project-folder")
+    patch_daemon_global(monkeypatch, "choose_project_folder", lambda: "/definitely/not/a/project-folder")
     from codex_plugin_scanner.guard.store import GuardStore
 
     store = GuardStore(tmp_path / "guard-home")

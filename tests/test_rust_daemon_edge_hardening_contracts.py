@@ -21,7 +21,7 @@ def test_daemon_http_server_is_bounded() -> None:
 
 
 def test_native_runtime_tracks_total_request_age() -> None:
-    runtime_source = (ROOT / "rust/crates/guard-runtime/src/main.rs").read_text(encoding="utf-8")
+    runtime_source = (ROOT / "rust/crates/guard-runtime/src/lib.rs").read_text(encoding="utf-8")
     transport_source = (ROOT / "rust/crates/guard-runtime/src/resident_transport.rs").read_text(encoding="utf-8")
     assert "mod hardening;" in runtime_source
     assert "accepted_at: Instant" in transport_source

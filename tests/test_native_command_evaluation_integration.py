@@ -6,90 +6,8 @@ import pytest
 
 from codex_plugin_scanner.guard.native_command_model import _canonical_command_from_native
 from codex_plugin_scanner.guard.runtime import native_command_evaluation
-from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
-from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
-from codex_plugin_scanner.guard.runtime.native_command_extension_evidence import observations_from_native_evidence
 from tests.native_command_test_support import real_native_review_fixture
-
-
-@pytest.mark.parametrize(
-    ("command", "force_rule_ids", "controls", "expected_rules"),
-    [
-        (
-            "printf hello",
-            (),
-            (),
-            (),
-        ),
-        (
-            "ollama push model",
-            ("command.ollama.push",),
-            (("extension", "command.ollama", "enabled"),),
-            ("command.ollama.push",),
-        ),
-        (
-            "ollama rm old-model --help",
-            ("command.ollama.rm",),
-            (("extension", "command.ollama", "enabled"),),
-            ("command.ollama.rm",),
-        ),
-        (
-            "ollama push model && ollama rm old-model",
-            ("command.ollama.push", "command.ollama.rm"),
-            (("extension", "command.ollama", "enabled"),),
-            ("command.ollama.push", "command.ollama.rm"),
-        ),
-        (
-            "ollama push model",
-            ("command.ollama.push",),
-            (("extension", "command.ollama", "enabled"), ("permission", "command.ollama.permission.push", "disabled")),
-            ("command.ollama.push",),
-        ),
-    ],
-    ids=("benign-read", "cataloged-unsafe", "safe-variant", "compound", "permission-disabled"),
-)
-def test_real_native_payload_projects_with_exact_bound_snapshot(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    command: str,
-    force_rule_ids: tuple[str, ...],
-    controls: tuple[tuple[str, str, str], ...],
-    expected_rules: tuple[str, ...],
-) -> None:
-    fixture = real_native_review_fixture(command, force_rule_ids=force_rule_ids, controls=controls)
-    payload, snapshot = fixture.payload, fixture.snapshot
-    model = payload.get("command_model")
-    assert isinstance(model, dict), payload
-    assert model["normalized_text"] == command
-    assert payload["authority"] == "rust"
-    evidence = payload.get("command_extensions")
-    assert isinstance(evidence, dict)
-    assert tuple(item["rule_id"] for item in evidence["observations"]) == expected_rules
-
-    canonical = _canonical_command_from_native(command, model)
-    assert canonical is not None
-    observations = observations_from_native_evidence(
-        payload, BUILT_IN_COMMAND_EXTENSION_REGISTRY, command=canonical, control_snapshot=snapshot
-    )
-    assert tuple(item.rule.rule_id for item in observations) == expected_rules
-    projected = evaluate_command(
-        command,
-        canonical_command=canonical,
-        extension_control_snapshot=snapshot,
-        native_extension_evidence=payload,
-    )
-    assert projected.minimum_action == payload["minimum_action"]
-
-    monkeypatch.setattr(native_command_evaluation, "review_pre_tool_native", lambda *_args, **_kwargs: payload)
-    reviewed = native_command_evaluation.review_command_native(
-        command, guard_home=tmp_path, extension_control_snapshot=snapshot
-    )
-    assert reviewed is not None
-    assert reviewed.payload is payload
-    assert reviewed.snapshot is snapshot
-    assert tuple(item.rule.rule_id for item in reviewed.evaluation.extension_observations) == expected_rules
-    assert reviewed.evaluation.private_control_evidence == snapshot.private_evidence
 
 
 def test_real_native_payload_rejects_stale_snapshot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -131,12 +49,15 @@ def test_real_native_transparent_wrapper_preserves_uncertain_envelope() -> None:
 def test_real_native_review_classification_accepts_explicit_stash_permission(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # A stash write, not `git stash list`: a printing stash form now clears
+    # only through the Git helper probe, and an explicit Allow never settles
+    # that helper floor.
     fixture = real_native_review_fixture(
-        "git stash list",
+        "git stash push -m wip",
         force_rule_ids=("command.git.stash",),
         controls=(("permission", "command.git.permission.stash", "enabled"),),
     )
-    assert fixture.payload["minimum_action"] == "review"
+    assert fixture.payload["minimum_action"] == "allow"
     monkeypatch.setattr(native_command_evaluation, "review_pre_tool_native", lambda *_args, **_kwargs: fixture.payload)
     reviewed = native_command_evaluation.review_command_native(
         fixture.command,
@@ -144,7 +65,7 @@ def test_real_native_review_classification_accepts_explicit_stash_permission(
         extension_control_snapshot=fixture.snapshot,
     )
     assert reviewed is not None
-    assert reviewed.native_minimum_action == "review"
+    assert reviewed.native_minimum_action == "allow"
     assert reviewed.evaluation.minimum_action == "allow"
     assert reviewed.evaluation.control_resolution.explicitly_enabled_permission_ids == ("command.git.permission.stash",)
 
@@ -172,7 +93,7 @@ def test_native_privileged_wrapper_floor_survives_explicit_command_permission(
     )
 
 
-def test_native_unsupported_heredoc_remains_bound_blocking_unavailability(
+def test_native_unsupported_heredoc_with_a_non_root_removal_stays_under_review(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fixture = real_native_review_fixture("cat <<'EOF'\n$(sh -c 'rm -rf /tmp/example')\nEOF")
@@ -183,13 +104,15 @@ def test_native_unsupported_heredoc_remains_bound_blocking_unavailability(
     assert model["uncertainty_reason"] == "command_redirect_not_yet_supported"
     evidence = fixture.payload.get("command_extensions")
     assert isinstance(evidence, dict)
-    assert evidence["evaluation_error"] == "native_command_evaluation_failed"
+    assert evidence["evaluation_error"] is None
     assert evidence["observations"] == []
     binding = evidence["binding"]
     assert isinstance(binding, dict)
     assert binding["observation_count"] == 0
-    assert binding["uncertainty_count"] == 1
-    assert fixture.payload["minimum_action"] == "block"
+    assert binding["uncertainty_count"] == 0
+    # The heredoc names `rm -rf` on a non-root path, so the root-removal floor
+    # does not apply; the unmodeled shape still requires review.
+    assert fixture.payload["minimum_action"] == "review"
 
     monkeypatch.setattr(native_command_evaluation, "review_pre_tool_native", lambda *_args, **_kwargs: fixture.payload)
     reviewed = native_command_evaluation.review_command_native(
@@ -200,7 +123,7 @@ def test_native_unsupported_heredoc_remains_bound_blocking_unavailability(
     assert reviewed is not None
     assert reviewed.payload is fixture.payload
     assert reviewed.snapshot is fixture.snapshot
-    assert reviewed.evaluation.minimum_action == "block"
-    assert reviewed.evaluation.decision_plane.action == "block"
+    assert reviewed.evaluation.minimum_action == "review"
+    assert reviewed.evaluation.decision_plane.action == "review"
     assert reviewed.evaluation.matches == ()
     assert reviewed.evaluation.decision_plane.proof_routes == frozenset()

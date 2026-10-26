@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.aseprite",
+  "version": "1.0.0",
+  "name": "Aseprite Lua MCP",
+  "description": "Runs one agent-written Lua script per call through Aseprite's headless CLI. Because the script is arbitrary code, the execute tool is reviewed. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.alpsei",
+    "displayName": "alpsei",
+    "url": "https://github.com/alpsei/aseprite-lua-mcp"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCommandLine", "background": "#0F172A" },
+  "homepage": "https://github.com/alpsei/aseprite-lua-mcp",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "aseprite-lua-mcp"
+  },
+  "riskClasses": ["external-script-execution", "external-local-file-write"],
+  "tools": [
+    { "name": "execute_aseprite_script", "state": "review" },
+    { "name": "other", "state": "inherit" }
+  ],
+  "referenceUrls": [
+    "https://github.com/alpsei/aseprite-lua-mcp",
+    "https://github.com/alpsei/aseprite-lua-mcp#readme",
+    "https://www.npmjs.com/package/aseprite-lua-mcp"
+  ],
+  "saferAlternatives": [
+    "Keep execute_aseprite_script on Review: the Lua it runs can write files and call out to the host, not only draw sprites.",
+    "Set DEFAULT_OUTPUT_DIR to a dedicated sprite folder so relative output files stay out of project directories."
+  ]
+}

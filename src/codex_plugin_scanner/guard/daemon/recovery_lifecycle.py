@@ -28,7 +28,10 @@ def guard_recovery_is_disabled(guard_home: Path) -> bool:
         # Invalid or unavailable config must not suppress a valid recovery.
         del error
         return False
-    return protection_is_off(posture=config.protection_posture, mode=config.mode)
+    # A harness overridden to Protected keeps enforcing under a global Watch, so
+    # its hooks still need a recoverable daemon.
+    enforcing_override = any(posture != "watch" for posture in (config.harness_postures or {}).values())
+    return protection_is_off(posture=config.protection_posture, mode=config.mode) and not enforcing_override
 
 
 def recover_guard_daemon_after_hook_failure(
@@ -95,7 +98,7 @@ def _existing_recovery_url(manager, guard_home: Path, deadline: float | None) ->
         _record_dead_process(manager, guard_home, state)
         current_url = manager.load_guard_daemon_url(guard_home)
         live_process_url = manager._authenticated_live_current_daemon_url(guard_home, state)
-        return current_url or live_process_url
+        return live_process_url or current_url
 
 
 def authenticated_live_current_daemon_url(guard_home: Path, state: dict[str, object] | None) -> str | None:
@@ -103,6 +106,9 @@ def authenticated_live_current_daemon_url(guard_home: Path, state: dict[str, obj
 
     manager = _manager()
     if not isinstance(state, dict) or not manager._guard_daemon_state_matches_current_runtime(state):
+        return None
+    state_id = state.get("state_id")
+    if not isinstance(state_id, str) or not state_id:
         return None
     pid = state.get("pid")
     port = state.get("port")

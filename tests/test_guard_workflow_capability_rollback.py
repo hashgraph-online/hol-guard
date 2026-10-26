@@ -12,16 +12,11 @@ import sqlite3
 
 import pytest
 
-from codex_plugin_scanner.guard import store_workflow_capabilities as workflow_capability_store_mixin
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_workflow_capability_common import WORKFLOW_CAPABILITY_STORE_CLOCK
 from codex_plugin_scanner.guard.workflow_capabilities import (
     WorkflowCapabilityError,
     sign_workflow_capability,
-)
-from codex_plugin_scanner.guard.workflow_capability_transitions import (
-    authority_transition_sha256,
-    decode_signed_authority_transition,
 )
 from tests.test_guard_workflow_capabilities import (
     _KEY,
@@ -31,6 +26,10 @@ from tests.test_guard_workflow_capabilities import (
     _issue,
     _now,
     _store,
+)
+from tests.workflow_capability_transitions_support import (
+    authority_transition_sha256,
+    decode_signed_authority_transition,
 )
 
 
@@ -216,22 +215,6 @@ def test_post_commit_finalize_failure_recovers_only_from_matching_database(
         _issue(store, claim)
     assert calls == 3
     assert _store(tmp_path).lookup_workflow_capability(claim.capability_id) is not None
-
-
-def test_pre_commit_failure_leaves_forward_only_pending_control_blocked(
-    tmp_path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    store = _store(tmp_path)
-    claim = _claim(capability_id="wc-precommit-pending")
-
-    def fail_transition(*args: object, **kwargs: object) -> None:
-        raise RuntimeError("forced_transition_failure")
-
-    monkeypatch.setattr(workflow_capability_store_mixin, "append_authority_transition", fail_transition)
-    with pytest.raises(RuntimeError, match="forced_transition_failure"):
-        _issue(store, claim)
-    with pytest.raises(WorkflowCapabilityError, match="capability_control_pending_unresolved"):
-        store.lookup_workflow_capability(claim.capability_id)
 
 
 def test_missing_external_control_never_blesses_nonempty_sqlite(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:

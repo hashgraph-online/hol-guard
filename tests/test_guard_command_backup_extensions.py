@@ -4,14 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-
-from codex_plugin_scanner.guard.runtime import command_option_parsing
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from codex_plugin_scanner.guard.runtime.command_option_parsing import (
-    flags_present_in_all_option_parses,
-    matches_subcommands_conservatively,
-)
 from tests.command_extension_contracts import assert_reviewed_command_cases, assert_safe_command_cases
 from tests.native_command_test_support import (
     extract_sensitive_tool_action_request_native_test as extract_sensitive_tool_action_request,
@@ -272,24 +265,6 @@ def test_backup_option_parsing_handles_deep_option_sequences(tmp_path: Path) -> 
     assert destructive_runtime is not None
     assert safe_payload["status"] == "no_match"
     assert safe_runtime is None
-
-
-def test_backup_option_parse_limit_fails_secure(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(command_option_parsing, "_MAX_OPTION_PARSE_STATES", 1)
-    arguments = ("--future=value", "purge", "remote:archive")
-
-    assert matches_subcommands_conservatively(
-        arguments,
-        ("purge",),
-        options_with_values=frozenset(),
-        known_flags=frozenset({"-n"}),
-    )
-    assert not flags_present_in_all_option_parses(
-        arguments,
-        frozenset({"-n"}),
-        options_with_values=frozenset(),
-        known_flags=frozenset({"-n"}),
-    )
 
 
 def test_backup_extensions_publish_official_references() -> None:

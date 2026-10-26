@@ -48,7 +48,7 @@ fn known_subset(values: &[String], owners: &[String]) -> bool {
     unique(values) && values.iter().all(|value| owners.contains(value))
 }
 
-fn validate(document: &SourceDocument, mcp: bool) -> Result<(), &'static str> {
+pub(super) fn validate(document: &SourceDocument, mcp: bool) -> Result<(), &'static str> {
     if document.schema != SOURCE_SCHEMA {
         return Err("command_source_version_unsupported");
     }
@@ -278,6 +278,18 @@ pub(super) fn validate_relationships(
     if documents.is_empty() || documents.len() > 512 {
         return Err("command_source_catalog_bounds_invalid");
     }
+    validate_pack_relationships(documents, mcp_ids)
+}
+
+// The legacy complete-program count is not a limit on the release directory.
+// Each pack still passes the existing bounded compiler and native admission.
+pub(super) fn validate_pack_relationships(
+    documents: &[SourceDocument],
+    mcp_ids: &BTreeSet<&str>,
+) -> Result<(), &'static str> {
+    if documents.is_empty() {
+        return Err("command_source_catalog_bounds_invalid");
+    }
     let mut extensions = BTreeMap::new();
     let mut permissions = BTreeMap::new();
     let mut capabilities = BTreeSet::new();
@@ -347,12 +359,18 @@ pub(super) fn validate_relationships(
                     return Err("command_source_permission_conflict_invalid");
                 }
             }
-            if permission
-                .replacement_permission_id
-                .as_deref()
-                .is_some_and(|id| !permissions.contains_key(id))
-            {
+            // A permission is deprecated exactly when it names a live
+            // replacement: never itself, and never another deprecated entry.
+            if permission.deprecated != permission.replacement_permission_id.is_some() {
                 return Err("command_source_permission_replacement_invalid");
+            }
+            if let Some(replacement) = permission.replacement_permission_id.as_deref() {
+                let live_target = permissions
+                    .get(replacement)
+                    .is_some_and(|target| !target.deprecated);
+                if replacement == permission.permission_id || !live_target {
+                    return Err("command_source_permission_replacement_invalid");
+                }
             }
             permission_edges.insert(
                 permission.permission_id.as_str(),
@@ -360,6 +378,7 @@ pub(super) fn validate_relationships(
                     .dependencies
                     .iter()
                     .chain(&permission.implied_permissions)
+                    .chain(permission.replacement_permission_id.iter())
                     .map(String::as_str)
                     .collect(),
             );

@@ -1,0 +1,118 @@
+{
+  "activeProtectionChanged": false,
+  "binaryIdentityVerified": false,
+  "coverageMeaning": "Enumerated metadata only; not a security certification or proof of runtime completeness.",
+  "discoveredOperations": 9,
+  "discoveryDigest": "45749e2424fb998141a62f51b76d35859f09a5d56463482172b7f4432bf748f9",
+  "limitations": [
+    "mcp-inventory-is-snapshot",
+    "mcp-schemas-fingerprinted-not-executed",
+    "mcp-tool-annotations-untrusted",
+    "metadata-is-not-semantics"
+  ],
+  "operations": [
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-cb3d2fdfccd8d57e",
+      "path": [],
+      "reviewed": false,
+      "state": "inherit",
+      "toolName": "append-file",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-74ac9b77dafea3dc",
+      "path": [],
+      "reviewed": false,
+      "state": "inherit",
+      "toolName": "create-directory",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-bcccebc0835cd2bf",
+      "path": [],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "delete-directory",
+      "untrustedHints": [
+        "destructive-hint",
+        "destructive-name"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-ed87721d7457b578",
+      "path": [],
+      "reviewed": false,
+      "state": "inherit",
+      "toolName": "delete-file",
+      "untrustedHints": [
+        "destructive-hint",
+        "destructive-name"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-fea7b13f3a27a56c",
+      "path": [],
+      "reviewed": false,
+      "state": "inherit",
+      "toolName": "download-file",
+      "untrustedHints": [
+        "read-only-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-0459ac60b70fd95b",
+      "path": [],
+      "reviewed": false,
+      "state": "inherit",
+      "toolName": "edit-file",
+      "untrustedHints": [
+        "destructive-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-77a03e7ba341a31f",
+      "path": [],
+      "reviewed": false,
+      "state": "inherit",
+      "toolName": "list-directory",
+      "untrustedHints": [
+        "read-name",
+        "read-only-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-946e44311658b527",
+      "path": [],
+      "reviewed": false,
+      "state": "inherit",
+      "toolName": "rename-file",
+      "untrustedHints": [
+        "destructive-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-c503ad6b4d293269",
+      "path": [],
+      "reviewed": false,
+      "state": "inherit",
+      "toolName": "upload-file",
+      "untrustedHints": [
+        "destructive-hint"
+      ]
+    }
+  ],
+  "reviewedOperations": 1,
+  "revisionDigest": "f9941d6854220b79194265d638ec267dc3c1d116ea8ce790123afb0ffad79546",
+  "schemaVersion": "guard.extension-coverage-report.v1",
+  "unknownOperationBehavior": "inherit",
+  "upstreamVersion": "1.2.3"
+}

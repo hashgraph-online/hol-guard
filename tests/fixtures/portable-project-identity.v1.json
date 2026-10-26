@@ -1,0 +1,2743 @@
+{
+ "schema": "guard.portable-project-identity.vectors.v1",
+ "cases": [
+  {
+   "id": "remote_https_github",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://github.com/Owner/Repository.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/Owner/Repository.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:91dad12e6e0fc38e6fe9b061644932b276b487ad8f01cf5eb9dbec701402d57b"
+  },
+  {
+   "id": "remote_https_github_explicit_default_port",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://github.com:443/owner/repository.GIT\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com:443/owner/repository.GIT\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:91dad12e6e0fc38e6fe9b061644932b276b487ad8f01cf5eb9dbec701402d57b"
+  },
+  {
+   "id": "remote_ssh_url_port_2201",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = ssh://git@example.invalid:2201/owner/repository.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from ssh://git@example.invalid:2201/owner/repository.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:a825206711f22493673e1e990bf08ada3b0edb2870957cc8a79d50d822f5924b"
+  },
+  {
+   "id": "remote_ssh_url_port_2202",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = ssh://git@example.invalid:2202/owner/repository.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from ssh://git@example.invalid:2202/owner/repository.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:0dc5fde2af750ddaa76c8c6a109597b61f1968eff2d93f8f0a6c7cd97fcd9965"
+  },
+  {
+   "id": "remote_ssh_url_default_port",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = ssh://git@example.invalid:22/owner/repository.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from ssh://git@example.invalid:22/owner/repository.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:e4303cf0e751e563645f3210200d61fe0cc3150e707e22e454db3b7d9fb7991b"
+  },
+  {
+   "id": "remote_scp_with_user",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = git@example.invalid:owner/repository.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from git@example.invalid:owner/repository.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:e4303cf0e751e563645f3210200d61fe0cc3150e707e22e454db3b7d9fb7991b"
+  },
+  {
+   "id": "remote_scp_without_user",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = example.invalid:owner/repository\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from example.invalid:owner/repository\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:e4303cf0e751e563645f3210200d61fe0cc3150e707e22e454db3b7d9fb7991b"
+  },
+  {
+   "id": "remote_scp_user_with_colon",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = a:b@Example.invalid:Owner/Repo.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from a:b@Example.invalid:Owner/Repo.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:c0f508b4a80097352cc5033d3940af6c9d8464574e6b14a22b2d65f9c735b12b"
+  },
+  {
+   "id": "remote_scp_slash_before_colon",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = example.invalid/owner:repository\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from example.invalid/owner:repository\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "remote_ghe_host_lowercases_path",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://Acme.GHE.com/Org/Repo.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://Acme.GHE.com/Org/Repo.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:7a8b6006a2b6977c5916418ad0ec86aa17630f51208721f7ed85647f7251888f"
+  },
+  {
+   "id": "remote_other_host_keeps_path_case",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://gitlab.example/Group/Sub/Project.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://gitlab.example/Group/Sub/Project.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:c3716cbe708ecd8b37d41f749b02c92018be5e98fe2910de10b419b65c9cbdf7"
+  },
+  {
+   "id": "remote_trailing_slash",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://example.invalid/owner/repo/\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://example.invalid/owner/repo/\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:cbc28156b554619f74cd2926a839a7925d4f3c74dd4eb1dba694b96269876ecb"
+  },
+  {
+   "id": "remote_http_nondefault_port",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = http://example.invalid:8080/o/r\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from http://example.invalid:8080/o/r\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:43020cdf0c8a2dd8f44ed707554d56f7fe2558d0256aeb902f2e2ee6c3b041a5"
+  },
+  {
+   "id": "remote_git_scheme_default_port",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = git://example.invalid:9418/o/r.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from git://example.invalid:9418/o/r.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:d0eb33b2073c861d4e9196de057e468f3d31876f39585a38855052caa12aa813"
+  },
+  {
+   "id": "remote_port_out_of_range",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://example.invalid:70000/o/r\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://example.invalid:70000/o/r\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "remote_port_with_letters",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://example.invalid:abc/o/r\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://example.invalid:abc/o/r\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "remote_port_leading_zero",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://example.invalid:0443/o/r\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://example.invalid:0443/o/r\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:d0eb33b2073c861d4e9196de057e468f3d31876f39585a38855052caa12aa813"
+  },
+  {
+   "id": "remote_file_scheme",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = file:///srv/repository.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from file:///srv/repository.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "remote_empty_path",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://example.invalid/\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://example.invalid/\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "remote_only_git_suffix",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://example.invalid/.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://example.invalid/.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "remote_userinfo_and_default_port",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://user:pw@example.invalid:443/o/r.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://user:pw@example.invalid:443/o/r.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:d0eb33b2073c861d4e9196de057e468f3d31876f39585a38855052caa12aa813"
+  },
+  {
+   "id": "remote_hostname_zone",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = ssh://git@Host%25Zone/o/r\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from ssh://git@Host%25Zone/o/r\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:fcfbecd1bb120f8cad1e7c099e67192ab53eb311686201dac2b6068db3c28aa7"
+  },
+  {
+   "id": "remote_uppercase_scheme",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = HTTPS://GitHub.com/O/R\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from HTTPS://GitHub.com/O/R\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:be95ae82797a2cb653562ad54614f76d3f0f5e1a951757d8c77234aba82462e1"
+  },
+  {
+   "id": "remote_query_and_fragment",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://example.invalid/o/r.git?x=1#y\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://example.invalid/o/r.git?x=1#y\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:d0eb33b2073c861d4e9196de057e468f3d31876f39585a38855052caa12aa813"
+  },
+  {
+   "id": "remote_fragment_before_query",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://example.invalid/o/r#y?x=1\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://example.invalid/o/r#y?x=1\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:d0eb33b2073c861d4e9196de057e468f3d31876f39585a38855052caa12aa813"
+  },
+  {
+   "id": "remote_empty_hostname",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://:443/o/r\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://:443/o/r\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "remote_inner_space",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://example.invalid/o/r ; comment\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://example.invalid/o/r ; comment\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:2a806478437eda77922a558e988f8198e1bc113d221edf14a53bca2d039aa5d7"
+  },
+  {
+   "id": "remote_ipv6_explicit_port",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = ssh://git@[::1]:9418/owner/repo.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from ssh://git@[::1]:9418/owner/repo.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:85aa178856a7cd47b59633ce96ede1acaf2bac0b89720d15660c1155393a021a"
+  },
+  {
+   "id": "remote_ipv6_address_suffix",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = ssh://git@[::1:9418]/owner/repo.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from ssh://git@[::1:9418]/owner/repo.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:5de671e5e79f09439d7a00d69e580e74c245e4dfd856cc17a071102e8fbdd5c1"
+  },
+  {
+   "id": "layout_gitdir_pointer_file",
+   "tree": [
+    {
+     "path": "pointer/.git",
+     "text": "gitdir: ../repo/.git\n"
+    },
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://github.com/example/trusted-repository.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/example/trusted-repository.git\n"
+    }
+   ],
+   "workspace": "pointer",
+   "identity": null
+  },
+  {
+   "id": "layout_git_directory_symlink",
+   "tree": [
+    {
+     "path": "external-git/config",
+     "text": "[remote \"origin\"]\n\turl = https://github.com/example/trusted-repository.git\n"
+    },
+    {
+     "path": "external-git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/example/trusted-repository.git\n"
+    },
+    {
+     "path": "workspace/.git",
+     "symlink": "external-git"
+    }
+   ],
+   "workspace": "workspace",
+   "identity": null
+  },
+  {
+   "id": "layout_config_symlink",
+   "tree": [
+    {
+     "path": "external-git/config",
+     "text": "[remote \"origin\"]\n\turl = https://github.com/example/trusted-repository.git\n"
+    },
+    {
+     "path": "external-git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/example/trusted-repository.git\n"
+    },
+    {
+     "path": "workspace/.git/config",
+     "symlink": "external-git/config"
+    },
+    {
+     "path": "workspace/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/example/trusted-repository.git\n"
+    }
+   ],
+   "workspace": "workspace",
+   "identity": null
+  },
+  {
+   "id": "layout_logs_symlink",
+   "tree": [
+    {
+     "path": "external-git/config",
+     "text": "[remote \"origin\"]\n\turl = https://github.com/example/trusted-repository.git\n"
+    },
+    {
+     "path": "external-git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/example/trusted-repository.git\n"
+    },
+    {
+     "path": "workspace/.git/config",
+     "text": "[remote \"origin\"]\n\turl = https://github.com/example/trusted-repository.git\n"
+    },
+    {
+     "path": "workspace/.git/logs",
+     "symlink": "external-git/logs"
+    }
+   ],
+   "workspace": "workspace",
+   "identity": null
+  },
+  {
+   "id": "layout_head_symlink",
+   "tree": [
+    {
+     "path": "external-git/config",
+     "text": "[remote \"origin\"]\n\turl = https://github.com/example/trusted-repository.git\n"
+    },
+    {
+     "path": "external-git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/example/trusted-repository.git\n"
+    },
+    {
+     "path": "workspace/.git/config",
+     "text": "[remote \"origin\"]\n\turl = https://github.com/example/trusted-repository.git\n"
+    },
+    {
+     "path": "workspace/.git/logs/HEAD",
+     "symlink": "external-git/logs/HEAD"
+    }
+   ],
+   "workspace": "workspace",
+   "identity": null
+  },
+  {
+   "id": "layout_logs_missing",
+   "tree": [
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://github.com/example/trusted-repository.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "layout_config_missing",
+   "tree": [
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/example/trusted-repository.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "layout_config_is_directory",
+   "tree": [
+    {
+     "path": "external-git/config",
+     "text": "[remote \"origin\"]\n\turl = https://github.com/example/trusted-repository.git\n"
+    },
+    {
+     "path": "external-git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/example/trusted-repository.git\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "dir": true
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "layout_monorepo_first",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://github.com/example/trusted-repository.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/example/trusted-repository.git\n"
+    },
+    {
+     "path": "repo/apps/first",
+     "dir": true
+    },
+    {
+     "path": "repo/apps/second",
+     "dir": true
+    }
+   ],
+   "workspace": "repo/apps/first",
+   "identity": "git-project:v1:a3b703f9880a99e1d79e4ffc212b60331a9989edb3f558b277afb5c8c7c4a7ae"
+  },
+  {
+   "id": "layout_monorepo_second",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://github.com/example/trusted-repository.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/example/trusted-repository.git\n"
+    },
+    {
+     "path": "repo/apps/first",
+     "dir": true
+    },
+    {
+     "path": "repo/apps/second",
+     "dir": true
+    }
+   ],
+   "workspace": "repo/apps/second",
+   "identity": "git-project:v1:c7520a87e9b74ca2946f9aa8500285c34af328281f16826c032e6cfb4c4018fc"
+  },
+  {
+   "id": "layout_git_two_levels_up",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://github.com/example/trusted-repository.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/example/trusted-repository.git\n"
+    },
+    {
+     "path": "repo/a/b",
+     "dir": true
+    }
+   ],
+   "workspace": "repo/a/b",
+   "identity": "git-project:v1:677ec13defd2056e0a5cb2f1759c7fab22d48ea83684d038598137897392d6d2"
+  },
+  {
+   "id": "layout_walk_stops_at_unconfigured_git",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://github.com/example/trusted-repository.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/example/trusted-repository.git\n"
+    },
+    {
+     "path": "repo/inner/.git",
+     "dir": true
+    }
+   ],
+   "workspace": "repo/inner",
+   "identity": null
+  },
+  {
+   "id": "layout_walk_stops_at_nearest_repository",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://github.com/example/trusted-repository.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/example/trusted-repository.git\n"
+    },
+    {
+     "path": "repo/inner/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/inner/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://github.com/example/inner-repository.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/inner/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/example/inner-repository.git\n"
+    },
+    {
+     "path": "repo/inner/src",
+     "dir": true
+    }
+   ],
+   "workspace": "repo/inner/src",
+   "identity": "git-project:v1:ae17f5dc56579f672865c526dd9e8695e82e75806aff6341afa4a11c3fdad587"
+  },
+  {
+   "id": "layout_workspace_is_file",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://github.com/example/trusted-repository.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/example/trusted-repository.git\n"
+    }
+   ],
+   "workspace": "repo/README.md",
+   "identity": "git-project:v1:2176c1ae3f9d7e8af815ec82572a32d6bd1ef9709a39f7e14a8ab8877fb90eac"
+  },
+  {
+   "id": "layout_non_git_workspace",
+   "tree": [
+    {
+     "path": "plain",
+     "dir": true
+    }
+   ],
+   "workspace": "plain",
+   "identity": null
+  },
+  {
+   "id": "layout_filesystem_root",
+   "tree": [],
+   "workspace": "/",
+   "identity": null
+  },
+  {
+   "id": "reflog_no_clone_provenance",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://github.com/example/repo.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tcommit (initial): initial\n1111111111111111111111111111111111111111 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tcheckout: moving from main to dev\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "reflog_previous_oid_not_zero",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://github.com/example/repo.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "1111111111111111111111111111111111111111 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/example/repo.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "reflog_clone_not_first_line",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://github.com/example/repo.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tcommit (initial): initial\n0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/example/repo.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:137d4990cddedf4d54aeb9326074f1f21e42b80cb706127fdbb802bf01274fe9"
+  },
+  {
+   "id": "reflog_clone_remote_differs",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://github.com/example/repo.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/example/other.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "reflog_clone_canonically_equal",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://github.com/example/repo.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from git@github.com:Example/Repo.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:137d4990cddedf4d54aeb9326074f1f21e42b80cb706127fdbb802bf01274fe9"
+  },
+  {
+   "id": "reflog_file_clone_then_real_clone",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://github.com/example/repo.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from file:///srv/repo.git\n0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/example/repo.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:137d4990cddedf4d54aeb9326074f1f21e42b80cb706127fdbb802bf01274fe9"
+  },
+  {
+   "id": "reflog_unicode_line_separator",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://github.com/example/repo.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "noise\u20280000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/example/repo.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:137d4990cddedf4d54aeb9326074f1f21e42b80cb706127fdbb802bf01274fe9"
+  },
+  {
+   "id": "reflog_form_feed_separator",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://github.com/example/repo.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "noise\f0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/example/repo.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:137d4990cddedf4d54aeb9326074f1f21e42b80cb706127fdbb802bf01274fe9"
+  },
+  {
+   "id": "reflog_unit_separator_in_fields",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://github.com/example/repo.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000\u001f1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/example/repo.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:137d4990cddedf4d54aeb9326074f1f21e42b80cb706127fdbb802bf01274fe9"
+  },
+  {
+   "id": "reflog_single_field",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://github.com/example/repo.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000\tclone: from https://github.com/example/repo.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "reflog_no_tab",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://github.com/example/repo.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 clone: from https://github.com/example/repo.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "reflog_crlf_lines",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://github.com/example/repo.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/example/repo.git\r\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:137d4990cddedf4d54aeb9326074f1f21e42b80cb706127fdbb802bf01274fe9"
+  },
+  {
+   "id": "reflog_clone_remote_padded",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://github.com/example/repo.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from   https://github.com/example/repo.git  \n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:137d4990cddedf4d54aeb9326074f1f21e42b80cb706127fdbb802bf01274fe9"
+  },
+  {
+   "id": "reflog_invalid_utf8",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://github.com/example/repo.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "base64": "//54Cg=="
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "reflog_oversized",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://github.com/example/repo.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/example/repo.git\n",
+     "pad": 4194304
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "config_valueless_keys",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://example.invalid/owner/repository.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n\n[guard-test]\n\tbare\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://example.invalid/owner/repository.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:e4303cf0e751e563645f3210200d61fe0cc3150e707e22e454db3b7d9fb7991b"
+  },
+  {
+   "id": "config_crlf",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\r\n\trepositoryformatversion = 0\r\n\tfilemode = true\r\n\tbare = false\r\n\tlogallrefupdates = true\r\n[remote \"origin\"]\r\n\turl = https://example.invalid/owner/repository.git\r\n\tfetch = +refs/heads/*:refs/remotes/origin/*\r\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://example.invalid/owner/repository.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:e4303cf0e751e563645f3210200d61fe0cc3150e707e22e454db3b7d9fb7991b"
+  },
+  {
+   "id": "config_bare_cr",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\r\trepositoryformatversion = 0\r\tfilemode = true\r\tbare = false\r\tlogallrefupdates = true\r[remote \"origin\"]\r\turl = https://example.invalid/owner/repository.git\r\tfetch = +refs/heads/*:refs/remotes/origin/*\r"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://example.invalid/owner/repository.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:e4303cf0e751e563645f3210200d61fe0cc3150e707e22e454db3b7d9fb7991b"
+  },
+  {
+   "id": "config_bom",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "\ufeff[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://example.invalid/owner/repository.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://example.invalid/owner/repository.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "config_missing_section_header",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "url = https://example.invalid/owner/repository.git\n[remote \"origin\"]\n\turl = https://example.invalid/owner/repository.git\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://example.invalid/owner/repository.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "config_leading_delimiter",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\t= x\n[remote \"origin\"]\n\turl = https://example.invalid/owner/repository.git\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://example.invalid/owner/repository.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "config_inline_semicolon_kept",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[remote \"origin\"]\n\turl = https://example.invalid/owner/repository.git ; note\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://example.invalid/owner/repository.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "config_uppercase_key",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[remote \"origin\"]\n\tURL = https://example.invalid/owner/repository.git\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://example.invalid/owner/repository.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:e4303cf0e751e563645f3210200d61fe0cc3150e707e22e454db3b7d9fb7991b"
+  },
+  {
+   "id": "config_colon_delimiter",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[remote \"origin\"]\n\turl: https://example.invalid/owner/repository.git\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://example.invalid/owner/repository.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:e4303cf0e751e563645f3210200d61fe0cc3150e707e22e454db3b7d9fb7991b"
+  },
+  {
+   "id": "config_capitalized_section",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[Remote \"origin\"]\n\turl = https://example.invalid/owner/repository.git\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://example.invalid/owner/repository.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "config_default_fallback",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[DEFAULT]\nurl = https://example.invalid/owner/repository.git\n[remote \"origin\"]\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://example.invalid/owner/repository.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:e4303cf0e751e563645f3210200d61fe0cc3150e707e22e454db3b7d9fb7991b"
+  },
+  {
+   "id": "config_default_without_origin",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[DEFAULT]\nurl = https://example.invalid/owner/repository.git\n[core]\n\tbare = false\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://example.invalid/owner/repository.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "config_origin_valueless_url",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[remote \"origin\"]\n\turl\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://example.invalid/owner/repository.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "config_origin_blank_url",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[remote \"origin\"]\n\turl =   \n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://example.invalid/owner/repository.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "config_continuation_into_url",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[remote \"origin\"]\nurl = https://example.invalid/owner/repository.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://example.invalid/owner/repository.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "config_continuation_scp_url",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[remote \"origin\"]\nurl = git@example.invalid:o/r\n\tmore\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://example.invalid/owner/repository.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "config_empty_line_in_value",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[remote \"origin\"]\nurl = https://example.invalid/owner/repository.git\n\n\tmore\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://example.invalid/owner/repository.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "config_section_trailing_text",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[remote \"origin\"] # trailing\n\turl = https://example.invalid/owner/repository.git\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://example.invalid/owner/repository.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:e4303cf0e751e563645f3210200d61fe0cc3150e707e22e454db3b7d9fb7991b"
+  },
+  {
+   "id": "config_duplicate_url",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[remote \"origin\"]\n\turl = https://example.invalid/a/b\n\turl = https://example.invalid/owner/repository.git\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://example.invalid/owner/repository.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:e4303cf0e751e563645f3210200d61fe0cc3150e707e22e454db3b7d9fb7991b"
+  },
+  {
+   "id": "config_duplicate_section",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[remote \"origin\"]\n\turl = https://example.invalid/owner/repository.git\n[core]\n\tbare = false\n[remote \"origin\"]\n\turl = https://example.invalid/owner/repository.git\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://example.invalid/owner/repository.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:e4303cf0e751e563645f3210200d61fe0cc3150e707e22e454db3b7d9fb7991b"
+  },
+  {
+   "id": "config_comment_lines",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "# lead\n[remote \"origin\"]\n; mid\n\t# indented\n\turl = https://example.invalid/owner/repository.git\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://example.invalid/owner/repository.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:e4303cf0e751e563645f3210200d61fe0cc3150e707e22e454db3b7d9fb7991b"
+  },
+  {
+   "id": "config_invalid_utf8",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "base64": "W2NvcmVdCsMoCg=="
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://example.invalid/owner/repository.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "config_oversized",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n\tlogallrefupdates = true\n[remote \"origin\"]\n\turl = https://example.invalid/owner/repository.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n",
+     "pad": 1048576
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://example.invalid/owner/repository.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "corpus_01",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion : 0\n\tbare : false\n\tvalueless\n[remote  \"origin\"]\n\n\tUrl : git@example.invalid:team/app.git\n\tfetch : +refs/heads/*:refs/remotes/origin/*\n\t# indented\n\t  +refs/tags/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from git@example.invalid:team/app.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "corpus_02",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\nrepositoryformatversion=0\nbare=false\n[remote \"Origin\"]\nfetch=+refs/heads/*:refs/remotes/origin/*\n  +refs/tags/*\n[branch \"main\"]\nremote=origin\nmerge=refs/heads/main\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/Owner/Repo.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "corpus_03",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n    repositoryformatversion : 0\n    bare : false\n[remote \"origin\"]\n    url : git@example.invalid:team/app.git\n    fetch : +refs/heads/*:refs/remotes/origin/*\n\n[remote \"upstream\"]\n    url : https://example.invalid/up/stream.git\n[branch \"main\"]\n    remote : origin\n    merge : refs/heads/main\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from git@example.invalid:team/app.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:4b472d4e48123a6495451d77671ef72230d614b3d96bea6b7ad5f4d5c102a1fd"
+  },
+  {
+   "id": "corpus_04",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "\n[core]\n repositoryformatversion:0\n bare:false\n valueless\n[remote \"upstream\"]\n url:https://example.invalid/up/stream.git\n[branch \"main\"]\n # indented\n remote:origin\n\t\n merge:refs/heads/main\n[remote \"origin\"]\n URL:git@example.invalid:team/app.git\n fetch:+refs/heads/*:refs/remotes/origin/*\n\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from git@example.invalid:team/app.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:4b472d4e48123a6495451d77671ef72230d614b3d96bea6b7ad5f4d5c102a1fd"
+  },
+  {
+   "id": "corpus_05",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\nrepositoryformatversion\t=\t0\nbare\t=\tfalse\nvalueless\n; note\n[remote \"upstream\"]\nurl\t=\thttps://example.invalid/up/stream.git\n  ;x = y\n[remote \"origin\"]\n# note\nurl\t=\thttp://example.invalid:8080/a/b/\n  ;x = y\nfetch\t=\t+refs/heads/*:refs/remotes/origin/*\n# note\n[branch \"main\"]\nremote\t=\torigin\n; note\nmerge\t=\trefs/heads/main\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from http://example.invalid:8080/a/b/\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:8e440c95da3ed35719ce67d485f6966decdb950b91657cd4c52c15ff085e2ef1"
+  },
+  {
+   "id": "corpus_06",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": " # indented\n[core]\n repositoryformatversion : 0\n bare : false\n valueless\n[DEFAULT]\nurl : git@example.invalid:team/app.git\n  ;x = y\n[remote \"origin\"]\n\n Url : http://example.invalid:8080/a/b/\n fetch : +refs/heads/*:refs/remotes/origin/*\n[remote \"upstream\"]\n\t\n url : https://example.invalid/up/stream.git\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from http://example.invalid:8080/a/b/\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:8e440c95da3ed35719ce67d485f6966decdb950b91657cd4c52c15ff085e2ef1"
+  },
+  {
+   "id": "corpus_07",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion = 0\n\tbare = false\n[remote \"upstream\"]\n\turl = https://example.invalid/up/stream.git\n; note\n[DEFAULT]\n\nurl = https://gitlab.example/Group/Sub/Project.git\n[branch \"main\"]\n\tremote = origin\n\tmerge = refs/heads/main\n[remote \"origin\"]\n; note\n\turl = ssh://git@example.invalid:2222/team/app\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n\t  +refs/tags/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://gitlab.example/Group/Sub/Project.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "corpus_08",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "; note\n[core]\n repositoryformatversion=0\n bare=false\n valueless\n[DEFAULT]\nurl=https://gitlab.example/Group/Sub/Project.git\n[remote \"upstream\"]\n url=https://example.invalid/up/stream.git\n[remote \"origin\"]\n url=git@example.invalid:team/app.git\n fetch=+refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from git@example.invalid:team/app.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:4b472d4e48123a6495451d77671ef72230d614b3d96bea6b7ad5f4d5c102a1fd"
+  },
+  {
+   "id": "corpus_09",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "; note\n[core]\nrepositoryformatversion=0\nbare=false\nvalueless\n; note\n[remote \"Origin\"]\nUrl=https://gitlab.example/Group/Sub/Project.git\nfetch=+refs/heads/*:refs/remotes/origin/*\n  +refs/tags/*\n[DEFAULT]"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://gitlab.example/Group/Sub/Project.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "corpus_10",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n repositoryformatversion\t=\t0\n bare\t=\tfalse\n valueless\n[DEFAULT]\n[remote \"upstream\"]\n\t\n url\t=\thttps://example.invalid/up/stream.git\n\n[remote \"origin\"]\n URL\t=\thttp://example.invalid:8080/a/b/\n fetch\t=\t+refs/heads/*:refs/remotes/origin/*\n; note\n   extra"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from http://example.invalid:8080/a/b/\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:8e440c95da3ed35719ce67d485f6966decdb950b91657cd4c52c15ff085e2ef1"
+  },
+  {
+   "id": "corpus_11",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n repositoryformatversion\t=\t0\n bare\t=\tfalse\n[remote \"upstream\"]\n url\t=\thttps://example.invalid/up/stream.git\n[remote \"origin\"]\n Url\t=\thttps://gitlab.example/Group/Sub/Project.git\n fetch\t=\t+refs/heads/*:refs/remotes/origin/*\n[branch \"main\"]\n# note\n remote\t=\torigin\n; note\n merge\t=\trefs/heads/main\n\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://gitlab.example/Group/Sub/Project.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:c3716cbe708ecd8b37d41f749b02c92018be5e98fe2910de10b419b65c9cbdf7"
+  },
+  {
+   "id": "corpus_12",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\nrepositoryformatversion=0\nbare=false\n\n[remote \"origin\"]\n; note\nUrl=https://gitlab.example/Group/Sub/Project.git\n# indented\nfetch=+refs/heads/*:refs/remotes/origin/*\n[branch \"main\"]\nremote=origin\n# note\nmerge=refs/heads/main\n\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://gitlab.example/Group/Sub/Project.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:c3716cbe708ecd8b37d41f749b02c92018be5e98fe2910de10b419b65c9cbdf7"
+  },
+  {
+   "id": "corpus_13",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n    repositoryformatversion=0\n    bare=false\n    # indented\n[remote  \"origin\"]\n    url=ssh://git@example.invalid:2222/team/app\n    \tgit@h:p\n    fetch=+refs/heads/*:refs/remotes/origin/*\n[DEFAULT]\n\nurl=http://example.invalid:8080/a/b/"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from ssh://git@example.invalid:2222/team/app\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "corpus_14",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n    repositoryformatversion : 0\n    bare : false\n\t\n[branch \"main\"]\n    remote : origin\n    # indented\n    merge : refs/heads/main\n# note\n[remote \"upstream\"]\n    # indented\n    url : https://example.invalid/up/stream.git\n    # indented\n[remote \"origin\"]\n   \n    Url : https://github.com/Owner/Repo.git\n    fetch : +refs/heads/*:refs/remotes/origin/*"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/Owner/Repo.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:3198d7faa1436f7af66cd1aad0ad513eb56a775eb361056841954191fa436f1c"
+  },
+  {
+   "id": "corpus_15",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion=0\n\tbare=false\n\n[remote \"origin\"]\n\turl=git@example.invalid:team/app.git\n\tfetch=+refs/heads/*:refs/remotes/origin/*\n\t\n[remote \"upstream\"]\n\turl=https://example.invalid/up/stream.git\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from git@example.invalid:team/app.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:4b472d4e48123a6495451d77671ef72230d614b3d96bea6b7ad5f4d5c102a1fd"
+  },
+  {
+   "id": "corpus_16",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "; note\n[core]\nrepositoryformatversion:0\nbare:false\nvalueless\n[remote \"origin\"]\n\nURL:ssh://git@example.invalid:2222/team/app\nfetch:+refs/heads/*:refs/remotes/origin/*\n  extra\n  ;x = y\n[remote \"upstream\"]\nurl:https://example.invalid/up/stream.git\n[branch \"main\"]\nremote:origin\nmerge:refs/heads/main"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from ssh://git@example.invalid:2222/team/app\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:0ab609ad7d238a4d0b2c715d93592abe342877b68e292c86bed3683709ca7e61"
+  },
+  {
+   "id": "corpus_17",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "# note\n[core]\nrepositoryformatversion : 0\nbare : false\nvalueless\n; note\n[remote  \"origin\"]\n; note\nURL : http://example.invalid:8080/a/b/\n\n\ttail\nfetch : +refs/heads/*:refs/remotes/origin/*\n  extra\n\n[remote \"upstream\"]\nurl : https://example.invalid/up/stream.git\n[branch \"main\"]\nremote : origin\nmerge : refs/heads/main\n\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from http://example.invalid:8080/a/b/\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "corpus_18",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "; note\n[core]\n repositoryformatversion : 0\n bare : false\n valueless\n[remote \"upstream\"]\n url : https://example.invalid/up/stream.git\n\t\n[DEFAULT]\nurl : ssh://git@example.invalid:2222/team/app\n[remote \"origin\"]\n url : git@example.invalid:team/app.git\n fetch : +refs/heads/*:refs/remotes/origin/*"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from git@example.invalid:team/app.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:4b472d4e48123a6495451d77671ef72230d614b3d96bea6b7ad5f4d5c102a1fd"
+  },
+  {
+   "id": "corpus_19",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion\t=\t0\n\tbare\t=\tfalse\n\tvalueless\n; note\n[remote \"origin\"]\n\tfetch\t=\t+refs/heads/*:refs/remotes/origin/*\n\t  +refs/tags/*\n  ;x = y\n[DEFAULT]\nurl\t=\tssh://git@example.invalid:2222/team/app\n\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/Owner/Repo.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "corpus_20",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "\t\n[core]\n\trepositoryformatversion : 0\n\tbare : false\n   \n[remote \"upstream\"]\n  ;x = y\n\turl : https://example.invalid/up/stream.git\n[remote \"origin\"]\n\n\tUrl : git@example.invalid:team/app.git\n# note\n\tfetch : +refs/heads/*:refs/remotes/origin/*\n\t# indented\n\t  extra\n\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from git@example.invalid:team/app.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:4b472d4e48123a6495451d77671ef72230d614b3d96bea6b7ad5f4d5c102a1fd"
+  },
+  {
+   "id": "corpus_21",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "; note\n[core]\n repositoryformatversion : 0\n bare : false\n[remote \"origin\"]\n fetch : +refs/heads/*:refs/remotes/origin/*\n[DEFAULT]\nurl : https://github.com/Owner/Repo.git\n[branch \"main\"]\n remote : origin\n merge : refs/heads/main"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from git@example.invalid:team/app.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "corpus_22",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n repositoryformatversion=0\n bare=false\n[remote \"Origin\"]\n URL=git@example.invalid:team/app.git\n fetch=+refs/heads/*:refs/remotes/origin/*\n# note\n   extra\n\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from git@example.invalid:team/app.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "corpus_23",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion\t=\t0\n\tbare\t=\tfalse\n[branch \"main\"]\n\tremote\t=\torigin\n\tmerge\t=\trefs/heads/main\n# note\n[remote \"upstream\"]\n\turl\t=\thttps://example.invalid/up/stream.git\n[remote \"origin\"]\n\turl\t=\tssh://git@example.invalid:2222/team/app\n\tfetch\t=\t+refs/heads/*:refs/remotes/origin/*\n\t  +refs/tags/*"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/Owner/Repo.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "corpus_24",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "; note\n[core]\n    repositoryformatversion=0\n    bare=false\n[branch \"main\"]\n    remote=origin\n    merge=refs/heads/main\n\n[remote \"origin\"]\n    url=https://gitlab.example/Group/Sub/Project.git\n\t\n    fetch=+refs/heads/*:refs/remotes/origin/*\n    # indented\n[DEFAULT]"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://gitlab.example/Group/Sub/Project.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:c3716cbe708ecd8b37d41f749b02c92018be5e98fe2910de10b419b65c9cbdf7"
+  },
+  {
+   "id": "corpus_25",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion=0\n\tbare=false\n[remote \"upstream\"]\n\turl=https://example.invalid/up/stream.git\n[branch \"main\"]\n\t# indented\n\tremote=origin\n\tmerge=refs/heads/main\n[remote \"origin\"]\n\turl=https://gitlab.example/Group/Sub/Project.git\n\tfetch=+refs/heads/*:refs/remotes/origin/*\n\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://gitlab.example/Group/Sub/Project.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:c3716cbe708ecd8b37d41f749b02c92018be5e98fe2910de10b419b65c9cbdf7"
+  },
+  {
+   "id": "corpus_26",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n repositoryformatversion\t=\t0\n bare\t=\tfalse\n\t\n[remote \"origin\"]\n Url\t=\tgit@example.invalid:team/app.git\n; note\n \tgit@h:p\n; note\n fetch\t=\t+refs/heads/*:refs/remotes/origin/*\n[remote \"upstream\"]\n url\t=\thttps://example.invalid/up/stream.git\n[branch \"main\"]\n remote\t=\torigin\n merge\t=\trefs/heads/main\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from git@example.invalid:team/app.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "corpus_27",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\nrepositoryformatversion=0\nbare=false\nvalueless\n[remote \"upstream\"]\nurl=https://example.invalid/up/stream.git\n  ;x = y\n[remote \"origin\"]\nURL=https://gitlab.example/Group/Sub/Project.git\n  ;x = y\nfetch=+refs/heads/*:refs/remotes/origin/*\n\t\n[DEFAULT]\nurl=https://github.com/Owner/Repo.git\n\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://gitlab.example/Group/Sub/Project.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:c3716cbe708ecd8b37d41f749b02c92018be5e98fe2910de10b419b65c9cbdf7"
+  },
+  {
+   "id": "corpus_28",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "    # indented\n[core]\n    repositoryformatversion=0\n    bare=false\n    valueless\n[DEFAULT]\nurl=https://github.com/Owner/Repo.git\n    # indented\n[remote \"origin\"]\n    url=https://github.com/Owner/Repo.git\n    fetch=+refs/heads/*:refs/remotes/origin/*"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/Owner/Repo.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:3198d7faa1436f7af66cd1aad0ad513eb56a775eb361056841954191fa436f1c"
+  },
+  {
+   "id": "corpus_29",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "\t\n[core]\nrepositoryformatversion = 0\nbare = false\n[remote \"origin\"]\nurl = http://example.invalid:8080/a/b/\n; note\nfetch = +refs/heads/*:refs/remotes/origin/*\n   \n  extra\n[branch \"main\"]\nremote = origin\nmerge = refs/heads/main\n\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from http://example.invalid:8080/a/b/\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:8e440c95da3ed35719ce67d485f6966decdb950b91657cd4c52c15ff085e2ef1"
+  },
+  {
+   "id": "corpus_30",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion\t=\t0\n\tbare\t=\tfalse\n[remote \"origin\"]\n\n\tfetch\t=\t+refs/heads/*:refs/remotes/origin/*\n\t  extra\n\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from http://example.invalid:8080/a/b/\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "corpus_31",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "\t\n[core]\n repositoryformatversion=0\n bare=false\n[DEFAULT]\n[branch \"main\"]\n remote=origin\n# note\n merge=refs/heads/main\n[remote \"origin\"]\n fetch=+refs/heads/*:refs/remotes/origin/*"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/Owner/Repo.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "corpus_32",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\nrepositoryformatversion=0\nbare=false\n; note\n[remote \"Origin\"]\nURL=https://github.com/Owner/Repo.git\nfetch=+refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from git@example.invalid:team/app.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "corpus_33",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n    repositoryformatversion : 0\n    bare : false\n[Remote \"origin\"]\n   \n    fetch : +refs/heads/*:refs/remotes/origin/*\n      extra\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from http://example.invalid:8080/a/b/\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "corpus_34",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion=0\n\tbare=false\n[remote \"origin\"]\n\turl=http://example.invalid:8080/a/b/\n# note\n\tfetch=+refs/heads/*:refs/remotes/origin/*\n[branch \"main\"]\n\tremote=origin\n\tmerge=refs/heads/main\n  ;x = y\n[remote \"upstream\"]\n\turl=https://example.invalid/up/stream.git\n\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from http://example.invalid:8080/a/b/\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:8e440c95da3ed35719ce67d485f6966decdb950b91657cd4c52c15ff085e2ef1"
+  },
+  {
+   "id": "corpus_35",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n    repositoryformatversion : 0\n    bare : false\n[remote \"origin\"]\n    URL : http://example.invalid:8080/a/b/\n# note\n    fetch : +refs/heads/*:refs/remotes/origin/*\n[branch \"main\"]\n  ;x = y\n    remote : origin\n    merge : refs/heads/main\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from http://example.invalid:8080/a/b/\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:8e440c95da3ed35719ce67d485f6966decdb950b91657cd4c52c15ff085e2ef1"
+  },
+  {
+   "id": "corpus_36",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion : 0\n\tbare : false\n[remote \"origin\"]\n   \n\turl : ssh://git@example.invalid:2222/team/app\n\tfetch : +refs/heads/*:refs/remotes/origin/*\n[remote \"upstream\"]\n  ;x = y\n\turl : https://example.invalid/up/stream.git\n\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from ssh://git@example.invalid:2222/team/app\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:0ab609ad7d238a4d0b2c715d93592abe342877b68e292c86bed3683709ca7e61"
+  },
+  {
+   "id": "corpus_37",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "# note\n[core]\n\trepositoryformatversion : 0\n\tbare : false\n[branch \"main\"]\n\tremote : origin\n\tmerge : refs/heads/main\n[remote  \"origin\"]\n\tUrl : http://example.invalid:8080/a/b/\n\tfetch : +refs/heads/*:refs/remotes/origin/*\n\t  extra\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from http://example.invalid:8080/a/b/\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "corpus_38",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "\t\n[core]\n\trepositoryformatversion = 0\n\tbare = false\n  ;x = y\n[remote \"origin\"]\n; note\n\turl = https://gitlab.example/Group/Sub/Project.git\n\t# indented\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n[branch \"main\"]\n\tremote = origin\n\tmerge = refs/heads/main\n\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://gitlab.example/Group/Sub/Project.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:c3716cbe708ecd8b37d41f749b02c92018be5e98fe2910de10b419b65c9cbdf7"
+  },
+  {
+   "id": "corpus_39",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "\n[core]\n\trepositoryformatversion=0\n\tbare=false\n\tvalueless\n[branch \"main\"]\n\tremote=origin\n\t\n\tmerge=refs/heads/main\n  ;x = y\n[DEFAULT]\n   \nurl=https://github.com/Owner/Repo.git\n[remote \"Origin\"]\n\tURL=git@example.invalid:team/app.git\n\tfetch=+refs/heads/*:refs/remotes/origin/*\n\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from git@example.invalid:team/app.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "corpus_40",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "; note\n[core]\n\trepositoryformatversion=0\n\tbare=false\n\tvalueless\n[remote \"Origin\"]\n\turl=https://gitlab.example/Group/Sub/Project.git\n\tfetch=+refs/heads/*:refs/remotes/origin/*\n\t# indented\n\t  extra\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://gitlab.example/Group/Sub/Project.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "corpus_41",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n    repositoryformatversion:0\n    bare:false\n[remote \"Origin\"]\n; note\n    URL:https://gitlab.example/Group/Sub/Project.git\n    fetch:+refs/heads/*:refs/remotes/origin/*"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://gitlab.example/Group/Sub/Project.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "corpus_42",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "\t\n[core]\nrepositoryformatversion=0\nbare=false\nvalueless\n\n[branch \"main\"]\nremote=origin\n  ;x = y\nmerge=refs/heads/main\n\n[remote \"upstream\"]\n   \nurl=https://example.invalid/up/stream.git\n  ;x = y\n[remote \"Origin\"]\n# indented\nurl=https://github.com/Owner/Repo.git\nfetch=+refs/heads/*:refs/remotes/origin/*\n  +refs/tags/*\n\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/Owner/Repo.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "corpus_43",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n    repositoryformatversion:0\n    bare:false\n[remote \"Origin\"]\n    Url:https://github.com/Owner/Repo.git\n    fetch:+refs/heads/*:refs/remotes/origin/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/Owner/Repo.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "corpus_44",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion=0\n\tbare=false\n\n[remote \"origin\"]\n   \n\turl=https://gitlab.example/Group/Sub/Project.git\n\tfetch=+refs/heads/*:refs/remotes/origin/*\n# note\n\t  extra\n\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://gitlab.example/Group/Sub/Project.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:c3716cbe708ecd8b37d41f749b02c92018be5e98fe2910de10b419b65c9cbdf7"
+  },
+  {
+   "id": "corpus_45",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "# indented\n[core]\nrepositoryformatversion = 0\nbare = false\n[remote \"origin\"]\nurl = ssh://git@example.invalid:2222/team/app\n\t\n\ttail\nfetch = +refs/heads/*:refs/remotes/origin/*\n\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from ssh://git@example.invalid:2222/team/app\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "corpus_46",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "    # indented\n[core]\n    repositoryformatversion\t=\t0\n    bare\t=\tfalse\n    valueless\n[branch \"main\"]\n    remote\t=\torigin\n    merge\t=\trefs/heads/main\n  ;x = y\n[Remote \"origin\"]\n    fetch\t=\t+refs/heads/*:refs/remotes/origin/*\n      +refs/tags/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/Owner/Repo.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "corpus_47",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n repositoryformatversion\t=\t0\n bare\t=\tfalse\n[DEFAULT]\n[Remote \"origin\"]\n\t\n url\t=\tssh://git@example.invalid:2222/team/app\n fetch\t=\t+refs/heads/*:refs/remotes/origin/*"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from ssh://git@example.invalid:2222/team/app\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "corpus_48",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\nrepositoryformatversion\t=\t0\nbare\t=\tfalse\nvalueless\n  ;x = y\n[remote \"upstream\"]\n  ;x = y\nurl\t=\thttps://example.invalid/up/stream.git\n[remote  \"origin\"]\nurl\t=\thttp://example.invalid:8080/a/b/\n# indented\nfetch\t=\t+refs/heads/*:refs/remotes/origin/*\n[branch \"main\"]\nremote\t=\torigin\n; note\nmerge\t=\trefs/heads/main"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from http://example.invalid:8080/a/b/\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "corpus_49",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion : 0\n\tbare : false\n[Remote \"origin\"]\n\turl : https://github.com/Owner/Repo.git\n\tfetch : +refs/heads/*:refs/remotes/origin/*\n\n\t  extra\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/Owner/Repo.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "corpus_50",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "\n[core]\n    repositoryformatversion:0\n    bare:false\n    # indented\n[remote \"origin\"]\n    URL:https://gitlab.example/Group/Sub/Project.git\n    fetch:+refs/heads/*:refs/remotes/origin/*\n[branch \"main\"]\n# note\n    remote:origin\n    merge:refs/heads/main"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from ssh://git@example.invalid:2222/team/app\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "corpus_51",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n    repositoryformatversion=0\n    bare=false\n[remote \"origin\"]\n    URL=git@example.invalid:team/app.git\n    fetch=+refs/heads/*:refs/remotes/origin/*"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from git@example.invalid:team/app.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:4b472d4e48123a6495451d77671ef72230d614b3d96bea6b7ad5f4d5c102a1fd"
+  },
+  {
+   "id": "corpus_52",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n repositoryformatversion : 0\n bare : false\n[remote \"upstream\"]\n url : https://example.invalid/up/stream.git\n[DEFAULT]\n# note\nurl : https://gitlab.example/Group/Sub/Project.git\n[branch \"main\"]\n remote : origin\n merge : refs/heads/main\n[remote \"origin\"]\n Url : ssh://git@example.invalid:2222/team/app\n fetch : +refs/heads/*:refs/remotes/origin/*\n\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from ssh://git@example.invalid:2222/team/app\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:0ab609ad7d238a4d0b2c715d93592abe342877b68e292c86bed3683709ca7e61"
+  },
+  {
+   "id": "corpus_53",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": " # indented\n[core]\n repositoryformatversion\t=\t0\n bare\t=\tfalse\n\n[DEFAULT]\n\n[remote \"Origin\"]\n Url\t=\thttp://example.invalid:8080/a/b/\n fetch\t=\t+refs/heads/*:refs/remotes/origin/*\n[remote \"upstream\"]\n url\t=\thttps://example.invalid/up/stream.git"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from git@example.invalid:team/app.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "corpus_54",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "  ;x = y\n[core]\nrepositoryformatversion:0\nbare:false\n[branch \"main\"]\nremote:origin\nmerge:refs/heads/main\n[remote \"origin\"]\n\nUrl:git@example.invalid:team/app.git\n# indented\nfetch:+refs/heads/*:refs/remotes/origin/*"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from git@example.invalid:team/app.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:4b472d4e48123a6495451d77671ef72230d614b3d96bea6b7ad5f4d5c102a1fd"
+  },
+  {
+   "id": "corpus_55",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n    repositoryformatversion : 0\n    bare : false\n[remote \"Origin\"]\n    url : https://github.com/Owner/Repo.git\n    fetch : +refs/heads/*:refs/remotes/origin/*\n\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from git@example.invalid:team/app.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": null
+  },
+  {
+   "id": "corpus_56",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\nrepositoryformatversion\t=\t0\nbare\t=\tfalse\n; note\n[DEFAULT]\n[remote \"origin\"]\n\nurl\t=\thttp://example.invalid:8080/a/b/\nfetch\t=\t+refs/heads/*:refs/remotes/origin/*\n  extra\n[branch \"main\"]\nremote\t=\torigin\n# note\nmerge\t=\trefs/heads/main\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from http://example.invalid:8080/a/b/\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:8e440c95da3ed35719ce67d485f6966decdb950b91657cd4c52c15ff085e2ef1"
+  },
+  {
+   "id": "corpus_57",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n\trepositoryformatversion=0\n\tbare=false\n[remote \"origin\"]\n\tUrl=https://github.com/Owner/Repo.git\n\tfetch=+refs/heads/*:refs/remotes/origin/*\n[remote \"upstream\"]\n\turl=https://example.invalid/up/stream.git\n\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from https://github.com/Owner/Repo.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:3198d7faa1436f7af66cd1aad0ad513eb56a775eb361056841954191fa436f1c"
+  },
+  {
+   "id": "corpus_58",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "  ;x = y\n[core]\n    repositoryformatversion = 0\n    bare = false\n    valueless\n\n[remote \"origin\"]\n    URL = http://example.invalid:8080/a/b/\n    fetch = +refs/heads/*:refs/remotes/origin/*\n      extra\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from http://example.invalid:8080/a/b/\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:8e440c95da3ed35719ce67d485f6966decdb950b91657cd4c52c15ff085e2ef1"
+  },
+  {
+   "id": "corpus_59",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n repositoryformatversion = 0\n bare = false\n valueless\n# note\n[branch \"main\"]\n# note\n remote = origin\n merge = refs/heads/main\n\n[remote \"upstream\"]\n# note\n url = https://example.invalid/up/stream.git\n[remote \"origin\"]\n url = git@example.invalid:team/app.git\n\n fetch = +refs/heads/*:refs/remotes/origin/*\n\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from git@example.invalid:team/app.git\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:4b472d4e48123a6495451d77671ef72230d614b3d96bea6b7ad5f4d5c102a1fd"
+  },
+  {
+   "id": "corpus_60",
+   "tree": [
+    {
+     "path": "repo/README.md",
+     "text": "guard\n"
+    },
+    {
+     "path": "repo/.git/config",
+     "text": "[core]\n    repositoryformatversion : 0\n    bare : false\n    valueless\n[DEFAULT]\n; note\nurl : git@example.invalid:team/app.git\n[remote \"origin\"]\n    URL : ssh://git@example.invalid:2222/team/app\n    fetch : +refs/heads/*:refs/remotes/origin/*\n      +refs/tags/*\n"
+    },
+    {
+     "path": "repo/.git/logs/HEAD",
+     "text": "0000000000000000000000000000000000000000 1111111111111111111111111111111111111111 Guard Test <guard@example.invalid> 1700000000 +0000\tclone: from ssh://git@example.invalid:2222/team/app\n"
+    }
+   ],
+   "workspace": "repo",
+   "identity": "git-project:v1:0ab609ad7d238a4d0b2c715d93592abe342877b68e292c86bed3683709ca7e61"
+  }
+ ]
+}

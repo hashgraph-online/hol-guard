@@ -163,7 +163,10 @@ def test_cloud_audit_executes_relative_dot_in_active_workspace(tmp_path: Path, m
             return_value=({"workspace": str(context.workspace_dir)}, 0),
         ) as audit,
         patch("codex_plugin_scanner.guard.runtime.command_executors.load_guard_config", return_value=object()),
-        patch("codex_plugin_scanner.guard.runtime.command_executors.record_package_shim_audit_result"),
+        patch(
+            "codex_plugin_scanner.guard.runtime.command_executors.record_package_shim_audit_result",
+            return_value={"audit_proof_recorded": False, "audit_proof_error": "native_shim_admin_unavailable"},
+        ),
     ):
         result = execute_guard_command_job(
             _make_job("guard.packageShims.audit", {"workspace_dir": "."}),
@@ -173,6 +176,8 @@ def test_cloud_audit_executes_relative_dot_in_active_workspace(tmp_path: Path, m
         )
 
     assert result["data"]["workspace"] == str(context.workspace_dir)
+    assert result["data"]["audit_proof_recorded"] is False
+    assert result["data"]["audit_proof_error"] == "native_shim_admin_unavailable"
     assert audit.call_args.kwargs["workspace_dir"] == context.workspace_dir.resolve()
 
 

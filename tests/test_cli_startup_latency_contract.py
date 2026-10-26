@@ -224,6 +224,50 @@ def test_hol_guard_daemon_serve_skips_command_surface(
     assert _COMMANDS_SUPPORT not in sys.modules
 
 
+_HELP_PATH_FORBIDDEN_MODULES = (
+    _COMMANDS_HUB,
+    _COMMANDS_SUPPORT,
+    "codex_plugin_scanner.guard.cli._commands_shared",
+    "codex_plugin_scanner.guard.store",
+    "codex_plugin_scanner.guard.native_context",
+    "codex_plugin_scanner.guard.daemon",
+    "codex_plugin_scanner.guard.proxy",
+    "codex_plugin_scanner.guard.runtime.command_extensions",
+)
+_HELP_PATH_PROBE = """
+import contextlib, io, json, sys
+sys.argv = ["hol-guard", *sys.argv[1:]]
+from codex_plugin_scanner.cli import main
+with contextlib.redirect_stdout(io.StringIO()) as out:
+    try:
+        code = main()
+    except SystemExit as exc:
+        code = exc.code
+print(json.dumps({"code": code, "usage": out.getvalue().startswith("usage:"), "modules": sorted(sys.modules)}))
+"""
+
+
+@pytest.mark.parametrize("argv", [["--help"], ["status", "--help"]], ids=["root", "subcommand"])
+def test_hol_guard_help_skips_command_surface(argv: list[str]) -> None:
+    import json
+    import subprocess
+
+    completed = subprocess.run(
+        [sys.executable, "-I", "-c", _HELP_PATH_PROBE, *argv],
+        capture_output=True,
+        check=False,
+        text=True,
+        timeout=60,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout.strip().splitlines()[-1])
+    assert result["code"] == 0
+    assert result["usage"] is True
+    loaded = set(result["modules"])
+    assert [name for name in _HELP_PATH_FORBIDDEN_MODULES if name in loaded] == []
+
+
 def test_resolve_targets_accepts_multiple_harnesses(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
 

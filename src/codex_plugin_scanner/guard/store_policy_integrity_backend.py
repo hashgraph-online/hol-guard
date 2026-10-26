@@ -1,7 +1,8 @@
 """Platform policy-integrity secret-store selection.
 
 Keep local policy integrity usable on desktop Linux when the Python keyring
-backend changes between daemon and terminal sessions. Keep the signing key and
+backend changes between daemon and terminal sessions, and on Windows when a
+logon session cannot open Credential Manager. Keep the signing key and
 its control metadata together; never overwrite a verified local identity with
 an unrelated keyring copy.
 """
@@ -211,6 +212,17 @@ def build_policy_integrity_secret_store(
             guard_home,
             allow_system_keyring=allow_system_keyring,
         )
+
+    if sys.platform == "win32":
+        from .store_policy_integrity_windows import WindowsPolicyIntegritySecretStore
+
+        vault = EncryptedFileSecretStore(guard_home)
+        if SystemKeyringSecretStore._backend_is_available():
+            return WindowsPolicyIntegritySecretStore(
+                SystemKeyringSecretStore(service_name=_POLICY_INTEGRITY_SERVICE_NAME),
+                vault,
+            )
+        return vault
 
     if sys.platform != "linux":
         return _base_policy_integrity_secret_store(

@@ -1,0 +1,193 @@
+#!{{interpreter}}
+from __future__ import annotations
+import os
+import shutil
+import subprocess
+import sys
+import time
+from pathlib import Path
+HOL_GUARD_PACKAGE_SHIM_SENTINEL = True
+base_command = {{base_command}}
+command_name = 'bun'
+guard_cli_cwd = {{import_root}}
+guard_workspace = None
+guard_home = {{guard_home}}
+guard_has_explicit_workspace = False
+shim_dir = {{shim_dir}}
+local_test_runners = ('jest', 'mocha', 'vitest')
+shim_probe = os.environ.get('HOL_GUARD_SHIM_PROBE') == '1'
+store_lock_retry_timeout_seconds = 30.0
+store_lock_retry_delay_seconds = 0.1
+def _real_manager_launch():
+    path_entries = [entry for entry in os.environ.get('PATH', '').split(os.pathsep) if entry]
+    shim_dir_abs = os.path.abspath(shim_dir)
+    filtered_entries = [entry for entry in path_entries if os.path.abspath(entry) != shim_dir_abs]
+    filtered_path = os.pathsep.join(filtered_entries)
+    resolved_command = shutil.which(command_name, path=filtered_path)
+    if resolved_command is None:
+        sys.stderr.write(f'Unable to locate real {command_name} binary on PATH\n')
+        raise SystemExit(127)
+    manager_env = dict(os.environ)
+    manager_env['PATH'] = filtered_path
+    manager_args = list(sys.argv[1:])
+    local_only_flag = {'bunx': '--no-install', 'npx': '--no'}.get(command_name)
+    leading_test_runner_flags = (
+        {'--bun', '--no-install'} if command_name == 'bunx' else {'--no', '--no-install'}
+    )
+    runner_index = 0
+    while runner_index < len(manager_args) and manager_args[runner_index] in leading_test_runner_flags:
+        runner_index += 1
+    if (
+        local_only_flag is not None
+        and runner_index < len(manager_args)
+        and manager_args[runner_index] in local_test_runners
+        and local_only_flag not in manager_args[:runner_index]
+    ):
+        manager_args.insert(runner_index, local_only_flag)
+    return resolved_command, manager_args, manager_env
+def _exec_real_manager():
+    resolved_command, manager_args, manager_env = _real_manager_launch()
+    if os.name == 'nt':
+        try:
+            raise SystemExit(subprocess.call([resolved_command, *manager_args], env=manager_env))
+        except KeyboardInterrupt:
+            raise SystemExit(130)
+    os.execvpe(resolved_command, [resolved_command, *manager_args], manager_env)
+def _command_guard_requirements():
+    if shim_probe:
+        return True, False
+    cwd = os.path.realpath(os.getcwd())
+    normalize = lambda entry: cwd if entry in ('', '.', os.curdir) else os.path.realpath(entry)
+    blocked_entries = {cwd, guard_cli_cwd}
+    sys.path = [guard_cli_cwd, *[entry for entry in sys.path if normalize(entry) not in blocked_entries]]
+    from codex_plugin_scanner.guard.package_shim_gate import (
+        package_shim_command_requires_external_archive_binding,
+        package_shim_command_requires_guard,
+    )
+    workspace = Path(guard_workspace) if guard_workspace is not None else Path.cwd()
+    arguments = tuple(sys.argv[1:])
+    selected_guard_home = Path(guard_home)
+    return (
+        package_shim_command_requires_guard(
+            command_name, arguments, workspace=workspace, guard_home=selected_guard_home
+        ),
+        package_shim_command_requires_external_archive_binding(
+            command_name, arguments, workspace=workspace, guard_home=selected_guard_home
+        ),
+    )
+try:
+    guard_required, external_archive_binding_required = _command_guard_requirements()
+except Exception:
+    guard_required = True
+    external_archive_binding_required = True
+if not guard_required:
+    _exec_real_manager()
+try:
+    from codex_plugin_scanner.guard.contained_package_script_execution import (
+        try_execute_contained_package_script,
+    )
+    contained_result = try_execute_contained_package_script(
+        command_name,
+        tuple(sys.argv[1:]),
+        workspace=Path(guard_workspace) if guard_workspace is not None else Path.cwd(),
+        guard_home=Path(guard_home),
+        shim_directory=Path(shim_dir),
+        environment=dict(os.environ),
+    )
+except Exception:
+    contained_result = None
+if contained_result is None:
+    try:
+        from codex_plugin_scanner.guard.contained_typescript_execution import (
+            try_execute_contained_typescript,
+        )
+        contained_result = try_execute_contained_typescript(
+            command_name,
+            tuple(sys.argv[1:]),
+            workspace=Path(guard_workspace) if guard_workspace is not None else Path.cwd(),
+            guard_home=Path(guard_home),
+            shim_directory=Path(shim_dir),
+            environment=dict(os.environ),
+        )
+    except Exception:
+        contained_result = None
+if contained_result is None:
+    try:
+        from codex_plugin_scanner.guard.contained_node_execution import (
+            try_execute_contained_node_command,
+        )
+        contained_result = try_execute_contained_node_command(
+            command_name,
+            tuple(sys.argv[1:]),
+            workspace=Path(guard_workspace) if guard_workspace is not None else Path.cwd(),
+            guard_home=Path(guard_home),
+            shim_directory=Path(shim_dir),
+            environment=dict(os.environ),
+        )
+    except Exception:
+        contained_result = None
+if contained_result is not None:
+    if contained_result.stdout:
+        sys.stdout.write(contained_result.stdout)
+    if contained_result.stderr:
+        sys.stderr.write(contained_result.stderr)
+    raise SystemExit(contained_result.exit_code)
+guard_env = dict(os.environ)
+guard_args = list(sys.argv[1:])
+guard_env.pop('PYTHONPATH', None)
+guard_env.pop('HOL_GUARD_PACKAGE_SHIM_STATUS_FD', None)
+guard_command = [*base_command, '--dry-run', command_name]
+if external_archive_binding_required:
+    resolved_command, guard_args, guard_env = _real_manager_launch()
+    guard_env.pop('PYTHONPATH', None)
+    guard_command = [*base_command, resolved_command]
+if shim_probe:
+    guard_command = [*base_command, '--json', '--dry-run', command_name]
+guard_kwargs = {'capture_output': True, 'text': True, 'env': guard_env}
+if guard_has_explicit_workspace:
+    guard_kwargs['cwd'] = guard_cli_cwd
+# POSIX package shims pass this descriptor for immediate status; Windows keeps capture fallback.
+package_shim_status_fd = None
+if os.name != 'nt':
+    try:
+        package_shim_status_fd = os.dup(sys.stderr.fileno())
+    except (AttributeError, OSError, ValueError):
+        package_shim_status_fd = None
+if package_shim_status_fd is not None:
+    guard_env['HOL_GUARD_PACKAGE_SHIM_STATUS_FD'] = str(package_shim_status_fd)
+    guard_kwargs['pass_fds'] = (package_shim_status_fd,)
+def _run_guard_with_store_lock_retry(command, kwargs):
+    deadline = time.monotonic() + store_lock_retry_timeout_seconds
+    while True:
+        result = subprocess.run(command, **kwargs)
+        stderr = result.stderr or ''
+        if result.returncode == 0 or 'database is locked' not in stderr.lower():
+            return result
+        remaining_seconds = deadline - time.monotonic()
+        if remaining_seconds <= 0:
+            return result
+        time.sleep(min(store_lock_retry_delay_seconds, remaining_seconds))
+try:
+    try:
+        guard_process = _run_guard_with_store_lock_retry(
+            [*guard_command, *guard_args], guard_kwargs
+        )
+    finally:
+        if package_shim_status_fd is not None:
+            try:
+                os.close(package_shim_status_fd)
+            except OSError:
+                pass
+except KeyboardInterrupt:
+    raise SystemExit(130)
+if guard_process.stdout:
+    sys.stdout.write(guard_process.stdout)
+if guard_process.stderr:
+    sys.stderr.write(guard_process.stderr)
+if shim_probe:
+    raise SystemExit(0)
+if external_archive_binding_required:
+    raise SystemExit(guard_process.returncode)
+if guard_process.returncode != 0:
+    raise SystemExit(guard_process.returncode)
+_exec_real_manager()

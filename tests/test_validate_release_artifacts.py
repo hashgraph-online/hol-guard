@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from scripts.ci.validate_release_artifacts import (
+    BUNDLE_ROOT_PATH,
     EXPECTED_PLATFORMS,
     ReleaseArtifactError,
     validate_identity,
@@ -22,7 +23,9 @@ RULE_DIGEST = "b" * 64
 NON_WINDOWS = tuple(sorted(set(EXPECTED_PLATFORMS) - {"win_amd64"}))
 
 
-def _write_wheel(root: Path, platform: str, *, runtime: bytes = b"runtime") -> Path:
+def _write_wheel(
+    root: Path, platform: str, *, runtime: bytes = b"runtime", bundle_root: bytes | None = None, descriptor=None
+) -> Path:
     wheel = root / f"hol_guard-{VERSION}-py3-none-{platform}.whl"
     runtime_name = (
         "codex_plugin_scanner/_native/hol-guard-runtime.exe"
@@ -40,6 +43,8 @@ def _write_wheel(root: Path, platform: str, *, runtime: bytes = b"runtime") -> P
         "runtime_sha256": hashlib.sha256(runtime).hexdigest(),
         "runtime_size": len(runtime),
     }
+    if descriptor is not None:
+        manifest["command_pack_bundle"] = descriptor
     with zipfile.ZipFile(wheel, "w") as archive:
         dist_info = f"hol_guard-{VERSION}.dist-info"
         archive.writestr(
@@ -52,6 +57,8 @@ def _write_wheel(root: Path, platform: str, *, runtime: bytes = b"runtime") -> P
         )
         archive.writestr("codex_plugin_scanner/_native/runtime-manifest.json", json.dumps(manifest))
         archive.writestr(runtime_name, runtime)
+        if bundle_root is not None:
+            archive.writestr(BUNDLE_ROOT_PATH, bundle_root)
     return wheel
 
 
@@ -219,3 +226,49 @@ def test_validate_provenance_accepts_multiline_json_array(tmp_path: Path) -> Non
     )
 
     assert validate_provenance(provenance)["records"] == 2
+
+
+def _bundle_descriptor(bundle_root: bytes) -> dict[str, object]:
+    return {
+        "schema": "guard.command-pack-bundle.v1",
+        "path": BUNDLE_ROOT_PATH,
+        "sha256": hashlib.sha256(bundle_root).hexdigest(),
+        "length": len(bundle_root),
+        "source_sha": SOURCE_SHA,
+        "engine": "c" * 64,
+    }
+
+
+def test_validate_wheel_set_accepts_a_bound_command_pack_bundle(tmp_path: Path) -> None:
+    dist = _dist(tmp_path / "dist", ())
+    bundle_root = b'{"schema":"guard.command-pack-bundle.v1"}'
+    _write_wheel(dist, "win_amd64", bundle_root=bundle_root, descriptor=_bundle_descriptor(bundle_root))
+
+    evidence = validate_wheel_set(
+        dist, version=VERSION, source_sha=SOURCE_SHA, rule_digest=RULE_DIGEST, platforms=("win_amd64",)
+    )
+
+    assert evidence["platforms"] == ["win_amd64"]
+
+
+@pytest.mark.parametrize(
+    ("embedded", "descriptor"),
+    [
+        (b"other root", _bundle_descriptor(b"root")),
+        (None, _bundle_descriptor(b"root")),
+        (b"root", None),
+        (b"root", {**_bundle_descriptor(b"root"), "source_sha": "d" * 40}),
+        (b"root", {**_bundle_descriptor(b"root"), "extra": 1}),
+        (b"root", {**_bundle_descriptor(b"root"), "schema": "guard.command-pack-bundle.v2"}),
+    ],
+)
+def test_validate_wheel_set_rejects_an_unbound_command_pack_bundle(
+    tmp_path: Path, embedded: bytes | None, descriptor: dict[str, object] | None
+) -> None:
+    dist = _dist(tmp_path / "dist", ())
+    _write_wheel(dist, "win_amd64", bundle_root=embedded, descriptor=descriptor)
+
+    with pytest.raises(ReleaseArtifactError, match="command pack bundle"):
+        validate_wheel_set(
+            dist, version=VERSION, source_sha=SOURCE_SHA, rule_digest=RULE_DIGEST, platforms=("win_amd64",)
+        )

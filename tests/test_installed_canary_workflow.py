@@ -9,6 +9,8 @@ from typing import cast
 
 import yaml
 
+from tests.release_workflow_helpers import native_wheel_job
+
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW_PATH = ROOT / ".github/workflows/publish.yml"
 MANIFEST_PATH = ROOT / "release-metadata/release-22-installed-evidence.json"
@@ -86,14 +88,15 @@ def test_same_repo_post_publish_matrix_covers_all_supported_operating_systems() 
 
 
 def test_pr_native_wheel_checkout_cannot_write_release_compilation_cache() -> None:
-    steps = _steps(_job("build-native-guard-wheels"))
+    steps = _steps(native_wheel_job())
     checkout = _action_step(steps, "actions/checkout")
     setup_python = _action_step(steps, "actions/setup-python")
 
     checkout_ref = _text(_mapping(checkout["with"])["ref"])
     assert "github.event.pull_request.head.sha" in checkout_ref
-    assert "needs.build.outputs.source_sha" in checkout_ref
-    assert not any(str(step.get("uses", "")).startswith("astral-sh/setup-uv") for step in steps)
+    assert "inputs.source_sha" in checkout_ref
+    setup_uv = _action_step(steps, "astral-sh/setup-uv")
+    assert "if" not in setup_uv
     assert steps.index(setup_python) < steps.index(checkout)
     caches = [step for step in steps if "cache" in str(step.get("uses", ""))]
     assert len(caches) == 1
@@ -113,6 +116,26 @@ def test_pr_native_wheel_checkout_cannot_write_release_compilation_cache() -> No
     commands = "\n".join(str(step.get("run", "")) for step in steps)
     assert "pip install" not in commands
     assert "uv sync" not in commands
+
+
+def test_verify_step_preserves_version_matched_runtime_fingerprint() -> None:
+    steps = _steps(native_wheel_job())
+    build_step = _named_step(steps, "Build version-matched runtime")
+    verify = next(step for step in steps if "verify_native_command_program.py" in str(step.get("run", "")))
+    assemble = next(step for step in steps if "build_native_hol_guard_wheel.py" in str(step.get("run", "")))
+
+    build_env = _mapping(build_step["env"])
+    verify_env = _mapping(verify["env"])
+    for name in (
+        "HOL_GUARD_BUILD_SHA",
+        "HOL_GUARD_PACKAGE_VERSION",
+        "HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX",
+        "HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX",
+        "RUSTFLAGS",
+    ):
+        assert verify_env[name] == build_env[name]
+    assert verify_env["HOL_GUARD_PACKAGE_VERSION"] == "${{ inputs.version }}"
+    assert steps.index(build_step) < steps.index(verify) < steps.index(assemble)
 
 
 def test_matrix_proves_remote_bytes_install_origin_record_corpus_and_dashboard() -> None:
@@ -188,7 +211,7 @@ def test_matrix_proves_remote_bytes_install_origin_record_corpus_and_dashboard()
     assert "/rust/crates/guard-command/src/command_compatibility/*.rs text eol=lf" in attributes_text
     assert "/src/codex_plugin_scanner/guard/daemon/static/index.html text eol=lf" in attributes_text
     assert '"$CANARY_PYTHON" -m pip install --no-compile' in workflow_text
-    assert 'python -m venv "$RUNNER_TEMP/hol-guard-canary-venv"' in workflow_text
+    assert 'python -m venv --copies "$RUNNER_TEMP/hol-guard-canary-venv"' in workflow_text
     assert "uv pip install" not in workflow_text
 
 
@@ -260,7 +283,7 @@ def test_slice_manifest_binds_the_release_correction_chain_and_repo_relative_own
                 ownership[path] = _text(item["id"])
             ownership_counts[cast(int, item["pull_request"])] += 1
     assert observed_overlaps == overlap_exceptions.keys()
-    assert ownership_counts == {1761: 38, 1763: 36}
+    assert ownership_counts == {1761: 31, 1763: 33}
 
     gates = _mapping(manifest["gates"])
     review = _mapping(gates["review"])

@@ -1,0 +1,93 @@
+name: Select release API token
+description: >-
+  Mint a scoped release GitHub App installation token when its credentials are
+  configured, otherwise fall back to the workflow token, and route later gh
+  calls in the job through a rate-limit-only retry wrapper.
+inputs:
+  client-id:
+    description: Release GitHub App client ID; empty selects the workflow token.
+    default: ""
+  private-key:
+    description: Release GitHub App private key; empty selects the workflow token.
+    default: ""
+  permission-contents:
+    description: Contents permission requested for the App token.
+    default: read
+  permission-pull-requests:
+    description: Pull requests permission requested for the App token; empty requests none.
+    default: ""
+  fallback-on-error:
+    description: Use the workflow token when minting fails instead of failing the job.
+    default: "false"
+outputs:
+  token:
+    description: Token for release gh API calls.
+    value: ${{ steps.mint.outputs.token || github.token }}
+  source:
+    description: Either app or workflow.
+    value: ${{ steps.select.outputs.source }}
+runs:
+  using: composite
+  steps:
+    - name: Read release App configuration
+      id: config
+      shell: bash
+      env:
+        HAS_CLIENT_ID: ${{ inputs.client-id != '' }}
+        HAS_PRIVATE_KEY: ${{ inputs.private-key != '' }}
+      run: |
+        if [[ "$HAS_CLIENT_ID" == "true" && "$HAS_PRIVATE_KEY" == "true" ]]; then
+          echo "app=true" >> "$GITHUB_OUTPUT"
+        else
+          if [[ "$HAS_CLIENT_ID" != "$HAS_PRIVATE_KEY" ]]; then
+            echo "::warning::Release App client ID and private key must both be set; using the workflow token."
+          fi
+          echo "app=false" >> "$GITHUB_OUTPUT"
+        fi
+    - name: Mint release App installation token
+      id: mint
+      if: steps.config.outputs.app == 'true'
+      continue-on-error: ${{ inputs.fallback-on-error == 'true' }}
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+      with:
+        client-id: ${{ inputs.client-id }}
+        private-key: ${{ inputs.private-key }}
+        permission-contents: ${{ inputs.permission-contents }}
+        permission-pull-requests: ${{ inputs.permission-pull-requests }}
+    - name: Report release API token source
+      id: select
+      shell: bash
+      env:
+        APP_CONFIGURED: ${{ steps.config.outputs.app }}
+        MINT_OUTCOME: ${{ steps.mint.outcome }}
+        PERMISSION_CONTENTS: ${{ inputs.permission-contents }}
+        PERMISSION_PULL_REQUESTS: ${{ inputs.permission-pull-requests }}
+      run: |
+        if [[ "$APP_CONFIGURED" == "true" && "$MINT_OUTCOME" == "success" ]]; then
+          echo "source=app" >> "$GITHUB_OUTPUT"
+          echo "Release API token source: GitHub App installation token (contents=${PERMISSION_CONTENTS}, pull-requests=${PERMISSION_PULL_REQUESTS:-none})"
+        elif [[ "$APP_CONFIGURED" == "true" ]]; then
+          echo "source=workflow" >> "$GITHUB_OUTPUT"
+          echo "::warning::Release App token mint failed; falling back to the workflow GITHUB_TOKEN."
+        else
+          echo "source=workflow" >> "$GITHUB_OUTPUT"
+          echo "Release API token source: workflow GITHUB_TOKEN (release App credentials not provided)"
+        fi
+    - name: Route gh through the rate-limit retry wrapper
+      shell: bash
+      env:
+        RETRY_SCRIPT: ${{ github.action_path }}/gh-retry.sh
+      run: |
+        bin="${RUNNER_TEMP}/release-gh-bin"
+        if [[ -x "${bin}/gh" ]]; then
+          exit 0
+        fi
+        real_gh=$(command -v gh)
+        mkdir -p "$bin"
+        {
+          echo '#!/usr/bin/env bash'
+          printf 'export GH_RETRY_REAL_GH=%q\n' "$real_gh"
+          printf 'exec bash %q "$@"\n' "$RETRY_SCRIPT"
+        } > "${bin}/gh"
+        chmod +x "${bin}/gh"
+        echo "$bin" >> "$GITHUB_PATH"

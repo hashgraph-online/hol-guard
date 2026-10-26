@@ -1,0 +1,339 @@
+{
+  "adapter": "cli",
+  "digest": "1002802e89336475ad89354954f08367e591d51fe6716226b6acda87c71584e2",
+  "limitations": [
+    "metadata-is-not-semantics",
+    "unknown-cli-operations-review"
+  ],
+  "metadata": {
+    "executable": "appimg",
+    "homepage": "https://github.com/MrGilfy/appimg",
+    "kind": "cli",
+    "launcher": "",
+    "name": "appimg",
+    "package": "",
+    "publisher": {
+      "displayName": "MrGilfy",
+      "id": "community.appimg"
+    },
+    "slug": "appimg",
+    "upstreamVersion": "0.4.1"
+  },
+  "operations": [
+    {
+      "evidenceSha256": "a78a672cad0c50a3f6d2b517038891aa4ab80a31e2d09a316cbbf6128a93e95d",
+      "flags": [
+        "--help",
+        "--no-color",
+        "--version",
+        "--yes",
+        "-V",
+        "-h",
+        "-y"
+      ],
+      "hints": [],
+      "id": "op-75eb278d6a9fb4cf",
+      "name": "",
+      "optionsWithValues": [],
+      "path": []
+    },
+    {
+      "evidenceSha256": "0c0c639b27f0e09abd3eb14557765efd9a50198f3b1c8adbfdc2beb9ec586a1f",
+      "flags": [
+        "--copy",
+        "--dry-run",
+        "--help",
+        "--keep-entries",
+        "--no-color",
+        "--scan",
+        "--terminal",
+        "--yes",
+        "-h",
+        "-y"
+      ],
+      "hints": [],
+      "id": "op-1a83df11ee5b78cd",
+      "name": "",
+      "optionsWithValues": [
+        "--args",
+        "--asset",
+        "--categories",
+        "--comment",
+        "--icon",
+        "--name",
+        "--update-source"
+      ],
+      "path": [
+        "adopt"
+      ]
+    },
+    {
+      "evidenceSha256": "76f9892e0cadc23d9560283ea4aef6f36870581eb21720f0144fa9cb1898f9ce",
+      "flags": [
+        "--help",
+        "--no-color",
+        "--yes",
+        "-h",
+        "-y"
+      ],
+      "hints": [],
+      "id": "op-1d8f2e3384b44038",
+      "name": "",
+      "optionsWithValues": [],
+      "path": [
+        "completions"
+      ]
+    },
+    {
+      "evidenceSha256": "e24ec5d7f8590fbfbbd1221b99414da0952c5f2ec05a79561dd6cbe63c3caea8",
+      "flags": [
+        "--help",
+        "--no-color",
+        "--yes",
+        "-h",
+        "-y"
+      ],
+      "hints": [],
+      "id": "op-2e390f4b1131c34a",
+      "name": "",
+      "optionsWithValues": [],
+      "path": [
+        "doctor"
+      ]
+    },
+    {
+      "evidenceSha256": "fff45d26bcd5991fd30e9b073bf9f342888292c0f19d6c06d8bab3573d84f656",
+      "flags": [
+        "--help",
+        "--no-color",
+        "--yes",
+        "-h",
+        "-y"
+      ],
+      "hints": [],
+      "id": "op-66ac10fbbea895e4",
+      "name": "",
+      "optionsWithValues": [],
+      "path": [
+        "edit"
+      ]
+    },
+    {
+      "evidenceSha256": "7e7ddbab219620317bf1ec4fe419f309e03f86eac4b88560848b67cfe4dcc652",
+      "flags": [
+        "--help",
+        "--no-color",
+        "--yes",
+        "-h",
+        "-y"
+      ],
+      "hints": [],
+      "id": "op-d76e96e3251de015",
+      "name": "",
+      "optionsWithValues": [],
+      "path": [
+        "export"
+      ]
+    },
+    {
+      "evidenceSha256": "8e6c694295222b11357f0affcf92c16ec3db28727b012faed928a172d80d57f2",
+      "flags": [
+        "--dry-run",
+        "--help",
+        "--no-color",
+        "--yes",
+        "-h",
+        "-y"
+      ],
+      "hints": [],
+      "id": "op-bb0b400368c64a1a",
+      "name": "",
+      "optionsWithValues": [],
+      "path": [
+        "import"
+      ]
+    },
+    {
+      "evidenceSha256": "6a032f64db6d7784cfb703cc2ef17f8ebb861fe274099facfe00d3a78ec2b873",
+      "flags": [
+        "--dry-run",
+        "--help",
+        "--no-color",
+        "--terminal",
+        "--yes",
+        "-h",
+        "-y"
+      ],
+      "hints": [],
+      "id": "op-6c69101a5444aed0",
+      "name": "",
+      "optionsWithValues": [
+        "--args",
+        "--asset",
+        "--categories",
+        "--comment",
+        "--icon",
+        "--name",
+        "--update-source"
+      ],
+      "path": [
+        "install"
+      ]
+    },
+    {
+      "evidenceSha256": "240a6486cfac0927df5ce0e7dfc513632a0cfd301d579e39baa29885eb634e12",
+      "flags": [
+        "--help",
+        "--json",
+        "--no-color",
+        "--yes",
+        "-h",
+        "-y"
+      ],
+      "hints": [
+        "read-name"
+      ],
+      "id": "op-28e623ce1c945c32",
+      "name": "",
+      "optionsWithValues": [],
+      "path": [
+        "list"
+      ]
+    },
+    {
+      "evidenceSha256": "0bbd0c71034713d279fc60c385bfa3bd78a1969dbf7d36b9e54ee49a94956c7a",
+      "flags": [
+        "--help",
+        "--no-color",
+        "--yes",
+        "-h",
+        "-y"
+      ],
+      "hints": [],
+      "id": "op-6df54ad180aab1a8",
+      "name": "",
+      "optionsWithValues": [],
+      "path": [
+        "notify",
+        "disable"
+      ]
+    },
+    {
+      "evidenceSha256": "26ff24bc56eb205dd82d154f8bdd33fa00a971881088b63cdfed2e3a7e7e280e",
+      "flags": [
+        "--help",
+        "--no-color",
+        "--yes",
+        "-h",
+        "-y"
+      ],
+      "hints": [],
+      "id": "op-c1ecd601718bd5de",
+      "name": "",
+      "optionsWithValues": [],
+      "path": [
+        "notify",
+        "enable"
+      ]
+    },
+    {
+      "evidenceSha256": "fa75f496cb4474b94c616bd3653715176538310b8cb48d7c46109903f5d049d5",
+      "flags": [
+        "--help",
+        "--no-color",
+        "--yes",
+        "-h",
+        "-y"
+      ],
+      "hints": [
+        "read-name"
+      ],
+      "id": "op-b4d1dad95db6f6d7",
+      "name": "",
+      "optionsWithValues": [],
+      "path": [
+        "notify",
+        "status"
+      ]
+    },
+    {
+      "evidenceSha256": "69910a44ee6256de84ffe872c815672aa5ab7c3eb8bc94838bc59715928bbebe",
+      "flags": [
+        "--help",
+        "--no-color",
+        "--yes",
+        "-h",
+        "-y"
+      ],
+      "hints": [],
+      "id": "op-3c5f7f4c2183d9b4",
+      "name": "",
+      "optionsWithValues": [],
+      "path": [
+        "notify",
+        "test"
+      ]
+    },
+    {
+      "evidenceSha256": "ed0fbc3c30e9fbc5a368e5432a32dbba567df4368ceb3bb482c53fbe85ea4d62",
+      "flags": [
+        "--help",
+        "--no-color",
+        "--yes",
+        "-h",
+        "-y"
+      ],
+      "hints": [
+        "destructive-name"
+      ],
+      "id": "op-98ae7de9f4921295",
+      "name": "",
+      "optionsWithValues": [],
+      "path": [
+        "remove"
+      ]
+    },
+    {
+      "evidenceSha256": "c2556c899ab092008b97120d5be4f44e81f0b14e343905fdef9197edb43bd60d",
+      "flags": [
+        "--all",
+        "--check",
+        "--help",
+        "--json",
+        "--no-color",
+        "--yes",
+        "-h",
+        "-y"
+      ],
+      "hints": [],
+      "id": "op-227d251131facfdb",
+      "name": "",
+      "optionsWithValues": [],
+      "path": [
+        "update"
+      ]
+    },
+    {
+      "evidenceSha256": "1a6c49c8367c5dd0583b37fb101cf319be29a9598f8c65c069b805f3f6d144a9",
+      "flags": [
+        "--clear",
+        "--help",
+        "--no-color",
+        "--yes",
+        "-h",
+        "-y"
+      ],
+      "hints": [],
+      "id": "op-08443d1c3be6e196",
+      "name": "",
+      "optionsWithValues": [
+        "--asset"
+      ],
+      "path": [
+        "update-source"
+      ]
+    }
+  ],
+  "schemaVersion": "guard.extension-discovery.v1",
+  "sourceSha256": "f494887d5c638956e6414ee3110366d6b55a9964197865b49bb00e4de1ff8a07"
+}

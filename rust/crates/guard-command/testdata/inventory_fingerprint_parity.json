@@ -1,0 +1,749 @@
+{
+ "agent_type": [
+  {
+   "normalized": "codex",
+   "value": "codex"
+  },
+  {
+   "normalized": "claude-code",
+   "value": "claude-code"
+  },
+  {
+   "normalized": "cline",
+   "value": "cline"
+  },
+  {
+   "normalized": "hermes",
+   "value": "hermes"
+  },
+  {
+   "normalized": "codex",
+   "value": "Codex"
+  },
+  {
+   "normalized": "codex",
+   "value": "claude_code"
+  },
+  {
+   "normalized": "codex",
+   "value": ""
+  },
+  {
+   "normalized": "codex",
+   "value": "unknown-harness"
+  },
+  {
+   "normalized": "codex",
+   "value": "CLAUDE-CODE"
+  },
+  {
+   "normalized": "codex",
+   "value": " codex "
+  }
+ ],
+ "compact_json": [
+  {
+   "digest": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+   "encoded": "null",
+   "value": null
+  },
+  {
+   "digest": "b5bea41b6c623f7c09f1bf24dcae58ebab3c0cdd90ad966bc43a45b44867e12b",
+   "encoded": "true",
+   "value": true
+  },
+  {
+   "digest": "fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa",
+   "encoded": "false",
+   "value": false
+  },
+  {
+   "digest": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9",
+   "encoded": "0",
+   "value": 0
+  },
+  {
+   "digest": "d3471dcc109cd382f5e09a64253c2219958b5f8f07371fba48ac81fed97bb18a",
+   "encoded": "-17",
+   "value": -17
+  },
+  {
+   "digest": "12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+   "encoded": "\"\"",
+   "value": ""
+  },
+  {
+   "digest": "945603a8f587786b463c3f94fce115c0fae88fac2728cc96ddf5981cf7f61741",
+   "encoded": "\"plain\"",
+   "value": "plain"
+  },
+  {
+   "digest": "6b7237250875c15db010db2757d404d382f8eb93a588dc1b4c47415cbb462755",
+   "encoded": "\"quote\\\" and \\\\ backslash\"",
+   "value": "quote\" and \\ backslash"
+  },
+  {
+   "digest": "8f082058b9ea06099df328b3d9bfc2a5f017d52dfe659f5acc11a86960b2255f",
+   "encoded": "\"tab\\tnewline\\nreturn\\r\"",
+   "value": "tab\tnewline\nreturn\r"
+  },
+  {
+   "digest": "a32ef9e34a4e9d755d1dab82966cf6d16c907aa7da42e3a261b1332a43f126bd",
+   "encoded": "\"bell\\u0007 del\\u007f unit\\u001f\"",
+   "value": "bell\u0007 del unit\u001f"
+  },
+  {
+   "digest": "ee08d8beb64c89c25fe7f583c6b522f7f380aab939035ec58d3fcdba24c881e1",
+   "encoded": "\"caf\\u00e9\"",
+   "value": "café"
+  },
+  {
+   "digest": "8932ab408fb04adeea55799775146d540ac0dcbe28da95471b53014347f9af1a",
+   "encoded": "\"\\u2028 line separator\"",
+   "value": "  line separator"
+  },
+  {
+   "digest": "29945760bc153fa7c9144a8a8468effbac23ccf76bbb9e6c8caee3a95dc574ef",
+   "encoded": "\"astral \\ud83d\\ude00\"",
+   "value": "astral 😀"
+  },
+  {
+   "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+   "encoded": "[]",
+   "value": []
+  },
+  {
+   "digest": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+   "encoded": "{}",
+   "value": {}
+  },
+  {
+   "digest": "597be421a7a1692cdedfeae56567a7f6f64f20022eacae23a3918aeaa29e5904",
+   "encoded": "[1,\"two\",null]",
+   "value": [
+    1,
+    "two",
+    null
+   ]
+  },
+  {
+   "digest": "90fdc77515f0a12325547efe08c8b3d425e3fd14b9d8d2eda49b1200247e9848",
+   "encoded": "{\"A\":3,\"a\":2,\"b\":1,\"\\u00e1\":4}",
+   "value": {
+    "A": 3,
+    "a": 2,
+    "b": 1,
+    "á": 4
+   }
+  },
+  {
+   "digest": "a9c05103a818944fce3db847e54d14d4545923ac43071955876576f549bef102",
+   "encoded": "{\"nested\":{\"a\":null,\"z\":[1,{\"y\":2}]}}",
+   "value": {
+    "nested": {
+     "a": null,
+     "z": [
+      1,
+      {
+       "y": 2
+      }
+     ]
+    }
+   }
+  },
+  {
+   "digest": "c6770054cda4e504020eafc417b004ddcd190a9b00311eb9fc674698025f0e21",
+   "encoded": "{\"ratio\":0.25,\"score\":100}",
+   "value": {
+    "ratio": 0.25,
+    "score": 100
+   }
+  }
+ ],
+ "fingerprint_text": [
+  {
+   "digest": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "value": ""
+  },
+  {
+   "digest": "c9ecf5e54c7b3f2640ecca21f96d4c3625a2b7935104f41c5ede29935a9e52c9",
+   "value": "plain text"
+  },
+  {
+   "digest": "2ef763ca2f4f2881ff1efa49428784736bd11b60901cc192c12eb9df1c5885a9",
+   "value": "  leading and trailing  "
+  },
+  {
+   "digest": "4d16d5484b66cbac844acb4441b2fcc63723b46193ade1f1a5d27c885f078ff8",
+   "value": "collapse   inner    runs"
+  },
+  {
+   "digest": "931c02f77aebf3f5250b478872f2dd3a0f9483756a230bc20624b4f40a528201",
+   "value": "tabs\tand\nnewlines"
+  },
+  {
+   "digest": "9118a2efa60bafda405f496ec469a317da42cf27903ec8a554e72a6087ba410a",
+   "value": "unit\u001fseparator"
+  },
+  {
+   "digest": "0b88077a5d93f6b2bbb955f75571c8f65f4027e61078fef7fa1032bf2bc62327",
+   "value": "\u001c\u001d\u001e\u001f"
+  },
+  {
+   "digest": "ec81dfc705e432ff4c85791d3926bdb926305cb6d9de659b9e45936493daab1b",
+   "value": "nbsp and em space"
+  },
+  {
+   "digest": "84b654ea3a355b056e45f38b2dcb4a9bef7878f1e3df9977d3f0f3fa6ae33963",
+   "value": "ideographic　space"
+  },
+  {
+   "digest": "9790d9892dfd4aed8deef8bc4fc2f521f850fc05ee94b4c4969e68e51c83fe31",
+   "value": "vertical\u000btab\fform feed"
+  },
+  {
+   "digest": "043764df773ac7ceea6175e1498893e6ee33e79885288417cc1d75cba6094827",
+   "value": "café 😀"
+  }
+ ],
+ "float_repr": [
+  {
+   "repr": "0.0",
+   "value": 0.0
+  },
+  {
+   "repr": "-0.0",
+   "value": -0.0
+  },
+  {
+   "repr": "1.0",
+   "value": 1.0
+  },
+  {
+   "repr": "-1.0",
+   "value": -1.0
+  },
+  {
+   "repr": "0.5",
+   "value": 0.5
+  },
+  {
+   "repr": "1.5",
+   "value": 1.5
+  },
+  {
+   "repr": "100.0",
+   "value": 100.0
+  },
+  {
+   "repr": "0.0001",
+   "value": 0.0001
+  },
+  {
+   "repr": "1e-05",
+   "value": 1e-05
+  },
+  {
+   "repr": "1e-07",
+   "value": 1e-07
+  },
+  {
+   "repr": "1000000000000000.0",
+   "value": 1000000000000000.0
+  },
+  {
+   "repr": "1e+16",
+   "value": 1e+16
+  },
+  {
+   "repr": "1e+17",
+   "value": 1e+17
+  },
+  {
+   "repr": "-1e+16",
+   "value": -1e+16
+  },
+  {
+   "repr": "1.7976931348623157e+308",
+   "value": 1.7976931348623157e+308
+  },
+  {
+   "repr": "5e-324",
+   "value": 5e-324
+  },
+  {
+   "repr": "0.1",
+   "value": 0.1
+  },
+  {
+   "repr": "0.3333333333333333",
+   "value": 0.3333333333333333
+  },
+  {
+   "repr": "123456789.12345679",
+   "value": 123456789.12345679
+  },
+  {
+   "repr": "2.5e-10",
+   "value": 2.5e-10
+  }
+ ],
+ "inventory_item_id": [
+  {
+   "agent_type": "codex",
+   "display_name": "  Mixed Case Name  ",
+   "item_id": "codex:skill:f06870693f7fe180e75bd51f",
+   "item_kind": "skill",
+   "semantic_text": ""
+  },
+  {
+   "agent_type": "codex",
+   "display_name": "  Mixed Case Name  ",
+   "item_id": "codex:skill:fbe330623c144365203db3e3",
+   "item_kind": "skill",
+   "semantic_text": "plain text"
+  },
+  {
+   "agent_type": "codex",
+   "display_name": "  Mixed Case Name  ",
+   "item_id": "codex:skill:c9b1332764adaa198ac8ed20",
+   "item_kind": "skill",
+   "semantic_text": "  leading and trailing  "
+  },
+  {
+   "agent_type": "codex",
+   "display_name": "  Mixed Case Name  ",
+   "item_id": "codex:skill:ccba3f627958fbdbd22d5605",
+   "item_kind": "skill",
+   "semantic_text": "collapse   inner    runs"
+  },
+  {
+   "agent_type": "codex",
+   "display_name": "  Mixed Case Name  ",
+   "item_id": "codex:skill:8173013ecdc1a607f106c814",
+   "item_kind": "skill",
+   "semantic_text": "tabs\tand\nnewlines"
+  },
+  {
+   "agent_type": "codex",
+   "display_name": "  Mixed Case Name  ",
+   "item_id": "codex:skill:4f56022589d9d47616540846",
+   "item_kind": "skill",
+   "semantic_text": "unit\u001fseparator"
+  },
+  {
+   "agent_type": "codex",
+   "display_name": "  Mixed Case Name  ",
+   "item_id": "codex:skill:f06870693f7fe180e75bd51f",
+   "item_kind": "skill",
+   "semantic_text": "\u001c\u001d\u001e\u001f"
+  },
+  {
+   "agent_type": "codex",
+   "display_name": "  Mixed Case Name  ",
+   "item_id": "codex:skill:e0b1e8704e11f82f8141bed6",
+   "item_kind": "skill",
+   "semantic_text": "nbsp and em space"
+  },
+  {
+   "agent_type": "codex",
+   "display_name": "  Mixed Case Name  ",
+   "item_id": "codex:skill:572b02051e9174990e497516",
+   "item_kind": "skill",
+   "semantic_text": "ideographic　space"
+  },
+  {
+   "agent_type": "codex",
+   "display_name": "  Mixed Case Name  ",
+   "item_id": "codex:skill:f5751c7c3aee443e462cc73b",
+   "item_kind": "skill",
+   "semantic_text": "vertical\u000btab\fform feed"
+  },
+  {
+   "agent_type": "codex",
+   "display_name": "  Mixed Case Name  ",
+   "item_id": "codex:skill:5cd2ae34522828effdbacc49",
+   "item_kind": "skill",
+   "semantic_text": "café 😀"
+  }
+ ],
+ "snapshot_content_hash": [
+  {
+   "agent_type": "codex",
+   "digest": "fa808fec5c059c3d8f34d7ff09600f797bb5ed444d689b70b1360f6dea405b80",
+   "findings": [],
+   "items": [],
+   "runtime_version": null,
+   "sources": []
+  },
+  {
+   "agent_type": "claude-code",
+   "digest": "c388d54cc98f54d2f6bdaf88988ab2afa80e9471f482b002534038a1b590b33d",
+   "findings": [
+    {
+     "artifact_id": "a1",
+     "check_id": "c1",
+     "confidence": "high",
+     "evidence": {},
+     "finding_id": "f2",
+     "severity": "low",
+     "source": "metadata",
+     "summary": null,
+     "title": "Title"
+    },
+    {
+     "artifact_id": "a1",
+     "check_id": "c1",
+     "confidence": "high",
+     "evidence": {},
+     "finding_id": "f1",
+     "severity": "low",
+     "source": "metadata",
+     "summary": "has summary",
+     "title": "Title"
+    },
+    {
+     "artifact_id": "a1",
+     "check_id": "c1",
+     "confidence": "high",
+     "evidence": {},
+     "finding_id": "f3",
+     "severity": "low",
+     "source": "metadata",
+     "summary": "",
+     "title": "Title"
+    }
+   ],
+   "items": [
+    {
+     "capability_categories": [
+      "reads_files"
+     ],
+     "content_hash": "ch",
+     "description": "",
+     "display_name": "Skill",
+     "drift_state": "unchanged",
+     "item_id": "b",
+     "item_kind": "skill",
+     "metadata": {},
+     "risk_level": "info",
+     "scanner_sources": [],
+     "security_score": 100,
+     "source_fingerprint": "fp"
+    },
+    {
+     "capability_categories": [
+      "reads_files"
+     ],
+     "content_hash": "ch",
+     "description": "",
+     "display_name": "Skill",
+     "drift_state": "unchanged",
+     "item_id": "a",
+     "item_kind": "skill",
+     "metadata": {},
+     "risk_level": "info",
+     "scanner_sources": [],
+     "security_score": 100,
+     "source_fingerprint": "fp"
+    },
+    {
+     "capability_categories": [
+      "reads_files"
+     ],
+     "content_hash": "ch",
+     "description": "",
+     "display_name": "Skill",
+     "drift_state": "unchanged",
+     "item_id": "z",
+     "item_kind": "agent",
+     "metadata": {},
+     "risk_level": "high",
+     "scanner_sources": [],
+     "security_score": 42,
+     "source_fingerprint": "fp"
+    }
+   ],
+   "runtime_version": "3.50.0",
+   "sources": [
+    {
+     "captured_at": null,
+     "detail": null,
+     "source_id": "s2",
+     "source_type": "config",
+     "status": "available"
+    },
+    {
+     "captured_at": null,
+     "detail": "detail text",
+     "source_id": "s1",
+     "source_type": "config",
+     "status": "available"
+    }
+   ]
+  },
+  {
+   "agent_type": "cursor",
+   "digest": "9b76b70ed4c043853dbd50a55f74bd1fea2f74e6cc0e8d8d430c9cc7cec915d8",
+   "findings": [
+    {
+     "artifact_id": "a1",
+     "check_id": "c1",
+     "confidence": "high",
+     "evidence": {
+      "generatedAt": "drop",
+      "kept": 0.25
+     },
+     "finding_id": "f1",
+     "severity": "low",
+     "source": "hol-detector",
+     "summary": null,
+     "title": "Title"
+    }
+   ],
+   "items": [
+    {
+     "capability_categories": [
+      "runs_shell",
+      "reads_files"
+     ],
+     "content_hash": "ch",
+     "description": "",
+     "display_name": "Skill",
+     "drift_state": "changed",
+     "item_id": "codex:skill:abc",
+     "item_kind": "skill",
+     "metadata": {
+      "café": "😀",
+      "keep": [
+       3,
+       1,
+       2
+      ],
+      "observedAt": "drop me"
+     },
+     "risk_level": "info",
+     "scanner_sources": [
+      "hol-detector"
+     ],
+     "security_score": 100,
+     "source_fingerprint": "fp"
+    }
+   ],
+   "runtime_version": "",
+   "sources": [
+    {
+     "captured_at": "2026-10-21T00:00:00Z",
+     "detail": null,
+     "source_id": "s1",
+     "source_type": "config",
+     "status": "available"
+    }
+   ]
+  },
+  {
+   "agent_type": "codex",
+   "digest": "2318daffdd38a41821dd569d733ff10c72e6e5cd4f8b6e716cd11cae96d647e9",
+   "findings": [
+    {
+     "artifact_id": "a1",
+     "check_id": "c1",
+     "confidence": "high",
+     "evidence": {},
+     "finding_id": "empty",
+     "severity": "low",
+     "source": "hol-detector",
+     "summary": "",
+     "title": "Title"
+    },
+    {
+     "artifact_id": "a1",
+     "check_id": "c1",
+     "confidence": "high",
+     "evidence": {},
+     "finding_id": "absent",
+     "severity": "low",
+     "source": "hol-detector",
+     "summary": null,
+     "title": "Title"
+    }
+   ],
+   "items": [],
+   "runtime_version": null,
+   "sources": [
+    {
+     "captured_at": "",
+     "detail": "",
+     "source_id": "empty",
+     "source_type": "config",
+     "status": "available"
+    },
+    {
+     "captured_at": null,
+     "detail": null,
+     "source_id": "absent",
+     "source_type": "config",
+     "status": "available"
+    }
+   ]
+  }
+ ],
+ "stable_snapshot_value": [
+  {
+   "stable": null,
+   "value": null
+  },
+  {
+   "stable": 7,
+   "value": 7
+  },
+  {
+   "stable": "text",
+   "value": "text"
+  },
+  {
+   "stable": {
+    "keep": 1
+   },
+   "value": {
+    "capturedAt": "now",
+    "keep": 1
+   }
+  },
+  {
+   "stable": {
+    "a": 1
+   },
+   "value": {
+    "a": 1,
+    "generatedAt": "x",
+    "observedAt": "y",
+    "scanDurationMs": 3
+   }
+  },
+  {
+   "stable": {
+    "outer": {
+     "inner": [
+      1,
+      2,
+      3
+     ]
+    }
+   },
+   "value": {
+    "outer": {
+     "inner": [
+      3,
+      1,
+      2
+     ],
+     "lastSeenAt": "x"
+    }
+   }
+  },
+  {
+   "stable": [
+    1,
+    2,
+    3
+   ],
+   "value": [
+    3,
+    1,
+    2
+   ]
+  },
+  {
+   "stable": [
+    "a",
+    "b",
+    "c"
+   ],
+   "value": [
+    "b",
+    "a",
+    "c"
+   ]
+  },
+  {
+   "stable": [
+    {
+     "a": 2
+    },
+    {
+     "b": 1
+    }
+   ],
+   "value": [
+    {
+     "b": 1
+    },
+    {
+     "a": 2
+    }
+   ]
+  },
+  {
+   "stable": [
+    [
+     1
+    ],
+    [
+     2
+    ],
+    []
+   ],
+   "value": [
+    [
+     2
+    ],
+    [
+     1
+    ],
+    []
+   ]
+  },
+  {
+   "stable": [
+    "1",
+    1,
+    false,
+    null,
+    true
+   ],
+   "value": [
+    true,
+    false,
+    null,
+    1,
+    "1"
+   ]
+  },
+  {
+   "stable": {},
+   "value": {
+    "attestation": 1,
+    "attestationBindings": 2,
+    "durationMs": 3,
+    "duration_ms": 4,
+    "elapsedMs": 5
+   }
+  },
+  {
+   "stable": {
+    "kept": {
+     "also": 4
+    }
+   },
+   "value": {
+    "evidenceHash": 1,
+    "kept": {
+     "also": 4,
+     "capturedAt": 3
+    },
+    "syncedAt": 2
+   }
+  }
+ ]
+}

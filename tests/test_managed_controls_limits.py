@@ -16,19 +16,15 @@ from codex_plugin_scanner.guard.runtime.extension_control_limits import (
     MAX_CONTROL_LAYERS,
     MAX_CONTROLS_PER_LAYER,
     MAX_CONTROLS_TOTAL,
-    MAX_INPUT_TEXT_LENGTH,
-    MAX_OBSERVATIONS,
     MAX_PERMISSIONS_PER_EXTENSION,
-    MAX_RESOLUTION_IDS,
-    ExtensionControlLimitViolation,
     advertised_extension_control_limits,
-    extension_control_limit_violation,
 )
 from tests.generated_command_catalog_test_support import generated_extension
 
 ROOT = Path(__file__).resolve().parents[1]
 LIMITS_PATH = ROOT / "contracts" / "managed-controls" / "v1" / "limits.json"
 API_PATH = ROOT / "src" / "codex_plugin_scanner" / "guard" / "daemon" / "extension_control_api.py"
+MUTATION_OP_PATH = ROOT / "rust" / "crates" / "guard-runtime" / "src" / "extension_control_mutation_op.rs"
 NAVIGATION_PATH = ROOT / "dashboard" / "src" / "shell-navigation-model.ts"
 RULES_PAGE_PATH = ROOT / "dashboard" / "src" / "policy-workspace-page.tsx"
 DASHBOARD_LIMITS_PATH = ROOT / "dashboard" / "src" / "extension-controls-normalize.ts"
@@ -40,74 +36,8 @@ def test_shared_limits_fixture_matches_runtime_constants() -> None:
     assert fixture["max_controls_total"] == (fixture["max_control_layers"] * fixture["max_controls_per_layer"])
 
 
-@pytest.mark.parametrize("count", [MAX_CONTROLS_PER_LAYER - 1, MAX_CONTROLS_PER_LAYER])
-def test_per_layer_control_boundary_accepts_limit_and_below(count: int) -> None:
-    assert extension_control_limit_violation(layer_sizes=(count,)) is None
-
-
-def test_per_layer_control_boundary_rejects_limit_plus_one() -> None:
-    assert (
-        extension_control_limit_violation(layer_sizes=(MAX_CONTROLS_PER_LAYER + 1,))
-        is ExtensionControlLimitViolation.PER_LAYER
-    )
-
-
-@pytest.mark.parametrize("layer_count", [MAX_CONTROL_LAYERS - 1, MAX_CONTROL_LAYERS])
-def test_layer_boundary_accepts_limit_and_below(layer_count: int) -> None:
-    assert extension_control_limit_violation(layer_sizes=(0,) * layer_count) is None
-
-
-def test_layer_boundary_rejects_limit_plus_one() -> None:
-    assert (
-        extension_control_limit_violation(layer_sizes=(0,) * (MAX_CONTROL_LAYERS + 1))
-        is ExtensionControlLimitViolation.LAYERS
-    )
-
-
 def test_total_control_boundary_is_consistent() -> None:
     assert MAX_CONTROLS_TOTAL == MAX_CONTROL_LAYERS * MAX_CONTROLS_PER_LAYER
-    assert extension_control_limit_violation(layer_sizes=(MAX_CONTROLS_PER_LAYER, MAX_CONTROLS_PER_LAYER)) is None
-
-
-@pytest.mark.parametrize(
-    ("field", "accepted", "rejected", "violation"),
-    [
-        (
-            "extension_id_count",
-            MAX_RESOLUTION_IDS,
-            MAX_RESOLUTION_IDS + 1,
-            ExtensionControlLimitViolation.RESOLUTION_IDS,
-        ),
-        (
-            "permission_id_count",
-            MAX_RESOLUTION_IDS,
-            MAX_RESOLUTION_IDS + 1,
-            ExtensionControlLimitViolation.RESOLUTION_IDS,
-        ),
-        (
-            "observation_count",
-            MAX_OBSERVATIONS,
-            MAX_OBSERVATIONS + 1,
-            ExtensionControlLimitViolation.OBSERVATIONS,
-        ),
-        (
-            "max_input_length",
-            MAX_INPUT_TEXT_LENGTH,
-            MAX_INPUT_TEXT_LENGTH + 1,
-            ExtensionControlLimitViolation.INPUT_TEXT,
-        ),
-    ],
-)
-def test_resolution_boundaries(
-    field: str,
-    accepted: int,
-    rejected: int,
-    violation: ExtensionControlLimitViolation,
-) -> None:
-    accepted_values = {field: accepted}
-    rejected_values = {field: rejected}
-    assert extension_control_limit_violation(layer_sizes=(), **accepted_values) is None
-    assert extension_control_limit_violation(layer_sizes=(), **rejected_values) is violation
 
 
 def _catalog_extension(index: int) -> CommandSafetyExtension:
@@ -192,9 +122,21 @@ def test_registry_permission_count_boundary_rejects_limit_plus_one() -> None:
 def test_daemon_api_uses_shared_limits_and_no_longer_advertises_4096_controls() -> None:
     source = API_PATH.read_text(encoding="utf-8")
     assert "advertised_extension_control_limits" in source
-    assert "MAX_CONTROLS_TOTAL" in source
-    assert "MAX_CATALOG_PAYLOAD_BYTES" in source
+    # The draft's own bounds are the resident's; the API only maps its refusal.
+    assert "mutation_bounds" in source
+    assert "MAX_DAEMON_CATALOG_RESPONSE_BYTES" in source
+    assert "MAX_CATALOG_PAYLOAD_BYTES =" not in source
     assert "_MAX_CONTROLS = 4096" not in source
+
+
+def test_resident_mutation_bounds_match_the_shared_limits() -> None:
+    source = MUTATION_OP_PATH.read_text(encoding="utf-8")
+    assert f"const MAX_CONTROLS_PER_LAYER: usize = {MAX_CONTROLS_PER_LAYER};" in source
+    assert "MAX_CONTROLS_TOTAL: usize = MAX_CONTROL_LAYERS * MAX_CONTROLS_PER_LAYER;" in source
+    guard_command = (ROOT / "rust" / "crates" / "guard-command" / "src" / "extension_control.rs").read_text(
+        encoding="utf-8"
+    )
+    assert f"MAX_CONTROL_LAYERS: usize = {MAX_CONTROL_LAYERS};" in guard_command
 
 
 def test_dashboard_catalog_limits_match_shared_fixture() -> None:

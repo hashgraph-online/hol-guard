@@ -2,18 +2,11 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
-import re
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Literal, Protocol
 
-from .shell_structure import ShellHeredoc, ShellScanState
-
-_REDIRECT_PATTERN = re.compile(
-    r"(?<![<>])(?P<operator>(?:\d*)(?:<>|>\||>>?|<))(?![<>&])\s*"
-    r"(?P<target>\"[^\"]+\"|'[^']+'|[^ \t\r\n;&|<>]+)"
-)
+from ..native_rich_command_model import request
+from .shell_structure import ShellHeredoc
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,76 +71,30 @@ def build_command_security_identity(
     redirects: tuple[CommandRedirect, ...],
     embedded_commands: tuple[EmbeddedCommand, ...],
 ) -> str:
-    """Return a versioned identity over the complete executable structure."""
-
-    payload = {
-        "version": 2,
-        "normalized_text": normalized_text,
-        "dialect": dialect,
-        "transport": transport,
-        "wrapper_chain": wrapper_chain,
-        "segments": [
-            {
-                "tokens": segment.tokens,
-                "environment_names": segment.environment_names,
-                "wrapper_chain": segment.wrapper_chain,
-                "execution_context": segment.execution_context,
-                "pipeline_index": segment.pipeline_index,
-            }
-            for segment in segments
-        ],
-        "redirects": [(item.operator, item.target) for item in redirects],
-        "embedded": [(item.kind, item.text, item.execution_context) for item in embedded_commands],
-    }
-    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    return f"command-security-v2:{hashlib.sha256(encoded).hexdigest()}"
-
-
-def extract_command_redirects(
-    command: str,
-    heredocs: tuple[ShellHeredoc, ...],
-) -> tuple[CommandRedirect, ...]:
-    """Extract redirects while preserving normalized source spans."""
-
-    redirects: list[CommandRedirect] = []
-    heredoc_operator_starts = {item.operator_start for item in heredocs}
-    state = ShellScanState()
-    index = 0
-    while index < len(command):
-        next_index = state.advance(command, index)
-        if next_index != index + 1:
-            index = next_index
-            continue
-        if not state.is_top_level:
-            index += 1
-            continue
-        match = _REDIRECT_PATTERN.match(command, index)
-        if match is None or match.start() in heredoc_operator_starts:
-            index += 1
-            continue
-        redirects.append(
-            CommandRedirect(
-                operator=match.group("operator"),
-                target=_strip_quotes(match.group("target")),
-                start=match.start(),
-                end=match.end(),
-            )
-        )
-        index = match.end()
-    redirects.extend(
-        CommandRedirect(
-            operator="<<-" if heredoc.strip_tabs else "<<",
-            target=heredoc.delimiter,
-            start=heredoc.operator_start,
-            end=heredoc.declaration_end,
-        )
-        for heredoc in heredocs
+    """Ask the native owner to bind the complete executable structure."""
+    return request(
+        "identity",
+        {
+            "normalized_text": normalized_text,
+            "dialect": dialect,
+            "transport": transport,
+            "wrapper_chain": wrapper_chain,
+            "segments": [
+                {
+                    name: getattr(s, name)
+                    for name in ("tokens", "environment_names", "wrapper_chain", "execution_context", "pipeline_index")
+                }
+                for s in segments
+            ],
+            "redirects": [asdict(item) for item in redirects],
+            "embedded_commands": [asdict(item) for item in embedded_commands],
+        },
     )
-    return tuple(sorted(redirects, key=lambda item: item.start))
 
 
-def _strip_quotes(value: str) -> str:
-    stripped = value.strip()
-    if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in {"'", '"'}:
-        return stripped[1:-1]
-    return stripped
+def extract_command_redirects(command: str, heredocs: tuple[ShellHeredoc, ...]) -> tuple[CommandRedirect, ...]:
+    """Present native redirects with their original normalized spans."""
+    return tuple(
+        CommandRedirect(**value)
+        for value in request("redirects", {"command": command, "heredocs": [asdict(item) for item in heredocs]})
+    )

@@ -5,26 +5,50 @@ import os
 import sys
 import threading
 from collections.abc import Callable, Iterator
+from contextlib import suppress
 from hashlib import sha256
 from pathlib import Path
 
 import pytest
 
+from tests.daemon_control_patching import patch_daemon_global
 from tests.guard_test_invariants import TEST_INVARIANTS, invariant_markers_for_nodeid
+from tests.home_isolation import isolate_user_home
 
-pytest_plugins = ["tests.bundle_first_cloud"]
+# Before any Guard module computes a default home or a test spawns a helper.
+isolate_user_home()
+
+pytest_plugins = [
+    "tests.bundle_first_cloud",
+    "tests.approval_mode_fixtures",
+    "tests.approval_reuse_fixtures",
+    "tests.containment_resident",
+    "tests.native_runtime_fixtures",
+    "tests.native_object_runtime",
+    "tests.native_resident_teardown",
+    "tests.optional_command_catalog_fixtures",
+]
 
 SRC_PATH = Path(__file__).resolve().parents[1] / "src"
 SUPPORT_PATH = Path(__file__).resolve().parent / "support"
 
-if str(SRC_PATH) not in sys.path:
+use_installed_package = os.environ.get("HOL_GUARD_TEST_USE_INSTALLED") == "1"
+if not use_installed_package and str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 if str(SUPPORT_PATH) not in sys.path:
     sys.path.insert(0, str(SUPPORT_PATH))
 
+
+# The runtime refuses to compile an uninstalled bundle unless a caller that owns
+# a checkout stages it. The suite runs against this checkout, so it registers one.
+from tests.development_authoring_staging import register_checkout_staging  # noqa: E402
+
+register_checkout_staging()
+
 existing_pythonpath = os.environ.get("PYTHONPATH", "")
 pythonpath_entries = [entry for entry in existing_pythonpath.split(os.pathsep) if entry]
-pythonpath_prefix = [str(path) for path in (SUPPORT_PATH, SRC_PATH) if str(path) not in pythonpath_entries]
+source_paths = (SUPPORT_PATH,) if use_installed_package else (SUPPORT_PATH, SRC_PATH)
+pythonpath_prefix = [str(path) for path in source_paths if str(path) not in pythonpath_entries]
 if pythonpath_prefix:
     os.environ["PYTHONPATH"] = os.pathsep.join([*pythonpath_prefix, *pythonpath_entries])
 
@@ -35,77 +59,251 @@ os.environ["HOL_GUARD_TEST_DISABLE_BROWSER_OPEN"] = "1"
 os.environ.pop("HOL_GUARD_TEST_ALLOW_BROWSER_OPEN", None)
 
 
-@pytest.fixture(autouse=True)
-def _default_unit_tests_to_python_rollback(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Keep legacy unit fixtures on explicit, test-only oracle mode.
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line(
+        "markers",
+        "native_route_unpinned: exercise the real route transport, skipping the default-off route pinning",
+    )
 
-    Production default remains ``auto``. Native-authority tests monkeypatch
-    ``native_mode`` or delete this variable themselves. The oracle is injected
-    below; no production module imports the semantic evaluator.
+
+@pytest.fixture(autouse=True)
+def _default_unit_test_native_mode(monkeypatch: pytest.MonkeyPatch) -> bool:
+    """Use the compiled authority in native regression jobs.
+
+    A caller's explicit mode is preserved, including deliberate unavailable
+    runtime tests. Regression CI supplies an exact native binary; defaulting
+    those jobs to ``auto`` would not pin the implementation they must test.
+    Ordinary isolated unit runs retain the explicit fail-safe surface.
     """
 
+    monkeypatch.setenv("HOL_GUARD_TEST_MODE", "1")
+    monkeypatch.setenv("HOL_GUARD_NATIVE_DIAGNOSTIC", "1")
+    monkeypatch.setenv("HOL_GUARD_RESIDENT_TEST_SEAMS", "1")
+    # Catalog sync ships on. Tests that exercise it opt in explicitly, so the
+    # rest keep a runtime session without catalog posture.
+    if "GUARD_EXTENSION_CATALOG_SYNC_V1" not in os.environ:
+        monkeypatch.setenv("GUARD_EXTENSION_CATALOG_SYNC_V1", "false")
     if "HOL_GUARD_NATIVE" not in os.environ:
-        monkeypatch.setenv("HOL_GUARD_NATIVE", "off")
+        regression = os.environ.get("HOL_GUARD_NATIVE_REGRESSION") == "1"
+        monkeypatch.setenv("HOL_GUARD_NATIVE", "force" if regression else "auto")
+        return not regression
+    return False
 
 
 @pytest.fixture(autouse=True)
-def _explicit_python_differential_oracle(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Install the Python reviewer only for explicit differential-test paths."""
+def _fresh_verified_runtime_copy() -> Iterator[None]:
+    """Start each test without the process's reused runtime copy."""
+    from codex_plugin_scanner.guard.extension_builder import native_executable_root
 
-    monkeypatch.setenv("HOL_GUARD_TEST_MODE", "1")
-    monkeypatch.setenv("HOL_GUARD_PYTHON_ORACLE", "1")
-    monkeypatch.setenv("HOL_GUARD_NATIVE_DIAGNOSTIC", "1")
-
-    from codex_plugin_scanner.guard.cli import commands_hook_source_ref
-    from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config
-    from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
-    from codex_plugin_scanner.guard.runtime.hook_content_scanner import ContentScanner
-    from codex_plugin_scanner.guard.runtime.hook_decision_cache import HookDecisionCache
-    from codex_plugin_scanner.guard.runtime.hook_review_engine import HookReviewEngine
-    from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest, HookReviewResponse
-    from codex_plugin_scanner.guard.store import GuardStore
-
-    def worker_oracle(worker: HookWorker) -> object:
-        return HookReviewEngine(
-            store=worker.store,
-            scanner=ContentScanner(),
-            cache=HookDecisionCache(worker.store),
-            config_loader=worker._load_config,
-            metrics=worker.metrics,
-        )
-
-    def source_ref_oracle(
-        request: HookReviewRequest,
-        store: GuardStore,
-        config: GuardConfig | None,
-    ) -> HookReviewResponse:
-        return HookReviewEngine(
-            store=store,
-            scanner=ContentScanner(),
-            cache=HookDecisionCache(store),
-            config_loader=lambda guard_home, workspace: (
-                config if config is not None else load_guard_config(guard_home, workspace=workspace)
-            ),
-        ).review(request)
-
-    monkeypatch.setattr(HookWorker, "_test_python_oracle_factory", worker_oracle)
-    monkeypatch.setattr(commands_hook_source_ref, "_test_source_ref_oracle", source_ref_oracle)
+    native_executable_root.release_copies()
+    yield
+    native_executable_root.release_copies()
 
 
-@pytest.fixture
-def native_command_artifact_reviews(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Supply actual native command evidence to legacy hook orchestration tests."""
-    from codex_plugin_scanner.guard.cli import commands_support_runtime_artifacts
-    from tests.native_command_test_support import real_native_command_evaluation
+@pytest.fixture(autouse=True)
+def _checkout_runtime_judges_distribution(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Let a source checkout validate distribution roots with the pinned runtime."""
+    from tests.native_distribution_support import route_distribution
 
-    def review(command: str, *, guard_home: Path, cwd: Path | None = None, home_dir: Path | None = None):
-        del guard_home
-        try:
-            return real_native_command_evaluation(command, cwd=cwd, home_dir=home_dir)
-        except Exception as exc:
-            pytest.fail(f"Native command artifact fixture failed: {type(exc).__name__}: {exc}")
+    route_distribution(monkeypatch)
 
-    monkeypatch.setattr(commands_support_runtime_artifacts, "review_command_native", review)
+
+@pytest.fixture(autouse=True)
+def _no_fleet_runtime_probe(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep receipt-sync tests off the real runtime probe; its own tests stub ``_observe``."""
+    from codex_plugin_scanner.guard.runtime import fleet_posture_runtimes
+
+    def unavailable(_context: object, _now: object) -> None:
+        raise RuntimeError("runtime probe disabled in tests")
+
+    monkeypatch.setattr(fleet_posture_runtimes, "_observe", unavailable)
+
+
+@pytest.fixture(autouse=True)
+def _fresh_native_answer_caches(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep reused native answers from crossing tests that stub native replies."""
+    from codex_plugin_scanner.guard.catalog_delivery import installed_bundle, object_native
+
+    for module in (installed_bundle, object_native):
+        monkeypatch.setattr(module, "_ANSWERS", type(module._ANSWERS)())
+
+
+@pytest.fixture(autouse=True)
+def _python_codex_hook_bridge(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Install Codex hooks with the Python bridge argv unless a test opts in.
+
+    Most Codex install and trust tests pin the Python bridge contract. Tests
+    marked ``native_codex_hook_bridge`` keep the native runtime selection.
+    """
+
+    if request.node.get_closest_marker("native_codex_hook_bridge") is not None:
+        return
+    from codex_plugin_scanner.guard.adapters import codex as codex_adapter
+
+    # Subprocess installers copy os.environ and do not see this monkeypatch.
+    # The adapter treats this value as the Python bridge pin.
+    monkeypatch.setenv("HOL_GUARD_CODEX_HOOK_BRIDGE", "python")
+    monkeypatch.setattr(codex_adapter, "_native_bridge_executable", lambda *_args, **_kwargs: None)
+
+
+@pytest.fixture(autouse=True)
+def _python_bounded_hook_bridge(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Install bounded CLI hooks with the Python bridge argv unless a test opts in.
+
+    Copilot, Kimi, Devin, ZCode, OpenClaw and Cursor install tests pin the
+    Python bridge contract. Tests marked ``native_bounded_hook_bridge`` keep the
+    native runtime selection.
+    """
+
+    if request.node.get_closest_marker("native_bounded_hook_bridge") is not None:
+        return
+    # Subprocess installers copy os.environ and do not see a monkeypatched
+    # function. The launcher treats this value as the Python bridge pin.
+    monkeypatch.setenv("HOL_GUARD_BOUNDED_HOOK_BRIDGE", "python")
+    monkeypatch.setenv("HOL_GUARD_CURSOR_HOOK_BRIDGE", "python")
+
+
+@pytest.fixture(autouse=True)
+def _fetch_pi_hook_bridge(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Generate Pi and Oh My Pi extensions that post to the daemon themselves.
+
+    Pi extension tests stub the extension's ``fetch``. Tests marked
+    ``native_pi_hook_bridge`` keep the native runtime selection.
+    """
+
+    if request.node.get_closest_marker("native_pi_hook_bridge") is not None:
+        return
+    # Subprocess installers copy os.environ and do not see a monkeypatched
+    # function, so the generated source pins the daemon request by value.
+    monkeypatch.setenv("HOL_GUARD_PI_HOOK_BRIDGE", "fetch")
+
+
+@pytest.fixture(autouse=True)
+def _python_mcp_proxy_launcher(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Install MCP proxies with the Python launcher argv unless a test opts in.
+
+    Most install and refresh tests pin the Python proxy entry. Relay tests
+    select the native relay by setting or clearing ``HOL_GUARD_MCP_RELAY``.
+    """
+
+    # Subprocess installers copy os.environ, so the pin is an environment value.
+    monkeypatch.setenv("HOL_GUARD_MCP_RELAY", "python")
+
+
+@pytest.fixture(autouse=True)
+def _reset_registry_cache() -> None:
+    """A registry document one test cached must not answer another test."""
+    from codex_plugin_scanner.guard.native_supply_chain_registry_cache import REGISTRY_CACHE
+
+    REGISTRY_CACHE.clear()
+
+
+@pytest.fixture(autouse=True)
+def _reset_last_bound_digest_home(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A guard home one test bound must not answer another test's unbound digests.
+
+    The remembered home outlives its test's temporary directory; a later test
+    that binds none would otherwise ask the resident about a deleted home.
+    """
+    from codex_plugin_scanner.guard import native_context
+
+    monkeypatch.setattr(native_context, "_last_bound_home", None)
+
+
+@pytest.fixture(autouse=True)
+def _reset_aibom_mcp_native_backoff() -> None:
+    """One outage's MCP-enrichment backoff must not leak into the next test."""
+
+    from codex_plugin_scanner.guard import aibom_detection
+
+    aibom_detection._mcp_native_backoff_until = 0.0
+
+
+@pytest.fixture(autouse=True)
+def _default_off_daemon_route_policy(
+    request: pytest.FixtureRequest,
+    _default_unit_test_native_mode: bool,
+) -> None:
+    """Keep daemon route and Origin policy native in default-off local runs.
+
+    The daemon's route policy is resident-owned and fails closed without a
+    runtime, which is correct for production and for tests that pin ``off``
+    explicitly (those use ``native_route_policy_with_hooks_off`` themselves).
+    A local run that merely inherited the conftest ``off`` default and names a
+    runtime binary gets the same route-transport pinning, so daemon tests that
+    do not care about hook mode still reach their assertions. Without a
+    binary nothing is pinned and the gate still fails closed.
+    """
+
+    binary = os.environ.get("HOL_GUARD_NATIVE_BINARY")
+    if request.node.get_closest_marker("native_route_unpinned"):
+        return
+    if _default_unit_test_native_mode and binary and os.path.isfile(binary):
+        request.getfixturevalue("native_route_policy_with_hooks_off")
+
+
+@pytest.fixture(autouse=True)
+def _isolate_native_resident_launch(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the native resident's process launch independent of test doubles.
+
+    Daemon tests replace ``subprocess.Popen`` on the shared module to fake the
+    process they spawn, while lifecycle decisions ask the native resident, which
+    is itself launched through ``subprocess``. Give the resident client a
+    private snapshot taken before any double is installed so only the code
+    under test sees the fake. Native transport tests own that surface and
+    patch it deliberately.
+    """
+
+    if request.module.__name__.rsplit(".", 1)[-1].startswith("test_native"):
+        return
+    import subprocess
+    import types
+
+    from codex_plugin_scanner.guard import native_resident_stream
+
+    monkeypatch.setattr(native_resident_stream, "subprocess", types.SimpleNamespace(**vars(subprocess)))
+
+
+class _GuardCommandsProxy:
+    """Patch target that rebinds a symbol in every loaded guard module.
+
+    The hook pipeline is split across ``commands_*``/``commands_support_*``
+    modules that share bindings through the ``commands_support`` union, so a
+    name patched on ``cli.commands`` alone would never reach the moved call
+    sites. ``monkeypatch.setattr(guard_commands_module, name, value)`` fans
+    the rebind out to every loaded ``codex_plugin_scanner`` module that holds
+    the same object, and restores through the same fan-out on teardown.
+    """
+
+    @staticmethod
+    def _original(name: str) -> object:
+        sentinel = object()
+        commands = sys.modules.get("codex_plugin_scanner.guard.cli.commands")
+        if commands is not None:
+            value = getattr(commands, name, sentinel)
+            if value is not sentinel:
+                return value
+        for module in list(sys.modules.values()):
+            if not getattr(module, "__name__", "").startswith("codex_plugin_scanner"):
+                continue
+            value = getattr(module, name, sentinel)
+            if value is not sentinel:
+                return value
+        raise AttributeError(name)
+
+    def __getattr__(self, name: str) -> object:
+        return self._original(name)
+
+    def __setattr__(self, name: str, value: object) -> None:
+        original = self._original(name)
+        for module in list(sys.modules.values()):
+            if not getattr(module, "__name__", "").startswith("codex_plugin_scanner"):
+                continue
+            if getattr(module, name, None) is original:
+                setattr(module, name, value)
+
+
+guard_commands_module = _GuardCommandsProxy()
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
@@ -118,9 +316,12 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    fault_injection_enabled = os.environ.get("GUARD_FAULT_INJECTION") == "1"
     for item in items:
         for marker in invariant_markers_for_nodeid(item.nodeid):
             item.add_marker(marker)
+        if not fault_injection_enabled and item.get_closest_marker("fault_injection") is not None:
+            item.add_marker(pytest.mark.skip(reason="requires GUARD_FAULT_INJECTION=1"))
 
     if not config.getoption("--validate-test-invariants"):
         return
@@ -165,9 +366,28 @@ def pytest_runtest_teardown(item: pytest.Item, nextitem: pytest.Item | None) -> 
         return
 
     from codex_plugin_scanner.guard.daemon.manager import retire_all_guard_daemons_for_home
+    from codex_plugin_scanner.guard.native_daemon_lifecycle import NativeDaemonLifecycleError
 
-    for guard_home in sorted(_test_guard_homes_with_daemon_state(test_tmp_path)):
-        retire_all_guard_daemons_for_home(guard_home)
+    # The per-test native mode is already undone here; the lifecycle decisions
+    # that identify the daemons to retire need the same compiled authority.
+    guard_homes = sorted(_test_guard_homes_with_daemon_state(test_tmp_path))
+    if guard_homes and "HOL_GUARD_NATIVE" not in os.environ and os.environ.get("HOL_GUARD_NATIVE_REGRESSION") == "1":
+        os.environ["HOL_GUARD_NATIVE"] = "force"
+        os.environ["HOL_GUARD_TEST_MODE"] = "1"
+        try:
+            _retire_homes(guard_homes, retire_all_guard_daemons_for_home, NativeDaemonLifecycleError)
+        finally:
+            os.environ.pop("HOL_GUARD_NATIVE", None)
+            os.environ.pop("HOL_GUARD_TEST_MODE", None)
+        return
+    _retire_homes(guard_homes, retire_all_guard_daemons_for_home, NativeDaemonLifecycleError)
+
+
+def _retire_homes(guard_homes: list[Path], retire: Callable[[Path], object], unavailable: type[Exception]) -> None:
+    for guard_home in guard_homes:
+        # Best-effort cleanup: an unavailable native authority must not mask the test result.
+        with suppress(unavailable):
+            retire(guard_home)
 
 
 @pytest.fixture(autouse=True)
@@ -198,6 +418,30 @@ def _isolate_lifecycle_authority_home(
 
 
 @pytest.fixture(autouse=True)
+def _isolate_hook_cli_loader_search_paths(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the runner's loader search paths out of `hol-guard hook` reviews.
+
+    The hook CLI stamps the caller's environment like a bridge does. CI's Python
+    exports LD_LIBRARY_PATH, which the native review rightly treats as a loader
+    override, so hook tests would answer for the runner rather than the fixture.
+    Child processes still inherit the variable.
+    """
+    from codex_plugin_scanner.guard.cli import commands_hook_native_authority as hook_authority
+    from codex_plugin_scanner.guard.hook_execution_environment import LIBRARY_SEARCH_PATH_NAMES
+
+    collect = hook_authority.collect_hook_execution_environment
+
+    def collect_without_runner_loader_paths() -> dict[str, object]:
+        stamped = collect()
+        names = stamped.get("environment_names")
+        if isinstance(names, list):
+            stamped["environment_names"] = [name for name in names if name not in LIBRARY_SEARCH_PATH_NAMES]
+        return {**stamped, "library_search_paths": {}}
+
+    monkeypatch.setattr(hook_authority, "collect_hook_execution_environment", collect_without_runner_loader_paths)
+
+
+@pytest.fixture(autouse=True)
 def _isolate_trust_attestation_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Clear trust attestation env vars so tests don't inherit the developer's shell config."""
     for key in (
@@ -221,13 +465,14 @@ def _isolate_daemon_background_refresh_workers(
         "daemon_aibom_refresh": "_start_aibom_inventory_refresh",
         "daemon_bundle_refresh": "_start_supply_chain_bundle_refresh",
         "daemon_headless_refresh": "_start_headless_cloud_sync",
+        "daemon_plugin_telemetry": "_start_plugin_telemetry",
     }
     for marker, method_name in worker_markers.items():
         if request.node.get_closest_marker(marker) is None:
             monkeypatch.setattr(daemon_server.GuardDaemonServer, method_name, lambda _self: None)
     if request.node.get_closest_marker("daemon_headless_queue") is None:
-        monkeypatch.setattr(
-            daemon_server,
+        patch_daemon_global(
+            monkeypatch,
             "_queue_headless_cloud_sync",
             lambda *, store: {
                 "status": "not_configured",
@@ -236,7 +481,11 @@ def _isolate_daemon_background_refresh_workers(
         )
     if request.node.get_closest_marker("daemon_service_workers") is None:
         monkeypatch.setattr(daemon_server, "start_command_queue_worker", lambda _store, existing: existing)
-        monkeypatch.setattr(daemon_server, "start_cloud_sync_sync_worker", lambda _store, existing: existing)
+        monkeypatch.setattr(
+            daemon_server,
+            "start_cloud_sync_sync_worker",
+            lambda _store, existing, *, on_authority_changed=None: existing,
+        )
 
 
 class _FakeSystemKeyringModule:

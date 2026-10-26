@@ -9,8 +9,10 @@ import urllib.error
 import urllib.request
 from urllib.parse import urlparse
 
-from codex_plugin_scanner.guard.adapters.claude_daemon_hook_transport import authenticated_claude_hook_response
-from codex_plugin_scanner.guard.adapters.codex_daemon_hook_auth import _DaemonResponseError
+from codex_plugin_scanner.guard.adapters._modules.claude.claude_daemon_hook_transport import (
+    authenticated_claude_hook_response,
+)
+from codex_plugin_scanner.guard.adapters._modules.codex.codex_daemon_hook_auth import _DaemonResponseError
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 
 

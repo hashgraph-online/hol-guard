@@ -1,0 +1,1066 @@
+{
+ "cases": [
+  {
+   "accepted": true,
+   "kind": "canonical_sha256",
+   "name": "digest_ok",
+   "payload": {
+    "code": "ok",
+    "digest": "abababababababababababababababababababababababababababababababab",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "canonical_sha256",
+   "name": "digest_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "canonical_sha256",
+   "name": "digest_empty",
+   "payload": {
+    "code": "ok",
+    "digest": "",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "canonical_sha256",
+   "name": "digest_error_status_without_output",
+   "payload": {
+    "code": "native_context_values_invalid",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "error"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "build_approval_context_token",
+   "name": "token_ok",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok",
+    "token": "guard-approval-context:v1:AA"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "build_approval_context_token",
+   "name": "token_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "configured_environment_hash",
+   "name": "configured_environment_hash_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "configured_environment_hash",
+   "name": "configured_environment_hash_ok",
+   "payload": {
+    "code": "ok",
+    "digest": "abababababababababababababababababababababababababababababababab",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "configured_headers_hash",
+   "name": "configured_headers_hash_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "configured_headers_hash",
+   "name": "configured_headers_hash_ok",
+   "payload": {
+    "code": "ok",
+    "digest": "abababababababababababababababababababababababababababababababab",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "launch_argv_digest",
+   "name": "launch_argv_digest_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "launch_argv_digest",
+   "name": "launch_argv_digest_ok",
+   "payload": {
+    "code": "ok",
+    "digest": "abababababababababababababababababababababababababababababababab",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "opaque_material_digest",
+   "name": "opaque_material_digest_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "opaque_material_digest",
+   "name": "opaque_material_digest_ok",
+   "payload": {
+    "code": "ok",
+    "digest": "abababababababababababababababababababababababababababababababab",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "validate_approval_context_tokens",
+   "name": "validation_reason_null",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok",
+    "validation_reason": null
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "validate_approval_context_tokens",
+   "name": "validation_reason_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "package_execution_context_from_evidence",
+   "name": "package_context_ok",
+   "payload": {
+    "code": "ok",
+    "package_context": {
+     "components": [
+      {
+       "digest": "abababababababababababababababababababababababababababababababab",
+       "name": "n"
+      }
+     ],
+     "digest": "abababababababababababababababababababababababababababababababab",
+     "non_portable_reason": null,
+     "portable": true
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "package_execution_context_from_evidence",
+   "name": "package_context_null",
+   "payload": {
+    "code": "ok",
+    "package_context": null,
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "package_execution_context_from_evidence",
+   "name": "package_context_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "package_execution_context_from_scanner_evidence",
+   "name": "package_context_scanner_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "package_execution_context_from_evidence",
+   "name": "package_context_bad_digest",
+   "payload": {
+    "code": "ok",
+    "package_context": {
+     "components": [
+      {
+       "digest": "abababababababababababababababababababababababababababababababab",
+       "name": "n"
+      }
+     ],
+     "digest": "nope",
+     "non_portable_reason": null,
+     "portable": true
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "package_execution_context_from_evidence",
+   "name": "package_context_no_components",
+   "payload": {
+    "code": "ok",
+    "package_context": {
+     "components": [],
+     "digest": "abababababababababababababababababababababababababababababababab",
+     "non_portable_reason": null,
+     "portable": true
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "package_execution_context_from_evidence",
+   "name": "package_context_bad_component_digest",
+   "payload": {
+    "code": "ok",
+    "package_context": {
+     "components": [
+      {
+       "digest": "zz",
+       "name": "n"
+      }
+     ],
+     "digest": "abababababababababababababababababababababababababababababababab",
+     "non_portable_reason": null,
+     "portable": true
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_server_identity",
+   "name": "server_identity_ok",
+   "payload": {
+    "code": "ok",
+    "mcp_server_identity": {
+     "args_hash": "abababababababababababababababababababababababababababababababab",
+     "command": "c",
+     "config_path": "p",
+     "env_keys": [],
+     "env_values_hash": "abababababababababababababababababababababababababababababababab",
+     "identity_hash": "abababababababababababababababababababababababababababababababab",
+     "package_name": null,
+     "package_source": "s",
+     "package_version": null,
+     "transport": "stdio"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_server_identity",
+   "name": "server_identity_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_server_identity",
+   "name": "server_identity_bad_hash",
+   "payload": {
+    "code": "ok",
+    "mcp_server_identity": {
+     "args_hash": "x",
+     "command": "c",
+     "config_path": "p",
+     "env_keys": [],
+     "env_values_hash": "abababababababababababababababababababababababababababababababab",
+     "identity_hash": "abababababababababababababababababababababababababababababababab",
+     "package_name": null,
+     "package_source": "s",
+     "package_version": null,
+     "transport": "stdio"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_server_identity",
+   "name": "server_identity_bad_env_hash",
+   "payload": {
+    "code": "ok",
+    "mcp_server_identity": {
+     "args_hash": "abababababababababababababababababababababababababababababababab",
+     "command": "c",
+     "config_path": "p",
+     "env_keys": [],
+     "env_values_hash": "x",
+     "identity_hash": "abababababababababababababababababababababababababababababababab",
+     "package_name": null,
+     "package_source": "s",
+     "package_version": null,
+     "transport": "stdio"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_server_identity",
+   "name": "server_identity_bad_identity_hash",
+   "payload": {
+    "code": "ok",
+    "mcp_server_identity": {
+     "args_hash": "abababababababababababababababababababababababababababababababab",
+     "command": "c",
+     "config_path": "p",
+     "env_keys": [],
+     "env_values_hash": "abababababababababababababababababababababababababababababababab",
+     "identity_hash": "x",
+     "package_name": null,
+     "package_source": "s",
+     "package_version": null,
+     "transport": "stdio"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_identity",
+   "name": "tool_identity_ok",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_identity": {
+     "description_hash": "abababababababababababababababababababababababababababababababab",
+     "identity_hash": "abababababababababababababababababababababababababababababababab",
+     "schema_hash": "abababababababababababababababababababababababababababababababab",
+     "server_hash": "x",
+     "tool_name": "t"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_tool_identity",
+   "name": "tool_identity_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_tool_identity",
+   "name": "tool_identity_bad_schema_hash",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_identity": {
+     "description_hash": "abababababababababababababababababababababababababababababababab",
+     "identity_hash": "abababababababababababababababababababababababababababababababab",
+     "schema_hash": "x",
+     "server_hash": "x",
+     "tool_name": "t"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_tool_identity",
+   "name": "tool_identity_bad_description_hash",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_identity": {
+     "description_hash": "x",
+     "identity_hash": "abababababababababababababababababababababababababababababababab",
+     "schema_hash": "abababababababababababababababababababababababababababababababab",
+     "server_hash": "x",
+     "tool_name": "t"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_tool_identity",
+   "name": "tool_identity_bad_identity_hash",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_identity": {
+     "description_hash": "abababababababababababababababababababababababababababababababab",
+     "identity_hash": "x",
+     "schema_hash": "abababababababababababababababababababababababababababababababab",
+     "server_hash": "x",
+     "tool_name": "t"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "browser_mcp",
+   "name": "browser_server_ok",
+   "payload": {
+    "browser_mcp": {
+     "is_browser": true,
+     "operation": "server"
+    },
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "browser_mcp",
+   "name": "browser_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "canonical_sha256",
+   "name": "browser_wrong_kind",
+   "payload": {
+    "browser_mcp": {
+     "is_browser": true,
+     "operation": "server"
+    },
+    "code": "ok",
+    "digest": "abababababababababababababababababababababababababababababababab",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "local_cli_identity",
+   "name": "local_cli_identity_own_kind",
+   "payload": {
+    "code": "ok",
+    "local_cli_identity": {
+     "x": 1
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "canonical_sha256",
+   "name": "local_cli_identity_wrong_kind",
+   "payload": {
+    "code": "ok",
+    "digest": "abababababababababababababababababababababababababababababababab",
+    "local_cli_identity": {
+     "x": 1
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "managed_controls_policy_fields",
+   "name": "managed_controls_policy_fields_own_kind",
+   "payload": {
+    "code": "ok",
+    "managed_controls_policy_fields": {
+     "x": 1
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "canonical_sha256",
+   "name": "managed_controls_policy_fields_wrong_kind",
+   "payload": {
+    "code": "ok",
+    "digest": "abababababababababababababababababababababababababababababababab",
+    "managed_controls_policy_fields": {
+     "x": 1
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "package_json_scripts",
+   "name": "package_json_scripts_own_kind",
+   "payload": {
+    "code": "ok",
+    "package_json_scripts": {
+     "x": 1
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "canonical_sha256",
+   "name": "package_json_scripts_wrong_kind",
+   "payload": {
+    "code": "ok",
+    "digest": "abababababababababababababababababababababababababababababababab",
+    "package_json_scripts": {
+     "x": 1
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "custom_extension_suggestion",
+   "name": "custom_extension_suggestion_own_kind",
+   "payload": {
+    "code": "ok",
+    "custom_extension_suggestion": {
+     "x": 1
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "canonical_sha256",
+   "name": "custom_extension_suggestion_wrong_kind",
+   "payload": {
+    "code": "ok",
+    "custom_extension_suggestion": {
+     "x": 1
+    },
+    "digest": "abababababababababababababababababababababababababababababababab",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "custom_extension_continuity",
+   "name": "custom_extension_continuity_own_kind",
+   "payload": {
+    "code": "ok",
+    "custom_extension_continuity": {
+     "x": 1
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "canonical_sha256",
+   "name": "custom_extension_continuity_wrong_kind",
+   "payload": {
+    "code": "ok",
+    "custom_extension_continuity": {
+     "x": 1
+    },
+    "digest": "abababababababababababababababababababababababababababababababab",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "local_cli_identify",
+   "name": "local_cli_identify_ok",
+   "payload": {
+    "code": "ok",
+    "local_cli_identities": [],
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "local_cli_identify",
+   "name": "local_cli_identify_nonempty",
+   "payload": {
+    "code": "ok",
+    "local_cli_identities": [
+     {
+      "cli_id": "x"
+     }
+    ],
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "local_cli_identify",
+   "name": "local_cli_identify_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "canonical_sha256",
+   "name": "local_cli_identities_wrong_kind",
+   "payload": {
+    "code": "ok",
+    "digest": "abababababababababababababababababababababababababababababababab",
+    "local_cli_identities": [],
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "local_cli_identify",
+   "name": "local_cli_identify_error_without_output",
+   "payload": {
+    "code": "native_local_cli_identify_deadline",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "error"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "runtime_hook_approval_context",
+   "name": "hook_approval_context_runtime_ok",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "generic_hook_approval_context",
+   "name": "hook_approval_context_generic_ok",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "browser_mcp",
+   "name": "browser_normalize_ok",
+   "payload": {
+    "browser_mcp": {
+     "intent": {
+      "intent": "browser.navigation",
+      "mcp_schema_hash": null,
+      "mcp_server_identity_hash": null,
+      "mcp_server_name": "s",
+      "mcp_tool_identity_hash": null,
+      "mcp_tool_name": "t",
+      "method": "navigate",
+      "operation": "navigate",
+      "profile_mode": "isolated",
+      "sensitive_surface_flags": [
+       "cookies"
+      ],
+      "target_domain": null,
+      "target_origin": null,
+      "target_path_prefix": null,
+      "target_url": null,
+      "version": 1,
+      "volatile_fields_dropped": [
+       "a"
+      ]
+     },
+     "operation": "normalize"
+    },
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "browser_mcp",
+   "name": "browser_normalize_null_intent",
+   "payload": {
+    "browser_mcp": {
+     "intent": null,
+     "operation": "normalize"
+    },
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "browser_mcp",
+   "name": "browser_normalize_version_2",
+   "payload": {
+    "browser_mcp": {
+     "intent": {
+      "intent": "browser.navigation",
+      "mcp_schema_hash": null,
+      "mcp_server_identity_hash": null,
+      "mcp_server_name": "s",
+      "mcp_tool_identity_hash": null,
+      "mcp_tool_name": "t",
+      "method": "navigate",
+      "operation": "navigate",
+      "profile_mode": "isolated",
+      "sensitive_surface_flags": [
+       "cookies"
+      ],
+      "target_domain": null,
+      "target_origin": null,
+      "target_path_prefix": null,
+      "target_url": null,
+      "version": 2,
+      "volatile_fields_dropped": [
+       "a"
+      ]
+     },
+     "operation": "normalize"
+    },
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "browser_mcp",
+   "name": "browser_normalize_duplicate_flags",
+   "payload": {
+    "browser_mcp": {
+     "intent": {
+      "intent": "browser.navigation",
+      "mcp_schema_hash": null,
+      "mcp_server_identity_hash": null,
+      "mcp_server_name": "s",
+      "mcp_tool_identity_hash": null,
+      "mcp_tool_name": "t",
+      "method": "navigate",
+      "operation": "navigate",
+      "profile_mode": "isolated",
+      "sensitive_surface_flags": [
+       "cookies",
+       "cookies"
+      ],
+      "target_domain": null,
+      "target_origin": null,
+      "target_path_prefix": null,
+      "target_url": null,
+      "version": 1,
+      "volatile_fields_dropped": [
+       "a"
+      ]
+     },
+     "operation": "normalize"
+    },
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "browser_mcp",
+   "name": "browser_normalize_duplicate_dropped",
+   "payload": {
+    "browser_mcp": {
+     "intent": {
+      "intent": "browser.navigation",
+      "mcp_schema_hash": null,
+      "mcp_server_identity_hash": null,
+      "mcp_server_name": "s",
+      "mcp_tool_identity_hash": null,
+      "mcp_tool_name": "t",
+      "method": "navigate",
+      "operation": "navigate",
+      "profile_mode": "isolated",
+      "sensitive_surface_flags": [
+       "cookies"
+      ],
+      "target_domain": null,
+      "target_origin": null,
+      "target_path_prefix": null,
+      "target_url": null,
+      "version": 1,
+      "volatile_fields_dropped": [
+       "a",
+       "a"
+      ]
+     },
+     "operation": "normalize"
+    },
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "browser_mcp",
+   "name": "browser_classify_ok",
+   "payload": {
+    "browser_mcp": {
+     "intent": "browser.inspect",
+     "operation": "classify"
+    },
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "browser_mcp",
+   "name": "browser_display_ok",
+   "payload": {
+    "browser_mcp": {
+     "operation": "display",
+     "target": "x"
+    },
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "custom_extension_continuity",
+   "name": "custom_extension_continuity_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "managed_controls_policy_fields",
+   "name": "managed_controls_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "launch_argv_digest_unknown",
+   "name": "unconstrained_kind_empty_ok",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_launch_environment",
+   "name": "mcp_launch_env_ok",
+   "payload": {
+    "code": "ok",
+    "mcp_launch_environment": {
+     "A": "b"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  }
+ ],
+ "schema": "guard-context-digest-result-check-vectors.v1"
+}

@@ -1,6 +1,6 @@
 # Guard Cloud control and evidence paths inventory
 
-Status: wave-zero baseline. Audience: execution-assurance gate reviewers. Pinned refs: `hol-points-portal` `main` at `8d6d20daae94144bcda4e61f7fb575437751b8db`; HOL Guard source snapshot `release/3.1` at `10348fd40fa53ef60d9363bb6c37591b8bb60a61`, migrated to release 3.0 in PR #1901.
+Status: wave-zero baseline. Audience: execution-assurance gate reviewers. Pinned refs: `cloud-portal` `main` at `8d6d20daae94144bcda4e61f7fb575437751b8db`; HOL Guard source snapshot `release/3.1` at `10348fd40fa53ef60d9363bb6c37591b8bb60a61`, migrated to release 3.0 in PR #1901.
 
 Maps Guard Cloud policy distribution, identity, device, evidence, command, session, protection, remediation, incident, notification, and MDM/EDR paths to their routes, repositories, schemas, and UI, with workspace/tenant authorization.
 

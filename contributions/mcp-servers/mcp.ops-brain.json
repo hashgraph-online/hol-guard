@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.ops-brain",
+  "version": "1.0.0",
+  "name": "ops-brain MCP",
+  "description": "Self-hosted team bus for AI agents: cross-machine handoffs, check-in, and shared knowledge on your own PostgreSQL. Reads keep Guard's usual handling; writes to the shared bus and both deletes are gated on review. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.thek3nsai",
+    "displayName": "TheK3nsai",
+    "url": "https://github.com/TheK3nsai"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCube", "background": "#0F172A" },
+  "homepage": "https://github.com/TheK3nsai/ops-brain",
+  "license": "MIT OR Apache-2.0",
+  "launch": {
+    "kind": "direct-command",
+    "command": "ops-brain"
+  },
+  "riskClasses": ["external-shared-state-write", "external-agent-messaging", "external-content-deletion"],
+  "tools": [
+    { "name": "check_in", "state": "inherit" },
+    { "name": "search_bus", "state": "inherit" },
+    { "name": "get_handoff", "state": "inherit" },
+    { "name": "list_handoffs", "state": "inherit" },
+    { "name": "list_replies_to_me", "state": "inherit" },
+    { "name": "create_handoff", "state": "review" },
+    { "name": "accept_handoff", "state": "review" },
+    { "name": "complete_handoff", "state": "review" },
+    { "name": "mark_merged", "state": "review" },
+    { "name": "add_knowledge", "state": "review" },
+    { "name": "update_knowledge", "state": "review" },
+    { "name": "delete_knowledge", "state": "review" },
+    { "name": "delete_handoff", "state": "review" },
+    { "name": "other", "state": "review" }
+  ],
+  "referenceUrls": [
+    "https://github.com/TheK3nsai/ops-brain",
+    "https://github.com/TheK3nsai/ops-brain/blob/main/docs/agent-tokens.md",
+    "https://github.com/TheK3nsai/ops-brain/blob/main/docs/client-scope.md",
+    "https://github.com/TheK3nsai/ops-brain/pkgs/container/ops-brain",
+    "https://registry.modelcontextprotocol.io/v0/servers/io.github.TheK3nsai%2Fops-brain/versions/latest"
+  ],
+  "saferAlternatives": [
+    "Start with check_in, search_bus, get_handoff and list_handoffs; they only read the bus.",
+    "Over stdio there is no authentication: ops-brain runs with full access to the configured database. Per-agent tokens and exclude_client_data apply only to a separately configured HTTP deployment.",
+    "delete_handoff and delete_knowledge are hard deletes (handoff deletes leave an audit_log row); prefer complete_handoff.",
+    "This entry matches the stdio binary only. Shared HTTP deployments are self-hosted with no official endpoint; set them up on Guard's Protect page."
+  ]
+}

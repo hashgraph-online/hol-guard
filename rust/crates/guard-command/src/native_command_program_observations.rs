@@ -2,6 +2,12 @@
 
 use super::*;
 
+/// The rules a proven recoverable removal does not match.
+const RECOVERABLE_REMOVAL_RULES: &[&str] = &[
+    "command.filesystem.recursive-delete",
+    "command.shell-mutations.destructive-shell",
+];
+
 impl NativeCommandProgram {
     pub fn observe(
         &self,
@@ -9,25 +15,109 @@ impl NativeCommandProgram {
         active_extensions: &BTreeSet<String>,
         deadline: Option<Instant>,
     ) -> Result<NativeCommandObservationBatchV1, &'static str> {
-        let compatibility =
-            crate::command_compatibility::compatibility_observations(command, deadline)?;
-        let mut batch = self.observe_declarative(command, active_extensions, deadline)?;
+        self.observe_with_context(
+            command,
+            active_extensions,
+            deadline,
+            crate::pretool::PathContext::default(),
+        )
+    }
+
+    pub fn observe_with_context(
+        &self,
+        command: &CanonicalCommandV1,
+        active_extensions: &BTreeSet<String>,
+        deadline: Option<Instant>,
+        context: crate::pretool::PathContext<'_>,
+    ) -> Result<NativeCommandObservationBatchV1, &'static str> {
+        self.observe_in(command, active_extensions, deadline, context, None)
+    }
+
+    /// [`Self::observe_with_context`] with the execution environment the
+    /// command inherits, for proofs that run a metadata probe.
+    pub(crate) fn observe_in(
+        &self,
+        command: &CanonicalCommandV1,
+        active_extensions: &BTreeSet<String>,
+        deadline: Option<Instant>,
+        context: crate::pretool::PathContext<'_>,
+        environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    ) -> Result<NativeCommandObservationBatchV1, &'static str> {
+        self.observe_in_with_dispatch(
+            command,
+            active_extensions,
+            deadline,
+            context,
+            environment,
+            None,
+        )
+    }
+
+    pub(crate) fn observe_in_with_dispatch(
+        &self,
+        command: &CanonicalCommandV1,
+        active_extensions: &BTreeSet<String>,
+        deadline: Option<Instant>,
+        context: crate::pretool::PathContext<'_>,
+        environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+        dispatch: Option<&CommandCandidateIndex>,
+    ) -> Result<NativeCommandObservationBatchV1, &'static str> {
+        let mut compatibility = crate::command_compatibility::compatibility_observations_in(
+            command,
+            deadline,
+            context,
+            environment,
+        )?;
+        // A recursive removal Git can restore matches neither the recursive
+        // delete rule nor the destructive-shell rule: it loses no work. The
+        // proof reads an exact single `rm`, so it also settles the
+        // destructive-shell rule's uncertain match.
+        let recoverable = crate::pretool::recoverable_removal::exact_safe_command(
+            command,
+            context,
+            deadline,
+            environment,
+        );
+        if recoverable {
+            compatibility
+                .rule_matches
+                .retain(|matched| !RECOVERABLE_REMOVAL_RULES.contains(&matched.rule_id));
+        }
+        let candidates = dispatch
+            .map(|index| index.candidates(command))
+            .unwrap_or_else(|| self.candidate_rule_indices(command));
+        let mut batch = self.observe_declarative_memo(
+            command,
+            active_extensions,
+            deadline,
+            candidates,
+            dispatch.map(|index| Arc::clone(&index.memo_layout)),
+        )?;
+        if recoverable {
+            batch.observations.retain(|observation| {
+                !RECOVERABLE_REMOVAL_RULES.contains(&observation.rule_id.as_str())
+            });
+        }
         for mut matched in compatibility.rule_matches {
             // Safe evidence is both capability- and segment-scoped. A preview
             // in one segment cannot suppress its destructive sibling, and a
             // CLI's help predicate cannot erase a separate capability whose
             // semantics deliberately still require review for trailing help.
+            // An uncertain match is never suppressed: a steered segment's
+            // safe-looking flags do not prove what the program will do.
+            let uncertain = matched.uncertainty;
             matched.segment_indexes.retain(|segment| {
-                !batch.observations.iter().any(|observation| {
-                    safe_variant_covers_compatibility(matched.rule_id, &observation.rule_id)
-                        && !observation.effective_segment_indexes.contains(segment)
-                        && observation.safe_variants.iter().any(|variant| {
-                            variant
-                                .matcher_evidence
-                                .iter()
-                                .any(|evidence| evidence.segment_index == *segment)
-                        })
-                })
+                uncertain
+                    || !batch.observations.iter().any(|observation| {
+                        safe_variant_covers_compatibility(matched.rule_id, &observation.rule_id)
+                            && !observation.effective_segment_indexes.contains(segment)
+                            && observation.safe_variants.iter().any(|variant| {
+                                variant
+                                    .matcher_evidence
+                                    .iter()
+                                    .any(|evidence| evidence.segment_index == *segment)
+                            })
+                    })
             });
             if matched.segment_indexes.is_empty() {
                 continue;
@@ -135,16 +225,45 @@ impl NativeCommandProgram {
         active_extensions: &BTreeSet<String>,
         deadline: Option<Instant>,
     ) -> Result<NativeCommandObservationBatchV1, &'static str> {
+        self.observe_declarative_selected(
+            command,
+            active_extensions,
+            deadline,
+            self.candidate_rule_indices(command),
+        )
+    }
+
+    pub(super) fn observe_declarative_selected(
+        &self,
+        command: &CanonicalCommandV1,
+        active_extensions: &BTreeSet<String>,
+        deadline: Option<Instant>,
+        candidates: impl IntoIterator<Item = usize>,
+    ) -> Result<NativeCommandObservationBatchV1, &'static str> {
+        self.observe_declarative_memo(command, active_extensions, deadline, candidates, None)
+    }
+
+    pub(super) fn observe_declarative_memo(
+        &self,
+        command: &CanonicalCommandV1,
+        active_extensions: &BTreeSet<String>,
+        deadline: Option<Instant>,
+        candidates: impl IntoIterator<Item = usize>,
+        layout: Option<Arc<MemoLayout>>,
+    ) -> Result<NativeCommandObservationBatchV1, &'static str> {
         let mut state = Evaluation {
             program: self,
             command,
             deadline,
-            memo: vec![None; self.nodes.len()],
+            memo: NodeMemo::new(layout),
         };
         let mut observations = Vec::new();
         let mut evidence_items = 0usize;
-        for index in self.candidate_rule_indices(command) {
+        let mut considered = 0usize;
+        let mut evaluated = 0usize;
+        for index in candidates {
             state.check_deadline()?;
+            considered += 1;
             let rule = &self.rules[index];
             let extension = &self.extensions[rule.extension_index];
             if !active_extensions.contains(&extension.extension_id) {
@@ -153,6 +272,7 @@ impl NativeCommandProgram {
             let Some(matcher) = rule.matcher else {
                 continue;
             };
+            evaluated += 1;
             let mut uncertainty = Vec::new();
             let base = match state.evaluate(matcher) {
                 Ok(indices) => indices,
@@ -227,6 +347,7 @@ impl NativeCommandProgram {
             });
         }
         state.check_deadline()?;
+        super::work_stats::record_pass(considered, evaluated);
         Ok(NativeCommandObservationBatchV1 {
             observations,
             ..Default::default()

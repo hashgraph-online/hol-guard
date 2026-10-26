@@ -10,18 +10,13 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Protocol, cast
 
-import pytest
-
 if not __package__:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.ci.pytest_duration_manifest import load_duration_manifest, node_id_digest
+from scripts.ci.test_inventory import collect_test_items
 
 UNKNOWN_NODE_DURATION_SECONDS = 1.0
-
-
-class _CollectionSession(Protocol):
-    items: list[pytest.Item]
 
 
 class _Arguments(Protocol):
@@ -30,14 +25,6 @@ class _Arguments(Protocol):
     granularity: str
     duration_manifest: Path | None
     max_manifest_age_days: int
-
-
-class _NodeCollector:
-    def __init__(self) -> None:
-        self.node_ids: list[str] = []
-
-    def pytest_collection_finish(self, session: _CollectionSession) -> None:
-        self.node_ids = sorted(item.nodeid for item in session.items)
 
 
 def discover_test_files(root: Path) -> list[Path]:
@@ -69,16 +56,7 @@ def build_test_shards(root: Path, shard_count: int) -> list[list[Path]]:
 
 
 def discover_test_nodes(root: Path) -> list[str]:
-    collector = _NodeCollector()
-    result = pytest.main(
-        # Collecting IDs needs normal Python assertions, but not pytest's costly
-        # assertion-message rewriting. Execution runners retain normal rewriting.
-        [str(root / "tests"), "--collect-only", "--assert=plain", "-p", "no:terminal"],
-        plugins=[collector],
-    )
-    if result != pytest.ExitCode.OK:
-        raise RuntimeError(f"pytest collection failed with exit code {result}")
-    return collector.node_ids
+    return sorted(item.nodeid for item in collect_test_items(root))
 
 
 def build_node_shards(

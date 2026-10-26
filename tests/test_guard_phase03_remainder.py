@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import http.client
 import json
+import sys
+import sysconfig
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -19,6 +21,8 @@ from tests.update_context_test_support import build_legacy_update_context
 
 @pytest.fixture(autouse=True)
 def _use_legacy_update_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Installer probes must not change the interpreter used by pytest and coverage.
+    monkeypatch.setattr(update_commands, "sys", SimpleNamespace(**vars(sys)))
     monkeypatch.setattr(update_commands, "build_trusted_update_context", build_legacy_update_context)
 
 
@@ -89,8 +93,16 @@ def test_update_detects_uv_tool_install_and_pins_latest_version(monkeypatch: pyt
     assert payload["binary_diagnostics"]["path_status"] == "uv_tool_shim_detected"
 
 
+def _all_alpha_tags_live(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(update_commands, "_alpha_liveness_checker", lambda: lambda _version: True)
+
+
 def test_update_alpha_pins_latest_alpha_release(monkeypatch: pytest.MonkeyPatch) -> None:
+    runtime_prefix = sys.prefix
+    runtime_paths = sysconfig.get_paths()
     monkeypatch.setattr(update_commands.sys, "prefix", "/opt/pipx/venvs/hol-guard")
+    assert sys.prefix == runtime_prefix
+    assert sysconfig.get_paths() == runtime_paths
     monkeypatch.setattr(update_commands.shutil, "which", lambda name: f"/opt/bin/{name}")
     monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.1127")
     monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
@@ -104,11 +116,9 @@ def test_update_alpha_pins_latest_alpha_release(monkeypatch: pytest.MonkeyPatch)
         "runpip",
         "hol-guard",
         "install",
-        "--upgrade",
-        "--force-reinstall",
-        "--pre",
-        "hol-guard==2.1.0a35",
+        "hol_guard-2.1.0a35-py3-none-<platform>.whl",
     ]
+    assert payload["upgrade_source"] == "github_alpha_release"
     assert payload["retry_command"] == "hol-guard update --alpha"
     assert payload["release_channel"] == "alpha"
     assert payload["version_check"]["release_channel"] == "alpha"
@@ -149,6 +159,7 @@ def test_update_command_allows_prerelease_for_alpha_pins() -> None:
 def test_latest_alpha_version_selects_newest_alpha_across_majors_and_skips_yanked(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _all_alpha_tags_live(monkeypatch)
     monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.0.1127")
     monkeypatch.setattr(
         update_commands,
@@ -170,6 +181,7 @@ def test_latest_alpha_version_selects_newest_alpha_across_majors_and_skips_yanke
 
 
 def test_alpha_python_fallback_stays_on_alpha_channel(monkeypatch: pytest.MonkeyPatch) -> None:
+    _all_alpha_tags_live(monkeypatch)
     monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.2.20")
     monkeypatch.setattr(update_commands, "_runtime_python_version", lambda: "3.12.0")
     monkeypatch.setattr(
@@ -446,9 +458,7 @@ def test_latest_version_lookup_keeps_prior_cache_when_response_lacks_stable_vers
         def read(self, _limit: int) -> bytes:
             return b'{"info":{}}'
 
-    monkeypatch.setattr(
-        update_commands.urllib.request, "urlopen", lambda *_args, **_kwargs: FakeResponse()
-    )
+    monkeypatch.setattr(update_commands.urllib.request, "urlopen", lambda *_args, **_kwargs: FakeResponse())
 
     assert update_commands._latest_version_from_pypi() == "2.0.9"
     assert update_commands._last_pypi_payload == cached_payload
@@ -480,9 +490,7 @@ def test_latest_version_lookup_ignores_prerelease_info_version(
                 b'"2.0.9":[{"filename":"hol_guard-2.0.9-py3-none-any.whl"}]}}'
             )
 
-    monkeypatch.setattr(
-        update_commands.urllib.request, "urlopen", lambda *_args, **_kwargs: FakeResponse()
-    )
+    monkeypatch.setattr(update_commands.urllib.request, "urlopen", lambda *_args, **_kwargs: FakeResponse())
 
     assert update_commands._latest_version_from_pypi() == "2.0.9"
 
@@ -490,6 +498,7 @@ def test_latest_version_lookup_ignores_prerelease_info_version(
 def test_alpha_only_response_preserves_stable_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _all_alpha_tags_live(monkeypatch)
     monkeypatch.setattr(update_commands, "_last_pypi_payload", None)
     monkeypatch.setattr(update_commands, "_last_pypi_stable_version", "2.0.9")
 
@@ -511,9 +520,7 @@ def test_alpha_only_response_preserves_stable_fallback(
                 b'"3.0.0a1":[{"filename":"hol_guard-3.0.0a1-py3-none-any.whl"}]}}'
             )
 
-    monkeypatch.setattr(
-        update_commands.urllib.request, "urlopen", lambda *_args, **_kwargs: FakeResponse()
-    )
+    monkeypatch.setattr(update_commands.urllib.request, "urlopen", lambda *_args, **_kwargs: FakeResponse())
 
     assert update_commands._latest_version_from_pypi() == "2.0.9"
     assert update_commands._last_pypi_stable_version == "2.0.9"
@@ -521,6 +528,7 @@ def test_alpha_only_response_preserves_stable_fallback(
 
 
 def test_alpha_lookup_uses_alpha_only_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    _all_alpha_tags_live(monkeypatch)
     monkeypatch.setattr(update_commands, "_last_pypi_payload", None)
     monkeypatch.setattr(update_commands, "_last_pypi_stable_version", None)
 
@@ -542,9 +550,7 @@ def test_alpha_lookup_uses_alpha_only_payload(monkeypatch: pytest.MonkeyPatch) -
                 b'"3.0.0a1":[{"filename":"hol_guard-3.0.0a1-py3-none-any.whl"}]}}'
             )
 
-    monkeypatch.setattr(
-        update_commands.urllib.request, "urlopen", lambda *_args, **_kwargs: FakeResponse()
-    )
+    monkeypatch.setattr(update_commands.urllib.request, "urlopen", lambda *_args, **_kwargs: FakeResponse())
 
     assert update_commands._latest_version_from_pypi() is None
     assert update_commands._latest_alpha_version_from_pypi("2.0.9") == "3.0.0a1"

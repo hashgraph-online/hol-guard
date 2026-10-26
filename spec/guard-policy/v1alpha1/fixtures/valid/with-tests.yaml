@@ -1,0 +1,59 @@
+apiVersion: guard.hashgraphonline.com/v1alpha1
+kind: GuardPolicy
+metadata:
+  id: policy.with-tests
+  name: Policy with example tests
+  revision: 1
+spec:
+  defaults:
+    mode: enforce
+  rules:
+    - id: block-mcp
+      enabled: true
+      effect: block
+      match:
+        tools:
+          - mcp
+      lifetime:
+        mode: permanent
+      provenance:
+        source: builder
+        createdAt: 2026-10-14T00:00:00Z
+    - id: allow-trusted-plugin
+      enabled: true
+      effect: allow
+      match:
+        artifacts:
+          - pkg:npm/trusted-plugin
+        harnesses:
+          - codex
+      lifetime:
+        mode: until
+        expiresAt: 2026-12-31T00:00:00Z
+      provenance:
+        source: builder
+        createdAt: 2026-10-14T00:00:00Z
+  x-hol.tests:
+    - id: mcp-blocked
+      name: MCP servers are blocked for every agent
+      event:
+        harness: claude-code
+        tool: mcp
+      expect:
+        effect: block
+        ruleId: block-mcp
+    - id: trusted-plugin-allowed
+      name: The trusted plugin is allowed in Codex
+      event:
+        harness: codex
+        artifact: pkg:npm/trusted-plugin
+        at: 2026-11-01T00:00:00Z
+      expect:
+        effect: allow
+        ruleId: allow-trusted-plugin
+    - id: unknown-plugin-falls-through
+      event:
+        harness: codex
+        artifact: pkg:npm/unknown-plugin
+      expect:
+        effect: default
