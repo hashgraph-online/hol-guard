@@ -198,3 +198,19 @@ def test_no_other_run_can_displace_a_pending_tag_publication() -> None:
     assert "format('push-{0}', github.event.workflow_run.id)" in group
     steps = [step["name"] for step in workflow["jobs"]["publish"]["steps"]]
     assert steps.index("Refuse to replace a newer stable release") < steps.index("Publish to MCP registry")
+
+
+@pytest.mark.parametrize("name", ["publish-mcp-registry.yml", "publish-mcpb.yml"])
+def test_consumers_declare_no_ref_filter_so_tag_runs_reach_them(name: str) -> None:
+    """workflow_run offers only branch filters, and declaring one drops every tag-ref run.
+
+    3.58.0 published from a dispatch on refs/tags/v3.58.0 and reached neither consumer while a
+    branches list named the tag pattern, because GitHub matches that list against branches alone.
+    """
+    workflow = yaml.safe_load((WORKFLOWS / name).read_text())
+    trigger = workflow[True]["workflow_run"]
+    assert trigger["workflows"] == ["Publish to PyPI"]
+    assert "branches" not in trigger and "branches-ignore" not in trigger
+    condition = workflow["jobs"]["verify"]["if"]
+    assert "startsWith(github.event.workflow_run.head_branch, 'v')" in condition
+    assert "github.event.workflow_run.head_repository.full_name == github.repository" in condition

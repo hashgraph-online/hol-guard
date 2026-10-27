@@ -4,8 +4,10 @@ on:
   workflow_run:
     workflows: ["Publish to PyPI"]
     types: [completed]
-    # Stable releases are dispatched on their vX.Y.Z tag, which GitHub reports as the branch.
-    branches: [main, release/3.0, "v[0-9]+.[0-9]+.[0-9]+"]
+    # No ref filter. workflow_run offers only branches/branches-ignore, and declaring either one
+    # drops every run whose ref is a tag. Stable releases are dispatched on their vX.Y.Z tag, so a
+    # branch filter silently skipped them however the tag was spelled. The verify job below, and
+    # the verifier it runs, decide which completed run may publish.
   workflow_dispatch:
     inputs:
       publication_run_id:
