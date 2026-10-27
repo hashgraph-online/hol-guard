@@ -38,6 +38,11 @@ impl DepMap {
         previous
     }
 
+    /// Distinct values `key` held before its current one, oldest first.
+    pub fn earlier(&self, key: &str) -> &[String] {
+        self.earlier.get(key).map_or(&[], Vec::as_slice)
+    }
+
     pub fn get(&self, key: &str) -> Option<&String> {
         self.values.get(key)
     }

@@ -1498,11 +1498,11 @@ def sync_network_protection_bundle(
 ) -> dict[str, object]:
     """Fetch, verify, and save the workspace's signed network protection bundle."""
 
+    from ..native_network_protection_bundle import native_verify_network_protection_response
     from .network_protection_bundle import (
         NETWORK_PROTECTION_SYNC_STATE_KEY,
         NetworkProtectionBundleError,
         network_protection_status,
-        verify_network_protection_response,
     )
 
     resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
@@ -1535,13 +1535,15 @@ def sync_network_protection_bundle(
     )
     payload = _fetch_supply_chain_bundle_payload(request)
     try:
-        verified = verify_network_protection_response(
+        verified = native_verify_network_protection_response(
             payload,
             workspace_id=workspace_id,
-            trusted_keys=load_supply_chain_verification_keys(store.get_sync_payload("supply_chain_bundle_keyring")),
+            # The saved keyring goes over as it was stored; the resident parses
+            # and anchors it, so Python never decides which key is trusted.
+            trusted_keys=store.get_sync_payload("supply_chain_bundle_keyring"),
             cached_bundle_version=cached_bundle_version,
         )
-    except (NetworkProtectionBundleError, SupplyChainBundleError) as error:
+    except NetworkProtectionBundleError as error:
         raise RuntimeError(f"Guard network protection bundle sync failed: {error}") from error
     synced_at = _now()
     store.set_sync_payload(NETWORK_PROTECTION_SYNC_STATE_KEY, verified, synced_at)

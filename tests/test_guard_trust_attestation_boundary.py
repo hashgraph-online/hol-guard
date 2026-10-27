@@ -207,6 +207,11 @@ def test_stale_locally_marked_evidence_hash_is_rejected() -> None:
     assert "trustResolution" not in result
 
 
+# The verifier is the native runtime's, so this test needs a provisioned
+# resident. `native_context_digest` forces the compiled runtime against the
+# session's keyed home and skips where no binary was built, which keeps the
+# rest of this module running on the jobs that do not build Rust.
+@pytest.mark.usefixtures("native_context_digest")
 def test_attestation_schema_replay_revocation_and_monotonic_rules() -> None:
     config = _signing_config("active-key")
     verification_key = build_trust_attestation_verification_key(config)
@@ -280,6 +285,16 @@ def test_attestation_schema_replay_revocation_and_monotonic_rules() -> None:
             envelope=envelope,
             trusted_keys=(verification_key,),
             policy=GuardTrustAttestationVerificationPolicy(minimum_sequence=8),
+        )
+    with pytest.raises(ValueError, match="monotonic"):
+        # A limit wider than any fixed-width field is still a limit, and it
+        # comes back as the verifier's own refusal rather than as a runtime
+        # that could not read the request at all.
+        verify_trust_attestation(
+            payload=payload,
+            envelope=envelope,
+            trusted_keys=(verification_key,),
+            policy=GuardTrustAttestationVerificationPolicy(minimum_sequence=2**80),
         )
     with pytest.raises(ValueError, match="predates"):
         verify_trust_attestation(

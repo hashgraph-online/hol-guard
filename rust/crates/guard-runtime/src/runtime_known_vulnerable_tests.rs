@@ -85,6 +85,11 @@ fn a_known_affected_build_is_held_for_review_with_both_choices() {
     let raised = raise(result("allow"), &found, "require-reapproval", false);
     validate_pre_tool_result_matrix(&raised).unwrap();
     assert_eq!(raised.minimum_action, "require-reapproval");
+    // Both floors stay at a review action, so the exact-action token is
+    // issued and the prompt offers Allow once and Always allow
+    // (`a_known_vulnerable_runtime_approval_survives_a_feed_update`).
+    assert_eq!(raised.policy_action, "require-reapproval");
+    assert_eq!(raised.decision, "deny");
     assert_eq!(raised.reason_code, FINDING);
     assert!(is_review_finding(&raised.reason_code));
     assert!(!raised.explicitly_benign);

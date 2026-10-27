@@ -452,7 +452,7 @@ pub fn try_dependency_versions_for_path(
 
 /// Lockfiles whose package manager installs or builds every version they
 /// resolve a package to, side by side.
-fn installs_every_version(path: &str) -> bool {
+pub fn installs_every_version(path: &str) -> bool {
     let lower_path = path.to_lowercase();
     [
         "package-lock.json",

@@ -71,7 +71,7 @@ def fetch_stats(slug: str, key: str) -> dict[str, Any]:
     except ValueError as error:
         raise PluginStatsError("The stats from HOL were not valid JSON.") from error
     if not isinstance(stats, dict) or stats.get("apiVersion") != "v1":
-        raise PluginStatsError("The stats from HOL were not in the expected shape. Run: pip install -U hol-guard")
+        raise PluginStatsError("The stats from HOL were not in the expected shape. Run: hol-guard update")
     return stats
 
 

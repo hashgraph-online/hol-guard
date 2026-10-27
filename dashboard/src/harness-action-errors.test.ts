@@ -2,6 +2,7 @@ import { GuardHarnessActionError } from "./guard-api";
 import {
   isApprovalGateRequiredError,
   isGuardHarnessActionError,
+  isPackageFirewallOperationInProgressError,
   isSupplyChainSyncConnectError,
   isSupplyChainSyncRetryableError,
   readHarnessActionUserMessage,
@@ -191,3 +192,18 @@ assert(
 assert(readPackageFirewallActionFailure("boom") === "Action failed.", "non-Error throws fall back to a generic message");
 
 console.log("harness-action-errors.test.ts: all assertions passed");
+
+assert(
+  isPackageFirewallOperationInProgressError(
+    makeHarnessError(409, {
+      error: "operation_in_progress",
+      message: "Guard is still finishing a package protection change. Check its status before retrying.",
+      operation: "sync",
+    }),
+  ),
+  "a sync that is still running in the daemon is recognized",
+);
+assert(
+  !isPackageFirewallOperationInProgressError(makeHarnessError(409, { error: "folder_picker_busy" })),
+  "other conflicts are not mistaken for a running sync",
+);

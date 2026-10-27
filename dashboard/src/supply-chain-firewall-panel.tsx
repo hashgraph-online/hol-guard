@@ -14,11 +14,13 @@ import {
   runPackageFirewallAction,
   runPackageAudit,
   runPackageSync,
+  GuardOperationTimeoutError,
   repairSupplyChainProtection,
   startPackageFirewallConnect,
 } from "./guard-api";
 import {
   isApprovalGateRequiredError,
+  isPackageFirewallOperationInProgressError,
   isSupplyChainSyncConnectError,
   isSupplyChainSyncRetryableError,
   readHarnessActionUserMessage,
@@ -473,6 +475,24 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
             return;
           }
         }
+        if (isPackageFirewallOperationInProgressError(err)) {
+          // Another package protection change (a sync, repair or shim install) holds the daemon's lock; that is not a failure, so keep the dialog ready.
+          const message = "Guard is still finishing another package protection change. Wait a moment, then sync again.";
+          setAuditRecoveryErrorOp("sync");
+          setAuditRecoveryError(message);
+          setAuditRecoveryPhase("ready");
+          refreshInBackground();
+          return;
+        }
+        if (err instanceof GuardOperationTimeoutError) {
+          // The daemon may still finish this sync, so recheck status instead of asking for approval again.
+          setAuditRecoveryErrorOp("sync");
+          setAuditRecoveryError(err.message);
+          setAuditRecoveryPhase("ready");
+          setLastFailed({ op: "sync", manager: null, message: err.message });
+          refreshInBackground();
+          return;
+        }
         if (isSupplyChainSyncRetryableError(err)) {
           const message = readHarnessActionUserMessage(
             err,
@@ -506,6 +526,7 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
       onStateChanged,
       openSyncApprovalRecovery,
       refreshAfterOp,
+      refreshInBackground,
     ],
   );
 
@@ -868,11 +889,22 @@ export const PackageFirewallPanel = forwardRef(function PackageFirewallPanel(
         }
         const message = readHarnessActionUserMessage(err, "Operation failed.");
         setLastFailed({ op, manager: null, message });
+        if (err instanceof GuardOperationTimeoutError) {
+          refreshInBackground();
+        }
       } finally {
         setPendingOp(null);
       }
     },
-    [onStateChanged, openAuditConnectGate, openSyncApprovalRecovery, panelLoad, refreshAfterOp, runAuditOperation],
+    [
+      onStateChanged,
+      openAuditConnectGate,
+      openSyncApprovalRecovery,
+      panelLoad,
+      refreshAfterOp,
+      refreshInBackground,
+      runAuditOperation,
+    ],
   );
 
   const handleInstall = useCallback(

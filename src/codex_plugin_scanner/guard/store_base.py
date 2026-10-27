@@ -34,7 +34,6 @@ from cryptography.fernet import Fernet, InvalidToken
 
 from .approval_gate import ApprovalGateGrant, require_policy_clear, require_policy_write, require_request_resolution
 from .cli.oauth_client import resolve_guard_oauth_client_config
-from .edge_events import build_receipt_event
 from .fork_safety import forget_in_child
 from .local_trust_contract import (
     POLICY_INTEGRITY_ENFORCEMENT_ENFORCE,
@@ -72,9 +71,6 @@ from .store_approvals import (
     approval_index_statements,
     approval_schema_statement,
     backfill_approval_queue_columns,
-)
-from .store_approvals import (
-    bulk_resolve_approval_requests as persist_bulk_resolution,
 )
 from .store_approvals import (
     get_approval_request as load_approval_request,
@@ -1415,18 +1411,6 @@ def _runtime_scoped_exact_match_key(
             ).encode("utf-8")
         ).hexdigest()
     return f"{_RUNTIME_SCOPED_EXACT_MATCH_PREFIX}{digest}"
-
-
-def runtime_tool_action_policy_artifact_id(artifact_id: str | None) -> str | None:
-    """Return a scoped family identity for one exact runtime tool action."""
-
-    if artifact_id is None or not artifact_id.strip():
-        return None
-    family_key = _artifact_family_key(artifact_id)
-    if family_key is not None and _family_key_value(family_key) in _SCOPED_RUNTIME_EXACT_FAMILIES:
-        return artifact_id
-    digest = sha256(artifact_id.strip().encode("utf-8")).hexdigest()
-    return f"guard:runtime:tool-action:{digest}"
 
 
 def runtime_tool_action_exact_match_context(

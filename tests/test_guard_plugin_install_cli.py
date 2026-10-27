@@ -609,7 +609,8 @@ def test_newer_specs_ask_for_a_newer_guard_and_unknown_fields_are_ignored(
     assert message in error
     assert "curl" not in output
     if exit_code == 5:
-        assert "hol-guard update" in error or "pip install -U hol-guard" in error
+        assert "Run: hol-guard update" in error
+        assert "pip install" not in error
 
 
 def test_nothing_guard_can_install_exits_3(

@@ -14,11 +14,9 @@ from .codex_hook_identity import (
     CodexHookGroupQuestion,
     CodexHookHandlerQuestion,
     CodexHookIdentityUnavailableError,
-    canonical_codex_command_argv,
     canonical_codex_hook_group_conflict_keys,
     canonical_codex_hook_group_identities,
     canonical_codex_hook_handler_identities,
-    canonical_codex_hook_identity,
 )
 
 CODEX_HOOK_INVENTORY_UNMANAGED_EXECUTABLE = "codex_hook_inventory_unmanaged_executable"
@@ -528,10 +526,8 @@ __all__ = [
     "CodexHookInventory",
     "CodexHookInventoryIssue",
     "CodexHookInventoryRecord",
-    "canonical_codex_command_argv",
     "canonical_codex_hook_group_conflict_keys",
     "canonical_codex_hook_group_identities",
     "canonical_codex_hook_handler_identities",
-    "canonical_codex_hook_identity",
     "enumerate_codex_hooks",
 ]

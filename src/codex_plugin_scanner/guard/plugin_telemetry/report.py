@@ -107,13 +107,11 @@ def _native_request(request: Mapping[str, object], *, feature: str = PLUGIN_TELE
         or status.capabilities is None
         or feature not in status.capabilities.features
     ):
-        raise PluginTelemetryError("This command needs a newer Guard native runtime. Run: pip install -U hol-guard")
+        raise PluginTelemetryError("This command needs a newer Guard native runtime. Run: hol-guard update")
     runtime = status.identity.path
     input_text = json.dumps(dict(request), sort_keys=True, separators=(",", ":"))
     if len(input_text.encode("utf-8")) > _NATIVE_REQUEST_LIMIT_BYTES:
-        raise PluginTelemetryError(
-            "The HOL plugin index is too large for this Guard version. Run: pip install -U hol-guard"
-        )
+        raise PluginTelemetryError("The HOL plugin index is too large for this Guard version. Run: hol-guard update")
     completed = run_isolated_hook_process(
         (str(runtime), PLUGIN_TELEMETRY_COMMAND, "--stdin"),
         input_text=input_text,

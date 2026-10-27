@@ -68,6 +68,8 @@ CONNECT_SYNC_AUTH_CONTEXT_KEY = "_guard_sync_auth_context"
 DEVICE_CODE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code"
 DEVICE_CODE_SLOW_DOWN_SECONDS = 5
 DEVICE_CODE_TRANSIENT_MAX_INTERVAL_SECONDS = 60
+# How many fresh device codes HOL Guard requests after Guard Cloud's approval answer is lost.
+DEVICE_CODE_LOST_APPROVAL_RESTARTS = 1
 HEADLESS_RUNTIME_ID = "hol-guard"
 HEADLESS_RUNTIME_LABEL = "HOL Guard CLI"
 _GUARD_OAUTH_USER_AGENT = f"hol-guard/{__version__}"
@@ -723,6 +725,17 @@ def _unanswered_device_poll_error() -> RuntimeError:
     )
 
 
+class GuardDeviceApprovalLostError(RuntimeError):
+    """Guard Cloud redeemed the device code on a poll whose answer never arrived."""
+
+
+def _device_approval_lost_error() -> GuardDeviceApprovalLostError:
+    return GuardDeviceApprovalLostError(
+        "Guard Cloud approved this device, but its answer was lost on the way back. "
+        "Device codes work only once, so HOL Guard needs a new code to finish connecting."
+    )
+
+
 def exchange_guard_device_code(
     *,
     token_endpoint: str,
@@ -743,6 +756,7 @@ def exchange_guard_device_code(
     current_interval = max(interval_seconds, 1)
     dpop_nonce: str | None = None
     nonce_retry_count = 0
+    poll_went_unanswered = False
     while True:
         request = _guard_token_request_with_dpop(
             token_endpoint,
@@ -763,6 +777,8 @@ def exchange_guard_device_code(
                 continue
             oauth_error = str(payload.get("error") or "").strip() if isinstance(payload, dict) else ""
             if oauth_error == "authorization_pending":
+                # An answered pending poll proves the code was not redeemed yet.
+                poll_went_unanswered = False
                 if time.monotonic() >= deadline:
                     raise RuntimeError(
                         "Guard OAuth approval timed out. Retry `hol-guard connect --headless` to request a new code."
@@ -770,6 +786,7 @@ def exchange_guard_device_code(
                 sleep(float(current_interval))
                 continue
             if oauth_error == "slow_down":
+                poll_went_unanswered = False
                 current_interval = max(current_interval + DEVICE_CODE_SLOW_DOWN_SECONDS, 1)
                 if time.monotonic() >= deadline:
                     raise RuntimeError(
@@ -785,6 +802,10 @@ def exchange_guard_device_code(
                 raise RuntimeError(
                     "Guard OAuth approval was denied. Retry `hol-guard connect --headless` to request a new code."
                 ) from error
+            if oauth_error == "invalid_grant" and poll_went_unanswered:
+                # A poll that never answered can still have redeemed the code,
+                # and Guard Cloud refuses a code twice, so this code is spent.
+                raise _device_approval_lost_error() from error
             message = (
                 str(payload.get("error_description") or oauth_error or error.reason)
                 if isinstance(payload, dict)
@@ -794,6 +815,7 @@ def exchange_guard_device_code(
         except (TimeoutError, ConnectionError, urllib.error.URLError) as error:
             if not _is_transient_device_poll_error(error):
                 raise
+            poll_went_unanswered = True
             # The device code stays valid while one poll goes unanswered, so a
             # slow or briefly unreachable Guard Cloud must not end the wait.
             remaining_seconds = deadline - time.monotonic()
@@ -1134,36 +1156,57 @@ def run_guard_device_connect_command(
         client_id=oauth_client.client_id,
         scopes=_resolve_guard_device_scopes(ci_safe=ci_safe),
     )
-    response = request_device_authorization(
-        oauth_client.device_authorization_endpoint,
-        request_body,
-    )
-    payload = build_device_authorization_copy_payload(response)
-    payload["connect_mode"] = "device_code"
-    if open_browser is not None:
-        next_action = payload.get("next_action")
-        target = next_action.get("target") if isinstance(next_action, dict) else None
-        opened = False
-        if isinstance(target, str) and target:
-            opened = bool(open_browser(target))
-        payload["browser_opened"] = opened
-    if announce_copy is not None:
-        announce_copy(payload)
-    device_code = str(response.get("device_code") or "").strip()
-    if not device_code:
-        raise ValueError("Device authorization response is missing device_code.")
-    token_result = exchange_guard_device_code(
-        token_endpoint=oauth_client.token_endpoint,
-        client_id=oauth_client.client_id,
-        device_code=device_code,
-        dpop_key_material=dpop_key_material,
-        interval_seconds=_int_payload_value(response, "interval", 5),
-        expires_in_seconds=_int_payload_value(response, "expires_in", 0),
-        wait_timeout_seconds=wait_timeout_seconds,
-        urlopen=token_urlopen,
-        sleep=sleep,
-        now=datetime.fromisoformat(now) if now else None,
-    )
+    restarts_left = DEVICE_CODE_LOST_APPROVAL_RESTARTS
+    approval_lost = False
+    # A restart with a new code shares the caller's wait budget instead of
+    # starting a fresh one.
+    command_deadline = time.monotonic() + wait_timeout_seconds if wait_timeout_seconds is not None else None
+    while True:
+        response = request_device_authorization(
+            oauth_client.device_authorization_endpoint,
+            request_body,
+        )
+        payload = build_device_authorization_copy_payload(response)
+        payload["connect_mode"] = "device_code"
+        if approval_lost:
+            payload["approval_lost"] = True
+        if open_browser is not None:
+            next_action = payload.get("next_action")
+            target = next_action.get("target") if isinstance(next_action, dict) else None
+            opened = False
+            if isinstance(target, str) and target:
+                opened = bool(open_browser(target))
+            payload["browser_opened"] = opened
+        if announce_copy is not None:
+            announce_copy(payload)
+        device_code = str(response.get("device_code") or "").strip()
+        if not device_code:
+            raise ValueError("Device authorization response is missing device_code.")
+        try:
+            token_result = exchange_guard_device_code(
+                token_endpoint=oauth_client.token_endpoint,
+                client_id=oauth_client.client_id,
+                device_code=device_code,
+                dpop_key_material=dpop_key_material,
+                interval_seconds=_int_payload_value(response, "interval", 5),
+                expires_in_seconds=_int_payload_value(response, "expires_in", 0),
+                wait_timeout_seconds=(
+                    max(command_deadline - time.monotonic(), 0) if command_deadline is not None else None
+                ),
+                urlopen=token_urlopen,
+                sleep=sleep,
+                now=datetime.fromisoformat(now) if now else None,
+            )
+        except GuardDeviceApprovalLostError as error:
+            out_of_time = command_deadline is not None and time.monotonic() >= command_deadline
+            if restarts_left <= 0 or out_of_time:
+                raise RuntimeError(f"{error} Retry `hol-guard connect --headless` to request a new code.") from error
+            # The spent code cannot be redeemed again; ask for a new one and
+            # show it, so the user approves once more instead of starting over.
+            restarts_left -= 1
+            approval_lost = True
+            continue
+        break
     if token_result.refresh_token is None:
         raise RuntimeError("Guard OAuth token exchange failed: missing refresh token.")
     timestamp = now or datetime.now(timezone.utc).isoformat()

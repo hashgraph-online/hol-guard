@@ -102,8 +102,9 @@ def _package_artifact(workspace: Path) -> GuardArtifact:
 
 
 class _SavedPackagePolicyStore:
-    def __init__(self, action: GuardAction) -> None:
+    def __init__(self, action: GuardAction, guard_home: Path) -> None:
         self.action = action
+        self.guard_home = guard_home
         self.claimed = False
 
     def resolve_policy_decision_lookup(self, *_args: object, **kwargs: object) -> dict[str, object]:
@@ -130,13 +131,13 @@ class _SavedPackagePolicyStore:
 def test_package_saved_allow_never_lowers_terminal_current_action(
     tmp_path: Path,
     current_action: GuardAction,
-    native_context_digest: Path,
+    package_workspace_scope_native: Path,
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     artifact = _package_artifact(workspace)
     context = build_package_execution_context(workspace_dir=workspace, artifact=artifact, executable="npm")
-    store = _SavedPackagePolicyStore("allow")
+    store = _SavedPackagePolicyStore("allow", tmp_path / "guard-home")
 
     result = apply_stored_package_policy_override(
         _package_evaluation(current_action),
@@ -156,12 +157,14 @@ def test_package_saved_allow_never_lowers_terminal_current_action(
     assert store.claimed is False
 
 
-def test_package_durable_exact_saved_allow_satisfies_reapproval(tmp_path: Path, native_context_digest: Path) -> None:
+def test_package_durable_exact_saved_allow_satisfies_reapproval(
+    tmp_path: Path, package_workspace_scope_native: Path
+) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     artifact = _package_artifact(workspace)
     context = build_package_execution_context(workspace_dir=workspace, artifact=artifact, executable="npm")
-    store = _SavedPackagePolicyStore("allow")
+    store = _SavedPackagePolicyStore("allow", tmp_path / "guard-home")
 
     result = apply_stored_package_policy_override(
         _package_evaluation("require-reapproval"),
@@ -178,12 +181,14 @@ def test_package_durable_exact_saved_allow_satisfies_reapproval(tmp_path: Path, 
     assert store.claimed is True
 
 
-def test_package_exact_saved_allow_satisfies_only_current_review(tmp_path: Path, native_context_digest: Path) -> None:
+def test_package_exact_saved_allow_satisfies_only_current_review(
+    tmp_path: Path, package_workspace_scope_native: Path
+) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     artifact = _package_artifact(workspace)
     context = build_package_execution_context(workspace_dir=workspace, artifact=artifact, executable="npm")
-    store = _SavedPackagePolicyStore("allow")
+    store = _SavedPackagePolicyStore("allow", tmp_path / "guard-home")
 
     result = apply_stored_package_policy_override(
         _package_evaluation("review"),
@@ -201,13 +206,13 @@ def test_package_exact_saved_allow_satisfies_only_current_review(tmp_path: Path,
 
 
 def test_package_reuse_uses_post_scanner_current_action_before_claim(
-    tmp_path: Path, native_context_digest: Path
+    tmp_path: Path, package_workspace_scope_native: Path
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     artifact = _package_artifact(workspace)
     context = build_package_execution_context(workspace_dir=workspace, artifact=artifact, executable="npm")
-    store = _SavedPackagePolicyStore("allow")
+    store = _SavedPackagePolicyStore("allow", tmp_path / "guard-home")
 
     result = apply_stored_package_policy_override(
         _package_evaluation("review"),
@@ -226,13 +231,13 @@ def test_package_reuse_uses_post_scanner_current_action_before_claim(
 
 
 def test_package_weaker_supplied_current_action_cannot_erase_package_block(
-    tmp_path: Path, native_context_digest: Path
+    tmp_path: Path, package_workspace_scope_native: Path
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     artifact = _package_artifact(workspace)
     context = build_package_execution_context(workspace_dir=workspace, artifact=artifact, executable="npm")
-    store = _SavedPackagePolicyStore("allow")
+    store = _SavedPackagePolicyStore("allow", tmp_path / "guard-home")
 
     result = apply_stored_package_policy_override(
         _package_evaluation("block"),
@@ -250,12 +255,14 @@ def test_package_weaker_supplied_current_action_cannot_erase_package_block(
     assert store.claimed is False
 
 
-def test_package_local_saved_allow_without_exact_hash_is_rejected(tmp_path: Path, native_context_digest: Path) -> None:
+def test_package_local_saved_allow_without_exact_hash_is_rejected(
+    tmp_path: Path, package_workspace_scope_native: Path
+) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     artifact = _package_artifact(workspace)
     context = build_package_execution_context(workspace_dir=workspace, artifact=artifact, executable="npm")
-    store = _SavedPackagePolicyStore("allow")
+    store = _SavedPackagePolicyStore("allow", tmp_path / "guard-home")
     original_lookup = store.resolve_policy_decision_lookup
 
     def lookup_without_hash(*args: object, **kwargs: object) -> dict[str, object]:
@@ -283,13 +290,13 @@ def test_package_local_saved_allow_without_exact_hash_is_rejected(tmp_path: Path
 
 def test_package_equal_legacy_hash_cannot_prove_complete_approval_context(
     tmp_path: Path,
-    native_context_digest: Path,
+    package_workspace_scope_native: Path,
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     artifact = _package_artifact(workspace)
     context = build_package_execution_context(workspace_dir=workspace, artifact=artifact, executable="npm")
-    store = _SavedPackagePolicyStore("allow")
+    store = _SavedPackagePolicyStore("allow", tmp_path / "guard-home")
     original_lookup = store.resolve_policy_decision_lookup
 
     def lookup_with_legacy_hash(*args: object, **kwargs: object) -> dict[str, object]:
@@ -326,7 +333,7 @@ def test_package_policy_and_sandbox_context_changes_invalidate_review_approval(
     tmp_path: Path,
     changed_dimension: str,
     expected_reason: str,
-    native_context_digest: Path,
+    package_workspace_scope_native: Path,
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()

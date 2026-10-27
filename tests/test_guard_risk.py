@@ -38,7 +38,6 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     extract_sensitive_file_read_request_artifact,
     extract_sensitive_file_read_request_from_action,
     extract_sensitive_tool_action_request,
-    is_file_read_tool_name,
 )
 from codex_plugin_scanner.guard.runtime.secret_sensitivity import (
     SecretContentMatch,
@@ -658,10 +657,7 @@ def test_file_read_request_classifier_is_argument_aware(tmp_path):
     claude_request = extract_sensitive_file_read_request("Read", {"file_path": "~/.ssh/config"}, home_dir=tmp_path)
     copilot_request = extract_sensitive_file_read_request("view", {"path": ".env"})
 
-    assert is_file_read_tool_name("read_file") is True
-    assert is_file_read_tool_name("Read") is True
-    assert is_file_read_tool_name("view") is True
-    assert is_file_read_tool_name("write_file") is False
+    assert extract_sensitive_file_read_request("write_file", {"path": ".env.local"}) is None
     assert env_request is not None
     assert env_request.path_match.path_class == "local .env file"
     assert claude_request is not None

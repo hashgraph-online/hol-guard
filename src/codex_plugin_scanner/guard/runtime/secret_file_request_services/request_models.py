@@ -60,14 +60,6 @@ class FileWriteRequestMatch:
     action_class: str
 
 
-def is_file_read_tool_name(tool_name: str | None) -> bool:
-    """Return whether the tool name looks like a file-read tool."""
-
-    if not isinstance(tool_name, str) or not tool_name.strip():
-        return False
-    return tool_name.strip().lower() in _FILE_READ_TOOL_NAMES
-
-
 def classify_sensitive_path(
     path: str | None,
     *,
@@ -197,7 +189,6 @@ __all__ = [
     "expand_home",
     "extract_sensitive_file_read_request",
     "extract_sensitive_file_read_request_from_action",
-    "is_file_read_tool_name",
     "normalize_path",
     "tool_action_risk_summary",
 ]

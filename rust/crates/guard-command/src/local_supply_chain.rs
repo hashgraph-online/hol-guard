@@ -34,6 +34,7 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
+use guard_contracts::write_canonical_json;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256, Sha512};
 
@@ -1091,6 +1092,22 @@ pub const VALID_RISK_ACTION_KEYS: &[&str] = &[
 /// `DEFAULT_SECURITY_LEVEL` (config.py).
 pub const DEFAULT_SECURITY_LEVEL: &str = "balanced";
 
+/// Days in a Gregorian month, so an impossible calendar day is rejected
+/// rather than rolled into the next month.
+fn days_in_month(year: i64, month: u32) -> u32 {
+    match month {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if (year % 4 == 0 && year % 100 != 0) || year % 400 == 0 => 29,
+        2 => 28,
+        _ => 0,
+    }
+}
+
+/// Python's `datetime.fromisoformat` reads the whole string or raises, and it
+/// knows how long each month is. This mirror did neither, so a signed document
+/// carrying `2026-02-31` or an instant with text after it parsed here where it
+/// was refused before.
 pub fn parse_timestamp(value: &str) -> Option<Timestamp> {
     let text = value.trim();
     let bytes = text.as_bytes();
@@ -1103,7 +1120,7 @@ pub fn parse_timestamp(value: &str) -> Option<Timestamp> {
     }
     let month: u32 = text.get(5..7)?.parse().ok()?;
     let day: u32 = text.get(8..10)?.parse().ok()?;
-    if !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+    if !(1..=12).contains(&month) || day < 1 || day > days_in_month(year, month) {
         return None;
     }
     let mut hour: u32 = 0;
@@ -1144,21 +1161,35 @@ pub fn parse_timestamp(value: &str) -> Option<Timestamp> {
         } else {
             cursor += 5;
         }
+        if hour > 23 || minute > 59 || second > 59 {
+            return None;
+        }
         if let Some(&marker) = bytes.get(cursor) {
             match marker {
-                b'Z' | b'z' => offset_seconds = 0,
+                b'Z' | b'z' => {
+                    offset_seconds = 0;
+                    cursor += 1;
+                }
                 b'+' | b'-' => {
                     let sign: i64 = if marker == b'-' { -1 } else { 1 };
                     let off_h = two(text, cursor + 1)?;
-                    let off_m = if bytes.get(cursor + 3) == Some(&b':') {
+                    let separated = bytes.get(cursor + 3) == Some(&b':');
+                    let off_m = if separated {
                         two(text, cursor + 4)?
                     } else {
                         two(text, cursor + 3)?
                     };
+                    if off_h > 23 || off_m > 59 {
+                        return None;
+                    }
                     offset_seconds = sign * ((off_h as i64) * 3600 + (off_m as i64) * 60);
+                    cursor += if separated { 6 } else { 5 };
                 }
-                _ => {}
+                _ => return None,
             }
+        }
+        if cursor != bytes.len() {
+            return None;
         }
     }
     let days = days_from_civil(year, month as i64, day as i64);
@@ -5404,16 +5435,24 @@ pub fn package_request_runtime_workspace_scope(
         "scope": "package-request-workspace-exact",
         "version": PACKAGE_EXECUTION_CONTEXT_VERSION,
     });
-    let canonical = serde_json::to_string(&material).unwrap_or_default();
-    let digest = stable_digest_hex(canonical.as_bytes());
+    let digest = package_scope_digest(&material)?;
     Some(format!(
         "package-request-workspace-exact:v{PACKAGE_EXECUTION_CONTEXT_VERSION}:{digest}"
     ))
 }
 
+/// The key a saved package approval is already stored under: `json.dumps(
+/// material, sort_keys=True, separators=(",", ":"))` hashed with plain
+/// SHA-256. The crate's keyed `stable_digest_hex` would be a different string,
+/// and a different string is an approval the user has to grant a second time.
+fn package_scope_digest(material: &Value) -> Option<String> {
+    let mut encoded = Vec::new();
+    write_canonical_json(material, &mut encoded).ok()?;
+    Some(sha256_content_digest(&encoded))
+}
+
 /// `approval_scope_support.package_request_portable_workspace_scope`.
-#[allow(dead_code)]
-fn package_request_portable_workspace_scope(
+pub fn package_request_portable_workspace_scope(
     artifact_id: Option<&str>,
     artifact_hash: Option<&str>,
     artifact_type: Option<&str>,
@@ -5437,8 +5476,7 @@ fn package_request_portable_workspace_scope(
         "scope": "package-request-workspace",
         "version": PACKAGE_EXECUTION_CONTEXT_VERSION,
     });
-    let canonical = serde_json::to_string(&material).unwrap_or_default();
-    let digest = stable_digest_hex(canonical.as_bytes());
+    let digest = package_scope_digest(&material)?;
     Some(format!(
         "package-request-workspace:v{PACKAGE_EXECUTION_CONTEXT_VERSION}:{digest}"
     ))

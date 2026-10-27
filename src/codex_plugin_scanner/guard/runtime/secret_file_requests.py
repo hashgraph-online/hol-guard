@@ -35,7 +35,6 @@ from .secret_file_request_services.request_models import FileWriteRequestMatch a
 from .secret_file_request_services.request_models import ToolActionRequestMatch as ToolActionRequestMatch
 from .secret_file_request_services.request_models import _normalize_tool_name as _normalize_tool_name
 from .secret_file_request_services.request_models import classify_sensitive_path as classify_sensitive_path
-from .secret_file_request_services.request_models import is_file_read_tool_name as is_file_read_tool_name
 from .secret_file_request_services.source_edit_context import (
     low_risk_compound_developer_execution_context as low_risk_compound_developer_execution_context,
 )
@@ -201,6 +200,5 @@ __all__ = [
     "extract_sensitive_file_write_request",
     "extract_sensitive_file_write_request_artifact",
     "extract_sensitive_tool_action_request",
-    "is_file_read_tool_name",
     "low_risk_compound_developer_execution_context",
 ]

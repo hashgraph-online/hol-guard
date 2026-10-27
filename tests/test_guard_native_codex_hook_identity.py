@@ -28,6 +28,20 @@ def _resident(monkeypatch: pytest.MonkeyPatch, reply) -> list[dict[str, object]]
     return sent
 
 
+def _identity(**question: object) -> str:
+    """Ask the bridge for one handler identity, as a single-entry request."""
+
+    entry = codex_hook_identity._handler_entry(codex_hook_identity.CodexHookHandlerQuestion(**question))
+    return codex_hook_identity._digest_of(bridge.native_codex_hook_identity([entry])[0])
+
+
+def _argv(command: str | None) -> tuple[str, ...] | None:
+    """Ask the bridge to tokenize one command, as a single-entry request."""
+
+    entry = codex_hook_identity._argv_entry(command)
+    return codex_hook_identity._argv_of(bridge.native_codex_hook_identity([entry])[0])
+
+
 def _digests(request: dict[str, object]) -> dict[str, object]:
     entries = request["entries"]
     assert isinstance(entries, list)
@@ -42,7 +56,7 @@ def test_no_entries_never_reaches_the_resident(monkeypatch: pytest.MonkeyPatch) 
 
 def test_the_wire_carries_the_coordinates_and_the_definition(monkeypatch: pytest.MonkeyPatch) -> None:
     sent = _resident(monkeypatch, _digests)
-    codex_hook_identity.canonical_codex_hook_identity(
+    _identity(
         source_scope="user",
         source_hooks_enabled=True,
         event_name="PreToolUse",
@@ -66,7 +80,7 @@ def test_the_wire_carries_the_coordinates_and_the_definition(monkeypatch: pytest
 
 def test_an_argv_request_sends_only_the_command(monkeypatch: pytest.MonkeyPatch) -> None:
     sent = _resident(monkeypatch, lambda _request: {"identities": [{"argv": ["echo", "hi"]}]})
-    assert codex_hook_identity.canonical_codex_command_argv("echo hi") == ("echo", "hi")
+    assert _argv("echo hi") == ("echo", "hi")
     assert sent[0]["entries"] == [
         {
             "kind": "argv",
@@ -80,7 +94,7 @@ def test_an_argv_request_sends_only_the_command(monkeypatch: pytest.MonkeyPatch)
 
 def test_an_argv_answer_of_null_is_not_an_identity(monkeypatch: pytest.MonkeyPatch) -> None:
     _resident(monkeypatch, lambda _request: {"identities": [{"argv": None}]})
-    assert codex_hook_identity.canonical_codex_command_argv("sh -c 'echo $HOME'") is None
+    assert _argv("sh -c 'echo $HOME'") is None
 
 
 def test_conflict_keys_come_back_in_order(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -101,7 +115,7 @@ def test_scalars_json_cannot_carry_travel_as_tokens(monkeypatch: pytest.MonkeyPa
     """A date, a time, a datetime, a non-finite float and a wide integer."""
 
     sent = _resident(monkeypatch, _digests)
-    codex_hook_identity.canonical_codex_hook_identity(
+    _identity(
         source_scope="user",
         source_hooks_enabled=True,
         event_name="PreToolUse",
@@ -137,7 +151,7 @@ def test_a_token_can_never_be_a_string_the_payload_already_holds(
     sent = _resident(monkeypatch, _digests)
     drawn = iter(["collides", "collides", "clear", "request-id"])
     monkeypatch.setattr(bridge, "uuid4", lambda: type("Hex", (), {"hex": next(drawn)})())
-    codex_hook_identity.canonical_codex_hook_identity(
+    _identity(
         source_scope="user",
         source_hooks_enabled=True,
         event_name="PreToolUse",
@@ -153,7 +167,7 @@ def test_a_key_json_cannot_name_arrives_in_its_canonical_spelling(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     sent = _resident(monkeypatch, _digests)
-    codex_hook_identity.canonical_codex_hook_identity(
+    _identity(
         source_scope="user",
         source_hooks_enabled=True,
         event_name="PreToolUse",
@@ -175,7 +189,7 @@ def test_an_unusable_reply_leaves_the_caller_without_an_identity() -> None:
         monkeypatch_context = pytest.MonkeyPatch()
         _resident(monkeypatch_context, reply)
         with pytest.raises(bridge.CodexHookIdentityUnavailableError):
-            codex_hook_identity.canonical_codex_hook_identity(
+            _identity(
                 source_scope="user",
                 source_hooks_enabled=True,
                 event_name="PreToolUse",

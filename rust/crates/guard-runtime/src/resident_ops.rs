@@ -315,6 +315,11 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
                     &request,
                 )
             }
+            ResidentOperationV1::NetworkProtectionVerify(request) => {
+                crate::network_protection_verify_op::evaluate_network_protection_verify_request(
+                    &request,
+                )
+            }
             ResidentOperationV1::GithubCliClassify(request) => {
                 crate::github_cli_classify_op::evaluate_github_cli_classify_request(&request)
             }
@@ -488,6 +493,11 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
                     &request,
                 )
             }
+            ResidentOperationV1::TrustAttestationVerify(request) => {
+                crate::trust_attestation_verify_op::evaluate_trust_attestation_verify_request(
+                    &request,
+                )
+            }
             ResidentOperationV1::LocalToolEligibility(request) => {
                 crate::local_tool_eligibility_op::evaluate_local_tool_eligibility_request(&request)
             }
@@ -629,6 +639,11 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             }
             ResidentOperationV1::PackageEvaluationView(request) => {
                 crate::package_evaluation_view_op::evaluate_package_evaluation_view(&request)
+            }
+            ResidentOperationV1::PackageWorkspaceScope(request) => {
+                crate::package_workspace_scope_op::evaluate_package_workspace_scope_request(
+                    &request,
+                )
             }
             ResidentOperationV1::PackagePosture(request) => {
                 crate::package_posture_op::evaluate_package_posture(&request)

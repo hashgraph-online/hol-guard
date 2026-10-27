@@ -24,9 +24,8 @@ from codex_plugin_scanner.guard.runtime.approval_context import build_approval_c
 from codex_plugin_scanner.guard.store import (
     GuardStore,
     runtime_tool_action_exact_match_context,
-    runtime_tool_action_policy_artifact_id,
 )
-from tests.policy_store_support import resolve_policy
+from tests.policy_store_support import resolve_policy, runtime_tool_action_policy_artifact_id
 
 
 def _request(

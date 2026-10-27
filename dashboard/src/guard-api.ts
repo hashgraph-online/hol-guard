@@ -4270,26 +4270,33 @@ export async function runPackageAudit(input?: {
   return normalizePackageFirewallAction(payloadBody);
 }
 
+/** How long the dashboard waits for a supply-chain sync before it stops waiting and rechecks status. */
+export const SUPPLY_CHAIN_SYNC_TIMEOUT_MS = 45_000;
+
 export async function runPackageSync(credentials?: {
   approval_password?: string;
   approval_totp_code?: string;
 }): Promise<PackageFirewallActionResponse> {
-  const response = await fetchGuardApi("/v1/supply-chain/sync", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...guardAuthHeaders(),
+  const { response, payload: payloadBody } = await fetchLocalProtectionJson(
+    "/v1/supply-chain/sync",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...guardAuthHeaders(),
+      },
+      body: JSON.stringify({
+        ...(credentials?.approval_password !== undefined
+          ? { approval_password: credentials.approval_password }
+          : {}),
+        ...(credentials?.approval_totp_code !== undefined
+          ? { approval_totp_code: credentials.approval_totp_code }
+          : {}),
+      }),
     },
-    body: JSON.stringify({
-      ...(credentials?.approval_password !== undefined
-        ? { approval_password: credentials.approval_password }
-        : {}),
-      ...(credentials?.approval_totp_code !== undefined
-        ? { approval_totp_code: credentials.approval_totp_code }
-        : {}),
-    }),
-  });
-  const payloadBody = (await response.json().catch(() => null)) as unknown;
+    SUPPLY_CHAIN_SYNC_TIMEOUT_MS,
+    "Guard Cloud did not answer the intel sync in time. Guard rechecked the feed status; try syncing again if it is still out of date.",
+  );
   if (!response.ok) {
     throw new GuardHarnessActionError(
       response.status,

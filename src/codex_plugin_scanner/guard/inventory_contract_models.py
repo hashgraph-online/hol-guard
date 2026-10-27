@@ -100,17 +100,6 @@ class GuardAgentInventoryDockerProof:
 
 
 @dataclass(frozen=True, slots=True)
-class GuardAgentIntegrationRun:
-    run_id: str
-    agent_id: str
-    agent_type: str
-    status: Literal["started", "completed", "failed"]
-    started_at: str
-    completed_at: str | None = None
-    message: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
 class GuardInventorySource:
     source_id: str
     source_type: Literal["config", "docker", "scanner", "runtime", "repository"]

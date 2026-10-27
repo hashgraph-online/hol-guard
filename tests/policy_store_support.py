@@ -8,9 +8,16 @@ older one-call shapes for fixtures that seed or read a store directly.
 
 from __future__ import annotations
 
+from hashlib import sha256
+
 from codex_plugin_scanner.guard.approval_gate_types import ApprovalGateGrant
 from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.store_base import (
+    _SCOPED_RUNTIME_EXACT_FAMILIES,
+    _artifact_family_key,
+    _family_key_value,
+)
 
 
 def resolve_policy(
@@ -59,3 +66,15 @@ def replace_remote_policies(
     )
     with store._connect() as connection:
         store._replace_remote_policy_rows_locked(connection, rows)
+
+
+def runtime_tool_action_policy_artifact_id(artifact_id: str | None) -> str | None:
+    """Return a scoped family identity for one exact runtime tool action."""
+
+    if artifact_id is None or not artifact_id.strip():
+        return None
+    family_key = _artifact_family_key(artifact_id)
+    if family_key is not None and _family_key_value(family_key) in _SCOPED_RUNTIME_EXACT_FAMILIES:
+        return artifact_id
+    digest = sha256(artifact_id.strip().encode("utf-8")).hexdigest()
+    return f"guard:runtime:tool-action:{digest}"

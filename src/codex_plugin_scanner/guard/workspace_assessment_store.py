@@ -19,7 +19,6 @@ from typing import Any, Final
 from .store_workspace_assessment_schema import MAX_COVERAGE_JSON_BYTES, MAX_FINDINGS_JSON_BYTES
 from .workspace_assessment_carry import carry_unchecked_findings, keep_package_identities
 from .workspace_assessment_reads import (
-    get_run,
     latest_assessed_run,
     latest_assessed_runs,
     latest_runs,
@@ -466,7 +465,6 @@ __all__ = [
     "claim_next",
     "enqueue",
     "finish",
-    "get_run",
     "latest_assessed_run",
     "latest_assessed_runs",
     "latest_runs",

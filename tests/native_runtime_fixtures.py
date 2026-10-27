@@ -466,6 +466,35 @@ def native_adapter_state_integrity_runtime(
 
 
 @pytest.fixture
+def package_workspace_scope_native(
+    monkeypatch: pytest.MonkeyPatch,
+    _native_context_home: Path,
+) -> Path:
+    """Derive package workspace approval scopes in the compiled resident.
+
+    ``package_request_{portable,runtime}_workspace_scope`` are resident-sole-
+    authority: the scope a saved package approval is stored and matched under
+    has one derivation, and an unavailable resident raises rather than
+    guessing a key.  The op reads every input off the wire, so the Guard home
+    only has to name a resident that is already keyed and warm.
+    """
+
+    from codex_plugin_scanner.guard import native_package_workspace_scope
+
+    binary = _context_digest_runtime_binary()
+    if binary is None:
+        pytest.skip("package workspace scope tests require the compiled Rust runtime")
+    monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
+    monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", str(binary.resolve()))
+    monkeypatch.setattr(
+        native_package_workspace_scope,
+        "_resolve_digest_home",
+        lambda guard_home=None: _native_context_home,
+    )
+    return _native_context_home
+
+
+@pytest.fixture
 def package_intent_native(
     monkeypatch: pytest.MonkeyPatch,
     _native_context_home: Path,

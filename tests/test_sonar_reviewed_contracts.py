@@ -14,8 +14,11 @@ from codex_plugin_scanner.guard import action_lattice
 from codex_plugin_scanner.guard.adapters.claude_hook_config import handler_identity
 from codex_plugin_scanner.guard.approval_scope_support import package_request_portable_workspace_scope
 from codex_plugin_scanner.guard.daemon import client
-from codex_plugin_scanner.guard.models import GUARD_ACTION_VALUES, GuardAction
-from codex_plugin_scanner.guard.package_execution_context import PackageExecutionContext
+from codex_plugin_scanner.guard.models import GUARD_ACTION_VALUES, GuardAction, GuardArtifact
+from codex_plugin_scanner.guard.package_execution_context import (
+    PackageExecutionContext,
+    build_package_execution_context,
+)
 from codex_plugin_scanner.guard.runtime import runner
 from codex_plugin_scanner.guard.store_workflow_capability_secret_control import (
     StoreWorkflowCapabilitySecretControlMixin,
@@ -78,13 +81,58 @@ def test_action_lattice_import_guard_is_false_for_consistent_declarations() -> N
     assert declared != frozenset((*GUARD_ACTION_VALUES, "unrecognized_future_action"))
 
 
+def _portable_package_context(tmp_path: Path) -> PackageExecutionContext:
+    """A context the resident accepts.
+
+    The resident rebuilds the context digest from the components it is handed
+    and drops any evidence that does not reproduce it, so a hand-written
+    ``PackageExecutionContext`` never survives the trip.  This builds a real
+    one the same way the package request path does.
+    """
+
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    (workspace_dir / ".git").mkdir()
+    (workspace_dir / ".git" / "config").write_text('[remote "origin"]\nurl = https://example.test/app.git\n')
+    (workspace_dir / "package.json").write_text('{"name":"sonar-contract"}\n')
+    executable = tmp_path / "bin" / "npm"
+    executable.parent.mkdir(parents=True, exist_ok=True)
+    executable.write_text("#!/bin/sh\n")
+    executable.chmod(0o755)
+    (tmp_path / "home").mkdir()
+    context = build_package_execution_context(
+        workspace_dir=workspace_dir,
+        artifact=GuardArtifact(
+            artifact_id="guard-cli:project:package-request:fixture",
+            name="npm install left-pad",
+            harness="guard-cli",
+            artifact_type="package_request",
+            source_scope="project",
+            config_path=str(workspace_dir / "hol-guard.toml"),
+            metadata={
+                "package_manager": "npm",
+                "package_executable": "npm",
+                "manifest_paths": ["package.json"],
+                "lockfile_paths": [],
+            },
+        ),
+        environment={"HOME": str(tmp_path / "home"), "PATH": str(executable.parent)},
+    )
+    assert context.portable is True
+    return context
+
+
 @pytest.mark.parametrize("artifact_hash", [None, "", "  ", "unknown", "a" * 64])
-def test_optional_package_hash_guard_rejects_only_invalid_hashes(artifact_hash: str | None) -> None:
+def test_optional_package_hash_guard_rejects_only_invalid_hashes(
+    artifact_hash: str | None,
+    tmp_path: Path,
+    package_workspace_scope_native: Path,
+) -> None:
     scope = package_request_portable_workspace_scope(
         artifact_id="guard-cli:project:package-request:fixture",
         artifact_type="package_request",
         artifact_hash=artifact_hash,
-        execution_context=PackageExecutionContext("b" * 64, True, ()),
+        execution_context=_portable_package_context(tmp_path),
     )
     if artifact_hash == "a" * 64:
         assert scope is not None and scope.startswith("package-request-workspace:v2:")

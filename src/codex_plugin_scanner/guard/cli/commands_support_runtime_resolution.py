@@ -52,34 +52,6 @@ def _truncate_codex_display_text(value: str, *, limit: int) -> str:
         return value
     return f"{value[: limit - 1].rstrip()}…"
 
-def _resolve_prompt_scan_path(requested_path: str, *, cwd: Path | None) -> Path | None:
-    stripped = requested_path.strip().strip("'\"")
-    if not stripped:
-        return None
-    exact_path = _expand_prompt_scan_path(stripped, cwd=cwd)
-    if _prompt_scan_path_exists(exact_path):
-        return exact_path
-    normalized = stripped.rstrip(".,;:!?)]}")
-    if not normalized or normalized == stripped:
-        return exact_path
-    return _expand_prompt_scan_path(normalized, cwd=cwd)
-
-def _expand_prompt_scan_path(requested_path: str, *, cwd: Path | None) -> Path:
-    try:
-        expanded = Path(requested_path).expanduser()
-    except RuntimeError:
-        return Path(requested_path)
-    if not expanded.is_absolute():
-        expanded = (cwd or Path.cwd()) / expanded
-    with suppress(OSError):
-        return expanded.resolve(strict=False)
-    return expanded
-
-def _prompt_scan_path_exists(path: Path) -> bool:
-    with suppress(OSError):
-        return path.is_file()
-    return False
-
 def _is_copilot_permission_request(payload: dict[str, object]) -> bool:
     from ..daemon.hook_availability_policy import hook_event_is_permission_request as _perm
     return any(
@@ -339,11 +311,10 @@ def _server_command(server: dict[str, object]) -> list[str]:
 
 __all__ = [
     "_canonical_harness_name",
-    "_expand_prompt_scan_path", "_is_copilot_permission_request",
+    "_is_copilot_permission_request",
     "_managed_install_for", "_managed_manifest_server",
-    "_prompt_scan_path_exists",
     "_redact_codex_prompt_secret_assignments",
-    "_resolve_prompt_scan_path", "_run_hermes_mcp_proxy",
+    "_run_hermes_mcp_proxy",
     "_runtime_policy_path", "_runtime_request_summary",
     "_server_command", "_server_env", "_server_headers",
     "_truncate_codex_display_text",

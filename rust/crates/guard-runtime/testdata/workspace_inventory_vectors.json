@@ -1583,10 +1583,26 @@
     {
      "direct": false,
      "ecosystem": "npm",
+     "name": "zeta",
+     "namespace": null,
+     "range": null,
+     "version": "1.0.0"
+    },
+    {
+     "direct": false,
+     "ecosystem": "npm",
      "name": "alpha",
      "namespace": null,
      "range": null,
      "version": "1.0.0"
+    },
+    {
+     "direct": false,
+     "ecosystem": "npm",
+     "name": "alpha",
+     "namespace": null,
+     "range": null,
+     "version": "0.5.0"
     },
     {
      "direct": false,

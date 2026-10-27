@@ -10,6 +10,7 @@ import pytest
 
 from codex_plugin_scanner.guard import workspace_assessment_store as assessments
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.workspace_assessment_reads import _run_payload
 
 
 def admit_worktree(
@@ -128,3 +129,17 @@ def assess(
     )
     assert assessments.finish(store, claimed, outcome, now_ms=at + 1)
     return str(run_id)
+
+
+def get_run(store: GuardStore, run_id: str) -> dict[str, object] | None:
+    with store._connect() as connection:
+        row = connection.execute(
+            """
+            select run_id, codebase_key, worktree_key, snapshot_digest, kind, trigger_kind, state,
+                   dirty_generation, coverage_json, findings_json, error_code,
+                   created_at_ms, started_at_ms, finished_at_ms
+            from workspace_assessment_runs where run_id = ?
+            """,
+            (run_id,),
+        ).fetchone()
+    return _run_payload(row) if row is not None else None

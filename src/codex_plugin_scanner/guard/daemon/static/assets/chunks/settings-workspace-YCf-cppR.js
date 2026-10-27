@@ -2,7 +2,7 @@ import { r as reactExports, aF as fetchResolvedApprovalGate, j as jsxRuntimeExpo
 import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRequestError, b as resolveSettingsSaveProofKind, c as requiresSettingsSaveProof, d as HarnessPostureSummaryCard, e as HarnessPostureManager, G as GuardRepairControl, S as SettingsSaveProofModal, f as resolveSettingsSaveProofModalCopy } from "./settings-save-proof-modal-CZZvxWFO.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog-By01oDVd.js";
 import { u as useConfirmDialog } from "./confirm-dialog-C2SCoXLE.js";
-import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-C4Z4YFhK.js";
+import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-DZLEHj7B.js";
 function describeAffectedHarness(item) {
   const count = item.hook_count ?? item.swept_hook_count;
   if (typeof count === "number" && count > 0) {

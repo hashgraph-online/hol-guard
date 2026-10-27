@@ -98,7 +98,7 @@ _ERRORS = {
         "HOL's install details for this listing failed Guard's checks, so nothing will run. "
         "Follow the listing's install steps instead."
     ),
-    "plugin_kit_install_spec_unsupported": "This listing needs a newer hol-guard. Run: pip install -U hol-guard",
+    "plugin_kit_install_spec_unsupported": "This listing needs a newer hol-guard. Run: hol-guard update",
     "plugin_kit_install_runtime_unknown": "Unknown runtime. Choose from: claude-code, codex, agent-skills",
     "plugin_kit_install_runtime_not_offered": "This listing cannot be installed for a runtime you named.",
     "plugin_kit_install_spec_mismatch": (

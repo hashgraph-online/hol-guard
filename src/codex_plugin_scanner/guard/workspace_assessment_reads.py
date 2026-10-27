@@ -87,20 +87,6 @@ def latest_runs(store: Any) -> list[dict[str, object]]:
     return runs
 
 
-def get_run(store: Any, run_id: str) -> dict[str, object] | None:
-    with store._connect() as connection:
-        row = connection.execute(
-            """
-            select run_id, codebase_key, worktree_key, snapshot_digest, kind, trigger_kind, state,
-                   dirty_generation, coverage_json, findings_json, error_code,
-                   created_at_ms, started_at_ms, finished_at_ms
-            from workspace_assessment_runs where run_id = ?
-            """,
-            (run_id,),
-        ).fetchone()
-    return _run_payload(row) if row is not None else None
-
-
 def latest_assessed_runs(store: Any, keys: Sequence[WorktreeKeys] | None = None) -> list[dict[str, object]]:
     """The newest completed or partial run of every admitted worktree, or of just ``keys``.
 
@@ -182,4 +168,4 @@ def _key_tuple(keys: WorktreeKeys | None) -> tuple[str, str]:
     return (keys.codebase_key, keys.worktree_key)
 
 
-__all__ = ["get_run", "latest_assessed_run", "latest_assessed_runs", "latest_runs", "list_worktrees", "recent_runs"]
+__all__ = ["latest_assessed_run", "latest_assessed_runs", "latest_runs", "list_worktrees", "recent_runs"]

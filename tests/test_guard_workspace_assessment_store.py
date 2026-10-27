@@ -10,7 +10,7 @@ from codex_plugin_scanner.guard import workspace_assessment_store as assessments
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_connection_schema import _REQUIRED_SCHEMA_MIGRATION_VERSIONS
 from codex_plugin_scanner.guard.store_workspace_assessment_schema import WORKSPACE_ASSESSMENT_MIGRATION_VERSION
-from tests.workspace_fix_support import admit_worktree
+from tests.workspace_fix_support import admit_worktree, get_run
 
 DETECTORS = "d" * 64
 T0 = 1_000_000_000
@@ -126,7 +126,7 @@ def test_canceled_run_cannot_record_its_outcome(tmp_path: Path) -> None:
     assert assessments.cancel(store, claimed.run_id, now_ms=T0 + 1)
     assert not assessments.cancel(store, claimed.run_id, now_ms=T0 + 2)
     assert not assessments.finish(store, claimed, completed(), now_ms=T0 + 3)
-    assert assessments.get_run(store, claimed.run_id)["state"] == "canceled"
+    assert get_run(store, claimed.run_id)["state"] == "canceled"
     assert assessments.list_worktrees(store)[0]["last_completed_generation"] == 0
 
 
@@ -139,7 +139,7 @@ def test_expired_lease_is_failed_requeued_and_fenced(tmp_path: Path) -> None:
     fresh = assessments.claim_next(store, owner="new", now_ms=expiry)
     assert fresh is not None and fresh.run_id != stale.run_id
     assert fresh.trigger_kind == "manual"
-    expired = assessments.get_run(store, stale.run_id)
+    expired = get_run(store, stale.run_id)
     assert expired is not None
     assert (expired["state"], expired["error_code"]) == ("failed", "lease_expired")
     assert not assessments.finish(store, stale, completed(), now_ms=expiry + 1)
@@ -153,7 +153,7 @@ def test_finish_after_the_lease_deadline_is_refused(tmp_path: Path) -> None:
     assert claimed is not None
     # No claim ran in between to expire the lease; the deadline alone fences it.
     assert not assessments.finish(store, claimed, completed(), now_ms=T0 + assessments.LEASE_MS + 1)
-    assert assessments.get_run(store, claimed.run_id)["state"] == "running"
+    assert get_run(store, claimed.run_id)["state"] == "running"
 
 
 @pytest.mark.parametrize(("trigger", "successor"), [("manual", "manual"), ("file_change", "file_change")])
@@ -255,7 +255,7 @@ def test_oversized_result_is_rejected_before_storage(tmp_path: Path) -> None:
     outcome = assessments.RunOutcome(state="completed", snapshot_digest=digest("s"), findings=huge)
     with pytest.raises(ValueError):
         assessments.finish(store, claimed, outcome, now_ms=T0 + 1)
-    assert assessments.get_run(store, claimed.run_id)["state"] == "running"
+    assert get_run(store, claimed.run_id)["state"] == "running"
 
 
 def test_generations_cannot_move_backward(tmp_path: Path) -> None:
