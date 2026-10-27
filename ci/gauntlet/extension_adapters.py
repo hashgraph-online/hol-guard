@@ -114,6 +114,16 @@ def _authorize_extension_controls(daemon: Any, guard_home: Path) -> str:
     return password
 
 
+@functools.cache
+def _required_extension_ids() -> frozenset[str]:
+    """Extension ids the catalog marks required, so always enabled."""
+    from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+
+    return frozenset(
+        extension.extension_id for extension in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions if extension.required
+    )
+
+
 def _commit_extension_controls(
     daemon: Any, password: str, extension_id: str, permissions: tuple[tuple[str, bool], ...]
 ) -> int:
@@ -121,15 +131,23 @@ def _commit_extension_controls(
 
     The commit goes through the daemon's control service, the path an installed
     enable takes, so it prepares the extension's optional pack first.
+
+    A required extension is already enabled and the runtime refuses a local
+    control over its state, so ask only for the permissions. Asking to enable
+    it anyway is refused with `immutable_extension`, which no fixture can
+    recover from.
     """
     from ci.native_runtime.probe_installed_native_extensions import commit_controls, control
     from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlState, ControlTargetKind
 
-    controls = [control(ControlTargetKind.EXTENSION, extension_id, ControlState.ENABLED)]
+    required = extension_id in _required_extension_ids()
+    controls = [] if required else [control(ControlTargetKind.EXTENSION, extension_id, ControlState.ENABLED)]
     controls += [
         control(ControlTargetKind.PERMISSION, permission, ControlState.ENABLED if enabled else ControlState.DISABLED)
         for permission, enabled in permissions
     ]
+    if not controls:
+        raise RuntimeError(f"{extension_id} is required and no permission control was requested")
     return commit_controls(daemon._server.extension_control_api, password, tuple(controls))
 
 
