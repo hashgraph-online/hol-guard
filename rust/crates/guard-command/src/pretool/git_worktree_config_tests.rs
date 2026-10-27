@@ -217,6 +217,29 @@ fn only_the_last_hooks_path_git_reads_is_judged() {
     };
     assert_eq!(facts.repository_hooks_path.as_deref(), Some(".husky/_"));
     assert!(facts.hook_dirs.is_empty(), "the global directory is dead");
+
+    // A value Git has already been told to ignore cannot be judged at all:
+    // an earlier directory that no longer exists, or an earlier relative
+    // value the working tree would decide, says nothing about the hooks this
+    // checkout runs.
+    let absent = root.path().join("absent-hooks");
+    let absent_spelling = absent.to_str().expect("path spelling").to_owned();
+    for (scope, value) in [
+        ("global", absent_spelling.as_str()),
+        ("local", absent_spelling.as_str()),
+        ("local", "../hooks"),
+    ] {
+        let Some(Some(facts)) = judged(&[
+            (scope, "core.hookspath", value),
+            ("local", "core.hookspath", spelling.as_str()),
+        ]) else {
+            panic!("the dead {scope} value {value} was judged");
+        };
+        assert_eq!(
+            facts.hook_dirs,
+            vec![fs::canonicalize(&hooks).expect("canonical hooks directory")]
+        );
+    }
 }
 
 /// A hook manager, or a tool that wants Git's hooks out of the way,

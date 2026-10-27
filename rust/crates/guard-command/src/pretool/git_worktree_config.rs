@@ -41,6 +41,9 @@ pub(super) fn safe_worktree_config(output: &[u8], home: &Path) -> Option<Option<
         ..ConfigFacts::default()
     };
     let mut past_system = false;
+    // The last `core.hooksPath` value read, and whether the repository's own
+    // configuration wrote it.
+    let mut hooks_path: Option<(bool, String)> = None;
     let mut records = output.split('\0');
     while let Some(scope) = records.next() {
         if scope.is_empty() {
@@ -81,28 +84,17 @@ pub(super) fn safe_worktree_config(output: &[u8], home: &Path) -> Option<Option<
             // `git clone` never copies `.git/config`, so a `local` value was
             // written by this developer or a tool they ran. The directory it
             // names is read either way. A `worktree` or `command` value can
-            // come from this very invocation, so it stays doubt.
+            // come from this very invocation, so it stays doubt - and Git
+            // reads those last, so nothing later in the listing retires one.
             if !global_scope && scope != "local" {
                 return Some(None);
             }
-            // Git reads one hooks path, the last value it is given, so an
-            // earlier value names a directory this checkout never consults.
-            if scope == "local"
-                && super::super::git_hook_files::repository_relative_hooks_path(value)
-            {
-                facts.hook_dirs.clear();
-                facts.repository_hooks_path = Some(value.to_owned());
-                continue;
-            }
-            let Some(directory) = expand_config_path(value, home)
-                .and_then(|path| fs::canonicalize(path).ok())
-                .filter(|path| path.is_dir())
-            else {
-                return Some(None);
-            };
-            facts.repository_hooks_path = None;
-            facts.hook_dirs.clear();
-            facts.hook_dirs.push(directory);
+            // Git consults one hooks path: the last value it is given. An
+            // earlier value names a directory this checkout never reads, so
+            // it is judged only once the listing ends and the effective value
+            // is known. Judging it in place sent `worktree add` to review
+            // over a directory Git had already been told to ignore.
+            hooks_path = Some((scope == "local", value.to_owned()));
             continue;
         }
         if key.starts_with("filter.") {
@@ -158,6 +150,19 @@ pub(super) fn safe_worktree_config(output: &[u8], home: &Path) -> Option<Option<
             || key.ends_with(".receivepack")
         {
             return Some(None);
+        }
+    }
+    if let Some((local, value)) = hooks_path {
+        if local && super::super::git_hook_files::repository_relative_hooks_path(&value) {
+            facts.repository_hooks_path = Some(value);
+        } else {
+            let Some(directory) = expand_config_path(&value, home)
+                .and_then(|path| fs::canonicalize(path).ok())
+                .filter(|path| path.is_dir())
+            else {
+                return Some(None);
+            };
+            facts.hook_dirs.push(directory);
         }
     }
     Some(Some(facts))
