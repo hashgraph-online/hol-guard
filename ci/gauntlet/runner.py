@@ -51,6 +51,7 @@ from .fixtures import (
     scratch_checkout,
     stage_directory,
 )
+from .git_allow_fixtures import GIT_ALLOW_CASES, configure_git_allow_controls
 from .host_process import clean_environment, realistic_environment, run_process
 from .input_evidence import (
     public_native_extension_evidence,
@@ -218,7 +219,7 @@ def run_case(
                 agent_dir,
                 relay,
                 wait_for_tasks=scenario.id
-            in {"omp-native-task-readonly-lookup", TASK_SCHEMA_CASE, CREDENTIAL_REPORT_CASE},
+                in {"omp-native-task-readonly-lookup", TASK_SCHEMA_CASE, CREDENTIAL_REPORT_CASE},
                 memory_bank="learn" in scenario.required_tools,
                 github_tool="github" in scenario.required_tools,
                 structured_tasks=scenario.id == TASK_SCHEMA_CASE,
@@ -242,6 +243,8 @@ def run_case(
                 )
             if scenario.id == GITHUB_REVIEW_CASE:
                 case["extension_control"] = configure_github_review_controls(daemon, fixture.root / "guard-home")
+            if scenario.id in GIT_ALLOW_CASES:
+                case["extension_control"] = configure_git_allow_controls(daemon, fixture.root / "guard-home")
             if scenario.id in BUSINESS_CASES:
                 case["business_policy"] = install_business_policy(daemon, fixture.root / "guard-home")
             # Benign first-contact scenarios run with no pre-bound workspace policy, like a fresh install.

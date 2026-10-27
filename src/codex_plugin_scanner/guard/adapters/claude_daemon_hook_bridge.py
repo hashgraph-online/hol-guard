@@ -29,7 +29,6 @@ from ..codex_hook_launch_runtime import isolated_daemon_start_command
 from ..hook_execution_environment import stamp_hook_input_text
 from ._modules.claude.claude_daemon_state import state_path_for_query
 from .claude_hook_config import CLAUDE_GUARD_DAEMON_HOOK_MARKER
-from .claude_hook_config import CLAUDE_GUARD_PERMISSION_PASSTHROUGH_KEY as PERMISSION_PASSTHROUGH_KEY
 from .hook_input_reader import read_stdin_text
 from .native_hook_bridge import native_hook_bridge_executable
 
@@ -241,70 +240,6 @@ def _degraded(reason: str, data: str) -> str:
         message = _DEGRADED_DAEMON_MESSAGE.format(reason=reason)
         return _deny_event(event, message)
     return "{}"
-
-
-def _authenticated_control_plane_failure(reason: str, data: str) -> str:
-    message = f"HOL Guard denied the action because daemon authentication failed: {reason}"
-    event = _event_name(data)
-    if event.startswith("Permission") or event == "PreToolUse":
-        return _deny_event(event, message)
-    return json.dumps({"continue": True, "stopReason": message}, separators=(",", ":"))
-
-
-def _should_suppress_output(data: str, response_body: str) -> bool:
-    if _event_name(data) != "UserPromptSubmit":
-        return False
-    trimmed = (response_body or "").strip()
-    return trimmed in {"", "{}"}
-
-
-def _valid_hook_json_or_degraded(output: str, *, reason: str, data: str) -> str:
-    trimmed = (output or "").strip()
-    if not trimmed:
-        return _degraded(reason, data)
-    try:
-        decoded = json.loads(trimmed)
-    except json.JSONDecodeError:
-        return _degraded(reason, data)
-    if not isinstance(decoded, dict):
-        return _degraded(reason, data)
-    event = _event_name(data)
-    if event == "PreToolUse":
-        hook_output = decoded.get("hookSpecificOutput")
-        if (
-            not isinstance(hook_output, dict)
-            or hook_output.get("hookEventName") != event
-            or hook_output.get("permissionDecision") not in ("allow", "ask", "deny")
-        ):
-            return _degraded(reason, data)
-    elif event.startswith("Permission"):
-        hook_output = decoded.get("hookSpecificOutput")
-        decision = hook_output.get("decision") if isinstance(hook_output, dict) else None
-        if _is_permission_passthrough(decoded, hook_output, event):
-            return trimmed
-        if (
-            not isinstance(hook_output, dict)
-            or hook_output.get("hookEventName") != event
-            or not isinstance(decision, dict)
-            or decision.get("behavior") not in ("allow", "deny")
-        ):
-            return _degraded(reason, data)
-    return trimmed
-
-
-def _is_permission_passthrough(decoded: dict[str, object], hook_output: object, event: str) -> bool:
-    """Accept the daemon's explicit deferral to Claude's own permission dialog.
-
-    The marker comes only from the authenticated daemon. It carries no
-    decision, so Claude keeps its normal prompt; it never grants approval.
-    """
-
-    return (
-        decoded.get(PERMISSION_PASSTHROUGH_KEY) is True
-        and isinstance(hook_output, dict)
-        and hook_output.get("hookEventName") == event
-        and "decision" not in hook_output
-    )
 
 
 def _recovery_command(state_path: str | Path, query: str) -> tuple[str, ...]:

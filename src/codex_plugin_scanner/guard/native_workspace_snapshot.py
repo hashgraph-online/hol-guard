@@ -8,7 +8,14 @@ finding before it crosses this boundary. It may likewise ask for the skill
 content rules over the agent skills among those bytes; their findings carry
 fixed rule text and never quote the skill. A request may also ask for the
 check of every hook command in the project's agent configuration files; its
-findings name the file and hook event, never the command.
+findings name the file and hook event, never the command, and for the check of
+the hooks and MCP servers every agent plugin in the worktree ships, whose
+findings name the file and hook event or server, never the command or URL. A
+request may ask for the check of the project's GitHub Actions workflows; its
+findings name the workflow file and rule, never an action, ref or command. A
+request may last ask for the check of the project's editor tasks and dev
+container configuration; its findings name the file and rule, never a task or
+command.
 """
 
 from __future__ import annotations
@@ -22,6 +29,9 @@ WORKSPACE_SNAPSHOT_FEATURE = "workspace-snapshot-v1"
 WORKSPACE_SECRETS_FEATURE = "workspace-snapshot-secrets-v1"
 WORKSPACE_SKILLS_FEATURE = "workspace-snapshot-skills-v1"
 WORKSPACE_HOOKS_FEATURE = "workspace-snapshot-hooks-v1"
+WORKSPACE_PLUGINS_FEATURE = "workspace-snapshot-plugins-v1"
+WORKSPACE_WORKFLOWS_FEATURE = "workspace-snapshot-workflows-v1"
+WORKSPACE_EDITOR_TASKS_FEATURE = "workspace-snapshot-editor-tasks-v1"
 WORKSPACE_SNAPSHOT_COMMAND = "workspace-snapshot"
 WORKSPACE_SNAPSHOT_SCHEMA = "guard.workspace-snapshot.v1"
 
@@ -56,6 +66,9 @@ class WorkspaceSnapshot:
     secrets: dict[str, object] | None = None
     skills: dict[str, object] | None = None
     hooks: dict[str, object] | None = None
+    plugins: dict[str, object] | None = None
+    workflows: dict[str, object] | None = None
+    editor_tasks: dict[str, object] | None = None
 
 
 def workspace_snapshot(
@@ -66,6 +79,9 @@ def workspace_snapshot(
     secret_key: str | None = None,
     skills: bool = False,
     hooks: bool = False,
+    plugins: bool = False,
+    workflows: bool = False,
+    editor_tasks: bool = False,
 ) -> WorkspaceSnapshot:
     """Snapshot ``root``; ``secrets`` also scans the hashed bytes for secrets.
 
@@ -78,6 +94,10 @@ def workspace_snapshot(
     skill content rules; a runtime without them raises
     ``workspace_snapshot_skills_unavailable`` the same way, and ``hooks``,
     the project hook check, raises ``workspace_snapshot_hooks_unavailable``.
+    ``plugins``, the agent plugin check, raises
+    ``workspace_snapshot_plugins_unavailable``, ``workflows``, the workflow
+    check, ``workspace_snapshot_workflows_unavailable``, and ``editor_tasks``,
+    the editor task check, ``workspace_snapshot_editor_tasks_unavailable``.
     """
 
     request: dict[str, object] = {"root": str(root), "mode": mode}
@@ -89,7 +109,21 @@ def workspace_snapshot(
         request["skills"] = True
     if hooks:
         request["hooks"] = True
-    reply = _native_request(request, needs_secrets=secrets, needs_skills=skills, needs_hooks=hooks)
+    if plugins:
+        request["plugins"] = True
+    if workflows:
+        request["workflows"] = True
+    if editor_tasks:
+        request["editor_tasks"] = True
+    reply = _native_request(
+        request,
+        needs_secrets=secrets,
+        needs_skills=skills,
+        needs_hooks=hooks,
+        needs_plugins=plugins,
+        needs_workflows=workflows,
+        needs_editor_tasks=editor_tasks,
+    )
     if reply.get("ok") is not True:
         error = reply.get("error")
         raise WorkspaceSnapshotError(error if isinstance(error, str) and error else "workspace_snapshot_failed")
@@ -97,7 +131,14 @@ def workspace_snapshot(
 
 
 def _native_request(
-    request: dict[str, object], *, needs_secrets: bool = False, needs_skills: bool = False, needs_hooks: bool = False
+    request: dict[str, object],
+    *,
+    needs_secrets: bool = False,
+    needs_skills: bool = False,
+    needs_hooks: bool = False,
+    needs_plugins: bool = False,
+    needs_workflows: bool = False,
+    needs_editor_tasks: bool = False,
 ) -> dict[str, object]:
     import os
 
@@ -119,6 +160,12 @@ def _native_request(
         raise WorkspaceSnapshotError("workspace_snapshot_skills_unavailable")
     if needs_hooks and WORKSPACE_HOOKS_FEATURE not in status.capabilities.features:
         raise WorkspaceSnapshotError("workspace_snapshot_hooks_unavailable")
+    if needs_plugins and WORKSPACE_PLUGINS_FEATURE not in status.capabilities.features:
+        raise WorkspaceSnapshotError("workspace_snapshot_plugins_unavailable")
+    if needs_workflows and WORKSPACE_WORKFLOWS_FEATURE not in status.capabilities.features:
+        raise WorkspaceSnapshotError("workspace_snapshot_workflows_unavailable")
+    if needs_editor_tasks and WORKSPACE_EDITOR_TASKS_FEATURE not in status.capabilities.features:
+        raise WorkspaceSnapshotError("workspace_snapshot_editor_tasks_unavailable")
     runtime = status.identity.path
     environment = {key: value for key in _CHILD_ENVIRONMENT_KEYS if (value := os.environ.get(key))}
     completed = run_isolated_hook_process(
@@ -169,6 +216,9 @@ def _parse_result(result: object) -> WorkspaceSnapshot:
     secrets = result.get("secrets")
     skills = result.get("skills")
     hooks = result.get("hooks")
+    plugins = result.get("plugins")
+    workflows = result.get("workflows")
+    editor_tasks = result.get("editor_tasks")
     return WorkspaceSnapshot(
         mode=mode,  # type: ignore[arg-type]
         root=str(result["root"]),
@@ -184,6 +234,9 @@ def _parse_result(result: object) -> WorkspaceSnapshot:
         secrets=secrets if isinstance(secrets, dict) else None,
         skills=skills if isinstance(skills, dict) else None,
         hooks=hooks if isinstance(hooks, dict) else None,
+        plugins=plugins if isinstance(plugins, dict) else None,
+        workflows=workflows if isinstance(workflows, dict) else None,
+        editor_tasks=editor_tasks if isinstance(editor_tasks, dict) else None,
     )
 
 
@@ -192,10 +245,13 @@ def _is_digest(value: object) -> bool:
 
 
 __all__ = [
+    "WORKSPACE_EDITOR_TASKS_FEATURE",
     "WORKSPACE_HOOKS_FEATURE",
+    "WORKSPACE_PLUGINS_FEATURE",
     "WORKSPACE_SECRETS_FEATURE",
     "WORKSPACE_SKILLS_FEATURE",
     "WORKSPACE_SNAPSHOT_FEATURE",
+    "WORKSPACE_WORKFLOWS_FEATURE",
     "WorkspaceSnapshot",
     "WorkspaceSnapshotError",
     "workspace_snapshot",

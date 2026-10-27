@@ -728,12 +728,6 @@ def test_bridge_real_daemon_reviews_git_fetch_without_repository_bound_cwd(
 @pytest.mark.parametrize(
     ("command", "pending_approvals"),
     (
-        (
-            "gh api -H 'Accept: application/vnd.github.raw+json' "
-            "'repos/hashgraph-online/hol-guard/contents/ci/code-quality-baseline.json?ref=main' "
-            "| jq '{tests: .tests, total: .total}'",
-            1,
-        ),
         ("gh pr view 1 -tREVIEW", 1),
         ("gh pr list -q'.[] | select(.state == \"REVIEW_REQUIRED\")'", 1),
         ("gh issue list -q'.[] | {REPO: .repository}'", 1),
@@ -762,6 +756,35 @@ def test_bridge_real_daemon_denies_unproven_github_content_reads(
     response, store = _bridge_github_read(tmp_path, monkeypatch, command)
     _assert_bridge_denied(response)
     assert len(store.list_approval_requests(limit=None)) == pending_approvals, response
+
+
+def test_bridge_real_daemon_allows_a_bounded_jq_projection_over_a_github_content_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    native_hook_force: Path,
+) -> None:
+    """An object-building filter reads the piped value, so it keeps the read's allow baseline.
+
+    The repository path names its owner and repository outright, so this read
+    is as proven as the ones beside it, and the jq stage only shapes the value
+    the pipeline already produced. It used to be reviewed because a filter over
+    stdin had to open with a projection, which is a spelling rather than a
+    proof: the same file comes through `--jq .content | base64 -d` whole, and
+    that pipeline is an expected allow in the benign gate. The grammar is what
+    keeps a filter from reaching the environment, further input, files or
+    modules, and `{tests: .tests, total: .total}` clears it in full.
+    """
+
+    command = (
+        "gh api -H 'Accept: application/vnd.github.raw+json' "
+        "'repos/hashgraph-online/hol-guard/contents/ci/code-quality-baseline.json?ref=main' "
+        "| jq '{tests: .tests, total: .total}'"
+    )
+    response, store = _bridge_github_read(tmp_path, monkeypatch, command, runtime=native_hook_force)
+    hook_output = response.get("hookSpecificOutput")
+    assert isinstance(hook_output, dict)
+    assert "permissionDecision" not in hook_output, response
+    assert store.list_approval_requests(limit=None) == [], response
 
 
 @pytest.mark.parametrize("command", ("gh -Rowner/repo pr view 17", "gh -Rgithub.com/Owner/Repo pr view 17"))

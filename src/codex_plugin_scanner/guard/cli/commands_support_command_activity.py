@@ -9,7 +9,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 
-from ..models import GuardAction
 from ..runtime.command_activity_contract import (
     CommandExecutionStatus,
     CorrelationHandle,
@@ -23,16 +22,8 @@ from ..runtime.command_activity_lifecycle import (
     build_correlated_post_activity,
     build_unpaired_post_evidence,
 )
-from ..runtime.command_evaluation import CompositeCommandEvaluation
-from ..runtime.command_shadow_evaluation import (
-    CommandShadowObservation,
-    baseline_command_shadow_proposal,
-    build_command_shadow_observation,
-    load_command_shadow_control,
-)
 from ..store import GuardStore
 
-_PRE_HOOK_EVENTS = frozenset({"PreToolUse", "preToolUse", "copilotPermissionRequest"})
 _POST_HOOK_EVENTS = frozenset(
     {
         "PostToolUse",
@@ -138,34 +129,6 @@ def hook_post_succeeded(event: str, payload: Mapping[str, object]) -> bool:
         return False
     exit_code = payload.get("exit_code", payload.get("exitCode"))
     return not (type(exit_code) is int and exit_code != 0)
-
-
-def _build_shadow_best_effort(
-    *,
-    evaluation: CompositeCommandEvaluation,
-    command_text: str | None,
-    guard_home: Path,
-    cwd: Path | None,
-    home_dir: Path | None,
-    policy_action: GuardAction,
-    activity_id: str,
-    occurred_at: datetime,
-) -> tuple[CommandShadowObservation | None, bool]:
-    try:
-        proposal = baseline_command_shadow_proposal(evaluation)
-        return (
-            build_command_shadow_observation(
-                evaluation,
-                authoritative_action=policy_action,
-                proposal=proposal,
-                activity_id=activity_id,
-                occurred_at=occurred_at,
-                control=load_command_shadow_control(),
-            ),
-            False,
-        )
-    except Exception:
-        return None, True
 
 
 def _payload_command_text(payload: Mapping[str, object]) -> str | None:

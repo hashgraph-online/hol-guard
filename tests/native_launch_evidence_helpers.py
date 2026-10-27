@@ -1,9 +1,43 @@
 """Non-authorizing native observations used by code-version regressions."""
 
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from codex_plugin_scanner.guard.daemon.hook_native_exact_action import native_exact_action, native_launch_evidence
+from codex_plugin_scanner.guard.daemon import hook_native_exact_action
+from codex_plugin_scanner.guard.daemon.hook_native_exact_action import native_exact_action
+
+
+def native_launch_evidence(
+    *,
+    harness: str,
+    tool_name: str,
+    payload: Mapping[str, object],
+    native_result: Mapping[str, object],
+    native_receipt: Mapping[str, object] | None,
+    workspace: Path | None,
+    home_dir: Path | None,
+    guard_home: Path | None = None,
+) -> tuple[dict[str, Any] | None, str | None]:
+    """Ask the resident's ``launch_evidence`` kind for observations only.
+
+    No runtime caller sends this kind; regressions use it to see the code,
+    files and configuration an exact-action identity would cover.
+    """
+    try:
+        action = hook_native_exact_action._exact_query(
+            harness=harness,
+            tool_name=tool_name,
+            payload=payload,
+            native_result=native_result,
+            native_receipt=native_receipt,
+            workspace=workspace,
+            home_dir=home_dir,
+        )
+        reply = hook_native_exact_action._answer({"kind": "launch_evidence", "action": action}, guard_home)
+        return reply["evidence"], reply["unavailable_reason"]
+    except (hook_native_exact_action.NativeExactActionError, OSError, RuntimeError, TypeError, ValueError):
+        return None, hook_native_exact_action.UNPROVEN_LAUNCH
 
 
 def _arguments(

@@ -347,3 +347,55 @@ fn hermes_bridge_rejects_a_request_with_no_response() {
     assert_eq!(result.status, "error");
     assert_eq!(result.code, "native_hook_render_invalid");
 }
+
+#[test]
+fn cli_hook_emit_reads_the_answer_or_reports_why_not() {
+    let mut req = request("cli_hook_emit");
+    req.harness = "devin".to_owned();
+    req.cli = Some(json!({
+        "event_name": "PreToolUse",
+        "response_json": r#"{"policy_action":"block","reason":"denied"}"#,
+    }));
+    let result = decode(evaluate_hook_render_request(&req).expect("encoded"));
+    assert_eq!(result.status, "ok");
+    let payload = result.payload.expect("payload");
+    assert_eq!(payload["outcome"], "document");
+    assert_eq!(payload["response"]["exit_code"], 2);
+    assert_eq!(payload["response"]["stderr"], "denied");
+
+    req.cli = Some(json!({"event_name": "PreToolUse", "response_json": "[]"}));
+    let result = decode(evaluate_hook_render_request(&req).expect("encoded"));
+    assert_eq!(result.code, "native_hook_render_unrenderable");
+    req.cli = Some(json!({"event_name": "PreToolUse"}));
+    let result = decode(evaluate_hook_render_request(&req).expect("encoded"));
+    assert_eq!(result.code, "native_hook_render_invalid");
+}
+
+#[test]
+fn cli_hook_emit_reads_an_answer_larger_than_the_render_budget() {
+    // The answer travels as escaped JSON text, so a reason past the shared
+    // render budget must still reach the resident and render.
+    let reason = "\"x\"".repeat(guard_contracts::HOOK_RENDER_MAX_BYTES / 2);
+    let response_json = serde_json::to_string(&json!({
+        "policy_action": "block", "reason": reason,
+    }))
+    .expect("answer");
+    let mut req = request("cli_hook_emit");
+    req.harness = "cursor".to_owned();
+    req.cli = Some(json!({"event_name": "PreToolUse", "response_json": response_json}));
+    let result = decode(evaluate_hook_render_request(&req).expect("encoded"));
+    assert_eq!(result.status, "ok");
+    assert_eq!(
+        result.payload.expect("payload")["response"]["policy_action"],
+        "block"
+    );
+
+    req.cli = Some(json!({
+        "event_name": "PreToolUse",
+        "response_json": "x".repeat(guard_contracts::HOOK_RENDER_CLI_EMIT_MAX_BYTES),
+    }));
+    assert_eq!(
+        evaluate_hook_render_request(&req).unwrap_err(),
+        "native_hook_render_too_large"
+    );
+}

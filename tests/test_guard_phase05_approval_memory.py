@@ -32,6 +32,7 @@ from codex_plugin_scanner.guard.store import (
     runtime_tool_action_exact_match_context,
 )
 from tests.native_detector_support import NativeDetector
+from tests.policy_store_support import resolve_policy
 
 
 def _store(tmp_path: Path) -> GuardStore:
@@ -569,7 +570,8 @@ def test_gr101_gr102_resolved_allow_and_block_persist_exact_action_policy(
     )
 
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             allow_request.artifact_id,
             "hash-allow",
@@ -578,7 +580,8 @@ def test_gr101_gr102_resolved_allow_and_block_persist_exact_action_policy(
         == "allow"
     )
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             block_request.artifact_id,
             "hash-block",
@@ -587,7 +590,8 @@ def test_gr101_gr102_resolved_allow_and_block_persist_exact_action_policy(
         == "block"
     )
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             allow_request.artifact_id,
             "hash-changed",
@@ -672,7 +676,8 @@ def test_codex_prompt_file_retry_reuses_artifact_once_across_context_drift(
     )
 
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             retry_artifact.artifact_id,
             artifact_hash(retry_artifact),
@@ -682,7 +687,8 @@ def test_codex_prompt_file_retry_reuses_artifact_once_across_context_drift(
         == "allow"
     )
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             different_intent_artifact.artifact_id,
             artifact_hash(different_intent_artifact),
@@ -882,7 +888,8 @@ def test_gr117_broad_runtime_allow_is_bound_to_exact_action(
         is None
     )
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             other_shell_request.artifact_id,
             "hash-new",
@@ -891,7 +898,8 @@ def test_gr117_broad_runtime_allow_is_bound_to_exact_action(
         is None
     )
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             "codex:project:mcp-tool:other",
             "hash-new",
@@ -900,7 +908,8 @@ def test_gr117_broad_runtime_allow_is_bound_to_exact_action(
         is None
     )
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             "codex:project:prompt-file:abcdef",
             "hash-new",
@@ -964,7 +973,8 @@ def test_artifact_runtime_scope_reuses_approval_for_same_exact_action_retry(
     ]
     assert contextual_exact_key != legacy_exact_key
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             shell_request.artifact_id,
             contextual_exact_key,
@@ -972,9 +982,10 @@ def test_artifact_runtime_scope_reuses_approval_for_same_exact_action_retry(
         )
         == "allow"
     )
-    assert store.resolve_policy("codex", shell_request.artifact_id, None, now="2026-05-13T00:04:00+00:00") is None
+    assert resolve_policy(store, "codex", shell_request.artifact_id, None, now="2026-05-13T00:04:00+00:00") is None
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             shell_request.artifact_id,
             contextual_exact_key,
@@ -983,7 +994,8 @@ def test_artifact_runtime_scope_reuses_approval_for_same_exact_action_retry(
         is None
     )
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             other_shell_request.artifact_id,
             contextual_exact_key,

@@ -6,14 +6,14 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.daemon import hook_native_local_cli, hook_native_review_approval
-from codex_plugin_scanner.guard.local_cli_trust import matching_local_cli_grant, utc_now
+from codex_plugin_scanner.guard.local_cli_trust import utc_now
 from codex_plugin_scanner.guard.runtime.local_cli_identity import (
     identify_unlisted_cli,
     is_local_cli_id,
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
-from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
+from .local_cli_native_fixture import native_local_cli_grant_resident, review_rule_verdict  # noqa: F401
 
 
 @pytest.fixture(autouse=True)
@@ -90,11 +90,9 @@ def test_registry_identity_honors_blocks_only(tmp_path: Path, state: str) -> Non
     assert identity is not None
     store = _grant_store(tmp_path, identity, state)
 
-    match = matching_local_cli_grant(
-        store=store, command=command, cwd=workspace, home_dir=home_dir, current_action="review"
-    )
+    match = review_rule_verdict(store, command=command, cwd=workspace, home_dir=home_dir)
 
-    assert match == ((identity, "blocked") if state == "blocked" else None)
+    assert match == (("blocked", identity.name) if state == "blocked" else None)
 
 
 def test_local_identity_honors_allow_grant(tmp_path: Path) -> None:
@@ -105,11 +103,9 @@ def test_local_identity_honors_allow_grant(tmp_path: Path) -> None:
     assert identity is not None
     store = _grant_store(tmp_path, identity, "allowed")
 
-    match = matching_local_cli_grant(
-        store=store, command="npx wrangler whoami", cwd=workspace, home_dir=home_dir, current_action="review"
-    )
+    match = review_rule_verdict(store, command="npx wrangler whoami", cwd=workspace, home_dir=home_dir)
 
-    assert match == (identity, "allowed")
+    assert match == ("allowed", None)
 
 
 def _native_review(
@@ -255,3 +251,34 @@ def test_registry_identity_keeps_valid_id_for_hyphenated_names(tmp_path: Path) -
     assert identity is not None
     assert identity.is_registry_package
     assert is_local_cli_id(identity.cli_id)
+
+
+@pytest.mark.parametrize("verdict", [["allowed"], {"allowed": True}, 1, None])
+def test_malformed_resident_verdict_leaves_the_review_standing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, verdict: object
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    monkeypatch.setattr(hook_native_local_cli, "ensure_resident_prerequisite", lambda guard_home: True)
+
+    def resident(**kwargs: object) -> dict[str, object]:
+        request = kwargs["request"]
+        assert isinstance(request, Mapping)
+        return {
+            "schema": "guard-hook-local-cli-rule-result.v1",
+            "request_id": request["request_id"],
+            "status": "ok",
+            "verdict": verdict,
+        }
+
+    monkeypatch.setattr(hook_native_local_cli, "_resident_request", resident)
+
+    response = hook_native_local_cli.native_local_cli_grant_response(
+        store,
+        harness="codex",
+        payload={"tool_input": {"command": "npx wrangler whoami"}, "cwd": str(tmp_path)},
+        native_result={"decision": "review", "policy_action": "review", "minimum_action": "review"},
+        workspace=tmp_path,
+        home_dir=tmp_path,
+    )
+
+    assert response is None

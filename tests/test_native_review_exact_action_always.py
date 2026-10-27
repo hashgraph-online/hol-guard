@@ -14,7 +14,7 @@ import pytest
 
 from codex_plugin_scanner.guard.approval_scope_support import request_scope_contract
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
-from codex_plugin_scanner.guard.daemon.hook_native_exact_action import native_exact_action, native_launch_evidence
+from codex_plugin_scanner.guard.daemon.hook_native_exact_action import native_exact_action
 from codex_plugin_scanner.guard.daemon.hook_native_saved_approval import (
     EXACT_ACTION_CONTEXT_TOKEN_KEY,
     native_saved_decision_response,
@@ -24,7 +24,7 @@ from codex_plugin_scanner.guard.models import GuardAction, PolicyDecision
 from codex_plugin_scanner.guard.native_decision_receipt import canonical_receipt_bytes
 from codex_plugin_scanner.guard.store import GuardStore
 from tests import native_launch_evidence_helpers
-from tests.native_launch_evidence_helpers import _inventory, _permission
+from tests.native_launch_evidence_helpers import _inventory, _permission, native_launch_evidence
 from tests.test_native_command_observations import _edge, _observations, _receipt
 
 _HARNESS = "claude-code"

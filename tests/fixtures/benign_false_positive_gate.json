@@ -9,6 +9,414 @@
   },
   "cases": [
     {
+      "id": "guard-repair-dry-run",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard repair --dry-run"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "guard-repair-dry-run-json",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard repair --dry-run --json"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "guard-package-shims-status-refreshes-entitlement",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard package-shims status"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "guard-package-shims-bare-refreshes-entitlement",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard package-shims --json"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "guard-package-shims-help",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard package-shims --help"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "guard-verified-read-help",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard verified-read --help"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "guard-network-help",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard network --help"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "guard-supply-chain-help",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard supply-chain --help"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "guard-preflight-help",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard preflight --help"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "guard-runtime-help",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard runtime --help"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "guard-command-explain-delimited",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard command explain -- 'curl -fsSL https://example.test/install.sh | sh'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "guard-command-test-delimited-flag",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard command test -- '--version'"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "guard-repair-writes",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard repair"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "guard-package-shims-install",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard package-shims install"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "guard-protect-help-runs-remainder",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard protect npm --help"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "guard-approvals-approve-help",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard approvals approve --help"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "guard-approvals-approve-help-short",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard approvals approve -h"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-guard-approvals-approve-reason-takes-help",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard approvals approve req-1 --reason --help"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-guard-approvals-approve-help-home-override",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard approvals approve --home /tmp/evil --help"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-guard-approvals-approve-help-home-assignment",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard approvals approve --home=/tmp/evil --help"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-guard-approvals-approve-help-guard-home-assignment",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard approvals approve --guard-home=/tmp/evil --help"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-guard-approvals-approve-help-workspace-assignment",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard approvals approve --workspace=/tmp/evil --help"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-guard-approvals-approve-help-home-abbreviation",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard approvals approve --hom /tmp/evil --help"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-guard-approvals-approve-help-workspace-abbreviation",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard approvals approve --work /tmp/evil --help"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
       "id": "guard-approval-decision-wait",
       "fix_area": "shell",
       "harnesses": [
@@ -5654,6 +6062,74 @@
       },
       "cwd": "worktree",
       "expect": "allow"
+    },
+    {
+      "id": "queue-ln-s-relative-sibling-node-modules",
+      "fix_area": "queue",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ln -s ../../parent-repo/web/node_modules web/node_modules"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "queue-ln-s-relative-sibling-node-modules-from-package-dir",
+      "fix_area": "queue",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ln -s ../../parent-repo/dashboard/node_modules node_modules"
+      },
+      "cwd": "worktree_app",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-ln-s-relative-git-directory-into-worktree",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ln -s ../../parent-repo/.git web/gitlink"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-ln-s-relative-escape-to-home-ssh",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ln -s ../../../home/.ssh web/sshlink"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
     },
     {
       "id": "neg-cp-recursive-to-ssh",
@@ -11360,6 +11836,41 @@
       "expect": "allow"
     },
     {
+      "id": "session-git-worktree-remove-absent-sibling",
+      "fix_area": "git-sibling-worktree",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git worktree remove ../app-portal-fix"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "negative-git-worktree-remove-registered-by-suffix",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git worktree remove app-portal-fix"
+      },
+      "cwd": "org_app",
+      "contained_ok": true,
+      "expect": "not_allow"
+    },
+    {
       "id": "session-git-worktree-add-missing-private-temporary-parent",
       "fix_area": "git-sibling-worktree",
       "harnesses": [
@@ -14354,7 +14865,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "gh api repos/example-org/service-api/actions/jobs/115473298819/logs 2>&1 | grep -A 6 \"Diff in\" | head -40"
+        "command": "gh api repos/example-org/service-api/actions/jobs/123456789012/logs 2>&1 | grep -A 6 \"Diff in\" | head -40"
       },
       "cwd": "org_app",
       "expect": "allow"
@@ -18272,6 +18783,102 @@
       "expect": "allow"
     },
     {
+      "id": "walkup-cd-subdirectory-npx-vitest",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd app && npx vitest run"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "walkup-cd-subdirectory-npx-eslint",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd app && npx eslint ."
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "walkup-cd-subdirectory-npm-exec-tsc",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd app && npm exec tsc --noEmit"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "walkup-cd-subdirectory-npx-tsc",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd app && npx tsc --noEmit"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "walkup-cd-subdirectory-uv-run-pytest",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd app && uv run pytest -q"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "walkup-cd-subdirectory-cargo-test",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd app && cargo test"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "neg-toolchain-npm-exec-workspace-filter",
       "fix_area": "shell",
       "harnesses": [
@@ -20707,6 +21314,406 @@
       },
       "cwd": "worktree",
       "expect": "allow"
+    },
+    {
+      "id": "inert-pnpm-silent-run-lint",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm --silent run lint"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "inert-pnpm-reporter-value-run-lint",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm --reporter silent run lint"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "inert-pnpm-reporter-inline-run-lint",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm --reporter=silent run lint"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "inert-pnpm-recursive-run-lint",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm -r run lint"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "inert-pnpm-filter-name-run-lint",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm --filter web run lint"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "inert-pnpm-filter-short-scoped-run-lint",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm -F @acme/web run lint"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "inert-npm-silent-run-build",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm --silent run build"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "inert-npm-loglevel-inline-run-build",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm --loglevel=error run build"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "inert-npm-workspace-run-build",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm --workspace web run build"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "inert-yarn-silent-build",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "yarn --silent build"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "inert-bun-flag-run-typecheck",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bun --bun run typecheck"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-inert-yarn-silent-has-no-verb",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "yarn --silent"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-inert-yarn-frozen-lockfile-installs",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "yarn --frozen-lockfile"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-inert-yarn-workspaces-focus-installs",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "yarn workspaces focus"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-inert-yarn-silent-workspaces-focus-installs",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "yarn --silent workspaces focus"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-inert-yarn-workspaces-foreach-runs-its-own-command",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "yarn workspaces foreach run build"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-inert-pnpm-filter-directory-selector",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm --filter {/opt/other} run build"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-inert-pnpm-filter-name-then-directory",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm --filter web{/opt/other} run build"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-inert-pnpm-filter-ref-then-directory",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm --filter [origin/main]{/opt/other} run build"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-inert-pnpm-filter-exclusion-directory",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm --filter !{/opt/other} run build"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-inert-pnpm-filter-drive-selector",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm --filter=C:/other run build"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-inert-npm-silent-install",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm --silent install"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-inert-pnpm-silent-add-package",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm --silent add lodash"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-inert-pnpm-filter-path-selector",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm --filter ./packages/web run build"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-inert-pnpm-unknown-option-hides-verb",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm --registry https://example.test run build"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
     },
     {
       "id": "shell-just-recipe",
@@ -28342,6 +29349,2251 @@
       "cwd": "worktree",
       "contained_ok": true,
       "expect": "allow"
+    },
+    {
+      "id": "jq-stdin-select-draft-number",
+      "fix_area": "gh",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh pr list --json number,isDraft | jq -r '.[] | select(.isDraft == false) | .number'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "jq-stdin-length",
+      "fix_area": "gh",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh pr list --json number | jq 'length'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "jq-stdin-map-field",
+      "fix_area": "gh",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh pr list --json number | jq 'map(.number)'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "jq-stdin-array-select-count",
+      "fix_area": "gh",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh pr list --json statusCheckRollup | jq '[.[] | select(.conclusion != \"SUCCESS\")] | length'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "jq-stdin-alternative-empty-string",
+      "fix_area": "gh",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh pr view 1 --json body | jq -r '.body // \"\"'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "jq-stdin-object-construction",
+      "fix_area": "gh",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh api /rate_limit | jq '{limit: .rate.limit}'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "jq-stdin-group-by-author",
+      "fix_area": "gh",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh pr list --json author | jq 'group_by(.author.login) | map(length)'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "jq-stdin-clustered-read-only-flags",
+      "fix_area": "gh",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh pr list --json number | jq -rc '.[] | .number'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "jq-stdin-slurp-flag",
+      "fix_area": "gh",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh pr list --json number | jq -s 'length'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "jq-stdin-env-variable",
+      "fix_area": "gh",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh pr list --json number | jq '$ENV.GH_TOKEN'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "jq-stdin-env-builtin",
+      "fix_area": "gh",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh pr list --json number | jq 'env'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "jq-stdin-shell-format-string",
+      "fix_area": "gh",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh pr list --json number | jq -r '.[] | @sh'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "jq-stdin-input-filename",
+      "fix_area": "gh",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh pr list --json number | jq 'input_filename'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "jq-stdin-filter-from-file",
+      "fix_area": "gh",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh pr list --json number | jq -f /tmp/report.jq"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "jq-stdin-reduce-binding",
+      "fix_area": "gh",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh pr list --json number | jq 'reduce .[] as $row (0; . + $row.number)'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "jq-stdin-select-decimal",
+      "fix_area": "gh",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh pr list --json number | jq '[.[] | select(.number >= 1.5)] | length'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "jq-stdin-select-negative",
+      "fix_area": "gh",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh pr list --json number | jq '[.[] | select(.number < -1)] | length'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "jq-stdin-subtraction",
+      "fix_area": "gh",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh pr list --json number | jq '.[] | .number - 1'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "jq-stdin-limit-two-arguments",
+      "fix_area": "gh",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh pr list --json number | jq 'limit(1; .[])'"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "observed-git-01",
+      "fix_area": "git",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ${WORKTREE}/signup-funnel status"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-01",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${HOME}/.web-client/skills/usage-rollup/scripts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-grep-01",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rln \"usage-rollup\" ${PRIVATE_TMP}/audit-trail/__tests__"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-gh-01",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh api repos/o/r/actions/jobs/123456789012/logs 2>&1 | tail -30"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-cat-01",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat ${HOME}/.codex/skills/audit-trail/references/notes.md && cat ${HOME}/.codex/skills/audit-trail/references/notes.md && git status --short --branch && git rev-parse HEAD && git remote -v"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-grep-02",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rln \"other-project the web-client\" ${WORKTREE}/service-api"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-grep-03",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rln \"read_workspace_record\" ${WORKTREE} --include=\"*.rs\""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-37",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd sub && ls"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-git-02",
+      "fix_area": "git",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${WORKTREE} && git log --oneline -5 && git show --stat c9cf0af96c | head -30"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-rg-01",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -l \"report-lane\" ${WORKTREE}/signup-funnel/__tests__"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-git-03",
+      "fix_area": "git",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${WORKTREE} && git diff --stat && git diff -- service-api/package.json service-api/src/panel.tsx service-api/src/panel.tsx service-api/src/panel.tsx service-api/src/apps/index.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-rg-02",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${WORKTREE} && rg -n \"${HOME}${HOME}\" service-api/src/panel.tsx service-api/src/panel.tsx service-api/src/panel.tsx service-api/src/panel.tsx; echo audit-trail"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-find-02",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find ${HOME}/.web-client ${HOME}/.codex -maxdepth 4 -name \"run-checks.sh\" 2>/dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-grep-04",
+      "fix_area": "shell",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -l 'read_workspace_record' ${WORKTREE}/signup-funnel/workers/*.ts ${WORKTREE}/signup-funnel/lib/**/*.ts ${WORKTREE}/signup-funnel/src/**/*.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-rg-03",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -ln \"report-lane\" ${WORKTREE}/signup-funnel"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-rg-04",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -rl \"resolveWorkspaceRecord\" ${WORKTREE}/signup-funnel"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-gh-02",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh api \"repos/o/r/check-runs/123456789012/annotations\" --paginate 2>&1 | head -40"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-git-04",
+      "fix_area": "git",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ${WORKTREE} config --get gpg.format"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-find-03",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find ${HOME}/.web-client -maxdepth 4 -name \"run-checks.sh\" 2>&1"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-grep-05",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rln \"web-client setting\" ${WORKTREE} ${WORKTREE}/service-api/src ${WORKTREE}/service-api/e2e 2>/dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-rg-05",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -rn \"read_workspace_record\" ${WORKTREE} 2>/dev/null | head -8"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-git-05",
+      "fix_area": "git",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ${WORKTREE} log --oneline -8"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-git-06",
+      "fix_area": "git",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ${WORKTREE} status --porcelain"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-rg-06",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -l \"guard/billing/stripe/report-lane\" ${WORKTREE}"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-grep-06",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rln -e \"read_workspace_record\" -e \"WorkspaceRecord web-client other-project\" ${WORKTREE}"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-grep-07",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rl read_workspace_record ${WORKTREE}"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-grep-08",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rln \"read_workspace_record\" ${PRIVATE_TMP}/audit-trail/src ${PRIVATE_TMP}/audit-trail/scripts ${PRIVATE_TMP}/audit-trail/lib"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-cat-03",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat ${HOME}/.web-client/skills/audit-trail/notes.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-02",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -R o/r"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-find-04",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find ${HOME}/.web-client -maxdepth 4 -name \"run-checks.sh\""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-03",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${HOME}/.report-lane/web-client/"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-grep-09",
+      "fix_area": "shell",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rln 'read_workspace_record' ${WORKTREE}/signup-funnel --include='*.ts' --include='*.tsx' --include='*.mjs'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-04",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${HOME}/.web-client/skills/order-intake/"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-grep-10",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rln \"resolveWorkspaceRecord\" ${PRIVATE_TMP}/audit-trail/__tests__/ ${PRIVATE_TMP}/audit-trail/tools/usage-rollup 2>/dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-05",
+      "fix_area": "shell",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${HOME}/.codex/plans/order-intake"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-07",
+      "fix_area": "shell",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la ${HOME}/.config/doctl"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-08",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${WORKTREE} 2>/dev/null | head"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-rg-07",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -rln \"ga4\" ${WORKTREE}/signup-funnel/src/lib ${WORKTREE}/signup-funnel/scripts --glob '*.ts'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-grep-11",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn \"read_workspace_record\" ${WORKTREE}/"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-rg-08",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -rln \"signup-funnel\" ${WORKTREE}"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-grep-12",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rl \"1792Mi\" ${WORKTREE}/"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-rg-09",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -l \"WorkspaceRecord WorkspaceRecord\" ${WORKTREE} | tail -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-09",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls app/report-lane/*/"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-10",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la ${HOME}/.deploy.lock"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-11",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${WORKTREE}/notes.md ${WORKTREE}/notes.md 2>&1; ls ${WORKTREE}/.app-portal 2>/dev/null; ls ${WORKTREE} | head -40"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-gh-03",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh api repos/o/r/actions/jobs/123456789012/logs 2>&1 | grep -A 6 \"service-api in\" | head -40"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-rg-11",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -n \"resolveWorkspaceRecord\" ${WORKTREE}/ 2>/dev/null | rg -v \"signup-funnel\" | head -15"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-rg-12",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -n -l \"app-portal in the WorkspaceRecord web-client other-project\" ${WORKTREE}"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-12",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${WORKTREE}"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-git-08",
+      "fix_area": "git",
+      "harnesses": [
+        "codex"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git log -1 --oneline"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-13",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la /opt/homebrew/bin/node ${HOME}/.bun/bin/bun"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-git-09",
+      "fix_area": "git",
+      "harnesses": [
+        "codex"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git status --short && cat collect.py && cat collect.py"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-14",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la ${WORKTREE}/signup-funnel/.deploy.lock.d"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-15",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la ${HOME}/.report-lane/web-client/"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-git-10",
+      "fix_area": "git",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ${WORKTREE} grep -l \"WORKSPACE_RECORD\" HEAD"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-gh-04",
+      "fix_area": "shell",
+      "harnesses": [
+        "claude-code"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh api repos/o/r/git/ref/tags/v3.45.0 -q .object.sha"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-git-11",
+      "fix_area": "git",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ${WORKTREE} diff --stat"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-rg-13",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg --files -g notes.md -g '!**/.git/**'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-grep-13",
+      "fix_area": "shell",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rln 'resolveWorkspaceRecord' ${WORKTREE}/signup-funnel"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-rg-14",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -l \"tsx\" ${WORKTREE}"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-grep-14",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rln \"resolveWorkspaceRecord\" ${PRIVATE_TMP}/audit-trail/__tests__/"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-rg-15",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -ln \"ga4\" ${WORKTREE}/signup-funnel/src/lib"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-git-12",
+      "fix_area": "git",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${WORKTREE} && git merge-base --is-ancestor c9cf0af96c FETCH_HEAD && echo report-lane"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-git-13",
+      "fix_area": "git",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ${WORKTREE} diff --cached --check"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-rg-17",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -n \"resolveWorkspaceRecord\" ${WORKTREE}"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-grep-15",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn \"enum WorkspaceRecord\" ${WORKTREE}/*.rs | head -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-git-14",
+      "fix_area": "git",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ${WORKTREE}/signup-funnel log --oneline -8"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-diff-01",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "diff ${WORKTREE}/service-api/src/panel.tsx ${WORKTREE}/order-intake/service-api/src/panel.tsx"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-16",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la ${HOME}/.codex/plans/audit-trail/ 2>/dev/null; echo \"---\"; ls -la \"${WORKTREE}/\" 2>/dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-17",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${WORKTREE}/"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-git-15",
+      "fix_area": "git",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git status && git log -1 --oneline"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-git-16",
+      "fix_area": "git",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${WORKTREE}/signup-funnel && git status --porcelain=v1 -b | head -40 && git log --oneline -5 && git branch -a | head -30"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-git-17",
+      "fix_area": "git",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ${WORKTREE} diff --cached --stat"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-rg-18",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -rln \"stripe/report-lane\" ${WORKTREE} | head"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-18",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${HOME}/.web-client/skills/usage-rollup"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-rg-19",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -ln \"WorkspaceRecord\" ${WORKTREE}"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-grep-16",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rl \"billing/stripe/report-lane\" ${WORKTREE} | head -6"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-20",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${HOME}/.report-lane/v2/ 2>/dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-rg-20",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${WORKTREE} && rg -n \"resolveWorkspaceRecord\" service-api/src --glob \"*.panel.tsx\" --glob \"*.index.ts\""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-cat-04",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat ${HOME}/.codex/skills/.system/usage-rollup/notes.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-21",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la ${WORKTREE}/signup-funnel/.deploy.lock.d ${WORKTREE}/signup-funnel/.audit-trail"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-true-01",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${WORKTREE} 2>/dev/null; true"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-git-19",
+      "fix_area": "git",
+      "harnesses": [
+        "codex"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git status --short --branch && git rev-parse HEAD && git remote -v && cat ${HOME}/.codex/skills/audit-trail/references/notes.md && cat ${HOME}/.codex/skills/audit-trail/references/notes.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-22",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${WORKTREE} && ls service-api/src/settings/ 2>/dev/null; ls service-api/src | head -50"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-23",
+      "fix_area": "shell",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -dt ${ORG}/*app-portal* ${ORG}/*service-api* 2>/dev/null | head -20; echo ===; ls -d ${ORG}/* | tail -40"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-git-20",
+      "fix_area": "git",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ${WORKTREE}/signup-funnel diff --stat web-client/signup-funnel"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-grep-17",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rln \"usage-rollup\" app src"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-cat-05",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat ${HOME}/.web-client/skills/usage-rollup/scripts/run-checks.sh"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-git-21",
+      "fix_area": "git",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ${WORKTREE}/signup-funnel log -8 --oneline"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-grep-18",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -l \"read_workspace_record\" ${WORKTREE} 2>/dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-git-22",
+      "fix_area": "git",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ${WORKTREE} config user.name; git -C ${WORKTREE} config user.email"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-grep-19",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rln \"signup-funnel\" ${WORKTREE}/ | head -5"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-git-23",
+      "fix_area": "git",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ${WORKTREE} ls-tree HEAD --name-only src/read_workspace_record/"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-rg-21",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -ln \"read_workspace_record\" ${WORKTREE}"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-grep-20",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rln \"resolveWorkspaceRecord\" ${WORKTREE}/ ${WORKTREE} 2>/dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-du-01",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "du -sh ${WORKTREE}"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-rg-23",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${WORKTREE} && rg -n \"WorkspaceRecord\" service-api/src/panel.tsx service-api/src/*.tsx 2>/dev/null | grep -i \"export function\" ; cat service-api/package.json | head -50"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-find-07",
+      "fix_area": "shell",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find ${WORKTREE} -maxdepth 4 \\( -name 'notes.md' -o -name 'notes.md' -o -name 'notes.md' \\) -newermt '2026-10-01' 2>/dev/null | head -30; echo ---; find ${WORKTREE} -maxdepth 3 -iname '*app-portal*' 2>/dev/null | head -30"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-24",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${WORKTREE} 2>/dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-grep-21",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rln \"resolveWorkspaceRecord\" ${WORKTREE}"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-25",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la ${WORKTREE}/ ${WORKTREE}/; wc -l ${WORKTREE}/*.yaml ${WORKTREE}/*.json 2>/dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-grep-22",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn \"def read_workspace_record\" ${WORKTREE}/*.py 2>/dev/null | head -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-26",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${HOME}/.nvm/versions/node/v25.2.1/lib/node_modules/ 2>/dev/null; ls ${HOME}/.bun/install/global/node_modules 2>/dev/null | head -10"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-27",
+      "fix_area": "shell",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la ${HOME}/.codex/plans/order-intake/"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-rg-24",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg --files -g 'notes.md' -g '*web-client*' -g 'pyproject.toml' -g 'WorkspaceRecord*' -g '*.py' ./source ./main"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-28",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls \"app/report-lane/[resolveWorkspaceRecord]\""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-rg-25",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -n \"read_workspace_record\" ${WORKTREE}"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-cat-06",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat ${HOME}/.audit-trail/notes.md && cat ${HOME}/.web-client/skills/audit-trail/notes.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-30",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls app/report-lane/[resolveWorkspaceRecord]"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-git-25",
+      "fix_area": "git",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ${WORKTREE}/signup-funnel branch --show-current"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-find-08",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find ${WORKTREE} -maxdepth 2 -name notes.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-cat-07",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat ${HOME}/.codex/skills/audit-trail/references/notes.md ${HOME}/.codex/skills/audit-trail/references/notes.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-grep-23",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rln -e read_workspace_record ${PRIVATE_TMP}/audit-trail/src ${PRIVATE_TMP}/audit-trail/scripts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-git-28",
+      "fix_area": "git",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ${WORKTREE}/signup-funnel grep -l 'read_workspace_record'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-31",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${WORKTREE}/signup-funnel/.deploy.lock.d"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-grep-24",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rln \"resolveWorkspaceRecord('VITEST'\" ${WORKTREE}/ | head -8"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-git-29",
+      "fix_area": "git",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ${WORKTREE} log --oneline -1"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-grep-25",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -c \"resolveWorkspaceRecord\" ${WORKTREE}/scripts/run-checks.sh"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-wc-01",
+      "fix_area": "shell",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "wc -l ${HOME}/.codex/plans/order-intake/notes.md ${HOME}/.codex/plans/order-intake/notes.md ${HOME}/.codex/plans/order-intake/notes.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-grep-26",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rln read_workspace_record ${PRIVATE_TMP}/audit-trail/scripts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-git-30",
+      "fix_area": "git",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ${WORKTREE} status --short | head -10; git -C ${WORKTREE} ls-tree HEAD --name-only src/read_workspace_record/ | grep read_workspace_record; git -C ${WORKTREE} log --oneline --all -3 -- src/read_workspace_record/collect.py"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-grep-28",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn \"read_workspace_record\" ${WORKTREE} 2>/dev/null | head -8"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-git-31",
+      "fix_area": "git",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ${WORKTREE} config --get user.email"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-rg-26",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -rn --files-with-matches \"WorkspaceRecord WorkspaceRecord\" ${WORKTREE}"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-rg-27",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -c \"resolveWorkspaceRecord\" ${WORKTREE} | sort -t: -k2 -rn | head -10"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-38",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd tests && ls"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-32",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${WORKTREE}/ 2>/dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-git-32",
+      "fix_area": "git",
+      "harnesses": [
+        "codex"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git status --short --branch && git worktree list --porcelain"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-33",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${WORKTREE} 2>/dev/null | head -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-grep-30",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rln \"web-client by app\" ${WORKTREE} --include=\"*.tsx\" --include=\"*.ts\" --include=\"*.js\" --include=\"*.jsx\" --include=\"*.html\" --include=\"*.md\" 2>/dev/null | grep -v node_modules | head"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-git-33",
+      "fix_area": "git",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ${WORKTREE} log --oneline acme-plain"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-grep-31",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rln \"signup-funnel\" ${WORKTREE}/"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-rg-28",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -ln \"resolveWorkspaceRecord\" ${WORKTREE}"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-34",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${WORKTREE}/service-api/src/panel.tsx"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-grep-32",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rin \"protection by app\" ${WORKTREE}/service-api/src ${WORKTREE}/service-api/e2e 2>/dev/null | head -20; echo ---; grep -rin \"other-project the web-client setting\" ${WORKTREE}/service-api/src | head -10"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-35",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${PRIVATE_TMP}/node_modules/.bin/vitest 2>&1 | head -1"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-36",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${PRIVATE_TMP}/ && ls ${PRIVATE_TMP}/org/ && cd ${PRIVATE_TMP}/org/signup-funnel && git status && git log --oneline -15"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "read-repo-codex-plugin-manifest",
+      "fix_area": "read",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${ORG}/app-portal/.codex-plugin/plugin.json"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "read-repo-well-known-agent-card",
+      "fix_area": "read",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${ORG}/app-portal/.well-known/agent-card.json"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "read-repo-workflow-named-for-a-tool",
+      "fix_area": "read",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${ORG}/app-portal/.github/workflows/docker.yml"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "read-repo-well-known-agent-document",
+      "fix_area": "read",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${ORG}/app-portal/.well-known/agent.json"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-read-repo-git-hook-body",
+      "fix_area": "negative",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${ORG}/app-portal/.git/hooks/pre-commit.sh"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-read-repo-hidden-credential-store-name",
+      "fix_area": "negative",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${ORG}/app-portal/.codex-plugin/credentials.json"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-read-repo-hidden-compiled-blob",
+      "fix_area": "negative",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${ORG}/app-portal/.codex-plugin/runtime.node"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-read-repo-hidden-tool-tree",
+      "fix_area": "negative",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${ORG}/app-portal/.cursor/mcp.json"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-read-repo-dotfile-spelled-as-a-directory",
+      "fix_area": "negative",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${ORG}/app-portal/.dockerignore/notes.md"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-read-repo-hidden-credential-directory-source-name",
+      "fix_area": "negative",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${ORG}/app-portal/.secrets/read.py"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
     }
   ],
   "mcp_cases": [

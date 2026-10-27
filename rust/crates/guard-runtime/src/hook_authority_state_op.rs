@@ -450,6 +450,7 @@ fn required(value: &Option<String>) -> Result<&str, &'static str> {
 pub(crate) mod direct_record;
 mod dispatch;
 mod flows;
+mod question_settle;
 mod store;
 
 #[cfg(all(test, unix))]
@@ -459,3 +460,7 @@ mod vectors;
 #[cfg(all(test, unix))]
 #[path = "hook_authority_state_session_ops_tests.rs"]
 mod session_ops;
+
+#[cfg(all(test, unix))]
+#[path = "hook_authority_state_question_settle_tests.rs"]
+mod question_settle_tests;

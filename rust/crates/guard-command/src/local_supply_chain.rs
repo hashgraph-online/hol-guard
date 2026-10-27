@@ -5454,124 +5454,16 @@ fn is_package_request_artifact(artifact_id: Option<&str>, artifact_type: Option<
 // ---------------------------------------------------------------------------
 
 /// `runtime.package_protect_projection.resolve_local_supply_chain_harness`.
-#[allow(dead_code)]
+///
+/// The attribution itself lives in [`crate::harness_attribution`], which
+/// mirrors `runtime/harness_attribution.py`. The slug feeds request identity,
+/// receipts, and user-facing attribution only; policy scoping stays keyed on
+/// the synthetic guard-cli artifact harness, which the invoking process cannot
+/// influence.
 fn resolve_local_supply_chain_harness() -> String {
-    resolve_environment_harness()
-        .or_else(resolve_parent_process_harness)
+    crate::harness_attribution::resolve_environment_harness()
+        .or_else(crate::harness_attribution::resolve_parent_process_harness)
         .unwrap_or_else(|| LOCAL_SUPPLY_CHAIN_HARNESS.to_string())
-}
-
-/// `runtime.harness_attribution.resolve_environment_harness`.
-#[allow(dead_code)]
-fn resolve_environment_harness() -> Option<String> {
-    let env: std::collections::HashMap<String, String> = std::env::vars().collect();
-    resolve_environment_harness_from(&env)
-}
-
-#[allow(dead_code)]
-fn resolve_environment_harness_from(
-    env: &std::collections::HashMap<String, String>,
-) -> Option<String> {
-    // HOL_GUARD_ORIGIN_HARNESS takes precedence — an explicit override.
-    if let Some(v) = env.get("HOL_GUARD_ORIGIN_HARNESS") {
-        let v = v.trim().to_string();
-        if !v.is_empty() {
-            return Some(v);
-        }
-    }
-    // Presence-only markers — the harness runtime injects these into the
-    // environment of every command it spawns.
-    static MARKERS: &[(&[&str], &str)] = &[
-        (
-            &[
-                "CURSOR_VERSION",
-                "CURSOR_PROJECT_DIR",
-                "CURSOR_TRACE_ID",
-                "CURSOR_SESSION_ID",
-                "CURSOR_TRANSCRIPT_PATH",
-            ],
-            "cursor",
-        ),
-        (&["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT"], "claude-code"),
-        (&["CODEX_SANDBOX", "CODEX_THREAD_ID"], "codex"),
-        (&["GROK_AGENT", "GROK_SESSION_ID"], "grok"),
-        (&["OPENCODE_CONFIG_CONTENT"], "opencode"),
-        (&["DEVIN_PROJECT_DIR"], "devin"),
-    ];
-    for (keys, slug) in MARKERS {
-        if keys.iter().any(|k| env.contains_key(*k)) {
-            return Some(slug.to_string());
-        }
-    }
-    None
-}
-
-/// `runtime.harness_attribution.resolve_parent_process_harness` — inspect the
-/// process tree for known harness executable names (best-effort, never used
-/// for authorization).
-#[allow(dead_code)]
-fn resolve_parent_process_harness() -> Option<String> {
-    let output = std::process::Command::new("/bin/ps")
-        .args(["-axo", "pid=,ppid=,comm="])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let text = String::from_utf8_lossy(&output.stdout);
-    let mut parents: std::collections::HashMap<u32, (u32, String)> =
-        std::collections::HashMap::new();
-    let mut self_pid = std::process::id();
-    for line in text.lines() {
-        let line = line.trim();
-        if line.is_empty() {
-            continue;
-        }
-        let mut parts = line.split_whitespace();
-        let pid: u32 = match parts.next()?.parse() {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
-        let ppid: u32 = match parts.next()?.parse() {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
-        let comm: String = parts.collect::<Vec<_>>().join(" ");
-        parents.insert(pid, (ppid, comm));
-    }
-    static PROCESS_HARNESSES: &[(&str, &str)] = &[
-        ("codex", "codex"),
-        ("claude", "claude-code"),
-        ("cursor", "cursor"),
-        ("cursor-agent", "cursor"),
-        ("zcode", "zcode"),
-        ("zcode-cli", "zcode"),
-        ("grok", "grok"),
-        ("pi", "pi"),
-        ("omp", "omp"),
-        ("opencode", "opencode"),
-        ("devin", "devin"),
-    ];
-    let mut visited = std::collections::HashSet::new();
-    loop {
-        let Some(&(ppid, ref comm)) = parents.get(&self_pid) else {
-            break;
-        };
-        if !visited.insert(self_pid) {
-            break;
-        }
-        if ppid == self_pid {
-            break;
-        }
-        self_pid = ppid;
-        let name = comm.rsplit('/').next().unwrap_or(comm);
-        for (proc_name, slug) in PROCESS_HARNESSES {
-            if name == *proc_name {
-                return Some(slug.to_string());
-            }
-        }
-    }
-    None
 }
 
 // ---------------------------------------------------------------------------
@@ -5973,6 +5865,24 @@ pub fn package_config_policy_context(
     artifact: &GuardArtifact,
     config: Option<&GuardConfig>,
 ) -> Map<String, Value> {
+    package_config_policy_context_for(
+        &artifact.artifact_id,
+        artifact.publisher.as_deref(),
+        &artifact.harness,
+        config,
+    )
+}
+
+/// The same context for a caller that holds the artifact's identity rather
+/// than the artifact itself: a request the resident answers carries the
+/// artifact as a payload, and these three fields are all of it the context
+/// reads.
+pub fn package_config_policy_context_for(
+    artifact_id: &str,
+    publisher: Option<&str>,
+    harness: &str,
+    config: Option<&GuardConfig>,
+) -> Map<String, Value> {
     let mut out = Map::new();
     let Some(config) = config else {
         out.insert("available".into(), json!(false));
@@ -5987,12 +5897,10 @@ pub fn package_config_policy_context(
             .and_then(Value::as_str)
             .map(str::to_owned)
     };
-    let artifact_override = map_lookup("artifact_actions", &artifact.artifact_id);
-    let publisher_override = artifact
-        .publisher
-        .as_deref()
-        .and_then(|publisher| map_lookup("publisher_actions", publisher));
-    let harness_override = map_lookup("harness_actions", &artifact.harness);
+    let artifact_override = map_lookup("artifact_actions", artifact_id);
+    let publisher_override =
+        publisher.and_then(|publisher| map_lookup("publisher_actions", publisher));
+    let harness_override = map_lookup("harness_actions", harness);
     out.insert("artifact_override".into(), option_json(artifact_override));
     out.insert("available".into(), json!(true));
     out.insert(
@@ -6000,19 +5908,19 @@ pub fn package_config_policy_context(
         option_json(resolve_risk_action(
             config,
             Some("package_script"),
-            Some(&artifact.harness),
+            Some(harness),
         )),
     );
     out.insert(
         "global_package_script_action".into(),
         option_json(resolve_risk_action(config, Some("package_script"), None)),
     );
-    out.insert("harness".into(), json!(artifact.harness));
+    out.insert("harness".into(), json!(harness));
     out.insert("harness_override".into(), option_json(harness_override));
     out.insert(
         "harness_package_script_action".into(),
         option_json(config.harness_risk_actions.as_ref().and_then(|map| {
-            map.get(&artifact.harness)
+            map.get(harness)
                 .and_then(|inner| inner.get("package_script"))
                 .cloned()
         })),

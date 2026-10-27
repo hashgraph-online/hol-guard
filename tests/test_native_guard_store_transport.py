@@ -13,7 +13,6 @@ from codex_plugin_scanner.guard import native_guard_store, store_review_event_ou
 from codex_plugin_scanner.guard.cli.connect_flow import build_connect_status_payload
 from codex_plugin_scanner.guard.daemon.cloud_review_settings import cloud_review_settings_status
 from codex_plugin_scanner.guard.native_guard_store import NativeGuardStoreUnavailable
-from codex_plugin_scanner.guard.runtime.cloud_review_sync import cloud_review_sync_status
 from codex_plugin_scanner.guard.store import GuardStore
 
 # pyright: reportAny=false, reportPrivateUsage=false, reportUnknownMemberType=false
@@ -59,16 +58,6 @@ def test_cloud_review_settings_status_flags_unavailable_outbox(tmp_path: Path, m
     assert status["outbox_available"] is False
     assert status["outbox_unavailable_reason"] == "native_guard_store_prerequisite_unavailable"
     assert status["pending_uploads"] == 0
-
-
-def test_cloud_review_sync_status_reports_unavailable_outbox(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    _unavailable_native(monkeypatch)
-    status = cloud_review_sync_status(store)
-    outbox = status["outbox"]
-    assert isinstance(outbox, dict)
-    assert outbox["outbox_available"] is False
-    assert outbox["unavailable_reason"] == "native_guard_store_prerequisite_unavailable"
 
 
 def test_unavailable_error_is_never_swallowed_by_non_status_callers(

@@ -17,6 +17,7 @@ use guard_contracts::{
 };
 use serde_json::{json, Map, Value};
 
+use crate::hook_artifact_compose_codex_live_allow as codex_live_allow;
 use crate::hook_artifact_compose_package_firewall as package_firewall;
 use crate::hook_artifact_compose_package_firewall_entitlement as package_firewall_entitlement;
 use crate::hook_artifact_compose_policy_lookup as lookup;
@@ -109,6 +110,12 @@ pub(crate) fn compose(query: &HookArtifactComposeQueryV1) -> Result<Value, Strin
         HookArtifactComposeQueryV1::SignalComposition(query) => signal_composition(query)?,
         HookArtifactComposeQueryV1::PolicyComposition(query) => {
             policy_tail::policy_composition(query)
+        }
+        HookArtifactComposeQueryV1::CodexLiveAllowPrecheck(query) => {
+            codex_live_allow::codex_live_allow_precheck(query)
+        }
+        HookArtifactComposeQueryV1::CodexLiveAllowSettle(query) => {
+            codex_live_allow::codex_live_allow_settle(query)
         }
     })
 }

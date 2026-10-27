@@ -12,9 +12,7 @@ import pytest
 
 import codex_plugin_scanner.guard.native_policy_snapshot as snapshot_module
 import codex_plugin_scanner.guard.native_policy_snapshot_storage as storage_module
-import codex_plugin_scanner.guard.native_policy_snapshot_windows_key as windows_key
 import codex_plugin_scanner.guard.native_policy_snapshot_windows_state as windows_state
-from codex_plugin_scanner.guard.native_policy_snapshot_constants import NATIVE_POLICY_VERIFIER_KEY_NAME
 
 __test__ = False
 
@@ -207,41 +205,4 @@ def test_windows_pending_cleanup_uses_bound_file_handle(
     storage_module._clear_v3_snapshot_pending(tmp_path / "guard")
 
     assert observed == [(binding.path, binding.handle, True)]
-    assert not active
-
-
-def test_windows_verifier_key_provisioning_holds_state_binding(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    active = False
-    calls: list[tuple[Path, bytes]] = []
-    binding = types.SimpleNamespace(path=tmp_path / "native-runtime", handle=object(), handles=[])
-
-    @contextmanager
-    def private_state_binding(guard_home: Path):
-        nonlocal active
-        assert guard_home == tmp_path / "guard-home"
-        active = True
-        try:
-            yield binding
-        finally:
-            active = False
-
-    def provision(path: Path, derived: bytes, **_kwargs: object) -> Path:
-        assert active
-        calls.append((path, derived))
-        return path
-
-    monkeypatch.setattr(windows_key.os, "name", "nt")
-    monkeypatch.setattr(windows_key, "_windows_private_state_binding", private_state_binding)
-    monkeypatch.setattr(windows_key, "_windows_provision_verifier_key", provision)
-
-    result = windows_key.provision_native_policy_verifier_key(
-        tmp_path / "guard-home",
-        b"m" * 32,
-    )
-
-    assert result == binding.path / NATIVE_POLICY_VERIFIER_KEY_NAME
-    assert calls == [(result, snapshot_module.derive_native_policy_verifier_key(b"m" * 32))]
     assert not active

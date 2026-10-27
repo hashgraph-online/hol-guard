@@ -15,6 +15,7 @@ from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.runtime import workspace_assessment_sync as sync
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_runner_sync_payload import _add_receipts, _install_transport, store  # noqa: F401
+from tests.workspace_fix_support import admit_worktree
 
 DETECTORS = "d" * 64
 T0 = 1_000_000_000
@@ -57,7 +58,7 @@ def assessed(
     at: int = T0,
     reasons: list[str] | None = None,
 ) -> None:
-    assessments.admit_worktree(guard_store, KEYS, root=ROOT, now_ms=T0)
+    admit_worktree(guard_store, KEYS, root=ROOT, now_ms=T0)
     assessments.enqueue(guard_store, KEYS, trigger_kind="workspace_open", detector_set_digest=DETECTORS, now_ms=at)
     claimed = assessments.claim_next(guard_store, owner="test", now_ms=at + assessments.DEBOUNCE_MS)
     assert claimed is not None
@@ -131,6 +132,20 @@ def test_partial_runs_report_partial_coverage_never_all_clear(tmp_path: Path) ->
     assert entry["status"] == "partial"
     assert entry["assessment"]["coverage"]["status"] == "partial"
     assert entry["assessment"]["coverage"]["reasons"] == ["lockfile_missing"]
+
+
+def test_a_finding_carried_from_an_earlier_run_is_not_sent_as_seen_again(tmp_path: Path) -> None:
+    guard_store = GuardStore(tmp_path / "home")
+    carried = {**finding(2), "carried_from_run_id": "earlier-run"}
+    assessed(guard_store, state="partial", findings=[finding(1), carried])
+
+    built = sync.build_workspace_assessment_sync(guard_store, now=NOW)
+
+    assert built is not None
+    [entry] = built.payload["worktrees"]
+    observed = sync.keyed_digest(sync.load_hash_key(guard_store, NOW), "guard.workspace.finding\0" + f"{1:032x}")
+    assert [item["findingKey"] for item in entry["findings"]] == [observed]
+    assert entry["findingsTruncated"] is False
 
 
 def test_status_reflects_paused_and_queued_worktrees(tmp_path: Path) -> None:
@@ -251,7 +266,7 @@ def test_findings_are_read_only_for_the_summarized_worktrees(
     guard_store = GuardStore(tmp_path / "home")
     assessed(guard_store)
     other = assessments.WorktreeKeys(digest("other-codebase"), digest("other-worktree"))
-    assessments.admit_worktree(guard_store, other, root=f"{ROOT}-other", now_ms=T0 + 1)
+    admit_worktree(guard_store, other, root=f"{ROOT}-other", now_ms=T0 + 1)
     monkeypatch.setattr(sync, "MAX_WORKTREES", 1)
     requested: list[object] = []
     original = reads.latest_assessed_runs
@@ -360,7 +375,7 @@ def test_worktrees_dropped_from_a_request_are_sent_on_the_next_sync(tmp_path: Pa
     guard_store = GuardStore(tmp_path / "home")
     assessed(guard_store, findings=[])
     second = assessments.WorktreeKeys(digest("codebase-2"), digest("worktree-2"))
-    assessments.admit_worktree(guard_store, second, root=ROOT + "-2", now_ms=T0 + 1)
+    admit_worktree(guard_store, second, root=ROOT + "-2", now_ms=T0 + 1)
     built = sync.build_workspace_assessment_sync(guard_store, now=NOW)
     assert built is not None and len(built.payload["worktrees"]) == 2
     one = len(json.dumps({**built.payload, "worktrees": built.payload["worktrees"][:1]}).encode())

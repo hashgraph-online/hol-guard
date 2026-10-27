@@ -22,6 +22,7 @@ from ..mdm.network import ManagedNetworkError, managed_urlopen
 
 STATS_URL = "https://hol.org/api/v1/guard/plugins/{slug}/stats"
 KEY_ENV = "HOL_API_KEY"
+KEYS_URL = "https://hol.org/guard/plugins"
 _STATS_LIMIT_BYTES = 64 * 1024
 _STATS_TIMEOUT_SECONDS = 20.0
 
@@ -33,9 +34,7 @@ class PluginStatsError(RuntimeError):
 def read_key(environ: Mapping[str, str] | None = None) -> str:
     key = (environ if environ is not None else os.environ).get(KEY_ENV, "").strip()
     if not key:
-        raise PluginStatsError(
-            f"Set {KEY_ENV} to a stats key. Create one under Stats in your terminal in the HOL plugin workspace."
-        )
+        raise PluginStatsError(f"Set {KEY_ENV} to a stats key. Create one under Stats in your terminal at {KEYS_URL}")
     return key
 
 
@@ -54,7 +53,10 @@ def fetch_stats(slug: str, key: str) -> dict[str, Any]:
             raw = response.read(_STATS_LIMIT_BYTES + 1)
     except urllib.error.HTTPError as error:
         if error.code == 401:
-            raise PluginStatsError(f"HOL did not accept the key in {KEY_ENV}. It may have been revoked.") from error
+            raise PluginStatsError(
+                f"HOL did not accept the key in {KEY_ENV}. It may have been revoked."
+                f" Create a new one under Stats in your terminal at {KEYS_URL}"
+            ) from error
         if error.code == 403:
             raise PluginStatsError(f"The key's account does not own {slug} on HOL.") from error
         if error.code == 400:

@@ -396,3 +396,57 @@ fn a_package_tree_inside_the_workspace_grants_no_root_of_its_own() {
     assert!(outside_at_home(&root, "rg", &search_path));
     let _ = fs::remove_dir_all(&root);
 }
+
+#[test]
+fn a_package_manager_behind_guards_shim_is_reachable() {
+    // Guard's own package shims sit first on the PATH of every session it
+    // supervises, and the sandbox executes from none of them, so reading the
+    // shim as the program made `pnpm run build` unreachable on every machine
+    // the shims are installed on. The program behind the shim is the one the
+    // sandbox would run.
+    let root = sealed_scratch();
+    let shims = root.join(".hol-guard/package-shims/bin");
+    let node = root.join(".nvm/versions/node/v25.2.1/bin");
+    sealed_dirs(&root, &shims);
+    sealed_dirs(&root, &node);
+    tool(&shims.join("pnpm"), "#!/bin/sh\nexit 0\n");
+    tool(&node.join("pnpm"), "#!/bin/sh\nexit 0\n");
+    let search_path = format!("{}:{}:/usr/bin:/bin", shims.display(), node.display());
+
+    assert!(!outside_at_home(&root, "pnpm", &search_path));
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_program_only_a_shim_answers_for_is_unreachable() {
+    // Nothing stands behind the shim on this PATH, and the sandbox executes
+    // nothing from the shim directory, so containing the command would trade
+    // a review for a command the run cannot find.
+    let root = sealed_scratch();
+    let shims = root.join(".hol-guard/package-shims/bin");
+    sealed_dirs(&root, &shims);
+    tool(&shims.join("pnpm"), "#!/bin/sh\nexit 0\n");
+    // Only the fixture shim is on PATH. A host `pnpm` in `/usr/bin` or
+    // `/bin` would answer the retry and hide a shim that nothing stands
+    // behind.
+    let search_path = shims.display().to_string();
+
+    assert!(outside_at_home(&root, "pnpm", &search_path));
+    let _ = fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_project_package_shim_directory_stays_reachable() {
+    // The two trailing names are how Guard lays its shims out, and they are
+    // also a directory a project is free to use. One inside the workspace is
+    // a path the sandbox already executes, so it is not the shim layer the
+    // retry strips.
+    let root = sealed_scratch();
+    let shims = root.join("workspace/package-shims/bin");
+    sealed_dirs(&root, &shims);
+    tool(&shims.join("pnpm"), "#!/bin/sh\nexit 0\n");
+    let search_path = shims.display().to_string();
+
+    assert!(!outside_at_home(&root, "pnpm", &search_path));
+    let _ = fs::remove_dir_all(&root);
+}

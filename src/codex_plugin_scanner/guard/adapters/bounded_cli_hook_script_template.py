@@ -20,6 +20,7 @@ _HOOK_STARTED_MONOTONIC = time.monotonic()
 import json
 import os
 import re
+import shlex
 import stat
 import sys
 import urllib.error
@@ -100,13 +101,67 @@ def _git_config_no_system_enabled(value: str | None) -> bool:
     return value is not None and value.casefold() in _GIT_TRUE_VALUES
 
 
+# `home` written the way the shell it is pasted into reads it. POSIX quoting
+# puts `C:\\guards\\ci` inside single quotes, which `cmd.exe` hands on as part
+# of the path, so a Windows person pastes a command that repairs nothing. A
+# Windows path needing no quoting stays bare, and one that merely needs holding
+# together is double-quoted, which both shells read literally, backslashes
+# included. A Windows path cannot hold a `"`, so nothing inside has to be
+# escaped. Double quotes are not literal to either shell, though: PowerShell
+# expands `$name` inside them and reads a backtick as an escape, and `cmd.exe`
+# expands `%VAR%` and, with delayed expansion, `!name!`. Single quotes would
+# hold those in PowerShell but become part
+# of the path in `cmd.exe`, so no one rendering reaches such a store and the
+# block keeps the short command instead of naming a path the shell rewrote.
+def _quote_home(home: str, windows: bool) -> str | None:
+    if not windows:
+        return shlex.quote(home)
+    plain = home != "" and all(
+        character.isascii() and (character.isalnum() or character in "_-.:\\\\/")
+        for character in home
+    )
+    if plain:
+        return home
+    if any(character in home for character in "$%`!"):
+        return None
+    return '"' + home + '"'
+
+
+# The block names the home this hook read its authority from. Pasting the bare
+# command into a shell pointing elsewhere recovers a different install while
+# this one stays blocked, so a home the command would not find on its own is
+# named, quoted for the terminal it is pasted into. The default home is left
+# out: the short command is the one almost everyone needs. `--guard-home` is
+# the flag that names a store: `--home` also reaches it, but it moves the home
+# directory too, to a directory nobody lives in. It goes on `command`; the
+# `recover-authority` leaf takes no options. This copy of the decision has to
+# match `zcode_hooks._authority_block_remediation` and the native bridge's
+# `remediation_for_home`, because the script cannot import either; the three
+# are pinned to each other in tests/test_zcode_hooks.py.
+def _authority_remediation() -> str:
+    try:
+        home_dir = Path.home()
+    except RuntimeError:
+        return _AUTHORITY_REMEDIATION
+    guard_home = Path(GUARD_HOME)
+    if home_dir / ".hol-guard" == guard_home:
+        return _AUTHORITY_REMEDIATION
+    quoted = _quote_home(str(guard_home), os.name == "nt")
+    if quoted is None:
+        return _AUTHORITY_REMEDIATION
+    return _AUTHORITY_REMEDIATION.replace(
+        "command controls recover-authority",
+        f"command --guard-home {quoted} controls recover-authority",
+    )
+
+
 def _stderr_reason(reason: str) -> str:
     if (
         HARNESS == "zcode"
         and _AUTHORITY_MARKER in reason
         and "hol-guard command controls" not in reason
     ):
-        return reason + _AUTHORITY_REMEDIATION
+        return reason + _authority_remediation()
     return reason
 
 

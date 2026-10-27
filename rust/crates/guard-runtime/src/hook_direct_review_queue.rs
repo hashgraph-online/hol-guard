@@ -425,7 +425,7 @@ mod blocked;
 use blocked::silent;
 
 #[path = "hook_direct_review_connector.rs"]
-mod connector;
+pub(super) mod connector;
 
 #[path = "hook_direct_review_notice.rs"]
 mod notice;

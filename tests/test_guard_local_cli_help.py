@@ -18,8 +18,6 @@ import pytest
 
 from codex_plugin_scanner.guard.runtime.local_cli_commands import (
     LocalCliCommand,
-    command_tokens_for_invocation,
-    match_command_id,
     merge_discovered_commands,
 )
 from codex_plugin_scanner.guard.runtime.local_cli_help import (
@@ -29,6 +27,7 @@ from codex_plugin_scanner.guard.runtime.local_cli_help import (
     run_cli_help,
 )
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity, identify_unlisted_cli
+from tests.local_cli_command_id_client import command_tokens_for_invocation, match_command_id
 
 FIXTURE = Path(__file__).resolve().parents[1] / "tests/fixtures/guard-local-cli-help-parse.v1.json"
 
@@ -178,9 +177,7 @@ def test_a_resident_that_cannot_answer_is_a_failure_not_an_empty_cli(
     """The operator is told Guard could not read --help, not that the CLI named nothing."""
 
     _stand_in_resident(monkeypatch, lambda **_: None)
-    commands, status = discover_local_cli_commands(
-        _identity(), ("wrangler", "--help"), runner=lambda _: WRANGLER_HELP
-    )
+    commands, status = discover_local_cli_commands(_identity(), ("wrangler", "--help"), runner=lambda _: WRANGLER_HELP)
     assert status == "failed"
     assert [command.command_id for command in commands] == ["root", "other"]
 
@@ -189,9 +186,7 @@ def test_a_cli_that_names_nothing_is_still_empty(monkeypatch: pytest.MonkeyPatch
     """A real empty parse keeps its own status, so "failed" stays meaningful."""
 
     _stand_in_resident(monkeypatch, lambda **_: ())
-    _, status = discover_local_cli_commands(
-        _identity(), ("wrangler", "--help"), runner=lambda _: WRANGLER_HELP
-    )
+    _, status = discover_local_cli_commands(_identity(), ("wrangler", "--help"), runner=lambda _: WRANGLER_HELP)
     assert status == "empty"
 
 
@@ -199,16 +194,12 @@ def test_blank_help_output_never_reaches_the_resident(monkeypatch: pytest.Monkey
     """Nothing was printed, so there is nothing to provision a resident for."""
 
     calls = _stand_in_resident(monkeypatch, lambda **_: ())
-    _, status = discover_local_cli_commands(
-        _identity(), ("wrangler", "--help"), runner=lambda _: "   \n"
-    )
+    _, status = discover_local_cli_commands(_identity(), ("wrangler", "--help"), runner=lambda _: "   \n")
     assert status == "failed"
     assert calls == []
 
 
-def test_discovery_parses_through_the_home_it_is_given(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_discovery_parses_through_the_home_it_is_given(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """A daemon on an overridden home must not send the parse to the default one."""
 
     calls = _stand_in_resident(monkeypatch, lambda **_: (_row("docs"),))
@@ -236,9 +227,7 @@ def test_a_resident_that_goes_quiet_stops_the_nested_probes(
         return answers.pop(0) if answers else pytest.fail("probed past the silence")
 
     calls = _stand_in_resident(monkeypatch, _answer)
-    commands, status = discover_local_cli_commands(
-        _identity(), ("wrangler", "--help"), runner=lambda _: WRANGLER_HELP
-    )
+    commands, status = discover_local_cli_commands(_identity(), ("wrangler", "--help"), runner=lambda _: WRANGLER_HELP)
     # The top-level parse stands; only the children are given up on.
     assert status == "ok"
     assert {"docs", "init", "deploy"} <= {command.command_id for command in commands}

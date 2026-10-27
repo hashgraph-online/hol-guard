@@ -10,7 +10,6 @@ Python transports the facts only it holds: the verified policy binding, the
 ambient environment and the extension-control digest. There is no Python
 fallback: when the resident cannot answer, no persistent token is available.
 The separate delivery contract decides whether a once retry is executable.
-Launch evidence reports observations only and never grants execution.
 """
 
 from __future__ import annotations
@@ -240,35 +239,6 @@ def native_exact_action(
     return token, reason
 
 
-def native_launch_evidence(
-    *,
-    harness: str,
-    tool_name: str,
-    payload: Mapping[str, object],
-    native_result: Mapping[str, object],
-    native_receipt: Mapping[str, object] | None,
-    workspace: Path | None,
-    home_dir: Path | None,
-    guard_home: Path | None = None,
-) -> tuple[dict[str, Any] | None, str | None]:
-    """Observe code/configuration without minting any execution or persistence capability."""
-    try:
-        action = _exact_query(
-            harness=harness,
-            tool_name=tool_name,
-            payload=payload,
-            native_result=native_result,
-            native_receipt=native_receipt,
-            workspace=workspace,
-            home_dir=home_dir,
-        )
-        reply = _answer({"kind": "launch_evidence", "action": action}, guard_home)
-        return reply["evidence"], reply["unavailable_reason"]
-    except (NativeExactActionError, OSError, RuntimeError, TypeError, ValueError) as error:
-        _LOGGER.warning("native launch-evidence ask failed closed: %s", type(error).__name__)
-        return None, UNPROVEN_LAUNCH
-
-
 def _execution_environment(payload: Mapping[str, object]) -> dict[str, object] | None:
     stamped = payload.get(HOOK_EXECUTION_ENVIRONMENT_KEY)
     return dict(stamped) if isinstance(stamped, Mapping) else None
@@ -459,7 +429,6 @@ __all__ = [
     "NativeExactActionError",
     "launch_cwd",
     "native_exact_action",
-    "native_launch_evidence",
     "native_review_binding",
     "native_review_evidence",
 ]

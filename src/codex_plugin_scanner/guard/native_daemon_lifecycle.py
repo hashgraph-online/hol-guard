@@ -162,10 +162,6 @@ def reset_daemon_lifecycle_deadline(token: contextvars.Token[float | None]) -> N
     _DAEMON_LIFECYCLE_DEADLINE.reset(token)
 
 
-def daemon_lifecycle_deadline() -> float | None:
-    return _DAEMON_LIFECYCLE_DEADLINE.get()
-
-
 def _active_deadline(explicit: float | None) -> float | None:
     bound = _DAEMON_LIFECYCLE_DEADLINE.get()
     if explicit is None:

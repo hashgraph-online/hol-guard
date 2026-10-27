@@ -10,7 +10,7 @@ from codex_plugin_scanner.guard.mdm.policy import parse_managed_policy
 from codex_plugin_scanner.guard.runtime.structured_output_mediation import (
     STRUCTURED_OUTPUT_SETTING_PATH,
     StructuredOutputBinding,
-    resolve_managed_structured_output_binding,
+    resolve_managed_structured_output_resolution,
 )
 
 
@@ -92,7 +92,7 @@ def _real_observe_managed_config(tmp_path: Path) -> object:
 
 
 def _binding(harness: str = "pi") -> StructuredOutputBinding:
-    binding = resolve_managed_structured_output_binding(_config(), harness=harness)
+    binding = resolve_managed_structured_output_resolution(_config(), harness=harness).binding
     assert binding is not None
     return binding
 

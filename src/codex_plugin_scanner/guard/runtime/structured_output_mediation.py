@@ -117,10 +117,6 @@ def resolve_managed_structured_output_resolution(config: object, *, harness: str
         return StructuredOutputResolution(None, True, "structured_managed_authority_unavailable")
 
 
-def resolve_managed_structured_output_binding(config: object, *, harness: str) -> StructuredOutputBinding | None:
-    return resolve_managed_structured_output_resolution(config, harness=harness).binding
-
-
 @dataclass(frozen=True, slots=True)
 class StructuredContentMediation:
     action: MediationAction
@@ -199,6 +195,5 @@ __all__ = [
     "StructuredOutputResolution",
     "canonical_harness_name",
     "mediate_native_post_tool_content",
-    "resolve_managed_structured_output_binding",
     "resolve_managed_structured_output_resolution",
 ]

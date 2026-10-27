@@ -18,7 +18,7 @@ import time
 from collections.abc import Mapping
 from pathlib import Path
 
-from .codex_hook_launch_runtime import run_isolated_hook_process
+from .codex_hook_launch_runtime import BoundedHookProcessResult, run_isolated_hook_process
 from .group_write_trust import trusted_owner_and_mode as _trusted_owner_and_mode
 from .native_binary_identity import validate_native_binary as _validate_binary
 from .native_resident_client import native_resident_client_request
@@ -257,6 +257,33 @@ def _isolated_environment() -> dict[str, str]:
     return environment
 
 
+def _run_native_process_result(
+    path: Path,
+    args: tuple[str, ...],
+    *,
+    input_text: str,
+    timeout_seconds: float,
+    output_limit: int = _MAX_RESPONSE_BYTES,
+) -> BoundedHookProcessResult:
+    """Run one bounded native invocation and keep its whole result.
+
+    Callers that only need the answer use :func:`_run_native_process`. This
+    form is for the one-shot arms whose failure code is the answer: the
+    runtime prints the code on stderr and exits non-zero, so collapsing the
+    result to ``None`` would lose the distinction between, say, a mismatched
+    key and a directory it could not create.
+    """
+
+    return run_isolated_hook_process(
+        (str(path), *args),
+        input_text=input_text,
+        cwd=path.parent,
+        environment=_isolated_environment(),
+        timeout_seconds=timeout_seconds,
+        output_limit=output_limit,
+    )
+
+
 def _run_native_process(
     path: Path,
     args: tuple[str, ...],
@@ -265,11 +292,10 @@ def _run_native_process(
     timeout_seconds: float,
     output_limit: int = _MAX_RESPONSE_BYTES,
 ) -> str | None:
-    result = run_isolated_hook_process(
-        (str(path), *args),
+    result = _run_native_process_result(
+        path,
+        args,
         input_text=input_text,
-        cwd=path.parent,
-        environment=_isolated_environment(),
         timeout_seconds=timeout_seconds,
         output_limit=output_limit,
     )

@@ -24,7 +24,6 @@ from .review_claim_hashing import (
 )
 from .review_exact_capability_advertisement import attach_exact_review_capability
 from .review_native_claim_bindings import (
-    NATIVE_BINDING_FIELDS,
     NATIVE_BINDING_VERSION,
     native_binding_commitment_matches,
 )
@@ -236,23 +235,6 @@ def build_local_review_request_claim(
     }
     claim["claimHash"] = compute_local_review_request_claim_hash(claim)
     return attach_exact_review_capability(claim, oauth, store)
-
-
-def validate_local_review_request_claim(claim: dict[str, object]) -> dict[str, object]:
-    if claim.get("contractVersion") != _LOCAL_REVIEW_REQUEST_CONTRACT_VERSION:
-        raise GuardReviewContractError("unsupported_claim_contract_version")
-    has_native_bindings = any(isinstance(claim.get(key), str) for key in NATIVE_BINDING_FIELDS) or any(
-        key in claim for key in ("nativeBindingVersion", "nativeBindingDigest")
-    )
-    if has_native_bindings and not native_binding_commitment_matches(claim):
-        raise GuardReviewContractError("native_binding_digest_mismatch")
-    expected_hash = compute_local_review_request_claim_hash(claim)
-    claim_hash = _non_empty_string(claim.get("claimHash"))
-    if claim_hash != expected_hash and (
-        has_native_bindings or claim_hash != compute_legacy_local_review_request_claim_hash(claim)
-    ):
-        raise GuardReviewContractError("claim_hash_mismatch")
-    return claim
 
 
 def payload_hash_for_remote_approval_envelope(envelope: dict[str, object]) -> str:

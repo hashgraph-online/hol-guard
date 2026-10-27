@@ -132,6 +132,133 @@ fn native_bash_reply_pending_lineage_never_acknowledges_or_spends_consent() {
 }
 
 #[test]
+fn native_bash_reply_prepared_accepts_only_the_bounded_assurances() {
+    for assurance in [
+        "macos-readonly-root-framed-outputs-v1",
+        "macos-readonly-root-http-read-v1",
+        "macos-hardened-broker-v1",
+    ] {
+        let mut reply = prepared_reply();
+        reply["subject"]["execution_assurance"] = json!(assurance);
+        assert!(prepared(&reply), "{assurance}");
+    }
+    let mut unbounded = prepared_reply();
+    unbounded["subject"]["execution_assurance"] = json!("macos-readonly-root-unbounded-v1");
+    assert!(!prepared(&unbounded));
+}
+
+#[test]
+fn native_bash_reply_malformed_dependency_data_cannot_masquerade_as_prepared() {
+    let mut good = prepared_reply();
+    good["dependency_artifact"] = json!({"artifact_id":format!("omp:project:package-request:{}","a".repeat(64)),
+        "artifact_type":"package_request","harness":"omp",
+        "metadata":{"assessment_only":true,"captured_subject_sha256":"a".repeat(64)}});
+    assert!(prepared(&good));
+    assert_eq!(good["consent_required"], json!(true));
+    for (pointer, invalid) in [
+        ("/dependency_artifact", json!([])),
+        (
+            "/dependency_artifact/artifact_type",
+            json!("tool_action_request"),
+        ),
+        ("/dependency_artifact/metadata", json!([])),
+        (
+            "/dependency_artifact/metadata/assessment_only",
+            json!(false),
+        ),
+        (
+            "/dependency_artifact/metadata/captured_subject_sha256",
+            json!("not-a-digest"),
+        ),
+        (
+            "/dependency_artifact/artifact_id",
+            json!(format!("omp:project:package-request:{}", "b".repeat(64))),
+        ),
+        ("/dependency_artifact/harness", json!("unknown")),
+        (
+            "/artifact_id",
+            json!(format!("omp:project:package-request:{}", "a".repeat(64))),
+        ),
+    ] {
+        let mut changed = good.clone();
+        *changed.pointer_mut(pointer).unwrap() = invalid;
+        assert!(!prepared(&changed), "{pointer}");
+    }
+    // A pi artifact is refused while the subject was captured by the omp host.
+    let mut pi = good;
+    pi["dependency_artifact"]["harness"] = json!("pi");
+    pi["dependency_artifact"]["artifact_id"] =
+        json!(format!("pi:project:package-request:{}", "a".repeat(64)));
+    assert!(!prepared(&pi));
+}
+
+#[test]
+fn native_bash_reply_forged_success_shapes_are_refused() {
+    let (good, request) = completed_reply();
+    for (pointer, invalid) in [
+        ("/grant_claimed", json!(1)),
+        ("/operation/completion", Value::Null),
+        ("/operation/state", json!({})),
+    ] {
+        let mut changed = good.clone();
+        *changed.pointer_mut(pointer).unwrap() = invalid;
+        assert!(!executed(&changed, &request), "{pointer}");
+    }
+}
+
+#[test]
+fn native_bash_reply_pending_lineage_must_be_present_and_well_formed() {
+    let (mut reply, request) = completed_reply();
+    reply["status"] = json!("error");
+    reply["code"] = json!("native_bash_consent_required");
+    reply["payload"] = Value::Null;
+    reply["operation"] = Value::Null;
+    reply["dispatch_acknowledged"] = json!(false);
+    reply["review_lineage"] = json!({"schema":"guard-native-bash-review-lineage.v1",
+        "lineage_id":"c".repeat(64),"operation_id":"stable-operation-1",
+        "artifact_hash":"guard-approval-context:v1:fixture",
+        "created_at_ms":1000,"expires_at_ms":86_401_000});
+    assert!(executed(&reply, &request));
+    let mut missing = reply.clone();
+    missing["review_lineage"] = Value::Null;
+    assert!(!executed(&missing, &request));
+    for (key, invalid) in [
+        ("operation_id", json!("another-operation-0001")),
+        ("lineage_id", json!("invalid")),
+        ("allow", json!(true)),
+    ] {
+        let mut changed = reply.clone();
+        changed["review_lineage"][key] = invalid;
+        assert!(!executed(&changed, &request), "{key}");
+    }
+}
+
+#[test]
+fn native_bash_reply_replay_reports_an_uncertain_operation_and_spent_once_authority() {
+    let (mut reply, request) = completed_reply();
+    reply["status"] = json!("recorded");
+    reply["code"] = json!("native_bash_operation_in_progress_or_uncertain");
+    reply["replayed"] = json!(true);
+    reply["payload"] = Value::Null;
+    reply["operation"]["state"] = json!("uncertain");
+    reply["operation"]["completion"] = Value::Null;
+    assert!(executed(&reply, &request));
+
+    // A replay may report a saved grant spent by the first run to a query
+    // that carries no grant of its own, but only as a claimed grant.
+    let (mut spent, request) = completed_reply();
+    spent["status"] = json!("recorded");
+    spent["code"] = json!("native_bash_already_completed_output_not_retained");
+    spent["replayed"] = json!(true);
+    spent["payload"] = Value::Null;
+    spent["grant_claimed"] = json!(true);
+    spent["operation"]["authorization"] = json!("saved_grant");
+    assert!(executed(&spent, &request));
+    spent["grant_claimed"] = json!(false);
+    assert!(!executed(&spent, &request));
+}
+
+#[test]
 fn native_bash_reply_tool_invocation_id_is_distinct_from_operation_permission() {
     let (mut reply, mut request) = completed_reply();
     request["tool_call_id"] = json!("sdk-call");

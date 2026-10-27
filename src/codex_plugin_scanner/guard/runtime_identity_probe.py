@@ -16,12 +16,10 @@ from dataclasses import dataclass
 
 from .runtime_identity_assessment import RuntimeIdentityError, run_native_identity_command
 
-RUNTIME_PROBE_FEATURE = "runtime-identity-probe-v1"
 # Launch resolution is an additive capability of the same command.
 RUNTIME_PROBE_LAUNCH_FEATURE = "runtime-identity-launch-v1"
 RUNTIME_PROBE_COMMAND = "runtime-identity-probe"
 RUNTIME_PROBE_SCHEMA = "guard.runtime-identity-probe.v1"
-RUNTIME_PROBE_MAX_PATHS = 128
 # The probe hashes whole files, so it gets more time than a plain assessment.
 _PROBE_TIMEOUT_SECONDS = 60.0
 
@@ -38,17 +36,6 @@ class RuntimeProbe:
     # One row per launch spec sent, in order; empty for a path-only probe.
     launches: tuple[dict[str, object], ...] = ()
     candidate_limit_reached: bool = False
-
-
-def probe_runtime_paths(paths: Sequence[str]) -> RuntimeProbe:
-    """Describe the executables at ``paths`` natively, never running them."""
-
-    unique = tuple(dict.fromkeys(paths))
-    if len(unique) > RUNTIME_PROBE_MAX_PATHS:
-        raise RuntimeIdentityError("runtime_identity_probe_too_many_paths")
-    if not unique:
-        return RuntimeProbe(artifacts=(), locations=(), observations=())
-    return _probe(RUNTIME_PROBE_FEATURE, {"paths": list(unique)})
 
 
 def probe_runtime_launches(
@@ -162,10 +149,7 @@ def _launch_ok(row: object, index: int) -> bool:
 
 
 __all__ = [
-    "RUNTIME_PROBE_FEATURE",
     "RUNTIME_PROBE_LAUNCH_FEATURE",
-    "RUNTIME_PROBE_MAX_PATHS",
     "RuntimeProbe",
     "probe_runtime_launches",
-    "probe_runtime_paths",
 ]

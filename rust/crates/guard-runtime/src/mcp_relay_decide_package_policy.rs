@@ -305,6 +305,9 @@ fn current_action_and_hash(
         artifact: artifact.to_dict(),
         evaluation: Value::Object(view_of(evaluation, &HASH_EVALUATION_FIELDS)?),
         config_policy: super::package_config::config_policy(view, artifact)?,
+        // The relay hydrates the policy view from the bound harness view
+        // rather than sending the configuration fields it was loaded from.
+        config_facts: None,
         sandbox_analysis: Some(super::package_config::sandbox_analysis(view)?),
         store_path: Some(saved.store_path.clone()),
         workspace_dir: Some(workspace_dir.to_owned()),

@@ -11,10 +11,8 @@ from codex_plugin_scanner.guard.cli.protect_approvals import _queue_local_protec
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.mcp_tool_calls import ToolCallDecision
 from codex_plugin_scanner.guard.proxy import CodexMcpGuardProxy, OpenCodeMcpGuardProxy, runtime_mcp
-from codex_plugin_scanner.guard.proxy.stdio import StdioGuardProxy
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.silent_review_assertions import assert_silent_review_recorded
-from tests.test_guard_approval_precedence_generic_stdio import _marker_child_command, _sensitive_read_message
 from tests.test_guard_protect_approval_guidance import _pending_package_payload
 from tests.test_guard_runtime_mcp_saved_blocks import _child_command, _context, _messages, _package_artifact
 
@@ -100,8 +98,10 @@ def test_mcp_package_denial_preserves_reason_and_policy_source(tmp_path, monkeyp
         "decision": "review",
         "reasons": [{"code": "changed-package", "message": "Digest no longer matches."}],
         "packages": [{"name": "example", "version": "1.0"}],
+        "risk_summary": "Package integrity changed.",
         "user_copy": {
             "title": "Review package",
+            "summary": "Package changed",
             "dashboard_url": "http://127.0.0.1:4455/requests/example",
             "next_step": "Open Guard to approve",
             "harness_message": "Ask the user to approve",
@@ -138,29 +138,6 @@ def test_mcp_package_denial_preserves_reason_and_policy_source(tmp_path, monkeyp
     assert response["error"]["data"]["approvalRequests"] == []
     assert_silent_review_recorded(store)
     assert store.list_receipts(limit=1)[0]["approval_source"] == "policy"
-
-
-def test_stdio_default_secret_read_denial_has_no_pending_review(tmp_path):
-    context = _context(tmp_path)
-    marker = tmp_path / "must-not-execute"
-    store = GuardStore(context.guard_home)
-    proxy = StdioGuardProxy(
-        command=_marker_child_command(marker),
-        cwd=context.workspace_dir,
-        guard_store=store,
-        guard_config=GuardConfig(
-            guard_home=context.guard_home, workspace=context.workspace_dir, default_action="review"
-        ),
-        approval_center_url="http://127.0.0.1:4455",
-        harness="codex",
-    )
-    result = proxy.run_session([_sensitive_read_message()])
-    message = result["responses"][0]["error"]["message"]
-    assert "safe, permitted alternative" in message
-    assert "pending" not in message.lower()
-    assert "review in" not in message.lower()
-    assert not marker.exists()
-    assert_silent_review_recorded(store)
 
 
 @pytest.mark.parametrize("proxy_class", [CodexMcpGuardProxy, OpenCodeMcpGuardProxy])

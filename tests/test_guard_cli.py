@@ -43,13 +43,10 @@ from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 from codex_plugin_scanner.guard.codex_config import dump_toml
 from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config, resolve_risk_action
 from codex_plugin_scanner.guard.desktop_notifications import DesktopNotificationSetupResult
-from codex_plugin_scanner.guard.policy_bundle_parser import (
-    computed_policy_bundle_hash,
-    payload_hash_for_policy_bundle,
-)
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
+from tests.policy_bundle_parser_support import computed_policy_bundle_hash, payload_hash_for_policy_bundle
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
 from tests.support.network import stub_authenticated_urlopen
 from tests.update_context_test_support import build_legacy_update_context, stage_legacy_wheel
@@ -5030,7 +5027,7 @@ args = ["-lc", "echo hi"]
 """.strip()
             + "\n",
         )
-        monkeypatch.setattr("codex_plugin_scanner.guard.adapters.codex._command_available", lambda command: True)
+        monkeypatch.setattr("codex_plugin_scanner.guard.adapters.codex._command_available", lambda *_args: True)
 
         rc = main(["guard", "doctor", "codex", "--home", str(home_dir), "--json"])
         output = json.loads(capsys.readouterr().out)
@@ -5053,7 +5050,7 @@ args = ["-lc", "echo hi"]
             )
             + "\n",
         )
-        monkeypatch.setattr("codex_plugin_scanner.guard.adapters.codex._command_available", lambda command: True)
+        monkeypatch.setattr("codex_plugin_scanner.guard.adapters.codex._command_available", lambda *_args: True)
 
         rc = main(["guard", "doctor", "codex", "--home", str(home_dir), "--guard-home", str(guard_home), "--json"])
         output = json.loads(capsys.readouterr().out)
@@ -5085,7 +5082,7 @@ args = ["-lc", "echo hi"]
 """.strip()
             + "\n",
         )
-        monkeypatch.setattr("codex_plugin_scanner.guard.adapters.codex._command_available", lambda command: True)
+        monkeypatch.setattr("codex_plugin_scanner.guard.adapters.codex._command_available", lambda *_args: True)
         monkeypatch.setattr(
             GuardStore,
             "get_effective_guard_connect_state",
@@ -5388,7 +5385,7 @@ args = ["-lc", "echo hi"]
         home_dir = tmp_path / "home"
         guard_home = tmp_path / "guard-home"
         _write_text(guard_home / "config.toml", "runtime_detector_registry = true\n")
-        monkeypatch.setattr("codex_plugin_scanner.guard.adapters.codex._command_available", lambda command: True)
+        monkeypatch.setattr("codex_plugin_scanner.guard.adapters.codex._command_available", lambda *_args: True)
 
         rc = main(["guard", "doctor", "codex", "--home", str(home_dir), "--guard-home", str(guard_home)])
         output = capsys.readouterr().out

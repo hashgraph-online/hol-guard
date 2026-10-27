@@ -38,7 +38,6 @@ from codex_plugin_scanner.guard.cli import prompt as guard_prompt_module
 from codex_plugin_scanner.guard.cli.approval_commands import run_approval_command
 from codex_plugin_scanner.guard.cli.commands import (
     _persist_claude_native_permission_policy,
-    _queue_claude_native_approval_gate_fallback,
     run_guard_command,
 )
 from codex_plugin_scanner.guard.config import editable_guard_settings, load_guard_config, reset_guard_settings
@@ -52,10 +51,12 @@ from codex_plugin_scanner.guard.proxy.runtime_mcp import RuntimeMcpGuardProxy
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.runtime.self_approval import _AGENT_ENV_MARKERS
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.totp import TotpSecretStore, _temporary_atomic_path, totp_code_at_counter
+from tests.claude_native_gate_fallback import queue_claude_native_approval_gate_fallback
 from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
+from tests.guard_totp_support import read_totp_secret, totp_code_at_counter
 from tests.native_permission_plan_stub import answer_persist_plans
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
+from tests.policy_store_support import replace_remote_policies, resolve_policy
 from tests.support.network import stub_authenticated_urlopen
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
@@ -238,23 +239,6 @@ def _enable_totp(store: GuardStore, *, now: str) -> str:
         now=now,
     )
     return secret
-
-
-def test_totp_atomic_temp_paths_are_random(tmp_path: Path) -> None:
-    target_path = tmp_path / "guard-home" / "totp-secrets" / "seed.secret"
-    first = _temporary_atomic_path(target_path)
-    second = _temporary_atomic_path(target_path)
-    try:
-        assert first != second
-        assert first.parent == target_path.parent
-        assert second.parent == target_path.parent
-        assert first.name != f"{target_path.name}.tmp"
-        assert second.name != f"{target_path.name}.tmp"
-    finally:
-        if first.exists():
-            first.unlink()
-        if second.exists():
-            second.unlink()
 
 
 def test_approval_gate_missing_password_fails_closed(tmp_path: Path) -> None:
@@ -1339,7 +1323,7 @@ def test_approval_gate_cli_totp_commands_round_trip(tmp_path: Path) -> None:
 
     state = json.loads((store.guard_home / "approval-gate.json").read_text(encoding="utf-8"))
     pending_secret_id = str(state["totp_pending_secret_id"])
-    secret = TotpSecretStore(store.guard_home).get_secret(pending_secret_id)
+    secret = read_totp_secret(store.guard_home, pending_secret_id)
     assert secret is not None
 
     verify_counter = _counter(datetime.now(timezone.utc).isoformat())
@@ -1854,7 +1838,8 @@ def test_daemon_approval_false_artifact_scope_still_allows_once(
     assert body["resolved"] is True
     assert store.list_policy_decisions("codex") == []
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             f"codex:project:{request_id}",
             f"hash-{request_id}",
@@ -1863,7 +1848,8 @@ def test_daemon_approval_false_artifact_scope_still_allows_once(
         == "allow"
     )
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             f"codex:project:{request_id}",
             f"hash-{request_id}",
@@ -1914,7 +1900,7 @@ def test_approval_gate_direct_lower_layers_cannot_bypass(tmp_path: Path) -> None
     with pytest.raises(ApprovalGateError):
         store.upsert_policy(decision, "2026-04-11T00:00:00+00:00")
     with pytest.raises(ApprovalGateError):
-        store.replace_remote_policies([decision], "2026-04-11T00:00:00+00:00")
+        replace_remote_policies(store, [decision], "2026-04-11T00:00:00+00:00")
     with pytest.raises(ApprovalGateError):
         record_policy(store, "codex", "allow", "artifact", "codex:project:record", None)
     with pytest.raises(ApprovalGateError):
@@ -2166,7 +2152,7 @@ def test_approval_gate_native_permission_failure_queues_guard_fallback(
         reason="native approval",
         now="2026-04-11T00:00:00+00:00",
     )
-    queued = _queue_claude_native_approval_gate_fallback(
+    queued = queue_claude_native_approval_gate_fallback(
         store=store,
         harness="claude-code",
         artifact=artifact,

@@ -3,8 +3,9 @@
 //! bundle freshness, health, and the cloud-managed policy projection.
 //!
 //! The caller hydrates only what it alone can read (the sync payloads, the
-//! configured risk actions and the package-manager shim status). The runtime
-//! decides the status, the health, the refresh schedule and every field of the
+//! configuration the reported risk actions are resolved from and the
+//! package-manager shim status). The runtime decides the status, the health,
+//! the refresh schedule, the configured actions and every field of the
 //! reported posture; callers never recompute any of it.
 
 use guard_command::local_supply_chain::ecosystem_support_matrix;
@@ -176,10 +177,14 @@ fn posture(request: &PackagePostureRequestV1) -> Result<Value, String> {
     let managed_by_cloud = !remote_policy.is_empty();
     let workspace = request.workspace_id.as_deref();
     let workspace_value = workspace.map_or(Value::Null, |id| json!(id));
-    let action = |remote: Option<&str>, configured: &Option<String>| match remote {
+    // A cloud-managed action overrides the local configuration; otherwise the
+    // configured action is resolved here, from the fields the caller sent.
+    let action = |remote: Option<&str>, risk_class: &str| match remote {
         Some(action) => json!(action),
-        None => configured
+        None => request
+            .risk_action_config
             .as_ref()
+            .and_then(|config| crate::risk_action::configured_risk_action(config, risk_class, None))
             .map_or(Value::Null, |action| json!(action)),
     };
     Ok(json!({
@@ -226,8 +231,8 @@ fn posture(request: &PackagePostureRequestV1) -> Result<Value, String> {
         },
         "policy": {
             "security_level": request.security_level,
-            "cloud_advisory_action": action(remote_cloud_advisory, &request.config_cloud_advisory_action),
-            "package_script_action": action(remote_package_script, &request.config_package_script_action),
+            "cloud_advisory_action": action(remote_cloud_advisory, "cloud_advisory"),
+            "package_script_action": action(remote_package_script, "package_script"),
             "managed_by_cloud": managed_by_cloud,
             "remote_policy_active": !remote_policy.is_empty(),
             "team_policy_active": false,

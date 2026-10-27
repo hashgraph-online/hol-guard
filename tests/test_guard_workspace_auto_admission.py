@@ -14,6 +14,7 @@ from codex_plugin_scanner.guard import workspace_assessment_store as assessments
 from codex_plugin_scanner.guard import workspace_assessment_worker as worker
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_workspace_assessment_runner import KEYS, SNAPSHOT, T0, digest, snapshots
+from tests.workspace_fix_support import admit_worktree
 
 STAT = replace(SNAPSHOT, mode="stat")
 NOW = "2026-10-25T00:00:00+00:00"
@@ -56,7 +57,7 @@ def test_automatic_admission_never_resumes_a_paused_worktree(tmp_path: Path, mon
     store = GuardStore(tmp_path / "home")
     old_root = tmp_path / "old"
     old_root.mkdir()
-    assessments.admit_worktree(store, KEYS, root=str(old_root), now_ms=T0)
+    admit_worktree(store, KEYS, root=str(old_root), now_ms=T0)
     assert assessments.set_paused(store, KEYS, paused=True)
     # The same worktree, reached through a newly registered root.
     snapshots(monkeypatch, worker, STAT)

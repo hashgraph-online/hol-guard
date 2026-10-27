@@ -6,6 +6,13 @@
 //! `./node_modules/.bin/<tool>` would, and fetch from the registry only when
 //! it is not. A runner whose tool is installed where it runs is local work the
 //! sandbox bounds; one that could fetch keeps its package review.
+//!
+//! Where it runs is every directory the runner's own lookup reads: a runner
+//! puts each ancestor's `node_modules/.bin` on the path it searches, so in a
+//! workspace that hoists its dependencies to the root, `cd packages/web &&
+//! npx tsc` starts the very binary the root holds. The search is bounded at
+//! the workspace root, so the tool admitted here is always one the workspace
+//! itself installed.
 use crate::package_intent_common::PackageIntent;
 use crate::{CanonicalCommandV1, CommandSegmentV1};
 use std::path::Path;
@@ -44,8 +51,9 @@ pub(super) fn runner_arguments(segment: &CommandSegmentV1) -> Option<&[String]> 
     }
 }
 
-/// The tools the runners in `model` start, each a bare name installed in
-/// `node_modules/.bin` of the directory it runs in. `None` when there is no
+/// The tools the runners in `model` start, each a bare name installed in a
+/// `node_modules/.bin` the runner reads from the directory it runs in, at or
+/// above it and never above `workspace`. `None` when there is no
 /// runner, or any runner names a version or source, takes an unknown option,
 /// or runs where the leading `cd` steps cannot be followed. The caller's shape
 /// check still proves every `cd` stays inside `workspace`.
@@ -92,8 +100,11 @@ pub(super) fn installed_tools(model: &CanonicalCommandV1, workspace: &Path) -> O
             && tool
                 .chars()
                 .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-'));
-        let installed = directory.join("node_modules").join(".bin").join(tool);
-        if !bare || !std::fs::metadata(&installed).is_ok_and(|metadata| metadata.is_file()) {
+        let installed = |probe: &Path| {
+            std::fs::metadata(probe.join("node_modules").join(".bin").join(tool))
+                .is_ok_and(|metadata| metadata.is_file())
+        };
+        if !bare || super::cd::first_from(&directory, workspace, installed).is_none() {
             return None;
         }
         tools.push(tool.clone());

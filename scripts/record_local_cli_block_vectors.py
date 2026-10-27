@@ -3,13 +3,13 @@
 
 The expected answers come from the Python the daemon runs for an allowed
 native ``PreToolUse`` while a custom block rule exists:
-``native_local_cli_block_response`` (``hook_native_local_cli.py``), the
-grant answer checks in ``decide_local_cli_grant`` and ``_decode_payload``,
+``native_local_cli_block_response`` (``hook_native_local_cli.py``),
 ``match_command_id``, and the Watch replacement in ``hook_worker_native.py``.
 The resident's port in ``hook_direct_local_cli_block.rs`` replays every
 vector. Identity derivation and the store read are the resident's own, so
 the grant and the launch identity are given; rendering is captured as the
-verdict handed to the resident's renderer.
+verdict handed to the resident's renderer. The grant answer outcomes were
+recorded from the retired ``decide_local_cli_grant`` and are kept as recorded.
 
 Usage: python scripts/record_local_cli_block_vectors.py [--check]
 Deterministic output.
@@ -20,22 +20,21 @@ from __future__ import annotations
 import ast
 import json
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT))
 
-from codex_plugin_scanner.guard import local_cli_grant_decision as grant_decision  # noqa: E402
 from codex_plugin_scanner.guard.daemon import hook_native_local_cli as block  # noqa: E402
 from codex_plugin_scanner.guard.daemon import hook_native_saved_approval as saved  # noqa: E402
-from codex_plugin_scanner.guard.native_local_cli_grant import (  # noqa: E402
-    NativeLocalCliGrantFailure,
-    _decode_payload,
-)
 from codex_plugin_scanner.guard.runtime.local_cli_commands import (  # noqa: E402
+    _MAX_DEPTH,
+    OTHER_COMMAND_ID,
+    ROOT_COMMAND_ID,
     LocalCliCommand,
-    match_command_id,
 )
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity  # noqa: E402
 
@@ -45,6 +44,17 @@ CLI_ID = "local-cli.demo-tool"
 HASH = "a" * 64
 OTHER_HASH = "b" * 64
 HARNESSES = ["codex", "claude-code", "copilot", "kimi", "devin", "zcode", "openclaw", "hermes", "cline", "grok"]
+
+
+def match_command_id(tokens: Sequence[str], commands: Sequence[LocalCliCommand]) -> str:
+    if not tokens:
+        return ROOT_COMMAND_ID
+    known = {command.command_id for command in commands}
+    for length in range(min(len(tokens), _MAX_DEPTH), 0, -1):
+        candidate = ".".join(tokens[:length])
+        if candidate in known:
+            return candidate
+    return OTHER_COMMAND_ID
 
 
 def identity(name: str = "demo-tool") -> UnlistedCliIdentity:
@@ -106,29 +116,23 @@ def grant_cases() -> list[tuple[str, object]]:
     ]
 
 
-def grant_outcome(payload: object) -> str | None:
-    def native(**_: object) -> object:
-        decoded = _decode_payload(payload) if payload is not None else None
-        return decoded if decoded is not None else NativeLocalCliGrantFailure("native_local_cli_grant_payload_invalid")
+def grant_outcome(label: str, payload: object) -> str | None:
+    """Return the grant outcome recorded for ``label`` and its exact answer.
 
-    store = mock.Mock(path=Path("/guard/guard.db"), guard_home=Path("/guard"))
-    store.read_local_cli_command_catalog.return_value = []
-    # The decision logs each unverified answer; the vectors record the outcome.
-    with (
-        mock.patch.object(grant_decision, "native_local_cli_grant", native),
-        mock.patch.object(grant_decision, "_LOGGER"),
-    ):
-        try:
-            return grant_decision.decide_local_cli_grant(
-                store=store,
-                identity=identity(),
-                command="demo-tool build",
-                cwd=Path("/work"),
-                home_dir=None,
-                current_action="allow",
-            )
-        except grant_decision.LocalCliIdentityUnavailableError:
-            return "unverified"
+    The grant decision and its answer decoder now live only in the resident
+    (``local_cli_grant_op.rs``). Their Python copies are retired, so the
+    outcomes they recorded are kept as the reference. A case whose answer
+    changed, or a new case, has no trustworthy recorded outcome: its expected
+    value must be recorded from the resident, so the recorder refuses it.
+    """
+
+    recorded = json.loads(OUT.read_text(encoding="utf-8"))["grant_answers"]["cases"]
+    for case in recorded:
+        if case["label"] == label:
+            if case["answer"] != payload:
+                raise SystemExit(f"grant case {label!r} changed; record its outcome from the resident")
+            return case["expected"]
+    raise SystemExit(f"grant case {label!r} has no recorded outcome; record it from the resident")
 
 
 def results() -> list[tuple[str, dict[str, object]]]:
@@ -172,7 +176,7 @@ def block_outcome(harness: str, result: dict[str, object], name: str) -> dict[st
 
     with (
         mock.patch.object(block, "_has_block_rules", return_value=True),
-        mock.patch.object(block, "_matching_grant", return_value=(identity(name), "blocked")),
+        mock.patch.object(block, "_rule_verdict", return_value=("blocked", name)),
         mock.patch.object(block, "store_guard_home", return_value=None),
         mock.patch.object(saved, "render_pre_tool", capture),
     ):
@@ -222,7 +226,7 @@ def document() -> dict[str, object]:
             "cli_id": CLI_ID,
             "identity_hash": HASH,
             "cases": [
-                {"label": label, "answer": payload, "expected": grant_outcome(payload)}
+                {"label": label, "answer": payload, "expected": grant_outcome(label, payload)}
                 for label, payload in grant_cases()
             ],
         },

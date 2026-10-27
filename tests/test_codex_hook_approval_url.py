@@ -12,7 +12,6 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.approval_hook_copy import (
     join_native_hook_reason,
     live_approval_review_url,
-    live_hook_approval_context,
     with_approval_review_url,
 )
 from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import (
@@ -62,28 +61,6 @@ def test_stored_hook_copy_uses_primary_url_without_approval_center_field() -> No
     assert stored is not None
     assert "http://127.0.0.1:5474/requests/req-codex-2" in stored
     assert "Open HOL Guard to approve or keep this blocked:" in stored
-
-
-def test_live_hook_copy_adds_scoped_token_on_loopback(tmp_path: Path) -> None:
-    guard_home = tmp_path / "guard-home"
-    _write_daemon_token(guard_home, "secret-daemon-token")
-    payload = {
-        "approval_center_url": "http://127.0.0.1:5474",
-        "approval_requests": [
-            {
-                "request_id": "req-codex-1",
-                "approval_url": "http://127.0.0.1:5474/requests/req-codex-1",
-            }
-        ],
-        "primary_approval_url": "http://127.0.0.1:5474/requests/req-codex-1",
-    }
-    live = live_hook_approval_context(payload, harness="codex", guard_home=guard_home)
-    assert live is not None
-    assert "secret-daemon-token" not in live
-    start = live.index("http://")
-    review_url = live[start : live.index(". After you choose")]
-    fragment = parse_qs(urlparse(review_url).fragment)
-    assert fragment["guard-token"][0].startswith("gld1.")
 
 
 def test_hook_reason_keeps_policy_copy_with_one_tokenized_url() -> None:
@@ -143,25 +120,6 @@ def test_native_review_reason_uses_signed_loopback_link(tmp_path: Path) -> None:
     assert "guard-token=" in reason
     assert "secret-daemon-token" not in reason
     assert "Open HOL Guard to approve or keep this blocked:" in reason
-
-
-def test_live_hook_copy_does_not_token_external_urls(tmp_path: Path) -> None:
-    guard_home = tmp_path / "guard-home"
-    _write_daemon_token(guard_home, "secret-daemon-token")
-    payload = {
-        "approval_center_url": "https://example.invalid/approvals",
-        "approval_requests": [
-            {
-                "request_id": "req-ext-1",
-                "approval_url": "https://example.invalid/approvals/req-ext-1",
-            }
-        ],
-        "primary_approval_url": "https://example.invalid/approvals/req-ext-1",
-    }
-    live = live_hook_approval_context(payload, harness="codex", guard_home=guard_home)
-    assert live is not None
-    assert "https://example.invalid/approvals/req-ext-1" in live
-    assert "guard-token=" not in live
 
 
 def test_load_reconciles_watch_posture_when_mode_is_still_prompt(tmp_path: Path) -> None:

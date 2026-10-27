@@ -1,4 +1,4 @@
-"""Path and ``fd`` argument helpers shared by Guard secret-file request detectors.
+"""Skill-doc path helper shared by Guard secret-file request detectors.
 
 The false-positive signal classifiers (source search, health endpoint, read-only
 HTTP probe, version, manifest and docs/example paths) are owned by the native
@@ -11,52 +11,6 @@ from pathlib import Path
 
 from ..native_cli_runtime_support import cli_runtime_support
 
-SOURCE_INSPECTION_PARTS = frozenset(
-    {
-        "__tests__",
-        "app",
-        "constants",
-        "dashboard",
-        "docs",
-        "lib",
-        "packages",
-        "scripts",
-        "src",
-        "test",
-        "tests",
-        "workers",
-    }
-)
-SOURCE_INSPECTION_EXTENSIONS = frozenset(
-    {
-        ".c",
-        ".cc",
-        ".cpp",
-        ".css",
-        ".go",
-        ".h",
-        ".hpp",
-        ".html",
-        ".java",
-        ".js",
-        ".jsx",
-        ".json",
-        ".md",
-        ".mjs",
-        ".py",
-        ".rs",
-        ".sh",
-        ".toml",
-        ".ts",
-        ".tsx",
-        ".yaml",
-        ".yml",
-    }
-)
-SOURCE_INSPECTION_SENSITIVE_PARTS = frozenset(
-    {".aws", ".docker", ".env", ".git-credentials", ".kube", ".netrc", ".npmrc", ".pypirc", ".ssh", "credentials"}
-)
-SOURCE_INSPECTION_BENIGN_DOTFILES = frozenset({".nvmrc"})
 KNOWN_SKILL_DOC_ROOT_SUFFIXES = (
     ".codex/superpowers/skills",
     ".codex/skills",
@@ -76,7 +30,3 @@ def target_is_known_skill_doc_path(target: str, *, home_dir: Path | None = None)
     """Return true for known local skill-doc roots without resolving user path text."""
     home = str(home_dir) if home_dir is not None else str(Path.home())
     return _bound_rule("skill_doc_path", {"value": target, "home_dir": home})
-
-
-def fd_arg_requests_exec(arg: str) -> bool:
-    return _bound_rule("fd_exec_request", {"value": arg})

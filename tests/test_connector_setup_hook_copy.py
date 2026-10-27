@@ -13,10 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.bounded_cli_hook_daemon import _daemon_response_to_native
 from codex_plugin_scanner.guard.approval_hook_copy import (
     join_native_hook_reason,
-    live_hook_approval_context,
     with_approval_review_url,
 )
 from codex_plugin_scanner.guard.blocked_request_mode import (
@@ -81,21 +79,9 @@ def test_a_local_tool_gets_the_shared_hook_link_in_the_default_mode() -> None:
     assert join_native_hook_reason(_LOCAL, _LINK) == f"{_LOCAL} {_LINK}"
 
 
-@pytest.mark.parametrize("case", _vectors("bounded_hook_bridge/connector_setup_vectors.json"))
-def test_bounded_bridge_harnesses_render_the_shared_vectors(case: dict[str, object]) -> None:
-    response = json.loads(str(case["response"]))
-    stdout, stderr, exit_code = _daemon_response_to_native(
-        response, harness=str(case["harness"]), event_name="PreToolUse"
-    )
-    assert (stdout, stderr, exit_code) == (case["stdout"], case["stderr"], case["exit_code"])
-    assert (str(response["approval_url"]) in stdout) is case["ask"]
-
-
 def test_default_mode_gets_no_link_from_the_shared_hook_copy() -> None:
     assert with_approval_review_url(_DEFAULT, {"approval_url": _URL}) == _DEFAULT
     assert join_native_hook_reason(_DEFAULT, _LINK) == _DEFAULT
-    payload = {"reason": _DEFAULT, "approval_url": _URL}
-    assert live_hook_approval_context(payload, harness="claude-code", guard_home=Path("/nonexistent")) is None
 
 
 def test_ask_mode_keeps_the_link_in_the_shared_hook_copy() -> None:

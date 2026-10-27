@@ -175,35 +175,6 @@ def native_claim_approval_reuse_decisions(
     return payload is not None and payload.get("claimed") is True
 
 
-def native_approval_reuse_diagnostic(
-    *,
-    store_path: Path | str,
-    guard_home: Path,
-    harness: str,
-    artifact_id: str,
-    artifact_hash: str | None,
-    workspace: str | None,
-    publisher: str | None,
-    now: str,
-    evidence_provider: EvidenceProvider,
-) -> tuple[str | None, str | None]:
-    """Diagnose a saved-allow miss as ``(reason, stored_hash)``."""
-
-    reason, stored_hash, _reuse = native_approval_reuse_miss(
-        store_path=store_path,
-        guard_home=guard_home,
-        harness=harness,
-        artifact_id=artifact_id,
-        artifact_hash=artifact_hash,
-        workspace=workspace,
-        publisher=publisher,
-        now=now,
-        evidence_provider=evidence_provider,
-        current_action=None,
-    )
-    return reason, stored_hash
-
-
 def native_approval_reuse_miss(
     *,
     store_path: Path | str,

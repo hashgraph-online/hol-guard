@@ -13,9 +13,11 @@ use super::{
     MAX_RISK_CLASSES,
 };
 
-/// `_observed_risk_classes`, filtered and capped as `connector_setup_hint`
-/// keeps them. A rule id whose trim or case fold could differ from Python's
-/// defers, as does a catalog the resident cannot load.
+/// The risk classes of the catalog rules the paused evidence observed, sorted,
+/// deduplicated and capped; a critical or destructive shell rule also records
+/// `destructive`. Rule ids are matched exactly, as the native evidence records
+/// them, so an id the catalog does not hold adds nothing. A catalog the
+/// resident cannot load defers.
 pub(super) fn observed_risk_classes(result: &Object) -> Result<Vec<String>, HookDirectDefer> {
     let observations = result
         .get("command_extensions")
@@ -30,12 +32,6 @@ pub(super) fn observed_risk_classes(result: &Object) -> Result<Vec<String>, Hook
         let Some(rule_id) = observation.get("rule_id").and_then(Value::as_str) else {
             continue;
         };
-        if !rule_id
-            .chars()
-            .all(|item| item.is_ascii() && !('\x1c'..='\x1f').contains(&item))
-        {
-            return Err(HookDirectDefer::ReviewQueue);
-        }
         let catalog = match &catalog {
             Some(catalog) => catalog,
             None => catalog
@@ -61,7 +57,7 @@ pub(super) fn observed_risk_classes(result: &Object) -> Result<Vec<String>, Hook
         .collect())
 }
 
-/// `connector_setup_hint` through `validated_connector_setup_hint`: the hint
+/// The connector setup hint `validated_connector_setup_hint` accepts: the hint
 /// for a connector whose fields are all well formed, else null.
 pub(super) fn setup_hint(connector: &Connector, risk_classes: &[String]) -> Value {
     let display_name = connector.display_name();

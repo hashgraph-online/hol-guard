@@ -555,3 +555,31 @@ def test_a_save_names_its_catalog_revision_as_a_plain_count() -> None:
         with pytest.raises(LocalCliApiError) as raised:
             service._optional_revision({"mcp_catalog_revision": invalid}, "mcp_catalog_revision")
         assert raised.value.code == "invalid_mcp_catalog_revision"
+
+
+def test_a_paged_mcp_read_migrates_an_older_store_before_the_native_read(tmp_path: Path):
+    """The resident reads only the current schema; it never migrates one.
+
+    Every paged read used to run the migration itself before touching these
+    tables. An install that has not opened Guard since the provider tables
+    landed still carries an older marker, so the migration has to happen on
+    this side of the round trip or each page fails as an unreadable store.
+    """
+
+    import sqlite3
+
+    from codex_plugin_scanner.guard.store_local_cli_schema import _V10_CHECKSUM, LOCAL_CLI_SCHEMA_VERSION
+
+    store, identity = _store(tmp_path)
+    _publish(store, identity, "read")
+    with sqlite3.connect(store.path) as connection:
+        connection.execute("update local_cli_schema_migration set version = 10, checksum = ?", (_V10_CHECKSUM,))
+
+    skills = store.read_local_mcp_skills(identity.cli_id, offset=0, search="", expected_revision=None)
+    assert skills["entries"] == []
+    workflows = store.read_local_mcp_workflows(identity.cli_id)
+    assert isinstance(workflows, dict)
+
+    with store._connect() as connection:
+        version = connection.execute("select version from local_cli_schema_migration").fetchone()[0]
+    assert version == LOCAL_CLI_SCHEMA_VERSION

@@ -256,11 +256,6 @@ def _remember_answer(
         _remembered_asks[key] = (tuple(settled), witness)
 
 
-def clear_remembered_directory_trust() -> None:
-    with _memo_lock:
-        _remembered_asks.clear()
-
-
 def _round_trip(
     request: dict[str, Any],
     guard_home: Path,
@@ -363,6 +358,5 @@ __all__ = [
     "UNAVAILABLE_REASON",
     "DirectoryTrustVerdict",
     "NativeDirectoryTrustError",
-    "clear_remembered_directory_trust",
     "native_directory_trust",
 ]

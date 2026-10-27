@@ -17,20 +17,9 @@ def claude_guard_question_answer(store: GuardStore, payload: dict[str, object]) 
     review and what the answer saves. ``None`` means the call is not the
     question, so the ordinary post-tool review applies.
     """
-    from ..cli.commands_support_claude_approval import (
-        _claude_guard_question_verdict,
-        _persist_claude_guard_question_decision,
-    )
-    from ..cli.commands_support_hook_state import _load_single_claude_pending_permission
+    from ..cli.commands_support_claude_approval import _settle_claude_guard_question
 
-    pending_pair = _load_single_claude_pending_permission(store, payload)
-    if pending_pair is None:
-        return None
-    verdict = _claude_guard_question_verdict(payload, pending_pair[1])
-    if not verdict.is_question:
-        return None
-    _persist_claude_guard_question_decision(store, payload, pending_pair=pending_pair, verdict=verdict)
-    return {}
+    return None if _settle_claude_guard_question(store, payload) is None else {}
 
 
 def claude_turn_stop(store: GuardStore, payload: dict[str, object]) -> None:

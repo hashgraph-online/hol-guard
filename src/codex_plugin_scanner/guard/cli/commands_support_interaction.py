@@ -9,7 +9,6 @@ import importlib
 from typing import TYPE_CHECKING
 
 from ..browser_opener import open_browser_url
-from ..live_process_identity import CODEX_BROWSER_WAIT_PROCESS_KEY, process_identity_matches
 
 if TYPE_CHECKING:
     from ._commands_shared import _now
@@ -267,67 +266,6 @@ def _emit(command: str, payload: dict[str, object], as_json: bool) -> None:
 
     emit_guard_payload(command, payload, as_json)
 
-def _codex_can_use_browser_approval(args: argparse.Namespace, *, event_name: str, policy_action: str) -> bool:
-    return (
-        _canonical_harness_name(args.harness) == "codex"
-        and not getattr(args, "json", False)
-        and event_name in {"PreToolUse", "PostToolUse", "UserPromptSubmit"}
-        and policy_action in {"review", "require-reapproval"}
-    )
-
-def _codex_json_bridge_can_use_browser_approval(
-    args: argparse.Namespace,
-    *,
-    event_name: str,
-    policy_action: str,
-) -> bool:
-    # --json output changes rendering, not approval semantics: when the hook
-    # already has an authenticated daemon bridge for the queued request, the
-    # wait/revalidation contract still applies — except for PreToolUse, where
-    # the deny document is the terminal answer and the caller retries the
-    # action after resolving the queued approval. A worker-spawned bridge
-    # (codex_browser_wait_process in the payload) still owns the PreToolUse
-    # wait through the dedicated branch in _codex_hook_waits_for_browser_approval.
-    return (
-        _canonical_harness_name(args.harness) == "codex"
-        and bool(getattr(args, "json", False))
-        and event_name in {"PostToolUse", "UserPromptSubmit"}
-        and policy_action in {"review", "require-reapproval"}
-    )
-
-def _codex_hook_waits_for_browser_approval(
-    args: argparse.Namespace,
-    *,
-    event_name: str,
-    policy_action: str,
-    payload: Mapping[str, object] | None = None,
-    json_daemon_bridge: bool = False,
-) -> bool:
-    if (
-        _canonical_harness_name(args.harness) == "codex"
-        and event_name == "PreToolUse"
-        and policy_action in {"review", "require-reapproval"}
-        and _codex_bridge_wait_process(payload) is not None
-    ):
-        return True
-    return _codex_can_use_browser_approval(
-        args=args, event_name=event_name, policy_action=policy_action
-    ) or (
-        json_daemon_bridge
-        and _codex_json_bridge_can_use_browser_approval(
-            args, event_name=event_name, policy_action=policy_action
-        )
-    )
-
-def _codex_bridge_wait_process(payload: Mapping[str, object] | None) -> dict[str, object] | None:
-    if not isinstance(payload, Mapping):
-        return None
-    process_identity: object = payload.get(CODEX_BROWSER_WAIT_PROCESS_KEY)
-    if isinstance(process_identity, dict) and process_identity_matches(process_identity):
-        return process_identity
-    return None
-
-
 def _attach_primary_approval_link(
     response_payload: dict[str, object],
     *,
@@ -392,10 +330,7 @@ def _preferred_approval_review_url(response_payload: Mapping[str, object], *, ha
 __all__ = [
     "_apps_disconnect_confirm_command", "_attach_primary_approval_link",
     "_build_cisco_scan_options",
-    "_codex_bridge_wait_process",
-    "_codex_can_use_browser_approval",
-    "_codex_hook_waits_for_browser_approval",
-    "_codex_json_bridge_can_use_browser_approval", "_emit",
+    "_emit",
     "_guard_cloud_app_error_payload", "_guard_cloud_app_urls",
     "_open_guard_cloud_app", "_policy_write_needs_approval_gate", "_policy_write_requires_approval_gate",
     "_preferred_approval_review_url", "_primary_approval_lookup_kwargs",

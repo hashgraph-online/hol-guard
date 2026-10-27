@@ -5,7 +5,9 @@ the coverage hint, read out of the evidence the review paused on, and the allow
 hint, stored only when the command reviewed again under the admitted snapshot
 is exactly the review that paused and enabling the hinted permissions would
 really settle it. Python sends the hook payload and the paused result and
-shape-checks the answer; there is no Python evaluator and no fallback. A reply
+shape-checks the answer; there is no Python evaluator and no fallback. For a
+review that waits on a local CLI's setup, the same op answers the connector
+setup hint, with the risk classes the paused evidence observed. A reply
 that is not a bound, strictly decoded ``ok`` means no hint, so the dashboard
 never promises an Extensions change that would not work.
 """
@@ -21,10 +23,9 @@ from typing import TYPE_CHECKING, Any, Final
 
 from ..native_daemon_route import _decide
 from ..native_resident_decision import ResidentOperation
-from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from ..runtime.extension_allow_hint import (
-    connector_setup_hint,
     hint_authority_admitted,
+    validated_connector_setup_hint,
     validated_extension_allow_hint,
 )
 from ..runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
@@ -34,7 +35,6 @@ from ..runtime.extension_coverage_hint import (
 )
 from .hook_native_exact_action import launch_cwd as _launch_cwd
 from .hook_request_parsing import pre_tool_input
-from .native_review_connector import connector_display_name
 
 if TYPE_CHECKING:
     from ..local_cli_hook import SetupConnector
@@ -136,6 +136,7 @@ def _ask_review_hint(
     home_dir: Path | None,
     budget_seconds: float,
     paused: Mapping[str, object] | None = None,
+    connector: SetupConnector | None = None,
 ) -> dict[str, object] | None:
     """The resident's hints for ``payload``'s command, shape-checked, or None."""
 
@@ -151,6 +152,14 @@ def _ask_review_hint(
     }
     if paused is not None:
         query["paused"] = dict(paused)
+    if connector is not None:
+        query["connector"] = {
+            "cli_id": connector.cli_id,
+            "identity_hash": connector.identity_hash,
+            "name": connector.name,
+            "surface": connector.surface,
+            "queue_group_id": connector.queue_group_id,
+        }
     parsed: list[dict[str, object] | None] = []
 
     def validate(answer: dict[str, Any]) -> None:
@@ -158,7 +167,11 @@ def _ask_review_hint(
         if hint is None:
             parsed.append(None)
             return
-        checked = with_extension_coverage(validated_extension_allow_hint(hint), validated_extension_coverage_hint(hint))
+        checked = (
+            validated_connector_setup_hint(hint)
+            if connector is not None
+            else with_extension_coverage(validated_extension_allow_hint(hint), validated_extension_coverage_hint(hint))
+        )
         if checked is None:
             raise _OPERATION.fail(_OPERATION.invalid)
         parsed.append(checked)
@@ -177,26 +190,6 @@ def _ask_review_hint(
         # The hint is optional. A failure here must never affect the review itself.
         return None
     return parsed[0]
-
-
-def _observed_risk_classes(native_result: Mapping[str, object]) -> list[str]:
-    """Risk classes of the catalog rules the native evidence observed in this command.
-
-    A critical rule or a destructive shell rule also records ``destructive`` so the
-    connector recommendation keeps its caution for a pending delete.
-    """
-
-    evidence = native_result.get("command_extensions")
-    observations = evidence.get("observations") if isinstance(evidence, Mapping) else None
-    classes: list[str] = []
-    for observation in observations if isinstance(observations, list) else []:
-        rule_id = observation.get("rule_id") if isinstance(observation, Mapping) else None
-        rule = BUILT_IN_COMMAND_EXTENSION_REGISTRY.get_rule(rule_id) if isinstance(rule_id, str) else None
-        if rule is not None:
-            classes.extend(rule.risk_classes)
-            if rule.severity == "critical" or "destructive_shell" in rule.risk_classes:
-                classes.append("destructive")
-    return sorted(set(classes))
 
 
 def native_review_hint(
@@ -220,21 +213,20 @@ def native_review_hint(
     this one.
     """
 
-    if connector is not None:
-        return connector_setup_hint(
-            cli_id=connector.cli_id,
-            identity_hash=connector.identity_hash,
-            display_name=connector_display_name(connector),
-            surface=connector.surface,
-            risk_classes=_observed_risk_classes(native_result),
-        )
     guard_home = getattr(store, "guard_home", None)
-    # Both hints are read out of the extension evidence the review paused on;
-    # without it there is nothing to ask for.
-    if not isinstance(guard_home, Path) or not isinstance(native_result.get("command_extensions"), Mapping):
+    if not isinstance(guard_home, Path):
+        return None
+    # Both extension hints are read out of the extension evidence the review
+    # paused on; without it there is nothing to ask for. The connector hint
+    # needs only the connector, and names no risk class without evidence.
+    if connector is None and not isinstance(native_result.get("command_extensions"), Mapping):
         return None
     budget = _DEFAULT_BUDGET_SECONDS if deadline is None else deadline - time.monotonic() - _SAFETY_MARGIN_SECONDS
-    if budget < _MIN_BUDGET_SECONDS:
+    # The connector hint is what resolves the row once setup finishes, and the
+    # resident builds it from a catalog lookup, not a second review, so it asks
+    # with whatever time is left below the usual minimum. It never asks into
+    # the margin kept for persisting the review and answering the hook.
+    if budget < _MIN_BUDGET_SECONDS and (connector is None or budget <= 0):
         return None
     return _ask_review_hint(
         payload,
@@ -243,6 +235,7 @@ def native_review_hint(
         home_dir=home_dir,
         budget_seconds=budget,
         paused=native_result,
+        connector=connector,
     )
 
 

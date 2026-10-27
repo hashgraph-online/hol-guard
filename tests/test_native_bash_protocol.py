@@ -11,7 +11,6 @@ from unittest.mock import Mock
 import pytest
 
 from codex_plugin_scanner.guard import native_bash_protocol as bridge
-from codex_plugin_scanner.guard.native_bash_reply import validate_executed, validate_prepared
 from codex_plugin_scanner.guard.runtime import bound_bash_sink as sink
 
 
@@ -132,42 +131,6 @@ def test_runtime_without_pending_lineage_capability_is_not_used(monkeypatch):
     assert bridge.runtime_status() is status
 
 
-@pytest.mark.parametrize("mutation", ["missing", "operation", "id", "expiry", "unknown", "grant"])
-def test_pending_review_cannot_masquerade_as_authorization(mutation):
-    request = _request()
-    result = _result(request)
-    result.update(
-        status="error",
-        code="native_bash_consent_required",
-        payload=None,
-        operation=None,
-        dispatch_acknowledged=False,
-        review_lineage={
-            "schema": "guard-native-bash-review-lineage.v1",
-            "lineage_id": "c" * 64,
-            "operation_id": request["operation_id"],
-            "artifact_hash": "guard-approval-context:v1:fixture",
-            "created_at_ms": 1000,
-            "expires_at_ms": 86_401_000,
-        },
-    )
-    validate_executed(result, request)
-    if mutation == "missing":
-        result["review_lineage"] = None
-    elif mutation == "grant":
-        result["grant_claimed"] = True
-    else:
-        key, value = {
-            "operation": ("operation_id", "another-operation-0001"),
-            "id": ("lineage_id", "invalid"),
-            "expiry": ("expires_at_ms", 1001),
-            "unknown": ("allow", True),
-        }[mutation]
-        result["review_lineage"][key] = value
-    with pytest.raises(bridge.NativeBashError):
-        validate_executed(result, request)
-
-
 @pytest.mark.parametrize("failure", ["timeout", "output", "containment", "exit", "binding"])
 def test_uncertain_transport_never_reissues_or_changes_operation(transport, tmp_path, failure):
     runner, request = transport
@@ -200,68 +163,19 @@ def test_non_strict_responses_are_rejected(raw):
         bridge.decode(raw)
 
 
-@pytest.mark.parametrize("mutation", ["bool", "operation", "dispatch", "completion", "state", "authority"])
-def test_native_execution_results_cannot_forge_success_shape(mutation):
-    request = _request()
-    result = _result(request)
-    if mutation == "bool":
-        result["grant_claimed"] = 1
-    elif mutation == "operation":
-        result["operation"]["operation_id"] = "different-operation"
-    elif mutation == "dispatch":
-        result["dispatch_acknowledged"] = False
-    elif mutation == "completion":
-        result["operation"]["completion"] = None
-    elif mutation == "state":
-        result["operation"]["state"] = {}
-    else:
-        result["operation"]["authorization"] = "saved_grant"
-    with pytest.raises(bridge.NativeBashError):
-        validate_executed(result, request)
-
-
-def test_replay_reports_completion_without_emitting_old_output():
+def test_replay_renders_completion_without_emitting_old_output():
     request = _request()
     result = _result(request)
     result.update(
         status="recorded", code="native_bash_already_completed_output_not_retained", replayed=True, payload=None
     )
-    validate_executed(result, request)
     output, errors = io.StringIO(), io.StringIO()
     assert sink.render_result(result, output=output, errors=errors) == 7
     assert output.getvalue() == ""
     assert "output_not_retained" in errors.getvalue()
     result["operation"].update(state="uncertain", completion=None)
     result["code"] = "native_bash_operation_in_progress_or_uncertain"
-    validate_executed(result, request)
     assert sink.render_result(result, output=output, errors=errors) == 125
-
-
-@pytest.mark.parametrize(
-    "assurance",
-    [
-        "macos-readonly-root-framed-outputs-v1",
-        "macos-readonly-root-http-read-v1",
-        "macos-hardened-broker-v1",
-    ],
-)
-def test_prepare_requires_native_consent_flag_and_assurance(assurance):
-    payload = {
-        "artifact_id": bridge.ARTIFACT_ID,
-        "artifact_hash": "guard-approval-context:v1:fixture",
-        "assessment": [],
-        "consent_required": False,
-        "review": {"decision": {}, "receipt": {}},
-        "subject": {"schema": "guard.bash-subject.v1", "execution_assurance": assurance},
-    }
-    assert validate_prepared(payload) is payload
-    payload["subject"]["execution_assurance"] = "macos-readonly-root-unbounded-v1"
-    with pytest.raises(bridge.NativeBashError):
-        validate_prepared(payload)
-    payload["subject"]["execution_assurance"] = assurance
-    payload["consent_required"] = 0
-    with pytest.raises(bridge.NativeBashError):
-        validate_prepared(payload)
 
 
 @pytest.fixture
@@ -310,23 +224,6 @@ def test_missing_consent_reaches_native_journal_without_fabricating_a_grant(stor
     result = sink._authorization(store, _prepared(True), harness="omp", workspace=tmp_path)
     assert result == {"kind": "current_policy", "store_path": str(store.path)}
     store._claim_integrity_evidence.assert_not_called()
-
-
-def test_replay_can_report_previously_spent_once_authority_to_an_unprivileged_query():
-    request = _request()
-    result = _result(request)
-    result.update(
-        status="recorded",
-        code="native_bash_already_completed_output_not_retained",
-        replayed=True,
-        grant_claimed=True,
-        payload=None,
-    )
-    result["operation"]["authorization"] = "saved_grant"
-    validate_executed(result, request)
-    result["grant_claimed"] = False
-    with pytest.raises(bridge.NativeBashError):
-        validate_executed(result, request)
 
 
 def test_once_evidence_is_handed_to_native_without_spending_it(store, tmp_path):

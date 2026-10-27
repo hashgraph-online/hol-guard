@@ -150,7 +150,7 @@ def test_missing_native_fail_safe_codes_continue_mutating_pretool(tmp_path: Path
 
 
 def test_cursor_maps_before_write_file_to_a_write_pretooluse() -> None:
-    from codex_plugin_scanner.guard.adapters._modules.cursor.cursor_hook_payload import prepare_cursor_hook_payload
+    from tests.cursor_hook_payload_support import prepare_cursor_hook_payload
 
     mapped = prepare_cursor_hook_payload(
         {"hook_event_name": "beforeWriteFile", "file_path": "src/app.ts", "tool_name": "Read"}
@@ -230,10 +230,9 @@ def test_bounded_cli_failure_uses_fail_closed_pretool_responses() -> None:
     assert output["permissionDecision"] == "deny"
 
 
-def test_bounded_cli_cannot_finish_without_policy_action_denies_write() -> None:
-    from codex_plugin_scanner.guard.adapters.bounded_cli_hook_daemon import _daemon_response_to_native
+def test_bounded_cli_cannot_finish_without_policy_action_denies_write(native_bridge_render) -> None:
 
-    stdout, _stderr, code = _daemon_response_to_native(
+    stdout, _stderr, code = native_bridge_render(
         {"reason_code": "native_pre_tool_unavailable", "reason": "native miss"},
         harness="kimi",
         event_name="PreToolUse",
@@ -241,7 +240,7 @@ def test_bounded_cli_cannot_finish_without_policy_action_denies_write() -> None:
     payload = json.loads(stdout)
     assert code == 2
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-    invalid_stdout, _invalid_stderr, invalid_code = _daemon_response_to_native(
+    invalid_stdout, _invalid_stderr, invalid_code = native_bridge_render(
         {"policy_action": "invalid", "reason": "nope"},
         harness="kimi",
         event_name="PreToolUse",

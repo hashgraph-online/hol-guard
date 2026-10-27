@@ -412,19 +412,6 @@ def test_gr081_codex_native_runtime_returns_json_denial_for_yolo_shell_exfil(
     assert "combines sensitive data access with network transfer" in str(hook_output["permissionDecisionReason"])
 
 
-def test_gr081b_codex_reviewable_pretooluse_is_live_wait_candidate() -> None:
-    assert guard_commands_module._codex_hook_waits_for_browser_approval(
-        argparse.Namespace(harness="codex", json=False),
-        event_name="PreToolUse",
-        policy_action="review",
-        payload={
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Read",
-            "tool_input": {"path": "/workspace/project/.env"},
-        },
-    )
-
-
 @pytest.mark.usefixtures("native_hook_force")
 def test_gr082_claude_pretooluse_brands_native_prompt(tmp_path: Path) -> None:
     exit_code, output = _run_hook(

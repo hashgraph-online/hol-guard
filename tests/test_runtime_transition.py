@@ -968,7 +968,9 @@ def test_copilot_plan_restores_native_bindings_and_preserves_authority(
     workspace_enabled,
     previous_exists,
     frozen,
+    native_adapter_state_integrity_runtime,
 ):
+    del native_adapter_state_integrity_runtime
     from codex_plugin_scanner.guard.adapters.adapter_state_integrity import authenticate_adapter_state
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
@@ -1020,7 +1022,12 @@ def test_copilot_plan_restores_native_bindings_and_preserves_authority(
 
 
 @pytest.mark.parametrize("after_publication", [False, True])
-def test_changed_copilot_authority_prevents_any_transition_mutation(transition, after_publication):
+def test_changed_copilot_authority_prevents_any_transition_mutation(
+    transition,
+    after_publication,
+    native_adapter_state_integrity_runtime,
+):
+    del native_adapter_state_integrity_runtime
     from codex_plugin_scanner.guard.adapters.adapter_state_integrity import authenticate_adapter_state
     from codex_plugin_scanner.guard.adapters.base import HarnessContext
     from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter

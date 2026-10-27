@@ -1,6 +1,6 @@
 {
   "_comment": "Installed-acceptance expectations, held independently of the product's own hook contracts. The lane asserts against this file so that emptying or narrowing a product contract cannot make the lane pass by agreement. Update it deliberately when a harness genuinely changes shape, and say why in the pull request.",
-  "version": 2,
+  "version": 3,
   "harnesses": {
     "zcode": {
       "config": ".zcode/cli/config.json",
@@ -12,6 +12,7 @@
         "PostToolUse", "PostToolUseFailure", "Stop"
       ],
       "replay_event": "PreToolUse",
+      "replay_events": ["UserPromptSubmit"],
       "replay": true
     },
     "claude-code": {
@@ -36,6 +37,7 @@
       "hooks_key": "hooks",
       "minimum_guard_entries": 1,
       "replay_event": "PreToolUse",
+      "replay_events": ["UserPromptSubmit"],
       "replay": true
     },
     "omp": {
@@ -87,6 +89,26 @@
         "tool_input": {
           "command": "rg --line-number TODO src"
         },
+        "cwd": "{workspace}"
+      }
+    },
+    {
+      "id": "benign-prompt-submit",
+      "event": "UserPromptSubmit",
+      "expect": "allow",
+      "payload": {
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Finish the parser in src/main.py and run the tests.",
+        "cwd": "{workspace}"
+      }
+    },
+    {
+      "id": "benign-prompt-submit-names-a-file",
+      "event": "UserPromptSubmit",
+      "expect": "allow",
+      "payload": {
+        "hook_event_name": "UserPromptSubmit",
+        "prompt": "Read README.md and summarise what this project does.",
         "cwd": "{workspace}"
       }
     },

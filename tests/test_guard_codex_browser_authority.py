@@ -4,9 +4,6 @@ from __future__ import annotations
 
 import argparse
 
-import pytest
-
-from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli.commands import add_guard_root_parser
 from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
@@ -58,14 +55,3 @@ def _parse_guard_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     add_guard_root_parser(parser)
     return parser.parse_args(argv)
-
-
-@pytest.mark.parametrize("terminal_action", ["block", "sandbox-required"])
-def test_terminal_actions_are_not_browser_wait_candidates(terminal_action: str) -> None:
-    args = argparse.Namespace(harness="codex", json=False)
-
-    assert not guard_commands_module._codex_can_use_browser_approval(
-        args,
-        event_name="PostToolUse",
-        policy_action=terminal_action,
-    )

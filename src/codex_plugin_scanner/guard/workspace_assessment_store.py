@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import Any, Final
 
 from .store_workspace_assessment_schema import MAX_COVERAGE_JSON_BYTES, MAX_FINDINGS_JSON_BYTES
+from .workspace_assessment_carry import carry_unchecked_findings
 from .workspace_assessment_reads import (
     get_run,
     latest_assessed_run,
@@ -66,26 +67,8 @@ class RunOutcome:
     coverage: Mapping[str, object] | None = None
     findings: Sequence[Mapping[str, object]] = ()
     error_code: str | None = None
-
-
-def admit_worktree(store: Any, keys: WorktreeKeys, *, root: str, now_ms: int, resume: bool = True) -> bool:
-    """Admit a worktree; ``resume`` also unpauses one admitted before.
-
-    Without ``resume`` an already admitted worktree is left exactly as it is and
-    the call returns False, so an automatic admission never undoes a pause.
-    """
-
-    conflict = "update set private_root = excluded.private_root, paused = 0" if resume else "nothing"
-    with store._connect() as connection:
-        cursor = connection.execute(
-            f"""
-            insert into workspace_assessment_state (codebase_key, worktree_key, private_root, admitted_at_ms)
-            values (?, ?, ?, ?)
-            on conflict(codebase_key, worktree_key) do {conflict}
-            """,
-            (keys.codebase_key, keys.worktree_key, root, now_ms),
-        )
-        return cursor.rowcount == 1
+    # (ecosystem, name, version) of every package the audit read; None if it stopped early.
+    listed_packages: frozenset[tuple[str, str, str]] | None = None
 
 
 def set_paused(store: Any, keys: WorktreeKeys, *, paused: bool) -> bool:
@@ -311,6 +294,9 @@ def finish(store: Any, run: ClaimedRun, outcome: RunOutcome, *, now_ms: int) -> 
 
     if outcome.state not in _FINISHED_STATES:
         raise ValueError("invalid workspace assessment outcome state")
+    if outcome.state == "partial":
+        # Only one run of a worktree runs at a time, so its last run stays put.
+        outcome = carry_unchecked_findings(outcome, latest_assessed_run(store, run.keys))
     coverage_json = _bounded_json(dict(outcome.coverage or {}), MAX_COVERAGE_JSON_BYTES)
     findings_json = _bounded_json([dict(item) for item in outcome.findings], MAX_FINDINGS_JSON_BYTES)
     with store._connect() as connection:
@@ -474,7 +460,6 @@ __all__ = [
     "ClaimedRun",
     "RunOutcome",
     "WorktreeKeys",
-    "admit_worktree",
     "cancel",
     "claim_next",
     "enqueue",

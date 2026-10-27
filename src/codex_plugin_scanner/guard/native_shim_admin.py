@@ -321,38 +321,6 @@ def package_shim_status(context: HarnessContextLike, *, path_env: str | None = N
     return _object("status", context, path_env=path_env)
 
 
-def package_shim_digest_binding_sink(
-    context: HarnessContextLike,
-    *,
-    manager: str,
-    executable: str,
-    command: str | None,
-    workspace_dir: Path | None = None,
-    path_env: str | None = None,
-) -> bool:
-    """Does a healthy installed shim own this external-archive download?
-
-    The shim can bind an approval to a digest because it performs the download
-    itself, so it owns the approval only when the command is a bare launch of
-    that shim. The resident parses the command and resolves the paths; a caller
-    that cannot reach it leaves the approval with the user.
-    """
-
-    result = _object(
-        "digest_binding_sink",
-        context,
-        manager=manager,
-        executable=executable,
-        command=command,
-        workspace_dir=workspace_dir,
-        path_env=path_env,
-    )
-    bound = result.get("bound")
-    if not isinstance(bound, bool):
-        raise NativeShimAdminError("native_shim_admin_invalid_result")
-    return bound
-
-
 def package_shim_dashboard_status(context: HarnessContextLike) -> dict[str, object]:
     return _object("dashboard_status", context)
 

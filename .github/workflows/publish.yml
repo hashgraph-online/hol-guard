@@ -987,7 +987,7 @@ jobs:
         env:
           CHANNEL: ${{ steps.version.outputs.channel }}
         run: |
-          uv run --no-sync twine check dist/*
+          uv run --no-sync --with 'twine==7.0.0' twine check dist/*
           python3 scripts/verify_guard_wheel_entrypoints.py dist
           # Stable builds only: the version is stamped by now, so --release compares every
           # coverage record's Guard version against the build being published. Alpha and
@@ -1576,7 +1576,7 @@ jobs:
             --version "$VERSION" \
             --source-sha "$SOURCE_SHA" \
             --dist-dir dist
-          uv run --no-sync twine check dist/*
+          uv run --no-sync --with 'twine==7.0.0' twine check dist/*
       - name: Record aggregate immutable hashes
         run: |
           find dist -maxdepth 1 -type f -print0 | sort -z | xargs -0 sha256sum > distribution-sha256-native.txt
@@ -2174,36 +2174,59 @@ jobs:
         if: steps.pypi.outputs.hol_guard_upload == 'true'
         with:
           packages-dir: upload-dist-hol-guard/
+      - name: Skip plugin-scanner when its PyPI project is over quota
+        id: scanner_quota
+        if: steps.pypi.outputs.plugin_scanner_upload == 'true' && needs.build.outputs.release_train == 'main'
+        run: |
+          set -euo pipefail
+          quota_output=$(uv run --with packaging==25.0 python scripts/pypi_project_storage.py \
+            --project plugin-scanner --pending-dir dist-plugin-scanner)
+          printf '%s\n' "$quota_output"
+          if jq -e '.over_limit == true' <<< "$quota_output" >/dev/null; then
+            echo "blocked=true" >> "$GITHUB_OUTPUT"
+            echo "::warning title=plugin-scanner publication skipped::plugin-scanner was not uploaded because the PyPI project limit is reached. hol-guard publication continues."
+          else
+            echo "blocked=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Publish plugin-scanner to PyPI
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
-        if: steps.pypi.outputs.plugin_scanner_upload == 'true'
+        if: steps.pypi.outputs.plugin_scanner_upload == 'true' && steps.scanner_quota.outputs.blocked != 'true'
         with:
           packages-dir: dist-plugin-scanner/
       - name: Remove generated upload attestations
         run: rm -f upload-dist-hol-guard/*.publish.attestation dist-plugin-scanner/*.publish.attestation
       - name: Download and verify exact PyPI artifacts
         env:
+          SCANNER_QUOTA_BLOCKED: ${{ steps.scanner_quota.outputs.blocked }}
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
           VERSION: ${{ needs.build.outputs.version }}
         run: |
+          scanner_blocked=false
+          if [[ "${SCANNER_QUOTA_BLOCKED}" == "true" ]]; then
+            scanner_blocked=true
+          fi
           for attempt in {1..60}; do
             if ! guard_result=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
               inspect-release --registry pypi --project hol-guard --version "$VERSION"); then
               exit 1
             fi
-            if ! scanner_result=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
-              verify-release --registry pypi --project plugin-scanner --version "$VERSION" \
-              --dist-dir dist-plugin-scanner --download-dir verified-pypi-plugin-scanner); then
-              exit 1
-            fi
             guard_status=$(jq -r '.status' <<< "$guard_result")
-            scanner_status=$(jq -r '.status' <<< "$scanner_result")
-            if [[ "$guard_status" == "present" && "$scanner_status" == "exact" ]]; then
+            if [[ "$scanner_blocked" == "true" ]]; then
+              scanner_status=skipped
+            else
+              if ! scanner_result=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
+                verify-release --registry pypi --project plugin-scanner --version "$VERSION" \
+                --dist-dir dist-plugin-scanner --download-dir verified-pypi-plugin-scanner); then
+                exit 1
+              fi
+              scanner_status=$(jq -r '.status' <<< "$scanner_result")
+            fi
+            if [[ "$guard_status" == "present" && ( "$scanner_status" == "exact" || "$scanner_blocked" == "true" ) ]]; then
               uv run --with packaging==25.0 python scripts/retry_verify_published.py --registry pypi --version "$VERSION" --source-sha "$SOURCE_SHA" --dist-dir dist-hol-guard --artifact-set pure || exit 1
               break
             fi
             if [[ "$guard_status" != "absent" && "$guard_status" != "present" && "$guard_status" != "pending" ]] || \
-              [[ "$scanner_status" != "absent" && "$scanner_status" != "exact" ]] || \
+              [[ "$scanner_blocked" != "true" && "$scanner_status" != "absent" && "$scanner_status" != "exact" ]] || \
               [[ "$attempt" == "60" ]]; then
               echo "PyPI did not expose the exact release artifacts" >&2
               exit 1
@@ -2214,10 +2237,13 @@ jobs:
           guard_wheels=(dist-hol-guard/*-py3-none-any.whl)
           [[ "${#guard_wheels[@]}" == "1" ]]
           guard_wheel="${guard_wheels[0]}"
-          scanner_wheel=$(jq -r '.install_paths[] | select(endswith(".whl"))' <<< "$scanner_result")
-          [[ -n "$guard_wheel" && -n "$scanner_wheel" ]]
+          [[ -n "$guard_wheel" ]]
           [[ "$(uv tool run --from "$guard_wheel" hol-guard --version)" == "hol-guard $VERSION" ]]
-          [[ "$(uv tool run --from "$scanner_wheel" plugin-scanner --version)" == "plugin-scanner $VERSION" ]]
+          if [[ "$scanner_blocked" != "true" ]]; then
+            scanner_wheel=$(jq -r '.install_paths[] | select(endswith(".whl"))' <<< "$scanner_result")
+            [[ -n "$scanner_wheel" ]]
+            [[ "$(uv tool run --from "$scanner_wheel" plugin-scanner --version)" == "plugin-scanner $VERSION" ]]
+          fi
 
   release-unpublished-alpha-reservation:
     name: Release unpublished alpha reservation

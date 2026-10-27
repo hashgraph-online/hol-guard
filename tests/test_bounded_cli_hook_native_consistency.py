@@ -5,20 +5,23 @@ import json
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.bounded_cli_hook_daemon import _daemon_response_to_native
 from codex_plugin_scanner.guard.daemon.hook_fail_closed import render_pre_tool_review
 
 
-def _translate(payload: dict[str, object], *, harness: str = "grok", event: str = "PreToolUse"):
-    stdout, stderr, code = _daemon_response_to_native(payload, harness=harness, event_name=event)
-    return json.loads(stdout), stderr, code
+@pytest.fixture
+def _translate(native_bridge_render):
+    def translate(payload: dict[str, object], *, harness: str = "grok", event: str = "PreToolUse"):
+        stdout, stderr, code = native_bridge_render(payload, harness=harness, event_name=event)
+        return json.loads(stdout), stderr, code
+
+    return translate
 
 
 @pytest.mark.parametrize(
     ("harness", "expected_code"),
     [("grok", 2), ("openclaw", 0), ("kimi", 2), ("pi", 2), ("zcode", 2), ("devin", 2)],
 )
-def test_policy_block_cannot_be_weakened_by_native_allow(harness: str, expected_code: int) -> None:
+def test_policy_block_cannot_be_weakened_by_native_allow(harness: str, expected_code: int, _translate) -> None:
     payload, _stderr, code = _translate(
         {
             "decision": "allow",
@@ -44,7 +47,7 @@ def test_policy_block_cannot_be_weakened_by_native_allow(harness: str, expected_
     }
 
 
-def test_zcode_review_pretool_exits_zero_and_keeps_ask_envelope() -> None:
+def test_zcode_review_pretool_exits_zero_and_keeps_ask_envelope(_translate) -> None:
     # ZCode discards stdout JSON when a hook exits 2, so the review tier must
     # exit 0 for its ask envelope to reach ZCode's native permission prompt.
     payload, stderr, code = _translate(
@@ -68,7 +71,7 @@ def test_zcode_review_pretool_exits_zero_and_keeps_ask_envelope() -> None:
     assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
 
 
-def test_zcode_block_pretool_keeps_blocking_exit_with_stderr_reason() -> None:
+def test_zcode_block_pretool_keeps_blocking_exit_with_stderr_reason(_translate) -> None:
     payload, stderr, code = _translate(
         {
             "decision": "allow",
@@ -84,7 +87,7 @@ def test_zcode_block_pretool_keeps_blocking_exit_with_stderr_reason() -> None:
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
-def test_zcode_authority_block_stderr_carries_remediation() -> None:
+def test_zcode_authority_block_stderr_carries_remediation(_translate) -> None:
     _payload, stderr, code = _translate(
         {
             "decision": "allow",
@@ -96,10 +99,12 @@ def test_zcode_authority_block_stderr_carries_remediation() -> None:
     )
 
     assert code == 2
-    assert "hol-guard command controls recover-authority" in stderr
+    # The fixture home is not the default, so the command names it with --guard-home.
+    assert "hol-guard command --guard-home " in stderr
+    assert " controls recover-authority" in stderr
 
 
-def test_zcode_prompt_blocks_keep_blocking_exit() -> None:
+def test_zcode_prompt_blocks_keep_blocking_exit(_translate) -> None:
     _payload, _stderr, code = _translate(
         {"decision": "block", "policy_action": "review", "reason": "Prompt review."},
         harness="zcode",
@@ -108,7 +113,7 @@ def test_zcode_prompt_blocks_keep_blocking_exit() -> None:
     assert code == 2
 
 
-def test_zcode_native_review_renderer_asks_and_exits_zero() -> None:
+def test_zcode_native_review_renderer_asks_and_exits_zero(_translate) -> None:
     # The daemon worker renders review-tier PreToolUse responses through
     # the pre-tool review renderer; for zcode that envelope must
     # ask and the bridge must exit 0 so zcode opens its permission prompt.
@@ -125,7 +130,7 @@ def test_zcode_native_review_renderer_asks_and_exits_zero() -> None:
     assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
 
 
-def test_zcode_sandbox_required_envelope_denies_with_exit_two() -> None:
+def test_zcode_sandbox_required_envelope_denies_with_exit_two(_translate) -> None:
     payload, stderr, code = _translate(
         {"policy_action": "sandbox-required", "reason": "Sandbox required."}, harness="zcode"
     )
@@ -136,7 +141,7 @@ def test_zcode_sandbox_required_envelope_denies_with_exit_two() -> None:
     assert stderr == "Sandbox required."
 
 
-def test_zcode_block_without_reason_still_writes_stderr() -> None:
+def test_zcode_block_without_reason_still_writes_stderr(_translate) -> None:
     payload, stderr, code = _translate(
         {"decision": "allow", "policy_action": "block", "hookSpecificOutput": {"hookEventName": "PreToolUse"}},
         harness="zcode",
@@ -147,7 +152,7 @@ def test_zcode_block_without_reason_still_writes_stderr() -> None:
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
-def test_native_deny_promotes_allow_policy_to_block() -> None:
+def test_native_deny_promotes_allow_policy_to_block(_translate) -> None:
     payload, _stderr, code = _translate(
         {
             "decision": "allow",
@@ -168,7 +173,7 @@ def test_native_deny_promotes_allow_policy_to_block() -> None:
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
-def test_review_denial_is_byte_semantically_preserved_and_waitable() -> None:
+def test_review_denial_is_byte_semantically_preserved_and_waitable(_translate) -> None:
     original = {
         "decision": "deny",
         "policy_action": "review",
@@ -188,7 +193,7 @@ def test_review_denial_is_byte_semantically_preserved_and_waitable() -> None:
     assert code == 2
 
 
-def test_review_policy_repairs_native_allow_without_losing_metadata() -> None:
+def test_review_policy_repairs_native_allow_without_losing_metadata(_translate) -> None:
     payload, _stderr, code = _translate(
         {
             "decision": "allow",
@@ -214,7 +219,7 @@ def test_review_policy_repairs_native_allow_without_losing_metadata() -> None:
 
 
 @pytest.mark.parametrize("policy_action", ["allow", "warn"])
-def test_watch_and_recording_native_allow_are_preserved(policy_action: str) -> None:
+def test_watch_and_recording_native_allow_are_preserved(policy_action: str, _translate) -> None:
     original = {
         "decision": "allow",
         "policy_action": policy_action,
@@ -231,14 +236,14 @@ def test_watch_and_recording_native_allow_are_preserved(policy_action: str) -> N
     assert (stderr, code) == ("", 0)
 
 
-def test_recording_only_allow_without_policy_metadata_is_preserved() -> None:
+def test_recording_only_allow_without_policy_metadata_is_preserved(_translate) -> None:
     payload, stderr, code = _translate({"decision": "allow"})
 
     assert payload == {"decision": "allow"}
     assert (stderr, code) == ("", 0)
 
 
-def test_top_level_deny_cannot_be_masked_by_nested_allow() -> None:
+def test_top_level_deny_cannot_be_masked_by_nested_allow(_translate) -> None:
     payload, _stderr, code = _translate(
         {
             "decision": "deny",
@@ -254,7 +259,7 @@ def test_top_level_deny_cannot_be_masked_by_nested_allow() -> None:
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
-def test_lifecycle_envelope_without_decision_is_unchanged() -> None:
+def test_lifecycle_envelope_without_decision_is_unchanged(_translate) -> None:
     original = {
         "policy_action": "block",
         "reason": "inventory unavailable",
@@ -292,7 +297,7 @@ def test_lifecycle_envelope_without_decision_is_unchanged() -> None:
         },
     ],
 )
-def test_present_invalid_authority_fails_closed_without_mutating_input(original: dict[str, object]) -> None:
+def test_present_invalid_authority_fails_closed_without_mutating_input(original: dict[str, object], _translate) -> None:
     before = copy.deepcopy(original)
 
     payload, _stderr, code = _translate(original)
@@ -305,7 +310,7 @@ def test_present_invalid_authority_fails_closed_without_mutating_input(original:
         assert hook_specific["permissionDecision"] == "deny"
 
 
-def test_lifecycle_present_invalid_authority_is_not_promoted_to_a_gate() -> None:
+def test_lifecycle_present_invalid_authority_is_not_promoted_to_a_gate(_translate) -> None:
     original = {
         "policy_action": "inventory-unavailable",
         "hookSpecificOutput": {
@@ -334,6 +339,7 @@ def test_restrictive_tool_policy_materializes_missing_native_authority(
     policy_action: str,
     expected_permission: str,
     expected_top: str | None,
+    _translate,
 ) -> None:
     original = {
         "policy_action": policy_action,
@@ -361,7 +367,7 @@ def test_restrictive_tool_policy_materializes_missing_native_authority(
     assert original == before
 
 
-def test_restrictive_policy_reconstructs_malformed_tool_envelope() -> None:
+def test_restrictive_policy_reconstructs_malformed_tool_envelope(_translate) -> None:
     original: dict[str, object] = {
         "decision": "allow",
         "policy_action": "block",
@@ -386,7 +392,7 @@ def test_restrictive_policy_reconstructs_malformed_tool_envelope() -> None:
 
 
 @pytest.mark.parametrize("harness", ["openclaw", "codex"])
-def test_invalid_present_policy_materializes_stdout_denial_for_tool_envelope(harness: str) -> None:
+def test_invalid_present_policy_materializes_stdout_denial_for_tool_envelope(harness: str, _translate) -> None:
     original = {
         "policy_action": "bogus",
         "reason": "Retain malformed-policy reason.",
@@ -412,7 +418,7 @@ def test_invalid_present_policy_materializes_stdout_denial_for_tool_envelope(har
 
 
 @pytest.mark.parametrize("policy_action", ["block", "review"])
-def test_restrictive_prompt_policy_materializes_top_level_block(policy_action: str) -> None:
+def test_restrictive_prompt_policy_materializes_top_level_block(policy_action: str, _translate) -> None:
     original = {
         "policy_action": policy_action,
         "reason": "Prompt policy reason.",
@@ -428,7 +434,7 @@ def test_restrictive_prompt_policy_materializes_top_level_block(policy_action: s
     assert code == 2
 
 
-def test_devin_permission_request_review_blocks_with_top_level_decision() -> None:
+def test_devin_permission_request_review_blocks_with_top_level_decision(_translate) -> None:
     payload, stderr, code = _translate(
         {"policy_action": "review", "reason": "Needs review."},
         harness="devin",
@@ -440,7 +446,7 @@ def test_devin_permission_request_review_blocks_with_top_level_decision() -> Non
     assert stderr == "Needs review."
 
 
-def test_devin_pretooluse_allow_has_no_decision_key() -> None:
+def test_devin_pretooluse_allow_has_no_decision_key(_translate) -> None:
     payload, _stderr, code = _translate(
         {"policy_action": "allow", "reason": "Allowed."},
         harness="devin",

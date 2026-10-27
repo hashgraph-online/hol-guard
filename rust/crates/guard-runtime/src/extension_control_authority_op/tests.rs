@@ -376,6 +376,103 @@ fn an_abandoned_prepare_is_asked_about_once_then_stops_holding_the_read_back() {
 }
 
 #[test]
+fn an_interrupted_commit_is_resumed_instead_of_held_for_recovery() {
+    let home = Home::new();
+    let _ = home.commit(1, &catalog('a'), &[local(&catalog('a'))], "committed");
+    let _ = home.commit(2, &catalog('a'), &[], "prepared");
+    // The commit sealed the anchor over revision 2 and died before the row
+    // said so, which is the shape a crash between those two writes leaves.
+    let sealed: String = home
+        .db
+        .query_row(
+            "select snapshot_digest from extension_control_authority_transition where revision = 2",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let anchored = anchor(2, &sealed, "anchored");
+
+    let result = run(&read_request(&home, &catalog('a'), Some(anchored.clone())));
+    assert_eq!(result["action"]["action"], json!("resume_pending"));
+    assert_eq!(result["action"]["revision"], json!(2));
+    assert_eq!(result["action"]["current_revision"], json!(1));
+
+    // A caller that could not apply the resume asks again, and the read
+    // reports the state it found rather than asking a second time.
+    let retried = ExtensionControlAuthorityRequestV1 {
+        resume_attempted: true,
+        ..read_request(&home, &catalog('a'), Some(anchored.clone()))
+    };
+    assert_eq!(health(&run(&retried)), "recovery-required");
+
+    // The request that prepared that row settles it under the single-use
+    // proof it still holds, so its own read leaves the row alone.
+    let owner = ExtensionControlAuthorityRequestV1 {
+        rollback_attempted: true,
+        ..read_request(&home, &catalog('a'), Some(anchored))
+    };
+    assert_eq!(health(&run(&owner)), "recovery-required");
+}
+
+#[test]
+fn a_sealed_head_whose_phase_never_flipped_is_finished_instead_of_held() {
+    let home = Home::new();
+    let _ = home.commit(1, &catalog('a'), &[local(&catalog('a'))], "committed");
+    // The same interrupted commit one step later: the row and the snapshot
+    // both reached the sealed revision and the anchor died before it said the
+    // revision was closed, which is what a failed final anchor write leaves.
+    let sealed: String = home
+        .db
+        .query_row(
+            "select snapshot_digest from extension_control_authority_transition where revision = 1",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let anchored = anchor(1, &sealed, "anchored");
+
+    let result = run(&read_request(&home, &catalog('a'), Some(anchored.clone())));
+    assert_eq!(result["action"]["action"], json!("resume_pending"));
+    assert_eq!(result["action"]["revision"], json!(1));
+    assert_eq!(result["action"]["current_revision"], json!(1));
+
+    // A caller that could not apply the resume asks again, and the read
+    // reports the state it found rather than asking a second time.
+    let retried = ExtensionControlAuthorityRequestV1 {
+        resume_attempted: true,
+        ..read_request(&home, &catalog('a'), Some(anchored.clone()))
+    };
+    assert_eq!(health(&run(&retried)), "recovery-required");
+
+    // The request that prepared that row settles it under its own proof.
+    let owner = ExtensionControlAuthorityRequestV1 {
+        rollback_attempted: true,
+        ..read_request(&home, &catalog('a'), Some(anchored))
+    };
+    assert_eq!(health(&run(&owner)), "recovery-required");
+}
+
+#[test]
+fn a_prepared_anchor_over_the_head_is_still_held_for_recovery() {
+    let home = Home::new();
+    let _ = home.commit(1, &catalog('a'), &[local(&catalog('a'))], "committed");
+    let sealed: String = home
+        .db
+        .query_row(
+            "select snapshot_digest from extension_control_authority_transition where revision = 1",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    // Nothing has sealed a head to finish, so this one is left alone.
+    let prepared = anchor(1, &sealed, "prepared");
+    assert_eq!(
+        health(&run(&read_request(&home, &catalog('a'), Some(prepared)))),
+        "recovery-required"
+    );
+}
+
+#[test]
 fn catalog_change_needs_a_registry_then_the_manifest_then_migrates() {
     let home = Home::new();
     let anchor = home.commit(1, &catalog('a'), &[local(&catalog('a'))], "committed");

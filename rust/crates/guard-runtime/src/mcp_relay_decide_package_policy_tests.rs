@@ -214,9 +214,11 @@ fn an_evaluation_the_proxy_would_not_send_defers() {
 
 #[cfg(unix)]
 #[test]
-fn the_cached_advisory_feed_binds_the_approval_token() {
+fn a_cached_advisory_feed_leaves_the_approval_token_unchanged() {
+    // A feed refresh alone must not void a saved approval, so the token
+    // does not bind the cached bundle's feed snapshot.
     let (home, connection) = home("pkg-policy-feed");
-    let unbound = resolve(&home, &evaluation())
+    let without_feed = resolve(&home, &evaluation())
         .expect("the store is readable")
         .artifact_hash;
 
@@ -243,10 +245,10 @@ fn the_cached_advisory_feed_binds_the_approval_token() {
         )
         .unwrap();
 
-    let bound = resolve(&home, &evaluation())
+    let with_feed = resolve(&home, &evaluation())
         .expect("the store is readable")
         .artifact_hash;
-    assert_ne!(bound, unbound);
+    assert_eq!(with_feed, without_feed);
 }
 
 #[test]
@@ -267,7 +269,7 @@ fn the_metadata_the_context_binds_is_read_by_type() {
 
 #[cfg(unix)]
 #[test]
-fn a_malformed_cached_bundle_defers_rather_than_dropping_the_feed_binding() {
+fn a_malformed_cached_bundle_defers_like_the_proxy() {
     let (home, connection) = home("pkg-policy-feed-malformed");
     connection
         .execute_batch(
@@ -288,8 +290,8 @@ fn a_malformed_cached_bundle_defers_rather_than_dropping_the_feed_binding() {
         )
         .unwrap();
 
-    // `get_supply_chain_bundle` raises on this row, so a context token composed
-    // without the feed snapshot is not the one the proxy would bind.
+    // `get_supply_chain_bundle` raises on this row, so the proxy fails before
+    // composing a token and this lane defers the same way.
     assert_eq!(resolve(&home, &evaluation()).err(), Some(RESOLVE_FAILED));
 }
 

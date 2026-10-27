@@ -118,14 +118,6 @@ def is_loopback_approval_url(url: str) -> bool:
     return parsed.scheme in {"http", "https"} and host in _LOOPBACK_HOSTS
 
 
-def payload_has_unlinked_connector_setup_reason(payload: Mapping[str, object]) -> bool:
-    """Whether a hook response carries the default-mode connector setup reason."""
-
-    hook_output = payload.get("hookSpecificOutput")
-    nested = hook_output.get("permissionDecisionReason") if isinstance(hook_output, Mapping) else None
-    return any(is_unlinked_connector_setup_reason(value) for value in (payload.get("reason"), nested))
-
-
 def join_native_hook_reason(*values: object | None) -> str:
     """Join hook reason parts, keeping the tokenized Open-HOL-Guard copy when both exist.
 
@@ -168,32 +160,3 @@ def join_native_hook_reason(*values: object | None) -> str:
     if messages:
         return " ".join(messages)
     return _DEFAULT_HOOK_REASON
-
-
-def live_hook_approval_context(
-    response_payload: dict[str, object],
-    *,
-    harness: str,
-    guard_home: Path,
-) -> str | None:
-    """Build ephemeral hook copy with a loopback-only scoped dashboard token."""
-
-    if payload_has_unlinked_connector_setup_reason(response_payload):
-        return None
-    from .cli.commands_support_runtime_policy import _native_approval_center_context
-
-    message = _native_approval_center_context(response_payload, harness=harness)
-    if message is None:
-        return message
-    from .cli.commands_support_interaction import _preferred_approval_review_url
-
-    review_url = _preferred_approval_review_url(response_payload, harness=harness)
-    if review_url is None:
-        review_url = approval_review_url_from_payload(response_payload)
-    if review_url is None or not is_loopback_approval_url(review_url):
-        return message
-    tokenized = authenticated_approval_review_url(review_url, guard_home=guard_home)
-    if tokenized is None:
-        without_raw_url = _without_raw_approval_url(message, review_url)
-        return f"{without_raw_url} {_SIGNED_APPROVAL_LINK_UNAVAILABLE}".strip()
-    return message.replace(review_url, tokenized)

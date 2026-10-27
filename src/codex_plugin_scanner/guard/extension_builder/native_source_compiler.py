@@ -243,15 +243,6 @@ def find_packaged_source_compiler() -> Path:
     return _NATIVE_PACKAGE / _COMPILER_NAME
 
 
-def installed_compiler_identity() -> tuple[str, str]:
-    """Return release-bound source and implementation floors for data activation."""
-    manifest = _verify_manifest(_NATIVE_PACKAGE / _MANIFEST_NAME)
-    return (
-        _hex(manifest["source_sha"], length=_SHA40, field="source SHA"),
-        _hex(manifest["implementation_digest"], length=_SHA64, field="implementation digest"),
-    )
-
-
 def _canonical_request(request: Mapping[str, object]) -> bytes:
     if not isinstance(request, Mapping):
         raise NativeSourceCompilerError("compiler request must be an object")

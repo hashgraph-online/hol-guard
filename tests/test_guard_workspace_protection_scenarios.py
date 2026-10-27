@@ -32,6 +32,9 @@ from codex_plugin_scanner.guard import workspace_assessment_worker as worker
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHandler
+from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact
+from codex_plugin_scanner.guard.runtime.package_intent_common import build_package_request_artifact
+from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.daemon_control_patching import patch_daemon_global
 from tests.native_workspace import bind_workspace
@@ -188,6 +191,31 @@ def test_known_risk_is_reported_and_the_fixed_equivalent_stays_quiet(
     assert quiet["state"] == "partial"
     assert quiet["coverage"]["detectors"]["supply_chain"] == "incomplete"
     assert str(tmp_path) not in json.dumps(assessments.latest_assessed_runs(store))
+
+
+def test_a_background_finding_never_asks_and_the_package_firewall_keeps_its_own_decision(
+    tmp_path: Path, native_binary: None, offline: None, package_intent_native: Path
+) -> None:
+    clock = Clock()
+    store = _store(tmp_path)
+    root = tmp_path / "workspace"
+    _write_project(root, AFFECTED)
+    keys = _admit(store, root, clock)
+    assert _run_all(store, clock) == 1
+    [finding] = _minimist(_latest(store, keys))
+    assert finding["decision"] == "block"
+
+    # A blocking verdict found in the background is a dashboard finding. It
+    # opens no approval request, so ordinary work in the worktree stays quiet.
+    assert store.list_approval_requests(status=None, limit=None) == []
+
+    # The package firewall still decides a new install on its own authority.
+    intent = parse_package_intent("npm install minimist@^1.2.0", workspace=root)
+    assert intent is not None
+    artifact = build_package_request_artifact("codex", intent, config_path="codex.json", source_scope="project")
+    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=root)
+    assert result.decision == "block"
+    assert result.packages[0]["resolvedVersion"] == AFFECTED
 
 
 def test_feed_update_rematches_the_same_snapshot_once(tmp_path: Path, native_binary: None, offline: None) -> None:

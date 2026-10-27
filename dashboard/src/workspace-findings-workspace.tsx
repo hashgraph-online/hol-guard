@@ -14,7 +14,19 @@ import {
   type WorkspaceWorktree,
 } from "./workspace-findings-api";
 import { createLatestRefresh } from "./workspace-findings-refresh";
-import { Cell, HookFindingsTable, McpFindingsTable, RuntimeFindingsTable, SecretFindingsTable, SkillFindingsTable } from "./workspace-findings-tables";
+import {
+  CarriedNote,
+  Cell,
+  EditorTaskFindingsTable,
+  EvidenceNote,
+  HookFindingsTable,
+  McpFindingsTable,
+  PluginFindingsTable,
+  RuntimeFindingsTable,
+  SecretFindingsTable,
+  SkillFindingsTable,
+  WorkflowFindingsTable,
+} from "./workspace-findings-tables";
 import { FixCell, FixHistory, FixLoadError, FixReview, useWorktreeFixes, type WorktreeFixes } from "./workspace-fix-panel";
 
 const REFRESH_MS = 15_000;
@@ -41,6 +53,10 @@ const COVERAGE_REASONS: Record<string, string> = {
   skills_incomplete: "Some agent skills could not be read in full, so their instructions may not all be checked.",
   mcp_config_incomplete: "Some MCP server settings could not be read, so not every configured server was checked.",
   hook_config_incomplete: "Some agent hook settings could not be fully checked, so not every project hook was screened.",
+  plugin_manifest_incomplete: "Some agent plugin files could not be fully read, so not every plugin hook or MCP server was checked.",
+  ci_workflow_incomplete: "Some GitHub Actions workflows could not be fully read, so not every workflow was checked.",
+  editor_task_incomplete:
+    "Some editor task or dev container files could not be fully read, so not every file was checked.",
 };
 
 const FAILURE_REASONS: Record<string, string> = {
@@ -60,6 +76,9 @@ const DETECTOR_LABELS: Record<string, string> = {
   skill_content_v1: "Skill checking",
   mcp_config_v1: "MCP server checking",
   hook_config_v1: "Project hook checking",
+  plugin_manifest_v1: "Agent plugin checking",
+  ci_workflow_v1: "CI workflow checking",
+  editor_task_v1: "Editor task checking",
 };
 
 export type WorktreeStatus = { label: string; tone: TagTone; detail: string | null };
@@ -102,7 +121,10 @@ function decisionTone(decision: string): TagTone {
   return "slate";
 }
 
-const DECISION_LABELS: Record<string, string> = { block: "Blocked", ask: "Needs review", warn: "Warning" };
+// Package policy's verdict on this version. A finding in the worktree is not
+// itself a blocked action, and a saved approval or observe mode can still
+// change what happens at install.
+const DECISION_LABELS: Record<string, string> = { block: "Block", ask: "Ask", warn: "Warn" };
 
 export function WorkspaceFindingsWorkspace(props: {
   suggestedRoot: string;
@@ -332,6 +354,9 @@ function FindingsSections(props: FindingsSectionsProps) {
   const skills = props.findings.filter((finding) => finding.kind === "skill");
   const servers = props.findings.filter((finding) => finding.kind === "mcp");
   const hooks = props.findings.filter((finding) => finding.kind === "hook");
+  const plugins = props.findings.filter((finding) => finding.kind === "plugin");
+  const workflows = props.findings.filter((finding) => finding.kind === "workflow");
+  const editorTasks = props.findings.filter((finding) => finding.kind === "editor_task");
   if (props.findings.length === 0) {
     return <p className="text-sm text-slate-600">{emptyFindingsCopy(props.dependencyFilesFound, props.secretsChecked)}</p>;
   }
@@ -343,6 +368,9 @@ function FindingsSections(props: FindingsSectionsProps) {
       {skills.length > 0 && <SkillFindingsTable findings={skills} />}
       {servers.length > 0 && <McpFindingsTable findings={servers} />}
       {hooks.length > 0 && <HookFindingsTable findings={hooks} />}
+      {plugins.length > 0 && <PluginFindingsTable findings={plugins} />}
+      {workflows.length > 0 && <WorkflowFindingsTable findings={workflows} />}
+      {editorTasks.length > 0 && <EditorTaskFindingsTable findings={editorTasks} />}
     </div>
   );
 }
@@ -357,7 +385,7 @@ function FindingsTable({ findings, fixes }: { findings: WorkspaceFinding[]; fixe
             <th scope="col" className="px-3 py-2">Package</th>
             <th scope="col" className="px-3 py-2">Installed</th>
             <th scope="col" className="px-3 py-2">Fixed in</th>
-            <th scope="col" className="px-3 py-2">Decision</th>
+            <th scope="col" className="px-3 py-2">Policy</th>
             <th scope="col" className="px-3 py-2">Severity</th>
             <th scope="col" className="px-3 py-2">Advisories</th>
             <th scope="col" className="px-3 py-2">Fix</th>
@@ -372,8 +400,10 @@ function FindingsTable({ findings, fixes }: { findings: WorkspaceFinding[]; fixe
               </Cell>
               <Cell label="Installed"><Mono value={finding.packageVersion} /></Cell>
               <Cell label="Fixed in"><Mono value={finding.fixVersion} fallback="No fix yet" /></Cell>
-              <Cell label="Decision">
+              <Cell label="Policy">
                 <Tag tone={decisionTone(finding.decision)}>{DECISION_LABELS[finding.decision] ?? finding.decision}</Tag>
+                <EvidenceNote finding={finding} />
+                <CarriedNote finding={finding} />
               </Cell>
               <Cell label="Severity"><span className="capitalize text-slate-700">{finding.severity}</span></Cell>
               <Cell label="Advisories" wide>

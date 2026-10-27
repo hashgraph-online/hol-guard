@@ -2,7 +2,8 @@
 
 Rust reads the Guard home and workspace files, composes the managed policy this
 client resolved, and coerces every value. It also validates and writes the
-dashboard settings, the update channel and the settings reset. This module only
+dashboard settings, the update channel and the settings reset, resolves risk
+actions and composes synced and managed policy onto a loaded config. This module only
 spawns the runtime, fails closed when it is unavailable, and keeps a
 stat-validated memo so an unchanged configuration is not reloaded.
 """
@@ -27,6 +28,9 @@ GUARD_CONFIG_LOAD_TIMEOUT_SECONDS = 10.0
 GUARD_CONFIG_UPDATE_COMMAND = "guard-config-update"
 GUARD_CONFIG_UPDATE_FEATURE = "native-guard-config-update-v1"
 GUARD_CONFIG_UPDATE_SCHEMA = "guard-config-update.v1"
+GUARD_CONFIG_RESOLVE_COMMAND = "guard-config-resolve"
+GUARD_CONFIG_RESOLVE_FEATURE = "native-guard-config-resolve-v1"
+GUARD_CONFIG_RESOLVE_SCHEMA = "guard-config-resolve.v1"
 # Home, two workspace files and a managed policy are each bounded at 1 MiB, so
 # the composed response may exceed the default one-shot output allowance.
 GUARD_CONFIG_LOAD_OUTPUT_LIMIT_BYTES = 8 * 1024 * 1024
@@ -36,6 +40,9 @@ WORKSPACE_CONFIG_FILENAMES = (".ai-plugin-scanner-guard.toml", ".hol-guard.toml"
 _RACY_WINDOW_NS = 2_000_000_000
 _MEMO_LIMIT = 64
 _MEMO: OrderedDict[str, dict[str, Any]] = OrderedDict()
+# Resolutions are pure functions of their request, so one per distinct request
+# and runtime identity is kept.
+_RESOLVE_MEMO: OrderedDict[str, dict[str, Any]] = OrderedDict()
 _MEMO_LOCK = threading.Lock()
 
 
@@ -219,6 +226,65 @@ def update_native_guard_config(
     return cast("dict[str, Any] | None", previous)
 
 
+def resolve_native_guard_config(op: str, fields: Mapping[str, object]) -> dict[str, Any]:
+    """Return the native answer for one decision derived from a loaded config.
+
+    ``risk_actions`` resolves every risk class for one harness; ``overlay``
+    composes a synced policy payload and the managed policy onto the loaded
+    fields. Fails closed when the runtime is unavailable or answers badly.
+    """
+
+    request_text = json.dumps(
+        {"schema": GUARD_CONFIG_RESOLVE_SCHEMA, "op": op, **fields},
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    deadline = time.monotonic() + GUARD_CONFIG_LOAD_TIMEOUT_SECONDS
+    path, runtime_sha = _runtime_identity(deadline, GUARD_CONFIG_RESOLVE_FEATURE)
+    # Prefixed so a resolution can never share a flight with a load.
+    key = f"resolve\0{runtime_sha}\0{path}\0{request_text}"
+    with _MEMO_LOCK:
+        cached = _RESOLVE_MEMO.get(key)
+        if cached is not None:
+            _RESOLVE_MEMO.move_to_end(key)
+            return cast("dict[str, Any]", json.loads(json.dumps(cached)))
+        flight = _FLIGHTS.get(key)
+        leader = flight is None
+        if flight is None:
+            flight = _Flight()
+            _FLIGHTS[key] = flight
+    if not leader:
+        # Identical resolutions arriving together share one process; a waiter
+        # whose leader failed or outlived its deadline resolves for itself.
+        flight.done.wait(max(0.0, deadline - time.monotonic()))
+        shared = flight.config
+        if shared is not None:
+            return cast("dict[str, Any]", json.loads(json.dumps(shared)))
+        return _spawn_resolve(request_text, path, deadline)
+    try:
+        result = _spawn_resolve(request_text, path, deadline)
+        flight.config = cast("dict[str, Any]", json.loads(json.dumps(result)))
+        with _MEMO_LOCK:
+            _RESOLVE_MEMO[key] = json.loads(json.dumps(result))
+            while len(_RESOLVE_MEMO) > _MEMO_LIMIT:
+                _RESOLVE_MEMO.popitem(last=False)
+        return result
+    finally:
+        with _MEMO_LOCK:
+            _FLIGHTS.pop(key, None)
+        flight.done.set()
+
+
+def _spawn_resolve(request_text: str, path: Path, deadline: float) -> dict[str, Any]:
+    response = _run(GUARD_CONFIG_RESOLVE_COMMAND, request_text, path, deadline)
+    if response.get("ok") is not True:
+        _raise_failure(response)
+    result = response.get("result")
+    if not isinstance(result, dict):
+        raise ConfigFileTrustError("native_guard_config_invalid")
+    return cast("dict[str, Any]", result)
+
+
 def load_native_guard_config(
     guard_home: Path,
     workspace: Path | None,
@@ -290,3 +356,4 @@ def _memo_get(key: str) -> dict[str, Any] | None:
 def clear_native_guard_config_memo() -> None:
     with _MEMO_LOCK:
         _MEMO.clear()
+        _RESOLVE_MEMO.clear()

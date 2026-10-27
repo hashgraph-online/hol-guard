@@ -25,7 +25,8 @@ use serde_json::{json, Value};
 
 use crate::bounded_hook_bridge::{daemon_target, read_hook_input, Input};
 use crate::claude_hook_bridge_http::remaining;
-use crate::codex_hook_bridge_direct::{direct_answer, DirectHarness, OMP, PI};
+use crate::codex_hook_bridge_direct::{direct_answer_reporting, DirectHarness, OMP, PI};
+use crate::codex_hook_bridge_direct_resident::DirectMiss;
 
 pub(crate) const BRIDGE_COMMAND: &str = "pi-hook-bridge";
 pub(crate) const BRIDGE_FEATURE: &str = "pi-hook-bridge-v1";
@@ -89,23 +90,28 @@ pub(crate) fn reply(
     data: &str,
     deadline: Instant,
 ) -> Option<(u16, String)> {
-    if let Some(event_name) = event_name(data) {
-        // The resident gets half the time left, so the daemon keeps the rest.
-        let rpc_deadline = deadline.min(Instant::now() + remaining(deadline) / 2);
-        if let Some(answer) = direct_answer(
-            config.harness,
-            &config.guard_home,
-            &config.query,
-            &event_name,
-            data,
-            rpc_deadline,
-        ) {
-            return Some((200, answer));
+    let miss = match event_name(data) {
+        Some(event_name) => {
+            // The resident gets half the time left, so the daemon keeps the
+            // rest.
+            let rpc_deadline = deadline.min(Instant::now() + remaining(deadline) / 2);
+            match direct_answer_reporting(
+                config.harness,
+                &config.guard_home,
+                &config.query,
+                &event_name,
+                data,
+                rpc_deadline,
+            ) {
+                Ok(answer) => return Some((200, answer)),
+                Err(miss) => miss,
+            }
         }
-    }
+        None => DirectMiss::Request,
+    };
     let target = daemon_target(&config.guard_home, config.harness.name)?;
     let path = format!("/v1/hooks/{}?{}", config.harness.name, config.query);
-    let (status, body) = target.post_status(&path, data, deadline)?;
+    let (status, body) = target.post_status(&path, data, deadline, miss)?;
     // `fetch` decodes the body as UTF-8, replacing malformed bytes, and
     // drops a leading BOM.
     let text = String::from_utf8_lossy(&body);

@@ -38,8 +38,8 @@ def _forget_remembered_directories() -> None:
     case asking the runtime for itself.
     """
 
-    from codex_plugin_scanner.guard.native_directory_trust import clear_remembered_directory_trust
     from codex_plugin_scanner.guard.path_resolution_cache import clear_cached_realpaths
+    from tests.resident_probe_support import clear_remembered_directory_trust
 
     clear_remembered_directory_trust()
     clear_cached_realpaths()

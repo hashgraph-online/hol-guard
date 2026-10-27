@@ -46,10 +46,6 @@ _IDENTIFY_TIMEOUT_SECONDS = 2.5
 _FAILURES: ContextVar[list[str] | None] = ContextVar("local_cli_identity_failures", default=None)
 
 
-class LocalCliIdentityUnavailableError(RuntimeError):
-    """The resident could not derive an identity the command may need."""
-
-
 @contextmanager
 def track_local_cli_identity_failures() -> Iterator[list[str]]:
     """Collect native identity failures raised while the block runs."""
@@ -160,7 +156,6 @@ def native_unlisted_cli_identities(
 
 
 __all__ = [
-    "LocalCliIdentityUnavailableError",
     "native_local_cli_identity",
     "native_unlisted_cli_identities",
     "record_local_cli_identity_failure",

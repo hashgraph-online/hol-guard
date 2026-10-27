@@ -33,7 +33,6 @@ from ..approval_gate_nudge import approval_gate_posture
 from ..daemon.bounded_http import daemon_admission_snapshot
 from ..daemon.runtime_peer import load_guard_daemon_endpoint_url
 from ..native_aibom_summaries import NativeAibomSummariesError
-from ..native_runtime_admission import native_resident_admission_snapshot
 from ..runtime.command_queue import command_queue_status, repair_command_queue_state
 from ..runtime.connector_setup_items import connector_setup_status
 from ..shims import package_shim_dashboard_status
@@ -412,7 +411,6 @@ def _run_guard_doctor_command(
         availability = doctor_native_availability(guard_home)
     native_runtime: dict[str, object] = {
         "availability": availability,
-        "admission": native_resident_admission_snapshot(),
         "daemon_http": daemon_admission_snapshot(),
     }
     bundled_runtime = bundled_native_runtime_report()

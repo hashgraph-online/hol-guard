@@ -65,6 +65,7 @@ pub const NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES: &[&str] = &[
     "native_resident_auth_timeout_failed",
     "native_resident_clock_invalid",
     "native_resident_generation_invalid",
+    "native_resident_in_use",
     "native_resident_lease_busy",
     "native_resident_lease_lock_failed",
     "native_resident_lease_write_failed",

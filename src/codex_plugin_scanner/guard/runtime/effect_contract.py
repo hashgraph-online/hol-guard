@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 from types import MappingProxyType
@@ -11,7 +11,6 @@ from typing import Final, TypeVar, cast
 from codex_plugin_scanner.guard.action_lattice import (
     guard_action_severity,
     is_guard_action,
-    most_restrictive_guard_action,
 )
 from codex_plugin_scanner.guard.models import GuardAction
 
@@ -215,10 +214,6 @@ class EffectAssessment:
             and ProofRequirement.CONTAINMENT_IDENTITY not in self.proof_requirements
         ):
             raise ValueError("required containment must bind containment identity")
-
-
-def maximum_action_floor(floors: Iterable[GuardAction]) -> GuardAction:
-    return most_restrictive_guard_action(*tuple(floors))
 
 
 class TruthfulState(str, Enum):

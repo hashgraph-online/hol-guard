@@ -388,10 +388,10 @@ fn listing(
                     false,
                 ),
                 "block",
-                super::evaluate::MISSING_PATH,
+                super::read_decisions::MISSING_PATH,
                 "",
             );
-            result.reason = super::evaluate::missing_path_reason(
+            result.reason = super::read_decisions::missing_path_reason(
                 "HOL Guard did not run this listing because its path does not exist. Check the path, for example by listing its parent directory, and try again with the correct one.",
                 "listing",
                 targets.iter().find(|target| !proven(target)).copied(),
@@ -936,10 +936,10 @@ fn grep_scope(
                     false,
                 ),
                 "block",
-                super::evaluate::MISSING_PATH,
+                super::read_decisions::MISSING_PATH,
                 "",
             );
-            result.reason = super::evaluate::missing_path_reason(
+            result.reason = super::read_decisions::missing_path_reason(
                 reason,
                 "search",
                 targets.iter().find(|target| !proven(target)).copied(),

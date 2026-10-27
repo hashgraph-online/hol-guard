@@ -35,6 +35,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     ExtensionControlLayer,
     ResolverFailureCode,
 )
+from tests.native_extension_control_support import resolve_extension_controls
 
 
 @pytest.fixture
@@ -54,7 +55,7 @@ def _resolve(
     surface: ControlSurface = ControlSurface.COMMAND_EVALUATION,
     authority_failure: ResolverFailureCode | None = None,
 ) -> bridge.ControlAnswer:
-    return bridge.resolve_extension_controls(
+    return resolve_extension_controls(
         layers,
         registry,
         extension_ids=extension_ids,

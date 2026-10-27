@@ -504,3 +504,53 @@ fn direct_mcp_rejects_noncanonical_commands_and_launch_arguments() {
         Err("command_source_mcp_contract_invalid")
     ));
 }
+
+#[test]
+fn first_party_display_name_does_not_change_trust_digest() {
+    let mut trust: Value = serde_json::from_slice(TRUST).unwrap();
+    trust["classes"]["first-party"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!("command.example-cli"));
+    let shown = compile_addition(&[EXAMPLE], &serde_json::to_vec(&trust).unwrap()).unwrap();
+    assert_eq!(shown.catalog[0]["publisher"]["id"], "hol");
+    assert_eq!(shown.catalog[0]["publisher"]["displayName"], "HOL");
+    trust["publishers"]["hol"]["displayName"] = serde_json::json!("Hashgraph Online");
+    let previous = compile_addition(&[EXAMPLE], &serde_json::to_vec(&trust).unwrap()).unwrap();
+    assert_eq!(
+        previous.catalog[0]["publisher"]["displayName"],
+        "Hashgraph Online"
+    );
+    assert_eq!(
+        shown.program["trust_digest"],
+        previous.program["trust_digest"]
+    );
+    trust["classes"]["first-party"]
+        .as_array_mut()
+        .unwrap()
+        .retain(|id| id != "command.example-cli");
+    trust["classes"]["trusted-library"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!("command.example-cli"));
+    let moved = compile_addition(&[EXAMPLE], &serde_json::to_vec(&trust).unwrap()).unwrap();
+    assert_ne!(shown.program["trust_digest"], moved.program["trust_digest"]);
+}
+
+#[test]
+fn external_publisher_display_name_changes_trust_digest() {
+    let mut source: Value = serde_json::from_slice(EXAMPLE).unwrap();
+    source["extension"]["publisher"] = serde_json::json!({
+        "id":"community.example","display_name":"Example Contributor"
+    });
+    let named = compile_addition(&[&serde_json::to_vec(&source).unwrap()], TRUST).unwrap();
+    source["extension"]["publisher"]["display_name"] = serde_json::json!("Renamed Contributor");
+    let renamed = compile_addition(&[&serde_json::to_vec(&source).unwrap()], TRUST).unwrap();
+    assert_eq!(named.catalog[0]["trust_class"], "external");
+    assert_ne!(
+        named.program["trust_digest"],
+        renamed.program["trust_digest"]
+    );
+    source["extension"]["publisher"]["id"] = serde_json::json!("hol");
+    assert!(compile_addition(&[&serde_json::to_vec(&source).unwrap()], TRUST).is_err());
+}

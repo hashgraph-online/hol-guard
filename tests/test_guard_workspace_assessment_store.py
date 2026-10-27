@@ -10,6 +10,7 @@ from codex_plugin_scanner.guard import workspace_assessment_store as assessments
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_connection_schema import _REQUIRED_SCHEMA_MIGRATION_VERSIONS
 from codex_plugin_scanner.guard.store_workspace_assessment_schema import WORKSPACE_ASSESSMENT_MIGRATION_VERSION
+from tests.workspace_fix_support import admit_worktree
 
 DETECTORS = "d" * 64
 T0 = 1_000_000_000
@@ -27,7 +28,7 @@ OTHER = assessments.WorktreeKeys(digest("codebase"), digest("other-worktree"))
 def admitted(tmp_path: Path, *keys: assessments.WorktreeKeys) -> GuardStore:
     store = GuardStore(tmp_path / "home")
     for index, item in enumerate(keys or (KEYS,)):
-        assessments.admit_worktree(store, item, root=f"/work/{index}", now_ms=T0)
+        admit_worktree(store, item, root=f"/work/{index}", now_ms=T0)
     return store
 
 

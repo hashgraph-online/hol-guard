@@ -93,8 +93,8 @@ fn legacy_rule_floor(
     mode_floor(rule_default_mode)
 }
 
-/// The `COMMAND_RISK_EFFECTS` table (`command_risk_effects.py`); `None` = a
-/// risk class the effect vocabulary does not name. The catalog is authored
+/// The command risk-class to effect-kind table; `None` = a risk class the
+/// effect vocabulary does not name. The catalog is authored
 /// independently of this table, so an extension may ship a class that is not
 /// here, and `effect_claims` answers for one when it does.
 fn command_risk_effects(risk_class: &str) -> Option<EffectKind> {
@@ -501,6 +501,10 @@ fn reason_to_dict(reason: &DecisionReason) -> Value {
 }
 
 #[cfg(test)]
+#[path = "command_decision_adapter_catalog_tests.rs"]
+mod catalog_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::extension_evidence::ExtensionRuleIdentity;
@@ -519,7 +523,7 @@ mod tests {
     /// to the fallback cannot pass as agreement.
     #[test]
     fn effect_claims_answer_for_a_risk_class_the_vocabulary_does_not_name() {
-        // Every class `COMMAND_RISK_EFFECTS` (`command_risk_effects.py`) names.
+        // Every class `command_risk_effects` names.
         assert_eq!(
             claims(&["credential_exfiltration"]),
             [EffectKind::CredentialOrSecretOperation]

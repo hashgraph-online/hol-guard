@@ -475,10 +475,6 @@ def native_command_list_candidate_texts(values: list[str], *, preserve_items: bo
     return tuple(_text(item) for item in result)
 
 
-def native_benign_file_read(tool_name: object, arguments: object, *, cwd: Path | None, home_dir: Path | None) -> bool:
-    return _bool(_ask("benign_file_read", {"tool_name": tool_name, "arguments": arguments}, cwd=cwd, home_dir=home_dir))
-
-
 def native_unmodeled_shell_artifact(
     command_text: str, *, workspace: Path | None, home_dir: Path
 ) -> tuple[str, dict[str, object]] | None:
@@ -559,14 +555,3 @@ def native_compound_artifact(
         metadata.pop("extension_allow_hint", None)
     metadata.update((key, value) for key, value in pairs)
     return replace(primary, artifact_id=_text(reply["artifact_id"]), name=_text(reply["name"]), metadata=metadata)
-
-
-def native_read_only_lookup_target_is_safe(target: str, *, allow_dirs: bool, home_dir: Path | None) -> bool:
-    return _bool(
-        _ask(
-            "read_only_lookup_target_is_safe",
-            {"target": target, "allow_dirs": allow_dirs},
-            cwd=None,
-            home_dir=home_dir,
-        )
-    )

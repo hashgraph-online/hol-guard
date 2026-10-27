@@ -12,6 +12,28 @@ from codex_plugin_scanner.guard import workspace_assessment_store as assessments
 from codex_plugin_scanner.guard.store import GuardStore
 
 
+def admit_worktree(
+    store: GuardStore, keys: assessments.WorktreeKeys, *, root: str, now_ms: int, resume: bool = True
+) -> bool:
+    """Admit a worktree; ``resume`` also unpauses one admitted before.
+
+    Without ``resume`` an already admitted worktree is left exactly as it is and
+    the call returns False, so an automatic admission never undoes a pause.
+    """
+
+    conflict = "update set private_root = excluded.private_root, paused = 0" if resume else "nothing"
+    with store._connect() as connection:
+        cursor = connection.execute(
+            f"""
+            insert into workspace_assessment_state (codebase_key, worktree_key, private_root, admitted_at_ms)
+            values (?, ?, ?, ?)
+            on conflict(codebase_key, worktree_key) do {conflict}
+            """,
+            (keys.codebase_key, keys.worktree_key, root, now_ms),
+        )
+        return cursor.rowcount == 1
+
+
 @pytest.fixture
 def native_binary() -> None:
     """Fix planning and applying run in the compiled runtime, so these tests need it."""
@@ -81,7 +103,7 @@ def write_manifest(directory: Path, text: str = MANIFEST) -> Path:
 
 def seeded_store(tmp_path: Path, root: Path) -> GuardStore:
     store = GuardStore(tmp_path / "home")
-    assessments.admit_worktree(store, KEYS, root=str(root), now_ms=T0)
+    admit_worktree(store, KEYS, root=str(root), now_ms=T0)
     return store
 
 

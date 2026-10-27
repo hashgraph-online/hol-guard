@@ -45,7 +45,6 @@ class QueuedRuntimeHook:
     payload_bytes: int
     deadline: RuntimeHookDeadline
     queued_at: float
-    normalized_payload: bytes = b""
     cancellation: threading.Event | None = None
     admitted_at: float | None = None
     admitted: bool = False

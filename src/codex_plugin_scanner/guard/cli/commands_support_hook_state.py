@@ -5,22 +5,18 @@
 from __future__ import annotations
 
 import importlib
-from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from ..native_hook_authority_state import (
-    flag_field,
     hook_authority_state,
     keys_field,
     object_field,
-    text_field,
 )
 
 if TYPE_CHECKING:
     from ._commands_shared import (
         _CLAUDE_GUARD_APPROVAL_HEADER,
         _CLAUDE_GUARD_APPROVAL_OPTIONS,
-        _hook_command_text,
         _now,
     )
 
@@ -55,10 +51,6 @@ def _claude_notification_tool_name(payload: dict[str, object]) -> str | None:
 
 def _canonical_harness_name(value: str) -> str:
     return _runtime_resolution_module()._canonical_harness_name(value)
-
-
-def _claude_pending_permission_index_key(session_id: str) -> str:
-    return f"claude_pending_permissions:{session_id}"
 
 
 def _state_now(now: str | None) -> str:
@@ -246,211 +238,14 @@ def _remove_claude_pending_permission(
     )
 
 
-def _cursor_conversation_id(payload: dict[str, object]) -> str | None:
-    for key in ("conversation_id", "conversationId", "session_id", "sessionId"):
-        value = _optional_string(payload.get(key))
-        if value is not None:
-            return value
-    for env_key in ("CURSOR_SESSION_ID", "CURSOR_TRACE_ID"):
-        value = _optional_string(os.environ.get(env_key))
-        if value is not None:
-            return value
-    return None
-
-
-def _cursor_shell_command_from_payload(payload: Mapping[str, object]) -> str | None:
-    from ..adapters.cursor_native_approval import (
-        cursor_hook_payload_is_mcp_execution,
-        is_shell_wrapper_command,
-        normalize_cursor_shell_command,
-    )
-
-    tool_input_command = _hook_command_text(payload)
-    top_level = _optional_string(payload.get("command"))
-    if cursor_hook_payload_is_mcp_execution(payload):
-        if tool_input_command is not None:
-            return normalize_cursor_shell_command(tool_input_command)
-        if top_level is not None:
-            return normalize_cursor_shell_command(top_level)
-        return None
-    if tool_input_command is not None and (top_level is None or is_shell_wrapper_command(top_level)):
-        return normalize_cursor_shell_command(tool_input_command)
-    if top_level is not None:
-        return normalize_cursor_shell_command(top_level)
-    return None
-
-
-def _append_cursor_pending_shell_key(
-    store: GuardStore,
-    *,
-    conversation_id: str,
-    pending_key: str,
-    now: str,
-) -> bool:
-    reply = hook_authority_state(
-        store,
-        "cursor_append_key",
-        now=now,
-        create_key=True,
-        conversation_id=conversation_id,
-        pending_key=pending_key,
-    )
-    return flag_field(reply, "stored")
-
-
-def _load_cursor_pending_shell_index(
-    store: GuardStore,
-    *,
-    conversation_id: str,
-    now: str | None = None,
-) -> list[str]:
-    reply = hook_authority_state(
-        store,
-        "cursor_load_index",
-        now=_state_now(now),
-        conversation_id=conversation_id,
-    )
-    return keys_field(reply, "pending_keys")
-
-
-def _store_cursor_pending_shell_index(
-    store: GuardStore,
-    *,
-    conversation_id: str,
-    pending_keys: Sequence[str],
-    now: str,
-) -> bool:
-    reply = hook_authority_state(
-        store,
-        "cursor_store_index",
-        now=now,
-        create_key=bool(pending_keys),
-        conversation_id=conversation_id,
-        pending_keys=list(pending_keys),
-    )
-    return flag_field(reply, "stored")
-
-
-def _store_cursor_pending_shell_state(
-    store: GuardStore,
-    *,
-    conversation_id: str,
-    command: str,
-    payload: Mapping[str, object],
-    now: str,
-) -> str | None:
-    """Stores the pending shell state and returns the key it was stored under.
-
-    The conversation and the command name the row: the resident derives its
-    state key and reports it back, so the caller indexes and rolls back the row
-    the resident actually wrote.
-    """
-
-    reply = hook_authority_state(
-        store,
-        "cursor_store_pending_state",
-        now=now,
-        create_key=True,
-        conversation_id=conversation_id,
-        command=command,
-        payload=dict(payload),
-    )
-    if not flag_field(reply, "stored"):
-        return None
-    return text_field(reply, "state_key")
-
-
-def _load_verified_cursor_pending_shell_state(
-    store: GuardStore,
-    *,
-    conversation_id: str,
-    command: str,
-    state_key: str | None = None,
-    now: str | None = None,
-) -> dict[str, object] | None:
-    from ..adapters.cursor_native_approval import normalize_cursor_shell_command
-
-    reply = hook_authority_state(
-        store,
-        "cursor_load_pending_state",
-        now=_state_now(now),
-        conversation_id=conversation_id,
-        command=normalize_cursor_shell_command(command),
-        state_key=state_key,
-    )
-    return object_field(reply, "pending")
-
-
-def _record_cursor_native_shell_allow_state(
-    *,
-    store: GuardStore,
-    conversation_id: str,
-    command: str,
-    artifact: GuardArtifact,
-    artifact_hash: str,
-    now: str,
-) -> bool:
-    from ..adapters.cursor_native_approval import normalize_cursor_shell_command
-
-    normalized_command = normalize_cursor_shell_command(command)
-    reply = hook_authority_state(
-        store,
-        "cursor_record_allow",
-        now=now,
-        create_key=True,
-        conversation_id=conversation_id,
-        command=normalized_command,
-        artifact_id=artifact.artifact_id,
-        artifact_hash=artifact_hash,
-        artifact_name=artifact.name,
-    )
-    return flag_field(reply, "stored")
-
-
-def _load_cursor_native_shell_allowance(
-    store: GuardStore,
-    payload: Mapping[str, object],
-) -> dict[str, object] | None:
-    conversation_id = _cursor_conversation_id(dict(payload))
-    command = _cursor_shell_command_from_payload(payload)
-    if conversation_id is None or command is None:
-        return None
-    reply = hook_authority_state(
-        store,
-        "cursor_load_allowance",
-        now=_now(),
-        conversation_id=conversation_id,
-        command=command,
-    )
-    return object_field(reply, "allowance")
-
-
-def _cursor_native_shell_is_approved(
-    store: GuardStore,
-    payload: Mapping[str, object],
-) -> bool:
-    return _load_cursor_native_shell_allowance(store, payload) is not None
-
-
 __all__ = [
-    "_append_cursor_pending_shell_key",
     "_claude_guard_approval_question_text",
-    "_claude_pending_permission_index_key",
-    "_cursor_conversation_id",
-    "_cursor_native_shell_is_approved",
-    "_cursor_shell_command_from_payload",
     "_load_claude_pending_permission_index",
     "_load_claude_permission_notice",
-    "_load_cursor_native_shell_allowance",
-    "_load_cursor_pending_shell_index",
     "_load_single_claude_pending_permission",
     "_load_verified_claude_pending_permission",
-    "_load_verified_cursor_pending_shell_state",
     "_mark_claude_pending_permission_prompt_seen",
     "_peek_claude_permission_notice",
     "_record_claude_permission_notice",
-    "_record_cursor_native_shell_allow_state",
     "_remove_claude_pending_permission",
-    "_store_cursor_pending_shell_index",
-    "_store_cursor_pending_shell_state",
 ]

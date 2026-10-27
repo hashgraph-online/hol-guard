@@ -21,6 +21,7 @@ from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_workspace_assessment_runner import (
     AUDIT,
     HOOKS_COMPLETE,
+    SCANNED,
     SECRETS_COMPLETE,
     SKILLS_COMPLETE,
     SNAPSHOT,
@@ -63,7 +64,7 @@ def hooks_result(*findings: dict[str, object], **overrides: object) -> dict[str,
 
 def run_with(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, hooks: dict[str, object] | None):
     store, claimed = queued_run(tmp_path)
-    scanned = replace(SNAPSHOT, secrets=SECRETS_COMPLETE, skills=SKILLS_COMPLETE, hooks=hooks)
+    scanned = replace(SCANNED, hooks=hooks)
     monkeypatch.setattr(runner, "workspace_snapshot", lambda root, **_: scanned)
     monkeypatch.setattr(runner, "_local_audit", lambda store, config, root: AUDIT)
     return store, claimed, runner.execute(store, None, claimed, clock=lambda: T0)
@@ -131,7 +132,12 @@ def test_older_runtime_keeps_secret_and_skill_scans_and_reports_hooks_not_run(tm
     assert requested == [(True, True, True), (True, True, False), (False, False, False)]
     assert outcome.state == "partial"
     assert outcome.coverage is not None
-    assert outcome.coverage["reasons"] == ["detector_not_run:hook_config_v1"]
+    assert outcome.coverage["reasons"] == [
+        "detector_not_run:hook_config_v1",
+        "detector_not_run:plugin_manifest_v1",
+        "detector_not_run:ci_workflow_v1",
+        "detector_not_run:editor_task_v1",
+    ]
     assert outcome.coverage["detectors"]["secrets"] == "complete"
     assert outcome.coverage["detectors"]["skill_content_v1"] == "no_inputs"
     assert outcome.coverage["detectors"]["hook_config_v1"] == "not_run"
@@ -223,6 +229,8 @@ def test_an_unreadable_hook_result_is_an_error(payload: dict[str, object]) -> No
         {"category": "Execution!"},
         {"severity": "unknown"},
         {"confidence": "high"},
+        {"severity": ["critical"]},
+        {"confidence": {"level": "strong"}},
         {"title": ""},
         {"title": "line one\nline two"},
         {"reason": "r" * 2000},
@@ -283,3 +291,36 @@ def test_compiled_runtime_reports_a_risky_hook_without_quoting_it(tmp_path: Path
     ]
     stored = json.dumps(latest)
     assert "evil.example" not in stored and str(workspace) not in stored
+
+
+def test_a_hook_file_that_stops_parsing_keeps_its_finding_open(tmp_path: Path, native_binary: None) -> None:
+    """A configuration the scan can no longer parse is unknown, never fixed."""
+    workspace = tmp_path / "workspace"
+    (workspace / ".claude").mkdir(parents=True)
+    (workspace / HOOK_PATH).write_text(REMOTE_HOOK, encoding="utf-8")
+    store = GuardStore(tmp_path / "guard-home")
+    admitted = worker.admit_workspace(store, str(workspace))
+    keys = assessments.WorktreeKeys(str(admitted["codebase_key"]), str(admitted["worktree_key"]))
+    config = load_guard_config(store.guard_home)
+    assert worker.queue_manual_run(store, keys) == admitted["run_id"]
+    assert runner.run_next(store, config, owner="test")
+    [opened] = assessments.latest_assessed_runs(store)
+    [first] = [item for item in opened["findings"] if item["detector"] == "hook_config_v1"]
+
+    (workspace / HOOK_PATH).write_text(REMOTE_HOOK[:-3], encoding="utf-8")
+    second_run = worker.queue_manual_run(store, keys)
+    assert second_run and second_run != admitted["run_id"]
+    assert runner.run_next(store, config, owner="test")
+    [latest] = assessments.latest_assessed_runs(store)
+    assert latest["run_id"] == second_run
+    assert latest["state"] == "partial"
+    assert latest["coverage"]["detectors"]["hook_config_v1"] == "incomplete"
+    assert "hook_config_incomplete" in latest["coverage"]["reasons"]
+    # The runtime itself reported the file as unparsed, so the detector is
+    # incomplete for that reason and found nothing new in the broken file.
+    assert latest["coverage"]["hook_config"]["skipped"]["unparsed"] == 1
+    assert latest["coverage"]["hook_config"]["files_scanned"] == 0
+    hooks = [item for item in latest["findings"] if item["detector"] == "hook_config_v1"]
+    assert [(item["finding_id"], item["carried_from_run_id"]) for item in hooks] == [
+        (first["finding_id"], admitted["run_id"])
+    ]

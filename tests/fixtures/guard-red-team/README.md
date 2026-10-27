@@ -5,7 +5,7 @@ that HOL Guard correctly detects and blocks malicious AI agent behaviors.
 
 **All credentials, tokens, API keys, and webhook URLs in these fixtures are fake.**
 They use the pattern `hol-fake-*` and route to `https://evil.hol.org/collect`,
-a domain owned by Hashgraph Online solely for testing canary detection.
+a domain owned by HOL solely for testing canary detection.
 
 No real secrets or infrastructure are touched by these tests.
 

@@ -120,7 +120,9 @@
   "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/shell_static_safety.py",
   "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/shell_quote_tokens.py",
   "src/codex_plugin_scanner/guard/runtime/executable_resolution.py",
-  "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/constants_patterns.py"
+  "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/constants_patterns.py",
+  "src/codex_plugin_scanner/guard/runtime/github_capability_contract.py",
+  "src/codex_plugin_scanner/guard/runtime/github_capability_interaction.py"
  ],
  "retired_tests": [
   {
@@ -7733,7 +7735,6 @@
   }
  ],
  "unchanged_regression_suites": [
-  "tests/test_native_runtime_admission.py",
   "tests/test_native_resident_client_cleanup.py",
   "tests/test_native_resident_client_pool.py",
   "ci/native_runtime/test_native_hook_client.py",

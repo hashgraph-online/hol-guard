@@ -399,7 +399,10 @@ fn path_gate(
                     || worktree_gitfile(canonical)
                     || scratch::workspace_scratch_read(canonical, home_dir, cwd)
                     || scratch::private_temporary_scratch_read(canonical, home_dir)
-                    || virtualenv_activation_script(canonical)))
+                    || virtualenv_activation_script(canonical)
+                    || hidden_listing::repository_hidden_source_document(
+                        canonical, home_dir, cwd,
+                    )))
             || (read_only && execution_output_log(canonical, home_dir)))
     {
         return false;

@@ -1,6 +1,6 @@
 {
   "schema": "artifact-hash-parity.v1",
-  "generator": "scripts/ci/generate_artifact_hash_parity.py",
+  "generator": "frozen: recorded from the retired Python artifact hash",
   "cases": [
     {
       "case": "plain_hook",

@@ -10,35 +10,9 @@ from typing import Any, cast
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.scanner_cache import scanner_cache_key
 from codex_plugin_scanner.integrations import cisco_mcp_scanner, cisco_skill_scanner
 from codex_plugin_scanner.integrations.cisco_skill_scanner import CiscoIntegrationStatus
 from codex_plugin_scanner.integrations.scanner_subprocess import ScannerProcessResult
-
-
-def test_scanner_cache_key_changes_with_content_hash_or_version() -> None:
-    base_key = scanner_cache_key(
-        scanner_name="cisco-mcp-scanner",
-        input_content_hash="content-a",
-        scanner_version="4.6.2",
-    )
-
-    assert (
-        scanner_cache_key(
-            scanner_name="cisco-mcp-scanner",
-            input_content_hash="content-b",
-            scanner_version="4.6.2",
-        )
-        != base_key
-    )
-    assert (
-        scanner_cache_key(
-            scanner_name="cisco-mcp-scanner",
-            input_content_hash="content-a",
-            scanner_version="4.7.0",
-        )
-        != base_key
-    )
 
 
 def test_skill_scanner_reports_timeout_without_marking_scan_failed(monkeypatch, tmp_path: Path) -> None:

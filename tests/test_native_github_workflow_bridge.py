@@ -74,20 +74,6 @@ def harness(monkeypatch: pytest.MonkeyPatch) -> _Harness:
     return _Harness(monkeypatch)
 
 
-@pytest.mark.parametrize(("verified", "expected"), ((True, True), (False, False), ("yes", False)))
-def test_persisted_command_verification_only_trusts_an_explicit_true(
-    harness: _Harness, verified: object, expected: bool
-) -> None:
-    harness.reply = lambda request: _reply(request, verified=verified)
-    assert bridge.github_workflow_persisted_command_matches(_COMMAND, approval_record()) is expected
-    assert harness.requests[0]["mode"] == "verify"
-
-
-def test_persisted_command_verification_fails_closed_on_mismatch(harness: _Harness) -> None:
-    harness.reply = lambda request: _reply(request, verified=True, request_sha256="sha256:" + "0" * 64)
-    assert not bridge.github_workflow_persisted_command_matches(_COMMAND, approval_record())
-
-
 def _lineage() -> bridge.GitHubWorkflowLineage | None:
     return bridge.github_workflow_validated_lineage(
         {"request_id": "req-1"}, {"operation_id": "op-1"}, {"session_id": "sess-1"}

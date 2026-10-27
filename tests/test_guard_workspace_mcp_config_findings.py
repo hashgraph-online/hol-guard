@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -20,10 +19,7 @@ from codex_plugin_scanner.guard.runtime import workspace_assessment_sync as sync
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_workspace_assessment_runner import (
     AUDIT,
-    HOOKS_COMPLETE,
-    SECRETS_COMPLETE,
-    SKILLS_COMPLETE,
-    SNAPSHOT,
+    SCANNED,
     T0,
     queued_run,
 )
@@ -62,8 +58,7 @@ def mcp_result(*findings: dict[str, object], **overrides: object) -> dict[str, o
 
 def run_with(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, result: dict[str, object] | None):
     store, claimed = queued_run(tmp_path)
-    scanned = replace(SNAPSHOT, secrets=SECRETS_COMPLETE, skills=SKILLS_COMPLETE, hooks=HOOKS_COMPLETE)
-    monkeypatch.setattr(runner, "workspace_snapshot", lambda root, **_: scanned)
+    monkeypatch.setattr(runner, "workspace_snapshot", lambda root, **_: SCANNED)
     monkeypatch.setattr(runner, "_local_audit", lambda store, config, root: AUDIT)
     monkeypatch.setattr(runner, "assess_workspace_mcp_configs", lambda store, root: result)
     return store, claimed, runner.execute(store, None, claimed, clock=lambda: T0)
@@ -163,6 +158,8 @@ def test_an_unreadable_mcp_result_is_an_error(payload: dict[str, object]) -> Non
         native_finding(server="bad\nname"),
         native_finding(severity="severe"),
         native_finding(confidence="certain"),
+        native_finding(severity=["high"]),
+        native_finding(confidence={"level": "strong"}),
         native_finding(title=None),
     ],
 )

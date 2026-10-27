@@ -11,18 +11,17 @@ from codex_plugin_scanner.guard.cloud_exceptions import (
     build_cloud_exceptions_from_policy_bundle,
     list_active_cloud_exceptions,
 )
-from codex_plugin_scanner.guard.policy_bundle_parser import validated_policy_bundle_payload
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.cloud_exception_bundle_fixtures import (
     build_cloud_exception_bundle_entry,
     build_cloud_exception_policy_bundle,
 )
+from tests.policy_bundle_parser_support import computed_policy_bundle_hash, validated_policy_bundle_payload
 from tests.policy_bundle_signing_helpers import (
     policy_bundle_test_keyring,
     policy_bundle_test_verification_key,
 )
 from tests.support.network import stub_authenticated_urlopen
-from tests.test_policy_bundle_parser import computed_policy_bundle_hash
 
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):

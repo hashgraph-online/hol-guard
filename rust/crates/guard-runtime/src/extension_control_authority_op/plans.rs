@@ -387,15 +387,27 @@ impl Ctx<'_> {
             let Some(replay) = &replay else {
                 return Err(tampered("extension control authority proof replay"));
             };
-            let phase = Phase::parse(&row_text(replay, "phase")?)
-                .ok_or_else(|| degraded("invalid extension control authority phase"))?;
-            if phase == Phase::Committed {
-                return Err(tampered("extension control authority proof replay"));
-            }
+            // The grant names the one mutation it was issued for and the one
+            // row that reserved it. A grant that names anything else is not
+            // this transition's, whatever state that transition is in.
             if row_text(proof, "mutation_digest")? != commit.mutation_digest
                 || row_py_int(proof, "transition_revision")? != row_int(replay, "revision")?
             {
                 return Err(tampered("extension control authority proof state conflict"));
+            }
+            let phase = Phase::parse(&row_text(replay, "phase")?)
+                .ok_or_else(|| degraded("invalid extension control authority phase"))?;
+            // A committed row whose grant was spent is a second use of a
+            // commit that already returned. A committed row whose grant is
+            // still unspent is this caller's own commit, finished for it by a
+            // read that met the sealed head while the call that prepared it
+            // was still in flight. Refusing that as a replay would strand the
+            // caller: its commit never returned, and the grant it holds is the
+            // only one it has. It falls through to `resume`, which checks the
+            // row against this request's own identity and layers and settles
+            // the grant, so the single use is spent exactly once either way.
+            if phase == Phase::Committed && row_optional_str(proof, "consumed_at")?.is_some() {
+                return Err(tampered("extension control authority proof replay"));
             }
         }
         if let Some(replay) = &replay {

@@ -9,38 +9,32 @@
 use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::Value;
 
+use crate::policy_decision_lookup_op::computed_workspace_policy_key;
 use guard_contracts::timestamp_has_expired;
 use guard_policy_snapshot::local_authority_integrity::{
     sign_local_authority_payload, verify_local_authority_payload,
 };
 
 pub const LOCAL_ONCE_INTEGRITY_PURPOSE: &str = "guard-local-once-approval";
+pub const EXACT_CLOUD_AUTHORITY_KIND: &str = "exact-cloud";
+pub const EXACT_CLOUD_INTEGRITY_PURPOSE: &str = "guard-exact-cloud-local-once-v1";
+
+/// `local_once_integrity_purpose` (`store_local_once_authority.py` :17-20).
+///
+/// A Cloud Review verdict is signed under its own purpose, so authority from
+/// one source cannot be replayed as authority from the other even when both
+/// use the same install key.
+pub(crate) fn local_once_integrity_purpose(authority_kind: Option<&str>) -> &'static str {
+    if authority_kind == Some(EXACT_CLOUD_AUTHORITY_KIND) {
+        EXACT_CLOUD_INTEGRITY_PURPOSE
+    } else {
+        LOCAL_ONCE_INTEGRITY_PURPOSE
+    }
+}
 
 /// `_local_once_approval_is_reusable` (:28-29).
 pub(crate) fn local_once_approval_is_reusable(artifact_id: &str) -> bool {
     artifact_id.contains(":package-request:")
-}
-
-/// `_workspace_policy_key` (`store_base.py:1371-1376`); callers that pass a
-/// raw workspace path get the stored `guard-workspace-policy:<sha256>` form.
-#[allow(dead_code)]
-pub fn workspace_policy_key(workspace: &str) -> Option<String> {
-    let trimmed = workspace.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-    let normalized = normalized_workspace_path(trimmed);
-    let mut hasher = <sha2::Sha256 as sha2::Digest>::new();
-    sha2::Digest::update(&mut hasher, normalized.as_bytes());
-    let digest = sha2::Digest::finalize(hasher);
-    Some(format!("guard-workspace-policy:{}", hex::encode(digest)))
-}
-
-#[allow(dead_code)]
-fn normalized_workspace_path(workspace: &str) -> String {
-    // `_normalized_workspace_path` resolves the path; preserve the Python
-    // "trailing-slash stripped absolute" contract minimally here.
-    workspace.trim_end_matches('/').to_owned()
 }
 
 /// `_row_value` — `NULL` → `Value::Null`.
@@ -48,9 +42,14 @@ fn row_value(row: &Value, key: &str) -> Value {
     row.get(key).cloned().unwrap_or(Value::Null)
 }
 
-/// `_local_once_approval_signed_payload` (:385-396) — the 11 signed columns.
+/// `_local_once_approval_signed_payload` (:120-137) — the eleven base columns,
+/// plus `authority_kind` when the row carries one.
+///
+/// Rows written before the column existed are signed without it, so it is
+/// appended only when set; adding it unconditionally would read every one of
+/// those older approvals as tampered.
 fn local_once_approval_signed_payload(row: &Value) -> Value {
-    serde_json::json!({
+    let mut payload = serde_json::json!({
         "approval_id": row_value(row, "approval_id"),
         "request_id": row_value(row, "request_id"),
         "harness": row_value(row, "harness"),
@@ -62,7 +61,14 @@ fn local_once_approval_signed_payload(row: &Value) -> Value {
         "created_at": row_value(row, "created_at"),
         "expires_at": row_value(row, "expires_at"),
         "claimed_at": row_value(row, "claimed_at"),
-    })
+    });
+    let authority_kind = row_value(row, "authority_kind");
+    if !authority_kind.is_null() {
+        if let Some(map) = payload.as_object_mut() {
+            map.insert("authority_kind".to_owned(), authority_kind);
+        }
+    }
+    payload
 }
 
 /// `_local_once_approval_integrity` (:398-405).
@@ -87,7 +93,7 @@ fn verify_local_once_approval<'a>(
         &local_once_approval_integrity(row),
         key,
         key_id,
-        LOCAL_ONCE_INTEGRITY_PURPOSE,
+        local_once_integrity_purpose(row_value(row, "authority_kind").as_str()),
     )
 }
 
@@ -167,7 +173,8 @@ const IDENTITY_KEYS: [&str; 15] = [
 /// Column list shared by the claim SELECT and the lookup SELECT.
 const CLAIM_COLUMNS: &str = "approval_id, request_id, harness, artifact_id, artifact_hash, \
      workspace, publisher, action, created_at, expires_at, claimed_at, \
-     integrity_version, payload_hash, payload_mac, integrity_key_id, signed_at";
+     integrity_version, payload_hash, payload_mac, integrity_key_id, signed_at, \
+     authority_kind";
 
 /// Convert a `rusqlite::Row` into the `Value` object the helpers consume.
 /// Column order must match `CLAIM_COLUMNS`.
@@ -194,6 +201,7 @@ pub(crate) fn row_to_value(row: &rusqlite::Row) -> rusqlite::Result<Value> {
         "payload_mac": get(13)?,
         "integrity_key_id": get(14)?,
         "signed_at": get(15)?,
+        "authority_kind": get(16)?,
     }))
 }
 
@@ -251,7 +259,7 @@ pub fn claim_local_once_approval_by_id_locked(
         &claimed_row,
         integrity_key.unwrap(),
         integrity_key_id.unwrap(),
-        LOCAL_ONCE_INTEGRITY_PURPOSE,
+        local_once_integrity_purpose(row_value(&row, "authority_kind").as_str()),
         now,
     ) {
         Ok(f) => f,
@@ -299,7 +307,7 @@ pub fn peek_local_once_approval_lookup_locked(
     let now = guard_contracts::canonical_utc_timestamp(now).unwrap_or_else(|| now.to_owned());
     let artist = artifact_id.map(str::to_owned);
     let artist_hash = artifact_hash.map(str::to_owned);
-    let ws_key = workspace.and_then(workspace_policy_key);
+    let ws_key = computed_workspace_policy_key(workspace);
 
     let run_query = |artifact_col: &str,
                      artifact_val: Option<&str>,
@@ -440,6 +448,7 @@ pub fn claim_local_once_approval_locked(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::policy_decision_lookup_op::LOCAL_ONCE_LEGACY_AUTHORITY_KIND;
     use rusqlite::Connection;
 
     const SEED: &str = include_str!("../testdata/local_once_claim_seed.json");
@@ -454,7 +463,7 @@ mod tests {
                publisher text, action text not null, created_at text not null,
                expires_at text not null, claimed_at text,
                integrity_version integer, payload_hash text, payload_mac text,
-               integrity_key_id text, signed_at text);
+               integrity_key_id text, signed_at text, authority_kind text);
              create table guard_events (event_id integer primary key autoincrement,
                event_name text not null, payload_json text not null, occurred_at text not null);",
         )
@@ -465,8 +474,11 @@ mod tests {
             };
             let gi = |k: &str| -> Option<i64> { row.get(k).and_then(|v| v.as_i64()) };
             conn.execute(
-                "insert into guard_local_once_approvals values
-                 (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)",
+                "insert into guard_local_once_approvals (
+                   approval_id, request_id, harness, artifact_id, artifact_hash, workspace,
+                   publisher, action, created_at, expires_at, claimed_at, integrity_version,
+                   payload_hash, payload_mac, integrity_key_id, signed_at)
+                 values (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16)",
                 params![
                     gs("approval_id"),
                     gs("request_id"),
@@ -520,8 +532,10 @@ mod tests {
         assert_eq!(decision["request_id"].as_str().unwrap(), "req-a-1");
 
         // Post-claim row: claimed_at=now, integrity re-signed.
-        let sql = "select approval_id, request_id, harness, artifact_id, artifact_hash,              workspace, publisher, action, created_at, expires_at, claimed_at,              integrity_version, payload_hash, payload_mac, integrity_key_id, signed_at              from guard_local_once_approvals where approval_id='a-1'";
-        let row = conn.query_row(sql, [], row_to_value).unwrap();
+        let sql = format!(
+            "select {CLAIM_COLUMNS} from guard_local_once_approvals where approval_id='a-1'"
+        );
+        let row = conn.query_row(&sql, [], row_to_value).unwrap();
         assert_eq!(row["claimed_at"].as_str().unwrap(), now);
         assert_ne!(row["claimed_at"], Value::Null);
         // signed_at on the re-sign equals `now`.
@@ -629,5 +643,127 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+    }
+
+    /// Signs a row the way `persist_local_once_approval` does and inserts it,
+    /// so the claim below sees exactly the bytes the writer produced.
+    fn insert_signed(connection: &Connection, approval_id: &str, authority_kind: Option<&str>) {
+        let created_at = "2026-01-01T00:00:00.000000+00:00";
+        let expires_at = "2099-01-01T00:00:00.000000+00:00";
+        let mut signed = serde_json::json!({
+            "approval_id": approval_id,
+            "request_id": "req-1",
+            "harness": "codex",
+            "artifact_id": "pkg:npm/left-pad@1.3.0",
+            "artifact_hash": "sha256:abc",
+            "workspace": Value::Null,
+            "publisher": Value::Null,
+            "action": "allow",
+            "created_at": created_at,
+            "expires_at": expires_at,
+            "claimed_at": Value::Null,
+        });
+        if let Some(kind) = authority_kind {
+            signed["authority_kind"] = Value::from(kind);
+        }
+        let integrity = sign_local_authority_payload(
+            &signed,
+            b"local-once-integrity-key-material",
+            "key-1",
+            local_once_integrity_purpose(authority_kind),
+            created_at,
+        )
+        .unwrap();
+        connection
+            .execute(
+                "insert into guard_local_once_approvals (
+                   approval_id, request_id, harness, artifact_id, artifact_hash, workspace,
+                   publisher, action, created_at, expires_at, claimed_at, integrity_version,
+                   payload_hash, payload_mac, integrity_key_id, signed_at, authority_kind)
+                 values (?1,'req-1','codex','pkg:npm/left-pad@1.3.0','sha256:abc',null,null,
+                   'allow',?2,?3,null,?4,?5,?6,?7,?8,?9)",
+                params![
+                    approval_id,
+                    created_at,
+                    expires_at,
+                    integrity.integrity_version,
+                    integrity.payload_hash,
+                    integrity.payload_mac,
+                    integrity.integrity_key_id,
+                    integrity.signed_at,
+                    authority_kind,
+                ],
+            )
+            .unwrap();
+    }
+
+    /// A row carrying an `authority_kind` is signed over that field, so the
+    /// claim has to sign over it too. Omitting it read every approval the
+    /// writer stamped as tampered, which silently dropped a saved allow and
+    /// asked the user again.
+    #[test]
+    fn claim_honours_the_authority_kind_the_writer_signed() {
+        let key = b"local-once-integrity-key-material";
+        for kind in [
+            Some(LOCAL_ONCE_LEGACY_AUTHORITY_KIND),
+            Some(EXACT_CLOUD_AUTHORITY_KIND),
+            None,
+        ] {
+            let conn = Connection::open_in_memory().unwrap();
+            conn.execute_batch(
+                "create table guard_local_once_approvals (
+                   approval_id text primary key, request_id text not null, harness text not null,
+                   artifact_id text not null, artifact_hash text not null, workspace text,
+                   publisher text, action text not null, created_at text not null,
+                   expires_at text not null, claimed_at text, integrity_version integer,
+                   payload_hash text, payload_mac text, integrity_key_id text, signed_at text,
+                   authority_kind text);",
+            )
+            .unwrap();
+            insert_signed(&conn, "a-1", kind);
+            let now = "2026-06-01T00:00:00.000000+00:00";
+            let claimed = claim_local_once_approval_by_id_locked(
+                &conn,
+                "a-1",
+                now,
+                None,
+                Some(key),
+                Some("key-1"),
+                true,
+            )
+            .unwrap();
+            assert!(claimed.is_some(), "authority_kind {kind:?} failed to claim");
+
+            // The claim re-signs under the same purpose, so a second read of
+            // the stored row still verifies.
+            let stored = conn
+                .query_row(
+                    &format!("select {CLAIM_COLUMNS} from guard_local_once_approvals"),
+                    [],
+                    row_to_value,
+                )
+                .unwrap();
+            assert_eq!(row_value(&stored, "claimed_at"), Value::from(now));
+            assert_eq!(
+                verify_local_once_approval(&stored, Some(key), Some("key-1")).status,
+                "valid"
+            );
+        }
+    }
+
+    /// A Cloud Review verdict and a locally saved allow are signed under
+    /// different purposes, so neither can be presented as the other.
+    #[test]
+    fn the_two_authority_kinds_do_not_share_a_purpose() {
+        assert_eq!(
+            local_once_integrity_purpose(Some(EXACT_CLOUD_AUTHORITY_KIND)),
+            EXACT_CLOUD_INTEGRITY_PURPOSE
+        );
+        for kind in [Some(LOCAL_ONCE_LEGACY_AUTHORITY_KIND), Some("other"), None] {
+            assert_eq!(
+                local_once_integrity_purpose(kind),
+                LOCAL_ONCE_INTEGRITY_PURPOSE
+            );
+        }
     }
 }

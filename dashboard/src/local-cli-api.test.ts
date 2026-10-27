@@ -22,6 +22,7 @@ import {
   suggestedPackageScriptExtensions,
   suggestedSeenExtensions,
   waitForMcpDiscoveryJob,
+  fetchMcpProviderActions,
   unreviewedToolChangeCount,
 } from "./local-cli-api";
 import { keepChoicesCopy } from "./protection-center/local-cli-panel-copy";
@@ -428,4 +429,54 @@ assert.equal(addedCustomExtensions(mixedValidity.items).length, 2);
   assert.equal(unreviewedToolChangeCount({ ...item, mcp_catalog: undefined } as typeof item), 0);
   assert.equal(keepChoicesCopy(1), "1 tool is new or changed since you last saved. Keep the choices shown to mark them reviewed.");
   assert.equal(keepChoicesCopy(55), "55 tools are new or changed since you last saved. Keep the choices shown to mark them reviewed.");
+}
+
+{
+  // A provider page the runtime shortened to stay under its byte budget still
+  // pages: next_offset lands past the current offset but no further than the
+  // page the dashboard asked for.
+  const realFetch = globalThis.fetch;
+  const storage = { getItem: () => null, setItem: () => undefined, removeItem: () => undefined };
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: {
+      location: { origin: "http://127.0.0.1:4174", pathname: "/", search: "", hash: "" },
+      sessionStorage: storage,
+      localStorage: storage,
+    },
+  });
+  const token = "a".repeat(64);
+  const action = {
+    tool_slug: "read_file", toolkit: "files", description: "Read a file.", full_schema: true,
+    permission_state: "review", allow_supported: false, account_binding: "unverified",
+    revision: 1, updated_at: "2026-10-26T00:00:00Z",
+  };
+  const page = (nextOffset: unknown) => ({
+    cli_id: "local-cli.cwv-py-abcdef12", coverage: "discovery-subset",
+    actions: [action, action, action], next_offset: nextOffset, catalog_token: token,
+  });
+  const serve = (body: unknown) => {
+    globalThis.fetch = (async () => new Response(JSON.stringify(body), {
+      status: 200, headers: { "content-type": "application/json" },
+    })) as typeof fetch;
+  };
+  const read = (offset: number) =>
+    fetchMcpProviderActions("local-cli.cwv-py-abcdef12", { search: "", offset });
+  try {
+    serve(page(103));
+    assert.equal((await read(100)).nextOffset, 103);
+    serve(page(150));
+    assert.equal((await read(100)).nextOffset, 150);
+    serve(page(null));
+    assert.equal((await read(100)).nextOffset, null);
+    serve(page(100));
+    await assert.rejects(read(100), /Invalid provider inventory page/);
+    serve(page(99));
+    await assert.rejects(read(100), /Invalid provider inventory page/);
+    serve(page(151));
+    await assert.rejects(read(100), /Invalid provider inventory page/);
+  } finally {
+    globalThis.fetch = realFetch;
+    Reflect.deleteProperty(globalThis, "window");
+  }
 }

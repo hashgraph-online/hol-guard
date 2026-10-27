@@ -43,7 +43,7 @@ def _write_good_plugin(plugin_dir: Path) -> None:
                 "name": "trust-demo",
                 "version": "1.0.0",
                 "description": "Trust scoring demo plugin",
-                "author": {"name": "Hashgraph Online"},
+                "author": {"name": "HOL"},
                 "homepage": "https://example.com/plugin",
                 "repository": "https://github.com/hashgraph-online/hol-guard",
                 "skills": "skills",

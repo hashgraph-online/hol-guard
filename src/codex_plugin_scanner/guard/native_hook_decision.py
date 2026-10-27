@@ -122,6 +122,24 @@ def _tilde_home() -> str | None:
     return None if home.startswith("~") else home
 
 
+def validated_permission_persist_plan(value: object) -> dict[str, Any]:
+    """``value`` when it is a well-formed persist plan, else ``NativeHookDecisionError``."""
+
+    plan = _shape(value, _PERSIST_PLAN_FIELDS)
+    stored, policy_action = plan["stored_artifact_hash"], plan["policy_action"]
+    if (stored is None) != (policy_action is None) or policy_action not in {None, "allow", "block"}:
+        raise NativeHookDecisionError(_INVALID)
+    names: list[str] = []
+    for event in plan["events"]:
+        fields = _shape(event, _PERSIST_EVENT_FIELDS)
+        if _PERSIST_EVENT_PHASE.get(fields["name"]) != fields["before_policy"]:
+            raise NativeHookDecisionError(_INVALID)
+        names.append(fields["name"])
+    if tuple(names) not in _PERSIST_EVENT_SEQUENCES[stored is not None]:
+        raise NativeHookDecisionError(_INVALID)
+    return plan
+
+
 def native_permission_persist_plan(
     inputs: Mapping[str, object],
     *,
@@ -140,18 +158,7 @@ def native_permission_persist_plan(
     def validate(payload: dict[str, Any]) -> None:
         if set(payload) != {"kind", *_PERSIST_PLAN_FIELDS}:
             raise NativeHookDecisionError(_INVALID)
-        plan = _shape({key: payload[key] for key in _PERSIST_PLAN_FIELDS}, _PERSIST_PLAN_FIELDS)
-        stored, policy_action = plan["stored_artifact_hash"], plan["policy_action"]
-        if (stored is None) != (policy_action is None) or policy_action not in {None, "allow", "block"}:
-            raise NativeHookDecisionError(_INVALID)
-        names: list[str] = []
-        for event in plan["events"]:
-            fields = _shape(event, _PERSIST_EVENT_FIELDS)
-            if _PERSIST_EVENT_PHASE.get(fields["name"]) != fields["before_policy"]:
-                raise NativeHookDecisionError(_INVALID)
-            names.append(fields["name"])
-        if tuple(names) not in _PERSIST_EVENT_SEQUENCES[stored is not None]:
-            raise NativeHookDecisionError(_INVALID)
+        validated_permission_persist_plan({key: payload[key] for key in _PERSIST_PLAN_FIELDS})
 
     payload = _decide(
         {
@@ -170,4 +177,5 @@ __all__ = [
     "HOOK_DECISION_NATIVE_PERMISSION_PERSIST_FEATURE",
     "NativeHookDecisionError",
     "native_permission_persist_plan",
+    "validated_permission_persist_plan",
 ]

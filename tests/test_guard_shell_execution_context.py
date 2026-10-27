@@ -7,9 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.cli.commands_support_codex_reads import (
-    _codex_command_is_read_only_source_inspection,
-)
 from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import (
     _codex_post_tool_output_artifact,
 )
@@ -29,8 +26,11 @@ from codex_plugin_scanner.guard.runtime.shell_execution_context import (
     SHELL_CWD_UNRESOLVED_PARENT_SHELL,
     SHELL_CWD_WORKSPACE_ESCAPE,
     model_shell_execution_context,
-    validate_shell_execution_segment,
 )
+from tests.codex_read_only_inspection import (
+    codex_command_is_read_only_source_inspection,
+)
+from tests.resident_probe_support import validate_shell_execution_segment
 
 pytestmark = pytest.mark.usefixtures("package_intent_native")
 
@@ -444,7 +444,7 @@ def test_source_inspection_and_package_evidence_use_project_b(
     manager = _write_executable(tmp_path / "bin" / "npx")
     monkeypatch.setenv("PATH", str(manager.parent))
 
-    assert _codex_command_is_read_only_source_inspection(
+    assert codex_command_is_read_only_source_inspection(
         "cd project-b && sed -n '1,20p' src/safe.py",
         cwd=project_a,
     )

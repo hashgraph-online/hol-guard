@@ -105,6 +105,59 @@ pub struct LocalCliHookRequestV1 {
     pub grant_allowed: bool,
 }
 
+/// Schema discriminator for the daemon's custom extension rule request.
+pub const HOOK_LOCAL_CLI_RULE_REQUEST_SCHEMA: &str = "guard-hook-local-cli-rule-request.v1";
+/// Schema discriminator for the daemon's custom extension rule result.
+pub const HOOK_LOCAL_CLI_RULE_RESULT_SCHEMA: &str = "guard-hook-local-cli-rule-result.v1";
+/// Capability advertised by the runtime when `hook_local_cli_rule` is available.
+pub const HOOK_LOCAL_CLI_RULE_FEATURE: &str = "hook-local-cli-rule-v1";
+
+/// The custom extension rule for one native `PreToolUse` the daemon holds:
+/// `allowed` checks a command the edge allowed against the custom block
+/// rules, `review` reads the rule for a review the daemon paused. The
+/// resident derives the launch identity, reads the grant and decides; the
+/// daemon renders the verdict it returns.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct HookLocalCliRuleRequestV1 {
+    pub schema: String,
+    pub request_id: String,
+    /// Absolute path of `guard.db`; must sit directly under `guard_home`.
+    pub store_path: String,
+    /// Absolute path of the guard home that owns the store.
+    pub guard_home: String,
+    /// `allowed` or `review`.
+    pub mode: String,
+    /// The `PreToolUse` payload the harness sent.
+    pub payload: serde_json::Map<String, Value>,
+    /// The native result the edge answered with.
+    pub native_result: serde_json::Map<String, Value>,
+    /// The hook workspace, the launch directory when the payload names none.
+    #[serde(default)]
+    pub workspace: Option<String>,
+    pub home_dir: String,
+    /// The daemon's own home, which the launch resolves `~` against.
+    #[serde(default)]
+    pub user_home: Option<String>,
+    /// The daemon's environment, which the launch resolves `PATH` against.
+    #[serde(default)]
+    pub env: Option<BTreeMap<String, String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct HookLocalCliRuleResultV1 {
+    pub schema: String,
+    pub request_id: String,
+    /// Always `ok`; a request the resident refuses gets an error frame.
+    pub status: String,
+    /// `none`, `blocked`, `unverified` or `allowed`.
+    pub verdict: String,
+    /// The CLI a `blocked` verdict names.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct LocalCliHookResultV1 {

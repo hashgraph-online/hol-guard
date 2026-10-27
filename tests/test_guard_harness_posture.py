@@ -10,6 +10,7 @@ import pytest
 
 import codex_plugin_scanner.guard.config as config_module
 from codex_plugin_scanner.guard.config import (
+    GuardConfig,
     load_guard_config,
     maybe_auto_revert_watch,
     resolve_risk_action,
@@ -17,7 +18,9 @@ from codex_plugin_scanner.guard.config import (
 )
 from codex_plugin_scanner.guard.harness_posture import (
     config_for_harness,
+    harness_posture_status,
     harness_posture_summary,
+    known_harness_ids,
     protection_settings_payload,
 )
 from codex_plugin_scanner.guard.mdm.contracts import ManagedPolicy, ManagedPolicyState
@@ -111,6 +114,19 @@ def test_config_for_harness_applies_override_and_noops_without_one(tmp_path: Pat
     scoped = config_for_harness(config, "codex")
     assert scoped.mode == "observe" and scoped.protection_posture == "watch"
     assert config_for_harness(config, "claude-code") is config
+
+
+def test_config_for_harness_derives_the_mode_and_level_its_posture_implies(tmp_path: Path) -> None:
+    guard_home = tmp_path / ".hol-guard"
+    config = update_guard_settings(
+        guard_home, {"protection_posture": "protected", "harness_postures": {"codex": "extra_careful"}}
+    )
+    scoped = config_for_harness(config, "codex")
+    assert (scoped.protection_posture, scoped.mode, scoped.security_level) == ("extra_careful", "enforce", "strict")
+    assert scoped.protection_posture_explicit is True
+    # Watch keeps the level it found rather than loosening it.
+    watching = config_for_harness(update_guard_settings(guard_home, {"harness_postures": {"codex": "watch"}}), "codex")
+    assert (watching.mode, watching.security_level) == ("observe", config.security_level)
 
 
 def test_managed_lock_rejects_local_watch_write(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -239,3 +255,34 @@ def test_failed_sidecar_write_binds_no_overrides(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(sidecar_module, "_write_private_file", _fail)
     assert write_harness_postures_sidecar(store, generation=2, policy_digest=digest, postures={"codex": "watch"}) == {}
     assert read_harness_postures_sidecar(store, generation=2, policy_digest=digest) == {}
+
+
+def test_an_unoverridden_harness_does_not_ask_the_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def boom(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise AssertionError("runtime")
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.harness_posture.resolve_native_guard_config", boom)
+    config = GuardConfig(guard_home=tmp_path, workspace=None, harness_postures={"codex": "watch"})
+    assert config_for_harness(config, "claude-code") is config
+
+
+def test_status_asks_the_runtime_once(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    harnesses = known_harness_ids()
+    calls = {"n": 0}
+
+    def fake(_op: str, _fields: object) -> dict[str, object]:
+        calls["n"] += 1
+        view = {"posture": "protected", "mode": "enforce", "security_level": "standard"}
+        return {
+            "baseline": "protected",
+            "effective": {harness: "protected" for harness in harnesses},
+            "views": {harness: view for harness in harnesses},
+        }
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.harness_posture.resolve_native_guard_config", fake)
+    rows = harness_posture_status(GuardConfig(guard_home=tmp_path, workspace=None))
+    assert calls["n"] == 1
+    assert [row["harness"] for row in rows] == list(harnesses)
+    summary = harness_posture_summary(GuardConfig(guard_home=tmp_path, workspace=None))
+    assert calls["n"] == 2
+    assert summary["harnesses_in_watch"] == []

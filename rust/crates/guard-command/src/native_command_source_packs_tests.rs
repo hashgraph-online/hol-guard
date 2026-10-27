@@ -207,7 +207,7 @@ fn synthetic(index: usize) -> (Value, Vec<u8>) {
         .replace("command.example-cli", &id)
         .replace("example-cli", &format!("scale-{index}"));
     let trust = json!({"schemaVersion":"guard.extension-trust-class-map.v1", "publishers":{
-        "hol":{"id":"hol", "displayName":"Hashgraph Online"}, "hol-curated":{"id":"hol-curated", "displayName":"HOL curated library"}},
+        "hol":{"id":"hol", "displayName":"HOL"}, "hol-curated":{"id":"hol-curated", "displayName":"HOL curated library"}},
         "classes":{"first-party":[], "trusted-library":[], "external":[id]}});
     (json!({"kind":"command", "trust":trust}), text.into_bytes())
 }

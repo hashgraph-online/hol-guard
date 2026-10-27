@@ -27,6 +27,7 @@ from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.synced_policy import cached_policy_bundle_validation
 from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
 from tests.daemon_control_patching import patch_daemon_global
+from tests.policy_bundle_parser_support import computed_policy_bundle_hash
 from tests.policy_bundle_signing_helpers import (
     policy_bundle_test_keyring,
     policy_bundle_test_verification_key,
@@ -41,7 +42,6 @@ from tests.test_guard_headless_daemon_api import (
     _request,
 )
 from tests.test_guard_headless_daemon_api import _seed_guard_cloud as _seed_daemon_cloud
-from tests.test_policy_bundle_parser import computed_policy_bundle_hash
 
 
 def _unavailable(*_args: object, **_kwargs: object) -> dict[str, object]:

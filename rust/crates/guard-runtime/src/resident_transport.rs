@@ -367,6 +367,48 @@ fn retry_overflow_admissions(
     }
 }
 
+/// Auth workers only authenticate and read the frame header. Evaluation runs
+/// on the evaluation pool even when the whole payload arrived with the header:
+/// an auth worker held by a slow evaluation cannot answer the next caller's
+/// challenge, and that caller gives up after `AUTH_TIMEOUT` and falls back to
+/// the daemon. Concurrent hooks then miss the direct lane in bursts.
+///
+/// A full evaluation queue leaves a fully buffered request on the auth
+/// worker, as before the hand-off: answering `native_overloaded` would turn
+/// saturation into a hook failure. A fragmented request is still answered
+/// with overload so no auth worker ever waits on a client's payload.
+fn dispatch_authenticated(
+    pending: PendingRequest,
+    control_sender: &SyncSender<PendingRequest>,
+    evaluation_sender: &SyncSender<PendingRequest>,
+    policy_store: Option<&Arc<crate::policy_store::PolicySnapshotStore>>,
+) {
+    if pending.payload_prefix.len() == pending.length
+        && control::is_request(&pending.payload_prefix)
+    {
+        control::enqueue(control_sender, pending);
+        return;
+    }
+    match evaluation_sender.try_send(pending) {
+        Ok(()) => {}
+        // A fully buffered request needs no further reads, so the auth worker
+        // evaluates it as it did before the hand-off existed. A fragmented one
+        // would hold the auth worker in a payload read, so it is answered with
+        // retryable overload instead.
+        Err(TrySendError::Full(returned)) if returned.payload_prefix.len() == returned.length => {
+            handle_pending_request(returned, policy_store.cloned(), Some(control_sender));
+        }
+        Err(TrySendError::Full(mut returned)) => write_overload(&mut returned),
+        Err(TrySendError::Disconnected(returned)) => {
+            resident_diagnostics::finish_since(
+                Phase::ResidentDispatchWait,
+                Status::Error,
+                returned.accepted_at,
+            );
+        }
+    }
+}
+
 pub(crate) fn start_resident_workers(
     token: Arc<[u8; crate::AUTH_TOKEN_BYTES]>,
     policy_store: Option<Arc<crate::policy_store::PolicySnapshotStore>>,
@@ -416,28 +458,12 @@ pub(crate) fn start_resident_workers(
                 Err(_) => return,
             };
             pending.payload_prefix.truncate(available);
-            if available == pending.length {
-                if control::is_request(&pending.payload_prefix) {
-                    control::enqueue(&control_sender, pending);
-                } else {
-                    handle_pending_request(pending, policy_store.clone(), Some(&control_sender));
-                }
-                return;
-            }
-            match evaluation_sender.try_send(pending) {
-                Ok(()) => {}
-                Err(TrySendError::Full(returned)) => {
-                    let mut pending = returned;
-                    write_overload(&mut pending);
-                }
-                Err(TrySendError::Disconnected(returned)) => {
-                    resident_diagnostics::finish_since(
-                        Phase::ResidentDispatchWait,
-                        Status::Error,
-                        returned.accepted_at,
-                    );
-                }
-            }
+            dispatch_authenticated(
+                pending,
+                &control_sender,
+                &evaluation_sender,
+                policy_store.as_ref(),
+            );
         },
     ));
     let overflow_primary = authentication_sender.clone();

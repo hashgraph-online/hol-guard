@@ -46,21 +46,3 @@ def build_decision_v2(
     signals: Sequence[RiskSignalV2] = (),
 ) -> GuardDecisionV2:
     return decision_from_legacy_policy_action(policy_action, reason=reason, signals=signals)
-
-
-def decide_action_with_v2(
-    configured_action: str | None,
-    default_action: str | None,
-    config: GuardConfig,
-    changed: bool,
-    *,
-    reason: str,
-    signals: Sequence[RiskSignalV2] = (),
-) -> tuple[GuardAction, GuardDecisionV2]:
-    action = decide_action(
-        configured_action=configured_action,
-        default_action=default_action,
-        config=config,
-        changed=changed,
-    )
-    return action, build_decision_v2(action, reason=reason, signals=signals)

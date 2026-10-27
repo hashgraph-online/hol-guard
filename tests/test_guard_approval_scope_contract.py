@@ -26,6 +26,7 @@ from codex_plugin_scanner.guard.store import (
     runtime_tool_action_exact_match_context,
     runtime_tool_action_policy_artifact_id,
 )
+from tests.policy_store_support import resolve_policy
 
 
 def _request(
@@ -836,7 +837,8 @@ def test_v2_saved_tool_call_allow_remains_bound_to_exact_context(tmp_path: Path,
     assert len(decisions) == 1
     assert decisions[0]["expires_at"] is None
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             artifact_id,
             context_token,
@@ -853,7 +855,8 @@ def test_v2_saved_tool_call_allow_remains_bound_to_exact_context(tmp_path: Path,
         sandbox={"mode": "workspace-write"},
     )
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             artifact_id,
             changed_token,

@@ -15,7 +15,7 @@ from pathlib import Path
 
 from ..store_policy_decision import policy_decision_hash_exists
 from .hook_fail_closed import render_accepted_allow, render_pre_tool
-from .hook_native_exact_action import GUARD_CONTROL_ACTION_TYPES, native_exact_action
+from .hook_native_exact_action import native_exact_action
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -184,16 +184,6 @@ def _native_review_is_approvable(native_result: Mapping[str, object]) -> bool:
     return native_result.get("policy_action") in {"review", "require-reapproval"} and native_result.get(
         "minimum_action"
     ) in {"review", "require-reapproval"}
-
-
-def _native_review_is_overridable(native_result: Mapping[str, object]) -> bool:
-    """A review a broad local-CLI grant may lift: never Guard control or a package action."""
-
-    if not _native_review_is_approvable(native_result):
-        return False
-    action = native_result.get("action")
-    action_type = action.get("action_type") if isinstance(action, Mapping) else None
-    return action_type not in {*GUARD_CONTROL_ACTION_TYPES, "package"}
 
 
 __all__ = [

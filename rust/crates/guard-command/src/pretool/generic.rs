@@ -19,6 +19,8 @@ mod extract;
 mod omp;
 #[path = "generic_omp_bash_cwd.rs"]
 mod omp_bash_cwd;
+#[path = "generic_read_decisions.rs"]
+mod read_decisions;
 
 /// Resolve the host's tool-level directory for an execution-owner preview.
 /// This is path observation only; the owner must still judge current policy.
@@ -378,7 +380,7 @@ fn omp_bash_cwd_missing(harness: &str, event: &str) -> PreToolResultV1 {
             false,
         ),
         "block",
-        evaluate::MISSING_PATH,
+        read_decisions::MISSING_PATH,
         "HOL Guard did not run this command because its working directory does not exist. Check the directory, for example by listing its parent, and try again with the correct one.",
     )
 }
@@ -779,8 +781,8 @@ fn evaluate_envelope(
             // The edit cannot apply, so stopping it costs nothing. Saying why
             // lets the agent fix the path instead of waiting on an approval.
             super::omp_hashline_writes::HashlineEdit::MissingTarget(path) => {
-                let mut result = generic_result(action, "block", evaluate::MISSING_PATH, "");
-                result.reason = evaluate::missing_path_reason(
+                let mut result = generic_result(action, "block", read_decisions::MISSING_PATH, "");
+                result.reason = read_decisions::missing_path_reason(
                     "HOL Guard did not run this edit because a file it names does not exist. Check the path, for example by listing its parent directory, and try again with the correct one.",
                     "edit",
                     Some(&path),

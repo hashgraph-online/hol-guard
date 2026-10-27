@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import store_local_cli, store_mcp_provider_catalog
+from codex_plugin_scanner.guard import store_mcp_provider_catalog
 from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiError, LocalCliApiService
 from codex_plugin_scanner.guard.runtime.composio_discovery import ComposioActionSchema
 from codex_plugin_scanner.guard.runtime.mcp_classification import McpClassificationUnavailableError
@@ -147,7 +147,6 @@ def test_an_unavailable_resident_still_lists_connections_and_actions(
         raise McpClassificationUnavailableError
 
     monkeypatch.setattr(store_mcp_provider_catalog, "classify_mcp_actions", unavailable)
-    monkeypatch.setattr(store_local_cli, "classify_mcp_actions", unavailable)
 
     action = store.read_local_mcp_provider_actions(cli_id)["actions"][0]
     assert action["permission_state"] == "review"

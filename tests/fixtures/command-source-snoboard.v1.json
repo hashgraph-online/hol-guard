@@ -11096,7 +11096,7 @@
       },
       "publishers": {
         "hol": {
-          "displayName": "Hashgraph Online",
+          "displayName": "HOL",
           "id": "hol"
         },
         "hol-curated": {

@@ -107,8 +107,101 @@ def detection_request(harness: str, context: HarnessContext) -> dict[str, object
     return request
 
 
-def _command_available(command: str) -> bool:
-    return shutil.which(command) is not None
+_SYSTEM_ONLY_PATH_ENTRIES = frozenset({"/usr/bin", "/bin", "/usr/sbin", "/sbin"})
+
+
+def _system_only_path(path_value: str | None) -> bool:
+    """True when PATH is the bare default launchd and GUI launchers hand to apps."""
+
+    entries = [entry.rstrip("/") or "/" for entry in (path_value or "").split(os.pathsep) if entry]
+    return bool(entries) and all(entry in _SYSTEM_ONLY_PATH_ENTRIES for entry in entries)
+
+
+def _user_command_directories(command: str, home: Path) -> tuple[Path, ...]:
+    """Install directories a terminal PATH normally has and a GUI-launched app does not.
+
+    Guard Desktop starts the daemon with only the system directories on PATH, so a
+    plain ``shutil.which`` misses CLIs from Homebrew, npm and nvm, bun or a tool's own
+    installer, and diagnostics then report a working tool as broken.
+    """
+
+    directories = [
+        Path("/opt/homebrew/bin"),
+        Path("/usr/local/bin"),
+        Path("/home/linuxbrew/.linuxbrew/bin"),
+        home / ".local" / "bin",
+        home / "bin",
+        home / ".bun" / "bin",
+        home / ".npm-global" / "bin",
+        home / ".volta" / "bin",
+        home / ".asdf" / "shims",
+        home / ".cargo" / "bin",
+        home / "Library" / "pnpm",
+        home / ".local" / "share" / "pnpm",
+        home / f".{command}" / "bin",
+    ]
+    nvm_versions = home / ".nvm" / "versions" / "node"
+    try:
+        node_versions = sorted(nvm_versions.iterdir(), key=_node_version_key, reverse=True)
+    except OSError:
+        node_versions = []
+    directories.extend(version / "bin" for version in node_versions)
+    return tuple(directories)
+
+
+def _node_version_key(path: Path) -> tuple[int, ...]:
+    parts = path.name.lstrip("v").split(".")
+    return tuple(int(part) if part.isdigit() else -1 for part in parts)
+
+
+def _user_owned_executable(candidate: Path) -> bool:
+    # Match what the user's terminal would run, but only when both the install directory
+    # and the directory holding the resolved target are owned by root or the user and
+    # nobody else can write to them. Package managers such as bun install world-writable
+    # entrypoints, so the file's own mode is not checked.
+    try:
+        resolved = candidate.resolve(strict=True)
+        file_stat = resolved.stat()
+        directory_stats = (candidate.parent.stat(), resolved.parent.stat())
+    except (OSError, RuntimeError):
+        # Python before 3.13 raises RuntimeError for a symlink loop.
+        return False
+    owners = {0, os.getuid()}
+    if file_stat.st_uid not in owners:
+        return False
+    if any(stat.st_uid not in owners or stat.st_mode & 0o022 for stat in directory_stats):
+        return False
+    return resolved.is_file() and os.access(resolved, os.X_OK)
+
+
+def _which_from_user_directories(
+    command: str, home: Path | None = None, extra_directories: tuple[Path, ...] = ()
+) -> str | None:
+    """Locate a CLI the user installed outside the process PATH.
+
+    The usual user install directories are searched only under the bare desktop launch
+    PATH. ``extra_directories`` names a tool's own installer directory and is searched
+    under any PATH. Every candidate must pass the same ownership and write checks.
+    Only availability checks use this. Launch and probe commands keep resolving through
+    PATH, so nothing found here is ever executed.
+    """
+
+    if os.name == "nt" or os.sep in command:
+        return None
+    directories: tuple[Path, ...] = ()
+    if _system_only_path(os.environ.get("PATH")):
+        directories = _user_command_directories(command, Path.home() if home is None else home)
+    for directory in (*directories, *extra_directories):
+        candidate = directory / command
+        if _user_owned_executable(candidate):
+            return str(candidate)
+    return None
+
+
+def _command_available(command: str, home: Path | None = None, extra_directories: tuple[Path, ...] = ()) -> bool:
+    return (
+        shutil.which(command) is not None or _which_from_user_directories(command, home, extra_directories) is not None
+    )
 
 
 def _shell_command(command: tuple[str, ...], *, windows: bool | None = None) -> str:

@@ -92,6 +92,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = guard_config_update::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if guard_config_resolve::is_command(command) && flag == "--stdin" => {
+            let response = guard_config_resolve::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if policy_effective::is_command(command) && flag == "--stdin" => {
             let response = policy_effective::run_command(io::stdin().lock())?;
             write_bytes_response(&response)

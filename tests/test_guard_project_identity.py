@@ -16,6 +16,7 @@ from codex_plugin_scanner.guard.project_identity import (
 )
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
+from tests.policy_store_support import resolve_policy
 
 _NOW = "2026-08-07T20:00:00+00:00"
 _WORKSPACE_ID = "workspace-solo-project-memory"
@@ -244,7 +245,8 @@ def test_forged_clone_metadata_cannot_grant_portable_permission(tmp_path: Path) 
     _activate_project_memory_bundle(store, bundle)
 
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             "tool:read",
             workspace=str(forged),
@@ -337,7 +339,8 @@ def test_restrictive_project_memory_created_on_one_clone_reuses_on_another_clone
     _activate_project_memory_bundle(target_store, bundle)
 
     assert (
-        target_store.resolve_policy(
+        resolve_policy(
+            target_store,
             "codex",
             "tool:read",
             workspace=str(second),
@@ -365,7 +368,8 @@ def test_local_path_scope_remains_more_restrictive_than_portable_allow(tmp_path:
     _activate_project_memory_bundle(store, bundle)
 
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             "tool:read",
             workspace=str(second),
@@ -399,14 +403,16 @@ def test_portable_selector_does_not_turn_one_shot_approval_into_sticky_memory(tm
             expires_at="2026-08-08T20:00:00+00:00",
         )
 
-    first = store.resolve_policy(
+    first = resolve_policy(
+        store,
         "codex",
         "tool:read-once",
         artifact_hash="sha256:once",
         workspace=str(workspace),
         now=_NOW,
     )
-    second = store.resolve_policy(
+    second = resolve_policy(
+        store,
         "codex",
         "tool:read-once",
         artifact_hash="sha256:once",
@@ -438,21 +444,24 @@ def test_direct_portable_selector_does_not_apply_one_shot_permission(tmp_path: P
             expires_at="2026-08-08T20:00:00+00:00",
         )
 
-    first = store.resolve_policy(
+    first = resolve_policy(
+        store,
         "codex",
         "tool:portable-once",
         artifact_hash="sha256:portable-once",
         workspace=project_identity,
         now=_NOW,
     )
-    second = store.resolve_policy(
+    second = resolve_policy(
+        store,
         "codex",
         "tool:portable-once",
         artifact_hash="sha256:portable-once",
         workspace=project_identity,
         now="2026-08-07T20:01:00+00:00",
     )
-    third = store.resolve_policy(
+    third = resolve_policy(
+        store,
         "codex",
         "tool:portable-once",
         artifact_hash="sha256:portable-once",

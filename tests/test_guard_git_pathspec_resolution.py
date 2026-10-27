@@ -10,9 +10,11 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _codex_post_tool_output_artifact
 from codex_plugin_scanner.guard.native_codex_tool_output import codex_tool_output_native
+from tests.codex_read_only_inspection import (
+    codex_command_is_read_only_source_inspection,
+)
 from tests.native_command_test_support import inspect_command_native_test as inspect_command
 
 # Windows rejects ASCII newlines in filenames; keep an unusual Unicode separator
@@ -95,19 +97,19 @@ def test_git_diff_pathspec_applies_the_same_policy_as_explicit_files(git_reposit
     protected_explicit = "git diff -- .env | sed -n '1,40p'"
     protected_without_terminator = "git diff .env | sed -n '1,40p'"
 
-    assert guard_commands_module._codex_command_is_read_only_source_inspection(
+    assert codex_command_is_read_only_source_inspection(
         allowed_magic,
         cwd=git_repository,
     )
-    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
+    assert not codex_command_is_read_only_source_inspection(
         protected_magic,
         cwd=git_repository,
     )
-    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
+    assert not codex_command_is_read_only_source_inspection(
         protected_explicit,
         cwd=git_repository,
     )
-    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
+    assert not codex_command_is_read_only_source_inspection(
         protected_without_terminator,
         cwd=git_repository,
     )
@@ -277,7 +279,7 @@ def test_windows_refuses_git_pathspec_identity_instead_of_guessing(git_repositor
     assert answer.value is None
     assert answer.error_code == "native_codex_tool_output_unsupported_platform"
     # Without the resident's proof even a POSIX-safe source pathspec stays unproven.
-    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
+    assert not codex_command_is_read_only_source_inspection(
         "git diff -- ':(top,glob)src/**/*.py' | sed -n '1,40p'",
         cwd=git_repository,
     )

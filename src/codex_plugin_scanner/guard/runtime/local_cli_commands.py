@@ -6,12 +6,7 @@ import hashlib
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Literal
-
-from .command_model import parse_shell_command
-from .local_cli_identity import UnlistedCliIdentity
-from .local_cli_runner import runner_inner_arguments
 
 LocalCliCommandState = Literal["inherit", "allow", "review", "block"]
 
@@ -117,69 +112,3 @@ def merge_discovered_commands(
             break
     merged.append(other)
     return tuple(merged)
-
-
-def command_tokens_for_invocation(
-    command_text: str,
-    *,
-    cwd: Path,
-    home_dir: Path | None,
-    identity: UnlistedCliIdentity,
-) -> tuple[str, ...]:
-    from .package_json_scripts import package_script_command_tokens
-
-    package_tokens = package_script_command_tokens(command_text, cwd=cwd, home_dir=home_dir)
-    if package_tokens is not None:
-        return package_tokens
-    model = parse_shell_command(command_text, cwd=cwd, home_dir=home_dir)
-    if not model.segments:
-        return ()
-    arguments = list(model.segments[0].arguments)
-    if identity.runner is not None:
-        split = runner_inner_arguments(identity.runner, arguments)
-        if split is None:
-            return ()
-        arguments = split
-    elif identity.kind == "script" and arguments:
-        first_name = Path(arguments[0]).name
-        if first_name == identity.name:
-            arguments = arguments[1:]
-    tokens: list[str] = []
-    for argument in arguments:
-        if argument.startswith("-") or not _COMMAND_NAME.fullmatch(argument):
-            break
-        tokens.append(argument)
-        if len(tokens) >= _MAX_DEPTH:
-            break
-    return tuple(tokens)
-
-
-def match_command_id(
-    tokens: Sequence[str],
-    commands: Sequence[LocalCliCommand],
-) -> str:
-    if not tokens:
-        return ROOT_COMMAND_ID
-    known = {command.command_id for command in commands}
-    for length in range(min(len(tokens), _MAX_DEPTH), 0, -1):
-        candidate = ".".join(tokens[:length])
-        if candidate in known:
-            return candidate
-    return OTHER_COMMAND_ID
-
-
-def resolve_command_id_for_text(
-    command_text: str,
-    *,
-    cwd: Path,
-    home_dir: Path | None,
-    identity: UnlistedCliIdentity,
-    commands: Sequence[LocalCliCommand],
-) -> str:
-    tokens = command_tokens_for_invocation(
-        command_text,
-        cwd=cwd,
-        home_dir=home_dir,
-        identity=identity,
-    )
-    return match_command_id(tokens, commands)

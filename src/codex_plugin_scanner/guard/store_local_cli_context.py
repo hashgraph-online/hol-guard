@@ -13,7 +13,7 @@ otherwise ``unset``), so it can never disagree with the grant that decides.
 from __future__ import annotations
 
 import sqlite3
-from typing import Final, Literal
+from typing import Final
 
 FIRST_BLOCKED_CAUSES: Final = (
     "exec_outside_roots",
@@ -33,7 +33,6 @@ CONTEXT_COLUMNS: Final = (
 # Caps the resident applies as well; the store never keeps more than this.
 MAX_SUMMARY_CHARS: Final = 240
 MAX_LABEL_CHARS: Final = 80
-ConnectorResolutionState = Literal["unset", "allowed", "blocked"]
 # The causes a grant capability resolves, and the capability each implies.
 CAPABILITY_BY_CAUSE: Final = {
     "connect_loopback": "loopback-network",
@@ -63,24 +62,6 @@ def validated_first_blocked_cause(raw: object) -> str | None:
     return raw
 
 
-def connector_resolution_state(
-    connection: sqlite3.Connection, cli_id: str, identity_hash: str
-) -> ConnectorResolutionState:
-    """Derive the decision state from the grant row; a changed identity is ``unset``."""
-
-    exists = connection.execute(
-        "select 1 from sqlite_master where type = 'table' and name = 'local_cli_grant'"
-    ).fetchone()
-    if exists is None:
-        return "unset"
-    row = connection.execute("select identity_hash, state from local_cli_grant where cli_id = ?", (cli_id,)).fetchone()
-    if row is None or row[0] != identity_hash:
-        return "unset"
-    if row[1] == "allowed":
-        return "allowed"
-    return "blocked" if row[1] == "blocked" else "unset"
-
-
 def note_capability_cause(connection: sqlite3.Connection, *, cli_id: str, identity_hash: str, cause: str) -> int:
     """Keep that an allowed CLI's contained run was denied what ``cause`` names.
 
@@ -100,19 +81,6 @@ def note_capability_cause(connection: sqlite3.Connection, *, cli_id: str, identi
     return cursor.rowcount
 
 
-def implied_capabilities(connection: sqlite3.Connection) -> dict[str, tuple[str, str]]:
-    """``{cli_id: (identity_hash, capability)}`` for each CLI whose cause implies one."""
-
-    capability_causes = tuple(CAPABILITY_BY_CAUSE)
-    marks = ", ".join("?" for _ in capability_causes)
-    rows = connection.execute(
-        f"""select cli_id, identity_hash, first_blocked_cause from local_cli_observation
-            where surface = 'cli' and first_blocked_cause in ({marks})""",
-        capability_causes,
-    ).fetchall()
-    return {str(row[0]): (str(row[1]), CAPABILITY_BY_CAUSE[str(row[2])]) for row in rows}
-
-
 def _column_names(connection: sqlite3.Connection, table: str) -> set[str]:
     names: set[str] = set()
     for row in connection.execute(f"pragma table_info({table})").fetchall():
@@ -126,10 +94,7 @@ __all__ = [
     "FIRST_BLOCKED_CAUSES",
     "MAX_LABEL_CHARS",
     "MAX_SUMMARY_CHARS",
-    "ConnectorResolutionState",
-    "connector_resolution_state",
     "ensure_local_cli_context_columns",
-    "implied_capabilities",
     "note_capability_cause",
     "validated_first_blocked_cause",
 ]

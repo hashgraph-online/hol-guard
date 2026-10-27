@@ -136,6 +136,15 @@ regexes = [
 ]
 
 [[rules.allowlists]]
+description = "Recorded provider-catalog fingerprint in the MCP provider read parity vectors, a SHA-256 of the catalog rows rather than a credential"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)rust/crates/guard\-runtime/testdata/guard_store/mcp_provider_read_vectors\.json$''']
+regexes = [
+  '''^[\t\r\n ]*"catalog_token": "8d638ce7441755dda07242b347ddc6c5c13b0d7e107c61a7ae41223d466402cd",?[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
 description = "Synthetic OAuth subject digest recorded in the guard-store parity vectors, not a credential"
 condition = "AND"
 regexTarget = "secret"

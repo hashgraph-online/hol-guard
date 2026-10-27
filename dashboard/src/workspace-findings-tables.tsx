@@ -1,6 +1,35 @@
 import { Tag, type TagTone } from "./approval-center-primitives";
 import type { WorkspaceFinding, WorkspaceSkillCheck } from "./workspace-findings-api";
 
+/** Shown under a finding's status when the latest scan could not recheck it. */
+export function CarriedNote({ finding }: { finding: WorkspaceFinding }) {
+  if (!finding.carried) return null;
+  return <span className="mt-1 block text-xs text-slate-500">Not rechecked in the latest scan</span>;
+}
+
+function evidenceSource(finding: WorkspaceFinding): string {
+  if (finding.advisoryIds.length > 0) return "Advisory match";
+  return finding.kind === "supply_chain" ? "Package policy" : "Rule match";
+}
+
+const VALIDATION_SUFFIX: Record<string, string> = { confirmed: ", confirmed", unvalidated: ", not confirmed" };
+
+/**
+ * Where a finding came from and how far it is confirmed, apart from what Guard
+ * does about it. Every local finding comes from advisory data, package policy
+ * or a fixed rule; none is an AI judgement.
+ */
+export function EvidenceNote({ finding }: { finding: WorkspaceFinding }) {
+  // A policy match has no evidence beyond the match, so it is never shown as confirmed.
+  const source = evidenceSource(finding);
+  return (
+    <span className="mt-1 block text-xs text-slate-500">
+      {source}
+      {source === "Package policy" ? "" : (VALIDATION_SUFFIX[finding.validation] ?? "")}
+    </span>
+  );
+}
+
 export function Cell(props: { label: string; wide?: boolean; children: React.ReactNode }) {
   return (
     <td className={`min-w-0 md:px-3 md:py-2.5 ${props.wide ? "col-span-2 md:col-span-1" : ""}`}>
@@ -41,7 +70,11 @@ export function SecretFindingsTable({ findings }: { findings: WorkspaceFinding[]
                 </span>
               </Cell>
               <Cell label="Severity"><span className="capitalize text-slate-700">{finding.severity}</span></Cell>
-              <Cell label="Status"><Tag tone="slate">Not verified</Tag></Cell>
+              <Cell label="Status">
+                <Tag tone="amber">Warning</Tag>
+                <EvidenceNote finding={finding} />
+                <CarriedNote finding={finding} />
+              </Cell>
             </tr>
           ))}
         </tbody>
@@ -100,7 +133,11 @@ function RuleFindingsTable({ findings, caption, subjectLabel, subject, check }: 
                     </span>
                   )}
                 </Cell>
-                <Cell label="Status"><Tag tone="amber">Warning</Tag></Cell>
+                <Cell label="Status">
+                  <Tag tone="amber">Warning</Tag>
+                  <EvidenceNote finding={finding} />
+                  <CarriedNote finding={finding} />
+                </Cell>
               </tr>
             );
           })}
@@ -156,6 +193,50 @@ export function HookFindingsTable({ findings }: { findings: WorkspaceFinding[] }
   );
 }
 
+/** Hooks and MCP servers an agent plugin in the worktree ships. */
+export function PluginFindingsTable({ findings }: { findings: WorkspaceFinding[] }) {
+  return (
+    <RuleFindingsTable
+      findings={findings}
+      caption="Agent plugins with risky hooks or MCP servers"
+      subjectLabel="Plugin"
+      subject={(finding) => (
+        <>
+          <span className="block break-all font-semibold text-slate-800">
+            {finding.hook ? `${finding.hook.event} hook` : `${finding.mcp?.server} MCP server`}
+          </span>
+          <span className="block break-all font-mono text-xs text-slate-500">{finding.path}</span>
+        </>
+      )}
+      check={(finding) => finding.hook ?? finding.mcp}
+    />
+  );
+}
+
+export function WorkflowFindingsTable({ findings }: { findings: WorkspaceFinding[] }) {
+  return (
+    <RuleFindingsTable
+      findings={findings}
+      caption="GitHub Actions workflows with risky settings"
+      subjectLabel="Workflow"
+      subject={(finding) => <span className="break-all font-mono text-xs text-slate-700">{finding.path}</span>}
+      check={(finding) => finding.workflow}
+    />
+  );
+}
+
+export function EditorTaskFindingsTable({ findings }: { findings: WorkspaceFinding[] }) {
+  return (
+    <RuleFindingsTable
+      findings={findings}
+      caption="Editor tasks and dev containers that run commands on their own"
+      subjectLabel="File"
+      subject={(finding) => <span className="break-all font-mono text-xs text-slate-700">{finding.path}</span>}
+      check={(finding) => finding.editorTask}
+    />
+  );
+}
+
 const RUNTIME_VERDICTS: Record<string, { label: string; tone: TagTone }> = {
   affected: { label: "Affected version", tone: "attention" },
   restart_required: { label: "Restart needed", tone: "amber" },
@@ -194,6 +275,8 @@ export function RuntimeFindingsTable({ findings }: { findings: WorkspaceFinding[
                     <Tag tone={verdict.tone}>{verdict.label}</Tag>
                     {finding.runtime?.knownExploited && <Tag tone="red">Known exploited</Tag>}
                   </span>
+                  <EvidenceNote finding={finding} />
+                  <CarriedNote finding={finding} />
                 </Cell>
                 <Cell label="Severity"><span className="capitalize text-slate-700">{finding.severity}</span></Cell>
                 <Cell label="Advisories" wide>

@@ -11,6 +11,10 @@ from codex_plugin_scanner.guard import native_sensitive_request as client
 from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.native_request_context import NativeRequestContextFailure
 from codex_plugin_scanner.guard.runtime import secret_file_requests
+from tests import resident_probe_support as probes
+from tests.codex_read_only_inspection import (
+    codex_post_tool_command_is_read_only_source_inspection,
+)
 
 
 def _reply(query: str, result: object) -> dict[str, object]:
@@ -91,7 +95,7 @@ def test_unknown_sensitivity_is_not_presented(monkeypatch: pytest.MonkeyPatch, t
 def test_boolean_answers_must_be_booleans(monkeypatch: pytest.MonkeyPatch) -> None:
     _answer(monkeypatch, _reply("read_only_lookup_target_is_safe", 1))
     with pytest.raises(client.NativeSensitiveRequestError):
-        secret_file_requests._read_only_lookup_target_is_safe("README.md", allow_dirs=False)
+        probes._read_only_lookup_target_is_safe("README.md", allow_dirs=False)
 
 
 def test_tool_action_reply_rejects_a_non_string_command(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -223,8 +227,8 @@ def test_post_tool_review_outage_blocks_the_post_tool_artifact(monkeypatch: pyte
 
 
 def test_resident_outage_is_not_a_read_only_post_tool(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.cli import commands_support_codex_commands as codex
     from codex_plugin_scanner.guard.native_codex_tool_output import ToolOutputAnswer
+    from tests import codex_read_only_inspection as codex
 
     sent: list[tuple[str, dict[str, object]]] = []
 
@@ -234,7 +238,7 @@ def test_resident_outage_is_not_a_read_only_post_tool(monkeypatch: pytest.Monkey
 
     monkeypatch.setattr(codex, "codex_tool_output_native", down)
     assert (
-        codex._codex_post_tool_command_is_read_only_source_inspection(
+        codex_post_tool_command_is_read_only_source_inspection(
             payload={"tool_name": "Bash", "tool_input": {"commands": ["ls"]}, "session_id": "s"},
             cwd=tmp_path,
             home_dir=None,

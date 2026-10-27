@@ -4,29 +4,49 @@ on:
   workflow_run:
     workflows: ["Publish to PyPI"]
     types: [completed]
-    branches: [main, release/3.0]
+    # Stable releases are dispatched on their vX.Y.Z tag, which GitHub reports as the branch.
+    branches: [main, release/3.0, "v[0-9]+.[0-9]+.[0-9]+"]
+  workflow_dispatch:
+    inputs:
+      publication_run_id:
+        description: Successful Publish to PyPI run of the latest stable release to republish
+        required: true
+        type: string
 
 # New jobs start without a token grant; writers declare only their own scopes.
 permissions: {}
 
 concurrency:
-  group: hol-guard-mcp-registry-${{ github.event.workflow_run.head_branch }}
+  # GitHub keeps one pending run per group and drops the older one, so no other run may share a
+  # tag run's group. Repairs queue among themselves; each push run is alone. The publish-time
+  # latest-release check, not ordering, stops an older version from replacing a newer one.
+  group: hol-guard-mcp-registry-${{ github.event_name == 'workflow_dispatch' && 'repair' || github.event.workflow_run.event == 'workflow_dispatch' && format('tag-{0}', github.event.workflow_run.head_branch) || format('push-{0}', github.event.workflow_run.id) }}
   cancel-in-progress: false
 
 jobs:
   verify:
     if: >-
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
-      github.event.workflow_run.conclusion == 'success' &&
-      contains(fromJSON('["push", "workflow_dispatch"]'), github.event.workflow_run.event) &&
-      github.event.workflow_run.run_attempt == 1 &&
-      github.event.workflow_run.head_repository.full_name == github.repository &&
-      contains(fromJSON('["main", "release/3.0"]'), github.event.workflow_run.head_branch) &&
-      !contains(github.event.workflow_run.head_commit.message || '', '[skip release publish]')
+      (
+        (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+        (
+          github.event.workflow_run.conclusion == 'success' &&
+          contains(fromJSON('["push", "workflow_dispatch"]'), github.event.workflow_run.event) &&
+          github.event.workflow_run.run_attempt == 1 &&
+          github.event.workflow_run.head_repository.full_name == github.repository &&
+          (
+            contains(fromJSON('["main", "release/3.0"]'), github.event.workflow_run.head_branch) ||
+            (github.event.workflow_run.event == 'workflow_dispatch' && startsWith(github.event.workflow_run.head_branch, 'v'))
+          ) &&
+          !contains(github.event.workflow_run.head_commit.message || '', '[skip release publish]')
+        )
+      )
     permissions:
       actions: read
       contents: read
     uses: ./.github/workflows/verify-mcp-release-source.yml
+    with:
+      publication_run_id: ${{ inputs.publication_run_id || '' }}
 
   publish:
     needs: verify
@@ -38,12 +58,20 @@ jobs:
       needs.verify.outputs.sha != '' &&
       needs.verify.outputs.branch != '' &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
-      github.event.workflow_run.conclusion == 'success' &&
-      contains(fromJSON('["push", "workflow_dispatch"]'), github.event.workflow_run.event) &&
-      github.event.workflow_run.run_attempt == 1 &&
-      github.event.workflow_run.head_repository.full_name == github.repository &&
-      contains(fromJSON('["main", "release/3.0"]'), github.event.workflow_run.head_branch) &&
-      !contains(github.event.workflow_run.head_commit.message || '', '[skip release publish]')
+      (
+        (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+        (
+          github.event.workflow_run.conclusion == 'success' &&
+          contains(fromJSON('["push", "workflow_dispatch"]'), github.event.workflow_run.event) &&
+          github.event.workflow_run.run_attempt == 1 &&
+          github.event.workflow_run.head_repository.full_name == github.repository &&
+          (
+            contains(fromJSON('["main", "release/3.0"]'), github.event.workflow_run.head_branch) ||
+            (github.event.workflow_run.event == 'workflow_dispatch' && startsWith(github.event.workflow_run.head_branch, 'v'))
+          ) &&
+          !contains(github.event.workflow_run.head_commit.message || '', '[skip release publish]')
+        )
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -59,12 +87,17 @@ jobs:
         env:
           SOURCE_SHA: ${{ needs.verify.outputs.sha }}
           SOURCE_REF: refs/heads/${{ needs.verify.outputs.branch }}
+          VERIFIED_TAG: ${{ needs.verify.outputs.tag }}
         run: |
           set -euo pipefail
           # The trusted verifier proved both PyPI and GitHub release jobs completed.
           # A missing tag is an integrity error, not a reason to occupy a runner for 30 minutes.
           git fetch --force --tags origin
-          if [[ "$SOURCE_REF" == "refs/heads/release/3.0" ]]; then
+          if [[ -n "$VERIFIED_TAG" ]]; then
+            # The verifier proved this exact tag names the published commit; never substitute another tag at it.
+            git tag --points-at "$SOURCE_SHA" --list 'v*' | grep -Fqx -- "$VERIFIED_TAG"
+            tag="$VERIFIED_TAG"
+          elif [[ "$SOURCE_REF" == "refs/heads/release/3.0" ]]; then
             tag=$(git tag --points-at "$SOURCE_SHA" --list 'alpha/v3.0.1a*' | sort -V | tail -n 1)
           elif [[ "$SOURCE_REF" == "refs/heads/main" ]]; then
             tag=$(git tag --points-at "$SOURCE_SHA" --list 'v*' | sort -V | tail -n 1)
@@ -148,6 +181,20 @@ jobs:
           tar -xzf "$archive" mcp-publisher
           chmod 0755 mcp-publisher
           ./mcp-publisher --help >/dev/null
+
+      - name: Refuse to replace a newer stable release
+        if: needs.verify.outputs.branch == 'main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          # Rechecked at the publication boundary: a newer release may have shipped while this run waited.
+          latest=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '.tag_name')
+          if [[ "$latest" != "$TAG" ]]; then
+            echo "$TAG is no longer the latest stable release ($latest); the MCP Registry keeps the newer version" >&2
+            exit 1
+          fi
 
       - name: Authenticate with GitHub OIDC
         if: >-

@@ -5,9 +5,6 @@ from __future__ import annotations
 import pytest
 
 from codex_plugin_scanner.guard.models import GuardAction
-from codex_plugin_scanner.guard.runtime.command_shadow_evaluation import (
-    baseline_command_shadow_proposal,
-)
 from codex_plugin_scanner.guard.runtime.effect_contract import ProofRoute
 from tests.guard_command_decision_diff_runner import _baseline_proposal
 from tests.native_command_test_support import real_native_command_evaluation
@@ -42,10 +39,10 @@ def test_native_classification_survives_baseline_and_shadow_comparison(
     assert baseline.action == action
     assert any(reason.reason_code == reason_code for reason in baseline.reasons)
     assert (ProofRoute.VERIFIED in baseline.proof_routes) is (action == "allow")
-    shadow_baseline = baseline_command_shadow_proposal(evaluation).decision
-    assert shadow_baseline.action == baseline.action
-    assert shadow_baseline.disposition is baseline.disposition
-    assert shadow_baseline.proof_routes == baseline.proof_routes
+    current = evaluation.decision_plane
+    assert current.action == baseline.action
+    assert current.disposition is baseline.disposition
+    assert current.proof_routes == baseline.proof_routes
 
 
 @pytest.mark.parametrize(

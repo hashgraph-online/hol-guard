@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.pi_support import enable_managed_extension
+from tests.pi_managed_extension_client import enable_managed_extension
 
 
 def test_enable_managed_extension_prunes_stale_hol_guard_extensions(tmp_path: Path) -> None:

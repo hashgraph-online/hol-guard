@@ -59,6 +59,22 @@
    "body": "2385428e2299"
   },
   {
+   "verdict": "windows-equivalent",
+   "note": "`runtime/harness_attribution.py` returns `None` on `os.name == \"nt\"` before it ever reaches `/bin/ps`, so there is no Windows behaviour to keep parity with rather than an absent one. A Windows harness is still attributed by its environment markers, which every supported harness sets; only the fallback parent walk is missing, and its absence leaves the origin unknown rather than wrong. The slug is receipt and display identity, never a policy selector, so an unknown origin softens nothing.",
+   "file": "rust/crates/guard-command/src/harness_attribution.rs",
+   "item": "fn read_process_table() -> Option<String>",
+   "cfg": "not(unix)",
+   "body": "8e5de9c7806f"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "Unreachable on Windows: `read_process_table` above has already answered `None` and ended the walk. Kept as its own arm so the Unix side can use `std::os::unix::process::parent_id`, which has no portable counterpart.",
+   "file": "rust/crates/guard-command/src/harness_attribution.rs",
+   "item": "fn parent_pid() -> Option<i64>",
+   "cfg": "not(unix)",
+   "body": "a64cdb9f2015"
+  },
+  {
    "file": "rust/crates/guard-command/src/local_supply_chain.rs",
    "item": "fn package_request_artifact_hash -- non-Unix block",
    "verdict": "windows-equivalent",
@@ -835,6 +851,30 @@
    "body": "60598db7948f"
   },
   {
+   "verdict": "windows-equivalent",
+   "note": "Reproduces what CPython's own `os.stat` reported here: `0o444` or `0o666` from the read-only attribute, plus the execute bits for `.bat`, `.cmd`, `.exe` and `.com`. Python compared manifest modes against exactly these numbers on Windows, so the resident refuses and accepts the same files it always did. Neither side reads an ACL, so a file shared for writing through an ACE still reads as `0o666` and clears the group-write check it would fail on Unix; `permissions_unsafe` is a Unix-strength finding only.",
+   "file": "rust/crates/guard-runtime/src/codex_hook_file_identity_op.rs",
+   "item": "fn file_mode(path: &Path, metadata: &fs::Metadata) -> u32",
+   "cfg": "not(unix)",
+   "body": "8fff5cb08bf5"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "`st_uid` is `0` in CPython's Windows `os.stat`, so a Windows manifest records owner `0` and the resident compares `0` against `0`. Ownership is therefore not a discriminator off Unix, the same as before the cutover; `owner_mismatch` can only fire on Unix.",
+   "file": "rust/crates/guard-runtime/src/codex_hook_file_identity_op.rs",
+   "item": "fn file_uid(_metadata: &fs::Metadata) -> u32",
+   "cfg": "not(unix)",
+   "body": "0c09428e667b"
+  },
+  {
+   "verdict": "windows-equivalent",
+   "note": "`st_gid` is `0` in CPython's Windows `os.stat`, the same as the `file_uid` arm in this file. The group-write escape hatch that asks whether the owner is the group's only member has no Windows reading either way, so the group check never softens a verdict there.",
+   "file": "rust/crates/guard-runtime/src/codex_hook_file_identity_op.rs",
+   "item": "fn file_gid(_metadata: &fs::Metadata) -> u32",
+   "cfg": "not(unix)",
+   "body": "61a7083442c2"
+  },
+  {
    "file": "rust/crates/guard-runtime/src/codex_thread_continue_op.rs",
    "item": "fn user_home(_name: &str) -> Option<PathBuf>",
    "verdict": "posix-primitive",
@@ -1321,6 +1361,14 @@
    "note": "`~user` has no Windows meaning; only the current account's home is resolved.",
    "cfg": "not(unix)",
    "body": "d4309f13f345"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Python's `platform.node()` is the DNS host name on Windows, which `COMPUTERNAME` (the upper-cased, 15-character NetBIOS name) does not match, and a bundle rule scoped to a device compares its name exactly. The arm reports no host name, so a device still on a generic label has no known name, `cached_bundle_identities` answers none, and every caller defers the bundle's rows to the store rather than authorizing them under a name the store would not use.",
+   "file": "rust/crates/guard-runtime/src/policy_bundle_store_identities.rs",
+   "item": "fn host_name() -> Option<String>",
+   "cfg": "not(unix)",
+   "body": "6a7c0c4ecb3c"
   },
   {
    "verdict": "other-platform",

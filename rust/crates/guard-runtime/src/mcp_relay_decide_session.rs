@@ -12,17 +12,19 @@
 //!   route answers natively, or a receipt redaction level the configs do not
 //!   agree on. The route is native under `safe-alternative`, and under `ask`
 //!   (`mcp_relay_decide_ask.rs`), which also needs the approval center and the
-//!   review OAuth source the daemon binds with it. Under `ask`
-//!   `mode = "observe"` still hands off: the proxy prompts before it observes
-//!   a call, which the resident cannot answer;
-//! - a store holding a policy bundle with a row this harness's lookups reach,
-//!   remote policy rows, or saved rows whose integrity state is not the
-//!   protected one the daemon published. A bundle whose rows are all bound to
-//!   other harnesses hands nothing off: no lookup here reads one.
+//!   review OAuth source the daemon binds with it;
+//! - a store holding a policy bundle the resident cannot judge the way the
+//!   daemon would, with a row this harness's lookups reach, remote policy
+//!   rows, or saved rows whose
+//!   integrity state is not the protected one the daemon published. A bundle
+//!   whose rows are all bound to other harnesses hands nothing off: no lookup
+//!   here reads one.
 //!
 //! `mode = "observe"` alone hands nothing off: the resident takes its
 //! observe-forward route and its downgrade of a pending saved approval
-//! (`mcp_relay_decide_observe.rs`).
+//! (`mcp_relay_decide_observe.rs`). A package call the proxy would prompt
+//! for before its package lane still defers per call, under either mode
+//! (`mcp_relay_decide_ask.rs`).
 //!
 //! This only steers which launcher runs. Each call is still admitted by
 //! `mcp_relay_decide`, which repeats every check and refuses whatever it does
@@ -36,8 +38,6 @@ use crate::policy_store::policy_store_direct_lane::DirectLaneBinding;
 
 /// `blocked_request_mode`, under which the queue route blocks natively.
 const SAFE_ALTERNATIVE_MODE: &str = "safe-alternative";
-/// `mode`, under which the proxy prompts before it observes a call.
-const OBSERVE_MODE: &str = "observe";
 const SESSION_REVIEW_MODE: &str = "mcp_relay_session_review_mode";
 const SESSION_REDACTION_UNBOUND: &str = "mcp_relay_session_redaction_unbound";
 
@@ -55,9 +55,7 @@ pub(crate) fn session_decidable(
         // needs the center it links and the OAuth source the row is written
         // with.
         Some(ASK_MODE) => {
-            view.mode != OBSERVE_MODE
-                && review.approval_center_origin.is_some()
-                && review.review_oauth_source.is_some()
+            review.approval_center_origin.is_some() && review.review_oauth_source.is_some()
         }
         _ => false,
     };

@@ -129,7 +129,7 @@ def test_stats_needs_a_key_and_sends_nothing_without_one(monkeypatch: pytest.Mon
 @pytest.mark.parametrize(
     ("status", "message"),
     [
-        (401, "did not accept the key"),
+        (401, "Create a new one under Stats in your terminal at https://hol.org/guard/plugins"),
         (403, "does not own acme/toolgate"),
         (503, "HTTP 503"),
     ],
@@ -164,3 +164,15 @@ def test_stats_tolerates_a_malformed_runtime_breakdown(monkeypatch: pytest.Monke
     assert code == 0
     assert "machines" in out
     assert "Traceback" not in err
+
+
+def test_stats_reads_the_key_only_from_the_environment_and_never_prints_it(
+    requests: list[Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    with pytest.raises(SystemExit):
+        run(["plugin", "stats", "acme/toolgate", "--key", "holp_abc.secret"], monkeypatch)
+    for extra in ([], ["--json"]):
+        code, out, err = run(["plugin", "stats", "acme/toolgate", *extra], monkeypatch)
+        assert code == 0
+        assert "holp_abc" not in out + err
+    assert all("holp_abc" not in request.full_url for request in requests)

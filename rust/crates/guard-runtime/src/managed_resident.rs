@@ -19,6 +19,7 @@ pub(crate) use client_timeout_policy::{client_timeout, DAEMON_LIFECYCLE_TIMEOUT_
 mod containment;
 #[path = "managed_resident_handoff.rs"]
 mod handoff;
+pub(crate) use handoff::answer_shutdown;
 #[path = "managed_resident_lease.rs"]
 mod lease;
 pub(crate) use lease::client_request;
@@ -159,7 +160,7 @@ pub(crate) fn stop_managed(state_base: &Path, retire_clients: bool) -> Result<()
     // stop can initialize it before publishing test or recovery state.
     let digest = runtime_digest()?;
     let runtime_scope = state_scope(state_base, &digest)?;
-    let request = br#"{"operation":"shutdown","request":{}}"#;
+    let request = handoff::STOP_SHUTDOWN_REQUEST;
     let deadline = Instant::now() + MANAGED_STOP_TIMEOUT;
     let Some((scope, digest, state)) = discover_home_states_prefer(state_base, Some(&digest))?
         .into_iter()

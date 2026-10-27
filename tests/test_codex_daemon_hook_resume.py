@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 import http.client
 import time
 from pathlib import Path
@@ -10,7 +9,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters import codex_daemon_hook_resume as resume
-from codex_plugin_scanner.guard.cli import commands_support_interaction as interaction
 from tests.package_review_settings import review_package_signals
 from tests.test_guard_phase04_harness_ux import _json_line, _run_hook
 
@@ -45,25 +43,6 @@ def test_pending_pretool_approval_requires_safe_request_id() -> None:
             event_name="PostToolUse",
         )
         is None
-    )
-
-
-def test_codex_json_pretool_does_not_hold_inside_daemon_worker() -> None:
-    args = argparse.Namespace(harness="codex", json=True)
-    assert not interaction._codex_hook_waits_for_browser_approval(
-        args,
-        event_name="PreToolUse",
-        policy_action="require-reapproval",
-        payload={"tool_input": {"command": "cat ~/.npmrc"}},
-    )
-
-
-def test_codex_direct_pretool_wait_is_not_limited_to_package_installs() -> None:
-    assert interaction._codex_hook_waits_for_browser_approval(
-        argparse.Namespace(harness="codex", json=False),
-        event_name="PreToolUse",
-        policy_action="review",
-        payload={"tool_name": "Read", "tool_input": {"path": "/workspace/project/.env"}},
     )
 
 

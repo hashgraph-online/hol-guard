@@ -37,7 +37,6 @@ use crate::claim_reuse::approval_authority_revision;
 use crate::guard_store_json::dumps_sorted;
 
 pub(crate) const LOCAL_ONCE_LEGACY_AUTHORITY_KIND: &str = "legacy";
-const LOCAL_ONCE_INTEGRITY_PURPOSE: &str = "guard-local-once-approval";
 /// The ceiling a non-consuming lookup stops fetching at. The document path
 /// reports the same ceiling, so both read it from the one contract constant.
 const NON_CONSUMING_POLICY_MATCH_LIMIT: i64 = guard_contracts::POLICY_DOCUMENT_MATCH_LIMIT as i64;
@@ -469,16 +468,6 @@ fn trust_status_from_state(state: &Value) -> Value {
     })
 }
 
-/// `local_once_integrity_purpose`.
-fn local_once_integrity_purpose(authority_kind: Option<&str>) -> String {
-    match authority_kind {
-        Some(kind) if !kind.is_empty() && kind != LOCAL_ONCE_LEGACY_AUTHORITY_KIND => {
-            format!("{LOCAL_ONCE_INTEGRITY_PURPOSE}:{kind}")
-        }
-        _ => LOCAL_ONCE_INTEGRITY_PURPOSE.to_string(),
-    }
-}
-
 pub(crate) fn value_or_null(cell: rusqlite::types::ValueRef<'_>) -> Value {
     use rusqlite::types::ValueRef;
     match cell {
@@ -641,7 +630,7 @@ pub(crate) fn verify_local_once(
         &local_once_integrity(row),
         key,
         key_id,
-        &local_once_integrity_purpose(authority_kind.as_str()),
+        crate::local_once_store::local_once_integrity_purpose(authority_kind.as_str()),
     )
 }
 
@@ -830,12 +819,12 @@ pub(crate) fn claim_local_once_by_id(
         m.insert("claimed_at".into(), Value::from(now));
     }
     let authority_kind = row_value(&row, "authority_kind");
-    let purpose = local_once_integrity_purpose(authority_kind.as_str());
+    let purpose = crate::local_once_store::local_once_integrity_purpose(authority_kind.as_str());
     let signed = match sign_local_authority_payload(
         &claimed,
         integrity_key.unwrap_or(&[]),
         integrity_key_id.unwrap_or(""),
-        &purpose,
+        purpose,
         now,
     ) {
         Ok(s) => s,

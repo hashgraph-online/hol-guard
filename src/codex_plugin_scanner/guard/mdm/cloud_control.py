@@ -165,30 +165,6 @@ def reject_authority(value: object, depth: int = 0, *, _nodes: list[int] | None 
     raise ContractError("invalid_json_value")
 
 
-def load_json(body: bytes, limit: int = 1024 * 1024) -> dict[str, object]:
-    if len(body) > limit:
-        raise ContractError("request_too_large", 413)
-
-    def pairs(items: list[tuple[str, object]]) -> dict[str, object]:
-        output: dict[str, object] = {}
-        for key, value in items:
-            if key in output:
-                raise ContractError("duplicate_json_key")
-            output[key] = value
-        return output
-
-    try:
-        value = json.loads(body, object_pairs_hook=pairs)
-    except UnicodeDecodeError as error:
-        raise ContractError("invalid_utf8") from error
-    except json.JSONDecodeError as error:
-        raise ContractError("invalid_json") from error
-    if not isinstance(value, dict):
-        raise ContractError("invalid_json_object")
-    reject_authority(value)
-    return value
-
-
 def policy_hash(policy: Mapping[str, object]) -> str:
     return digest(policy)
 

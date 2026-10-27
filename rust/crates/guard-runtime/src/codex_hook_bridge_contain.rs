@@ -1,5 +1,5 @@
 //! Codex sandbox-required answers, settled natively: a port of
-//! `route_codex_containment` (`codex_contained_tests.py`) and the
+//! `route_codex_containment` (`tests/codex_containment_route.py`) and the
 //! `contained_zcode_response` rewrite it runs for Codex.
 //!
 //! A contained-run denial becomes an allow whose `updatedInput` runs Guard's

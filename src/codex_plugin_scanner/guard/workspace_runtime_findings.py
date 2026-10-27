@@ -169,9 +169,12 @@ def assessment_context_digest(feed_digest: str, runtime_digest: str | None) -> s
     supply-chain detector incomplete rather than reporting no inputs. v5:
     runs check agent skill content. v6: runs check MCP server configuration.
     v7: runs check project hook commands.
+    v8: runs check agent plugin hooks and MCP servers.
+    v9: runs check GitHub Actions workflows.
+    v10: runs check editor tasks and dev container commands.
     """
 
-    encoded = f"guard.workspace-context.v7\0{feed_digest}\0{runtime_digest or 'unknown'}"
+    encoded = f"guard.workspace-context.v10\0{feed_digest}\0{runtime_digest or 'unknown'}"
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
@@ -191,7 +194,7 @@ def project_runtime_findings(worktree_key: str, posture: Mapping[str, object]) -
     findings: dict[str, dict[str, object]] = {}
     for advisory in _rows(posture.get("advisories")):
         advisory_id, verdict = _text(advisory.get("advisory_id")), advisory.get("verdict")
-        if advisory_id is None or verdict not in _FINDING_VERDICTS:
+        if advisory_id is None or not isinstance(verdict, str) or verdict not in _FINDING_VERDICTS:
             continue
         severity = str(advisory.get("severity") or "").lower()
         for artifact_id in _list(advisory.get("affected_artifact_ids")):

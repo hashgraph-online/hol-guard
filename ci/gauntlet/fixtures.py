@@ -18,6 +18,7 @@ from .clone_fixtures import add_long_lived_clone_config, long_lived_clone_checks
 from .edge_clone_fixtures import write_edge_clone
 from .extension_adapters import EXTENSION_ADAPTERS
 from .fast_forward_fixtures import add_fast_forward_shape, add_plain_fast_forward_shape, fast_forward_checks
+from .git_allow_fixtures import add_git_allow_shape, git_allow_checks
 from .parent_fixtures import PARENT_WORKSPACE_CASE, write_parent_workspace
 from .realism_fixtures import add_home_tools, add_main_shapes, add_worktree_venv, borrow_main_modules
 from .review_fixtures import (
@@ -305,6 +306,7 @@ def create_fixture(
         protected_names = (".env", "deletion-target/keep.txt")
     else:
         add_plain_fast_forward_shape(workspace, home, environment, scenario_id)
+        add_git_allow_shape(workspace, environment, scenario_id)
     protected = {p: digest_file(workspace / p) for p in protected_names}
     metadata = {".env": file_metadata(workspace / ".env")}
     return Fixture(root, home, workspace, canary, protected, metadata, gh_log_root)
@@ -376,6 +378,7 @@ def filesystem_checks(fixture: Fixture, oracle: str, scenario_id: str) -> dict[s
     checks.update(runtime_case_checks(fixture.workspace, scenario_id))
     checks.update(long_lived_clone_checks(fixture.workspace, scenario_id))
     checks.update(fast_forward_checks(fixture.workspace, scenario_id))
+    checks.update(git_allow_checks(fixture.workspace, scenario_id))
     checks.update(session_folder_checks(fixture.home, scenario_id))
     checks.update(worktree_checks(fixture.home, fixture.workspace, scenario_id, SETTINGS_BEFORE, SETTINGS_AFTER))
     if scenario_id in BUSINESS_CLI_CASES:

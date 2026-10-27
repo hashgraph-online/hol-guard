@@ -6,6 +6,9 @@ import pytest
 
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.native_codex_tool_output import codex_tool_output_native
+from tests.codex_read_only_inspection import (
+    codex_command_is_read_only_source_inspection,
+)
 
 
 def _secret_like_source_name(command: str, *, cwd: Path | None = None) -> bool:
@@ -56,7 +59,7 @@ def test_codex_source_view_allows_placeholder_private_key_fixture_output(tmp_pat
 
     command = "sed -n '1,20p' tests/test_connect_fixture.py"
 
-    assert guard_commands_module._codex_command_is_read_only_source_inspection(
+    assert codex_command_is_read_only_source_inspection(
         command,
         cwd=workspace_dir,
     )
@@ -117,7 +120,7 @@ def test_codex_source_view_allows_medium_examples_from_symlinked_skill(tmp_path:
     linked_skill.symlink_to(real_skill, target_is_directory=True)
     command = f"sed -n '1,20p' {linked_skill / 'SKILL.md'}"
 
-    assert guard_commands_module._codex_command_is_read_only_source_inspection(
+    assert codex_command_is_read_only_source_inspection(
         command,
         cwd=workspace_dir,
         home_dir=home_dir,

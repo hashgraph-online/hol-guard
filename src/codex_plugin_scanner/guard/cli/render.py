@@ -15,6 +15,7 @@ from ..protection_coverage import PROTECTION_NOT_IN_EFFECT_DETAIL, protection_is
 from ..redaction import redact_text
 from ..value_coercion import coerce_int as _coerce_int
 from .doctor_readiness import doctor_runtime_readiness
+from .protect_inline_approval import human_protect_guidance
 from .protect_output import _protect_harness_message_for_render, _restore_ephemeral_signed_approval_output
 from .render_approval_gate_nudge import print_approval_gate_nudge
 from .render_connectors import print_connector_setup_line, render_mcp_list
@@ -480,7 +481,7 @@ def _plain_text_protect(payload: PayloadDict) -> str:
     if reason:
         lines.append(f"Reason: {reason}")
 
-    lines.extend(_protect_guidance_lines(payload))
+    lines.extend(human_protect_guidance(payload, _protect_guidance_lines(payload))[1])
     return "\n".join(lines)
 
 
@@ -2411,13 +2412,13 @@ def _render_protect(console: Console, payload: dict[str, object]) -> None:
             ):
                 body.add_row("Next", "Run hol-guard connect to sign in, then retry this install.")
     console.print(Panel(body, title="Install protection", border_style="cyan"))
-    guidance = _protect_guidance_lines(payload)
+    guidance_title, guidance = human_protect_guidance(payload, _protect_guidance_lines(payload))
     if guidance:
         guidance_text, signed_approval_url = _protect_harness_message_for_render(payload, "\n".join(guidance))
         console.print(
             Panel(
                 Text(guidance_text, no_wrap=False, overflow="fold"),
-                title="Guard guidance",
+                title=guidance_title,
                 border_style="magenta",
             )
         )

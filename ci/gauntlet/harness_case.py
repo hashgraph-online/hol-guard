@@ -35,6 +35,7 @@ from .fixtures import (
     scratch_checkout,
     stage_directory,
 )
+from .git_allow_fixtures import GIT_ALLOW_CASES, configure_git_allow_controls
 from .guard_tap import GuardTap, read_tap
 from .harness_judge import assess_harness_case, guard_decisions
 from .harnesses import CredentialSeed, adapter, credential_environment, keep_login_shell_path, read_transcript
@@ -211,9 +212,7 @@ def run_harness_case(
                 # path has no other way in, because a hard block never queues an approval.
                 # A case whose repeated action is a file-tool call needs the default floor;
                 # the subprocess floor the shell cases raise never reaches a file tool.
-                case["review_policy"] = write_review_config(
-                    guard_home, file_tool="bash" not in scenario.required_tools
-                )
+                case["review_policy"] = write_review_config(guard_home, file_tool="bash" not in scenario.required_tools)
             if CONNECTOR_PROFILE in scenario.profiles:
                 connector = stage_connector_case(scenario.oracle, fixture.root, fixture.home, guard_home, harness)
                 connector_state = state_digest(connector.state_dir)
@@ -230,6 +229,8 @@ def run_harness_case(
                 )
             if scenario.id == GITHUB_REVIEW_CASE:
                 case["extension_control"] = configure_github_review_controls(daemon, guard_home)
+            if scenario.id in GIT_ALLOW_CASES:
+                case["extension_control"] = configure_git_allow_controls(daemon, guard_home)
             if scenario.id in BUSINESS_CASES:
                 case["business_policy"] = install_business_policy(daemon, guard_home)
             # Native-tools cases run first-contact, with no pre-bound workspace policy, like a fresh install.

@@ -176,7 +176,7 @@ class ZCodeHarnessAdapter(HarnessAdapter):
         )
 
         runtime_signal = self._detect_runtime_signal()
-        command_available = _command_available(self.executable)
+        command_available = _command_available(self.executable, context.home_dir)
         installed = bool(found_paths) or runtime_signal or command_available
         warnings: list[str] = []
         if runtime_signal and not found_paths:

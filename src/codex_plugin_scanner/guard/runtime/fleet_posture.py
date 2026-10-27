@@ -353,18 +353,6 @@ def _assemble(
     }
 
 
-def build_fleet_posture(
-    store: GuardStore,
-    adapters: Iterable[Any],
-    settings: FleetPostureSettings,
-    *,
-    acknowledgement: Mapping[str, object] | None = None,
-) -> dict[str, object]:
-    """Return the ``fleet-posture/v1`` object for ``syncContext.fleetPosture``."""
-
-    return build_fleet_posture_state(store, adapters, settings, acknowledgement=acknowledgement).payload
-
-
 def commit_fleet_posture_sent(store: GuardStore, built: FleetPostureBuild, *, now: str) -> None:
     """Record what Guard Cloud accepted so the next build can send a delta."""
 
@@ -388,7 +376,6 @@ __all__ = [
     "SCHEMA_VERSION",
     "FleetPostureBuild",
     "FleetPostureSettings",
-    "build_fleet_posture",
     "build_fleet_posture_state",
     "commit_fleet_posture_sent",
     "derive_protection_state",

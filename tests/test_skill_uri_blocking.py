@@ -1,13 +1,22 @@
 """Tests for skill:// URI handling in target_is_known_skill_doc_path."""
 
 import os
+from pathlib import Path
 
 from codex_plugin_scanner.guard.runtime.false_positive_rules import (
     target_is_known_skill_doc_path,
 )
-from codex_plugin_scanner.guard.runtime.secret_file_requests import (
-    is_explicitly_benign_native_file_read_request,
-)
+from tests.resident_probe_support import native_benign_file_read
+
+
+def is_explicitly_benign_native_file_read_request(
+    tool_name: object,
+    arguments: object,
+    *,
+    cwd: Path | None = None,
+    home_dir: Path | None = None,
+) -> bool:
+    return native_benign_file_read(tool_name, arguments, cwd=cwd, home_dir=home_dir)
 
 
 def test_skill_uri_existing(tmp_path):

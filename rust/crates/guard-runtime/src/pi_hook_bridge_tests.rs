@@ -12,6 +12,7 @@ use super::*;
 use crate::claude_hook_bridge_fixture::{
     read_request, write_private, write_response, GuardHome, Request,
 };
+use crate::codex_hook_bridge_direct_resident::DIRECT_MISS_HEADER;
 
 const TOKEN: &str = "pi-token-fixture";
 const PRE_TOOL: &str = r#"{"hook_event_name":"PreToolUse","tool_name":"bash"}"#;
@@ -138,7 +139,29 @@ fn a_hook_no_resident_answers_goes_to_the_daemon_as_the_extension_sent_it() {
         "/v1/hooks/omp?guard-home=%2Fsomewhere&workspace=%2Ftmp"
     );
     assert_eq!(request.header("X-Guard-Token"), Some(TOKEN));
+    assert!(request
+        .header(DIRECT_MISS_HEADER)
+        .is_some_and(|miss| !miss.is_empty()));
     assert_eq!(request.body, PRE_TOOL.as_bytes());
+}
+
+#[test]
+fn a_hook_without_an_event_name_tells_the_daemon_the_resident_was_not_asked() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let daemon = serve_once(listener, 200, "{}".to_owned());
+    let home = home_with_daemon("pi-bridge-no-event", port);
+
+    let unnamed = r#"{"tool_name":"bash"}"#;
+    assert_eq!(
+        reply(&home_config(&home, "pi"), unnamed, soon()),
+        Some((200, "{}".to_owned()))
+    );
+    let request = daemon.join().unwrap().unwrap();
+    assert_eq!(
+        request.header(DIRECT_MISS_HEADER),
+        Some(DirectMiss::Request.code())
+    );
 }
 
 #[test]

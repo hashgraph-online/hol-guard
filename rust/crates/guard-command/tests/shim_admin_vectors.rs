@@ -251,6 +251,28 @@ fn shorten(value: Option<&Value>) -> String {
     }
 }
 
+// Scenarios where the resident deliberately departs from the recorded Python
+// result. These shell-profile scenarios stage the shim directory in the profile
+// while the recording process's PATH lacks it. Python reported every shim as
+// bypassed; the resident now judges cloud coverage by the PATH a new login
+// shell will have, so the configured managers count as protected.
+const LOGIN_PATH_COVERAGE_SCENARIOS: [&str; 3] = [
+    "dashboard-projection-zsh",
+    "dashboard-projection-bash",
+    "dashboard-projection-fish",
+];
+
+fn expected_result(name: &str, subop: &Value, recorded: &Value) -> Value {
+    if subop != "cloud_coverage" || !LOGIN_PATH_COVERAGE_SCENARIOS.contains(&name) {
+        return recorded.clone();
+    }
+    let mut result = recorded.clone();
+    result["bypasses"] = json!([]);
+    result["pathActive"] = json!(true);
+    result["protectedManagers"] = recorded["configuredManagers"].clone();
+    result
+}
+
 fn run_scenario(scenario: &Value, base: &Path, index: usize) -> Vec<String> {
     let name = string_of(&scenario["name"]);
     let root = base.join(format!("v{}-{index}", std::process::id()));
@@ -289,11 +311,12 @@ fn run_scenario(scenario: &Value, base: &Path, index: usize) -> Vec<String> {
         match (&outcome, expected["ok"].as_bool().expect("ok")) {
             (Ok(result), true) => {
                 let got = remap_value(&tokenise(result, &root_text), &hashes);
-                if got != expected["result"] {
+                let want = expected_result(&name, &step["subop"], &expected["result"]);
+                if got != want {
                     failures.push(format!(
                         "{name} call {call_index} ({}): result {}",
                         step["subop"],
-                        first_difference(&got, &expected["result"])
+                        first_difference(&got, &want)
                     ));
                 }
             }

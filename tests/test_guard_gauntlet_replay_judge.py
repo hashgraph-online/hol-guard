@@ -203,6 +203,10 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         "neg-sort-output-file-in-worktree",
         "neg-tr-file-operand",
         "neg-uniq-output-operand-in-worktree",
+        # A removal git reads as the trailing part of a sibling checkout's registration: the
+        # checkout it would take away stands outside the workspace, so a contained run removes
+        # nothing of it.
+        "negative-git-worktree-remove-registered-by-suffix",
     }
 
 

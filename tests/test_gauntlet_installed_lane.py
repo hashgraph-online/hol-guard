@@ -618,3 +618,181 @@ def test_an_argv_list_command_is_left_alone() -> None:
 
 def test_an_unbalanced_quote_registers_no_argv_rather_than_an_invented_one() -> None:
     assert handler_argv({"command": "/opt/guard/hol-guard --flag 'unterminated"}) == []
+
+
+_ZCODE_STUB = """#!/usr/bin/env python3
+import json, sys
+from pathlib import Path
+
+EVENTS = {events!r}
+REGISTER_PROMPT = {register_prompt!r}
+PROMPT_DECISION = {prompt_decision!r}
+
+
+def value(flag, default=None):
+    argv = sys.argv
+    return argv[argv.index(flag) + 1] if flag in argv else default
+
+
+def install():
+    home = Path(value("--home"))
+    config = home / ".zcode" / "cli" / "config.json"
+    config.parent.mkdir(parents=True, exist_ok=True)
+    handler = {{"type": "command", "command": sys.argv[0], "args": ["hook"]}}
+    events = {{
+        event: [{{"matcher": "*", "hooks": [handler]}}]
+        for event in EVENTS
+        if REGISTER_PROMPT or event != "UserPromptSubmit"
+    }}
+    config.write_text(json.dumps({{"hooks": {{"events": events}}}}, indent=2))
+    print(json.dumps({{"installed": True, "harness": "zcode"}}))
+    return 0
+
+
+def hook():
+    payload = json.loads(sys.stdin.read() or "{{}}")
+    if payload.get("hook_event_name") == "UserPromptSubmit":
+        if PROMPT_DECISION == "allow":
+            print(json.dumps({{"decision": "allow"}}))
+        else:
+            print(
+                json.dumps(
+                    {{
+                        "decision": "block",
+                        "policy_action": "block",
+                        "reason_code": "native_active_pack_quarantine",
+                        "reason": "An active policy pack is quarantined.",
+                    }}
+                )
+            )
+        return 0
+    # The tool hook of a healthy build: ordinary work through, the decoy
+    # credential paths the contract's attack cases name denied.
+    text = json.dumps(payload)
+    harmful = ".ssh/id_rsa" in text or ".aws/credentials" in text
+    print(json.dumps({{"hookSpecificOutput": {{"permissionDecision": "deny" if harmful else "allow"}}}}))
+    return 0
+
+
+if "--version" in sys.argv:
+    print("hol-guard 0.0.0-stub")
+    raise SystemExit(0)
+raise SystemExit(install() if sys.argv[1] == "install" else hook())
+"""
+
+
+def _zcode_stub(path: Path, *, prompt_decision: str, register_prompt: bool = True) -> Path:
+    expectation = load_contract()["harnesses"]["zcode"]
+    path.write_text(
+        _ZCODE_STUB.format(
+            events=list(expectation["required_events"]),
+            register_prompt=register_prompt,
+            prompt_decision=prompt_decision,
+        ),
+        encoding="utf-8",
+    )
+    path.chmod(path.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+    return path
+
+
+def _run_zcode(tmp_path: Path, runtime: Path, *, repeat: int = 2) -> dict:
+    return run_lane(
+        runtime_path=runtime,
+        harnesses=["zcode"],
+        repeat=repeat,
+        require_frozen=False,
+        aged_store=False,
+        output=tmp_path / "evidence",
+        work_root=tmp_path / "work",
+    )
+
+
+def test_a_build_that_blocks_every_prompt_fails_the_lane(tmp_path: Path) -> None:
+    """3.58.0a7 answered tool calls and blocked every prompt: a session lockout.
+
+    The lane drove one argv per harness with PreToolUse payloads only, so that
+    build passed installed acceptance while the operator could not type into
+    their own session. The tool hook here is correct in every respect; only
+    the prompt hook blocks.
+    """
+
+    runtime = _zcode_stub(tmp_path / "hol-guard", prompt_decision="block")
+    evidence = _run_zcode(tmp_path, runtime)
+    assert evidence["accepted"] is False
+    assert any(
+        "benign-prompt-submit" in failure and "not allowed quietly" in failure for failure in evidence["failures"]
+    )
+    assert all("attack" not in failure for failure in evidence["failures"])
+
+
+def test_a_build_that_answers_prompts_and_tool_calls_passes(tmp_path: Path) -> None:
+    """The same stub with a working prompt hook, so the failure above is the prompt."""
+
+    runtime = _zcode_stub(tmp_path / "hol-guard", prompt_decision="allow")
+    evidence = _run_zcode(tmp_path, runtime)
+    assert evidence["failures"] == []
+    assert evidence["accepted"] is True
+    replay = evidence["harnesses"]["zcode"]["replay"]
+    assert [case["id"] for case in replay["cases"]] == [case["id"] for case in load_contract()["replay_cases"]]
+    assert replay["skipped"] == []
+
+
+def test_a_declared_prompt_hook_the_install_never_registered_is_a_failure() -> None:
+    """Codex's registration check counts entries, so a missing event reaches replay."""
+
+    from ci.gauntlet.installed_replay import replay_harness
+
+    result = replay_harness(
+        "codex",
+        ["registered-hook"],
+        [{"id": "benign-prompt-submit", "event": "UserPromptSubmit", "expect": "allow", "payload": {}}],
+        home=Path("/nonexistent"),
+        guard_home=Path("/nonexistent"),
+        workspace=Path("/nonexistent"),
+        repeat=1,
+        argv_by_event={"UserPromptSubmit": None},
+    )
+    assert result["cases"] == []
+    assert any("no runnable UserPromptSubmit hook" in failure for failure in result["failures"])
+
+
+def test_a_harness_with_no_prompt_hook_skips_the_prompt_cases_rather_than_failing(tmp_path: Path) -> None:
+    """Guard prunes Claude Code's UserPromptSubmit group on purpose.
+
+    There is no prompt hook there to replay, so the cases must be recorded as
+    skipped against the contract rather than counted against the build.
+    """
+
+    runtime = _stub(tmp_path / "hol-guard", register=True, verdicts=["allow", "allow"])
+    evidence = _run(tmp_path, runtime)
+    replay = evidence["harnesses"]["claude-code"]["replay"]
+    assert [entry["id"] for entry in replay["skipped"]] == [
+        "benign-prompt-submit",
+        "benign-prompt-submit-names-a-file",
+    ]
+    assert all("prompt" not in failure for failure in evidence["failures"])
+
+
+def test_a_case_no_harness_replays_refuses_to_run() -> None:
+    """A case every harness skips is coverage the lane does not have."""
+
+    from ci.gauntlet.installed_lane import undeclared_case_events
+
+    assert undeclared_case_events(load_contract()) == []
+    assert undeclared_case_events(
+        {
+            "harnesses": {"zcode": {"replay": True, "replay_events": ["UserPromptSubmit"]}},
+            "replay_cases": [{"id": "stop", "event": "Stop"}],
+        }
+    ) == ["Stop"]
+
+
+def test_the_contract_declares_the_prompt_hook_for_the_harnesses_that_have_one() -> None:
+    """zcode and Codex register UserPromptSubmit; Claude Code deliberately does not."""
+
+    contract = load_contract()
+    assert "UserPromptSubmit" in contract["harnesses"]["zcode"]["replay_events"]
+    assert "UserPromptSubmit" in contract["harnesses"]["codex"]["replay_events"]
+    assert "replay_events" not in contract["harnesses"]["claude-code"]
+    prompt_cases = [case for case in contract["replay_cases"] if case.get("event") == "UserPromptSubmit"]
+    assert prompt_cases and all(case["expect"] == "allow" for case in prompt_cases)

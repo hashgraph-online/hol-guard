@@ -17,8 +17,10 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.cli import commands_support as support
 from codex_plugin_scanner.guard.native_codex_tool_output import codex_tool_output_native
+from tests.codex_read_only_inspection import (
+    codex_command_is_read_only_source_inspection,
+)
 
 pytestmark = [
     pytest.mark.skipif(
@@ -130,9 +132,7 @@ def test_read_only_inspection_matches_the_retired_python_vectors(corpus: dict[st
         corpus,
         tree,
         "ro",
-        lambda command, cwd, home: support._codex_command_is_read_only_source_inspection(
-            command, cwd=cwd, home_dir=home
-        ),
+        lambda command, cwd, home: codex_command_is_read_only_source_inspection(command, cwd=cwd, home_dir=home),
     )
     assert not failures, failures[:10]
 

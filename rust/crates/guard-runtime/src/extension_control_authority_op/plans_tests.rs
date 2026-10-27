@@ -221,6 +221,74 @@ fn commit_plan_refuses_conflicts_and_replays() {
 }
 
 #[test]
+fn a_commit_a_read_finished_settles_its_grant_instead_of_being_refused_as_a_replay() {
+    let home = Home::new();
+    home.commit(1, &catalog('a'), &[local(&catalog('a'))], "committed");
+    // The call that prepared revision 2 sealed the anchor over it and died
+    // before the row said so. A read met that sealed head and finished the
+    // revision for it, leaving the grant the dead call reserved unspent.
+    let head = home.commit(2, &catalog('a'), &[local(&catalog('a'))], "committed");
+    let granted = commit(2, 1);
+    home.db
+        .execute(
+            "insert into extension_control_authority_proof values (?, ?, 2, ?, null)",
+            params![
+                private_hash("proof-2", &KEY, "proof"),
+                &granted.mutation_digest,
+                AT
+            ],
+        )
+        .unwrap();
+
+    // Its own retry settles the grant rather than being told it replayed a
+    // commit that never returned to it.
+    let settled = run(&commit_request(
+        &home,
+        &head,
+        view("protected", 2),
+        commit(2, 1),
+    ));
+    assert_eq!(settled["plan"]["outcome"], json!("finish"), "{settled}");
+    assert_eq!(settled["plan"]["revision"], json!(2));
+    assert_eq!(settled["plan"]["proof_recorded"], json!(true));
+
+    // A grant already spent on that revision is the replay it always was.
+    home.db
+        .execute(
+            "update extension_control_authority_proof set consumed_at = ?",
+            params![AT],
+        )
+        .unwrap();
+    assert_eq!(
+        refusal(&run(&commit_request(
+            &home,
+            &head,
+            view("protected", 2),
+            commit(2, 1)
+        ))),
+        "extension control authority proof replay"
+    );
+
+    // An unspent grant that names another mutation never belonged to this
+    // revision, whatever state the revision is in.
+    home.db
+        .execute(
+            "update extension_control_authority_proof set mutation_digest = ?, consumed_at = null",
+            params!["m".repeat(64)],
+        )
+        .unwrap();
+    assert_eq!(
+        refusal(&run(&commit_request(
+            &home,
+            &head,
+            view("protected", 2),
+            commit(2, 1)
+        ))),
+        "extension control authority proof state conflict"
+    );
+}
+
+#[test]
 fn commit_plan_seals_only_the_approved_mutation() {
     let home = Home::new();
     let head = home.commit(1, &catalog('a'), &[local(&catalog('a'))], "committed");
@@ -384,12 +452,16 @@ fn a_recorded_proof_for_a_committed_transition_is_a_replay() {
     let home = Home::new();
     home.commit(1, &catalog('a'), &[local(&catalog('a'))], "committed");
     let head = home.commit(2, &catalog('a'), &[local(&catalog('a'))], "committed");
+    // The grant names this request's own mutation and was spent on the
+    // revision that is now committed, so asking again is a second use of a
+    // commit that already returned.
+    let granted = commit(2, 1);
     home.db
         .execute(
             "insert into extension_control_authority_proof values (?, ?, 2, ?, ?)",
             params![
                 private_hash("proof-2", &KEY, "proof"),
-                "m".repeat(64),
+                &granted.mutation_digest,
                 AT,
                 AT
             ],

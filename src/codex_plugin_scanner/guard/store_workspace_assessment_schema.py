@@ -21,6 +21,9 @@ WORKSPACE_FIX_PROPOSAL_MIGRATION_VERSION: Final = 34
 
 MAX_COVERAGE_JSON_BYTES: Final = 16 * 1024
 MAX_FINDINGS_JSON_BYTES: Final = 256 * 1024
+MAX_FINDINGS: Final = 500
+# Leave room under the column bound for the list brackets and separators.
+FINDINGS_BYTE_BUDGET: Final = MAX_FINDINGS_JSON_BYTES - 1024
 MAX_FIX_DIFF_BYTES: Final = 64 * 1024
 MAX_FIX_EDITS_JSON_BYTES: Final = 16 * 1024
 
@@ -188,7 +191,9 @@ def ensure_workspace_fix_proposal_schema(connection: sqlite3.Connection, *, appl
 
 
 __all__ = [
+    "FINDINGS_BYTE_BUDGET",
     "MAX_COVERAGE_JSON_BYTES",
+    "MAX_FINDINGS",
     "MAX_FINDINGS_JSON_BYTES",
     "MAX_FIX_DIFF_BYTES",
     "MAX_FIX_EDITS_JSON_BYTES",

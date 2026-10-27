@@ -10,11 +10,15 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import platform
+import re
+import shlex
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
+from ...version import __version__
 from .output import write_check, write_conformance, write_links
 
 PLUGIN_KIT_COMMAND = "plugin-kit"
@@ -22,8 +26,23 @@ PLUGIN_KIT_FEATURE = "plugin-kit-v1"
 AGENT_PLUGINS_SPEC = "agent-plugins-1.0"
 _TIMEOUT_SECONDS = 120.0
 _OUTPUT_LIMIT_BYTES = 16 * 1024 * 1024
-_NATIVE_UNAVAILABLE = "The HOL Guard Plugin Kit requires the Guard native runtime. Run: pip install -U hol-guard"
+_REINSTALL = "pipx install --force hol-guard (or uv tool install --force hol-guard)"
+# These three stable wheels are attached to the GitHub release and are not uploaded to PyPI.
+_RELEASE_INSTALL = "hol-guard update"
+_GITHUB_ONLY_PLATFORMS = {
+    ("Darwin", "x86_64"),
+    ("Linux", "aarch64"),
+    ("Windows", "ARM64"),
+}
+# A native build exists for each of these. PyPI carries the rest.
+_NATIVE_PLATFORMS = _GITHUB_ONLY_PLATFORMS | {
+    ("Darwin", "arm64"),
+    ("Linux", "x86_64"),
+    ("Windows", "AMD64"),
+}
+_SYSTEM_NAMES = {"Darwin": "macOS"}
 _NATIVE_FAILED = "The HOL Guard Plugin Kit did not complete."
+INSTALL_DOCUMENT = "hol-guard.plugin-install/1"
 
 _ERRORS = {
     "plugin_kit_root_invalid": "The path is not a readable folder.",
@@ -56,6 +75,13 @@ _ERRORS = {
         "The output folder is inside a folder the Kit reads the plugin from. Choose one outside it."
     ),
     "plugin_kit_output_unwritable": "The output folder could not be written.",
+    "plugin_kit_output_unsafe": (
+        "Choose another output folder. It can't be the plugin folder, a folder that holds it, your home folder or /."
+    ),
+    "plugin_kit_output_not_generated": (
+        "The output folder has a file Guard did not write where it would write one."
+        " Nothing was changed. Move that file or choose an empty folder."
+    ),
     "plugin_kit_package_too_large": "The plugin is too large to package.",
     "plugin_kit_package_path_conflict": "Two different files would be packaged at the same path.",
     "plugin_kit_init_needs_name": "This folder has no plugin yet. Pass --name to scaffold one.",
@@ -86,6 +112,14 @@ _ERRORS = {
         "Guard has no record of installing this listing for the runtimes named, so it will not remove it. "
         "Use the runtime's own CLI instead."
     ),
+    "plugin_kit_install_endpoint_invalid": (
+        "HOL_GUARD_PLUGIN_SPEC_URL must be an https URL, or http on localhost or host.docker.internal, "
+        "with no credentials, query or fragment."
+    ),
+    "plugin_kit_install_recorded_elsewhere": (
+        "Guard recorded this listing through a different install-spec URL. Set HOL_GUARD_PLUGIN_SPEC_URL "
+        "as it was when you installed it, or unset it if you installed from hol.org."
+    ),
     "plugin_kit_ledger_invalid": (
         "Guard's install record (plugin-kit/installs.json in the Guard home) could not be read, so nothing will run."
     ),
@@ -97,7 +131,63 @@ _ERRORS = {
 
 
 class PluginKitNativeError(RuntimeError):
-    """The native runtime was unavailable or returned no usable response."""
+    """The native runtime was unavailable, returned no usable response, or
+    refused the request; ``code`` is the Kit's error code when it refused."""
+
+    def __init__(self, message: str, code: str | None = None) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+def _native_install_command(system: str, machine: str) -> str:
+    if (system, machine) in _GITHUB_ONLY_PLATFORMS:
+        return _RELEASE_INSTALL
+    return _REINSTALL
+
+
+def native_unavailable_message(
+    *,
+    outdated: bool = False,
+    incompatible: bool = False,
+    version: str | None = None,
+    system: str | None = None,
+    machine: str | None = None,
+) -> str:
+    """Why the Plugin Kit cannot run here, and the one command that fixes it."""
+
+    version = version or __version__
+    system = system or platform.system()
+    machine = machine or platform.machine()
+    where = f"{_SYSTEM_NAMES.get(system, system)} {machine}"
+    if outdated:
+        return (
+            "This HOL Guard's native runtime is too old for the Plugin Kit. "
+            f"Update it: {_native_install_command(system, machine)}"
+        )
+    if incompatible:
+        return (
+            f"HOL Guard found a native runtime for {where}, but it does not match this install. "
+            f"Update it: {_native_install_command(system, machine)}"
+        )
+    if (system, machine) not in _NATIVE_PLATFORMS:
+        return (
+            f"The Plugin Kit needs HOL Guard's native runtime, which is not built for {where}. "
+            "It is built for macOS, Linux and Windows on x86_64 and arm64."
+        )
+    if re.search(r"(a|b|rc|dev)\d*$", version):
+        return (
+            f"HOL Guard {version} is a pre-release, and pre-releases on PyPI do not include the native "
+            f"runtime the Plugin Kit needs. Install the latest release: {_native_install_command(system, machine)}"
+        )
+    if (system, machine) in _GITHUB_ONLY_PLATFORMS:
+        return (
+            f"The Plugin Kit needs HOL Guard's native runtime, and this install has none for {where}. "
+            f"PyPI does not publish that build. Install it from the release: {_RELEASE_INSTALL}"
+        )
+    return (
+        f"The Plugin Kit needs HOL Guard's native runtime, and this install has none for {where}. "
+        f"Reinstall to get it: {_REINSTALL}"
+    )
 
 
 def _native_request(request: Mapping[str, object]) -> dict[str, Any]:
@@ -107,14 +197,12 @@ def _native_request(request: Mapping[str, object]) -> dict[str, Any]:
     from ..native_runtime import native_runtime_status
 
     status = native_runtime_status()
-    if (
-        not status.available
-        or not status.compatible
-        or status.identity is None
-        or status.capabilities is None
-        or PLUGIN_KIT_FEATURE not in status.capabilities.features
-    ):
-        raise PluginKitNativeError(_NATIVE_UNAVAILABLE)
+    if not status.available or status.identity is None:
+        raise PluginKitNativeError(native_unavailable_message())
+    if not status.compatible or status.capabilities is None:
+        raise PluginKitNativeError(native_unavailable_message(incompatible=True))
+    if PLUGIN_KIT_FEATURE not in status.capabilities.features:
+        raise PluginKitNativeError(native_unavailable_message(outdated=True))
     runtime = status.identity.path
     completed = run_isolated_hook_process(
         (str(runtime), PLUGIN_KIT_COMMAND, "--stdin"),
@@ -146,7 +234,7 @@ def kit_request(request: Mapping[str, object]) -> dict[str, Any]:
     response = _native_request(request)
     if not response["ok"]:
         code = str(response.get("error") or "")
-        raise PluginKitNativeError(_ERRORS.get(code, code or _NATIVE_FAILED))
+        raise PluginKitNativeError(_ERRORS.get(code, code or _NATIVE_FAILED), code or None)
     result = response.get("result")
     return result if isinstance(result, dict) else {}
 
@@ -159,6 +247,12 @@ def _call(request: Mapping[str, object]) -> dict[str, Any] | None:
     except PluginKitNativeError as error:
         print(f"Error: {error}", file=sys.stderr)
         return None
+
+
+def _sha256(value: str) -> str:
+    if len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
+        raise argparse.ArgumentTypeError("use the 64-character lowercase sha256 Guard printed")
+    return value
 
 
 def _runtime_list(value: str) -> list[str]:
@@ -233,7 +327,38 @@ def build_parser(*, program_name: str = "hol-guard plugin") -> argparse.Argument
         ("install", "Install a HOL listing with each runtime's own CLI. Prints the plan unless --apply."),
         ("uninstall", "Remove a listing that plugin install added. Prints the plan unless --apply."),
     ):
-        command = commands.add_parser(name, help=help_text, description=help_text)
+        command = commands.add_parser(
+            name,
+            help=help_text,
+            description=help_text.replace(" Prints", "\nPrints"),
+            epilog=(
+                "examples:\n"
+                + (
+                    f"  {program_name} install acme/toolgate                  show the plan\n"
+                    f"  {program_name} install acme/toolgate --apply          install, asking first\n"
+                    f"  {program_name} install acme/toolgate --apply --runtime codex\n"
+                    if name == "install"
+                    else f"  {program_name} uninstall acme/toolgate                show the plan\n"
+                    f"  {program_name} uninstall acme/toolgate --apply        remove it\n"
+                )
+                + "\n"
+                "exit codes:\n"
+                "  0    done, or plan shown\n"
+                "  1    a runtime command or check failed\n"
+                "  2    usage, or no terminal to confirm in\n"
+                "  3    nothing Guard can install here\n"
+                "  4    stopped by HOL's scan result, a commit other than the scanned one,\n"
+                "       or a declared command not accepted\n"
+                "  5    this Guard is too old\n"
+                "  6    HOL unreachable\n"
+                "  130  interrupted\n"
+                "\n"
+                "To test against your own portal, set HOL_GUARD_PLUGIN_SPEC_URL to its\n"
+                "install-spec URL (https, or http on localhost). Guard warns on every run\n"
+                "while it is set."
+            ),
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+        )
         command.add_argument(
             "target",
             help="HOL listing, such as owner/plugin"
@@ -242,7 +367,23 @@ def build_parser(*, program_name: str = "hol-guard plugin") -> argparse.Argument
         mode = command.add_mutually_exclusive_group()
         mode.add_argument("--apply", action="store_true", help="Run the commands, confirming each runtime.")
         mode.add_argument("--dry-run", action="store_true", help="Only print the plan (the default).")
-        command.add_argument("--yes", action="store_true", help="With --apply, skip the confirmations (for CI).")
+        command.add_argument(
+            "--yes",
+            action="store_true",
+            help="With --apply, skip the confirmations (for CI). Never accepts a risk or a declared command.",
+        )
+        if name == "install":
+            command.add_argument(
+                "--accept-risk",
+                action="store_true",
+                help="Install even though HOL's scan result asks for your OK (unscanned, warnings, an old scan).",
+            )
+            command.add_argument(
+                "--accept-command",
+                type=_sha256,
+                metavar="SHA256",
+                help="Let Claude Code run the install command the plugin declares, if its sha256 matches.",
+            )
         command.add_argument(
             "--runtime",
             dest="runtimes",
@@ -251,7 +392,12 @@ def build_parser(*, program_name: str = "hol-guard plugin") -> argparse.Argument
         )
         if name == "install":
             command.add_argument("--spec-file", help="Read the install spec from a file instead of HOL (offline, CI).")
-        command.add_argument("--json", action="store_true", help="Print the plan as JSON.")
+        command.add_argument(
+            "--json",
+            action="store_true",
+            help=f"Print one {INSTALL_DOCUMENT} document on stdout; everything else goes to stderr.",
+        )
+    parser.set_defaults(program_name=program_name)
     stats = commands.add_parser(
         "stats",
         help="Print a listing you own's views and attested installs from HOL (needs HOL_API_KEY).",
@@ -371,7 +517,98 @@ def _offer_guard_once() -> None:
     print("  hol-guard install claude-code   (or codex, cursor, gemini, opencode)")
 
 
+#: Exit code for each Kit error ``plugin install|uninstall`` can get back.
+_INSTALL_EXITS = {
+    "plugin_kit_install_spec_unsupported": 5,
+    "plugin_kit_install_spec_invalid": 4,
+    "plugin_kit_install_spec_mismatch": 4,
+    "plugin_kit_install_version_unavailable": 2,
+    "plugin_kit_install_runtime_unknown": 2,
+    "plugin_kit_install_runtime_not_offered": 2,
+    "plugin_kit_install_not_recorded": 2,
+    "plugin_kit_install_recorded_elsewhere": 2,
+    "plugin_kit_install_endpoint_invalid": 2,
+    "plugin_kit_request_invalid": 2,
+}
+_NO_TERMINAL = "No terminal to confirm in. Run it in a terminal, or add --yes to install without prompts."
+
+
+class _InstallStopError(Exception):
+    def __init__(self, exit_code: int, code: str, message: str) -> None:
+        super().__init__(message)
+        self.exit_code = exit_code
+        self.code = code
+
+
+def _kit(request: Mapping[str, object]) -> dict[str, Any]:
+    try:
+        return kit_request(request)
+    except PluginKitNativeError as error:
+        raise _InstallStopError(
+            _INSTALL_EXITS.get(error.code or "", 1), error.code or "native_unavailable", str(error)
+        ) from error
+
+
 def _install(args: argparse.Namespace) -> int:
+    document: dict[str, Any] = {
+        "schema": INSTALL_DOCUMENT,
+        "action": args.command,
+        "apply": bool(args.apply),
+        "plan": None,
+        "runtimes": [],
+        "error": None,
+    }
+    try:
+        exit_code = _install_flow(args, document)
+    except _InstallStopError as stop:
+        print(f"Error: {stop}", file=sys.stderr)
+        document["error"] = {"code": stop.code, "message": str(stop)}
+        exit_code = stop.exit_code
+    except KeyboardInterrupt:
+        print("\nInterrupted.", file=sys.stderr)
+        document["error"] = {"code": "interrupted", "message": "Interrupted."}
+        exit_code = 130
+    document["exit_code"] = exit_code
+    if args.json:
+        print(json.dumps(document, indent=2, sort_keys=True))
+    return exit_code
+
+
+def _progress_stream(args: argparse.Namespace) -> TextIO | None:
+    """stderr when a person is watching it; never with --json (REM D15)."""
+
+    if args.json:
+        return None
+    try:
+        return sys.stderr if sys.stderr.isatty() else None
+    except (AttributeError, ValueError):
+        return None
+
+
+def _stdout_is_terminal() -> bool:
+    try:
+        return sys.stdout.isatty()
+    except (AttributeError, ValueError):
+        return False
+
+
+def _first_install_tip(args: argparse.Namespace, slug: str, installed: list[str], guard_home: Path) -> str:
+    """One tip after the first install (REM D13): protect a runtime Guard does
+    not cover yet, else how to remove the plugin. Nothing is set up here."""
+
+    from . import install
+
+    protected = install.protected_runtimes(guard_home)
+    unprotected = [runtime for runtime in installed if protected is not None and runtime not in protected]
+    if unprotected:
+        names = " and ".join(install.runtime_label(runtime) for runtime in unprotected)
+        return (
+            f"Guard does not check what runs in {names} yet. To turn that on: hol-guard install {' '.join(unprotected)}"
+        )
+    return f"{args.program_name} uninstall {slug} shows how to remove it again. Nothing changes until you add --apply."
+
+
+def _install_flow(args: argparse.Namespace, document: dict[str, Any]) -> int:
     from ..config import resolve_guard_home
     from . import install
 
@@ -381,14 +618,25 @@ def _install(args: argparse.Namespace) -> int:
         slug, version = install.parse_target(args.target)
         if not installing and version:
             raise install.PluginInstallError("Name the listing without a version, such as owner/plugin.")
+        endpoint, listing_origin = install.spec_endpoint()
+        if listing_origin:
+            print(
+                f"Warning: {install.SPEC_URL_ENV} is set. Install details come from {endpoint}, not hol.org.",
+                file=sys.stderr,
+            )
         spec: dict[str, Any] | None = None
         if installing:
-            spec = install.read_spec_file(args.spec_file) if args.spec_file else install.fetch_spec(slug)
+            spec = (
+                install.read_spec_file(args.spec_file)
+                if args.spec_file
+                else install.fetch_spec(slug, endpoint, progress=_progress_stream(args))
+            )
+            install.check_guard_version(spec)
     except install.PluginInstallError as error:
-        print(f"Error: {error}", file=sys.stderr)
-        return 2
-    available = install.available_programs()
-    runtimes = args.runtimes or []
+        raise _InstallStopError(error.exit_code, error.code, str(error)) from error
+    lookup = install.find_programs()
+    for line in lookup.ignored:
+        print(f"Warning: {line}", file=sys.stderr)
     # Uninstall plans from Guard's own record, so it only removes what
     # install added and still works once a listing leaves HOL.
     request: dict[str, object] = (
@@ -396,28 +644,106 @@ def _install(args: argparse.Namespace) -> int:
         if installing
         else {"command": "uninstall", "guard_home": str(guard_home), "slug": slug}
     )
-    plan = _call({**request, "available": available, "runtimes": runtimes})
-    if plan is None:
-        return 2
-    if args.json:
-        print(json.dumps(plan, indent=2, sort_keys=True))
-    else:
-        install.write_plan(plan, apply=args.apply)
+    if listing_origin:
+        request["listing_origin"] = listing_origin
+    plan = _kit({**request, "available": sorted(lookup.programs), "runtimes": args.runtimes or []})
+    document["plan"] = plan
+    outcomes = install.planned(plan, lookup)
+    document["runtimes"] = [outcome.as_json() for outcome in outcomes]
+    if not args.json:
+        install.write_plan(plan, lookup, apply=args.apply, program_name=args.program_name)
+    gate = (plan.get("security") or {}).get("gate")
+    if gate == "block":
+        for outcome in outcomes:
+            if outcome.status == "planned":
+                outcome.status = "blocked"
+        document["runtimes"] = [outcome.as_json() for outcome in outcomes]
+        raise _InstallStopError(4, "blocked", "HOL's scan result stops this install, so nothing ran.")
+    steps = plan.get("steps") or []
+    if not any(step.get("automatic") for step in steps):
+        raise _InstallStopError(3, "nothing_to_install", "Guard cannot install this listing for any runtime it runs.")
     if not args.apply:
         return 0
+    if not any(outcome.status == "planned" for outcome in outcomes):
+        raise _InstallStopError(
+            3, "nothing_to_install", "None of the runtimes Guard installs for (Claude Code, Codex) is on this machine."
+        )
+    interactive = install.runner.stdin_is_terminal()
+    if not args.yes and not interactive:
+        raise _InstallStopError(2, "no_terminal", _NO_TERMINAL)
+    if gate == "confirm" and not getattr(args, "accept_risk", False):
+        if getattr(args, "json", False):
+            for reason in (plan.get("security") or {}).get("reasons") or []:
+                print(f"  {reason}", file=sys.stderr)
+        if getattr(args, "yes", False):
+            raise _InstallStopError(
+                4,
+                "risk_not_accepted",
+                "HOL's scan result needs your OK before Guard installs this. "
+                "To install anyway, add --accept-risk with --yes.",
+            )
+        if not install.confirm("Install anyway?"):
+            raise _InstallStopError(4, "risk_declined", "Not installed.")
     # Refuse before anything runs when the install record cannot be read,
-    # rather than installing and then failing to record it.
-    if _call({"command": "installs", "guard_home": str(guard_home)}) is None:
-        return 2
+    # rather than installing and then failing to record it. An install moves
+    # a record that no longer parses aside and starts a new one; uninstall
+    # needs the record, so it stops instead.
+    installs = _kit({"command": "installs", "guard_home": str(guard_home), "recover": installing})
+    if installs.get("recovered"):
+        print(
+            f"Guard's install record could not be read. It was moved to plugin-kit/{installs['recovered']} "
+            "and a new one started.",
+            file=sys.stderr,
+        )
+    first_install = installing and not installs.get("installs")
 
-    def record(runtime: str) -> None:
-        install.record(guard_home, slug, runtime, installed=installing, spec=spec)
+    def record(runtime: str, marketplace_added: bool) -> None:
+        install.record(
+            guard_home,
+            slug,
+            runtime,
+            installed=installing,
+            spec=spec,
+            listing_origin=listing_origin,
+            marketplace_added=marketplace_added,
+        )
+
+    def progress(done: Sequence[install.Outcome]) -> None:
+        document["runtimes"] = [outcome.as_json() for outcome in [*done, *outcomes[len(done) :]]]
 
     try:
-        return install.apply_plan(plan, assume_yes=args.yes, record=record)
+        outcomes = install.apply_plan(
+            plan,
+            lookup=lookup,
+            assume_yes=args.yes,
+            record=record,
+            accept_command=getattr(args, "accept_command", None),
+            json_output=args.json,
+            progress=progress,
+        )
     except install.PluginInstallError as error:
-        print(f"Error: {error}", file=sys.stderr)
-        return 2
+        raise _InstallStopError(error.exit_code, error.code, str(error)) from error
+    document["runtimes"] = [outcome.as_json() for outcome in outcomes]
+    failed = [outcome.runtime for outcome in outcomes if outcome.status == "failed"]
+    if failed:
+        retry = [*args.program_name.split(), args.command, args.target, "--apply", "--runtime", ",".join(failed)]
+        # Keep the choices this run was given, so the retry stops where it did not.
+        if getattr(args, "spec_file", None):
+            retry += ["--spec-file", args.spec_file]
+        if getattr(args, "accept_command", None):
+            retry += ["--accept-command", args.accept_command]
+        if getattr(args, "accept_risk", False):
+            retry.append("--accept-risk")
+        if getattr(args, "yes", False):
+            retry.append("--yes")
+        if getattr(args, "json", False):
+            retry.append("--json")
+        document["retry"] = retry
+        print(f"Retry {', '.join(failed)} with: {shlex.join(retry)}", file=sys.stderr)
+    installed = [outcome.runtime for outcome in outcomes if outcome.status == "installed"]
+    if first_install and installed and not args.json and _stdout_is_terminal():
+        print(f"\nTip: {_first_install_tip(args, slug, installed, guard_home)}")
+    return install.exit_code_for(outcomes)
 
 
 def _stats(args: argparse.Namespace) -> int:

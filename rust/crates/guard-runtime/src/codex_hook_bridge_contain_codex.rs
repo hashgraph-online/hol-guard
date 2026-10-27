@@ -1,6 +1,6 @@
 //! Which Codex launched the hook, and whether it applies `updatedInput`:
 //! `launching_codex_executable` and `codex_applies_updated_input` from
-//! `codex_contained_tests.py`.
+//! `tests/codex_containment_route.py`.
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};

@@ -50,7 +50,7 @@ Where a control is not enforced by the backend it is omitted rather than inferre
 ## Behavioral tests
 
 - `tests/test_guard_containment_executor.py` — backend selection fallback, executable/input drift fails closed.
-- `tests/test_guard_containment_contract.py` — attestation immutability, failure reason codes.
+- `rust/crates/guard-command/src/contained_runner/` tests — request contract, attestation and contained proof (the Python contract now carries only the backend identifiers).
 - `tests/test_guard_containment_health.py` — compatibility signals, sandbox status.
 - `tests/test_guard_containment_external_executable.py` — pin/digest/0o500 verification, immutable rejection, replacement fails closed.
 - `tests/test_guard_contained_{node,package_script,typescript,workspace_write}_execution.py` — backend success/failure paths.

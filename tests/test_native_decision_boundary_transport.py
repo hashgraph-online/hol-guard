@@ -13,9 +13,9 @@ from codex_plugin_scanner.guard.decision_boundaries import (
     canonical_approval_surfaces_batch,
     canonical_receipt_decision,
 )
-from codex_plugin_scanner.guard.native_approval_queue_identity import bind_connection_guard_home
 from codex_plugin_scanner.guard.native_signal_projection import NativeSignalProjectionUnavailableError
 from codex_plugin_scanner.guard.store_approvals import resolvable_approval_request_ids
+from tests.approval_queue_identity_support import bind_connection_guard_home
 
 
 @pytest.mark.parametrize("operation", ("approval", "receipt", "surfaces", "batch"))

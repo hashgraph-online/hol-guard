@@ -83,6 +83,11 @@ impl Env<'_> {
                 self.claude_remove_pending(session_id, &pending_key);
                 Ok(json!({}))
             }
+            "claude_question_settle" => self.claude_question_settle(
+                required(&request.session_id)?,
+                request.payload.as_ref(),
+                request.tilde_home.as_deref(),
+            ),
             "claude_discard_session" => Ok(json!({
                 "discarded": self.claude_discard_session(required(&request.session_id)?)
             })),

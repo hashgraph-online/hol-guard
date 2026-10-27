@@ -9,8 +9,8 @@ from codex_plugin_scanner.guard.native_command_model import _canonical_command_f
 from codex_plugin_scanner.guard.runtime.command_evaluation import CompositeCommandEvaluation, evaluate_command
 from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
 from codex_plugin_scanner.guard.runtime.effect_decision import FinalDisposition, PositiveProof
-from codex_plugin_scanner.guard.runtime.github_capability_interaction import GITHUB_MAINTENANCE_ACTION_CLASS
 from codex_plugin_scanner.guard.runtime.github_workflow_authorization import (
+    GITHUB_MAINTENANCE_ACTION_CLASS,
     GitHubWorkflowAuthorization,
 )
 from codex_plugin_scanner.guard.store import GuardStore

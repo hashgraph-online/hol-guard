@@ -69,12 +69,6 @@ def extract_sensitive_file_write_request(
     return None
 
 
-def _candidate_command_texts(value: object) -> list[str]:
-    results: list[str] = []
-    _collect_candidate_commands(value, results, depth=0)
-    return results
-
-
 def command_list_candidate_texts(
     values: list[str],
     *,
@@ -122,7 +116,6 @@ def _collect_candidate_commands(value: object, results: list[str], *, depth: int
 
 
 __all__ = [
-    "_candidate_command_texts",
     "_collect_candidate_commands",
     "command_list_candidate_texts",
     "extract_sensitive_file_write_request",

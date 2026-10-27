@@ -14,7 +14,7 @@ import pytest
 
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
 from codex_plugin_scanner.guard.daemon import recovery_worker, start_classification, start_heartbeat
-from codex_plugin_scanner.guard.native_daemon_lifecycle import daemon_lifecycle_deadline
+from codex_plugin_scanner.guard.native_daemon_lifecycle import _DAEMON_LIFECYCLE_DEADLINE
 
 
 class _FakeProcess:
@@ -142,7 +142,7 @@ def test_heartbeat_from_a_foreign_process_does_not_count(tmp_path: Path, monkeyp
 
 def _deadline_bound_tree_check(pid: int, root_pid: int) -> bool:
     # Process-tree queries run under the lifecycle deadline, like the native inventory.
-    deadline = daemon_lifecycle_deadline()
+    deadline = _DAEMON_LIFECYCLE_DEADLINE.get()
     if deadline is not None and time.monotonic() >= deadline:
         raise TimeoutError("Guard daemon operation deadline exceeded.")
     return pid == root_pid

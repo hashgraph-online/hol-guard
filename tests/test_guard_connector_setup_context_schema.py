@@ -12,7 +12,6 @@ import pytest
 from codex_plugin_scanner.guard.store_local_cli_context import (
     CONTEXT_COLUMNS,
     FIRST_BLOCKED_CAUSES,
-    connector_resolution_state,
     validated_first_blocked_cause,
 )
 from codex_plugin_scanner.guard.store_local_cli_regroup import (
@@ -185,29 +184,6 @@ def test_an_unknown_first_blocked_cause_is_refused(cause: object) -> None:
 def test_the_absent_cause_is_none() -> None:
     assert validated_first_blocked_cause(None) is None
     assert len(FIRST_BLOCKED_CAUSES) == 5
-
-
-def test_resolution_state_is_read_from_the_grant(tmp_path: Path) -> None:
-    with sqlite3.connect(tmp_path / "guard.db") as connection:
-        ensure_local_cli_schema(connection)
-        cli_id = _observe(connection, "lanectl")
-
-        assert connector_resolution_state(connection, cli_id, _HASH) == "unset"
-        connection.execute(
-            "insert into local_cli_grant values (?, ?, 'allowed', 1, '2026-01-02T00:00:00Z')", (cli_id, _HASH)
-        )
-        assert connector_resolution_state(connection, cli_id, _HASH) == "allowed"
-        # A grant made for another identity of this CLI does not apply.
-        assert connector_resolution_state(connection, cli_id, _OTHER_HASH) == "unset"
-        connection.execute("update local_cli_grant set state = 'blocked', revision = 2")
-        assert connector_resolution_state(connection, cli_id, _HASH) == "blocked"
-        connection.execute("delete from local_cli_grant")
-        assert connector_resolution_state(connection, cli_id, _HASH) == "unset"
-
-
-def test_resolution_state_without_a_grant_table_is_unset() -> None:
-    with sqlite3.connect(":memory:") as connection:
-        assert connector_resolution_state(connection, "local-cli.lanectl-1", _HASH) == "unset"
 
 
 def test_pending_unrecognised_reviews_regroup_under_the_connector(tmp_path: Path) -> None:

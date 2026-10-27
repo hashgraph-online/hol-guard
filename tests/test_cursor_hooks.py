@@ -6,7 +6,6 @@ import hashlib
 import hmac
 import json
 import os
-import sqlite3
 import subprocess
 import sys
 import time
@@ -23,42 +22,12 @@ from codex_plugin_scanner.guard.adapters.cursor_hooks import (
     cursor_hooks_path,
     cursor_native_hook_state,
     install_cursor_hooks,
-    prepare_cursor_hook_payload,
     uninstall_cursor_hooks,
 )
 from codex_plugin_scanner.guard.cli import update_commands as guard_update_commands_module
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
-from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.store import GuardStore
-
-
-def _cursor_shell_fingerprint(command: str) -> str:
-    """The digest both Cursor state keys are built from.
-
-    Spelled out here rather than imported from the CLI module: the resident
-    derives these keys now, so a test that wants to read a row back has to say
-    independently what that row is called.
-    """
-
-    from codex_plugin_scanner.guard.adapters.cursor_native_approval import normalize_cursor_shell_command
-
-    return hashlib.sha256(normalize_cursor_shell_command(command).encode("utf-8")).hexdigest()[:24]
-
-
-def _cursor_native_shell_allow_key(conversation_id: str, command: str) -> str:
-    return f"cursor_native_shell_allow:{conversation_id}:{_cursor_shell_fingerprint(command)}"
-
-
-def _cursor_shell_artifact(*, workspace_dir: Path, command: str) -> GuardArtifact:
-    return GuardArtifact(
-        artifact_id="cursor:project:shell:rm",
-        name="Shell",
-        harness="cursor",
-        artifact_type="tool_action_request",
-        source_scope="project",
-        config_path=str(workspace_dir / ".cursor" / "mcp.json"),
-        command=command,
-    )
+from tests.cursor_hook_payload_support import prepare_cursor_hook_payload
 
 
 def test_prepare_cursor_hook_payload_maps_before_read_file() -> None:
@@ -1108,29 +1077,6 @@ def test_prepare_cursor_hook_payload_maps_after_mcp_execution() -> None:
     assert tool_input["command"] == "pnpm test"
 
 
-def test_cursor_hook_warn_with_risk_remains_allowed_without_a_prompt() -> None:
-    from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_would_prompt_user
-
-    payload = {"risk_signals": ["destructive shell command"]}
-    assert not cursor_hook_would_prompt_user(
-        policy_action="warn",
-        guard_payload=payload,
-    )
-    assert not cursor_hook_would_prompt_user(policy_action="allow", guard_payload={})
-    assert cursor_hook_would_prompt_user(policy_action="review", guard_payload={})
-    assert cursor_hook_would_prompt_user(policy_action="require-reapproval", guard_payload={})
-
-
-def test_validated_hol_guard_src_path_rejects_non_guard_trees(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.cursor_hooks import _validated_hol_guard_src_path
-
-    assert _validated_hol_guard_src_path(str(tmp_path)) is None
-    src_root = tmp_path / "src"
-    src_root.mkdir()
-    (src_root / "codex_plugin_scanner").mkdir()
-    assert _validated_hol_guard_src_path(str(src_root)) == str(src_root.resolve())
-
-
 def test_cursor_hook_script_source_infers_event_before_prepare(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
 
@@ -1171,157 +1117,6 @@ def test_install_cursor_hooks_registers_after_shell_observer(tmp_path: Path, mon
     assert Path(command_tokens[0]).name.lower().startswith("python")
     assert read_entry["failClosed"] is True
     assert (guard_home / "secrets" / "cursor-hook-attestation.key").is_file()
-
-
-def test_normalize_cursor_shell_command_unwraps_lean_ctx_wrapper() -> None:
-    from codex_plugin_scanner.guard.adapters.cursor_native_approval import normalize_cursor_shell_command
-
-    wrapped = (
-        "/path/to/lean-ctx -c 'gh api graphql -f query='\\''query { viewer { login } }'\\''' 2>&1 | "
-        'python3 -c "import json,sys; print(json.load(sys.stdin))"'
-    )
-    normalized = normalize_cursor_shell_command(wrapped)
-
-    assert normalized.startswith("gh api graphql")
-    assert "lean-ctx" not in normalized
-
-
-def test_signed_cursor_allowance_cannot_be_replayed_into_another_conversation(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-
-    store = GuardStore(tmp_path / "home")
-    approved_conversation = "conv-cursor-approved"
-    forged_conversation = "conv-cursor-forged-copy"
-    command = "rm -rf ./sensitive-directory"
-    now = guard_commands_module._now()
-    approved_state_key = _cursor_native_shell_allow_key(approved_conversation, command)
-    forged_state_key = _cursor_native_shell_allow_key(forged_conversation, command)
-    assert guard_commands_module._record_cursor_native_shell_allow_state(
-        store=store,
-        conversation_id=approved_conversation,
-        command=command,
-        artifact=_cursor_shell_artifact(workspace_dir=tmp_path, command=command),
-        artifact_hash="hash-approved-conversation",
-        now=now,
-    )
-    signed_allowance = store.get_sync_payload(approved_state_key)
-    assert isinstance(signed_allowance, dict)
-    store.set_sync_payload(forged_state_key, signed_allowance, now)
-
-    assert not guard_commands_module._cursor_native_shell_is_approved(
-        store,
-        {"conversation_id": forged_conversation, "command": command},
-    )
-    events = store.list_events(event_name="rule.ignored.local_integrity")
-    assert len(events) == 1
-    assert events[0]["payload"]["message"] == "local_authority_integrity_context_mismatch"
-
-
-def test_malformed_cursor_allowance_json_fails_closed_with_integrity_event(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-
-    store = GuardStore(tmp_path / "home")
-    conversation_id = "conv-cursor-malformed-json"
-    command = "rm -rf ./sensitive-directory"
-    now = guard_commands_module._now()
-    state_key = _cursor_native_shell_allow_key(conversation_id, command)
-    assert guard_commands_module._record_cursor_native_shell_allow_state(
-        store=store,
-        conversation_id=conversation_id,
-        command=command,
-        artifact=_cursor_shell_artifact(workspace_dir=tmp_path, command=command),
-        artifact_hash="hash-before-json-tamper",
-        now=now,
-    )
-    with sqlite3.connect(store.path) as connection:
-        connection.execute(
-            "update sync_state set payload_json = '{' where state_key = ?",
-            (state_key,),
-        )
-
-    assert not guard_commands_module._cursor_native_shell_is_approved(
-        store,
-        {"conversation_id": conversation_id, "command": command},
-    )
-    assert store.get_sync_payload(state_key) is None
-    events = store.list_events(event_name="rule.ignored.local_integrity")
-    assert len(events) == 1
-    assert events[0]["payload"]["message"] == "local_authority_integrity_payload_invalid_json"
-
-
-def test_cursor_native_shell_does_not_approve_unrelated_command(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-    from codex_plugin_scanner.guard.store import GuardStore
-
-    home_dir = tmp_path / "home"
-    store = GuardStore(home_dir)
-    conversation_id = "conv-cursor-unrelated-command"
-    approved_command = "gh api graphql -f query='query { viewer { login } }'"
-    now = guard_commands_module._now()
-    store.set_sync_payload(
-        _cursor_native_shell_allow_key(conversation_id, approved_command),
-        {
-            "saved_at": now,
-            "action": "allow",
-            "artifact_id": "cursor:project:tool-action:shared-artifact",
-            "artifact_hash": "hash-shared-artifact",
-            "artifact_name": "destructive shell command",
-            "command": approved_command,
-            "native_source": "cursor-native",
-        },
-        now,
-    )
-
-    graphql_command = (
-        'gh api graphql -f query=\'query { repository(owner:"org", name:"repo") { pullRequest(number:1) { id } } }\''
-    )
-
-    assert not guard_commands_module._cursor_native_shell_is_approved(
-        store,
-        {
-            "conversation_id": conversation_id,
-            "command": graphql_command,
-        },
-    )
-
-
-def test_cursor_shell_command_from_payload_prefers_inner_lean_ctx_command() -> None:
-    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-
-    command = guard_commands_module._cursor_shell_command_from_payload(
-        {
-            "command": "/Users/me/.local/bin/lean-ctx",
-            "tool_input": {"command": "rm -rf ./hol-guard-cursor-native-mcp-marker"},
-        }
-    )
-    assert command == "rm -rf ./hol-guard-cursor-native-mcp-marker"
-
-
-def test_cursor_shell_command_from_payload_prefers_mcp_tool_input_command() -> None:
-    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-
-    command = guard_commands_module._cursor_shell_command_from_payload(
-        {
-            "hook_event_name": "beforeMCPExecution",
-            "tool_name": "run_terminal_cmd",
-            "tool_input": {"command": "rm -rf ./hol-guard-cursor-native-mcp-marker"},
-            "command": "/usr/bin/unrelated-mcp-bridge",
-        }
-    )
-    assert command == "rm -rf ./hol-guard-cursor-native-mcp-marker"
-
-
-def test_cursor_shell_command_from_payload_prefers_bash_wrapper_inner_command() -> None:
-    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-
-    command = guard_commands_module._cursor_shell_command_from_payload(
-        {
-            "hook_event_name": "beforeShellExecution",
-            "command": "bash -c 'rm -rf ./hol-guard-cursor-native-mcp-marker'",
-            "tool_input": {"command": "rm -rf ./hol-guard-cursor-native-mcp-marker"},
-        }
-    )
-    assert command == "rm -rf ./hol-guard-cursor-native-mcp-marker"
 
 
 def test_extract_sensitive_tool_action_request_accepts_generic_mcp_tool_command() -> None:

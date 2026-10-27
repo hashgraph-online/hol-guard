@@ -2,11 +2,14 @@
 //! the composed current policy action, and the approval-context artifact hash
 //! that `local_supply_chain.py` used to compute in Python.
 //!
-//! The caller hydrates only facts it alone can read (the bound `GuardConfig`
-//! view, the Python-built execution context, the extension-control digest and
-//! the cached feed snapshot hash). The runtime reads the advisory cache and the
-//! workspace manifests itself, composes the action, builds the approval
-//! identity and returns the token; callers never recompute any of it.
+//! The caller hydrates only facts it alone can read (the configuration fields
+//! the policy view is built from, the Python-built execution context and the
+//! extension-control digest).
+//! The cached feed snapshot hash is still accepted but not bound: a feed
+//! refresh only matters when it changes the matched advisory ids. The runtime
+//! reads the advisory cache and the workspace manifests itself, composes the
+//! action, builds the approval identity and returns the token; callers never
+//! recompute any of it.
 
 use guard_command::action_lattice::most_restrictive_guard_action;
 use guard_command::effect_decision::GuardAction;
@@ -35,14 +38,80 @@ fn field<'a>(map: &'a Value, key: &str) -> &'a Value {
     map.get(key).unwrap_or(&Value::Null)
 }
 
+/// Where the request reached the op from, which decides whether it may carry a
+/// resolved policy view of its own.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PolicySource {
+    /// `evaluate_package_approval_hash`: bytes any client can put on the
+    /// resident socket.
+    Wire,
+    /// `package_current_action_and_hash`: the resident calling itself, with a
+    /// view it built in process.
+    InProcess,
+}
+
+/// The marker a caller sends when it has no configuration to hydrate a view
+/// from. It is the only `config_policy` a wire request may carry.
+fn is_unavailable_marker(policy: &Map<String, Value>) -> bool {
+    policy.len() == 1 && policy.get("available") == Some(&Value::Bool(false))
+}
+
+/// The policy view the composed action and the approval context are bound to.
+///
+/// A caller that holds the loaded configuration sends the fields and the view
+/// is hydrated here, so the `package_script` action and the override folded
+/// into the composed action are resolved by the runtime and never by the
+/// caller. A wire caller with nothing to hydrate the view from sends
+/// `{"available": false}` and nothing else: a resolved view on the wire would
+/// put `effective_package_script_action` and `resolved_override` back in the
+/// caller's hands, so it is refused. The relay is the one caller that still
+/// sends a view, and it does so in process, from the harness view the
+/// publisher bound rather than from a request.
+fn resolve_config_policy(
+    request: &PackageApprovalHashRequestV1,
+    source: PolicySource,
+) -> Result<Value, String> {
+    let Some(facts) = request.config_facts.as_ref() else {
+        let policy = request.config_policy.as_object().ok_or_else(invalid)?;
+        if source == PolicySource::Wire && !is_unavailable_marker(policy) {
+            return Err(invalid());
+        }
+        return Ok(request.config_policy.clone());
+    };
+    if !request.config_policy.is_null() {
+        return Err(invalid());
+    }
+    let facts = facts.as_object().ok_or_else(invalid)?;
+    let artifact = &request.artifact;
+    let harness = field(artifact, "harness").as_str().ok_or_else(invalid)?;
+    let artifact_id = field(artifact, "artifact_id")
+        .as_str()
+        .ok_or_else(invalid)?;
+    // The configuration fields and the managed-policy pair the approval hash
+    // binds arrive in one map, so it stands for both halves.
+    crate::package_config_mirror::config_policy(
+        facts,
+        facts,
+        &crate::package_config_mirror::ArtifactIdentity {
+            artifact_id,
+            publisher: field(artifact, "publisher").as_str(),
+            harness,
+        },
+    )
+    .ok_or_else(invalid)
+}
+
 /// `most_restrictive_guard_action(policy_action, additional?, config actions…)`.
-fn compose_current_action(request: &PackageApprovalHashRequestV1) -> GuardAction {
+fn compose_current_action(
+    request: &PackageApprovalHashRequestV1,
+    config_policy: &Value,
+) -> GuardAction {
     let mut actions = vec![field(&request.evaluation, "policy_action").clone()];
     if let Some(additional) = request.additional_current_action.as_ref() {
         actions.push(additional.clone());
     }
     for key in ["effective_package_script_action", "resolved_override"] {
-        let action = field(&request.config_policy, key);
+        let action = field(config_policy, key);
         if !action.is_null() {
             actions.push(action.clone());
         }
@@ -110,37 +179,113 @@ fn parse_execution_context(value: Option<&Value>) -> Result<PackageExecutionCont
     })
 }
 
+/// Cloud transport fallbacks say where the evidence came from, not what the
+/// policy is. The action they produce is already in `decision` and
+/// `policy_action`, so leaving them out keeps a timeout from voiding approvals.
+const EVIDENCE_SOURCE_REASON_CODES: [&str; 5] = [
+    "cloud_auth_error",
+    "cloud_http_error",
+    "cloud_invalid_response",
+    "cloud_timeout",
+    "cloud_validation_error",
+];
+
+/// Per-package fields that name the package or carry its verdict. Scores, fix
+/// suggestions and reason text are left out: a feed refresh rewrites them
+/// without changing what is installed or what Guard decided about it.
+const PACKAGE_POLICY_KEYS: [&str; 15] = [
+    "alias",
+    "decision",
+    "dependencyPath",
+    "direct",
+    "ecosystem",
+    "name",
+    "namespace",
+    "packageManager",
+    "relatedAdvisoryIds",
+    "requestedVersion",
+    "resolvedVersion",
+    "ruleId",
+    "sourceIdentity",
+    "sourceRepository",
+    "sourceRevisionKind",
+];
+
+/// Sorted, deduplicated reason codes. Messages are presentation text and may
+/// change between bundle refreshes without the verdict changing.
+fn policy_reason_codes(reasons: &Value) -> Vec<String> {
+    let mut codes = reasons
+        .as_array()
+        .map(Vec::as_slice)
+        .unwrap_or(&[])
+        .iter()
+        .filter_map(|reason| reason.get("code").and_then(Value::as_str))
+        .filter(|code| !EVIDENCE_SOURCE_REASON_CODES.contains(code))
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    codes.sort();
+    codes.dedup();
+    codes
+}
+
+fn policy_packages(packages: &Value) -> Value {
+    let Some(items) = packages.as_array() else {
+        return packages.clone();
+    };
+    let project = |package: &Value| -> Value {
+        let Some(map) = package.as_object() else {
+            return package.clone();
+        };
+        let mut projected = Map::new();
+        for key in PACKAGE_POLICY_KEYS {
+            if let Some(value) = map.get(key) {
+                projected.insert(key.to_owned(), value.clone());
+            }
+        }
+        if let Some(reasons) = map.get("reasons") {
+            projected.insert(
+                "reason_codes".to_owned(),
+                json!(policy_reason_codes(reasons)),
+            );
+        }
+        Value::Object(projected)
+    };
+    Value::Array(items.iter().map(project).collect())
+}
+
+/// The policy half of the approval context. Bundle and feed revisions are left
+/// out on purpose: Guard Cloud refreshes them hourly, and a refresh that does
+/// not change a verdict, a matched rule or the matched advisories must not
+/// void a saved approval.
 fn policy_context(
     request: &PackageApprovalHashRequestV1,
+    config_policy: &Value,
     current_action: GuardAction,
     matched_ids: Vec<String>,
 ) -> Value {
     let evaluation = &request.evaluation;
     let mut feed = Map::new();
     for key in [
-        "bundle_version",
         "decision",
         "enforcement",
         "entitlement_state",
         "exception_id",
         "matched_rule_id",
-        "packages",
         "policy_action",
-        "policy_version",
-        "reasons",
     ] {
         feed.insert(key.to_owned(), field(evaluation, key).clone());
     }
     feed.insert(
-        "feed_snapshot_hash".to_owned(),
-        request
-            .feed_snapshot_hash
-            .clone()
-            .map_or(Value::Null, Value::String),
+        "packages".to_owned(),
+        policy_packages(field(evaluation, "packages")),
+    );
+    feed.insert(
+        "reason_codes".to_owned(),
+        json!(policy_reason_codes(field(evaluation, "reasons"))),
     );
     feed.insert("matched_advisory_ids".to_owned(), json!(matched_ids));
     json!({
-        "configuration": request.config_policy,
+        "configuration": config_policy,
         "current_action": current_action.as_str(),
         "additional": request
             .additional_policy_context
@@ -153,6 +298,7 @@ fn policy_context(
 
 fn artifact_hash(
     request: &PackageApprovalHashRequestV1,
+    config_policy: &Value,
     current_action: GuardAction,
 ) -> Result<String, String> {
     let store_path = request.store_path.as_deref().ok_or_else(invalid)?;
@@ -171,7 +317,7 @@ fn artifact_hash(
     let matched_ids = matched_advisory_ids(&request.artifact, store_path)?
         .into_iter()
         .collect::<Vec<_>>();
-    let policy = policy_context(request, current_action, matched_ids);
+    let policy = policy_context(request, config_policy, current_action, matched_ids);
 
     let artifact = &request.artifact;
     let metadata = artifact
@@ -260,14 +406,12 @@ fn artifact_hash(
 pub(crate) fn package_current_action_and_hash(
     request: &PackageApprovalHashRequestV1,
 ) -> Result<(GuardAction, String), String> {
-    if !request.evaluation.is_object()
-        || !request.artifact.is_object()
-        || !request.config_policy.is_object()
-    {
+    if !request.evaluation.is_object() || !request.artifact.is_object() {
         return Err(invalid());
     }
-    let current_action = compose_current_action(request);
-    let artifact_hash = artifact_hash(request, current_action)?;
+    let config_policy = resolve_config_policy(request, PolicySource::InProcess)?;
+    let current_action = compose_current_action(request, &config_policy);
+    let artifact_hash = artifact_hash(request, &config_policy, current_action)?;
     Ok((current_action, artifact_hash))
 }
 
@@ -282,11 +426,11 @@ pub(crate) fn evaluate_package_approval_hash(
         || request.guard_home.is_empty()
         || !request.evaluation.is_object()
         || !request.artifact.is_object()
-        || !request.config_policy.is_object()
     {
         return Err(invalid());
     }
-    let current_action = compose_current_action(request);
+    let config_policy = resolve_config_policy(request, PolicySource::Wire)?;
+    let current_action = compose_current_action(request, &config_policy);
     let mut payload = Map::new();
     payload.insert("current_action".to_owned(), json!(current_action.as_str()));
     match request.kind.as_str() {
@@ -294,7 +438,7 @@ pub(crate) fn evaluate_package_approval_hash(
         "artifact_hash" => {
             payload.insert(
                 "artifact_hash".to_owned(),
-                Value::String(artifact_hash(request, current_action)?),
+                Value::String(artifact_hash(request, &config_policy, current_action)?),
             );
         }
         _ => return Err(invalid()),

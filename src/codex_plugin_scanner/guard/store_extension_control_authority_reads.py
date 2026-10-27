@@ -276,12 +276,14 @@ class ExtensionControlAuthorityReadsMixin:
     ) -> ExtensionControlAuthorityView:
         """Read the authority through the resident, doing the writer work it asks for.
 
-        The resident never writes. Restoring the last-good export, resuming an
-        interrupted migration, rolling back an abandoned transition and
-        committing a catalog migration come back as actions; each runs here
-        under the lease the caller holds, at most once, before asking again.
-        A writer about to resume its own prepared row passes
-        ``roll_back_abandoned=False`` so the read leaves that row in place.
+        The resident never writes. Restoring the last-good export, resuming a
+        prepared transition — an interrupted migration, or a commit that sealed
+        the anchor and died before the row said so — rolling back an abandoned
+        transition and committing a catalog migration come back as actions;
+        each runs here under the lease the caller holds, at most once, before
+        asking again. A writer about to resume its own prepared row passes
+        ``roll_back_abandoned=False`` so the read leaves that row in place for
+        it to settle under its own proof.
         """
 
         return self._read_authority_locked(
@@ -367,8 +369,12 @@ class ExtensionControlAuthorityReadsMixin:
                     self._restore_last_good_authority(key=key)
                 attempted["restore_attempted"] = True
             elif kind == "resume_pending":
-                resumed = self._resume_pending_catalog_migration(action, key=key)
-                if resumed is not None and resumed.health is AuthorityHealth.PROTECTED:
+                resumed = self._resume_pending_transition(action, key=key)
+                if (
+                    resumed is not None
+                    and resumed.health is AuthorityHealth.PROTECTED
+                    and resumed.catalog_digest == catalog_digest
+                ):
                     return resumed, None
                 attempted["resume_attempted"] = True
             elif kind == "roll_back_abandoned":
@@ -384,8 +390,40 @@ class ExtensionControlAuthorityReadsMixin:
                 raise ExtensionControlAuthorityError("invalid extension control authority action")
         raise ExtensionControlAuthorityError("extension control authority read did not settle")
 
-    def _resume_pending_catalog_migration(
+    def _resume_pending_transition(
         self, action: Mapping[str, object], *, key: bytes
     ) -> ExtensionControlAuthorityView | None:
-        with self._connect() as connection:
-            return self._resume_transition(connection, int(cast(int, action["revision"])), key=key)
+        """Finish the prepared transition the resident named, if this caller can.
+
+        The resident has already re-verified that row and the anchor over it,
+        so the work left is the write. A reader holding only a shared lease
+        cannot make every one of them: a transition that activates a command
+        pack writes the activation journal, which demands an exclusive lease.
+        That is not a verdict on the authority, so it is reported as the
+        mutation this read turned out to need, and the caller that can take an
+        exclusive lease — the daemon's refresh does exactly that — retries and
+        finishes the row. A caller that cannot reports the state it found, with
+        the explicit recovery verb still available, which is strictly better
+        than reporting a tampered authority for a row it merely could not
+        settle.
+
+        Only that missing write permission is read as "not settled here".
+        Every verdict the resident reaches about the row itself — a transition
+        or snapshot whose MAC does not authenticate, a head that does not match
+        the anchor over it, a recovery whose re-read does not come back
+        protected — is a tampered authority and propagates, so a forged
+        prepared row is never reported as merely recoverable.
+        """
+
+        from .native_command_control_authority_io import NativeCommandControlMutationRequiredError
+        from .native_policy_snapshot_constants import NativePolicySnapshotError
+
+        try:
+            with self._connect() as connection:
+                return self._resume_transition(connection, int(cast(int, action["revision"])), key=key)
+        except NativeCommandControlMutationRequiredError:
+            raise
+        except NativePolicySnapshotError as error:
+            if str(error) == "native_command_control_mutation_lease_missing":
+                raise NativeCommandControlMutationRequiredError() from error
+            return None

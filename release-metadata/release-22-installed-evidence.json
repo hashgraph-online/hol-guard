@@ -122,8 +122,6 @@
         "src/codex_plugin_scanner/guard/approval_scope_support.py",
         "src/codex_plugin_scanner/guard/approvals.py",
         "src/codex_plugin_scanner/guard/cli/commands_hook.py",
-        "src/codex_plugin_scanner/guard/runtime/github_capability_contract.py",
-        "src/codex_plugin_scanner/guard/runtime/github_capability_interaction.py",
         "rust/crates/guard-command/src/github_workflow_operations.rs",
         "rust/crates/guard-runtime/src/github_workflow_prepare_op.rs",
         "src/codex_plugin_scanner/guard/runtime/github_workflow_approval_record.py",

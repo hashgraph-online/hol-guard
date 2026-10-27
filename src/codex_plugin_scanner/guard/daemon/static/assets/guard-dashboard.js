@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-D6HYkV_q.js","assets/chunks/home-protection-module-DZsYd8li.js","assets/chunks/supply-chain-protection-stats-BbhzE3ad.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-By01oDVd.js","assets/chunks/fleet-workspace-BIUOUQ_O.js","assets/chunks/harness-version-label-CS-CRwir.js","assets/chunks/connect-guard-cloud-button-C4Z4YFhK.js","assets/chunks/settings-save-proof-modal-CZZvxWFO.js","assets/chunks/settings-workspace-D3SHkj-8.js","assets/chunks/confirm-dialog-C2SCoXLE.js","assets/chunks/extensions-workspace-Cp-huDr6.js","assets/chunks/app-detail-workspace-UGP1uq-z.js","assets/chunks/policy-workspace-page-DRY_qXhn.js","assets/chunks/about-workspace-BPE4bA0g.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-D6HYkV_q.js","assets/chunks/home-protection-module-DZsYd8li.js","assets/chunks/supply-chain-protection-stats-BbhzE3ad.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-By01oDVd.js","assets/chunks/fleet-workspace-BIUOUQ_O.js","assets/chunks/harness-version-label-CS-CRwir.js","assets/chunks/connect-guard-cloud-button-C4Z4YFhK.js","assets/chunks/settings-save-proof-modal-CZZvxWFO.js","assets/chunks/settings-workspace-D3SHkj-8.js","assets/chunks/confirm-dialog-C2SCoXLE.js","assets/chunks/extensions-workspace-Cp-huDr6.js","assets/chunks/app-detail-workspace-UGP1uq-z.js","assets/chunks/policy-workspace-page-DRY_qXhn.js","assets/chunks/about-workspace-DF4GsLZL.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -31537,7 +31537,7 @@ function extension(value, label) {
     required: bool$1(item.required, `${label}.required`),
     trust_class: item.trust_class === void 0 ? "first-party" : enumValue(item.trust_class, `${label}.trust_class`, ["first-party", "trusted-library", "external"]),
     activation: item.activation === void 0 ? "default-on" : enumValue(item.activation, `${label}.activation`, ["default-on", "opt-in"]),
-    publisher: item.publisher === void 0 ? { id: "hol", displayName: "Hashgraph Online" } : publisher(item.publisher, `${label}.publisher`),
+    publisher: item.publisher === void 0 ? { id: "hol", displayName: "HOL" } : publisher(item.publisher, `${label}.publisher`),
     icon: icon(item.icon, `${label}.icon`),
     source: enumValue(item.source, `${label}.source`, ["built-in", "local-admin", "signed-cloud"]),
     version: version(item.version, `${label}.version`),
@@ -35274,7 +35274,7 @@ async function fetchMcpProviderActions(cliId, options) {
     };
   });
   const nextOffset = body.next_offset;
-  if (nextOffset !== null && (typeof nextOffset !== "number" || !Number.isSafeInteger(nextOffset) || nextOffset !== options.offset + 50 || nextOffset > 1e4)) throw new Error("Invalid provider inventory page");
+  if (nextOffset !== null && (typeof nextOffset !== "number" || !Number.isSafeInteger(nextOffset) || nextOffset <= options.offset || nextOffset > options.offset + 50 || nextOffset > 1e4)) throw new Error("Invalid provider inventory page");
   return { actions, nextOffset, catalogToken: body.catalog_token };
 }
 const EXTENSION_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
@@ -37124,7 +37124,7 @@ const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePre
 const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal-B0TZsHE3.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = lazyWorkspace(
   "supply-chain-hub-workspace",
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-CrISM3WV.js").then((n) => n.d), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-BB7AjsHd.js").then((n) => n.d), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = lazyWorkspace(
   "policy-workspace-page",
@@ -37132,7 +37132,7 @@ const PolicyWorkspacePage = lazyWorkspace(
 );
 const AboutWorkspace = lazyWorkspace(
   "about-workspace",
-  () => __vitePreload(() => import("./chunks/about-workspace-BPE4bA0g.js"), true ? __vite__mapDeps([15,3,4,16]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
+  () => __vitePreload(() => import("./chunks/about-workspace-DF4GsLZL.js"), true ? __vite__mapDeps([15,3,4,16]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
 );
 const ReleasesWorkspace = lazyWorkspace(
   "releases-workspace",

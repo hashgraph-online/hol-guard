@@ -118,6 +118,10 @@ name = "shim_admin_vectors"
 path = "tests/shim_admin_vectors.rs"
 
 [[test]]
+name = "shim_cloud_coverage_login_path"
+path = "tests/shim_cloud_coverage_login_path.rs"
+
+[[test]]
 name = "mcp_stdio_probe_windows"
 path = "tests/mcp_stdio_probe_windows.rs"
 

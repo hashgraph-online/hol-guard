@@ -1,8 +1,6 @@
-"""Machine-wide protection posture and dual-write to legacy mode/level."""
+"""Machine-wide protection posture: its valid values, bounds and copy."""
 
 from __future__ import annotations
-
-from .models import GuardAction, GuardMode
 
 VALID_PROTECTION_POSTURES = frozenset({"protected", "extra_careful", "watch"})
 DEFAULT_PROTECTION_POSTURE = "protected"
@@ -30,55 +28,6 @@ POSTURE_COPY: dict[str, dict[str, str]] = {
     },
 }
 
-POSTURE_RISK_ACTIONS: dict[str, dict[str, GuardAction]] = {
-    "protected": {
-        "local_secret_read": "require-reapproval",
-        "credential_exfiltration": "require-reapproval",
-        "data_flow_exfiltration": "require-reapproval",
-        "destructive_shell": "require-reapproval",
-        "encoded_execution": "require-reapproval",
-        "network_egress": "allow",
-        "prompt_injection": "require-reapproval",
-        "mcp_dangerous_tool": "require-reapproval",
-        "malicious_skill": "require-reapproval",
-        "package_script": "require-reapproval",
-        "persistence": "require-reapproval",
-        "guard_bypass": "block",
-        "cloud_advisory": "allow",
-        "encoded_exfiltration": "block",
-        "package_unknown": "allow",
-        "package_lockfile_drift": "allow",
-        "package_direct_source": "allow",
-        "package_custom_registry": "allow",
-        "package_install": "allow",
-        "low_trust_artifact": "require-reapproval",
-        "runtime_known_vulnerable": "require-reapproval",
-    },
-    "extra_careful": {
-        "local_secret_read": "require-reapproval",
-        "credential_exfiltration": "require-reapproval",
-        "data_flow_exfiltration": "require-reapproval",
-        "destructive_shell": "require-reapproval",
-        "encoded_execution": "require-reapproval",
-        "network_egress": "require-reapproval",
-        "prompt_injection": "require-reapproval",
-        "mcp_dangerous_tool": "require-reapproval",
-        "malicious_skill": "require-reapproval",
-        "package_script": "require-reapproval",
-        "persistence": "require-reapproval",
-        "guard_bypass": "block",
-        "cloud_advisory": "require-reapproval",
-        "encoded_exfiltration": "block",
-        "package_unknown": "require-reapproval",
-        "package_lockfile_drift": "require-reapproval",
-        "package_direct_source": "require-reapproval",
-        "package_custom_registry": "allow",
-        "package_install": "allow",
-        "low_trust_artifact": "require-reapproval",
-        "runtime_known_vulnerable": "require-reapproval",
-    },
-}
-
 
 def normalize_protection_posture(value: object) -> str | None:
     if not isinstance(value, str):
@@ -94,36 +43,6 @@ def coerce_protection_posture(value: object) -> str:
     if posture is None:
         raise ValueError("Invalid Guard protection posture.")
     return posture
-
-
-def coerce_loaded_protection_posture(value: object) -> str | None:
-    return normalize_protection_posture(value)
-
-
-def derive_protection_posture(mode: object, security_level: object) -> str:
-    if mode == "observe":
-        return "watch"
-    if security_level == "strict":
-        return "extra_careful"
-    if security_level == "paranoid":
-        return "extra_careful"
-    return DEFAULT_PROTECTION_POSTURE
-
-
-def dual_write_from_posture(
-    posture: str,
-    *,
-    current_security_level: str | None = None,
-) -> tuple[GuardMode, str | None]:
-    if posture == "watch":
-        return "observe", current_security_level
-    if posture == "extra_careful":
-        return "enforce", "strict"
-    return "enforce", "balanced"
-
-
-def resolve_posture_defaults(posture: str) -> dict[str, GuardAction] | None:
-    return POSTURE_RISK_ACTIONS.get(posture)
 
 
 def posture_label(posture: str) -> str:

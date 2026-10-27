@@ -7,21 +7,23 @@ from typing import cast
 import pytest
 from jsonschema import Draft202012Validator
 
-from codex_plugin_scanner.guard.contracts import guard_cloud_review as contract_adapter
+import tests.guard_cloud_review_contract as contract_adapter
 from codex_plugin_scanner.guard.contracts.guard_cloud_review import (
     COMMAND_RESULT_CONTRACT_PATH,
     COMMAND_RESULT_CONTRACT_VERSION,
+    load_exact_command_result_contract,
+    validate_exact_command_result,
+)
+from tests.guard_cloud_review_contract import (
     CONTRACT_PATH,
     CONTRACT_VERSION,
     FIXTURES_PATH,
     PUBLIC_DOCUMENTATION_PATH,
     load_contract,
-    load_exact_command_result_contract,
     load_fixtures,
     render_public_documentation,
     resolve_json_pointer,
     status_values,
-    validate_exact_command_result,
     validate_review_result,
     validate_reviewability_case,
 )

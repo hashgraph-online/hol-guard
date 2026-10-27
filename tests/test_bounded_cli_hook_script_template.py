@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -443,19 +444,59 @@ def test_generated_zcode_block_pretool_exits_two_with_stderr_reason(tmp_path: Pa
     assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
-def test_generated_zcode_authority_block_stderr_appends_remediation(tmp_path: Path) -> None:
+_AUTHORITY_BLOCK = {
+    "policy_action": "block",
+    "reason": "HOL Guard requires the native command extension policy before this action can execute.",
+    "hookSpecificOutput": {"hookEventName": "PreToolUse"},
+}
+
+
+def test_generated_zcode_authority_block_stderr_names_the_home_it_reads(tmp_path: Path) -> None:
+    # The script knows which home it read the blocking floor from. Pasting a
+    # bare command into a shell would recover the default install instead,
+    # leaving this one blocked on every tool call.
     module = _load_script(tmp_path, harness="zcode")
-    _stdout, stderr, code = module._to_native(
-        {
-            "policy_action": "block",
-            "reason": "HOL Guard requires the native command extension policy before this action can execute.",
-            "hookSpecificOutput": {"hookEventName": "PreToolUse"},
-        },
-        "PreToolUse",
-    )
+    _stdout, stderr, code = module._to_native(dict(_AUTHORITY_BLOCK), "PreToolUse")
+
+    assert code == 2
+    # Spelled by the script's own quoting rule, because a Windows home renders
+    # for `cmd.exe`, not for a POSIX shell.
+    named = module._quote_home(module.GUARD_HOME, os.name == "nt")
+    assert named is not None, module.GUARD_HOME
+    assert f"hol-guard command --guard-home {named} controls recover-authority" in stderr
+
+
+def test_generated_zcode_authority_block_keeps_the_short_command_for_the_default_home(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The short command is the one almost everyone needs, and a path that adds
+    # nothing only invites editing.
+    module = _load_script(tmp_path, harness="zcode")
+    monkeypatch.setattr(module, "GUARD_HOME", str(tmp_path / ".hol-guard"))
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    _stdout, stderr, code = module._to_native(dict(_AUTHORITY_BLOCK), "PreToolUse")
 
     assert code == 2
     assert "hol-guard command controls recover-authority" in stderr
+    assert "--guard-home" not in stderr
+
+
+def test_generated_zcode_authority_block_keeps_the_short_command_without_a_home(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A platform that will not answer for the user's home leaves nothing to
+    # compare, so there is nothing worth adding to the command.
+    module = _load_script(tmp_path, harness="zcode")
+
+    def _no_home(cls: type[Path]) -> Path:
+        raise RuntimeError("home directory cannot be resolved")
+
+    monkeypatch.setattr(Path, "home", classmethod(_no_home))
+    _stdout, stderr, code = module._to_native(dict(_AUTHORITY_BLOCK), "PreToolUse")
+
+    assert code == 2
+    assert "hol-guard command controls recover-authority" in stderr
+    assert "--guard-home" not in stderr
 
 
 def test_generated_zcode_sandbox_required_denies_with_exit_two(tmp_path: Path) -> None:

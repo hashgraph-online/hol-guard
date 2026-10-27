@@ -10,12 +10,12 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.cli.commands_support_codex_commands import (
-    _codex_post_tool_command_is_read_only_source_inspection,
-)
 from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _codex_post_tool_output_artifact
-from codex_plugin_scanner.guard.native_shell_helpers import kubernetes_secret_read_source
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
+from tests.codex_read_only_inspection import (
+    codex_post_tool_command_is_read_only_source_inspection,
+)
+from tests.native_shell_helpers_client import kubernetes_secret_read_source
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
@@ -476,7 +476,7 @@ def test_pi_post_tool_output_keeps_sensitive_batched_command_even_with_read_only
 def test_read_only_command_batches_stay_read_only_for_post_tool_skip(tmp_path: Path) -> None:
     payload = {"tool_input": {"commands": ["rg foo src", "grep bar src/app.py"]}}
 
-    assert _codex_post_tool_command_is_read_only_source_inspection(
+    assert codex_post_tool_command_is_read_only_source_inspection(
         payload=payload,
         cwd=tmp_path,
         home_dir=tmp_path,

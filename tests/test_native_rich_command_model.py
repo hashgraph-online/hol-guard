@@ -12,7 +12,8 @@ from typing import Any
 import pytest
 
 from codex_plugin_scanner.guard import native_rich_command_model as client
-from codex_plugin_scanner.guard.runtime import command_model, command_tokens, env_wrapper
+from codex_plugin_scanner.guard.runtime import command_model, command_tokens
+from tests import env_wrapper_test_support as env_wrapper
 
 FIXTURE = json.loads((Path(__file__).parent / "fixtures/native_rich_command_model.json").read_text())
 
@@ -288,20 +289,17 @@ def test_explicit_inspection_home_identity_outage_returns_blocked_diagnostic(mon
 @pytest.mark.parametrize("harness", ["codex", "codex-alias"])
 @pytest.mark.parametrize(
     "error_type",
-    ["command-model", "sensitive-request", "artifact-identity"],
+    ["command-model", "sensitive-request"],
 )
 def test_runtime_artifact_native_outage_does_not_reparse_or_fabricate_identity(
     monkeypatch, tmp_path, harness, error_type
 ):
     from codex_plugin_scanner.guard.cli import commands_support_runtime_artifacts as artifacts
-    from codex_plugin_scanner.guard.native_runtime_artifact_identity import NativeRuntimeArtifactIdentityError
     from codex_plugin_scanner.guard.native_sensitive_request import NativeSensitiveRequestError
 
     monkeypatch.setattr(artifacts, "_canonical_harness_name", lambda _: "codex")
 
     def forbidden(*args, **kwargs):
-        if error_type == "artifact-identity":
-            raise NativeRuntimeArtifactIdentityError("native_runtime_artifact_identity_unavailable")
         if error_type == "sensitive-request":
             raise NativeSensitiveRequestError("native_sensitive_request_unavailable")
         raise client.NativeCommandModelError("native_rich_command_model_unavailable")
@@ -326,16 +324,16 @@ def test_runtime_artifact_native_outage_does_not_reparse_or_fabricate_identity(
 def test_command_id_resolution_never_converts_parser_errors_to_root_tokens(monkeypatch, tmp_path, error_type):
     from types import SimpleNamespace
 
-    from codex_plugin_scanner.guard.runtime import local_cli_commands, package_json_scripts
+    from tests import local_cli_command_id_client
 
-    monkeypatch.setattr(package_json_scripts, "package_script_command_tokens", lambda *args, **kwargs: None)
+    monkeypatch.setattr(local_cli_command_id_client, "package_script_command_tokens", lambda *args, **kwargs: None)
 
     def unavailable(*args, **kwargs):
         raise error_type("parser_unavailable")
 
-    monkeypatch.setattr(local_cli_commands, "parse_shell_command", unavailable)
+    monkeypatch.setattr(local_cli_command_id_client, "parse_shell_command", unavailable)
     with pytest.raises(error_type):
-        local_cli_commands.command_tokens_for_invocation(
+        local_cli_command_id_client.command_tokens_for_invocation(
             "tool --version",
             cwd=tmp_path,
             home_dir=tmp_path,

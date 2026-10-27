@@ -10,10 +10,6 @@ from codex_plugin_scanner.guard.config import (
     resolve_risk_action,
     update_guard_settings,
 )
-from codex_plugin_scanner.guard.protection_posture import (
-    derive_protection_posture,
-    dual_write_from_posture,
-)
 
 
 def _write_text(path: Path, text: str) -> None:
@@ -212,17 +208,6 @@ def test_relaxed_implicit_maps_stay_warn(tmp_path: Path) -> None:
     assert resolve_risk_action(config, "credential_exfiltration", harness="codex") == "warn"
 
 
-def test_derive_and_dual_write_tables() -> None:
-    assert derive_protection_posture("observe", "balanced") == "watch"
-    assert derive_protection_posture("prompt", "balanced") == "protected"
-    assert derive_protection_posture("enforce", "strict") == "extra_careful"
-    assert derive_protection_posture("enforce", "paranoid") == "extra_careful"
-    assert derive_protection_posture("prompt", "gentle") == "protected"
-    assert dual_write_from_posture("protected") == ("enforce", "balanced")
-    assert dual_write_from_posture("extra_careful") == ("enforce", "strict")
-    assert dual_write_from_posture("watch", current_security_level="balanced") == ("observe", "balanced")
-
-
 def test_managed_security_level_lock_keeps_level_maps(tmp_path: Path) -> None:
     guard_home = tmp_path / ".hol-guard"
     loaded = update_guard_settings(guard_home, {"protection_posture": "protected"})
@@ -277,7 +262,7 @@ def test_watch_auto_revert_accepts_naive_entered_at(tmp_path: Path) -> None:
 def test_explicit_protected_survives_mode_lock_overlay(tmp_path: Path) -> None:
     from types import SimpleNamespace
 
-    from codex_plugin_scanner.guard.config import _reapply_managed_config
+    from codex_plugin_scanner.guard.config import _overlay
 
     guard_home = tmp_path / ".hol-guard"
     loaded = update_guard_settings(guard_home, {"protection_posture": "protected"})
@@ -286,7 +271,7 @@ def test_explicit_protected_survives_mode_lock_overlay(tmp_path: Path) -> None:
         managed_policy=SimpleNamespace(settings={"mode": "enforce"}, locked_settings=frozenset({"mode"})),
         managed_locked_settings=("mode",),
     )
-    overlaid = _reapply_managed_config(locked)
+    overlaid = _overlay(locked, None)
     assert overlaid.protection_posture_explicit is True
     assert resolve_risk_action(overlaid, "package_script", harness="codex") == "require-reapproval"
 

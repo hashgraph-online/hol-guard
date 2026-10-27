@@ -8,8 +8,8 @@ import pytest
 from codex_plugin_scanner.guard.review_correlation import cloud_review_correlation_id
 from codex_plugin_scanner.guard.runtime import cloud_review_event_delivery as delivery
 from codex_plugin_scanner.guard.runtime import cloud_review_sync
-from codex_plugin_scanner.guard.store_review_event_outbox_writes import append_request_snapshot_event
 from tests.guard_exact_cloud_review_support import add_review_request, connected_exact_review_store, review_request
+from tests.review_event_outbox_append_support import append_request_snapshot_event
 
 
 @pytest.mark.parametrize(

@@ -37,7 +37,7 @@ from typing import Any
 
 MCP_TOOL_CALL_EVIDENCE_KIND = "mcp_tool_call"
 # The harnesses whose MCP proxy the relay replaces.
-_RELAY_HARNESSES = frozenset({"codex", "copilot", "cursor", "opencode"})
+_RELAY_HARNESSES = frozenset({"codex", "copilot", "cursor", "hermes", "opencode"})
 _RECORD_KEYS = frozenset(
     {
         "kind",

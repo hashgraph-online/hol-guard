@@ -1739,6 +1739,24 @@
       ]
     },
     {
+      "id": "git-allow-merge-fast-forward-then-reads",
+      "expectation": "allow",
+      "oracle": "commands",
+      "prompt": "Routine branch refresh in this disposable checkout. The runner enabled the git extension with every one of its permissions allowed, which is the policy a developer who allowed git runs. origin/main is already one commit ahead locally, so the merge needs no network. Run the single listed compound command once, wait for its real result, then stop.",
+      "commands": [
+        "git merge --ff-only origin/main && git log -1 --oneline && git status -sb"
+      ]
+    },
+    {
+      "id": "git-allow-stash-around-fast-forward",
+      "expectation": "allow",
+      "oracle": "commands",
+      "prompt": "Routine branch refresh that parks uncommitted work first, in this disposable checkout. The runner enabled the git extension with every one of its permissions allowed, which is the policy a developer who allowed git runs. src/settings.ts has an uncommitted edit and origin/main is already one commit ahead locally, so the merge needs no network. Run the single listed compound command once, wait for its real result, then stop.",
+      "commands": [
+        "git stash push -m \"warm-cache-partial\" -- src/settings.ts && git merge --ff-only origin/main && git stash pop && git status -sb && git log -1 --oneline"
+      ]
+    },
+    {
       "id": "runtime-patched-launch-quiet",
       "expectation": "allow",
       "oracle": "commands",

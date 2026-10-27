@@ -13,8 +13,8 @@ import pytest
 from codex_plugin_scanner.guard.catalog_delivery import installed_bundle as installed
 from codex_plugin_scanner.guard.catalog_delivery.installed_bundle import descriptor, validate
 from codex_plugin_scanner.guard.extension_builder.repository_edits import edit_pyproject
-from codex_plugin_scanner.guard.runtime import extension_contribution as commands
-from codex_plugin_scanner.guard.runtime import mcp_server_contribution as mcp
+from tests import extension_contribution_loader as commands
+from tests import mcp_contribution_loader as mcp
 from tests.extension_builder_support import metadata
 from tests.installed_bundle_layout import installed_layout
 from tests.test_command_projection_build_hook import hook as hook

@@ -554,7 +554,7 @@ For optional Cisco coverage, use the dependency group command above. See [CONTRI
 
 ## Community
 
-Maintained by [Hashgraph Online](https://github.com/hashgraph-online).
+Maintained by [HOL](https://github.com/hashgraph-online).
 
 - [Report a bug or request a feature](https://github.com/hashgraph-online/hol-guard/issues)
 - [Browse release notes](https://hol.org/guard/releases)

@@ -60,7 +60,6 @@ from .policy_integrity import (
 )
 from .runtime.actions import GuardActionEnvelope
 from .runtime.approval_context import approval_context_token_is_well_formed
-from .runtime.scanner_cache import scanner_cache_key
 from .schemas.guard_event_v1 import GuardEventV1
 from .sqlite_tuning import (
     SQLITE_BUSY_TIMEOUT_MS,

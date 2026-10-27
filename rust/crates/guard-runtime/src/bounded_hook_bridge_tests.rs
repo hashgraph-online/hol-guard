@@ -54,6 +54,7 @@ fn daemon_answers_render_as_python_renders_them() {
             &text(&case, "harness"),
             &text(&case, "event"),
             false,
+            None,
         );
         let expected = Rendered {
             stdout: text(&case, "stdout"),
@@ -423,6 +424,7 @@ fn the_daemon_answer_is_rendered_natively() {
         "kimi",
         "PreToolUse",
         false,
+        None,
     )
     .unwrap();
     assert_eq!(
@@ -492,3 +494,32 @@ fn an_answer_the_bridge_cannot_render_fails_closed() {
 
 #[path = "bounded_hook_bridge_surrogate_tests.rs"]
 mod surrogates;
+
+/// The home the bridge was launched against travels into the recovery command
+/// an authority block carries, so a person on an install the bare command
+/// would not find repairs the one that is blocking them. The fixture's home is
+/// never `<home>/.hol-guard`, which is the case the naming exists for.
+#[test]
+fn an_authority_block_names_the_home_the_bridge_read() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let answer = r#"{"policy_action":"block","reason":"HOL Guard blocked this action under the native command extension policy."}"#;
+    let daemon = serve_once(listener, 200, answer.to_owned());
+    let home = home_with_endpoint("bounded-authority-home", "127.0.0.1", port, true);
+
+    let route = route_hook(&bridge_config(&home, "zcode"), PRE_TOOL, soon());
+
+    let Route::Respond { stderr, .. } = route else {
+        panic!("the bridge did not answer: {route:?}");
+    };
+    let named = format!(
+        "hol-guard command --guard-home {} controls recover-authority",
+        crate::bounded_hook_bridge_remediation::quote_home(
+            &home.home.to_string_lossy(),
+            cfg!(windows)
+        )
+        .expect("the fixture home renders for the shell it would be pasted into")
+    );
+    assert!(stderr.contains(&named), "{stderr}");
+    daemon.join().unwrap().unwrap();
+}

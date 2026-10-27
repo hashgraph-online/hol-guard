@@ -473,7 +473,7 @@ def test_pending_binding_conflict_and_expiry_fail_without_mutation(
         )
 
     assert outbox_path.read_bytes() == before
-    assert health_lease.load_pending_health_lease(paths) == issued
+    assert health_lease._load_pending(paths) == issued
 
 
 def test_malformed_and_symlink_outbox_fail_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -482,14 +482,14 @@ def test_malformed_and_symlink_outbox_fail_closed(tmp_path: Path, monkeypatch: p
     outbox_path.write_bytes(b'{"schemaVersion":"wrong"}')
 
     with pytest.raises(ValueError, match="health_lease_outbox_invalid"):
-        health_lease.load_pending_health_lease(paths)
+        health_lease._load_pending(paths)
 
     outbox_path.unlink()
     target = tmp_path / "attacker-controlled"
     target.write_text("{}", encoding="utf-8")
     outbox_path.symlink_to(target)
     with pytest.raises(PermissionError, match="health_lease_outbox_acl_invalid"):
-        health_lease.load_pending_health_lease(paths)
+        health_lease._load_pending(paths)
 
 
 def test_concurrent_issuance_creates_only_one_pending_lease(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

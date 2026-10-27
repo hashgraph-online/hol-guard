@@ -100,6 +100,7 @@ def _config(**overrides: object) -> SimpleNamespace:
         "harness_postures": {},
         "protection_posture": "protected",
         "mode": "enforce",
+        "security_level": "balanced",
     }
     base.update(overrides)
     return SimpleNamespace(**base)

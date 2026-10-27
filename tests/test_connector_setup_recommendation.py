@@ -22,7 +22,7 @@ from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_allow_hint import (
     CONNECTOR_SETUP_HINT_SCHEMA,
-    connector_setup_hint,
+    connector_setup_deep_link,
     validated_connector_setup_hint,
     validated_extension_allow_hint,
 )
@@ -38,7 +38,18 @@ _CONNECTOR = SetupConnector(cli_id=_CLI_ID, identity_hash=_HASH, name="lanectl",
 
 
 def _hint(**overrides: object) -> dict[str, object]:
-    hint = connector_setup_hint(cli_id=_CLI_ID, identity_hash=_HASH, display_name="lanectl", surface="cli")
+    hint = validated_connector_setup_hint(
+        {
+            "schema": CONNECTOR_SETUP_HINT_SCHEMA,
+            "identity_hash": _HASH,
+            "cli_id": _CLI_ID,
+            "surface": "cli",
+            "display_name": "lanectl",
+            "deep_link": connector_setup_deep_link(_CLI_ID),
+            "card_recommendation": {"state": "allowed", "capabilities": []},
+            "risk_classes": [],
+        }
+    )
     assert hint is not None
     return {**hint, **overrides}
 
@@ -154,38 +165,61 @@ def test_malformed_hints_are_dropped(override: dict[str, object]) -> None:
     assert validated_connector_setup_hint(_hint(**override)) is None
 
 
-def test_queue_time_hint_is_the_connector_for_a_setup_review(monkeypatch: pytest.MonkeyPatch) -> None:
-    def unexpected(*_args: object, **_kwargs: object) -> None:
-        raise AssertionError("a setup review has no extension permission to hint")
+def test_queue_time_hint_asks_the_resident_for_the_connector(monkeypatch: pytest.MonkeyPatch) -> None:
+    asked: list[dict[str, object]] = []
 
-    monkeypatch.setattr(native_review_allow_hint, "_ask_review_hint", unexpected)
+    def ask(payload: object, **kwargs: object) -> dict[str, object]:
+        asked.append({"payload": payload, **kwargs})
+        return _hint()
 
-    hint = native_review_allow_hint.native_review_hint(
-        object(), {}, {"reason_code": "native_command_review_required"}, None, None, None, _CONNECTOR
-    )
+    monkeypatch.setattr(native_review_allow_hint, "_ask_review_hint", ask)
+    store = SimpleNamespace(guard_home=Path("guard-home"))
+    paused = {"reason_code": "native_command_review_required"}
+
+    hint = native_review_allow_hint.native_review_hint(store, {}, paused, None, None, None, _CONNECTOR)
 
     assert hint == _hint()
+    # A setup review carries no extension evidence, yet still asks: the
+    # connector hint names only the connector and what the evidence observed.
+    assert asked[0]["connector"] is _CONNECTOR
+    assert asked[0]["paused"] == paused
 
 
-def test_queue_time_hint_takes_risk_classes_from_observed_rules() -> None:
-    native_result = {
-        "reason_code": "native_command_review_required",
-        "command_extensions": {
-            "observations": [{"rule_id": "command.api-gateway.delete"}, {"rule_id": "command.unknown.rule"}, "bad"],
-        },
+def test_the_connector_rides_in_the_query_and_its_answer_is_shape_checked(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent: list[dict[str, object]] = []
+
+    def decide(query: dict[str, object], _home: object, _fields: object, validate, **_kwargs: object) -> None:
+        sent.append(query)
+        validate({"hint": _hint()})
+
+    monkeypatch.setattr(native_review_allow_hint, "_decide", decide)
+    store = SimpleNamespace(guard_home=Path("guard-home"))
+
+    hint = native_review_allow_hint.native_review_hint(store, {}, {}, None, None, None, _CONNECTOR)
+
+    assert hint == _hint()
+    assert sent[0]["connector"] == {
+        "cli_id": _CLI_ID,
+        "identity_hash": _HASH,
+        "name": "lanectl",
+        "surface": "cli",
+        "queue_group_id": _GROUP,
     }
+    assert sent[0]["paused"] == {}
 
-    hint = native_review_allow_hint.native_review_hint(object(), {}, native_result, None, None, None, _CONNECTOR)
-
-    assert hint is not None
-    assert hint["risk_classes"] == ["destructive", "destructive_shell", "network_egress"]
+    # An extension hint is not a connector hint, so the answer means none.
+    monkeypatch.setattr(
+        native_review_allow_hint,
+        "_decide",
+        lambda _q, _h, _f, validate, **_k: validate({"hint": {"schema": "guard.extension-allow-hint.v1"}}),
+    )
+    assert native_review_allow_hint.native_review_hint(store, {}, {}, None, None, None, _CONNECTOR) is None
 
 
 def test_a_pending_delete_keeps_caution_through_the_full_path(monkeypatch: pytest.MonkeyPatch) -> None:
     _items(monkeypatch)
-    native_result = {"command_extensions": {"observations": [{"rule_id": "command.api-gateway.delete"}]}}
-    hint = native_review_allow_hint.native_review_hint(object(), {}, native_result, None, None, None, _CONNECTOR)
-    assert hint is not None
+    # The resident records ``destructive`` for a destructive shell rule it observed.
+    hint = _hint(risk_classes=["destructive", "destructive_shell", "network_egress"])
 
     result = _build(_approval(hint))
 

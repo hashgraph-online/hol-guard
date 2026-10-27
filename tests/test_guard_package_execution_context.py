@@ -334,6 +334,38 @@ def test_script_backed_manager_binds_env_selected_interpreter_content_and_path(t
     assert _component_digest(first, component) != _component_digest(content_changed, component)
 
 
+def test_manager_digest_ignores_path_entries_that_do_not_change_the_resolved_binary(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    _write_repository(workspace)
+    _write_package_files(workspace)
+    environment = _environment(tmp_path)
+    shim_bin = tmp_path / "agent-shim-1234"
+    shim_bin.mkdir()
+    shadow_bin = tmp_path / "shadow-bin"
+    shadow_bin.mkdir()
+    shadow = shadow_bin / "pnpm"
+    shadow.write_text("#!/bin/sh\n# pnpm-v1\n", encoding="utf-8")
+    shadow.chmod(0o755)
+    artifact = _artifact()
+
+    baseline = _context(workspace, artifact, environment)
+    prefixed = _context(
+        workspace,
+        artifact,
+        {**environment, "PATH": os.pathsep.join((str(shim_bin), environment["PATH"]))},
+    )
+    shadowed = _context(
+        workspace,
+        artifact,
+        {**environment, "PATH": os.pathsep.join((str(shadow_bin), environment["PATH"]))},
+    )
+
+    component = "package_manager_executable"
+    assert baseline.portable is True
+    assert _component_digest(baseline, component) == _component_digest(prefixed, component)
+    assert _component_digest(baseline, component) != _component_digest(shadowed, component)
+
+
 def test_script_backed_manager_binds_nested_python_module_loaded_by_shebang(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     _write_repository(workspace)

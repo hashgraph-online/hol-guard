@@ -330,7 +330,7 @@ fn linked_worktree_git_entry_within_workspace(
         .is_some_and(|backlink| std::fs::canonicalize(entry).is_ok_and(|entry| backlink == entry))
 }
 
-fn bounded_git_metadata(path: &std::path::Path) -> Option<String> {
+pub(super) fn bounded_git_metadata(path: &std::path::Path) -> Option<String> {
     use std::io::Read;
     let mut contents = String::new();
     std::fs::File::open(path)

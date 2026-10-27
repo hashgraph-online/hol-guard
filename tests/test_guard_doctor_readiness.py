@@ -223,7 +223,7 @@ def test_global_doctor_validates_registration_without_executable_probes(tmp_path
 
     monkeypatch.setattr("codex_plugin_scanner.guard.adapters.base.subprocess.run", unexpected_subprocess)
     for adapter in ("hermes", "openclaw", "opencode"):
-        monkeypatch.setattr(f"codex_plugin_scanner.guard.adapters.{adapter}._command_available", lambda _command: True)
+        monkeypatch.setattr(f"codex_plugin_scanner.guard.adapters.{adapter}._command_available", lambda *_args: True)
     home = tmp_path / "home"
     codex_home = home / ".codex"
     codex_home.mkdir(parents=True)
@@ -248,7 +248,7 @@ def test_global_doctor_validates_registration_without_executable_probes(tmp_path
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.codex._command_available", lambda _command: True)
+    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.codex._command_available", lambda *_args: True)
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.adapters.codex._verify_live_hook_manifest",
         lambda _context, **_kwargs: {

@@ -19,8 +19,8 @@ from codex_plugin_scanner.guard.review_event_integrity import review_event_paylo
 from codex_plugin_scanner.guard.runtime import cloud_review_sync
 from codex_plugin_scanner.guard.runtime.cloud_review_event_projection import project_cloud_review_event
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_review_event_outbox_writes import append_request_snapshot_event
 from tests.guard_review_event_outbox_test_support import as_int
+from tests.review_event_outbox_append_support import append_request_snapshot_event
 
 # pyright: reportAny=false, reportPrivateUsage=false, reportUnknownMemberType=false
 # pyright: reportUnusedCallResult=false

@@ -19,13 +19,15 @@ import time
 from collections.abc import Mapping
 from pathlib import Path
 
-from .adapters._modules.codex.codex_daemon_dead_fastpath import (
-    NATIVE_RUNTIME_DEAD_REASON,
-    NATIVE_RUNTIME_DEAD_REASON_CODE,
-)
 from .codex_hook_launch_runtime import run_isolated_hook_process
 from .fork_safety import forget_in_child
 
+NATIVE_RUNTIME_DEAD_REASON_CODE = "native_resident_restart_circuit_open"
+# The one copy of this denial: the bridge, the daemon hook worker and the pool all use it.
+NATIVE_RUNTIME_DEAD_REASON = (
+    "HOL Guard's native runtime is not running and could not be restarted. "
+    "Run `hol-guard repair` in a terminal, then retry."
+)
 RESTART_BLOCKED_CODE = NATIVE_RUNTIME_DEAD_REASON_CODE
 DEAD_RUNTIME_REASON = NATIVE_RUNTIME_DEAD_REASON
 # Longer than a refused spawn attempt (a few hundred milliseconds) and shorter

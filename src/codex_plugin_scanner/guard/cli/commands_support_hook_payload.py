@@ -70,13 +70,7 @@ if TYPE_CHECKING:
 from ._commands_shared import *
 from .commands_parser_helpers import *
 from ..browser_opener import open_browser_url
-from .commands_support_hook_payload_loader import (
-    _first_hook_tool_call,
-    _load_hook_payload as _load_hook_payload_impl,
-    _normalize_hook_argument_value,
-    _normalize_hook_arguments,
-    _normalize_hook_payload,
-)
+from .commands_support_hook_payload_loader import _load_hook_payload as _load_hook_payload_impl
 
 
 def _load_hook_payload(
@@ -86,15 +80,13 @@ def _load_hook_payload(
     harness: str | None = None,
     normalize: bool = True,
 ) -> dict[str, object]:
-    """Keep the legacy CLI facade while the loader owns raw input handling."""
+    """Load the raw hook payload; the native runtime prepares it per harness.
 
-    payload = _load_hook_payload_impl(
-        event_file,
-        input_text=input_text,
-        harness=harness,
-        normalize=False,
-    )
-    return payload
+    ``harness`` and ``normalize`` are accepted for the hook command's call
+    shape and ignored: Python never rewrites a payload before native authority.
+    """
+
+    return _load_hook_payload_impl(event_file, input_text=input_text)
 
 _BLOCKING_ACTIONS = frozenset({"review", "require-reapproval", "sandbox-required", "block"})
 
@@ -481,10 +473,7 @@ __all__ = [
     "_action_envelope_json",
     "_approval_center_browser_url",
     "_approval_surface_policy_for_flow", "_browser_url_with_guard_params", "_coalesce_string",
-    "_first_hook_tool_call",
     "_headless_approval_resolver", "_hook_action_envelope",
     "_load_hook_payload",
-    "_normalize_hook_argument_value",
-    "_normalize_hook_arguments",
-    "_normalize_hook_payload", "_open_approval_center", "_public_approval_center_url",
+    "_open_approval_center", "_public_approval_center_url",
 ]

@@ -108,12 +108,9 @@ class RuntimeHookScheduler:
         deadline: float | RuntimeHookDeadline,
         byte_reservation: RuntimeHookByteReservation | None = None,
         cancellation: threading.Event | None = None,
-        normalized_payload: bytes | None = None,
     ) -> RuntimeHookAdmission:
         if payload_bytes < 0:
             raise ValueError("payload_bytes must not be negative")
-        if normalized_payload is not None and len(normalized_payload) != payload_bytes:
-            raise ValueError("normalized_payload length must match payload_bytes")
         with self._condition:
             now = self._monotonic()
             resolved_deadline = (
@@ -150,7 +147,6 @@ class RuntimeHookScheduler:
                 deadline=resolved_deadline,
                 queued_at=now,
                 cancellation=cancellation,
-                normalized_payload=normalized_payload or b"",
             )
             if byte_reservation is not None:
                 # Validate and claim ownership before publishing queued work.

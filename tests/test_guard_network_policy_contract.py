@@ -4,16 +4,18 @@ import pytest
 
 from codex_plugin_scanner.guard.runtime.network_policy_contract import (
     NETWORK_BACKEND_SCHEMA_VERSION,
-    NETWORK_BROKER_SCHEMA_VERSION,
-    NETWORK_EVIDENCE_SCHEMA_VERSION,
-    NETWORK_POLICY_SCHEMA_VERSION,
     BackendAdvertisement,
     BackendCapability,
-    Destination,
-    DestinationKind,
     EnforcementGrade,
     FailureMode,
     NetworkAction,
+)
+from tests.network_policy_model import (
+    NETWORK_BROKER_SCHEMA_VERSION,
+    NETWORK_EVIDENCE_SCHEMA_VERSION,
+    NETWORK_POLICY_SCHEMA_VERSION,
+    Destination,
+    DestinationKind,
     NetworkFlowRequest,
     NetworkPolicy,
     NetworkProtocol,

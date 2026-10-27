@@ -19,10 +19,8 @@ from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.runtime_advisory_bundle import NOT_CONNECTED
 from codex_plugin_scanner.guard.runtime_identity_assessment import RuntimeIdentityError
 from codex_plugin_scanner.guard.runtime_identity_probe import (
-    RUNTIME_PROBE_FEATURE,
     RUNTIME_PROBE_LAUNCH_FEATURE,
     probe_runtime_launches,
-    probe_runtime_paths,
 )
 from codex_plugin_scanner.guard.runtime_posture import ADVISORIES_UNAVAILABLE, build_runtime_posture
 
@@ -242,25 +240,6 @@ def test_assess_receives_an_empty_advisory_list_and_incomplete_scope(
     assert [artifact["identity_assurance"] for artifact in request["artifacts"]] == ["self_reported"]
 
 
-def test_probe_output_is_usable_as_assess_input(native_runtime: Path, tmp_path: Path) -> None:
-    node = _nvm_node(tmp_path)
-    missing = tmp_path / "gone" / "node"
-
-    probe = probe_runtime_paths([str(node), str(missing)])
-
-    states = {row["location_id"]: row["state"] for row in probe.locations}
-    assert sorted(states.values()) == ["missing", "present"]
-    assert all(str(tmp_path) not in json.dumps(row) for row in (*probe.artifacts, *probe.locations))
-    assert RUNTIME_PROBE_FEATURE == "runtime-identity-probe-v1"
-
-
-def test_probe_refuses_relative_paths(native_runtime: Path) -> None:
-    with pytest.raises(RuntimeIdentityError) as refused:
-        probe_runtime_paths(["node_modules/.bin/node"])
-
-    assert refused.value.code == "runtime_identity_probe_path_invalid"
-
-
 def test_cli_json_shape(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path, native_runtime: Path
 ) -> None:
@@ -399,7 +378,11 @@ def test_probe_gets_a_longer_deadline_than_a_plain_assessment(monkeypatch: pytes
     monkeypatch.setattr(runtime_identity_probe, "run_native_identity_command", fake)
 
     with pytest.raises(RuntimeIdentityError):
-        probe_runtime_paths(["/opt/node/bin/node"])
+        probe_runtime_launches(
+            [{"command": "/opt/node/bin/node", "launch_dir": "/opt"}],
+            environment={},
+            candidate_limit=1,
+        )
 
     assert isinstance(seen["timeout"], float) and seen["timeout"] > 10.0
 

@@ -7,8 +7,8 @@ use std::time::Instant;
 use guard_contracts::{
     NativeCommandControlBindingV1, NativeCommandObservationBatchV1, NativeCommandObservationV1,
     NativeCommandObservationsV1, NativeCommandPermissionObservationV1,
-    NativeCommandReceiptBindingV1, PreToolResultV1, NATIVE_COMMAND_OBSERVATIONS_SCHEMA,
-    NATIVE_COMMAND_RECEIPT_BINDING_SCHEMA,
+    NativeCommandReceiptBindingV1, PreToolActionTypeV1, PreToolResultV1,
+    NATIVE_COMMAND_OBSERVATIONS_SCHEMA, NATIVE_COMMAND_RECEIPT_BINDING_SCHEMA,
 };
 
 use crate::native_command_program::{

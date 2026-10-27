@@ -12,11 +12,8 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.cursor_native_approval import (
-    compute_cursor_after_observer_proof,
-    cursor_after_observer_proof_message,
     cursor_hook_attestation_secret_path,
     ensure_cursor_hook_attestation_secret,
-    normalize_cursor_shell_command,
 )
 
 posix_only = pytest.mark.skipif(
@@ -88,13 +85,15 @@ def test_attestation_write_does_not_follow_a_symlink(tmp_path: Path) -> None:
     assert target.read_bytes() == b"outside-key"
 
 
-def test_hook_template_proof_uses_the_same_passes_as_the_signer(tmp_path: Path) -> None:
+def test_hook_template_proof_signs_the_thrice_normalised_command(tmp_path: Path) -> None:
+    """The hook signs what the resident verifies: one pass picking the command
+    out of the payload, then the two passes the resident applies itself."""
+
     from codex_plugin_scanner.guard.adapters._modules.cursor.cursor_hook_script_template_tail import (
         HOOK_SCRIPT_TEMPLATE_TAIL,
     )
 
     raw = "lean-ctx -c \"lean-ctx -c 'lean-ctx -c git status'\""
-    once = normalize_cursor_shell_command(raw)
     secret = b"k" * 32
     secret_path = tmp_path / "secrets" / "cursor-hook-attestation.key"
     secret_path.parent.mkdir(parents=True)
@@ -115,53 +114,13 @@ def test_hook_template_proof_uses_the_same_passes_as_the_signer(tmp_path: Path) 
     assert isinstance(compute_hook, Callable)
     payload = {"conversation_id": "conversation", "command": raw}
     hook_proof = compute_hook(payload, "afterShellExecution", "binding")
-    signer_proof = compute_cursor_after_observer_proof(
-        secret=secret,
-        conversation_id="conversation",
-        command=once,
-        approval_binding="binding",
-        observer_event="afterShellExecution",
-    )
-    thrice = normalize_cursor_shell_command(normalize_cursor_shell_command(once))
 
-    assert once != thrice
-    assert hook_proof == signer_proof
-    assert (
-        hook_proof
-        == hmac.new(
-            secret,
-            cursor_after_observer_proof_message(
-                conversation_id="conversation",
-                command=thrice,
-                approval_binding="binding",
-                observer_event="afterShellExecution",
-            ),
-            hashlib.sha256,
-        ).hexdigest()
-    )
+    def proof_over(command: str) -> str:
+        message = "\0".join(("conversation", command, "binding", "afterShellExecution"))
+        return hmac.new(secret, message.encode("utf-8"), hashlib.sha256).hexdigest()
 
-
-def test_observer_proof_signs_the_twice_normalised_command() -> None:
-    raw = "lean-ctx -c 'lean-ctx -c git status'"
-    once = normalize_cursor_shell_command(raw)
-    twice = normalize_cursor_shell_command(once)
-    assert once != twice
-    secret = b"k" * 32
-    proof = compute_cursor_after_observer_proof(
-        secret=secret,
-        conversation_id="conversation",
-        command=raw,
-        approval_binding="binding",
-        observer_event="afterShellExecution",
-    )
-    message = cursor_after_observer_proof_message(
-        conversation_id="conversation",
-        command=twice,
-        approval_binding="binding",
-        observer_event="afterShellExecution",
-    )
-
-    assert proof == hmac.new(secret, message, hashlib.sha256).hexdigest()
+    assert hook_proof == proof_over("git status")
+    assert hook_proof != proof_over("lean-ctx -c git status")
 
 
 def stat_mode(path: Path) -> int:

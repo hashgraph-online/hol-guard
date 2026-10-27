@@ -47,12 +47,13 @@ def test_downstream_publication_requires_successful_same_repository_release(file
     workflow = _workflow(filename)
     # PyYAML's YAML 1.1 loader parses the unquoted Actions key as True.
     trigger = workflow[True]
-    assert set(trigger) == {"workflow_run"}
+    assert set(trigger) == {"workflow_run", "workflow_dispatch"}
     assert trigger["workflow_run"] == {
         "workflows": ["Publish to PyPI"],
         "types": ["completed"],
-        "branches": ["main", "release/3.0"],
+        "branches": ["main", "release/3.0", "v[0-9]+.[0-9]+.[0-9]+"],
     }
+    assert trigger["workflow_dispatch"]["inputs"]["publication_run_id"]["required"] is True
     verifier = workflow["jobs"]["verify"]
     assert verifier["uses"] == "./.github/workflows/verify-mcp-release-source.yml"
     assert verifier["permissions"] == {"actions": "read", "contents": "read"}

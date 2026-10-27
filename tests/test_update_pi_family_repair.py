@@ -7,9 +7,9 @@ import pytest
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.pi import OmpHarnessAdapter, PiHarnessAdapter
 from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
-from codex_plugin_scanner.guard.adapters.pi_support import enable_managed_extension
 from codex_plugin_scanner.guard.cli import update_commands
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.pi_managed_extension_client import enable_managed_extension
 
 
 def _context(tmp_path: Path) -> HarnessContext:

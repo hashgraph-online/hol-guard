@@ -55,20 +55,6 @@ class GitHubWorkflowLineage:
     nonce: str
 
 
-def github_workflow_persisted_command_matches(
-    command_text: str,
-    record: GitHubWorkflowApprovalRecord,
-    *,
-    timeout_seconds: float = _DEFAULT_TIMEOUT_SECONDS,
-) -> bool:
-    """Whether a persisted hook command still derives the record's exact operation."""
-    envelope = _resident_envelope(
-        {"mode": "verify", "command_text": command_text, "record": record.to_dict()},
-        timeout_seconds=timeout_seconds,
-    )
-    return envelope is not None and envelope.get("code") == "ok" and envelope.get("verified") is True
-
-
 def github_workflow_validated_lineage(
     approval_request: Mapping[str, object],
     operation: Mapping[str, object],

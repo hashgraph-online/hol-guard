@@ -166,7 +166,13 @@ def test_opencode_prepared_generation_matches_normal_install(tmp_path, previous_
 
 
 @pytest.mark.parametrize("workspace_enabled", [False, True])
-def test_frozen_copilot_preparation_plans_helper_without_publication(tmp_path, monkeypatch, workspace_enabled):
+def test_frozen_copilot_preparation_plans_helper_without_publication(
+    tmp_path,
+    monkeypatch,
+    workspace_enabled,
+    native_adapter_state_integrity_runtime,
+):
+    del native_adapter_state_integrity_runtime
     from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge as bridge
     from codex_plugin_scanner.guard.adapters.adapter_state_integrity import authenticate_adapter_state
     from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
@@ -192,7 +198,12 @@ def test_frozen_copilot_preparation_plans_helper_without_publication(tmp_path, m
 
 
 @pytest.mark.parametrize("workspace_enabled", [False, True])
-def test_copilot_prepared_generation_matches_normal_install(tmp_path, workspace_enabled):
+def test_copilot_prepared_generation_matches_normal_install(
+    tmp_path,
+    workspace_enabled,
+    native_adapter_state_integrity_runtime,
+):
+    del native_adapter_state_integrity_runtime
     from codex_plugin_scanner.guard.adapters.adapter_state_integrity import authenticate_adapter_state
     from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
 

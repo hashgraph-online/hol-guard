@@ -11,7 +11,7 @@ export function AboutFooter() {
           <Badge tone="success">Local-first</Badge>
         </div>
         <p className="text-xs text-brand-dark/75">
-          Built by Hashgraph Online. Open standards for the agent internet.
+          Built by HOL. Open standards for the agent internet.
         </p>
       </div>
     </footer>

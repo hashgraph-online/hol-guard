@@ -85,12 +85,16 @@ def test_an_argv_answer_of_null_is_not_an_identity(monkeypatch: pytest.MonkeyPat
 
 def test_conflict_keys_come_back_in_order(monkeypatch: pytest.MonkeyPatch) -> None:
     _resident(monkeypatch, lambda _request: {"identities": [{"digests": ["a", "b"]}]})
-    assert codex_hook_identity.canonical_codex_hook_conflict_keys(
-        source_scope="user",
-        source_hooks_enabled=True,
-        event_name="PreToolUse",
-        group={"hooks": [{"command": "x"}, {"command": "y"}]},
-    ) == ("a", "b")
+    assert codex_hook_identity.canonical_codex_hook_group_conflict_keys(
+        (
+            codex_hook_identity.CodexHookGroupQuestion(
+                source_scope="user",
+                source_hooks_enabled=True,
+                event_name="PreToolUse",
+                group={"hooks": [{"command": "x"}, {"command": "y"}]},
+            ),
+        )
+    ) == (("a", "b"),)
 
 
 def test_scalars_json_cannot_carry_travel_as_tokens(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -187,11 +191,15 @@ def test_a_resident_that_cannot_start_is_not_a_missing_identity(
     monkeypatch.setattr(bridge, "_resolve_digest_home", lambda _home: Path("/tmp/codex-hook-identity-home"))
     monkeypatch.setattr(bridge, "ensure_resident_prerequisite", lambda _home: False)
     with pytest.raises(bridge.CodexHookIdentityUnavailableError):
-        codex_hook_identity.canonical_codex_hook_group_identity(
-            source_scope="user",
-            source_hooks_enabled=True,
-            event_name="PreToolUse",
-            group={},
+        codex_hook_identity.canonical_codex_hook_group_identities(
+            (
+                codex_hook_identity.CodexHookGroupQuestion(
+                    source_scope="user",
+                    source_hooks_enabled=True,
+                    event_name="PreToolUse",
+                    group={},
+                ),
+            )
         )
 
 
@@ -210,11 +218,15 @@ def _nested(depth: int) -> dict[str, object]:
 
 def test_a_definition_the_resident_would_read_still_ships(monkeypatch: pytest.MonkeyPatch) -> None:
     sent = _resident(monkeypatch, _digests)
-    codex_hook_identity.canonical_codex_hook_group_identity(
-        source_scope="user",
-        source_hooks_enabled=True,
-        event_name="PreToolUse",
-        group=_nested(bridge._MAX_DEFINITION_DEPTH),
+    codex_hook_identity.canonical_codex_hook_group_identities(
+        (
+            codex_hook_identity.CodexHookGroupQuestion(
+                source_scope="user",
+                source_hooks_enabled=True,
+                event_name="PreToolUse",
+                group=_nested(bridge._MAX_DEFINITION_DEPTH),
+            ),
+        )
     )
     assert len(sent) == 1
 
@@ -224,11 +236,15 @@ def test_a_definition_deeper_than_the_resident_reads_names_the_config(
 ) -> None:
     sent = _resident(monkeypatch, _digests)
     with pytest.raises(bridge.CodexHookDefinitionTooDeepError) as raised:
-        codex_hook_identity.canonical_codex_hook_group_identity(
-            source_scope="user",
-            source_hooks_enabled=True,
-            event_name="PreToolUse",
-            group=_nested(bridge._MAX_DEFINITION_DEPTH + 1),
+        codex_hook_identity.canonical_codex_hook_group_identities(
+            (
+                codex_hook_identity.CodexHookGroupQuestion(
+                    source_scope="user",
+                    source_hooks_enabled=True,
+                    event_name="PreToolUse",
+                    group=_nested(bridge._MAX_DEFINITION_DEPTH + 1),
+                ),
+            )
         )
     assert raised.value.code == "native_codex_hook_definition_too_deep"
     # A caller that only knows the broad failure still fails closed on it.
@@ -242,10 +258,14 @@ def test_a_deep_list_counts_toward_the_same_bound(monkeypatch: pytest.MonkeyPatc
     for _ in range(bridge._MAX_DEFINITION_DEPTH - 1):
         group = {"nested": group}
     with pytest.raises(bridge.CodexHookDefinitionTooDeepError):
-        codex_hook_identity.canonical_codex_hook_group_identity(
-            source_scope="user",
-            source_hooks_enabled=True,
-            event_name="PreToolUse",
-            group=cast("dict[str, object]", group),
+        codex_hook_identity.canonical_codex_hook_group_identities(
+            (
+                codex_hook_identity.CodexHookGroupQuestion(
+                    source_scope="user",
+                    source_hooks_enabled=True,
+                    event_name="PreToolUse",
+                    group=cast("dict[str, object]", group),
+                ),
+            )
         )
     assert sent == []

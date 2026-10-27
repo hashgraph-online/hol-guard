@@ -483,24 +483,34 @@ def _run_guard_protect_command(
             harness=harness,
         ),
     )
+    wait_result: dict[str, object] | None = None
     if (
         bool(getattr(args, "package_shim_ui", False))
         and not bool(getattr(args, "json", False))
         and config.approval_wait_timeout_seconds > 0
     ):
+        from .protect_inline_approval import inline_package_approval
+
+        wait_result = inline_package_approval(
+            payload,
+            store=store,
+            workspace=protect_workspace,
+            timeout_seconds=config.approval_wait_timeout_seconds,
+        )
         approval_request_ids = payload.get("approval_request_ids")
         request_ids = [
             str(item)
             for item in (approval_request_ids if isinstance(approval_request_ids, list) else [])
             if isinstance(item, str) and item
         ]
-        if request_ids:
+        if wait_result is None and request_ids:
             _emit_package_shim_pending_approval_status()
             wait_result = wait_for_approval_requests(
                 store=store,
                 request_ids=request_ids,
                 timeout_seconds=config.approval_wait_timeout_seconds,
             )
+        if wait_result is not None:
             payload["approval_wait"] = wait_result
             wait_items = wait_result.get("items")
             resolved_items = [

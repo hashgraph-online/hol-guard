@@ -52,13 +52,14 @@ const CARGO_LOCAL_VERBS: &[&str] = &[
 ];
 
 /// Whether `go` runs a local verb inside a module that `directory` holds.
-/// Outside a module these verbs read the wider GOPATH, and the sandbox has no
-/// network to resolve a package by import path, so they keep the admission
-/// they have. A version an argument names is one go resolves through the
-/// module proxy, and `go list`'s `-u` and `-versions` ask the proxy what else
-/// a module has, as does `-retracted`, so each of those keeps that admission
-/// too.
-pub(super) fn local_go_work(arguments: &[&str], directory: &Path) -> bool {
+/// A module the directory holds is the one go finds by ascending from it, as
+/// go itself does, stopping at the workspace root. Outside a module these
+/// verbs read the wider GOPATH, and the sandbox has no network to resolve a
+/// package by import path, so they keep the admission they have. A version an
+/// argument names is one go resolves through the module proxy, and `go
+/// list`'s `-u` and `-versions` ask the proxy what else a module has, as does
+/// `-retracted`, so each of those keeps that admission too.
+pub(super) fn local_go_work(arguments: &[&str], directory: &Path, workspace: &Path) -> bool {
     let Some((verb, rest)) = arguments.split_first() else {
         return false;
     };
@@ -66,20 +67,26 @@ pub(super) fn local_go_work(arguments: &[&str], directory: &Path) -> bool {
         && !rest
             .iter()
             .any(|argument| names_a_go_fetch(argument) || argument.contains('@'))
-        && directory.join("go.mod").is_file()
+        && super::cd::first_from(directory, workspace, |probe| probe.join("go.mod").is_file())
+            .is_some()
 }
 
-/// Whether `cargo` runs a local verb against a package that `directory`
-/// holds. A leading `+toolchain` selects a rustup toolchain, which the run
-/// may read. Outside a package cargo has nothing to compile and would search
-/// upward out of the workspace, so those commands keep the admission they
-/// have.
-pub(super) fn local_cargo_work(arguments: &[&str], directory: &Path) -> bool {
+/// Whether `cargo` runs a local verb against a package reachable from
+/// `directory`. Cargo finds the manifest by ascending, and the search here
+/// ascends with it as far as the workspace root, which is what a run inside a
+/// crate of a workspace needs. A leading `+toolchain` selects a rustup
+/// toolchain, which the run may read. With no manifest anywhere below the
+/// workspace root cargo has nothing to compile and would search upward out of
+/// the workspace, so those commands keep the admission they have.
+pub(super) fn local_cargo_work(arguments: &[&str], directory: &Path, workspace: &Path) -> bool {
     arguments
         .iter()
         .find(|argument| !argument.starts_with('+'))
         .is_some_and(|verb| CARGO_LOCAL_VERBS.contains(&verb.to_ascii_lowercase().as_str()))
-        && directory.join("Cargo.toml").is_file()
+        && super::cd::first_from(directory, workspace, |probe| {
+            probe.join("Cargo.toml").is_file()
+        })
+        .is_some()
 }
 
 /// Whether an argument names one of the flags that send a Go verb to a module

@@ -24,7 +24,7 @@ def test_codex_doctor_keeps_live_bridge_hooks_when_interpreter_is_stale(
     context = _context(tmp_path)
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.adapters.codex._command_available",
-        lambda _command: True,
+        lambda *_args: True,
     )
     command = "python -I ./codex_daemon_hook_bridge.py '{}'"
     hook_entry = {

@@ -361,6 +361,12 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
                     &request,
                 )
             }
+            ResidentOperationV1::CommandCapability(request) => {
+                crate::command_capability_op::evaluate_command_capability_request(&request)
+            }
+            ResidentOperationV1::CommandEnvelope(request) => {
+                crate::command_envelope_op::evaluate_command_envelope_request(&request)
+            }
             ResidentOperationV1::ContainedWrapperPlan(request) => {
                 crate::contained_wrapper_plan_op::evaluate_contained_wrapper_plan_request(&request)
             }
@@ -464,6 +470,11 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             ResidentOperationV1::LocalCliHook(request) => {
                 crate::local_cli_hook_op::evaluate_local_cli_hook_request(&request)
             }
+            ResidentOperationV1::HookLocalCliRule(request) => {
+                crate::hook_direct::local_cli::rule_op::evaluate_hook_local_cli_rule_request(
+                    &request,
+                )
+            }
             ResidentOperationV1::ConnectorSetupContext(request) => {
                 crate::connector_setup_context_op::evaluate_connector_setup_context_request(
                     &request,
@@ -471,6 +482,11 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             }
             ResidentOperationV1::ArtifactRisk(request) => {
                 crate::artifact_risk_op::evaluate_artifact_risk_request(&request)
+            }
+            ResidentOperationV1::SupplyChainBundleVerify(request) => {
+                crate::supply_chain_bundle_verify_op::evaluate_supply_chain_bundle_verify_request(
+                    &request,
+                )
             }
             ResidentOperationV1::LocalToolEligibility(request) => {
                 crate::local_tool_eligibility_op::evaluate_local_tool_eligibility_request(&request)
@@ -544,6 +560,11 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             }
             ResidentOperationV1::CodexHookIdentity(request) => {
                 crate::codex_hook_identity_op::evaluate_codex_hook_identity_request(&request)
+            }
+            ResidentOperationV1::CodexHookFileIdentity(request) => {
+                crate::codex_hook_file_identity_op::evaluate_codex_hook_file_identity_request(
+                    &request,
+                )
             }
             ResidentOperationV1::InventoryScanTargets(request) => {
                 crate::inventory_scan_targets_op::evaluate_inventory_scan_targets_request(&request)
@@ -733,6 +754,11 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             ResidentOperationV1::RetryLineageCapture(request) => {
                 crate::retry_lineage_capture_op::evaluate_retry_lineage_capture(&request)
             }
+            ResidentOperationV1::AdapterStateIntegrity(request) => {
+                crate::adapter_state_integrity_op::evaluate_adapter_state_integrity_request(
+                    &request,
+                )
+            }
             #[cfg(not(unix))]
             ResidentOperationV1::ContainedNodeExecute(_)
             | ResidentOperationV1::ContainedTypescriptExecute(_)
@@ -746,9 +772,9 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
                 "status": "ready",
                 "protocol_version": crate::RESIDENT_PROTOCOL_VERSION,
             })),
-            ResidentOperationV1::Shutdown(_request) => {
-                crate::managed_resident::request_shutdown();
-                encode_response(&serde_json::json!({"status": "stopping"}))
+            ResidentOperationV1::Shutdown(request) => {
+                crate::managed_resident::answer_shutdown(&request, policy_store)
+                    .and_then(|response| encode_response(&response))
             }
         },
         ResidentRequestV1::Hook(request) => {
@@ -829,6 +855,7 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::RunnerAuthority(request) => Some(&request.guard_home),
         ResidentOperationV1::LocalCliGrantDecide(request) => Some(&request.guard_home),
         ResidentOperationV1::LocalCliHook(request) => Some(&request.guard_home),
+        ResidentOperationV1::HookLocalCliRule(request) => Some(&request.guard_home),
         ResidentOperationV1::ConnectorSetupContext(request) => Some(&request.guard_home),
         ResidentOperationV1::McpToolEvidence(request) => Some(&request.guard_home),
         ResidentOperationV1::LocalMcpGrantDecide(request) => Some(&request.guard_home),
@@ -871,6 +898,7 @@ fn operation_store_path(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::PolicyDecisionLookup(request) => Some(&request.store_path),
         ResidentOperationV1::LocalCliGrantDecide(request) => Some(&request.store_path),
         ResidentOperationV1::LocalCliHook(request) => Some(&request.store_path),
+        ResidentOperationV1::HookLocalCliRule(request) => Some(&request.store_path),
         ResidentOperationV1::ConnectorSetupContext(request) => Some(&request.store_path),
         ResidentOperationV1::LocalMcpGrantDecide(request) => Some(&request.store_path),
         ResidentOperationV1::ContributedMcpDecide(request) => Some(&request.store_path),

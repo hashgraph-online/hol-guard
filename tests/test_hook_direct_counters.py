@@ -9,6 +9,7 @@ import pytest
 
 from codex_plugin_scanner.guard.daemon import hook_direct_evidence_drain
 from codex_plugin_scanner.guard.daemon.hook_direct_counters import (
+    DIRECT_MISS_CODES,
     HARNESS_SLOTS,
     HookCounterLog,
     bind_hook_counter_sink,
@@ -86,7 +87,30 @@ def test_the_daemon_counts_received_hooks_by_slot_only() -> None:
     for harness in ("codex", "codex", "/home/user/bin/tool --flag", "grok"):
         note_hook_received(worker, harness)
     note_hook_received(None, "codex")
-    assert log.snapshot() == {"epoch": None, "resident": {}, "received": {"codex": 2, "grok": 1, "other": 1}}
+    assert log.snapshot() == {
+        "epoch": None,
+        "resident": {},
+        "received": {"codex": 2, "grok": 1, "other": 1},
+        "missed": {},
+    }
+
+
+def test_the_daemon_counts_a_bridge_miss_by_slot_and_known_reason() -> None:
+    log = HookCounterLog()
+    worker = type("Worker", (), {"hook_counters": log})()
+    note_hook_received(worker, "grok", "no_resident")
+    note_hook_received(worker, "grok", "no_resident")
+    note_hook_received(worker, "grok", "defer")
+    note_hook_received(worker, "grok")
+    note_hook_received(worker, "made-up", "/private/path")
+    note_hook_received(worker, "codex", 7)
+    assert log.snapshot()["received"] == {"codex": 1, "grok": 4, "other": 1}
+    assert log.snapshot()["missed"] == {
+        "grok": {"no_resident": 2, "defer": 1},
+        "other": {"unknown": 1},
+        "codex": {"unknown": 1},
+    }
+    assert {"no_resident", "defer", "unanswered", "late"} <= DIRECT_MISS_CODES
 
 
 def test_malformed_resident_counters_are_ignored() -> None:
@@ -113,7 +137,9 @@ def test_the_log_is_change_only_and_rate_limited() -> None:
     assert not log.maybe_log()
     log.note_received("codex")
     assert log.maybe_log()
-    assert sink.lines == [("hook_direct_counters", {"epoch": None, "resident": {}, "received": {"codex": 1}})]
+    assert sink.lines == [
+        ("hook_direct_counters", {"epoch": None, "resident": {}, "received": {"codex": 1}, "missed": {}})
+    ]
     log.note_received("codex")
     clock.now += 299.0
     assert not log.maybe_log()
@@ -143,7 +169,9 @@ def test_a_failed_delivery_is_retried_after_the_interval() -> None:
     assert not log.maybe_log()
     clock.now += 300.0
     assert log.maybe_log()
-    assert sink.lines == [("hook_direct_counters", {"epoch": None, "resident": {}, "received": {"codex": 1}})]
+    assert sink.lines == [
+        ("hook_direct_counters", {"epoch": None, "resident": {}, "received": {"codex": 1}, "missed": {}})
+    ]
 
 
 def test_a_dropped_line_is_retried_after_the_interval() -> None:
@@ -162,7 +190,9 @@ def test_a_dropped_line_is_retried_after_the_interval() -> None:
     assert not log.maybe_log()
     clock.now += 300.0
     assert log.maybe_log()
-    assert sink.lines == [("hook_direct_counters", {"epoch": None, "resident": {}, "received": {"codex": 1}})]
+    assert sink.lines == [
+        ("hook_direct_counters", {"epoch": None, "resident": {}, "received": {"codex": 1}, "missed": {}})
+    ]
 
 
 def test_receipts_are_logged_without_a_drain_transport(tmp_path: Path) -> None:
@@ -172,7 +202,9 @@ def test_receipts_are_logged_without_a_drain_transport(tmp_path: Path) -> None:
     drain = DirectHookEvidenceDrain(host, transport=lambda: None)
 
     assert drain.drain_once() is False
-    assert sink.lines == [("hook_direct_counters", {"epoch": None, "resident": {}, "received": {"codex": 1}})]
+    assert sink.lines == [
+        ("hook_direct_counters", {"epoch": None, "resident": {}, "received": {"codex": 1}, "missed": {}})
+    ]
 
 
 def test_a_new_page_feeds_the_log_through_the_drain(tmp_path: Path) -> None:
@@ -186,7 +218,7 @@ def test_a_new_page_feeds_the_log_through_the_drain(tmp_path: Path) -> None:
     assert sink.lines == [
         (
             "hook_direct_counters",
-            {"epoch": EPOCH, "resident": RESIDENT["by_harness"], "received": {"codex": 1}},
+            {"epoch": EPOCH, "resident": RESIDENT["by_harness"], "received": {"codex": 1}, "missed": {}},
         )
     ]
 
@@ -199,7 +231,9 @@ def test_a_new_daemon_drains_an_old_resident_page(tmp_path: Path) -> None:
 
     assert drain.drain_once() is False
     assert drain.failures == 0
-    assert sink.lines == [("hook_direct_counters", {"epoch": None, "resident": {}, "received": {"cursor": 1}})]
+    assert sink.lines == [
+        ("hook_direct_counters", {"epoch": None, "resident": {}, "received": {"cursor": 1}, "missed": {}})
+    ]
 
 
 def test_an_old_shaped_decoder_reads_a_new_page_unchanged() -> None:

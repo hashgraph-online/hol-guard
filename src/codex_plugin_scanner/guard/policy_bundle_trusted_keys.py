@@ -63,8 +63,6 @@ class PolicyBundleVerificationKey:
 
 
 class _PolicyBundleV2Module(Protocol):
-    def policy_bundle_v2_evidence(self, policy_bundle: dict[str, object]) -> dict[str, object]: ...
-
     def policy_bundle_v2_now_micros(self, now: datetime | None) -> int: ...
 
 
@@ -339,9 +337,6 @@ def validate_synced_policy_bundle(
         request["daemon_version"] = policy_bundle_parser.__version__
         request["bundle_chunks"] = policy_bundle_chunks(policy_bundle)
         result = native_policy_bundle("validate_synced", request)
-        if result.get("needs_evidence") is True:
-            request["evidence"] = v2_module.policy_bundle_v2_evidence(policy_bundle)
-            result = native_policy_bundle("validate_synced", request)
         anchored = _keys_from_wire(result.get("anchored_keys"))
     except PolicyBundleNativeError as error:
         return None, _synced_rejection_code(policy_bundle, error), ()

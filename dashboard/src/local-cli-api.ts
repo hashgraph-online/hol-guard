@@ -502,6 +502,7 @@ export async function fetchMcpProviderActions(
   });
   const nextOffset = body.next_offset;
   if (nextOffset !== null && (typeof nextOffset !== "number" || !Number.isSafeInteger(nextOffset)
-    || nextOffset !== options.offset + 50 || nextOffset > 10_000)) throw new Error("Invalid provider inventory page");
+    || nextOffset <= options.offset || nextOffset > options.offset + 50
+    || nextOffset > 10_000)) throw new Error("Invalid provider inventory page");
   return { actions, nextOffset, catalogToken: body.catalog_token };
 }

@@ -80,6 +80,7 @@ def test_no_resident_answer_for_the_local_cli_step_is_the_host_outage(
     # response, as the direct hook path does, whatever the store holds.
     from codex_plugin_scanner.guard import local_cli_hook
     from codex_plugin_scanner.guard.native_hook_decision import NativeHookDecisionError
+    from tests import runtime_wrapper_support
 
     monkeypatch.setattr(local_cli_hook, "native_local_cli_hook", lambda *_args, **_kwargs: None)
 
@@ -94,7 +95,7 @@ def test_no_resident_answer_for_the_local_cli_step_is_the_host_outage(
     for action in ("allow", "warn", "review", "block"):
         for grant_allowed in (True, False):
             with pytest.raises(NativeHookDecisionError) as raised:
-                local_cli_hook.local_cli_grant_action(
+                runtime_wrapper_support.local_cli_grant_action(
                     store=Store(),  # type: ignore[arg-type]
                     command="tool",
                     cwd=tmp_path,
@@ -105,7 +106,7 @@ def test_no_resident_answer_for_the_local_cli_step_is_the_host_outage(
             assert raised.value.code == "native_local_cli_hook_unavailable"
     # No command launches no CLI: nothing to ask, the action stands.
     assert (
-        local_cli_hook.local_cli_grant_action(
+        runtime_wrapper_support.local_cli_grant_action(
             store=Store(),  # type: ignore[arg-type]
             command=None,
             cwd=tmp_path,

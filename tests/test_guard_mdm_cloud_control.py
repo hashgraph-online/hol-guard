@@ -12,8 +12,8 @@ from codex_plugin_scanner.guard.mdm.cloud_control import (
     REMEDIATION_SCHEMA,
     ContractError,
     iso,
-    load_json,
     policy_hash,
+    reject_authority,
     sign_config,
     sign_proof,
     utcnow,
@@ -265,16 +265,14 @@ def test_remediation_rejects_arbitrary_authority_and_open_parameters() -> None:
             )
 
 
-def test_strict_json_loader_rejects_duplicates_limits_and_nonfinite_values() -> None:
-    with pytest.raises(ContractError, match="duplicate_json_key"):
-        load_json(b'{"workspaceId":"one","workspaceId":"two"}')
+def test_authority_check_rejects_nonfinite_values_and_deep_nesting() -> None:
     with pytest.raises(ContractError, match=r"^invalid_json_number$"):
-        load_json(b'{"value":NaN}')
-    with pytest.raises(ContractError, match="request_too_large"):
-        load_json(b"x" * 65, limit=64)
-    nested = b'{"a":' * 30 + b"null" + b"}" * 30
+        reject_authority({"value": float("nan")})
+    nested: object = None
+    for _ in range(30):
+        nested = {"a": nested}
     with pytest.raises(ContractError, match="contract_depth_exceeded"):
-        load_json(nested)
+        reject_authority(nested)
 
 
 def test_configuration_rejects_tampering_of_every_bound_security_field() -> None:

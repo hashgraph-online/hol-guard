@@ -98,6 +98,10 @@ def test_trickling_response_obeys_absolute_rpc_budget(tmp_path, monkeypatch, gen
         else:
             monkeypatch.setattr(daemon, "_daemon_hook_endpoint", lambda *args: endpoint)
             monkeypatch.setattr(daemon, "_read_daemon_auth_token", lambda *args: "fixture-token")
+            # The resident renders the answer after the RPC; this test times the RPC alone.
+            monkeypatch.setattr(
+                daemon, "_rendered_bridge_answer", lambda parsed, **_kwargs: (json.dumps(parsed), "", 0)
+            )
             started = time.monotonic()
             result = daemon.try_daemon_hook(guard_home=tmp_path, harness="grok", input_text="{}", timeout_seconds=0.4)
         elapsed = time.monotonic() - started

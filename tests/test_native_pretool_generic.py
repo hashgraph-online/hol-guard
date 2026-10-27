@@ -382,11 +382,6 @@ def test_cli_frames_raw_payload_before_harness_normalization(
 
     monkeypatch.setattr(commands_hook, "_load_hook_payload", load_payload)
     monkeypatch.setattr(commands_hook, "route_native_hook", route_native)
-    monkeypatch.setattr(
-        commands_hook,
-        "_normalize_hook_payload",
-        lambda *_args, **_kwargs: pytest.fail("harness normalization preceded native framing"),
-    )
 
     result = commands_hook._run_guard_hook_command(
         args,

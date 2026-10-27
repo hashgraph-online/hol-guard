@@ -6,6 +6,7 @@ from codex_plugin_scanner.guard import workspace_assessment_runner as runner
 from codex_plugin_scanner.guard import workspace_assessment_store as assessments
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_workspace_assessment_runner import AUDIT, KEYS, SCANNED, T0, snapshots
+from tests.workspace_fix_support import admit_worktree
 
 MINUTE_MS = 60_000
 NO_RUNTIMES = {"status": "ok", "coverage": {"advisories_available": False}, "runtimes": [], "advisories": []}
@@ -13,7 +14,7 @@ NO_RUNTIMES = {"status": "ok", "coverage": {"advisories_available": False}, "run
 
 def manual_run(tmp_path: Path) -> GuardStore:
     store = GuardStore(tmp_path / "home")
-    assessments.admit_worktree(store, KEYS, root=str(tmp_path), now_ms=T0)
+    admit_worktree(store, KEYS, root=str(tmp_path), now_ms=T0)
     assessments.enqueue(store, KEYS, trigger_kind="manual", detector_set_digest=runner.DETECTOR_SET_DIGEST, now_ms=T0)
     return store
 

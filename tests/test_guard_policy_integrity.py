@@ -68,6 +68,7 @@ from codex_plugin_scanner.guard.store import (
 from codex_plugin_scanner.guard.store_policy_integrity_backend import MirroredPolicyIntegritySecretStore
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
 from tests.policy_integrity_fixture import canonical_policy_payload
+from tests.policy_store_support import replace_remote_policies, resolve_policy
 
 _POLICY_BUNDLE_WORKSPACE_ID = "workspace-1"
 _TRUST_BACKEND_CORRUPT_RESULT_RUNTIME_TIMEOUT_SECONDS = 1.0
@@ -1061,7 +1062,8 @@ def test_direct_sqlite_insert_is_ignored_when_integrity_is_degraded(tmp_path: Pa
             ),
         )
 
-    resolved = store.resolve_policy(
+    resolved = resolve_policy(
+        store,
         "codex",
         "codex:project:forged",
         "hash-forged",
@@ -1115,7 +1117,8 @@ def test_sync_state_tamper_cannot_downgrade_enforcement(tmp_path: Path) -> None:
             ),
         )
 
-    resolved = store.resolve_policy(
+    resolved = resolve_policy(
+        store,
         "codex",
         "codex:project:forged-sync-state",
         "hash-forged-sync-state",
@@ -1311,7 +1314,8 @@ def test_ensure_policy_integrity_ready_for_write_skips_item_context_expansion(
     assert payload["autorepair"]["attempted"] is True
     assert payload["autorepair"]["steps"][0]["step"] == "setup"
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             "codex:project:approval-memory",
             "hash-approval-memory",
@@ -1341,8 +1345,10 @@ def test_setup_policy_integrity_repairs_all_harnesses_when_called_with_scope(tmp
 
     assert payload["counts"]["valid"] == 1
     assert global_status["counts"]["valid"] == 2
-    assert store.resolve_policy("codex", "codex:project:codex", "hash-codex", now="2026-06-14T00:06:00Z") == "allow"
-    assert store.resolve_policy("cursor", "cursor:project:cursor", "hash-cursor", now="2026-06-14T00:06:00Z") == "allow"
+    assert resolve_policy(store, "codex", "codex:project:codex", "hash-codex", now="2026-06-14T00:06:00Z") == "allow"
+    assert (
+        resolve_policy(store, "cursor", "cursor:project:cursor", "hash-cursor", now="2026-06-14T00:06:00Z") == "allow"
+    )
 
 
 def test_ensure_policy_integrity_ready_for_write_clears_tampered_rows_without_item_expansion(
@@ -1375,7 +1381,8 @@ def test_ensure_policy_integrity_ready_for_write_clears_tampered_rows_without_it
     assert payload["cleared"] == 1
     assert payload["autorepair"]["steps"][0]["step"] == "clear_invalid"
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             "codex:project:tampered-repair",
             "hash-tampered-repair",
@@ -1411,7 +1418,8 @@ def test_ensure_policy_integrity_ready_for_write_preserves_unknown_key_rows_whil
     assert payload["counts"]["valid"] == 1
     assert payload["cleared"] == 1
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             "codex:project:unknown-key",
             "hash-unknown-key",
@@ -1420,7 +1428,8 @@ def test_ensure_policy_integrity_ready_for_write_preserves_unknown_key_rows_whil
         == "allow"
     )
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             "codex:project:tampered-mixed",
             "hash-tampered-mixed",
@@ -1457,7 +1466,8 @@ def test_ensure_policy_integrity_ready_for_write_repairs_only_requested_harness(
 
     assert payload["cleared"] == 1
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             "codex:project:tampered-local",
             "hash-tampered-local",
@@ -1495,9 +1505,11 @@ def test_repair_policy_integrity_uses_reconciled_generation_before_fast_scan(
     assert payload["counts"]["valid"] == 2
     assert payload["cleared"] == 0
     assert (
-        store.resolve_policy("codex", "codex:project:baseline", "hash-baseline", now="2026-06-14T00:03:00Z") == "allow"
+        resolve_policy(store, "codex", "codex:project:baseline", "hash-baseline", now="2026-06-14T00:03:00Z") == "allow"
     )
-    assert store.resolve_policy("codex", "codex:project:pending", "hash-pending", now="2026-06-14T00:03:00Z") == "allow"
+    assert (
+        resolve_policy(store, "codex", "codex:project:pending", "hash-pending", now="2026-06-14T00:03:00Z") == "allow"
+    )
 
 
 def test_repair_policy_integrity_attaches_source_context_to_invalid_items(
@@ -1594,7 +1606,8 @@ def test_tampered_signed_row_is_ignored_and_event_emitted(tmp_path: Path) -> Non
             ("deadbeef", "codex:project:tampered"),
         )
 
-    resolved = store.resolve_policy(
+    resolved = resolve_policy(
+        store,
         "codex",
         "codex:project:tampered",
         "hash-tampered",
@@ -1615,7 +1628,8 @@ def test_remote_policy_row_is_honored_without_local_mac(tmp_path: Path) -> None:
         artifact_id="codex:project:remote",
     )
 
-    resolved = store.resolve_policy(
+    resolved = resolve_policy(
+        store,
         "codex",
         "codex:project:remote",
         "hash-remote",
@@ -1649,7 +1663,8 @@ def test_remote_policy_integrity_failure_does_not_emit_local_rule_event(
             ("tampered-reason", "codex:project:remote-tampered"),
         )
 
-    resolved = store.resolve_policy(
+    resolved = resolve_policy(
+        store,
         "codex",
         "codex:project:remote-tampered",
         "hash-remote",
@@ -1680,19 +1695,22 @@ def test_local_policy_write_cannot_impersonate_remote_policy_source(tmp_path: Pa
         )
 
     with pytest.raises(PolicyAuthorityError, match="remote_policy_source_requires_validated_sync_path"):
-        store.replace_remote_policies(
+        replace_remote_policies(
+            store,
             [_decision(artifact_id="codex:project:forged-replace", artifact_hash="hash-forged", source="team-policy")],
             "2026-06-14T00:01:00Z",
         )
 
-    store.replace_remote_policies(
+    replace_remote_policies(
+        store,
         [_decision(artifact_id="codex:project:valid-remote", artifact_hash="hash-valid", source="team-policy")],
         "2026-06-14T00:01:00Z",
         remote_write_authorized=True,
     )
 
     assert (
-        store.resolve_policy(
+        resolve_policy(
+            store,
             "codex",
             "codex:project:valid-remote",
             "hash-valid",
@@ -1707,7 +1725,8 @@ def test_local_policy_write_cannot_impersonate_remote_policy_source(tmp_path: Pa
         now="2026-06-14T00:01:45Z",
     )
 
-    resolved = store.resolve_policy(
+    resolved = resolve_policy(
+        store,
         "codex",
         "codex:project:valid-remote",
         "hash-valid",
@@ -1738,7 +1757,8 @@ def test_legacy_unsigned_row_stays_ignored_before_and_after_trusted_write(tmp_pa
         "2026-06-14T00:02:00Z",
     )
     enforced_status = store.get_policy_integrity_status()
-    enforced = store.resolve_policy(
+    enforced = resolve_policy(
+        store,
         "codex",
         "codex:project:legacy",
         "hash-legacy",
@@ -1775,8 +1795,8 @@ def test_migrate_local_policy_integrity_preserves_selected_rows_only(tmp_path: P
         now="2026-06-14T00:05:00Z",
     )
 
-    first = store.resolve_policy("codex", "codex:project:legacy-one", "hash-one", now="2026-06-14T00:06:00Z")
-    second = store.resolve_policy("codex", "codex:project:legacy-two", "hash-two", now="2026-06-14T00:06:00Z")
+    first = resolve_policy(store, "codex", "codex:project:legacy-one", "hash-one", now="2026-06-14T00:06:00Z")
+    second = resolve_policy(store, "codex", "codex:project:legacy-two", "hash-two", now="2026-06-14T00:06:00Z")
 
     assert Path(str(payload["backup_path"])).exists()
     assert payload["enforcement"] == "enforce"
@@ -1806,7 +1826,7 @@ def test_migrate_local_policy_integrity_re_signs_unknown_key_rows(tmp_path: Path
         now="2026-06-14T00:05:00Z",
     )
 
-    resolved = store.resolve_policy("codex", "codex:project:rotated", "hash-rotated", now="2026-06-14T00:06:00Z")
+    resolved = resolve_policy(store, "codex", "codex:project:rotated", "hash-rotated", now="2026-06-14T00:06:00Z")
 
     assert verify_payload["counts"]["unknown_key"] == 1
     assert payload["unknown_key_row_ids"] == [preserve_id]
@@ -2883,7 +2903,7 @@ def test_signed_rollback_snapshot_is_detected_and_repair_advances_generation(tmp
     rollback_item = next(item for item in verify["items"] if item.get("artifact_id") == "codex:project:rollback")
     repair = store.repair_policy_integrity(clear_invalid=True, now="2026-06-14T00:02:00Z")
     control = _policy_integrity_control_payload(store)
-    resolved = store.resolve_policy("codex", "codex:project:current", "hash-current", now="2026-06-14T00:03:00Z")
+    resolved = resolve_policy(store, "codex", "codex:project:current", "hash-current", now="2026-06-14T00:03:00Z")
 
     assert verify["counts"]["rollback_detected"] == 1
     assert rollback_item["integrity_status"] == "rollback_detected"
@@ -3751,7 +3771,8 @@ def test_trust_cli_explain_human_output_uses_trust_renderer(
 def test_trust_cli_explain_reports_guard_cloud_rule(tmp_path: Path, capsys) -> None:
     home_dir = tmp_path / "home"
     store = GuardStore(home_dir)
-    store.replace_remote_policies(
+    replace_remote_policies(
+        store,
         [
             PolicyDecision(
                 harness="codex",
@@ -3987,7 +4008,8 @@ def test_no_keyring_local_vault_keeps_persistent_local_allow_authoritative(
         "2026-06-14T00:00:00Z",
     )
 
-    resolved = store.resolve_policy(
+    resolved = resolve_policy(
+        store,
         "codex",
         "codex:project:local-vault",
         "hash-local-vault",
@@ -4012,7 +4034,8 @@ def test_symlinked_guard_home_forces_degraded_local_policy_authority(tmp_path: P
         "2026-06-14T00:00:00Z",
     )
 
-    resolved = store.resolve_policy(
+    resolved = resolve_policy(
+        store,
         "codex",
         "codex:project:symlinked",
         "hash-symlinked",

@@ -135,6 +135,8 @@ pub mod github_workflow_authorization;
 pub mod github_workflow_operations;
 #[path = "../../guard-command/src/guard_sync_transport.rs"]
 pub mod guard_sync_transport;
+#[path = "../../guard-command/src/harness_attribution.rs"]
+pub mod harness_attribution;
 #[path = "../../guard-command/src/harness_config_names.rs"]
 mod harness_config_names;
 #[path = "../../guard-command/src/harness_identity.rs"]

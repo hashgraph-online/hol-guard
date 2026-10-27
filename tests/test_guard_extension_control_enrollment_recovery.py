@@ -252,7 +252,7 @@ def test_recovery_requires_explicit_totp_even_with_recent_session_approval(
 
     from codex_plugin_scanner.guard import approval_gate, native_approval_gate
     from codex_plugin_scanner.guard.cli import approval_gate_prompt
-    from codex_plugin_scanner.guard.totp import totp_code_at_counter
+    from tests.guard_totp_support import totp_code_at_counter
 
     monkeypatch.setattr(native_approval_gate, "_session_signals", lambda: ["issue-3089-local-session"])
     now = datetime.now(timezone.utc)

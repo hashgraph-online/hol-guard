@@ -48,7 +48,7 @@ use guard_command::hook_adapter_value::{OMap, OValue, PyJsonError};
 
 use crate::bounded_hook_bridge::{read_hook_input, write_stdout, Input, MAX_HOOK_INPUT_BYTES};
 use crate::claude_hook_bridge_render::py_strip;
-use crate::codex_hook_bridge_direct::{direct_answer, CURSOR};
+use crate::codex_hook_bridge_direct::{direct_answer_reporting, CURSOR};
 use crate::codex_hook_response::{POST_TOOL_USE, PRE_TOOL_USE};
 use crate::cursor_hook_bridge_response::{
     python_document, read_python_document, rendered, unavailable_output, unmapped_json,
@@ -363,7 +363,7 @@ fn reply(client: &Client, raw: &[u8]) -> Reply {
         Kind::Prompt => USER_PROMPT_SUBMIT,
         Kind::After => POST_TOOL_USE,
     };
-    let resident = direct_answer(
+    let resident = direct_answer_reporting(
         CURSOR,
         Path::new(&client.guard_home),
         &request.query,

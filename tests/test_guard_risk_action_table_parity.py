@@ -1,15 +1,13 @@
-"""The baseline risk-action tables Python keeps must match the native ones.
+"""The CLI's resolved risk actions must match the native effective policy.
 
-``config.SECURITY_LEVEL_RISK_ACTIONS`` and ``protection_posture.POSTURE_RISK_ACTIONS``
-are a second copy of the tables ``guard_command::local_supply_chain`` keeps for
-``security_level_risk_actions`` and ``posture_risk_actions``. Both copies decide
-what Guard does about a risk class when the user configured nothing, so a row
-that drifts in one of them makes the CLI and the resident disagree about the
-same configuration without either side failing.
+``config._effective_risk_actions`` asks ``guard-config-resolve`` for the
+baseline, and ``effective_native_policy_v3`` asks the native composer. Both
+decide what Guard does about a risk class when the user configured nothing, so
+a row that drifts between them makes the CLI and the resident disagree about
+the same configuration without either side failing.
 
 These cases load a real configuration for every level and posture and compare
-the baseline Python resolves against the one the native composer returns for
-the same configuration.
+the two answers for the same configuration.
 """
 
 from __future__ import annotations

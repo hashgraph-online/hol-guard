@@ -12,6 +12,10 @@
 //!   the command once under the admitted snapshot and answers both hints from
 //!   that review.
 //!
+//! - With a `connector` as well, for a review that waits on a local CLI's
+//!   setup, it answers that connector's setup hint, with the risk classes the
+//!   paused evidence observed, as the direct lane stores it.
+//!
 //! Both answer under the controls the resident admitted and never mutate
 //! authority. The hints are advisory: a review that cannot be bound, a budget
 //! that runs out or a missing snapshot answers less, never an error the
@@ -62,6 +66,10 @@ struct ReviewHintQueryV1 {
     /// The result the review paused on, for a review being queued.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     paused: Option<Map<String, Value>>,
+    /// The local CLI a connector-setup review waits on, with its paused
+    /// result: the answer is that connector's setup hint instead.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    connector: Option<Value>,
     /// Milliseconds the caller can wait for the answer.
     budget_ms: u32,
 }
@@ -127,9 +135,14 @@ fn decide(
     }
     let budget = Duration::from_millis(u64::from(query.budget_ms.min(MAX_BUDGET_MS)));
     let deadline = Instant::now() + budget;
-    Ok(match &query.paused {
-        Some(paused) => queued(store, query, paused, deadline),
-        None => live(store, query, deadline),
+    Ok(match (&query.connector, &query.paused) {
+        (Some(connector), Some(paused)) => {
+            super::super::review_queue::connector::queued_setup_hint(connector, paused)
+        }
+        // A connector names the review it waits on; without it there is none.
+        (Some(_), None) => None,
+        (None, Some(paused)) => queued(store, query, paused, deadline),
+        (None, None) => live(store, query, deadline),
     })
 }
 

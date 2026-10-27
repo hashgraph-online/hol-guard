@@ -27,7 +27,6 @@ from codex_plugin_scanner.guard.runtime.local_cli_commands import (
     LocalCliCommand,
     default_local_cli_commands,
     is_local_cli_command_id,
-    match_command_id,
 )
 from codex_plugin_scanner.guard.runtime.local_cli_identity import (
     UnlistedCliIdentity,
@@ -35,6 +34,7 @@ from codex_plugin_scanner.guard.runtime.local_cli_identity import (
     is_local_cli_id,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.local_cli_command_id_client import match_command_id
 
 
 @pytest.mark.parametrize("profile", KNOWN_CLI_PROFILES, ids=lambda profile: profile.profile_id)

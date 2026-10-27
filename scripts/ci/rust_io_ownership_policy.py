@@ -87,7 +87,6 @@ _TRANSPORT_IDENTITY_PATHS: Final = frozenset(
 _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
     {
         # Reassembled resident fragments are bound by the native result digest.
-        "src/codex_plugin_scanner/guard/native_shell_helpers.py",
         "src/codex_plugin_scanner/guard/native_decision_receipt.py",
         "src/codex_plugin_scanner/guard/native_rich_command_model.py",
         "src/codex_plugin_scanner/guard/native_command_observations.py",
@@ -121,7 +120,6 @@ _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
         # Same correlation-only digest for the per-harness hook adapter op.
         "src/codex_plugin_scanner/guard/native_hook_adapter.py",
         "src/codex_plugin_scanner/guard/native_hook_adapter_wire.py",
-        "src/codex_plugin_scanner/guard/native_github_cli.py",
         # Same correlation-only digest for the Composio routing op.
         "src/codex_plugin_scanner/guard/native_composio_role.py",
         "src/codex_plugin_scanner/guard/native_shell_request_authority.py",
@@ -138,8 +136,6 @@ _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_mcp_proxy_decision.py",
         # Decodes the bounded resident daemon-lifecycle verdict; decisions stay Rust.
         "src/codex_plugin_scanner/guard/native_daemon_lifecycle.py",
-        # Gathers facts for and decodes the resident sensitive-read decisions; verdicts stay Rust.
-        "src/codex_plugin_scanner/guard/native_mcp_sensitive_read.py",
     }
 )
 _TRANSPORT_AUTHORITY_PATHS: Final = frozenset(
@@ -162,7 +158,6 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         # Resident-op dispatch bridge: decodes the bounded native response and
         # returns a DTO; it does not interpret response content into a decision.
         "src/codex_plugin_scanner/guard/native_execution.py",
-        "src/codex_plugin_scanner/guard/native_shell_helpers.py",
         # Bounded response decoding for native package-authority results.
         "src/codex_plugin_scanner/guard/native_package_authority.py",
         # Bounded decoding of the resident artifact-risk reply (gzip-packed when
@@ -211,8 +206,6 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         # strictly bound and validated, never reinterpreted.
         "src/codex_plugin_scanner/guard/native_hook_adapter.py",
         "src/codex_plugin_scanner/guard/native_hook_adapter_wire.py",
-        # Decodes the bounded resident GitHub CLI classification envelope.
-        "src/codex_plugin_scanner/guard/native_github_cli.py",
         # Decodes the bounded resident Composio routing envelope; the role is
         # reported as the runtime named it and never re-derived.
         "src/codex_plugin_scanner/guard/native_composio_role.py",
@@ -233,8 +226,6 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_mcp_proxy_decision.py",
         # Decodes the bounded resident daemon-lifecycle verdict; decisions stay Rust.
         "src/codex_plugin_scanner/guard/native_daemon_lifecycle.py",
-        # Gathers facts for and decodes the resident sensitive-read decisions; verdicts stay Rust.
-        "src/codex_plugin_scanner/guard/native_mcp_sensitive_read.py",
         # Decodes the bounded resident MCP runtime-evidence response envelope.
         "src/codex_plugin_scanner/guard/native_mcp_runtime_evidence.py",
         # Decodes the bounded resident runtime-detector-run response envelope.
@@ -299,7 +290,6 @@ _ASYNC_POLICY_PATHS: Final = frozenset(
     }
 )
 _PERSISTENCE_PATH_PREFIXES: Final = (
-    "src/codex_plugin_scanner/guard/runtime/hook_enrichment_queue.py",
     "src/codex_plugin_scanner/guard/daemon/hook_metrics.py",
     "src/codex_plugin_scanner/guard/private_file_io.py",
     "src/codex_plugin_scanner/guard/local_dashboard_session.py",
@@ -320,7 +310,6 @@ _PRESENTATION_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/codex_app_server.py",
         "src/codex_plugin_scanner/guard/continuation_runtime.py",
         "src/codex_plugin_scanner/guard/edge_events.py",
-        "src/codex_plugin_scanner/guard/harness_usage.py",
         "src/codex_plugin_scanner/guard/local_authority_integrity.py",
         "src/codex_plugin_scanner/guard/mcp_tool_calls.py",
         "src/codex_plugin_scanner/guard/temporary_mcp_approvals.py",

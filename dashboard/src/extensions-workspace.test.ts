@@ -278,7 +278,7 @@ assert.equal(mutationState.effective.layers[0]?.controls.length, 1, "builder mus
 const extension: ExtensionCatalogItem = {
   schema_version: 2, extension_id: "command.git", name: "Git", description: "Protects source-control commands.",
   enabled: true, required: false, trust_class: "first-party", activation: "default-on",
-  publisher: { id: "hol", displayName: "Hashgraph Online" }, icon: { kind: "none" },
+  publisher: { id: "hol", displayName: "HOL" }, icon: { kind: "none" },
   source: "built-in", version: "1.2.3", aliases: ["command.scm"],
   dependencies: [], conflicts: [], delegated_protection: null, ecosystem_ids: ["git"], executables: ["git"],
   project_markers: [".git"], reference_urls: [], action_classes: ["git.history.rewrite"],

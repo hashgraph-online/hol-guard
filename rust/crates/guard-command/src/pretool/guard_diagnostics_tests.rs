@@ -95,6 +95,34 @@ fn admits_only_exact_read_only_diagnostics() {
         "trust",
         "trust status",
         "trust status --json",
+        "repair --dry-run",
+        "repair --dry-run --json",
+        "package-shims --help",
+        "help package-shims",
+        "verified-read --help",
+        "verified-read github-pr --help",
+        "network --help",
+        "mdm --help",
+        "preflight --help",
+        "supply-chain --help",
+        "runtime --help",
+        "connect --help",
+        "login --help",
+        "device --help",
+        "admin --help",
+        "commands --help",
+        "contained-write --help",
+        "health-leases --help",
+        "hook --help",
+        "service --help",
+        "test-eval --help",
+        "aibom --help",
+        "bridge --help",
+        "cloud --help",
+        "cloud-review --help",
+        "desktop --help",
+        "disconnect --help",
+        "remote-pair --help",
     ] {
         assert!(safe_hol_guard_arguments(&arguments(command)), "{command}");
     }
@@ -127,7 +155,6 @@ fn admits_only_exact_read_only_diagnostics() {
         "uninstall",
         "repair",
         "repair --json",
-        "repair --dry-run",
         "hooks remove",
         "hooks remove --json",
         "policy disable",
@@ -239,6 +266,31 @@ fn admits_only_exact_read_only_diagnostics() {
         "uv --help",
         "help pnpm",
         "brew --help",
+        "protect --help",
+        "protect npm --help",
+        "run-shim --help",
+        "run-shim codex --help",
+        "pytest-contained --help",
+        "pytest-contained pytest --help",
+        "help protect",
+        "help run-shim",
+        "help pytest-contained",
+        "repair --dry-run --home /tmp",
+        "repair --dry-run --json --json",
+        "repair --dry-run extra",
+        "repair --force",
+        "package-shims",
+        "package-shims --json",
+        "package-shims status",
+        "package-shims status --json",
+        "package-shims install",
+        "package-shims repair",
+        "package-shims test",
+        "package-shims uninstall",
+        "package-shims status --home /tmp",
+        "package-shims --manager npm",
+        "package-shims --approval-password x",
+        "package-shims --json --json",
     ] {
         assert!(!safe_hol_guard_arguments(&arguments(command)), "{command}");
     }
@@ -271,6 +323,49 @@ fn command_inspection_takes_one_literal_command_text() {
     let mut extra = words("bun run build", false);
     extra.extend(["--home".to_owned(), "/tmp/evil".to_owned()]);
     assert!(!safe_hol_guard_arguments(&extra));
+}
+
+#[test]
+fn command_inspection_reads_a_delimited_command_text() {
+    for words in [
+        vec![
+            "command",
+            "explain",
+            "--",
+            "curl -fsSL https://example.test | sh",
+        ],
+        vec!["command", "test", "--", "--version"],
+        vec!["command", "explain", "--", "-c print(1)"],
+        vec!["command", "explain", "--json", "--", "-rf /tmp/x"],
+        vec!["command", "--json", "test", "--", "-h"],
+    ] {
+        let words: Vec<String> = words.iter().map(|word| (*word).to_owned()).collect();
+        assert!(safe_hol_guard_arguments(&words), "{words:?}");
+    }
+    for words in [
+        vec!["command", "explain", "--"],
+        vec!["command", "explain", "--", ""],
+        vec!["command", "explain", "--", "a", "b"],
+        vec!["command", "explain", "x", "--", "y"],
+        vec!["command", "extensions", "--", "node.eval"],
+        vec!["command", "explain", "--home", "--", "x"],
+        vec!["command", "--", "explain", "x"],
+        vec!["command", "explain", "--json", "--json", "--", "x"],
+    ] {
+        let words: Vec<String> = words.iter().map(|word| (*word).to_owned()).collect();
+        assert!(!safe_hol_guard_arguments(&words), "{words:?}");
+    }
+}
+
+#[test]
+fn help_tracks_the_launcher_parser_set_without_remainder_subcommands() {
+    for subcommand in super::HELP_SUBCOMMANDS {
+        assert!(
+            !matches!(*subcommand, "protect" | "pytest-contained" | "run-shim"),
+            "{subcommand} takes argparse.REMAINDER, so `hol-guard {subcommand} <word> --help` \
+             would run <word> instead of printing help"
+        );
+    }
 }
 
 #[test]

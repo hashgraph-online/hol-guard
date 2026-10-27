@@ -79,6 +79,63 @@ fn empty_argument_targets(maps: &[&Map<String, Value>]) -> bool {
     present
 }
 
+/// Every argument a request for the output of work the harness already
+/// started may carry. The set is closed on purpose: a retrieval tool's name is
+/// model-supplied, and the keys this extractor reads are not the only places a
+/// target can hide. A key outside this set may name a file, an address, a
+/// request body or an instruction under a spelling nothing here reads, so a
+/// call that carries one keeps its review.
+const RETRIEVAL_KEYS: [&str; 18] = [
+    "task_id",
+    "task_ids",
+    "taskId",
+    "taskIds",
+    "command_id",
+    "command_ids",
+    "commandId",
+    "commandIds",
+    "id",
+    "ids",
+    "timeout_ms",
+    "timeoutMs",
+    "timeout",
+    "block",
+    "wait",
+    "limit",
+    "offset",
+    "cursor",
+];
+
+/// The longest list of identifiers one retrieval may name.
+const MAX_RETRIEVAL_ITEMS: usize = 32;
+
+/// Whether every argument the call carries is a retrieval argument. A map with
+/// no arguments at all proves nothing, because the call's real target may sit
+/// outside the maps this extractor collects.
+fn retrieval_arguments_only(maps: &[&Map<String, Value>]) -> bool {
+    maps.iter().any(|record| !record.is_empty())
+        && maps.iter().all(|record| {
+            record.iter().all(|(key, value)| {
+                RETRIEVAL_KEYS.contains(&key.as_str()) && bounded_identifier(value)
+            })
+        })
+}
+
+/// Whether the value is an identifier or a bounded list of them. A nested map,
+/// or a list holding one, can carry a request of its own, so neither passes.
+fn bounded_identifier(value: &Value) -> bool {
+    match value {
+        Value::String(_) | Value::Number(_) | Value::Bool(_) | Value::Null => true,
+        Value::Array(items) => {
+            items.len() <= MAX_RETRIEVAL_ITEMS
+                && items.iter().all(|item| {
+                    matches!(item, Value::String(_) | Value::Number(_) | Value::Bool(_))
+                })
+        }
+        Value::Object(_) => false,
+    }
+}
+
 pub(crate) fn extract_generic_signals(
     payload: &Value,
 ) -> Result<GenericSignals, GenericExtractionError> {
@@ -189,6 +246,7 @@ pub(crate) fn extract_generic_signals(
         path_values,
         url_values,
         request_body_or_method: request_body_or_method(&maps),
+        retrieval_arguments_only: retrieval_arguments_only(&argument_maps(root)),
         github_read_only: false,
         prompt_present: !prompt_values.is_empty(),
         env_reference,

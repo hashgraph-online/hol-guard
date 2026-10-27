@@ -90,8 +90,8 @@ def test_an_advisory_matching_a_launched_runtime_is_an_observation_finding(verdi
     assert again[0]["finding_id"] == finding["finding_id"], "the same runtime and advisory keep one identity"
 
 
-@pytest.mark.parametrize("verdict", ["fixed_verified", "not_affected", "not_observed", "unknown"])
-def test_settled_or_unknown_verdicts_are_not_findings(verdict: str) -> None:
+@pytest.mark.parametrize("verdict", ["fixed_verified", "not_affected", "not_observed", "unknown", ["affected"], None])
+def test_settled_unknown_or_malformed_verdicts_are_not_findings(verdict: object) -> None:
     assert runtimes.project_runtime_findings(KEYS.worktree_key, posture(advisories=[advisory(verdict)])) == ([], False)
 
 

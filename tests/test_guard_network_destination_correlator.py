@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from codex_plugin_scanner.guard.runtime.network_destination_correlator import DestinationCorrelator
-from codex_plugin_scanner.guard.runtime.network_local_core import bind_resolution
+from tests.network_destination_correlator import DestinationCorrelator
+from tests.network_local_core import bind_resolution
 
 
 def test_correlator_reports_only_observed_unexpired_dns_bindings() -> None:

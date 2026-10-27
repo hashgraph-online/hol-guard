@@ -6,16 +6,16 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.github_capability_contract import (
-    GitHubCommandCapability,
-    github_assessment,
-)
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     classify_github_shell_capabilities,
     extract_sensitive_tool_action_request,
 )
 from tests.native_command_test_support import extract_sensitive_tool_action_request_native_test
-from tests.native_github_capability_support import github_cli_assessment
+from tests.native_github_capability_support import (
+    GitHubCommandCapability,
+    github_cli_assessment,
+    oracle_assessment,
+)
 
 _EXPECTED_FLOORS = {
     "read_local": "allow",
@@ -111,7 +111,7 @@ def test_capability_sets_preserve_every_effect(
 
 @pytest.mark.parametrize(("capability", "expected"), tuple(_EXPECTED_FLOORS.items()))
 def test_every_capability_has_an_explicit_floor(capability: GitHubCommandCapability, expected: str) -> None:
-    assessment = github_assessment(capability, "test.reason", "test detail")
+    assessment = oracle_assessment(capability, "test.reason", "test detail")
 
     assert assessment.action_floor == expected
 
@@ -177,6 +177,7 @@ def test_shell_composition_preserves_read_and_mutating_capabilities(
 
     assert assessment is not None
     assert assessment.capabilities == capabilities
+    assert assessment.action_floor == oracle_assessment(capabilities, "test.reason", "test detail").action_floor
     assert assessment.workflow_authorizable is False
 
 
@@ -304,6 +305,7 @@ def test_local_write_cannot_mask_remote_secret_capability(tmp_path: Path) -> Non
     assert assessment is not None
     assert assessment.capabilities == ("write_local", "secret_remote")
     assert assessment.capability == "secret_remote"
+    assert assessment.action_floor == "block"
 
 
 @pytest.mark.parametrize(
@@ -363,3 +365,79 @@ def test_branch_deletion_keeps_a_destructive_floor(tmp_path: Path, command: str)
 
     assert match is not None
     assert match.action_class == "git destructive command"
+
+
+_NATIVE_SHELL_ASSESSMENT = {
+    "capability": "secret_remote",
+    "capabilities": ["write_local", "secret_remote"],
+    "reason_code": "github.shell.combined-capabilities",
+    "detail": "The shell composition contains multiple GitHub capabilities.",
+    "action_floor": "block",
+    "workflow_authorizable": False,
+}
+
+
+@pytest.mark.parametrize(
+    "malformed",
+    (
+        {"action_floor": "permit"},
+        {"action_floor": None},
+        {"action_floor": ["block"]},
+        {"action_floor": {"action": "block"}},
+        {"capability": "steal_remote", "capabilities": ["steal_remote"]},
+        {"capabilities": ["write_local", "secret_remote", "steal_remote"]},
+        {"workflow_authorizable": "false"},
+        {"capability": "read_remote"},
+        {"capabilities": "secret_remote"},
+        {"reason_code": None},
+    ),
+)
+def test_shell_capability_carrier_rejects_a_malformed_native_answer(
+    monkeypatch: pytest.MonkeyPatch,
+    malformed: dict[str, object],
+) -> None:
+    from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
+    from codex_plugin_scanner.guard.runtime.secret_file_request_services import github_shell_capabilities
+
+    monkeypatch.setattr(
+        github_shell_capabilities,
+        "shell_request_authority",
+        lambda _entry, _arguments: {**_NATIVE_SHELL_ASSESSMENT, **malformed},
+    )
+
+    with pytest.raises(NativeRunnerAuthorityError, match=r"^native_github_shell_capabilities_invalid$"):
+        classify_github_shell_capabilities("gh secret set TOKEN", home_dir=None)
+
+
+def test_carrier_capability_names_match_the_rust_contract() -> None:
+    """The carrier's accepted names are exactly the ones ``GitHubCapability::as_str`` returns."""
+
+    import re
+
+    from codex_plugin_scanner.guard.runtime.secret_file_request_services import github_shell_capabilities
+
+    contract = Path(__file__).resolve().parents[1] / "rust/crates/guard-command/src/github_capability_contract.rs"
+    body = contract.read_text(encoding="utf-8").split("fn as_str", 1)[1].split("\n    }\n", 1)[0]
+    rust_names = set(re.findall(r'Self::\w+ => "([a-z_]+)"', body))
+
+    assert rust_names
+    assert rust_names == set(github_shell_capabilities._CAPABILITY_NAMES)
+
+
+def test_shell_capability_carrier_takes_floor_and_eligibility_from_the_resident(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.runtime.secret_file_request_services import github_shell_capabilities
+
+    monkeypatch.setattr(
+        github_shell_capabilities,
+        "shell_request_authority",
+        lambda _entry, _arguments: dict(_NATIVE_SHELL_ASSESSMENT),
+    )
+
+    assessment = classify_github_shell_capabilities("gh secret set TOKEN", home_dir=None)
+
+    assert assessment is not None
+    assert assessment.capabilities == ("write_local", "secret_remote")
+    assert assessment.action_floor == "block"
+    assert assessment.workflow_authorizable is False

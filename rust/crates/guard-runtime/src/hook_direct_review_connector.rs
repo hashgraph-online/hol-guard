@@ -7,9 +7,10 @@
 //! and then queues the row differently:
 //!
 //! - the row is grouped under the connector's `queue_group_id`, and its
-//!   `extension_allow_hint` is the connector setup hint
-//!   (`connector_setup_hint`, `extension_allow_hint.py`) instead of the
-//!   extension hints;
+//!   `extension_allow_hint` is the connector setup hint instead of the
+//!   extension hints. Both lanes build it here: the direct lane through
+//!   `setup_hint`, and a review the daemon queues itself through
+//!   `queued_setup_hint`, which `extension_review_hint` answers;
 //! - the agent is told the CLI is not set up on this device
 //!   (`connector_agent_reason`), in the silent block and in the pause;
 //! - once the row is stored, the review's context is recorded with the
@@ -475,6 +476,17 @@ fn pathlib_normal(path: &str) -> bool {
 fn pathlib_name(path: &str) -> &str {
     let separator = if cfg!(windows) { '\\' } else { '/' };
     path.rsplit(separator).next().unwrap_or_default()
+}
+
+/// The connector-setup hint for a connector-setup review the daemon queues
+/// itself, as `extension_review_hint` answers it: the connector `_setup_connector`
+/// accepts and the risk classes the paused evidence observed. A connector this
+/// lane would not accept, or evidence whose risk classes the resident cannot
+/// read, answers no hint.
+pub(crate) fn queued_setup_hint(connector: &Value, paused: &Object) -> Option<Value> {
+    let connector = Connector::parse(connector)?;
+    let risk_classes = observed_risk_classes(paused).ok()?;
+    Some(setup_hint(&connector, &risk_classes)).filter(|hint| !hint.is_null())
 }
 
 #[path = "hook_direct_review_connector_hint.rs"]

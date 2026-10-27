@@ -64,6 +64,12 @@ fn validator() -> Result<&'static jsonschema::Validator, BusinessDocumentError> 
         .map_err(|error| *error)
 }
 
+/// Whether `value` satisfies the canonical GuardPolicy v1alpha1 schema, or
+/// `None` when that schema cannot be compiled.
+pub fn satisfies_policy_document_schema(value: &Value) -> Option<bool> {
+    validator().ok().map(|validator| validator.is_valid(value))
+}
+
 fn validate_tree(
     value: &Value,
     depth: usize,

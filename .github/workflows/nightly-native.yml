@@ -191,7 +191,7 @@ jobs:
         run: >-
           uv run --no-sync python ci/native_runtime/test_command_model_differential.py
           --binary "$RUNTIME_BINARY"
-      - name: Exercise resident command bridge, shadow activity and runtime binary
+      - name: Exercise resident command bridge and runtime binary
         if: ${{ !cancelled() }}
         env:
           HOL_GUARD_NATIVE: force
@@ -199,7 +199,6 @@ jobs:
         run: >-
           uv run --no-sync pytest
           ci/native_runtime/test_command_model_resident.py
-          ci/native_runtime/test_command_shadow_activity.py
           ci/native_runtime/test_guard_native_runtime_binary.py
           --tb=short
       - name: Compare Python and Rust decisions
@@ -293,20 +292,7 @@ jobs:
       - name: Run with a constrained descriptor budget
         run: |
           ulimit -n 128
-          uv run --no-sync pytest -q tests/test_daemon_bounded_http.py tests/test_native_runtime_admission.py --tb=short
-      - name: Run 100000 bounded admission operations
-        if: ${{ !cancelled() }}
-        run: |
-          uv run --no-sync python - <<'PY'
-          from codex_plugin_scanner.guard.native_runtime_admission import native_resident_admission
-
-          @native_resident_admission
-          def operation(index: int, *, operation: str) -> int:
-              return index
-
-          for index in range(100_000):
-              assert operation(index, operation="command_model") == index
-          PY
+          uv run --no-sync pytest -q tests/test_daemon_bounded_http.py --tb=short
 
   native-platform:
     name: Native workspace and hook client (${{ matrix.os }})
@@ -359,7 +345,7 @@ jobs:
           HOL_GUARD_NATIVE_BINARY: ${{ env.RUNTIME }}
           HOL_GUARD_NATIVE_SOURCE_COMPILER: ${{ github.workspace }}/rust/target/release/guard-command-source${{ matrix.os == 'windows-2025' && '.exe' || '' }}
           HOL_GUARD_NATIVE_REGRESSION: "1"
-        run: uv run --no-sync pytest -q tests/test_native_runtime_admission.py tests/test_daemon_bounded_http.py tests/test_rust_daemon_edge_hardening_contracts.py tests/test_guard_store_storage_gate_windows.py --tb=short
+        run: uv run --no-sync pytest -q tests/test_daemon_bounded_http.py tests/test_rust_daemon_edge_hardening_contracts.py tests/test_guard_store_storage_gate_windows.py --tb=short
       - name: Validate real native client lifecycle
         if: ${{ !cancelled() }}
         env:

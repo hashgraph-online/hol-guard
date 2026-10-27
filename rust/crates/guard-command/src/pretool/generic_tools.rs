@@ -140,6 +140,24 @@ fn is_prompt_tool(tool: &str) -> bool {
     )
 }
 
+/// Whether the tool's name says it collects a record of work that is already
+/// under way: `get_command_or_subagent_output`, `read_task_output`. A name
+/// that fetches a report is not a name that submits one, so these calls are
+/// bookkeeping over work whose own call carried its proof.
+fn is_result_retrieval_tool(tool: &str) -> bool {
+    let tokens = tool_tokens(tool);
+    let (Some(first), Some(last)) = (tokens.first(), tokens.last()) else {
+        return false;
+    };
+    matches!(
+        first.as_str(),
+        "get" | "read" | "fetch" | "poll" | "collect" | "await"
+    ) && matches!(
+        last.as_str(),
+        "output" | "outputs" | "result" | "results" | "status" | "log" | "logs"
+    )
+}
+
 fn is_harness_tool(tool: &str) -> bool {
     tool_matches(
         tool,
@@ -284,7 +302,7 @@ pub(super) fn infer_action_type(
     if event_compact.contains("beforemcpexecution") {
         return (PreToolActionTypeV1::McpTool, PreToolOperationV1::Call);
     }
-    if is_prompt_tool(tool) {
+    if is_prompt_tool(tool) && !is_result_retrieval_tool(tool) {
         return (PreToolActionTypeV1::Prompt, PreToolOperationV1::Submit);
     }
     // Result reports need an explicit harness proof; referenced paths do not
@@ -292,8 +310,12 @@ pub(super) fn infer_action_type(
     if tool == "yield" {
         return (PreToolActionTypeV1::Harness, PreToolOperationV1::Set);
     }
-    if is_harness_tool(tool) {
-        let operation = if tool_matches(tool, &["stop", "end", "close"]) {
+    // A retrieval name reaches here only after the prompt branch declined it,
+    // so it names the harness's own records either way.
+    if is_harness_tool(tool) || is_prompt_tool(tool) {
+        let operation = if is_result_retrieval_tool(tool) {
+            PreToolOperationV1::Read
+        } else if tool_matches(tool, &["stop", "end", "close"]) {
             PreToolOperationV1::Stop
         } else {
             PreToolOperationV1::Start

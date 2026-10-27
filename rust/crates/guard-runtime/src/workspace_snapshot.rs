@@ -27,26 +27,38 @@ use sha2::{Digest, Sha256};
 use crate::workspace_snapshot_file::DirHandle;
 use crate::workspace_snapshot_git::{git_identity, GitIdentity};
 
+#[path = "workspace_snapshot_editor_tasks.rs"]
+mod editor_tasks;
 #[path = "workspace_snapshot_hooks.rs"]
 mod hooks;
+#[path = "workspace_snapshot_plugins.rs"]
+mod plugins;
 #[path = "workspace_snapshot_secrets.rs"]
 mod secrets;
 #[path = "workspace_snapshot_skills.rs"]
 mod skills;
 #[path = "workspace_snapshot_walk.rs"]
 mod walk;
+#[path = "workspace_snapshot_workflows.rs"]
+mod workflows;
+use editor_tasks::EditorTaskScan;
 use hooks::HookScan;
+use plugins::PluginScan;
 #[cfg(test)]
 use secrets::MAX_SECRET_FINDINGS;
 use secrets::{SecretKey, SecretScan, WalkSkips};
 use skills::SkillScan;
 use walk::{walk_directory, Walk, MAX_WALK_DEPTH};
+use workflows::WorkflowScan;
 
 pub(crate) const COMMAND: &str = "workspace-snapshot";
 pub(crate) const FEATURE: &str = "workspace-snapshot-v1";
 pub(crate) const SECRETS_FEATURE: &str = "workspace-snapshot-secrets-v1";
 pub(crate) const SKILLS_FEATURE: &str = "workspace-snapshot-skills-v1";
 pub(crate) const HOOKS_FEATURE: &str = "workspace-snapshot-hooks-v1";
+pub(crate) const PLUGINS_FEATURE: &str = "workspace-snapshot-plugins-v1";
+pub(crate) const WORKFLOWS_FEATURE: &str = "workspace-snapshot-workflows-v1";
+pub(crate) const EDITOR_TASKS_FEATURE: &str = "workspace-snapshot-editor-tasks-v1";
 const RESULT_SCHEMA: &str = "guard.workspace-snapshot.v1";
 const CONTRACT_VERSION: u32 = 1;
 
@@ -134,6 +146,18 @@ pub(crate) struct SnapshotRequest {
     /// files list. Needs `content` mode.
     #[serde(default)]
     pub(crate) hooks: bool,
+    /// Also check the hooks and MCP servers of every agent plugin the
+    /// worktree ships. Needs `content` mode.
+    #[serde(default)]
+    pub(crate) plugins: bool,
+    /// Also check the GitHub Actions workflows the worktree ships. Needs
+    /// `content` mode.
+    #[serde(default)]
+    pub(crate) workflows: bool,
+    /// Also check the editor tasks and dev container commands the worktree
+    /// sets to run on their own. Needs `content` mode.
+    #[serde(default)]
+    pub(crate) editor_tasks: bool,
 }
 
 struct Limits {
@@ -215,6 +239,15 @@ pub(crate) fn snapshot(request: &SnapshotRequest) -> Result<Value, String> {
     if request.hooks && request.mode != SnapshotMode::Content {
         return Err("workspace_snapshot_hooks_need_content".to_owned());
     }
+    if request.plugins && request.mode != SnapshotMode::Content {
+        return Err("workspace_snapshot_plugins_need_content".to_owned());
+    }
+    if request.workflows && request.mode != SnapshotMode::Content {
+        return Err("workspace_snapshot_workflows_need_content".to_owned());
+    }
+    if request.editor_tasks && request.mode != SnapshotMode::Content {
+        return Err("workspace_snapshot_editor_tasks_need_content".to_owned());
+    }
     let secret_key = match (request.secrets, request.secret_key.as_ref()) {
         (true, Some(key)) if key.is_usable() => Some(key),
         (true, _) => return Err("workspace_snapshot_secrets_need_key".to_owned()),
@@ -234,6 +267,13 @@ pub(crate) fn snapshot(request: &SnapshotRequest) -> Result<Value, String> {
             .skills
             .then(|| SkillScan::new(&worktree_key, &[&requested, &root])),
         hooks: request.hooks.then(|| HookScan::new(&worktree_key)),
+        plugins: request
+            .plugins
+            .then(|| PluginScan::new(&worktree_key, &[&requested, &root])),
+        workflows: request.workflows.then(|| WorkflowScan::new(&worktree_key)),
+        editor_tasks: request
+            .editor_tasks
+            .then(|| EditorTaskScan::new(&worktree_key)),
         ..Walk::default()
     };
     walk_directory(&mut handle, "", 0, request.mode, &limits, &mut walk);
@@ -283,6 +323,12 @@ pub(crate) fn snapshot(request: &SnapshotRequest) -> Result<Value, String> {
         .collect();
     let skills = walk.skills.take().map(|scan| scan.report(&incomplete));
     let hooks = walk.hooks.take().map(|scan| scan.report(&incomplete));
+    let plugins = walk.plugins.take().map(|scan| scan.report(&incomplete));
+    let workflows = walk.workflows.take().map(|scan| scan.report(&incomplete));
+    let editor_tasks = walk
+        .editor_tasks
+        .take()
+        .map(|scan| scan.report(&incomplete));
     let secrets = walk.secrets.take().map(|scan| {
         let skips = WalkSkips {
             sensitive: walk.counts.sensitive,
@@ -337,6 +383,15 @@ pub(crate) fn snapshot(request: &SnapshotRequest) -> Result<Value, String> {
         }
         if let Some(hooks) = hooks {
             fields.insert("hooks".to_owned(), hooks);
+        }
+        if let Some(plugins) = plugins {
+            fields.insert("plugins".to_owned(), plugins);
+        }
+        if let Some(workflows) = workflows {
+            fields.insert("workflows".to_owned(), workflows);
+        }
+        if let Some(editor_tasks) = editor_tasks {
+            fields.insert("editor_tasks".to_owned(), editor_tasks);
         }
     }
     Ok(result)
@@ -401,8 +456,14 @@ fn snapshot_digest(
 }
 
 #[cfg(test)]
+#[path = "workspace_snapshot_editor_tasks_tests.rs"]
+mod editor_tasks_tests;
+#[cfg(test)]
 #[path = "workspace_snapshot_hooks_tests.rs"]
 mod hooks_tests;
+#[cfg(test)]
+#[path = "workspace_snapshot_plugins_tests.rs"]
+mod plugins_tests;
 #[cfg(test)]
 #[path = "workspace_snapshot_secrets_tests.rs"]
 mod secrets_tests;
@@ -412,3 +473,6 @@ mod skills_tests;
 #[cfg(test)]
 #[path = "workspace_snapshot_tests.rs"]
 mod tests;
+#[cfg(test)]
+#[path = "workspace_snapshot_workflows_tests.rs"]
+mod workflows_tests;

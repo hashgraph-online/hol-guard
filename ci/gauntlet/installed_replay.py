@@ -83,6 +83,27 @@ def registered_argv(home: Path, expectation: dict[str, Any], config: dict[str, A
     return None
 
 
+def argv_for_event(expectation: dict[str, Any], config: dict[str, Any], event: str) -> list[str] | None:
+    """Find the argv registered for one exact event, with no fallback.
+
+    ``registered_argv`` falls back to any registered group, so a harness that
+    names its hook groups unusually still gets replayed at all. A case that
+    names its own event cannot take that fallback: feeding a prompt payload to
+    the PreToolUse argv would score a hook the install never registered, and
+    the hook a harness runs for a prompt is not the one it runs for a tool
+    call. A build can answer one and block the other.
+    """
+
+    hooks = hook_groups(config, expectation)
+    if not isinstance(hooks, dict):
+        return None
+    for handler in guard_handlers(hooks.get(event)):
+        argv = handler_argv(handler)
+        if argv:
+            return argv
+    return None
+
+
 def fill(payload: Any, *, home: Path, workspace: Path) -> Any:
     """Substitute the lane's own home and workspace into a contract payload."""
 
@@ -225,16 +246,46 @@ def replay_harness(
     guard_home: Path,
     workspace: Path,
     repeat: int,
+    argv_by_event: dict[str, list[str]] | None = None,
 ) -> dict[str, Any]:
-    """Replay every contract case against one harness's registered argv."""
+    """Replay every contract case against the argv its own event registered.
 
-    results = [
-        replay_case(argv, case, home=home, guard_home=guard_home, workspace=workspace, repeat=repeat) for case in cases
-    ]
-    failures = [failure for result in results for failure in result["failures"]]
+    A case without an ``event`` runs on the contract's replay event, as every
+    case did before. A case that names one runs on that event's own argv: the
+    hook a harness runs for a prompt is not the one it runs for a tool call,
+    and a build can answer one while blocking the other.
+
+    ``argv_by_event`` carries a key for exactly the events the contract
+    declares for this harness, so the two ways an event can have no argv stay
+    apart. A declared event that the install did not register is a failure —
+    the operator whose prompt hook never answers is locked out of the session
+    whatever the tool hook decides. An undeclared event is recorded as a skip,
+    because a harness Guard deliberately registers no prompt hook for has
+    nothing to replay and must not fail for it.
+    """
+
+    registered = argv_by_event or {}
+    results: list[dict[str, Any]] = []
+    unregistered: list[str] = []
+    skipped: list[dict[str, str]] = []
+    for case in cases:
+        event = case.get("event")
+        if event is not None and event not in registered:
+            skipped.append({"id": case["id"], "event": event, "reason": "the contract declares no such event here"})
+            continue
+        case_argv = argv if event is None else registered[event]
+        if case_argv is None:
+            unregistered.append(f"{case['id']}: the install registered no runnable {event} hook to replay")
+            continue
+        results.append(
+            replay_case(case_argv, case, home=home, guard_home=guard_home, workspace=workspace, repeat=repeat)
+        )
+    failures = unregistered + [failure for result in results for failure in result["failures"]]
     return {
         "harness": harness,
         "argv": argv,
+        "event_argv": {event: found for event, found in registered.items() if found},
+        "skipped": skipped,
         "cases": results,
         "latency": summarize_process_latency([run for case in results for run in case["runs"]]),
         "failures": failures,
@@ -245,6 +296,7 @@ def replay_harness(
 __all__ = [
     "ALLOW_DECISIONS",
     "NON_ANSWERS",
+    "argv_for_event",
     "fill",
     "handler_argv",
     "registered_argv",

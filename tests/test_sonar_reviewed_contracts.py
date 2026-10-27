@@ -13,7 +13,6 @@ from codex_plugin_scanner.ecosystems.kimi import _path_values
 from codex_plugin_scanner.guard import action_lattice
 from codex_plugin_scanner.guard.adapters.claude_hook_config import handler_identity
 from codex_plugin_scanner.guard.approval_scope_support import package_request_portable_workspace_scope
-from codex_plugin_scanner.guard.cli import commands_support_interaction as interaction
 from codex_plugin_scanner.guard.daemon import client
 from codex_plugin_scanner.guard.models import GUARD_ACTION_VALUES, GuardAction
 from codex_plugin_scanner.guard.package_execution_context import PackageExecutionContext
@@ -39,24 +38,6 @@ def test_handler_identity_is_a_hashable_tagged_key_not_an_unpacking_record() -> 
     }
     assert len(identities) == 4
     assert {len(identity) for identity in identities} == {2, 3, 5}
-
-
-@pytest.mark.parametrize("matches", [False, True])
-def test_browser_wait_identity_branch_is_reachable(monkeypatch: pytest.MonkeyPatch, matches: bool) -> None:
-    identity = {"pid": 42, "startToken": "fixture"}
-    check = Mock(return_value=matches)
-    monkeypatch.setattr(interaction, "process_identity_matches", check)
-    result = interaction._codex_bridge_wait_process({interaction.CODEX_BROWSER_WAIT_PROCESS_KEY: identity})
-    assert result is (identity if matches else None)
-    check.assert_called_once_with(identity)
-
-
-@pytest.mark.parametrize("payload", [None, {}, {interaction.CODEX_BROWSER_WAIT_PROCESS_KEY: "not-an-identity"}])
-def test_browser_wait_rejects_missing_or_non_dict_identity(monkeypatch: pytest.MonkeyPatch, payload) -> None:
-    check = Mock(side_effect=AssertionError("malformed identity reached matcher"))
-    monkeypatch.setattr(interaction, "process_identity_matches", check)
-    assert interaction._codex_bridge_wait_process(payload) is None
-    check.assert_not_called()
 
 
 class _SecretControl(StoreWorkflowCapabilitySecretControlMixin):

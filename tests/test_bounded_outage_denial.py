@@ -83,11 +83,13 @@ def test_legacy_continuation_flag_cannot_authorize_pretool(harness: str) -> None
 
 @pytest.mark.parametrize("harness", _HARNESSES)
 @pytest.mark.parametrize("policy", [None, "block"])
-def test_unavailable_daemon_reason_cannot_become_an_allow(harness: str, policy: str | None) -> None:
+def test_unavailable_daemon_reason_cannot_become_an_allow(
+    harness: str, policy: str | None, native_bridge_render
+) -> None:
     unavailable = {"reason_code": "native_pre_tool_unavailable", "reason": "native miss"}
     if policy is not None:
         unavailable["policy_action"] = policy
-    stdout, _stderr, _code = daemon._daemon_response_to_native(unavailable, harness=harness, event_name="PreToolUse")
+    stdout, _stderr, _code = native_bridge_render(unavailable, harness=harness, event_name="PreToolUse")
     response = json.loads(stdout)
     nested = response.get("hookSpecificOutput", {})
     decisions = [response.get("decision"), response.get("permissionDecision"), nested.get("permissionDecision")]

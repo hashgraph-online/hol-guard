@@ -18,6 +18,7 @@ from tests.guard_exact_cloud_review_support import (
     connected_exact_review_store,
     remote_approval,
 )
+from tests.policy_store_support import replace_remote_policies
 from tests.test_codex_live_decision import _seed_waiting_request
 
 
@@ -188,7 +189,8 @@ def test_live_completion_fails_closed_when_authority_revision_changes_before_cla
         now: str,
         approval_decision: Mapping[str, object] | None = None,
     ) -> dict[str, object] | None:
-        completion_store.replace_remote_policies(
+        replace_remote_policies(
+            completion_store,
             [
                 PolicyDecision(
                     harness="codex",

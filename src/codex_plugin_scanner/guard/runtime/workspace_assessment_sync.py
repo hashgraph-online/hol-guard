@@ -1,9 +1,10 @@
 """Workspace assessment summary for the receipts sync context.
 
 Guard Cloud gets one bounded summary per admitted worktree: its status, the
-latest assessed run's coverage, and package-coordinate findings. Local keys are
-plain digests of absolute paths, so every identifier that leaves the machine is
-re-keyed with the per-install secret; roots, commits and file names never do.
+latest assessed run's coverage, and the package-coordinate findings that run
+observed. Local keys are plain digests of absolute paths, so every identifier
+that leaves the machine is re-keyed with the per-install secret; roots,
+commits and file names never do.
 The summary is sent again only when it changes or a day has passed.
 """
 
@@ -195,7 +196,14 @@ def _worktree_entry(
         "startedAt": _iso(assessed_run.get("started_at_ms")),
         "finishedAt": _iso(assessed_run.get("finished_at_ms")),
     }
-    findings = [item for item in _list(assessed_run.get("findings")) if isinstance(item, dict)]
+    # A finding carried from an earlier run was not observed by this one. Cloud
+    # already holds it from the run that did, and a partial run never closes it,
+    # so sending it again would only make it look freshly seen.
+    findings = [
+        item
+        for item in _list(assessed_run.get("findings"))
+        if isinstance(item, dict) and not item.get("carried_from_run_id")
+    ]
     entry["findings"] = [_finding(item, hash_key) for item in findings[:MAX_FINDINGS_PER_WORKTREE]]
     entry["findingsTruncated"] = len(findings) > MAX_FINDINGS_PER_WORKTREE or "finding_cap" in _list(
         coverage.get("reasons")

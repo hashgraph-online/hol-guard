@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 
 import pytest
 
+from codex_plugin_scanner.guard import native_hook_render
 from codex_plugin_scanner.guard.adapters import bounded_cli_hook_daemon as daemon
 from codex_plugin_scanner.guard.daemon import auth_token as auth_token_module
 
@@ -101,7 +102,12 @@ def test_daemon_endpoint_accepts_only_valid_loopback_state(
     assert daemon._daemon_hook_endpoint(tmp_path, "grok") == expected
 
 
-def test_ipv6_daemon_endpoint_is_parseable_and_accepted_by_transport() -> None:
+def test_ipv6_daemon_endpoint_is_parseable_and_accepted_by_transport(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        native_hook_render,
+        "native_cli_hook_emit",
+        lambda *_args, **_kwargs: {"stdout": '{"decision":"allow"}', "stderr": "", "exit_code": 0},
+    )
     endpoint = "http://[::1]:4781/v1/hooks/grok"
     parsed = urlparse(endpoint)
     assert (parsed.hostname, parsed.port) == ("::1", 4781)
@@ -238,11 +244,82 @@ def test_hermes_daemon_response_uses_harness_native_translation(monkeypatch: pyt
     assert started < deadlines[0] <= time.monotonic() + 2
 
 
-def test_native_response_edge_contracts() -> None:
-    assert daemon._native_hook_permission_decision("unknown") is None
-    assert daemon._should_exit_block("copilot", "PreToolUse", "block") is False
+def test_daemon_answer_is_printed_as_the_resident_renders_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, dict[str, object], dict[str, object]]] = []
 
-    stdout, stderr, code = daemon._daemon_response_to_native(
+    def rendered(harness: str, response: dict[str, object], **kwargs: object) -> dict[str, object]:
+        calls.append((harness, dict(response), kwargs))
+        return {"stdout": '{"decision":"deny"}', "stderr": "blocked", "exit_code": 2}
+
+    monkeypatch.setattr(native_hook_render, "native_cli_hook_emit", rendered)
+    started = time.monotonic()
+    result = daemon.try_daemon_hook(
+        guard_home=Path("/private/unused"),
+        harness="OMP",
+        input_text='{"hook_event_name":"PreToolUse"}',
+        timeout_seconds=2,
+        _endpoint_loader=lambda *_args: "http://127.0.0.1:4781/v1/hooks/omp",
+        _token_loader=lambda _path: "token",
+        _opener_builder=lambda: cast(Any, _Opener(_Response(body=b'{"policy_action":"block"}'))),
+    )
+    assert result == ('{"decision":"deny"}', "blocked", 2)
+    assert len(calls) == 1
+    harness, response, kwargs = calls[0]
+    assert (harness, response) == ("omp", {"policy_action": "block"})
+    assert kwargs["event_name"] == "PreToolUse"
+    assert kwargs["guard_home"] == Path("/private/unused")
+    assert kwargs["bridge"] is True
+    deadline = kwargs["deadline"]
+    assert isinstance(deadline, float)
+    assert started < deadline <= time.monotonic() + 2
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        None,
+        {"stdout": 1, "stderr": "", "exit_code": 0},
+        {"stdout": "{}", "stderr": None, "exit_code": 0},
+        {"stdout": "{}", "stderr": "", "exit_code": True},
+        {"stdout": "{}", "stderr": ""},
+    ],
+)
+@pytest.mark.parametrize("harness", ["grok", "pi", "codex"])
+def test_unrendered_daemon_answer_fails_closed(
+    monkeypatch: pytest.MonkeyPatch, answer: dict[str, object] | None, harness: str
+) -> None:
+    from codex_plugin_scanner.guard.adapters.bounded_cli_hook_failure import failure_payload
+
+    monkeypatch.setattr(native_hook_render, "native_cli_hook_emit", lambda *_args, **_kwargs: answer)
+    result = daemon.try_daemon_hook(
+        guard_home=Path("/private/unused"),
+        harness=harness,
+        input_text='{"hook_event_name":"PreToolUse"}',
+        timeout_seconds=2,
+        _endpoint_loader=lambda *_args: f"http://127.0.0.1:4781/v1/hooks/{harness}",
+        _token_loader=lambda _path: "token",
+        _opener_builder=lambda: cast(Any, _Opener(_Response(body=b'{"policy_action":"allow"}'))),
+    )
+    assert result is not None
+    stdout, stderr, code = result
+    expected, expected_code = failure_payload(
+        harness=harness,
+        event_name="PreToolUse",
+        reason="HOL Guard could not read the daemon's answer to this hook.",
+        recording_only=False,
+    )
+    assert json.loads(stdout) == expected
+    assert (stderr, code) == ("", expected_code)
+    assert "deny" in stdout
+
+
+def test_native_response_edge_contracts(native_bridge_render) -> None:
+    _stdout, _stderr, code = native_bridge_render(
+        {"policy_action": "block"}, harness="copilot", event_name="PreToolUse"
+    )
+    assert code == 0
+
+    stdout, stderr, code = native_bridge_render(
         {
             "hookSpecificOutput": {
                 "permissionDecision": "deny",
@@ -255,7 +332,7 @@ def test_native_response_edge_contracts() -> None:
     assert json.loads(stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert (stderr, code) == ("blocked", 2)
 
-    stdout, _stderr, code = daemon._daemon_response_to_native(
+    stdout, _stderr, code = native_bridge_render(
         {"policy_action": "allow"},
         harness="codex",
         event_name="UserPromptSubmit",
@@ -263,7 +340,7 @@ def test_native_response_edge_contracts() -> None:
     assert json.loads(stdout) == {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}}
     assert code == 0
 
-    stdout, _stderr, code = daemon._daemon_response_to_native(
+    stdout, _stderr, code = native_bridge_render(
         {"policy_action": "block", "reason": "blocked"},
         harness="codex",
         event_name="UserPromptSubmit",

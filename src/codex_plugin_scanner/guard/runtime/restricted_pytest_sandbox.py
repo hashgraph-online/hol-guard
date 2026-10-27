@@ -144,21 +144,6 @@ def _bubblewrap_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> list[
     return restricted_native("bubblewrap_argv", _profile_fields(plan, private_root), list)
 
 
-def _runtime_read_roots(plan: RestrictedPytestPlan, *, private_root: Path | None = None) -> tuple[Path, ...]:
-    return tuple(
-        Path(path)
-        for path in restricted_native(
-            "runtime_roots",
-            {
-                "allowed_executables": plan.allowed_executables,
-                "workspace": plan.workspace,
-                "private_root": private_root,
-            },
-            list,
-        )
-    )
-
-
 def _current_user_process_ceiling() -> int:
     if sys.platform not in {"darwin", "linux"}:
         return _DEFAULT_PROCESSES

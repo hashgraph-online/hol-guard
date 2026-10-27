@@ -10,7 +10,6 @@ import uuid
 from pathlib import Path
 
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
-from codex_plugin_scanner.guard.native_approval_queue_identity import bind_connection_guard_home
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_approvals import (
     approval_index_statements,
@@ -20,6 +19,7 @@ from codex_plugin_scanner.guard.store_approvals import (
     list_approval_requests,
     resolve_request_with_queue_result,
 )
+from tests.approval_queue_identity_support import bind_connection_guard_home
 from tests.coverage_ci import under_coverage_scale
 from tests.native_approval_writes import (
     _store_for,

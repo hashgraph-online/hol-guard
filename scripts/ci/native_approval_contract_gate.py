@@ -53,11 +53,9 @@ ACTIVE_RUST_FILES: Final = (
     Path("rust/crates/guard-runtime/src/resident_protocol.rs"),
 )
 DECODER = Path("src/codex_plugin_scanner/guard/native_response_decoder.py")
-PROTOCOL = Path("src/codex_plugin_scanner/guard/native_approval_protocol.py")
-V4_PROTOCOL = Path("src/codex_plugin_scanner/guard/native_approval_v4_protocol.py")
+PROTOCOL = Path("tests/native_approval_protocol_support.py")
 ERRORS = Path("src/codex_plugin_scanner/guard/native_approval_errors.py")
 APPROVAL_CONTRACT = Path("rust/crates/guard-contracts/src/approval_contracts.rs")
-V4_APPROVAL_CONTRACT = Path("rust/crates/guard-contracts/src/approval_v4_contracts.rs")
 AUTHORITY = Path("rust/crates/guard-runtime/src/approval_authority.rs")
 RUNTIME_APPROVAL = Path("rust/crates/guard-runtime/src/approval.rs")
 REPLAY_MEMORY = Path("rust/crates/guard-runtime/src/approval_replay_memory.rs")
@@ -263,22 +261,13 @@ def _check_authority_fence(root: Path) -> None:
 
 def _check_contracts(root: Path) -> None:
     rust_contract = _read(root / APPROVAL_CONTRACT)
-    rust_v4_contract = _read(root / V4_APPROVAL_CONTRACT)
     decoder = _read(root / DECODER)
     protocol = _read(root / PROTOCOL)
-    protocol_v4 = _read(root / V4_PROTOCOL)
     errors = _read(root / ERRORS)
     if _struct_fields(rust_contract, "ApprovalReceiptV3") != RECEIPT_FIELDS:
         raise RuntimeError("native receipt fields do not match the declared contract")
     if _python_key_set(protocol, "_RECEIPT_KEYS") != RECEIPT_FIELDS:
         raise RuntimeError("Python receipt decoder fields drifted from the native contract")
-    for rust_name, python_name in (
-        ("ApprovalChallengeV4", "_CHALLENGE_V4_KEYS"),
-        ("ApprovalArtifactV4", "_ARTIFACT_V4_KEYS"),
-        ("ApprovalReceiptV4", "_RECEIPT_V4_KEYS"),
-    ):
-        if _struct_fields(rust_v4_contract, rust_name) != _python_key_set(protocol_v4, python_name):
-            raise RuntimeError(f"V4 {rust_name} fields drifted from the Python transport contract")
     if "resident_epoch" not in _python_key_set(protocol, "_CHALLENGE_KEYS"):
         raise RuntimeError("Python challenge decoder does not bind the resident epoch")
     if not _uses_canonical_approval_error_import(decoder):

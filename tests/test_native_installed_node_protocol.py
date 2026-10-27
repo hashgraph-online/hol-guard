@@ -15,6 +15,7 @@ import pytest
 
 from codex_plugin_scanner.guard import native_resident_decision
 from codex_plugin_scanner.guard.daemon import hook_native_exact_action as bridge
+from tests.native_launch_evidence_helpers import native_launch_evidence
 
 
 @pytest.mark.parametrize("previous", ["native-exact-action-v1", "native-exact-action-v2", "native-exact-action-v3"])
@@ -85,7 +86,7 @@ def test_real_resident_binds_installed_node_code_and_preserves_specific_uncertai
         command = f"{shlex.quote(node)} report.mjs"
 
         def identity():
-            evidence, reason = bridge.native_launch_evidence(
+            evidence, reason = native_launch_evidence(
                 harness="claude-code",
                 tool_name="Bash",
                 payload={"tool_name": "Bash", "tool_input": {"command": command}, "cwd": str(project)},

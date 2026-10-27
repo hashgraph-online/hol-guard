@@ -7,10 +7,10 @@ from codex_plugin_scanner.guard.native_decisions import NativeDecisionAuthorityE
 from codex_plugin_scanner.guard.runtime.decisions import (
     AuthoritativeGuardDecision,
     GuardDecisionV2,
-    authoritative_decision_from_artifact,
     build_authoritative_decision,
     decision_from_legacy_policy_action,
 )
+from tests.authoritative_decision_client import authoritative_decision_from_artifact
 
 
 @pytest.mark.parametrize("operation", ("v2", "authoritative", "build", "artifact", "legacy"))

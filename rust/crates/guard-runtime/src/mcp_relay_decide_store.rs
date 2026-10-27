@@ -16,6 +16,7 @@ use crate::local_store_read::{
     open_read_only_cached, schema_version, table_exists, CachedConnection, STORE_FILE_NAME,
     SUPPORTED_SCHEMA_VERSION,
 };
+use crate::policy_bundle_store_identities::cached_bundle_identities;
 use crate::policy_store::policy_store_direct_lane::DirectLaneBinding;
 use base64ct::{Base64UrlUnpadded, Encoding};
 use rusqlite::{Connection, OptionalExtension};
@@ -58,6 +59,9 @@ pub(super) struct Saved<'c> {
     pub(super) integrity_state: Value,
     pub(super) key_b64: Zeroizing<String>,
     pub(super) key_id: String,
+    /// The decision identities the cached signed bundle authorizes; empty
+    /// when no policy-bundle row can reach this call.
+    pub(super) bundle_identities: Vec<Vec<Value>>,
 }
 
 /// `None` when the store holds no saved row, so every lookup misses; the
@@ -70,18 +74,7 @@ pub(super) fn saved<'c>(
     harness: &str,
 ) -> Result<Option<Saved<'c>>, &'static str> {
     let shape = Shape { connection };
-    // The bundle's decision identities come from a synced, signed payload the
-    // resident does not validate. The lookup reads them only to keep or drop a
-    // policy-bundle row, and it reaches a row bound to this harness or to every
-    // harness: with none of those, the proxy's identities change nothing here.
-    if shape.bundle_row_for(harness)?
-        && shape.any(
-            "sync_state",
-            "select 1 from sync_state where state_key = 'policy_bundle'",
-        )?
-    {
-        return Err(SAVED_REMOTE);
-    }
+    let now = utc_now().ok_or(SAVED_UNVERIFIABLE)?;
     let has_local_policy = shape.any(
         "policy_decisions",
         &format!("select 1 from policy_decisions where source not in {REMOTE_SOURCES_SQL}"),
@@ -101,6 +94,16 @@ pub(super) fn saved<'c>(
     if shape.stored_integrity_state()?.as_ref() != Some(&integrity_state) {
         return Err(SAVED_UNVERIFIABLE);
     }
+    // The lookup reads the bundle's decision identities only to keep or drop a
+    // policy-bundle row, and it reaches a row bound to this harness or to every
+    // harness: with none of those, the identities change nothing here. They
+    // are derived last, so a store the resident cannot verify never pays for
+    // the bundle's signature and payload checks.
+    let bundle_identities = if shape.bundle_row_for(harness)? {
+        cached_bundle_identities(connection, &now).ok_or(SAVED_REMOTE)?
+    } else {
+        Vec::new()
+    };
     Ok(Some(Saved {
         connection,
         store_path: Path::new(guard_home)
@@ -108,11 +111,12 @@ pub(super) fn saved<'c>(
             .to_string_lossy()
             .into_owned(),
         guard_home: guard_home.to_owned(),
-        now: utc_now().ok_or(SAVED_UNVERIFIABLE)?,
+        now,
         has_local_policy,
         integrity_state,
         key_b64: Zeroizing::new(Base64UrlUnpadded::encode_string(&key.key)),
         key_id: key.key_id.clone(),
+        bundle_identities,
     }))
 }
 
@@ -241,7 +245,8 @@ impl Saved<'_> {
             integrity_key_id: policy_key.then(|| self.key_id.clone()),
             local_once_integrity_key_b64: Some(self.key_b64.to_string()),
             local_once_integrity_key_id: Some(self.key_id.clone()),
-            policy_bundle_decision_identities: None,
+            policy_bundle_decision_identities: (!self.bundle_identities.is_empty())
+                .then(|| self.bundle_identities.clone()),
             probe_groups: None,
             portable_workspace: None,
             evidence_binding: None,

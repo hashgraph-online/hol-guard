@@ -115,12 +115,6 @@ _MCP_PERMISSION_RE = re.compile(
 )
 
 
-_IGNORED_TREE_DIR_NAMES = {".git", ".hg", ".svn", "__pycache__", ".mypy_cache", ".ruff_cache", ".venv", "node_modules"}
-
-
-_MAX_FINGERPRINT_FILE_BYTES = 1024 * 1024
-
-
 _AIBOM_METADATA_KEYS = (
     "instructionRole",
     "localSecurity",

@@ -2,14 +2,13 @@
 
 Verifies:
 1. _command_from_payload recognizes 'pattern', 'query', 'search', 'regex' keys
-2. _hook_command_text recognizes the same keys
+2. command_text_from_tool_payload reads the same keys from a hook payload
 """
 
 import pytest
 
-from codex_plugin_scanner.guard.cli._commands_shared import _hook_command_text
-from codex_plugin_scanner.guard.cli.commands_support_codex_commands import _codex_command_is_read_only_source_inspection
 from codex_plugin_scanner.guard.runtime.actions import command_text_from_tool_payload, normalize_harness_payload
+from tests.codex_read_only_inspection import codex_command_is_read_only_source_inspection
 
 
 @pytest.fixture(autouse=True)
@@ -41,7 +40,7 @@ def test_yq_environment_lookup_is_not_read_only_source_inspection(tmp_path):
     workflow.write_text("jobs: {}\n", encoding="utf-8")
 
     assert (
-        _codex_command_is_read_only_source_inspection(
+        codex_command_is_read_only_source_inspection(
             "yq 'env(API_TOKEN)' .github/workflows/publish.yml",
             cwd=tmp_path,
             home_dir=tmp_path,
@@ -50,7 +49,7 @@ def test_yq_environment_lookup_is_not_read_only_source_inspection(tmp_path):
     )
 
     assert (
-        _codex_command_is_read_only_source_inspection(
+        codex_command_is_read_only_source_inspection(
             "yq '.value // $ENV.API_TOKEN' .github/workflows/publish.yml",
             cwd=tmp_path,
             home_dir=tmp_path,
@@ -75,7 +74,7 @@ def test_common_readers_are_read_only_source_inspection(tmp_path):
     )
 
     for command in commands:
-        assert _codex_command_is_read_only_source_inspection(
+        assert codex_command_is_read_only_source_inspection(
             command,
             cwd=tmp_path,
             home_dir=tmp_path,
@@ -91,7 +90,7 @@ def test_bounded_agent_guidance_reads_are_read_only_source_inspection(tmp_path):
         "sed -n '1,220p' ~/.codex/docs/harness-engineering.md && sed -n '1,180p' ~/.codex/docs/token-discipline.md"
     )
 
-    assert _codex_command_is_read_only_source_inspection(command, cwd=tmp_path, home_dir=tmp_path)
+    assert codex_command_is_read_only_source_inspection(command, cwd=tmp_path, home_dir=tmp_path)
 
 
 def test_agent_guidance_read_rejects_non_markdown_and_symlink_escape(tmp_path):
@@ -102,22 +101,22 @@ def test_agent_guidance_read_rejects_non_markdown_and_symlink_escape(tmp_path):
     outside.write_text("outside\n", encoding="utf-8")
     (docs / "harness-engineering.md").symlink_to(outside)
 
-    assert not _codex_command_is_read_only_source_inspection(
+    assert not codex_command_is_read_only_source_inspection(
         "sed -n '1,20p' ~/.codex/docs/credentials.json",
         cwd=tmp_path,
         home_dir=tmp_path,
     )
-    assert not _codex_command_is_read_only_source_inspection(
+    assert not codex_command_is_read_only_source_inspection(
         "sed -n '1,20p' ~/.codex/docs/harness-engineering.md",
         cwd=tmp_path,
         home_dir=tmp_path,
     )
-    assert not _codex_command_is_read_only_source_inspection(
+    assert not codex_command_is_read_only_source_inspection(
         "sed -n '1,20p' ~/.codex/docs/other.md",
         cwd=tmp_path,
         home_dir=tmp_path,
     )
-    assert not _codex_command_is_read_only_source_inspection(
+    assert not codex_command_is_read_only_source_inspection(
         "sed -n '1,20p' ~/.codex/docs/token-discipline.md",
         cwd=tmp_path,
         home_dir=tmp_path,
@@ -131,7 +130,7 @@ def test_agent_guidance_read_rejects_parent_directory_symlink(tmp_path):
     (docs / "harness-engineering.md").write_text("outside\n", encoding="utf-8")
     (tmp_path / ".codex").symlink_to(redirected_home, target_is_directory=True)
 
-    assert not _codex_command_is_read_only_source_inspection(
+    assert not codex_command_is_read_only_source_inspection(
         "sed -n '1,20p' ~/.codex/docs/harness-engineering.md",
         cwd=tmp_path,
         home_dir=tmp_path,
@@ -144,7 +143,7 @@ def test_semicolon_chain_requires_every_segment_to_be_read_only(tmp_path):
     source_file.write_text("export const value = 1;\n", encoding="utf-8")
 
     assert (
-        _codex_command_is_read_only_source_inspection(
+        codex_command_is_read_only_source_inspection(
             "sed -n '1,20p' src/example.ts; rm src/example.ts",
             cwd=tmp_path,
             home_dir=tmp_path,
@@ -188,7 +187,7 @@ def test_common_reader_unsafe_variants_are_not_source_inspection(tmp_path, comma
     workflow.parent.mkdir(parents=True)
     workflow.write_text("jobs: {}\n", encoding="utf-8")
 
-    assert not _codex_command_is_read_only_source_inspection(
+    assert not codex_command_is_read_only_source_inspection(
         command,
         cwd=tmp_path,
         home_dir=tmp_path,
@@ -197,6 +196,10 @@ def test_common_reader_unsafe_variants_are_not_source_inspection(tmp_path, comma
 
 def test_command_from_payload_preserves_command_priority():
     assert command_text_from_tool_payload("", {"command": "ls -la", "pattern": "foo"}) == "ls -la"
+
+
+def _hook_command_text(payload):
+    return command_text_from_tool_payload(payload.get("tool_name"), payload.get("tool_input"))
 
 
 def test_hook_command_text_recognizes_pattern():

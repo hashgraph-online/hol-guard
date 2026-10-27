@@ -9,6 +9,9 @@ import pytest
 
 from codex_plugin_scanner.guard.cli import commands as guard_commands_module
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
+from tests.codex_read_only_inspection import (
+    codex_command_is_read_only_source_inspection,
+)
 
 
 def _source_file(repo: Path, relative_path: str) -> None:
@@ -81,7 +84,7 @@ def test_literal_repo_read_only_inspection_rejects_later_workspace_escape(
     )
 
     assert match is not None
-    assert not guard_commands_module._codex_command_is_read_only_source_inspection(
+    assert not codex_command_is_read_only_source_inspection(
         command,
         cwd=workspace,
         home_dir=home_dir,
@@ -97,7 +100,7 @@ def test_literal_repo_read_only_inspection_stays_within_first_marked_workspace(t
     (repo / ".git").mkdir()
     command = "cd ~/projects/project && cd src && sed -n '1,20p' safe.ts"
 
-    assert guard_commands_module._codex_command_is_read_only_source_inspection(
+    assert codex_command_is_read_only_source_inspection(
         command,
         cwd=workspace,
         home_dir=home_dir,

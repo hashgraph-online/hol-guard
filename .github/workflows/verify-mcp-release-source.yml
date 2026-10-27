@@ -2,6 +2,12 @@ name: Verify MCP release source
 
 on:
   workflow_call:
+    inputs:
+      publication_run_id:
+        description: Publish to PyPI run to republish from; used only by a repair dispatch on main
+        required: false
+        type: string
+        default: ""
     outputs:
       sha:
         description: Immutable source SHA verified against the publishing run and release branch
@@ -9,12 +15,17 @@ on:
       branch:
         description: Verified canonical release branch
         value: ${{ jobs.verify.outputs.branch }}
+      tag:
+        description: Verified stable tag of a tag-dispatched release; empty for branch runs
+        value: ${{ jobs.verify.outputs.tag }}
 
 permissions: {}
 
 jobs:
   verify:
-    if: github.event_name == 'workflow_run'
+    if: >-
+      github.event_name == 'workflow_run' ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -23,6 +34,7 @@ jobs:
     outputs:
       sha: ${{ steps.source.outputs.sha }}
       branch: ${{ steps.source.outputs.branch }}
+      tag: ${{ steps.source.outputs.tag }}
     steps:
       # workflow_run's github.sha is the trusted default-branch commit, not the upstream run's source.
       - name: Check out trusted verification code
@@ -34,4 +46,5 @@ jobs:
         id: source
         env:
           GH_TOKEN: ${{ github.token }}
+          PUBLICATION_RUN_ID: ${{ inputs.publication_run_id }}
         run: python3 -I -S scripts/ci/verify_release_workflow_run.py

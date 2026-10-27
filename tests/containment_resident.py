@@ -22,7 +22,7 @@ from codex_plugin_scanner.guard import native_hook_containment_route as route_mo
 _T = TypeVar("_T")
 _SINK_USERS = (
     "codex_plugin_scanner.guard.adapters.zcode_contained_tests",
-    "codex_plugin_scanner.guard.adapters.codex_contained_tests",
+    "tests.codex_containment_route",
     "codex_plugin_scanner.guard.daemon.hook_contained_grant",
 )
 # Both hook paths take the route through ``edge_containment_route``, which

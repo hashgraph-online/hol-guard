@@ -153,4 +153,5 @@ def _discard_claude_pending_permissions(store: GuardStore, payload: dict[str, ob
 __all__ = [
     "_discard_claude_pending_permissions",
     "_persist_claude_native_permission_policy",
+    "_write_claude_native_permission_plan",
 ]

@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling<1.31", "jsonschema>=4.26.0"]
+requires = ["hatchling<1.33", "jsonschema>=4.26.0"]
 build-backend = "hatchling.build"
 
 [project]
@@ -143,8 +143,14 @@ line-length = 120
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/codex_plugin_scanner"]
+# PyPI's upload check parses core metadata with a pinned packaging release that
+# does not know 2.5 yet, so hatchling's newer default makes the wheel
+# unpublishable. State the version the publishing toolchain accepts instead of
+# inheriting whichever default the pinned hatchling range happens to resolve to.
+core-metadata-version = "2.4"
 
 [tool.hatch.build.targets.sdist]
+core-metadata-version = "2.4"
 # Keep all inputs needed to rebuild the wheel and verify frozen projections.
 # Dashboard assets are already bundled under src; contributor tests live in Git,
 # as do the Rust integration tests and their fixtures.

@@ -10,11 +10,7 @@ from typing import cast
 
 from jsonschema.exceptions import ValidationError
 
-from codex_plugin_scanner.guard.contracts.guard_cloud_review import (
-    load_fixtures,
-    validate_exact_command_result,
-    validate_review_result,
-)
+from codex_plugin_scanner.guard.contracts.guard_cloud_review import validate_exact_command_result
 from codex_plugin_scanner.guard.review_contracts import (
     normalize_remote_approval_decision,
     validated_remote_approval_envelope,
@@ -24,6 +20,7 @@ from codex_plugin_scanner.guard.runtime.cloud_review_event_delivery import (
     CloudReviewEventProtocolError,
     _normalize_response,
 )
+from tests.guard_cloud_review_contract import load_fixtures, validate_review_result
 from tests.guard_cloud_review_hardening_support import exact_job_store
 
 _FUZZ_SEED = 0xC10D5EED

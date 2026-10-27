@@ -448,6 +448,16 @@ python -m ci.gauntlet installed \
   `decision|exit_code`, and a crashed hook that emits no envelope is recorded as `no-envelope`
   rather than folded into `allow`, so a crash loop cannot read as silence. More than one signature
   across the N runs fails the case.
+- **A tool call is not the only thing a hook decides.** Every case used to be fed to one argv
+  per harness, the one registered for `replay_event`, so a build that answered tool calls and
+  blocked every prompt passed this lane while locking the operator out of their own session. A
+  case may now name its own `event`, and it is replayed through the argv that event registered,
+  resolved exactly with no fallback. Each harness declares in `replay_events` which extra events
+  its install registers: zcode and Codex register `UserPromptSubmit`, Claude Code's prompt group
+  is pruned on purpose and declares none, so a prompt case is recorded there as a skip rather
+  than counted against the build. A declared event the install did not register is a failure, and
+  a case whose event no replayable harness declares stops the lane before it starts, because a
+  case every harness skips is coverage the lane does not have.
 - **Infrastructure failures are not protection.** A fail-closed response such as
   `native_policy_not_ready` or `native_pre_tool_unavailable` fails an attack
   replay too. The lane requires a policy decision and preserves the top-level

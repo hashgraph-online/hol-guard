@@ -5,10 +5,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from pathlib import Path
 
-from ..runtime.hook_review_types import (
-    HookPayloadKind,
-)
-
 HOOK_PAYLOAD_REFERENCE_KEY = "guard_payload_ref"
 MAX_HOOK_PAYLOAD_REFERENCE_BYTES = 5 * 1024 * 1024
 
@@ -121,14 +117,6 @@ def runtime_hook_event_name(payload: Mapping[str, object]) -> str:
     return "PreToolUse"
 
 
-def payload_kind(payload: Mapping[str, object]) -> HookPayloadKind:
-    if "guard_payload_ref" in payload:
-        return "encrypted_payload_ref"
-    if "guard_source_ref" in payload:
-        return "source_file_ref"
-    return "inline"
-
-
 def pre_tool_input(payload: Mapping[str, object]) -> Mapping[str, object] | None:
     """Return the tool input for snake_case and camelCase (ZCode, Devin, Grok) payloads."""
 
@@ -155,7 +143,6 @@ __all__ = [
     "MAX_HOOK_PAYLOAD_REFERENCE_BYTES",
     "HookPayloadReferenceError",
     "hook_payload_reference_size",
-    "payload_kind",
     "pre_tool_command",
     "pre_tool_input",
     "runtime_hook_event_name",

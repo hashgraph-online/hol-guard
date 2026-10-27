@@ -205,8 +205,3 @@ def render_local_risk_report_html(report: LocalRiskReport) -> str:
         "<p>Sensitive local content included: no.</p>"
         "</main></body></html>\n"
     )
-
-
-def verify_local_risk_report(report: LocalRiskReport) -> bool:
-    payload = asdict(report)
-    return report.integrity_sha256 == hashlib.sha256(_canonical_report_payload(payload)).hexdigest()

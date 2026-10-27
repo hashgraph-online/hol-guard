@@ -11,13 +11,7 @@ import pytest
 
 from codex_plugin_scanner.guard.mdm.contracts import MDM_POLICY_SCHEMA_VERSION, ManagedPolicyState
 from codex_plugin_scanner.guard.mdm.policy import parse_managed_policy
-from codex_plugin_scanner.guard.policy_bundle_parser import (
-    canonical_policy_bundle_payload,
-    computed_policy_bundle_hash,
-    payload_hash_for_policy_bundle,
-    policy_bundle_rejection_message,
-    validated_policy_bundle_payload,
-)
+from codex_plugin_scanner.guard.policy_bundle_parser import policy_bundle_rejection_message
 from codex_plugin_scanner.guard.policy_bundle_trusted_keys import (
     POLICY_BUNDLE_KEY_PURPOSE,
     POLICY_BUNDLE_KEYRING_CONTRACT_VERSION,
@@ -29,6 +23,12 @@ from codex_plugin_scanner.guard.policy_bundle_trusted_keys import (
     validate_synced_policy_bundle,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.policy_bundle_parser_support import (
+    canonical_policy_bundle_payload,
+    computed_policy_bundle_hash,
+    payload_hash_for_policy_bundle,
+    validated_policy_bundle_payload,
+)
 from tests.policy_bundle_signing_helpers import (
     TEST_POLICY_BUNDLE_WORKSPACE_ID,
     policy_bundle_test_keyring,

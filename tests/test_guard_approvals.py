@@ -40,6 +40,8 @@ from codex_plugin_scanner.guard.models import (
 from codex_plugin_scanner.guard.package_execution_context import build_package_execution_context
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.daemon_control_patching import patch_daemon_global
+from tests.native_runtime_fixtures import patch_popen_past_native_runtime
+from tests.policy_store_support import replace_remote_policies, resolve_policy
 
 _AGENT_CONTEXT_ENV_MARKERS = (
     "HOL_GUARD_HOOK_ARGV",
@@ -1543,7 +1545,7 @@ class TestGuardApprovals:
             "1999-01-01T00:00:00+00:00",
         )
 
-        resolved = store.resolve_policy("codex", "codex:project:workspace_skill", "hash-legacy")
+        resolved = resolve_policy(store, "codex", "codex:project:workspace_skill", "hash-legacy")
 
         assert resolved is None
 
@@ -1560,7 +1562,8 @@ class TestGuardApprovals:
             "2026-04-11T00:00:00+00:00",
         )
 
-        resolved = store.resolve_policy(
+        resolved = resolve_policy(
+            store,
             "codex",
             "codex:project:workspace_skill",
             None,
@@ -1602,9 +1605,8 @@ class TestGuardApprovals:
             "_running_guard_daemon_processes_for_guard_home",
             lambda _guard_home: [],
         )
-        monkeypatch.setattr(
-            daemon_manager_module.subprocess,
-            "Popen",
+        patch_popen_past_native_runtime(
+            monkeypatch,
             lambda command, **_kwargs: launched_commands.append(command) or FakeProcess(),
         )
 
@@ -2707,7 +2709,8 @@ class TestGuardApprovals:
         assert "codex<script>" not in body
         assert "guard-dashboard-root" in body
         assert "Local approval center" in body
-        assert "Hashgraph Online" in body
+        assert 'guard-loading-shell__eyebrow">HOL</p>' in body
+        assert "Hashgraph Online" not in body
 
     def test_guard_daemon_rejects_cross_origin_post_requests(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -3058,7 +3061,8 @@ class TestGuardApprovals:
 
         assert "guard-dashboard-root" in body
         assert "Local approval center" in body
-        assert "Hashgraph Online" in body
+        assert 'guard-loading-shell__eyebrow">HOL</p>' in body
+        assert "Hashgraph Online" not in body
 
     def test_guard_daemon_serves_dashboard_assets_when_present(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -3489,7 +3493,8 @@ class TestGuardApprovals:
             ),
             "2026-04-23T00:00:00+00:00",
         )
-        store.replace_remote_policies(
+        replace_remote_policies(
+            store,
             [
                 PolicyDecision(
                     harness="codex",

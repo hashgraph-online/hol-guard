@@ -145,10 +145,6 @@ def pypi_desktop_core_versions(payload: object, *, include_alpha: bool) -> list[
     return versions
 
 
-def pypi_alpha_versions(payload: object) -> list[str]:
-    return pypi_desktop_core_versions(payload, include_alpha=True)
-
-
 def _release_files_are_available(files: object) -> bool:
     if not isinstance(files, list):
         return False
@@ -857,7 +853,6 @@ __all__ = [
     "is_desktop_managed_runtime",
     "is_frozen_runtime",
     "platform_target",
-    "pypi_alpha_versions",
     "pypi_desktop_core_versions",
     "select_desktop_core_latest",
 ]

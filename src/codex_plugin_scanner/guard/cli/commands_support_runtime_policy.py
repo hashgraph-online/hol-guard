@@ -17,7 +17,6 @@ if TYPE_CHECKING:
     from ._commands_shared import _now
 
 
-from ..runtime.approval_context import approval_context_tokens_validation_reason
 from ..store import runtime_tool_action_exact_match_context
 from ..text import ensure_terminal_punctuation as _ensure_terminal_punctuation
 from ._commands_shared import *
@@ -216,20 +215,6 @@ def _strip_cloud_inbox_urls(message: str) -> str:
 def _is_cloud_inbox_url(value: str) -> bool:
     parsed = urllib.parse.urlparse(value)
     return parsed.scheme in {"http", "https"} and parsed.path.rstrip("/") == "/guard/inbox"
-
-def _runtime_saved_allow_validation_reason(
-    decision: Mapping[str, object],
-    *,
-    artifact: GuardArtifact,
-    artifact_hash: str,
-) -> str | None:
-    """Require saved runtime allows to carry the complete current v1 context."""
-
-    if _optional_string(decision.get("action")) != "allow":
-        return None
-    stored_hash = _optional_string(decision.get("artifact_hash"))
-    return approval_context_tokens_validation_reason(stored_hash, artifact_hash)
-
 
 def _runtime_artifact_exact_match_context(artifact: GuardArtifact) -> str | None:
     if artifact.artifact_type != "tool_action_request":

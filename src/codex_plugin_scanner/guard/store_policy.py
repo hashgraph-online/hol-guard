@@ -76,10 +76,6 @@ RUNTIME_SAVED_REUSE_FEATURE = "runtime-saved-reuse-v1"
 # the unexpanded group with it, and the probe-groups contract denies unknown
 # fields, so a runtime that does not advertise this must not be sent one.
 POLICY_LOOKUP_MEMORY_FEATURE = "policy-decision-lookup-memory-v1"
-# The resident derives the trusted-local-tool grant selectors itself and probes
-# them. Same contract rule as above: never send ``probe_groups.local_tool_grant``
-# to a runtime that does not advertise this.
-LOCAL_TOOL_GRANT_LOOKUP_FEATURE = "policy-decision-lookup-local-tool-grant-v1"
 # The resident composes the portable-project lookup with the local one itself,
 # strips portable permission elevation, and claims the effective allow in the
 # same connection. Same contract rule as above: never send
@@ -376,23 +372,6 @@ class StorePolicyMixin:
         if not isinstance(next_control_state, dict):
             raise RuntimeError("Guard policy integrity control state is invalid.")
         self._finalize_policy_integrity_control_state(next_control_state)
-
-    def replace_remote_policies(
-        self,
-        decisions: list[PolicyDecision],
-        now: str,
-        *,
-        approval_gate_grant: ApprovalGateGrant | None = None,
-        remote_write_authorized: bool = False,
-    ) -> None:
-        now, rows = self._prepared_remote_policy_rows(
-            decisions,
-            now,
-            approval_gate_grant=approval_gate_grant,
-            remote_write_authorized=remote_write_authorized,
-        )
-        with self._connect() as connection:
-            self._replace_remote_policy_rows_locked(connection, rows)
 
     def apply_policy_bundle_authority(self, *args: Any, **kwargs: Any) -> dict[str, object] | None:
         """Activate one authenticated policy bundle atomically.
@@ -916,35 +895,6 @@ class StorePolicyMixin:
             rows,
         )
 
-    def resolve_policy(
-        self,
-        harness: str,
-        artifact_id: str | None,
-        artifact_hash: str | None = None,
-        workspace: str | None = None,
-        publisher: str | None = None,
-        now: str | None = None,
-        *,
-        memory_command: str | None = None,
-        memory_artifact_type: str | None = None,
-        memory_artifact_name: str | None = None,
-        consume_one_shot: bool = True,
-    ) -> str | None:
-        lookup = self.resolve_policy_decision_lookup_with_memory_pattern(
-            harness,
-            artifact_id,
-            artifact_hash=artifact_hash,
-            workspace=workspace,
-            publisher=publisher,
-            now=now,
-            memory_command=memory_command,
-            memory_artifact_type=memory_artifact_type,
-            memory_artifact_name=memory_artifact_name,
-            consume_one_shot=consume_one_shot,
-        )
-        decision = lookup["decision"]
-        return str(decision["action"]) if decision is not None else None
-
     def resolve_policy_decision_lookup_with_memory_pattern(
         self,
         harness: str,
@@ -1104,48 +1054,6 @@ class StorePolicyMixin:
         if local_once_only:
             request["local_once_only"] = True
         return cast("PolicyDecisionLookupResult", self.send_policy_decision_lookup(request))
-
-    def resolve_local_tool_grant(
-        self,
-        harness: str,
-        *,
-        tool_identity_hash: str,
-        capability: str,
-        current_action: str,
-    ) -> dict[str, object] | None:
-        """Resolve the trusted-local-tool grant a reviewable command may reuse.
-
-        The resident derives the grant selector of each target from the shipped
-        eligibility and probes them non-consuming in order, so the capability
-        digest the match turns on is computed where it is compared. Only an
-        ``allow`` row the grant source wrote answers. A degraded store serves no
-        grant, and neither does an action the hook did not recompute as
-        reviewable. Native failure is terminal, as for every other lookup.
-        """
-        evidence = self.policy_lookup_evidence()
-        if evidence.degraded_trust_status is not None:
-            return None
-        request = self.policy_decision_lookup_request(
-            evidence,
-            harness=harness,
-            artifact_id=None,
-            artifact_hash=None,
-            workspace=None,
-            publisher=None,
-            runtime_exact_match_context=None,
-            consume_one_shot=False,
-        )
-        request["probe_groups"] = {
-            "groups": [],
-            "local_tool_grant": {
-                "tool_identity_hash": tool_identity_hash,
-                "capability": capability,
-                "current_action": current_action,
-            },
-        }
-        payload = self.send_policy_decision_lookup(request, required_feature=LOCAL_TOOL_GRANT_LOOKUP_FEATURE)
-        decision = payload.get("decision")
-        return dict(decision) if isinstance(decision, Mapping) else None
 
     def policy_decision_lookup_request(
         self,

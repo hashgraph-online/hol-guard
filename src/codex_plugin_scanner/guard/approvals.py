@@ -1972,17 +1972,6 @@ def _runtime_headline_detail(headline_state: str) -> str:
     return details.get(headline_state, "Complete local protection cannot be proven.")
 
 
-def is_bulk_allow_once_eligible(request: Mapping[str, object], *, guard_home: Path) -> bool:
-    """Whether a request can be approved once via the bulk approval flow.
-
-    The resident owns the decision; an unavailable resident raises rather than
-    approving.
-    """
-    from .native_approval_bulk_eligibility import native_bulk_allow_once_eligibility
-
-    return native_bulk_allow_once_eligibility([request], guard_home=guard_home)[0]
-
-
 def bulk_allow_read_only_once(
     *,
     store: GuardStore,

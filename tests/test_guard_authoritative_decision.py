@@ -22,11 +22,11 @@ from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.decisions import (
     AUTHORITATIVE_DECISION_INCONSISTENT,
     AuthoritativeGuardDecision,
-    authoritative_decision_from_artifact,
     build_authoritative_decision,
 )
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.authoritative_decision_client import authoritative_decision_from_artifact
 from tests.guard_authority_gate_support import evaluation_authority_error, runner_native_authority
 
 pytestmark = pytest.mark.usefixtures("native_prompt_runtime")

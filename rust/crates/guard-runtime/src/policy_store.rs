@@ -50,6 +50,8 @@ pub(crate) mod policy_store_direct_lane;
 mod policy_store_migration;
 #[path = "policy_store_persistence.rs"]
 mod policy_store_persistence;
+#[path = "policy_store_publisher_binding.rs"]
+mod policy_store_publisher_binding;
 #[path = "policy_store_push.rs"]
 mod policy_store_push;
 #[path = "policy_store_request.rs"]

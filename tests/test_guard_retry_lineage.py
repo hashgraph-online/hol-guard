@@ -21,9 +21,9 @@ from codex_plugin_scanner.guard.continuation_contract import ContinuationOffer, 
 from codex_plugin_scanner.guard.continuation_payload import continuation_payload
 from codex_plugin_scanner.guard.continuation_runtime import continuation_offer_payload
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
-from codex_plugin_scanner.guard.runtime.local_request_snapshots import local_request_snapshot_payload
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_continuation import continuation_store_call
+from tests.local_request_snapshots_client import local_request_snapshot_payload
 
 _NOW = "2026-09-29T12:00:00+00:00"
 

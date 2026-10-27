@@ -73,7 +73,8 @@ def test_source_rollback_rejected_and_exact_compare_identity_required(protected)
         status="ahead",
         base_commit={"sha": floor["source"]},
         merge_base_commit={"sha": floor["source"]},
-        head_commit={"sha": candidate["source"]},
+        url="https://api.github.com/repos/hashgraph-online/hol-guard/compare/"
+        f"{floor['source']}...{candidate['source']}",
         ahead_by=1,
         behind_by=0,
     )
