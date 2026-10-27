@@ -121,8 +121,10 @@ fn sibling_worktree_add_stays_reviewed_with_repository_programs() {
     let fresh = session.home.join("app-portal-ga4").display().to_string();
     let add = format!("git -C {primary} worktree add {fresh} -b feat/ga4-goal origin/main");
     let chain = format!("git -C {primary} fetch origin main; {add}");
+    // A hooks directory is read rather than refused, so the one that keeps
+    // this checkout reviewed is one holding a hook `worktree add` would run.
     let hooks = session.home.join("hooks");
-    std::fs::create_dir_all(&hooks).unwrap();
+    executable_hook(&hooks.join("post-checkout"));
     let hooks = hooks.display().to_string();
     for (key, value) in [
         ("core.hooksPath", hooks.as_str()),

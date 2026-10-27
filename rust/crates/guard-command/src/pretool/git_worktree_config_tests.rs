@@ -171,6 +171,54 @@ fn repository_hooks_path_is_recorded_only_when_relative_and_local() {
     }
 }
 
+/// Git consults one hooks path: the last value it is given. An earlier
+/// value, whichever scope wrote it, names a directory this checkout never
+/// reads, so carrying it into the proof sends a command to review over a
+/// directory Git has already been told to ignore.
+#[test]
+fn only_the_last_hooks_path_git_reads_is_judged() {
+    let root = tempfile::tempdir().expect("temporary directory");
+    let hooks = root.path().join("empty-hooks");
+    fs::create_dir(&hooks).expect("hooks directory");
+    let spelling = hooks.to_str().expect("path spelling").to_owned();
+    let canonical = fs::canonicalize(&hooks).expect("canonical hooks directory");
+
+    let Some(Some(facts)) = judged(&[
+        ("local", "core.hookspath", ".husky/_"),
+        ("local", "core.hookspath", spelling.as_str()),
+    ]) else {
+        panic!("the effective fixed directory was rejected");
+    };
+    assert_eq!(
+        facts.repository_hooks_path, None,
+        "the relative value is dead"
+    );
+    assert_eq!(facts.hook_dirs, vec![canonical.clone()]);
+
+    let other = root.path().join("other-hooks");
+    fs::create_dir(&other).expect("other hooks directory");
+    let Some(Some(facts)) = judged(&[
+        (
+            "global",
+            "core.hookspath",
+            other.to_str().expect("path spelling"),
+        ),
+        ("local", "core.hookspath", spelling.as_str()),
+    ]) else {
+        panic!("the effective fixed directory was rejected");
+    };
+    assert_eq!(facts.hook_dirs, vec![canonical]);
+
+    let Some(Some(facts)) = judged(&[
+        ("global", "core.hookspath", spelling.as_str()),
+        ("local", "core.hookspath", ".husky/_"),
+    ]) else {
+        panic!("the effective relative value was rejected");
+    };
+    assert_eq!(facts.repository_hooks_path.as_deref(), Some(".husky/_"));
+    assert!(facts.hook_dirs.is_empty(), "the global directory is dead");
+}
+
 /// A hook manager, or a tool that wants Git's hooks out of the way,
 /// writes a fixed directory into the repository's own configuration.
 /// `git clone` never copies `.git/config`, so that value carries the

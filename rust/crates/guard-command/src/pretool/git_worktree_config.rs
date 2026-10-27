@@ -85,9 +85,12 @@ pub(super) fn safe_worktree_config(output: &[u8], home: &Path) -> Option<Option<
             if !global_scope && scope != "local" {
                 return Some(None);
             }
+            // Git reads one hooks path, the last value it is given, so an
+            // earlier value names a directory this checkout never consults.
             if scope == "local"
                 && super::super::git_hook_files::repository_relative_hooks_path(value)
             {
+                facts.hook_dirs.clear();
                 facts.repository_hooks_path = Some(value.to_owned());
                 continue;
             }
@@ -97,6 +100,8 @@ pub(super) fn safe_worktree_config(output: &[u8], home: &Path) -> Option<Option<
             else {
                 return Some(None);
             };
+            facts.repository_hooks_path = None;
+            facts.hook_dirs.clear();
             facts.hook_dirs.push(directory);
             continue;
         }
