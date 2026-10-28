@@ -919,12 +919,17 @@ fn evaluate_rewritten(
             execution_environment,
         )
     };
+    // A containment profile admits the exact command its sink runs, and the
+    // sink runs the submitted text, not the rewrite: `pytest &` leaves a job
+    // behind the contained run. A rewrite that comes back delegated keeps the
+    // construct's own review.
     match rewritten {
         Ok(rewritten)
             if matches!(
                 rewritten.minimum_action.as_str(),
                 "allow" | "review" | "block"
-            ) =>
+            ) && crate::hook_responses::contained_execution_profile(&rewritten.reason_code)
+                .is_none() =>
         {
             Ok(rewritten)
         }
