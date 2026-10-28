@@ -600,3 +600,89 @@ fn ask_without_any_reusable_identity_records_without_starting_a_wait() {
         std::fs::remove_dir_all(home).unwrap();
     }
 }
+
+#[test]
+fn only_a_codex_hook_its_bridge_holds_open_waits_for_the_daemon() {
+    let binding = ask_binding();
+    let waiting = json!({
+        "tool_name": "Read",
+        "guard_codex_browser_wait_process": {"pid": 7, "startToken": "linux:1"},
+        "guard_codex_browser_wait_timeout_seconds": 600,
+    });
+    let plain = json!({"tool_name": "Read"});
+    let links = |harness: &str, payload: &Value| {
+        let payload = payload.as_object().unwrap();
+        daemon_links_hook_wait(&Context {
+            harness,
+            payload,
+            recorded_payload: payload,
+            workspace: "/work",
+            home_dir: "/home/user",
+            guard_home: "/home/user/.hol-guard",
+            binding: &binding,
+            hint: None,
+        })
+    };
+    assert!(links("codex", &waiting));
+    assert!(!links("codex", &plain));
+    assert!(!links(CLAUDE_CODE, &waiting));
+}
+
+/// The approval a waiting Codex hook gets must release the original call, so
+/// the resident leaves its pause, and the request, to the daemon; without the
+/// bridge's wait the resident still queues the same review itself.
+#[cfg(unix)]
+#[test]
+fn a_paused_codex_review_the_bridge_waits_on_is_queued_by_the_daemon() {
+    for (tag, waiting) in [("codex-bridge-wait", true), ("codex-no-bridge-wait", false)] {
+        let home = store_home(tag, SILENT_VECTORS);
+        let guard_home = home.to_string_lossy().into_owned();
+        let binding = ask_binding();
+        let workspace = super::super::tests::workspace(tag);
+        let (_, _, _, exact) = super::super::tests::bound_query(&binding, &workspace);
+        let mut payload = json!({"tool_name": "Read", "tool_input": {"file_path": "/work/.npmrc"}});
+        if waiting {
+            payload["guard_codex_browser_wait_process"] =
+                json!({"pid": 7, "startToken": "linux:1"});
+            payload["guard_codex_browser_wait_timeout_seconds"] = json!(600);
+        }
+        let payload = payload.as_object().unwrap();
+        let fixture = super::super::tests::vectors();
+        let context = Context {
+            harness: "codex",
+            payload,
+            recorded_payload: payload,
+            workspace: &workspace,
+            home_dir: fixture["home_dir"].as_str().unwrap(),
+            guard_home: &guard_home,
+            binding: &binding,
+            hint: None,
+        };
+        let result = json!({"decision": "deny", "policy_action": "review", "minimum_action": "review",
+                           "reason": "Review this read.", "reason_code": "native_review"});
+        let answered = answer(
+            &context,
+            result.as_object().unwrap(),
+            None,
+            &exact,
+            &Ok("exact-token".to_owned()),
+        );
+        let connection = rusqlite::Connection::open(home.join(STORE_FILE_NAME)).unwrap();
+        let pending: i64 = connection
+            .query_row(
+                "select count(*) from approval_requests where status = 'pending'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        if waiting {
+            assert!(matches!(answered, Err(HookDirectDefer::ReviewQueue)));
+            assert_eq!(pending, 0);
+        } else {
+            let (response, _) = answered.expect("the resident pauses a review no hook waits on");
+            assert_eq!(response["prompted"], true);
+            assert_eq!(pending, 1);
+        }
+        std::fs::remove_dir_all(home).unwrap();
+    }
+}

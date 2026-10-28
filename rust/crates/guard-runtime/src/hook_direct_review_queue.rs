@@ -68,6 +68,8 @@ const ASK_MODE: &str = "ask";
 const CLAUDE_CODE: &str = "claude-code";
 /// The harness whose hook client rewrites the approval link itself.
 const CURSOR: &str = "cursor";
+/// The harness whose native bridge can hold a paused hook open.
+const CODEX: &str = "codex";
 use crate::hook_decision_review_response::REVIEW_DEFAULT_REASON as DEFAULT_REASON;
 /// A hook waits this long for a busy store before the daemon takes over.
 const BUSY_TIMEOUT_MS: u64 = 250;
@@ -132,6 +134,9 @@ pub(super) fn answer(
             },
             lookup,
         );
+    }
+    if daemon_links_hook_wait(context) {
+        return Err(HookDirectDefer::ReviewQueue);
     }
     let approval_url = request
         .get("approval_url")
@@ -210,6 +215,17 @@ pub(super) fn answer(
     let response = pause(setup_reason.as_deref(), &stored_id, &approval_url)
         .ok_or(HookDirectDefer::ReviewQueue)?;
     Ok((response, notice))
+}
+
+/// A Codex hook its native bridge holds open waits on the request it pauses
+/// for. Only the daemon links that wait to the request (`_codex_live_wait`
+/// in `hook_native_review_approval.py`), so an approval releases the original
+/// call; queued here, the approval could only ask the agent to retry.
+fn daemon_links_hook_wait(context: &Context<'_>) -> bool {
+    canonical_harness(context.harness) == CODEX
+        && context
+            .recorded_payload
+            .contains_key(crate::codex_hook_bridge::BROWSER_WAIT_PROCESS_KEY)
 }
 
 /// How a silent block may point at its row.
