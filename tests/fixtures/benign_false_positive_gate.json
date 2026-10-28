@@ -32604,6 +32604,246 @@
       "tool_input": {
         "command": "git branch -q fix/branch-start-d origin/main"
       }
+    },
+    {
+      "id": "npm-outdated",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm outdated"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "npm-outdated-json",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm outdated --json"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "npm-outdated-long-global",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm outdated --long -g"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "npm-audit",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm audit"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "npm-audit-json",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm audit --json"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "npm-audit-signatures",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm audit signatures"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "npm-audit-level-high",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm audit --audit-level=high --omit=dev"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "npm-search-term",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm search lodash"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "npm-search-json",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm search hol-guard --json"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "npm-ping",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm ping"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "npm-ping-json",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm ping --json"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "npm-audit-fix-still-reviewed",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm audit fix"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "npm-ci-still-reviewed",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm ci"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "npm-cache-add-still-reviewed",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm cache add left-pad"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "npm-search-registry-override-still-reviewed",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm search lodash --registry=https://registry.example.test"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
     }
   ],
   "mcp_cases": [

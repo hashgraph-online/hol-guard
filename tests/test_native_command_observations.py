@@ -1,4 +1,8 @@
-"""Independent malformed-wire, redaction, and receipt replay vectors."""
+"""Receipt replay vectors binding native command observations to a decision.
+
+The wire validator itself lives in the resident; its malformed-wire and
+redaction vectors are in `native_command_extension_evidence_tests.rs`.
+"""
 
 from __future__ import annotations
 
@@ -7,9 +11,6 @@ import hashlib
 import json
 from typing import Any
 
-import pytest
-
-from codex_plugin_scanner.guard.native_command_observations import validate_native_command_observations
 from codex_plugin_scanner.guard.native_decision_receipt import (
     receipt_matches_edge,
     validate_native_decision_receipt,
@@ -128,7 +129,6 @@ def _edge(extensions: dict[str, Any]) -> dict[str, Any]:
 
 def test_observations_bind_exact_redacted_evidence_to_receipt() -> None:
     observations = _observations()
-    assert validate_native_command_observations(observations) == observations
     receipt = _receipt(observations)
     assert validate_native_decision_receipt(receipt) == receipt
     assert receipt_matches_edge(_edge(observations), receipt)
@@ -165,76 +165,3 @@ def test_prompt_extension_binding_cannot_be_detached_from_its_native_receipt() -
     changed = copy.deepcopy(edge)
     changed["result"]["command_extensions"]["binding"]["program_digest"] = "e" * 64
     assert not receipt_matches_edge(changed, receipt)
-
-
-@pytest.mark.parametrize(
-    "field,value",
-    [
-        ("segment_index", True),
-        ("segment_index", 128),
-        ("segment_index", -1),
-        ("executable", "/private/ollama"),
-        ("executable", "secret token"),
-        ("detail", "raw secret command"),
-    ],
-)
-def test_untrusted_evidence_is_rejected_even_with_recomputed_digest(field: str, value: object) -> None:
-    observations = _observations()
-    observations["observations"][0]["matcher_evidence"][0][field] = value
-    _rehash(observations)
-    assert validate_native_command_observations(observations) is None
-
-
-def test_safe_variant_suppression_is_exact_and_cannot_hide_other_segments() -> None:
-    observations = _observations()
-    item = observations["observations"][0]
-    item["matcher_evidence"].append({**_evidence(), "segment_index": 1})
-    item["safe_variants"] = [{"match_class": "safe-variant", "variant_id": "help", "matcher_evidence": [_evidence()]}]
-    item["effective_segment_indexes"] = [1]
-    _rehash(observations)
-    assert validate_native_command_observations(observations) == observations
-    item["effective_segment_indexes"] = []
-    _rehash(observations)
-    assert validate_native_command_observations(observations) is None
-
-
-def test_permission_only_evidence_and_uncertainty_cannot_disappear() -> None:
-    observations = _observations()
-    observations["permission_observations"] = [
-        {
-            "extension_id": "command.github",
-            "permission_id": "command.github.permission.read-remote",
-            "matcher_evidence": [{**_evidence(), "executable": "gh"}],
-            "uncertainty_reasons": ["matcher-failure"],
-        }
-    ]
-    observations["binding"]["observation_count"] = 2
-    observations["binding"]["uncertainty_count"] = 1
-    _rehash(observations)
-    assert validate_native_command_observations(observations) == observations
-    observations["binding"]["uncertainty_count"] = 0
-    assert validate_native_command_observations(observations) is None
-    observations["binding"]["uncertainty_count"] = 1
-    observations["permission_observations"][0]["permission_id"] = "command.ollama.permission.push"
-    _rehash(observations)
-    assert validate_native_command_observations(observations) is None
-
-
-def test_unknown_fields_duplicates_limits_and_unbound_error_reject() -> None:
-    original = _observations()
-    bad = copy.deepcopy(original)
-    bad["raw_command"] = "secret"
-    assert validate_native_command_observations(bad) is None
-    bad = copy.deepcopy(original)
-    bad["observations"] *= 2
-    bad["binding"]["observation_count"] = 2
-    _rehash(bad)
-    assert validate_native_command_observations(bad) is None
-    bad = copy.deepcopy(original)
-    bad["observations"][0]["matcher_evidence"] *= 8_193
-    _rehash(bad)
-    assert validate_native_command_observations(bad) is None
-    bad = copy.deepcopy(original)
-    bad["evaluation_error"] = "native_command_evaluation_failed"
-    _rehash(bad)
-    assert validate_native_command_observations(bad) is None

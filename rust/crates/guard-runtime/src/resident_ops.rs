@@ -587,6 +587,11 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
                     &request,
                 )
             }
+            ResidentOperationV1::CodexHookManifestVerify(request) => {
+                crate::codex_hook_manifest_verify_op::evaluate_codex_hook_manifest_verify_request(
+                    &request,
+                )
+            }
             ResidentOperationV1::InventoryScanTargets(request) => {
                 crate::inventory_scan_targets_op::evaluate_inventory_scan_targets_request(&request)
             }

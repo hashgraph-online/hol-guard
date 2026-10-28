@@ -159,6 +159,7 @@ function normalizeFinding(value: unknown): WorkspaceFinding | null {
       hook: null,
       workflow: null,
       editorTask: null,
+      instruction: null,
     };
   }
   if (item.source_kind === "workspace_source" && item.detector === "skill_content_v1") {
@@ -187,6 +188,7 @@ function normalizeFinding(value: unknown): WorkspaceFinding | null {
       hook: null,
       workflow: null,
       editorTask: null,
+      instruction: null,
     };
   }
   if (item.source_kind === "workspace_source" && item.detector === "mcp_config_v1") {
@@ -217,6 +219,7 @@ function normalizeFinding(value: unknown): WorkspaceFinding | null {
       hook: null,
       workflow: null,
       editorTask: null,
+      instruction: null,
     };
   }
   if (item.source_kind === "workspace_source" && item.detector === "hook_config_v1") {
@@ -247,6 +250,7 @@ function normalizeFinding(value: unknown): WorkspaceFinding | null {
       },
       workflow: null,
       editorTask: null,
+      instruction: null,
     };
   }
   if (item.source_kind === "workspace_source" && item.detector === "plugin_manifest_v1") {
@@ -274,18 +278,22 @@ function normalizeFinding(value: unknown): WorkspaceFinding | null {
       hook: event === null ? null : { ...check, event },
       workflow: null,
       editorTask: null,
+      instruction: null,
     };
   }
-  if (item.source_kind === "workspace_source" && (item.detector === "ci_workflow_v1" || item.detector === "editor_task_v1")) {
+  if (
+    item.source_kind === "workspace_source" &&
+    (item.detector === "ci_workflow_v1" || item.detector === "editor_task_v1" || item.detector === "instruction_file_v1")
+  ) {
     const path = text(item.path);
     const title = text(item.title);
     const reason = text(item.reason);
     if (path === null || title === null || reason === null || common.ruleIds.length === 0) return null;
     const check = { title, reason, confidence: text(item.confidence) ?? "likely", falsePositiveHint: text(item.false_positive_hint) };
-    const workflow = item.detector === "ci_workflow_v1";
+    const kind = item.detector === "ci_workflow_v1" ? "workflow" : item.detector === "editor_task_v1" ? "editor_task" : "instruction";
     return {
       ...common,
-      kind: workflow ? "workflow" : "editor_task",
+      kind,
       ecosystem: "unknown",
       packageName: null,
       packageVersion: null,
@@ -297,8 +305,9 @@ function normalizeFinding(value: unknown): WorkspaceFinding | null {
       skill: null,
       mcp: null,
       hook: null,
-      workflow: workflow ? check : null,
-      editorTask: workflow ? null : check,
+      workflow: kind === "workflow" ? check : null,
+      editorTask: kind === "editor_task" ? check : null,
+      instruction: kind === "instruction" ? check : null,
     };
   }
   if (item.source_kind === "agent_inventory" && item.detector === "runtime_identity_v1") {
@@ -326,6 +335,7 @@ function normalizeFinding(value: unknown): WorkspaceFinding | null {
       hook: null,
       workflow: null,
       editorTask: null,
+      instruction: null,
     };
   }
   const packageName = text(item.package_name);
@@ -346,6 +356,7 @@ function normalizeFinding(value: unknown): WorkspaceFinding | null {
     hook: null,
       workflow: null,
       editorTask: null,
+      instruction: null,
   };
 }
 

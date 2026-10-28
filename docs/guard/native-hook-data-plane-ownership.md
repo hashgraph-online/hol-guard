@@ -478,6 +478,17 @@ token itself and nothing it contains can pass as a substituted scalar.
 `codex_hook_identity.py` now only names what is being identified;
 `native_codex_hook_identity.py` ships it across and fails closed.
 
+Whether the authenticated Codex hook manifest still describes the live
+installation is decided in the resident (`codex-hook-manifest-verify-v1`, in
+`codex_hook_manifest_verify_op.rs`). Python checked the manifest header, the
+config target, the interpreter and every packaged file, the launch identities
+and the hook registrations in the Codex config. It still authenticates the
+manifest, since the key never leaves it, and supplies the canonical path
+spellings, its package roots, its own command splitting and whether a file's
+group is private to its owner; the resident reads the files and answers with
+the integrity state. An unavailable resident reports the installation as
+unverified. `codex_hook_manifest.py` keeps only that authentication step.
+
 A Codex hook source's inventory is walked there as well
 (`codex-hook-identity-v2`, the `inventory` entry). Python sent one handler and
 one argv question per hook and assembled the records itself; it now sends the

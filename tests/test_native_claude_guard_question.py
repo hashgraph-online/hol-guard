@@ -112,13 +112,22 @@ def test_a_saved_answer_carries_its_plan(monkeypatch: pytest.MonkeyPatch) -> Non
     assert call["payload"] == expected
 
 
-def test_other_tools_never_ship_their_call(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_other_tools_never_reach_the_resident(monkeypatch: pytest.MonkeyPatch) -> None:
     case = next(case for case in _CASES if case["name"] == "answers-keyed-allow-once")
+    calls: list[str] = []
 
-    for payload in (
-        {**case["payload"], "tool_name": "Bash"},
-        {**case["payload"], "tool_name": "NotAskUserQuestion"},
+    def fake(_store: object, op: str, **_fields: object) -> object:
+        calls.append(op)
+        return {"outcome": "none"}
+
+    monkeypatch.setattr(native_claude_guard_question, "hook_authority_state", fake)
+    for payload, event in (
+        ({**case["payload"], "tool_name": "Bash"}, "PostToolUse"),
+        ({**case["payload"], "tool_name": "NotAskUserQuestion"}, "PostToolUse"),
+        (case["payload"], "PreToolUse"),
     ):
-        settled, call = _settle(monkeypatch, {"outcome": "none"}, payload)
+        settled = settle_claude_guard_question(
+            object(), session_id="session-1", payload=payload, event=event, now="2026-10-26T00:00:00+00:00"
+        )
         assert settled is None
-        assert call["payload"] is None
+    assert calls == []

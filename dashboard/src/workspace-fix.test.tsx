@@ -76,6 +76,7 @@ const finding: WorkspaceFinding = {
   hook: null,
   workflow: null,
   editorTask: null,
+  instruction: null,
   carried: false,
 };
 

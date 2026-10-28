@@ -1,5 +1,5 @@
-import { j as jsxRuntimeExports, T as Tag, db as fetchGuardApi, r as reactExports, a4 as HiMiniExclamationTriangle, A as ActionButton, f as formatRelativeTime, s as HiMiniCheckCircle, ap as HiMiniWrenchScrewdriver, N as EmptyState, ez as HiMiniFolderOpen, d as HiMiniArrowPath } from "../guard-dashboard.js";
-import { c as createLatestRefresh, r as runWorkspaceAction, a as addWorkspaceForAssessment, s as sameWorktree, w as worktreeStatus, f as fetchWorkspaceFindings } from "./workspace-findings-status-CIV9i876.js";
+import { j as jsxRuntimeExports, T as Tag, db as fetchGuardApi, r as reactExports, a4 as HiMiniExclamationTriangle, A as ActionButton, f as formatRelativeTime, s as HiMiniCheckCircle, ap as HiMiniWrenchScrewdriver, az as HiMiniEye, N as EmptyState, ez as HiMiniFolderOpen, d as HiMiniArrowPath } from "../guard-dashboard.js";
+import { c as createLatestRefresh, r as runWorkspaceAction, a as addWorkspaceForAssessment, s as sameWorktree, w as worktreeStatus, f as fetchWorkspaceFindings } from "./workspace-findings-status-DQjxOR9Y.js";
 function CarriedNote({ finding }) {
   if (!finding.carried) return null;
   return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-1 block text-xs text-slate-500", children: "Not rechecked in the latest scan" });
@@ -164,6 +164,18 @@ function EditorTaskFindingsTable({ findings }) {
     }
   );
 }
+function InstructionFindingsTable({ findings }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    RuleFindingsTable,
+    {
+      findings,
+      caption: "Agent instruction files that tell an agent to drop its safeguards",
+      subjectLabel: "File",
+      subject: (finding) => /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "break-all font-mono text-xs text-slate-700", children: finding.path }),
+      check: (finding) => finding.instruction
+    }
+  );
+}
 const RUNTIME_VERDICTS = {
   affected: { label: "Affected version", tone: "attention" },
   restart_required: { label: "Restart needed", tone: "amber" },
@@ -203,6 +215,123 @@ function RuntimeFindingsTable({ findings }) {
       ] }, finding.findingId);
     }) })
   ] }) });
+}
+const EXPORT_PREVIEW_PATH = "/v1/supply-chain/workspace-export-preview";
+const MAX_EXPORT_PREVIEW_PATHS = 200;
+const MAX_EXPORT_PREVIEW_PATH_LENGTH = 4096;
+class ExportPreviewError extends Error {
+  code;
+  constructor(code) {
+    super(exportPreviewErrorMessage(code));
+    this.name = "ExportPreviewError";
+    this.code = code;
+  }
+}
+const STATUSES = /* @__PURE__ */ new Set(["ready", "empty", "blocked"]);
+function record$1(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+function text$1(value) {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+function count(value) {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+function normalizeFile(value) {
+  const item = record$1(value);
+  const path = text$1(item.path);
+  const bytes = count(item.bytes);
+  const exportBytes = count(item.export_bytes);
+  const redactions = count(item.redactions);
+  return path && bytes !== null && exportBytes !== null && redactions !== null ? { path, bytes, exportBytes, redactions } : null;
+}
+function normalizeExportPreview(value) {
+  const item = record$1(value);
+  const status = text$1(item.status);
+  const bundleDigest = text$1(item.bundle_digest);
+  if (!status || !STATUSES.has(status) || !bundleDigest || !Array.isArray(item.files) || !Array.isArray(item.excluded)) {
+    return null;
+  }
+  const files = item.files.map(normalizeFile).filter((entry) => entry !== null);
+  const excluded = item.excluded.flatMap((entry) => {
+    const exclusion = record$1(entry);
+    const path = typeof exclusion.path === "string" ? exclusion.path : null;
+    const reason = text$1(exclusion.reason);
+    return path !== null && reason ? [{ path, reason }] : [];
+  });
+  const limits = record$1(item.limits);
+  return {
+    status,
+    files,
+    excluded,
+    // Totals come from the files kept here, so a dropped malformed entry can
+    // never leave the summary larger than the list it sits above.
+    exportBytes: files.reduce((total, file) => total + file.exportBytes, 0),
+    redactions: files.reduce((total, file) => total + file.redactions, 0),
+    bundleDigest,
+    maxFileBytes: count(limits.max_file_bytes),
+    maxTotalBytes: count(limits.max_total_bytes)
+  };
+}
+function parseExportPaths(input) {
+  const seen = /* @__PURE__ */ new Set();
+  for (const line of input.split(/\r?\n/)) {
+    const path = line.trim();
+    if (path) seen.add(path);
+  }
+  return [...seen];
+}
+async function previewWorkspaceExport(worktree, paths) {
+  if (paths.length === 0) throw new ExportPreviewError("no_paths");
+  if (paths.length > MAX_EXPORT_PREVIEW_PATHS) throw new ExportPreviewError("invalid_paths");
+  if (paths.some((path) => path.length > MAX_EXPORT_PREVIEW_PATH_LENGTH)) throw new ExportPreviewError("path_too_long");
+  const response = await fetchGuardApi(EXPORT_PREVIEW_PATH, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ codebase_key: worktree.codebaseKey, worktree_key: worktree.worktreeKey, paths })
+  });
+  const body = await response.json().catch(() => null);
+  if (!response.ok) throw new ExportPreviewError(text$1(record$1(body).error) ?? "workspace_export_preview_failed");
+  const preview = normalizeExportPreview(body);
+  if (preview === null) throw new ExportPreviewError("workspace_export_preview_failed");
+  return preview;
+}
+const EXCLUSION_REASONS = {
+  invalid_path: "Not a path inside this workspace.",
+  sensitive: "Credential or key file. Guard never exports these.",
+  policy_directory: "Inside a folder Guard never exports, such as .git or node_modules.",
+  oversize: "Larger than one file may be.",
+  byte_budget: "Past the total size Guard reads for one preview. List fewer files.",
+  not_text: "Not a text file.",
+  not_found: "No file at this path.",
+  not_a_file: "A folder or other entry, not a file.",
+  symlink: "Reached through a symbolic link, which Guard does not follow.",
+  special: "A device, pipe or socket, not a file.",
+  unreadable: "Could not be read.",
+  unstable: "Changed while Guard was reading it.",
+  redaction_failed: "Guard could not confirm this file is free of secrets after redaction, so it blocks the export."
+};
+function exclusionMessage(reason) {
+  return EXCLUSION_REASONS[reason] ?? "Left out of the export.";
+}
+const ERROR_MESSAGES$1 = {
+  no_paths: "Add at least one file path, one per line.",
+  invalid_paths: `List up to ${MAX_EXPORT_PREVIEW_PATHS} file paths, one per line.`,
+  path_too_long: `Each file path must be at most ${MAX_EXPORT_PREVIEW_PATH_LENGTH} characters.`,
+  worktree_not_found: "This workspace is no longer tracked. Refresh the list.",
+  worktree_moved: "This folder now belongs to a different workspace. Refresh the list, then preview again.",
+  workspace_export_preview_root_missing: "Guard cannot find this workspace folder. Check that it still exists.",
+  workspace_export_preview_root_unreadable: "Guard cannot read this workspace folder.",
+  workspace_export_preview_too_many_paths: `List up to ${MAX_EXPORT_PREVIEW_PATHS} file paths, one per line.`,
+  workspace_export_preview_native_unavailable: "The Guard runtime needed to read files is unavailable. Repair Guard, then try again."
+};
+function exportPreviewErrorMessage(code) {
+  return ERROR_MESSAGES$1[code] ?? "Guard could not build the preview. Check that Guard is running, then retry.";
+}
+function formatBytes(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 const FIX_PROPOSALS_PATH = "/v1/supply-chain/workspace-fix-proposals";
 class FixRequestError extends Error {
@@ -680,6 +809,195 @@ function FixNotice(props) {
     props.text
   ] });
 }
+const RESULT_LABELS = {
+  ready: "Ready",
+  empty: "Nothing to export",
+  blocked: "Blocked"
+};
+function suggestedExportPaths(findings) {
+  const paths = /* @__PURE__ */ new Set();
+  for (const finding of findings) {
+    if (finding.kind !== "runtime" && finding.path) paths.add(finding.path);
+  }
+  return [...paths];
+}
+function ExportPreviewView(props) {
+  const id = reactExports.useId();
+  const headingId = `${id}-heading`;
+  const fieldId = `${id}-paths`;
+  const hintId = `${id}-hint`;
+  const { preview } = props;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": headingId, className: "space-y-4 rounded-xl border border-slate-200 bg-surface-1/60 px-4 py-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start justify-between gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1 basis-64", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { id: headingId, className: "text-sm font-semibold text-brand-dark", children: "Preview a source export" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-[68ch] text-sm text-slate-600", children: "See what sharing these files would carry before anything leaves this device. Guard leaves out credential files and folders such as .git, and replaces each secret it finds with [REDACTED]. A preview sends nothing and never changes your files." })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "ghost", onClick: props.onClose, disabled: props.busy, children: "Close" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: fieldId, className: "block text-sm font-semibold text-brand-dark", children: "Files to include" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: hintId, className: "text-xs text-slate-600", children: "One path per line, relative to the workspace folder. Starts with the files this check points at." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "textarea",
+        {
+          id: fieldId,
+          "aria-describedby": hintId,
+          value: props.input,
+          onChange: (event) => props.onInput(event.target.value),
+          rows: 4,
+          spellCheck: false,
+          autoCapitalize: "off",
+          autoCorrect: "off",
+          placeholder: "src/app.py\npackage.json",
+          className: "w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-mono text-xs text-slate-800 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { onClick: props.onPreview, disabled: props.busy, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniEye, { className: "h-4 w-4", "aria-hidden": "true" }),
+        props.busy ? "Reading files…" : preview ? "Preview again" : "Preview export"
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { "aria-live": "polite", className: "space-y-4", children: [
+      props.error && /* @__PURE__ */ jsxRuntimeExports.jsx(FixNotice, { tone: "error", text: props.error }),
+      preview && /* @__PURE__ */ jsxRuntimeExports.jsx(PreviewResult, { preview, edited: props.edited })
+    ] })
+  ] });
+}
+function PreviewResult({ preview, edited }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", "data-testid": "export-preview-result", children: [
+    edited && /* @__PURE__ */ jsxRuntimeExports.jsx(FixNotice, { tone: "warning", text: "The list changed after this preview. Preview again to check it." }),
+    preview.status === "blocked" && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      FixNotice,
+      {
+        tone: "error",
+        text: "Guard could not confirm the file marked below is free of secrets after redaction, so this selection cannot be exported. Remove any secret from that file, or take it off the list."
+      }
+    ),
+    preview.status === "empty" && /* @__PURE__ */ jsxRuntimeExports.jsx(FixNotice, { tone: "warning", text: "None of these files can be exported. Each one is listed below with the reason." }),
+    preview.status === "ready" && preview.redactions > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(
+      FixNotice,
+      {
+        tone: "success",
+        text: `Guard would replace ${preview.redactions === 1 ? "1 secret" : `${preview.redactions} secrets`} with [REDACTED]. Your files stay as they are.`
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "grid grid-cols-2 gap-x-6 border-y border-slate-200 sm:grid-cols-3 lg:grid-cols-5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Fact, { label: "Result", value: RESULT_LABELS[preview.status] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Fact, { label: "Files", value: String(preview.files.length) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Fact, { label: "Export size", value: formatBytes(preview.exportBytes) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Fact, { label: "Secrets replaced", value: String(preview.redactions) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Fact, { label: "Destination", value: "None", title: "A preview stays on this device." })
+    ] }),
+    preview.files.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(IncludedFiles, { preview }),
+    preview.excluded.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Left out" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "space-y-1 text-sm text-slate-600", children: preview.excluded.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "min-w-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `break-all font-mono text-xs ${item.reason === "redaction_failed" ? "font-semibold text-red-800" : "text-slate-700"}`, children: item.path || "(empty line)" }),
+        " ",
+        exclusionMessage(item.reason)
+      ] }, `${item.path}:${item.reason}`)) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-500", children: [
+      "Bundle fingerprint ",
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "break-all font-mono", children: preview.bundleDigest }),
+      ". It changes whenever an included file does."
+    ] })
+  ] });
+}
+function IncludedFiles({ preview }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "overflow-hidden rounded-xl border border-slate-200 bg-white", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("table", { className: "w-full text-left text-sm", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("caption", { className: "sr-only", children: "Files an export would include" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("thead", { className: "hidden bg-slate-50 text-xs font-semibold text-slate-600 md:table-header-group", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("th", { scope: "col", className: "px-3 py-2", children: "File" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("th", { scope: "col", className: "px-3 py-2 text-right", children: "On disk" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("th", { scope: "col", className: "px-3 py-2 text-right", children: "Exported" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("th", { scope: "col", className: "px-3 py-2 text-right", children: "Secrets replaced" })
+    ] }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("tbody", { className: "divide-y divide-slate-100", children: preview.files.map((file) => /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { className: "grid grid-cols-3 gap-x-3 gap-y-2 px-3 py-3 md:table-row md:p-0", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { className: "col-span-3 min-w-0 md:col-span-1 md:px-3 md:py-2.5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-xs font-semibold text-slate-500 md:hidden", children: "File" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "break-all font-mono text-xs text-slate-800", children: file.path })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Cell, { label: "On disk", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Num, { value: formatBytes(file.bytes) }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Cell, { label: "Exported", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Num, { value: formatBytes(file.exportBytes) }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Cell, { label: "Secrets replaced", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Num, { value: String(file.redactions) }) })
+    ] }, file.path)) })
+  ] }) });
+}
+function Num({ value }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block font-mono text-xs tabular-nums text-slate-700 md:text-right", children: value });
+}
+function Fact(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 py-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-slate-500", children: props.label }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "text-sm font-semibold tabular-nums text-brand-dark", title: props.title, children: props.value })
+  ] });
+}
+function ExportPreviewPanel(props) {
+  const [open, setOpen] = reactExports.useState(false);
+  const [input, setInput] = reactExports.useState("");
+  const [busy, setBusy] = reactExports.useState(false);
+  const [error, setError] = reactExports.useState(null);
+  const [preview, setPreview] = reactExports.useState(null);
+  const mounted = reactExports.useRef(true);
+  const latestInput = reactExports.useRef(input);
+  latestInput.current = input;
+  reactExports.useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  const { worktree, findings } = props;
+  const show = reactExports.useCallback(() => {
+    setInput(suggestedExportPaths(findings).join("\n"));
+    setPreview(null);
+    setError(null);
+    setOpen(true);
+  }, [findings]);
+  const run = reactExports.useCallback(async () => {
+    const submitted = input;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await previewWorkspaceExport(worktree, parseExportPaths(submitted));
+      if (mounted.current) setPreview({ input: submitted, result });
+    } catch (caught) {
+      if (!mounted.current) return;
+      setPreview(null);
+      if (latestInput.current !== submitted) return;
+      setError(caught instanceof ExportPreviewError ? caught.message : new ExportPreviewError("workspace_export_preview_failed").message);
+    } finally {
+      if (mounted.current) setBusy(false);
+    }
+  }, [input, worktree]);
+  if (!open) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-[68ch] text-sm text-slate-600", children: "Check what sharing source from this workspace would send, with secrets redacted, before anything leaves this device." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "outline", onClick: show, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniEye, { className: "h-4 w-4", "aria-hidden": "true" }),
+        "Preview a source export"
+      ] })
+    ] });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    ExportPreviewView,
+    {
+      input,
+      busy,
+      error,
+      preview: preview?.result ?? null,
+      edited: preview !== null && preview.input !== input,
+      onInput: (value) => {
+        setInput(value);
+        setError(null);
+      },
+      onPreview: () => void run(),
+      onClose: () => setOpen(false)
+    }
+  );
+}
 const REFRESH_MS = 15e3;
 const COVERAGE_REASONS = {
   snapshot_entry_cap: "The workspace has more files than one assessment reads.",
@@ -703,7 +1021,8 @@ const COVERAGE_REASONS = {
   hook_config_incomplete: "Some agent hook settings could not be fully checked, so not every project hook was screened.",
   plugin_manifest_incomplete: "Some agent plugin files could not be fully read, so not every plugin hook or MCP server was checked.",
   ci_workflow_incomplete: "Some GitHub Actions workflows could not be fully read, so not every workflow was checked.",
-  editor_task_incomplete: "Some editor task or dev container files could not be fully read, so not every file was checked."
+  editor_task_incomplete: "Some editor task or dev container files could not be fully read, so not every file was checked.",
+  instruction_file_incomplete: "Some agent instruction files could not be fully read, so not every file was checked."
 };
 const DETECTOR_LABELS = {
   secrets: "Secret scanning",
@@ -713,7 +1032,8 @@ const DETECTOR_LABELS = {
   hook_config_v1: "Project hook checking",
   plugin_manifest_v1: "Agent plugin checking",
   ci_workflow_v1: "CI workflow checking",
-  editor_task_v1: "Editor task checking"
+  editor_task_v1: "Editor task checking",
+  instruction_file_v1: "Instruction file checking"
 };
 function checkedSummary(worktree, newestRun, assessment) {
   const pending = newestRun?.state === "running" || newestRun?.state === "queued" || newestRun?.state === "failed";
@@ -884,7 +1204,8 @@ function AssessmentFindings(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsx(FixLoadError, { fixes }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(FindingsSections, { findings, dependencyFilesFound, secretsChecked: !notRun.includes("secrets"), fixes }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(FixReview, { fixes, findings }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(FixHistory, { fixes, findings })
+    /* @__PURE__ */ jsxRuntimeExports.jsx(FixHistory, { fixes, findings }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(ExportPreviewPanel, { worktree: props.worktree, findings })
   ] });
 }
 function emptyFindingsCopy(dependencyFilesFound, secretsChecked) {
@@ -902,6 +1223,7 @@ function FindingsSections(props) {
   const plugins = props.findings.filter((finding) => finding.kind === "plugin");
   const workflows = props.findings.filter((finding) => finding.kind === "workflow");
   const editorTasks = props.findings.filter((finding) => finding.kind === "editor_task");
+  const instructions = props.findings.filter((finding) => finding.kind === "instruction");
   if (props.findings.length === 0) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", children: emptyFindingsCopy(props.dependencyFilesFound, props.secretsChecked) });
   }
@@ -914,7 +1236,8 @@ function FindingsSections(props) {
     hooks.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(HookFindingsTable, { findings: hooks }),
     plugins.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(PluginFindingsTable, { findings: plugins }),
     workflows.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(WorkflowFindingsTable, { findings: workflows }),
-    editorTasks.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(EditorTaskFindingsTable, { findings: editorTasks })
+    editorTasks.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(EditorTaskFindingsTable, { findings: editorTasks }),
+    instructions.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(InstructionFindingsTable, { findings: instructions })
   ] });
 }
 function FindingsTable({ findings, fixes }) {

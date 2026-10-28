@@ -13,9 +13,11 @@ the hooks and MCP servers every agent plugin in the worktree ships, whose
 findings name the file and hook event or server, never the command or URL. A
 request may ask for the check of the project's GitHub Actions workflows; its
 findings name the workflow file and rule, never an action, ref or command. A
-request may last ask for the check of the project's editor tasks and dev
-container configuration; its findings name the file and rule, never a task or
-command.
+request may ask for the check of the project's editor tasks and dev container
+configuration; its findings name the file and rule, never a task or command. A
+request may last ask for the check of the agent instruction files the project
+ships, such as ``AGENTS.md``; its findings name the file and rule, never the
+instruction text.
 """
 
 from __future__ import annotations
@@ -32,6 +34,7 @@ WORKSPACE_HOOKS_FEATURE = "workspace-snapshot-hooks-v1"
 WORKSPACE_PLUGINS_FEATURE = "workspace-snapshot-plugins-v1"
 WORKSPACE_WORKFLOWS_FEATURE = "workspace-snapshot-workflows-v1"
 WORKSPACE_EDITOR_TASKS_FEATURE = "workspace-snapshot-editor-tasks-v1"
+WORKSPACE_INSTRUCTIONS_FEATURE = "workspace-snapshot-instructions-v1"
 WORKSPACE_SNAPSHOT_COMMAND = "workspace-snapshot"
 WORKSPACE_SNAPSHOT_SCHEMA = "guard.workspace-snapshot.v1"
 
@@ -69,6 +72,7 @@ class WorkspaceSnapshot:
     plugins: dict[str, object] | None = None
     workflows: dict[str, object] | None = None
     editor_tasks: dict[str, object] | None = None
+    instructions: dict[str, object] | None = None
 
 
 def workspace_snapshot(
@@ -82,6 +86,7 @@ def workspace_snapshot(
     plugins: bool = False,
     workflows: bool = False,
     editor_tasks: bool = False,
+    instructions: bool = False,
 ) -> WorkspaceSnapshot:
     """Snapshot ``root``; ``secrets`` also scans the hashed bytes for secrets.
 
@@ -96,8 +101,10 @@ def workspace_snapshot(
     the project hook check, raises ``workspace_snapshot_hooks_unavailable``.
     ``plugins``, the agent plugin check, raises
     ``workspace_snapshot_plugins_unavailable``, ``workflows``, the workflow
-    check, ``workspace_snapshot_workflows_unavailable``, and ``editor_tasks``,
-    the editor task check, ``workspace_snapshot_editor_tasks_unavailable``.
+    check, ``workspace_snapshot_workflows_unavailable``, ``editor_tasks``, the
+    editor task check, ``workspace_snapshot_editor_tasks_unavailable``, and
+    ``instructions``, the agent instruction file check,
+    ``workspace_snapshot_instructions_unavailable``.
     """
 
     request: dict[str, object] = {"root": str(root), "mode": mode}
@@ -115,6 +122,8 @@ def workspace_snapshot(
         request["workflows"] = True
     if editor_tasks:
         request["editor_tasks"] = True
+    if instructions:
+        request["instructions"] = True
     reply = _native_request(
         request,
         needs_secrets=secrets,
@@ -123,6 +132,7 @@ def workspace_snapshot(
         needs_plugins=plugins,
         needs_workflows=workflows,
         needs_editor_tasks=editor_tasks,
+        needs_instructions=instructions,
     )
     if reply.get("ok") is not True:
         error = reply.get("error")
@@ -139,6 +149,7 @@ def _native_request(
     needs_plugins: bool = False,
     needs_workflows: bool = False,
     needs_editor_tasks: bool = False,
+    needs_instructions: bool = False,
 ) -> dict[str, object]:
     import os
 
@@ -166,6 +177,8 @@ def _native_request(
         raise WorkspaceSnapshotError("workspace_snapshot_workflows_unavailable")
     if needs_editor_tasks and WORKSPACE_EDITOR_TASKS_FEATURE not in status.capabilities.features:
         raise WorkspaceSnapshotError("workspace_snapshot_editor_tasks_unavailable")
+    if needs_instructions and WORKSPACE_INSTRUCTIONS_FEATURE not in status.capabilities.features:
+        raise WorkspaceSnapshotError("workspace_snapshot_instructions_unavailable")
     runtime = status.identity.path
     environment = {key: value for key in _CHILD_ENVIRONMENT_KEYS if (value := os.environ.get(key))}
     completed = run_isolated_hook_process(
@@ -219,6 +232,7 @@ def _parse_result(result: object) -> WorkspaceSnapshot:
     plugins = result.get("plugins")
     workflows = result.get("workflows")
     editor_tasks = result.get("editor_tasks")
+    instructions = result.get("instructions")
     return WorkspaceSnapshot(
         mode=mode,  # type: ignore[arg-type]
         root=str(result["root"]),
@@ -237,6 +251,7 @@ def _parse_result(result: object) -> WorkspaceSnapshot:
         plugins=plugins if isinstance(plugins, dict) else None,
         workflows=workflows if isinstance(workflows, dict) else None,
         editor_tasks=editor_tasks if isinstance(editor_tasks, dict) else None,
+        instructions=instructions if isinstance(instructions, dict) else None,
     )
 
 
@@ -247,6 +262,7 @@ def _is_digest(value: object) -> bool:
 __all__ = [
     "WORKSPACE_EDITOR_TASKS_FEATURE",
     "WORKSPACE_HOOKS_FEATURE",
+    "WORKSPACE_INSTRUCTIONS_FEATURE",
     "WORKSPACE_PLUGINS_FEATURE",
     "WORKSPACE_SECRETS_FEATURE",
     "WORKSPACE_SKILLS_FEATURE",

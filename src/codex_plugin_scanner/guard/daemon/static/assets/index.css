@@ -719,6 +719,10 @@
     grid-column: span 2 / span 2;
   }
 
+  .col-span-3 {
+    grid-column: span 3 / span 3;
+  }
+
   .col-span-full {
     grid-column: 1 / -1;
   }
@@ -7863,6 +7867,10 @@
 
     .md\:pl-0 {
       padding-left: 0;
+    }
+
+    .md\:text-right {
+      text-align: right;
     }
   }
 

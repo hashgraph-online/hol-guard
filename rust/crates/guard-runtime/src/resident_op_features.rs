@@ -183,6 +183,7 @@ pub(crate) const RESIDENT_OP_FEATURES: &[&str] = &[
     guard_contracts::CODEX_HOOK_IDENTITY_FEATURE,
     guard_contracts::CODEX_HOOK_INVENTORY_FEATURE,
     guard_contracts::CODEX_HOOK_FILE_IDENTITY_FEATURE,
+    guard_contracts::CODEX_HOOK_MANIFEST_VERIFY_FEATURE,
     guard_contracts::INVENTORY_SOURCE_EVIDENCE_FEATURE,
     guard_contracts::INVENTORY_SOURCE_EVIDENCE_PREVIOUS_FEATURE,
     guard_contracts::INVENTORY_SOURCE_EVIDENCE_FIRST_FEATURE,

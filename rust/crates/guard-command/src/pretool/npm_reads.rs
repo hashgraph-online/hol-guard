@@ -1,12 +1,17 @@
-//! Read-only npm queries: `npm view`, `npm ls` and `npm cache ls`.
+//! Read-only npm queries: `npm view`, `npm ls`, `npm cache ls`, `npm
+//! outdated`, `npm audit`, `npm search` and `npm ping`.
 //!
-//! None runs package code. `npm view` fetches public metadata for one
-//! registry package, `npm ls` reads the installed tree and `npm cache ls`
-//! lists entries already in the local cache. The risk is npm's
-//! configuration: a `.npmrc` that moves the registry can pair it with an
-//! `${ENV}` auth line and send that secret to another host. So the proof also
-//! needs every `.npmrc` npm could read to leave the fetch, its trust and npm's
-//! own paths alone, and no inherited npm or Node override.
+//! None runs package code, resolves a new tree or writes to the project.
+//! `npm view` and `npm search` fetch public metadata from the registry,
+//! `npm ls` reads the installed tree, `npm cache ls` lists entries already in
+//! the local cache, `npm outdated` asks the registry for the published
+//! versions of the names already installed, `npm audit` asks it about those
+//! same names, and `npm ping` only asks whether the registry answers. The
+//! risk is npm's configuration: a `.npmrc` that moves the registry can pair it
+//! with an `${ENV}` auth line and send that secret to another host, and the
+//! reports above name the project's dependencies in the request they make. So
+//! the proof also needs every `.npmrc` npm could read to leave the fetch, its
+//! trust and npm's own paths alone, and no inherited npm or Node override.
 
 use super::npmrc_keys;
 use std::fs;
@@ -23,6 +28,10 @@ pub(super) fn safe_npm_read(arguments: &[String], context: super::PathContext<'_
         "view" | "v" | "info" | "show" => view_arguments(rest),
         "ls" | "list" => list_arguments(rest),
         "cache" => cache_list_arguments(rest),
+        "outdated" => outdated_arguments(rest),
+        "audit" => audit_arguments(rest),
+        "search" | "find" | "s" | "se" => search_arguments(rest),
+        "ping" => ping_arguments(rest),
         _ => false,
     };
     // npm finds the user config through its own HOME, so the one checked
@@ -97,6 +106,95 @@ fn list_arguments(arguments: &[String]) -> bool {
             Some("dev" | "optional" | "peer")
         ) || plain_registry_spec(argument)
     })
+}
+
+/// The installed names against what the registry publishes. It reads the
+/// project manifest and the installed tree and fetches the same public
+/// metadata `view` prints, for the names already there. It resolves no new
+/// tree and writes nothing, so a report that a dependency moved on is a
+/// report, not an install.
+fn outdated_arguments(arguments: &[String]) -> bool {
+    arguments.iter().all(|argument| {
+        matches!(
+            argument.as_str(),
+            "--json"
+                | "--long"
+                | "-l"
+                | "--parseable"
+                | "-p"
+                | "--all"
+                | "-a"
+                | "-g"
+                | "--global"
+                | "--location=global"
+        ) || matches!(
+            argument.strip_prefix("--omit="),
+            Some("dev" | "optional" | "peer")
+        ) || plain_registry_spec(argument)
+    })
+}
+
+/// A report on the installed tree, and the signature check over it. Both send
+/// the installed names and versions to the registry the configuration check
+/// already pinned, and neither changes the tree they describe. `npm audit fix`
+/// resolves and installs, so it keeps the package review along with every
+/// other spelling that carries an operand.
+fn audit_arguments(arguments: &[String]) -> bool {
+    let options = match arguments.split_first() {
+        Some((first, rest)) if first == "signatures" => rest,
+        _ => arguments,
+    };
+    options.iter().all(|argument| {
+        matches!(
+            argument.as_str(),
+            "--json" | "--parseable" | "-p" | "--package-lock-only"
+        ) || matches!(
+            argument.strip_prefix("--audit-level="),
+            Some("info" | "low" | "moderate" | "high" | "critical" | "none")
+        ) || matches!(
+            argument.strip_prefix("--omit="),
+            Some("dev" | "optional" | "peer")
+        )
+    })
+}
+
+/// A registry search. The terms go to the registry the configuration check
+/// already pinned and come back as a list of names, so what is screened here
+/// is the text itself: a term written like a package name, a scope or an
+/// ordinary word, and nothing carrying syntax of its own.
+fn search_arguments(arguments: &[String]) -> bool {
+    let mut terms = arguments
+        .iter()
+        .filter(|argument| !search_option(argument.as_str()));
+    terms.next().is_some_and(|first| search_term(first)) && terms.all(|term| search_term(term))
+}
+
+fn search_option(argument: &str) -> bool {
+    matches!(
+        argument,
+        "--json" | "--long" | "-l" | "--parseable" | "-p" | "--no-description"
+    ) || argument
+        .strip_prefix("--searchlimit=")
+        .is_some_and(|limit| {
+            (1..=4).contains(&limit.len()) && limit.bytes().all(|byte| byte.is_ascii_digit())
+        })
+}
+
+/// At most one line of plain text, in the characters a name, a scope or a
+/// word is written with.
+fn search_term(term: &str) -> bool {
+    !term.is_empty()
+        && term.len() <= 64
+        && !term.starts_with('-')
+        && term
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || "._~@/-".contains(character))
+}
+
+/// Whether the registry answers. It sends no project data and reads nothing
+/// in the project.
+fn ping_arguments(arguments: &[String]) -> bool {
+    arguments.iter().all(|argument| argument == "--json")
 }
 
 /// `cache ls` and any package names. The other cache subcommands fetch into,

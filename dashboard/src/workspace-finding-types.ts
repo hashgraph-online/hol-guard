@@ -2,7 +2,7 @@
 
 export type WorkspaceFindingValidation = "confirmed" | "unvalidated" | "unknown";
 
-export type WorkspaceFindingKind = "supply_chain" | "secret" | "runtime" | "skill" | "mcp" | "hook" | "plugin" | "workflow" | "editor_task";
+export type WorkspaceFindingKind = "supply_chain" | "secret" | "runtime" | "skill" | "mcp" | "hook" | "plugin" | "workflow" | "editor_task" | "instruction";
 
 /** The fixed wording of the skill content rule that matched; never text from the skill. */
 export type WorkspaceSkillCheck = { title: string; reason: string; confidence: string; falsePositiveHint: string | null };
@@ -66,4 +66,6 @@ export type WorkspaceFinding = {
   workflow: WorkspaceSkillCheck | null;
   /** Set only for an editor task or dev container finding, a warning with no fix. */
   editorTask: WorkspaceSkillCheck | null;
+  /** Set only for an agent instruction file finding, a warning with no fix. */
+  instruction: WorkspaceSkillCheck | null;
 };

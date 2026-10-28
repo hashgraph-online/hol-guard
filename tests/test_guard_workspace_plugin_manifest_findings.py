@@ -185,6 +185,7 @@ def test_older_runtime_keeps_earlier_scans_and_reports_plugins_not_run(tmp_path:
         "detector_not_run:plugin_manifest_v1",
         "detector_not_run:ci_workflow_v1",
         "detector_not_run:editor_task_v1",
+        "detector_not_run:instruction_file_v1",
     ]
     assert outcome.coverage["detectors"]["hook_config_v1"] == "no_inputs"
     assert outcome.coverage["detectors"]["plugin_manifest_v1"] == "not_run"

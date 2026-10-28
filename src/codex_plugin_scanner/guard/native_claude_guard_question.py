@@ -64,13 +64,18 @@ def settle_claude_guard_question(
     with its validated plan.
     """
 
+    question = claude_guard_question_request(payload, event=event)
+    if question is None:
+        # Only an AskUserQuestion answer can settle a pending approval; the
+        # resident answers ``none`` for any other call, so it is not asked.
+        return None
     reply = hook_authority_state(
         store,
         "claude_question_settle",
         now=now,
         required_feature=HOOK_AUTHORITY_STATE_QUESTION_SETTLE_FEATURE,
         session_id=session_id,
-        payload=claude_guard_question_request(payload, event=event),
+        payload=question,
         tilde_home=_tilde_home(),
     )
     if reply is None:

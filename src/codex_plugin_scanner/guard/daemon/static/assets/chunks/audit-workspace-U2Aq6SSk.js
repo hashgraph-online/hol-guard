@@ -1,7 +1,7 @@
 import { j as jsxRuntimeExports, T as Tag, f as formatRelativeTime, r as reactExports, A as ActionButton, et as HiMiniChevronLeft, H as HiMiniChevronRight, dz as IconActionButton, _ as HiMiniXMark, d6 as GuardModalLayer, cS as HiMiniFunnel, p as HiMiniMagnifyingGlass, eu as HiMiniArrowDown, ev as HiMiniArrowUp, e3 as HiMiniFolder, S as SectionLabel, d as HiMiniArrowPath, dB as HiMiniBugAnt, N as EmptyState, aM as HiMiniAdjustmentsHorizontal, dG as ConnectFlowCard, a4 as HiMiniExclamationTriangle, bQ as useResolvedApprovalGate, ew as runAuditRemediation, a6 as Badge, ex as isBlockedGuardAction, dx as isSupplyChainAuditEvidence, s as HiMiniCheckCircle, aA as HiMiniXCircle, h as harnessDisplayName, aG as ApprovalProofModal, q as HiMiniDocumentText, bc as guardAwareHref, R as HiMiniShieldCheck } from "../guard-dashboard.js";
-import { n as normalizeSupplyChainAuditWorkspaceInput, p as packageWorkbenchEcosystems, f as filterPackageWorkbenchFindings, c as sortPackageWorkbenchFindings, i as isApprovalGateRequiredError, l as listSupplyChainAuditWorkspaceChoices } from "./supply-chain-hub-workspace-0ErMD3Dr.js";
+import { n as normalizeSupplyChainAuditWorkspaceInput, p as packageWorkbenchEcosystems, f as filterPackageWorkbenchFindings, c as sortPackageWorkbenchFindings, i as isApprovalGateRequiredError, l as listSupplyChainAuditWorkspaceChoices } from "./supply-chain-hub-workspace-CxUzlRIO.js";
 import { r as resolveManagerCoverageManagers, a as resolveManagerCoverageStatus } from "./supply-chain-protection-stats-D4Avk7Wd.js";
-import { c as createLatestRefresh, f as fetchWorkspaceFindings, s as sameWorktree, w as worktreeStatus } from "./workspace-findings-status-CIV9i876.js";
+import { c as createLatestRefresh, f as fetchWorkspaceFindings, s as sameWorktree, w as worktreeStatus } from "./workspace-findings-status-DQjxOR9Y.js";
 const STEPS = [
   { id: "preparing", label: "Prepare workspace" },
   { id: "scanning", label: "Scan manifests and lockfiles" },

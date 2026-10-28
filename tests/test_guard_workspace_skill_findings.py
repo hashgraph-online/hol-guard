@@ -125,6 +125,7 @@ def test_older_runtime_keeps_the_secret_scan_and_reports_skills_not_run(tmp_path
         "detector_not_run:plugin_manifest_v1",
         "detector_not_run:ci_workflow_v1",
         "detector_not_run:editor_task_v1",
+        "detector_not_run:instruction_file_v1",
     ]
     assert outcome.coverage["detectors"]["secrets"] == "complete"
     assert outcome.coverage["detectors"]["skill_content_v1"] == "not_run"

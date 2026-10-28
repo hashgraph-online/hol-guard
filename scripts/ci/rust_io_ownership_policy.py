@@ -88,7 +88,6 @@ _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
     {
         # Reassembled resident fragments are bound by the native result digest.
         "src/codex_plugin_scanner/guard/native_rich_command_model.py",
-        "src/codex_plugin_scanner/guard/native_command_observations.py",
         "src/codex_plugin_scanner/guard/native_context.py",
         # Execution-environment digest binds transport context without carrying
         # the environment values themselves.

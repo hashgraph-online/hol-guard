@@ -182,9 +182,10 @@ def assessment_context_digest(feed_digest: str, runtime_digest: str | None) -> s
     v9: runs check GitHub Actions workflows.
     v10: runs check editor tasks and dev container commands.
     v11: runs report processes still running a replaced, affected runtime.
+    v12: runs check agent instruction files.
     """
 
-    encoded = f"guard.workspace-context.v11\0{feed_digest}\0{runtime_digest or 'unknown'}"
+    encoded = f"guard.workspace-context.v12\0{feed_digest}\0{runtime_digest or 'unknown'}"
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 

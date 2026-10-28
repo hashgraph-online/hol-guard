@@ -346,6 +346,23 @@ macro_rules! strong {
     };
 }
 
+/// Whether `content` tells the agent to disable or bypass HOL Guard. Shared
+/// with the agent instruction file rules so both read the same wording.
+pub(crate) fn tells_guard_bypass(content: &str) -> bool {
+    any_match(&GUARD_BYPASS, content)
+}
+
+/// Whether `content` tells the agent to act without telling the user.
+pub(crate) fn tells_hidden_actions(content: &str) -> bool {
+    any_match(&HIDE_ACTIONS, content)
+}
+
+/// Whether `content` holds a Unicode control character that can hide text
+/// from a reader.
+pub(crate) fn has_unicode_controls(content: &str) -> bool {
+    UNICODE_CONTROLS.iter().any(|(ch, _)| content.contains(*ch))
+}
+
 /// `detect_skill_content_risk(content)`.
 pub fn detect_skill_content_risk(content: &str) -> Vec<RiskSignalV2> {
     let mut s = Vec::new();

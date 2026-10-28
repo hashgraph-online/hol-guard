@@ -48,6 +48,11 @@ from .workspace_hook_config_findings import (
     project_hook_config_findings,
     with_hook_config_coverage,
 )
+from .workspace_instruction_findings import (
+    INSTRUCTION_DETECTOR,
+    project_instruction_findings,
+    with_instruction_coverage,
+)
 from .workspace_mcp_config_findings import (
     MCP_CONFIG_DETECTOR,
     assess_workspace_mcp_configs,
@@ -82,9 +87,10 @@ DETECTOR_SET: Final = (
     PLUGIN_MANIFEST_DETECTOR,
     CI_WORKFLOW_DETECTOR,
     EDITOR_TASK_DETECTOR,
+    INSTRUCTION_DETECTOR,
 )
 # The content scans in the order they reached the native runtime.
-_CONTENT_SCANS: Final = ("secrets", "skills", "hooks", "plugins", "workflows", "editor_tasks")
+_CONTENT_SCANS: Final = ("secrets", "skills", "hooks", "plugins", "workflows", "editor_tasks", "instructions")
 DETECTOR_SET_DIGEST: Final = hashlib.sha256(
     ("guard.workspace-detectors.v1\0" + "\0".join(DETECTOR_SET)).encode("utf-8")
 ).hexdigest()
@@ -195,6 +201,7 @@ def execute(
         project_plugin_manifest_findings(before.plugins),
         project_ci_workflow_findings(before.workflows),
         project_editor_task_findings(before.editor_tasks),
+        project_instruction_findings(before.instructions),
     )
     truncated = supply_truncated or runtime_truncated or merge_truncated
     refused = offline.refused if offline is not None else 0
@@ -208,6 +215,7 @@ def execute(
         (with_plugin_manifest_coverage, before.plugins),
         (with_ci_workflow_coverage, before.workflows),
         (with_editor_task_coverage, before.editor_tasks),
+        (with_instruction_coverage, before.instructions),
     ):
         coverage = add_coverage(coverage, result)
     return assessments.RunOutcome(

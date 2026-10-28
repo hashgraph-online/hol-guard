@@ -260,6 +260,7 @@ def test_runner_hands_the_native_scan_a_stable_per_install_key(tmp_path: Path, m
         plugins: bool = False,
         workflows: bool = False,
         editor_tasks: bool = False,
+        instructions: bool = False,
     ):
         if secrets:
             keys.append(secret_key)
@@ -290,6 +291,7 @@ def test_older_runtime_falls_back_and_reports_the_detector_not_run(tmp_path: Pat
         plugins: bool = False,
         workflows: bool = False,
         editor_tasks: bool = False,
+        instructions: bool = False,
     ) -> native.WorkspaceSnapshot:
         requested.append(secrets)
         if secrets:
@@ -309,6 +311,7 @@ def test_older_runtime_falls_back_and_reports_the_detector_not_run(tmp_path: Pat
         "detector_not_run:plugin_manifest_v1",
         "detector_not_run:ci_workflow_v1",
         "detector_not_run:editor_task_v1",
+        "detector_not_run:instruction_file_v1",
     ]
     assert outcome.coverage["detectors"]["secrets"] == "not_run"
 
