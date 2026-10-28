@@ -49,7 +49,7 @@
     "get_post takes the parent Post's id, not a Version's: use the Post id from start_post or give_feedback, or find it with list_posts and get_post. If no Post holds that Version, don't call the tool.",
     "Before post_now or schedule_post with a version_id, show the person that Version's Final from get_post, every Part in order, the publish time, and the Community or profile it goes to.",
     "Before edit_scheduled_post, read the post with list_scheduled_posts and show the text, time, Community or profile, and follower sharing it will have after the edit, including fields the call leaves out.",
-    "Before delete_scheduled_post, show the person that post's text and time from list_scheduled_posts, and say the deletion is permanent and can't be undone.",
+    "Before delete_scheduled_post, show that post's text, time, and which Parts are already live on X, from list_scheduled_posts. Deleting is permanent, and Parts already live stay on X.",
     "Keep post_now, schedule_post, edit_scheduled_post and delete_scheduled_post on Review: a Scheduled post publishes at its time with no further prompt, and post_now can't be undone.",
     "Drafting with start_post and give_feedback only writes Versions inside Pumpkit and publishes nothing on X."
   ]
