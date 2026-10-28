@@ -225,7 +225,6 @@ fn unrelated_execution_and_shell_effects_do_not_inherit_test_delegation() {
         "pytest -q > result.txt",
         "pytest $(cat .env)",
         "pytest `cat .env`",
-        "pytest &",
         "PATH=/tmp pytest -q",
         "PYTHONPATH=/tmp python3 -m pytest",
         // A `timeout` named by path is whatever that file holds.
@@ -325,7 +324,6 @@ fn direct_node_tests_require_containment_without_weakening_other_execution() {
         "node --test > .env",
         "node --test && rm -rf /",
         "node --test $(cat .env)",
-        "node --test &",
         "NODE_OPTIONS=--require=x node --test",
     ] {
         let result = classify("omp", command);
@@ -334,6 +332,29 @@ fn direct_node_tests_require_containment_without_weakening_other_execution() {
             "{command}"
         );
         assert_ne!(result.decision, "allow", "{command}");
+    }
+}
+
+#[test]
+fn backgrounded_test_runs_keep_the_bare_command_verdict() {
+    // A backgrounded list is read as the list itself. The contained sink runs
+    // the submitted text in its own process group (a job object on Windows)
+    // and ends the whole group when the shell exits, so the background job
+    // stays inside the same profile as the bare run and cannot outlive it.
+    for (backgrounded, bare) in [
+        ("pytest -q &", "pytest -q"),
+        ("node --test &", "node --test"),
+    ] {
+        let backgrounded_result = classify("omp", backgrounded);
+        let bare_result = classify("omp", bare);
+        assert_eq!(
+            backgrounded_result.reason_code, bare_result.reason_code,
+            "{backgrounded}"
+        );
+        assert_eq!(
+            backgrounded_result.decision, bare_result.decision,
+            "{backgrounded}"
+        );
     }
 }
 

@@ -921,37 +921,20 @@ fn evaluate_rewritten(
     };
     // A containment profile admits the exact command its sink runs, and the
     // sink runs the submitted text, not the rewrite: `pytest &` leaves a job
-    // behind the contained run. A rewrite that comes back delegated, or whose
-    // review would be delegated by the hook layer reading its model, keeps the
+    // behind the contained run. A rewrite that comes back delegated keeps the
     // construct's own review.
     match rewritten {
         Ok(rewritten)
             if matches!(
                 rewritten.minimum_action.as_str(),
                 "allow" | "review" | "block"
-            ) && !delegated_rewrite(
-                &rewritten,
-                PathContext::for_session(home_dir, cwd, execution_environment),
-            ) =>
+            ) && crate::hook_responses::contained_execution_profile(&rewritten.reason_code)
+                .is_none() =>
         {
             Ok(rewritten)
         }
         _ => Ok(decision),
     }
-}
-
-/// Whether a rewritten decision would reach a containment sink. The hook layer
-/// contains a review by the profile its command model names, so a review that
-/// carries a rewritten test command would run the submitted construct under a
-/// profile that admits only the bare command.
-fn delegated_rewrite(decision: &PreToolDecisionV1, context: PathContext<'_>) -> bool {
-    crate::hook_responses::contained_execution_profile(&decision.reason_code).is_some()
-        || (decision.minimum_action == "review"
-            && restricted_test_commands::package_script::contained_test_reason(
-                &decision.command_model,
-                context,
-            )
-            .is_some())
 }
 
 /// The command list a trailing group runs, for the grouping forms whose
