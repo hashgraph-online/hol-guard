@@ -4,6 +4,8 @@ use std::time::Instant;
 
 #[path = "worktree_add_chain.rs"]
 pub(super) mod chain;
+#[path = "worktree_add_chain_route.rs"]
+mod chain_route;
 pub(crate) use chain::new_checkout_route;
 #[path = "worktree_add_destination.rs"]
 mod destination;

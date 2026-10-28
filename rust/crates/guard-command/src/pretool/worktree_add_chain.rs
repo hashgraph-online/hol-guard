@@ -15,13 +15,14 @@
 //! a proven `mkdir` may run between them, in the shell's own directory.
 
 use crate::{CanonicalCommandV1, CommandSegmentV1};
-use std::path::{Component, Path, PathBuf};
+use std::path::Path;
 use std::time::Instant;
 
 /// Whether the whole command is proven `origin` fetches, one proven
 /// `git worktree add`, a `cd` into exactly the checkout it creates, and
-/// proven Git reads there with bounded `head`/`tail` stages. The result is
-/// memoized so the Git read floor reuses this proof instead of probing again.
+/// proven Git reads there with bounded `head`, `tail` and `wc` stages. The
+/// result is memoized so the Git read floor reuses this proof instead of
+/// probing again.
 pub(in super::super) fn proven(
     model: &CanonicalCommandV1,
     context: super::super::PathContext<'_>,
@@ -57,9 +58,25 @@ fn worktree_index(model: &CanonicalCommandV1) -> Option<usize> {
             .is_some_and(|value| super::super::executable_basename(value) == "git")
             && super::parse(segment).is_some()
     })?;
-    let next = model.segments.get(index + 1)?;
-    (matches!(next.executable.as_deref(), Some("cd" | "mkdir")) || routed_position(next).is_some())
-        .then_some(index)
+    let next = model.segments.get(after_creation(model, index))?;
+    (matches!(next.executable.as_deref(), Some("cd" | "mkdir"))
+        || super::chain_route::routed_position(next).is_some())
+    .then_some(index)
+}
+
+/// The segment after the `git worktree add` and the stages of its own
+/// pipeline. `git worktree add ... 2>&1 | tail -3` reports what the add
+/// printed; the checkout it creates is the same one either way.
+fn after_creation(model: &CanonicalCommandV1, add: usize) -> usize {
+    let mut index = add + 1;
+    while model
+        .segments
+        .get(index)
+        .is_some_and(|segment| segment.pipeline_index > 0)
+    {
+        index += 1;
+    }
+    index
 }
 
 fn prove(
@@ -85,7 +102,7 @@ fn prove(
                 execution_environment,
             )
         } else {
-            stdin_stage(segment, context, execution_environment)
+            super::chain_route::stdin_stage(segment, context, execution_environment)
         };
         if !proven {
             return false;
@@ -93,14 +110,36 @@ fn prove(
         fetch_before = true;
     }
     let creation = &segments[add];
-    let next = &segments[add + 1];
-    if creation.pipeline_index != 0
-        || next.pipeline_index != 0
-        || super::separator_between(model, add, add + 1)
-            .as_deref()
-            .map(str::trim)
-            != Some("&&")
+    let after = after_creation(model, add);
+    let Some(next) = segments.get(after) else {
+        return false;
+    };
+    if creation.pipeline_index != 0 || next.pipeline_index != 0 {
+        return false;
+    }
+    if !segments[add + 1..after]
+        .iter()
+        .all(|segment| super::chain_route::stdin_stage(segment, context, execution_environment))
     {
+        return false;
+    }
+    let entered = next.executable.as_deref() == Some("cd");
+    let boundary = super::separator_between(model, after - 1, after);
+    // `&&` straight after the add tests the add's own exit status, so the
+    // checkout is there before anything reads it. A stage of the add's own
+    // pipeline reports its status instead, and `;` reports none, so those
+    // spellings prove the add ran only through the `cd`: the checkout proof
+    // read the destination and found nothing there, so entering it succeeds
+    // only once the add has created it, and a failed `cd` stops the `&&`
+    // that carries the reads.
+    if !matches!(
+        (
+            boundary.as_deref().map(str::trim),
+            after == add + 1,
+            entered
+        ),
+        (Some("&&"), true, _) | (Some("&&" | ";"), _, true)
+    ) {
         return false;
     }
     let Some((destination, chdir)) = super::proven_checkout(
@@ -112,8 +151,7 @@ fn prove(
     ) else {
         return false;
     };
-    let entered = next.executable.as_deref() == Some("cd");
-    if entered && cd_target(next, context).as_ref() != Some(&destination) {
+    if entered && super::chain_route::cd_target(next, context).as_ref() != Some(&destination) {
         return false;
     }
     // Reads are proven in the repository the checkout belongs to. If the
@@ -126,7 +164,7 @@ fn prove(
         cwd: chdir.as_deref().or(context.cwd),
         ..context
     };
-    let first = if entered { add + 2 } else { add + 1 };
+    let first = if entered { after + 1 } else { after };
     // Without a `cd` the chain must read the new checkout: an add followed
     // only by `mkdir` keeps the review work-tree updates give later writes.
     if !entered
@@ -150,10 +188,16 @@ fn prove(
         }
         let segment = &segments[index];
         if segment.pipeline_index > 0 {
-            return stdin_stage(segment, repository, execution_environment);
+            return super::chain_route::stdin_stage(segment, repository, execution_environment);
         }
         if entered {
-            return unrouted_read(model, index, repository, deadline, execution_environment);
+            return super::chain_route::unrouted_read(
+                model,
+                index,
+                repository,
+                deadline,
+                execution_environment,
+            );
         }
         if segment.executable.as_deref() == Some("mkdir") {
             return proven_mkdir(segment, &destination, context);
@@ -251,7 +295,7 @@ fn routed_read(
     stripped.segments[index]
         .arguments
         .drain(position..position + 2);
-    unrouted_read(
+    super::chain_route::unrouted_read(
         &stripped,
         index,
         repository,
@@ -271,200 +315,10 @@ pub(crate) fn new_checkout_route(
 ) -> Option<usize> {
     let add = worktree_index(model)?;
     let segment = model.segments.get(index).filter(|_| index > add)?;
-    let position = routed_position(segment)?;
+    let position = super::chain_route::routed_position(segment)?;
     let (_, destination, _) = super::planned_checkout(&model.segments[add], context)?;
     (super::super::directory_targets::home_targets_unquoted(segment)
-        && dash_c_target(&segment.arguments[position + 1], context) == Some(destination))
+        && super::chain_route::dash_c_target(&segment.arguments[position + 1], context)
+            == Some(destination))
     .then_some(position)
-}
-
-/// The index of the single `-C` among a Git read's leading options.
-fn routed_position(segment: &CommandSegmentV1) -> Option<usize> {
-    if segment.executable.as_deref() != Some("git") {
-        return None;
-    }
-    let mut position = None;
-    let mut index = 0;
-    loop {
-        match segment.arguments.get(index).map(String::as_str) {
-            Some("-P" | "--no-pager" | "--no-optional-locks") => index += 1,
-            Some("-C") if position.is_none() => {
-                position = Some(index);
-                index += 2;
-            }
-            _ => return position.filter(|position| *position + 1 < segment.arguments.len()),
-        }
-    }
-}
-
-/// The directory `git -C <path>` enters. Git changes directory physically,
-/// so the parent is resolved through any symlink and only the final name,
-/// which the add itself creates, is taken as spelled.
-fn dash_c_target(value: &str, context: super::super::PathContext<'_>) -> Option<PathBuf> {
-    let expanded;
-    let value = if value.starts_with("~/") {
-        if cfg!(windows) || !context.shell_home_matches {
-            return None;
-        }
-        expanded = super::super::read_paths::expand_home_read_path(value, context.home_dir)?;
-        expanded.as_str()
-    } else {
-        value
-    };
-    if !super::valid_path_text(value) {
-        return None;
-    }
-    let supplied = Path::new(value);
-    let target = if supplied.is_absolute() {
-        supplied.to_path_buf()
-    } else {
-        std::fs::canonicalize(context.cwd?).ok()?.join(supplied)
-    };
-    let leaf = target.file_name()?;
-    Some(std::fs::canonicalize(target.parent()?).ok()?.join(leaf))
-}
-
-/// A Git read with no leading option that could route it to another
-/// repository or override configuration, proven by the configuration probe.
-/// The path screens run against the repository's directory rather than the
-/// new checkout, so only paths that stay inside the checkout are accepted.
-fn unrouted_read(
-    model: &CanonicalCommandV1,
-    index: usize,
-    repository: super::super::PathContext<'_>,
-    deadline: Option<Instant>,
-    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
-) -> bool {
-    let arguments = &model.segments[index].arguments;
-    arguments
-        .iter()
-        .take_while(|argument| argument.starts_with('-'))
-        .all(|argument| {
-            matches!(
-                argument.as_str(),
-                "-P" | "--no-pager" | "--no-optional-locks"
-            )
-        })
-        && arguments.iter().all(|argument| checkout_relative(argument))
-        && super::super::git_remote_ops::proven_read(
-            model,
-            index,
-            repository,
-            deadline,
-            execution_environment,
-        )
-}
-
-/// An argument that names nothing outside the checkout: no absolute or
-/// home-relative path, no parent step, and no `--no-index` comparison of
-/// arbitrary files.
-fn checkout_relative(argument: &str) -> bool {
-    let value = argument
-        .split_once('=')
-        .filter(|_| argument.starts_with("--"))
-        .map_or(argument, |(_, value)| value);
-    !value.starts_with('/')
-        && !value.starts_with('~')
-        && !value.starts_with('\\')
-        && argument != "--no-index"
-        && !Path::new(value)
-            .components()
-            .any(|component| component == Component::ParentDir)
-}
-
-/// A bounded `head` or `tail` of the previous stage's output.
-fn stdin_stage(
-    segment: &CommandSegmentV1,
-    context: super::super::PathContext<'_>,
-    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
-) -> bool {
-    segment.environment_names.is_empty()
-        && segment.wrapper_chain.is_empty()
-        && !segment.path_overridden
-        && segment.executable.as_deref().is_some_and(|value| {
-            matches!(super::super::executable_basename(value), "head" | "tail")
-                && super::super::git_worktree::trusted_pipeline_command(
-                    value,
-                    context,
-                    execution_environment,
-                )
-        })
-        && super::super::safe_reads::safe_head_tail_stdin_arguments(&segment.arguments)
-}
-
-/// The directory `cd <path>` enters. A shell `cd` resolves `..` against its
-/// logical `$PWD`, while Git created the checkout at a physical path, so the
-/// two agree only when the reported cwd has no symlinked component. The
-/// lexical target's parent is then resolved physically and the result is
-/// compared with the canonical destination by the caller.
-fn cd_target(
-    segment: &CommandSegmentV1,
-    context: super::super::PathContext<'_>,
-) -> Option<PathBuf> {
-    let [value] = segment.arguments.as_slice() else {
-        return None;
-    };
-    if !segment.environment_names.is_empty()
-        || !segment.wrapper_chain.is_empty()
-        || segment.path_overridden
-        || !super::valid_path_text(value)
-    {
-        return None;
-    }
-    entered_directory(value, context)
-}
-
-/// On Windows only a drive-absolute operand is proved: the shell skips the
-/// CDPATH search for it and does not resolve it against its logical
-/// directory. Its parent must be spelled exactly as its canonical path, so
-/// case, short names, junctions and links all stay reviewed, and a `:` past
-/// the drive (an alternate data stream) is refused.
-#[cfg(windows)]
-fn entered_directory(value: &str, _context: super::super::PathContext<'_>) -> Option<PathBuf> {
-    if value.get(2..).is_none_or(|rest| rest.contains(':')) {
-        return None;
-    }
-    let supplied = Path::new(value);
-    let parent = supplied.parent()?;
-    let leaf = supplied.file_name()?;
-    let canonical = std::fs::canonicalize(parent).ok()?;
-    (supplied.is_absolute()
-        && super::super::directory_targets::exact_drive_spelling(parent.to_str()?, &canonical))
-    .then(|| canonical.join(leaf))
-}
-
-#[cfg(not(windows))]
-fn entered_directory(value: &str, context: super::super::PathContext<'_>) -> Option<PathBuf> {
-    let declared = Path::new(context.cwd?);
-    if !declared.is_absolute() || std::fs::canonicalize(declared).ok()? != declared {
-        return None;
-    }
-    // POSIX `cd` searches CDPATH for a relative operand unless it starts
-    // with `.` or `..`.
-    let supplied = Path::new(value);
-    if !supplied.is_absolute() && !value.starts_with("../") && !context.cdpath_unset {
-        return None;
-    }
-    let mut target = PathBuf::new();
-    for component in declared.join(supplied).components() {
-        match component {
-            Component::ParentDir => {
-                if !target.pop() {
-                    return None;
-                }
-            }
-            Component::CurDir => {}
-            other => target.push(other),
-        }
-    }
-    // The shell then enters the lexical target physically, through any
-    // symlinked parent such as `/tmp` on macOS, just as `-C` does. A link
-    // someone else could swap before the `cd` runs is never followed.
-    let leaf = target.file_name()?;
-    let parent = target.parent()?;
-    let home = std::fs::canonicalize(context.home_dir?).ok()?;
-    if !super::destination::fixed_symlinks(parent, &home) {
-        return None;
-    }
-    Some(std::fs::canonicalize(parent).ok()?.join(leaf))
 }

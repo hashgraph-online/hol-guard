@@ -22,7 +22,6 @@ from .hook_fail_closed import (
     render_silent_review_block,
 )
 from .hook_native_exact_action import native_review_evidence
-from .hook_native_local_cli import native_local_cli_grant_response
 from .hook_native_package_review import native_package_review_response
 from .hook_native_review_binding import (
     native_review_claimed_allow,
@@ -77,7 +76,9 @@ def pause_native_pre_tool_for_approval(
     claim_saved_approval: bool = True,
     claimed_saved_allow_hash: str | None = None,
     claimed_approval_request_id: str | None = None,
+    local_cli_rule: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
+    """Answer a native review; ``local_cli_rule`` is the edge's custom extension rule."""
     try:
         native_review_policy_binding(harness=harness, native_result=native_result, verified_receipt=native_receipt)
     except ValueError:
@@ -85,16 +86,9 @@ def pause_native_pre_tool_for_approval(
     launch_target = _native_review_launch_target(payload)
     tool_name = _native_review_tool_name(payload)
     # Custom-extension and saved exact-action blocks win over any allow or pending once approval.
-    custom = native_local_cli_grant_response(
-        store,
-        harness=harness,
-        payload=payload,
-        native_result=native_result,
-        workspace=workspace,
-        home_dir=home_dir,
-    )
-    if custom is not None and custom[0]:
-        return custom[1]
+    custom = None if local_cli_rule is None else cast("dict[str, object]", local_cli_rule["harness_response"])
+    if local_cli_rule is not None and local_cli_rule["blocked"] is True:
+        return cast("dict[str, object]", custom)
     # A matching custom grant never uses the evidence below, so it settles first.
     # One resident ask re-checks the receipt's policy binding and answers both
     # the retry binding and the exact-action token. The saved-decision lookup
@@ -121,7 +115,7 @@ def pause_native_pre_tool_for_approval(
     if saved is not None:
         return saved
     if custom is not None:
-        return custom[1]
+        return custom
     if native_review_matching_block(
         store,
         harness=harness,

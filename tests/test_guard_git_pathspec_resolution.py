@@ -10,10 +10,6 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.native_codex_tool_output import codex_tool_output_native
-from tests.codex_read_only_inspection import (
-    codex_command_is_read_only_source_inspection,
-)
 from tests.live_hook_review_support import assert_secret_output_held, live_post_tool_flag
 from tests.native_command_test_support import inspect_command_native_test as inspect_command
 
@@ -23,16 +19,11 @@ _LINE_BREAK_FILENAME = "line\u2028break.py" if os.name == "nt" else "line\nbreak
 
 
 # The resident's Codex tool-output review models POSIX shell text and paths and
-# refuses Windows outright (``native_codex_tool_output._platform_is_supported``),
-# so pathspec identities and read-only proofs exist only on POSIX hosts.
+# refuses Windows outright, so pathspec identities and read-only proofs exist
+# only on POSIX hosts.
 _POSIX_TOOL_OUTPUT_REVIEW = pytest.mark.skipif(
     sys.platform == "win32", reason="Codex tool-output review is POSIX-only; Windows fails closed"
 )
-
-
-def _codex_git_pathspec_identity_for_command(command_text: str, *, cwd: Path | None) -> str | None:
-    answer = codex_tool_output_native("git_pathspec_identity", command=command_text, cwd=cwd)
-    return None if answer.error_code is not None else answer.value
 
 
 def _write(path: Path, text: str) -> None:
@@ -91,31 +82,6 @@ def git_repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 @_POSIX_TOOL_OUTPUT_REVIEW
-def test_git_diff_pathspec_applies_the_same_policy_as_explicit_files(git_repository: Path) -> None:
-    allowed_magic = "git diff -- ':(top,glob)src/**/*.py' | sed -n '1,40p'"
-    protected_magic = "git diff -- ':(top,glob)**/*.env' | sed -n '1,40p'"
-    protected_explicit = "git diff -- .env | sed -n '1,40p'"
-    protected_without_terminator = "git diff .env | sed -n '1,40p'"
-
-    assert codex_command_is_read_only_source_inspection(
-        allowed_magic,
-        cwd=git_repository,
-    )
-    assert not codex_command_is_read_only_source_inspection(
-        protected_magic,
-        cwd=git_repository,
-    )
-    assert not codex_command_is_read_only_source_inspection(
-        protected_explicit,
-        cwd=git_repository,
-    )
-    assert not codex_command_is_read_only_source_inspection(
-        protected_without_terminator,
-        cwd=git_repository,
-    )
-
-
-@_POSIX_TOOL_OUTPUT_REVIEW
 def test_git_pathspec_selection_changes_post_tool_approval_identity(git_repository: Path) -> None:
     command = "git diff -- ':(top,glob)**/*.env' | sed -n '1,40p'"
     credential_fixture = "ghp_" + "1" * 36
@@ -136,67 +102,9 @@ def test_git_pathspec_selection_changes_post_tool_approval_identity(git_reposito
     )
 
     # Both selections stay held. The live output block carries no approval
-    # identity; the identity change itself is pinned by
-    # test_git_pathspec_identity_binds_index_and_worktree_state.
+    # identity.
     assert_secret_output_held(first)
     assert_secret_output_held(second)
-
-
-_DIFF_ENV_COMMAND = "git diff -- ':(top,glob)**/*.env' | sed -n '1,40p'"
-
-
-@_POSIX_TOOL_OUTPUT_REVIEW
-def test_git_pathspec_identity_binds_index_and_worktree_state(git_repository: Path) -> None:
-    first = _codex_git_pathspec_identity_for_command(_DIFF_ENV_COMMAND, cwd=git_repository)
-    _write(git_repository / ".env", "TOKEN=changed-fixture\n")
-    _git(git_repository, "add", ".env")
-    second = _codex_git_pathspec_identity_for_command(_DIFF_ENV_COMMAND, cwd=git_repository)
-
-    assert first is not None
-    assert second is not None
-    assert first != second
-
-
-@_POSIX_TOOL_OUTPUT_REVIEW
-def test_git_pathspec_identity_uses_modeled_directory_change(git_repository: Path) -> None:
-    contextual = _codex_git_pathspec_identity_for_command(
-        "cd src && git diff -- ':(top,glob)**/*.env' | sed -n '1,40p'", cwd=git_repository
-    )
-    direct = _codex_git_pathspec_identity_for_command(
-        "git diff -- ':(top,glob)**/*.env' | sed -n '1,40p'", cwd=git_repository / "src"
-    )
-
-    assert contextual is not None
-    assert contextual == direct
-
-
-@_POSIX_TOOL_OUTPUT_REVIEW
-def test_git_pathspec_identity_distinguishes_selections(git_repository: Path) -> None:
-    env_files = _codex_git_pathspec_identity_for_command(_DIFF_ENV_COMMAND, cwd=git_repository)
-    python_files = _codex_git_pathspec_identity_for_command(
-        "git diff -- ':(top,glob)src/**/*.py' | sed -n '1,40p'", cwd=git_repository
-    )
-
-    assert env_files is not None
-    assert python_files is not None
-    assert env_files != python_files
-
-
-@_POSIX_TOOL_OUTPUT_REVIEW
-def test_git_diff_default_revision_and_staged_forms_resolve_all_tracked_files(git_repository: Path) -> None:
-    for command in ("git diff", "git diff --staged", "git diff HEAD~1"):
-        assert _codex_git_pathspec_identity_for_command(command, cwd=git_repository) is not None
-
-
-@_POSIX_TOOL_OUTPUT_REVIEW
-def test_git_pathspec_identity_for_non_repository_differs_from_repository(git_repository: Path, tmp_path: Path) -> None:
-    outside = tmp_path / "not-a-repository"
-    outside.mkdir()
-    inside = _codex_git_pathspec_identity_for_command("git diff -- src", cwd=git_repository)
-    unavailable = _codex_git_pathspec_identity_for_command("git diff -- src", cwd=outside)
-
-    assert inside is not None
-    assert unavailable != inside
 
 
 @pytest.mark.parametrize(
@@ -236,47 +144,3 @@ def test_normal_git_workflows_preserve_native_ownership_and_proof_requirements(
     classification = payload["classification"]
     assert isinstance(classification, dict)
     assert classification["matched"] is (action != "allow")
-
-
-def test_git_pathspec_query_does_not_execute_aliases_hooks_or_diff_helpers(git_repository: Path) -> None:
-    marker = git_repository.parent / "executed"
-    _git(git_repository, "config", "alias.ls-files", f"!touch {marker}")
-    _git(git_repository, "config", "diff.external", f"touch {marker}")
-    _git(git_repository, "config", "core.fsmonitor", f"touch {marker}")
-    hook = git_repository / ".git" / "hooks" / "post-checkout"
-    _write(hook, f"#!/bin/sh\ntouch {marker}\n")
-    hook.chmod(0o755)
-
-    _codex_git_pathspec_identity_for_command("git diff -- ':(glob)src/**/*.py'", cwd=git_repository)
-
-    assert not marker.exists()
-
-
-@_POSIX_TOOL_OUTPUT_REVIEW
-def test_git_pathspec_symlink_selection_is_incomplete(git_repository: Path) -> None:
-    target = git_repository / "src" / "app.py"
-    symlink = git_repository / "linked.py"
-    try:
-        symlink.symlink_to(target)
-    except OSError as exc:
-        pytest.skip(f"symlinks unavailable: {exc}")
-    _git(git_repository, "add", "linked.py")
-
-    linked = _codex_git_pathspec_identity_for_command("git diff -- linked.py", cwd=git_repository)
-    regular = _codex_git_pathspec_identity_for_command("git diff -- src/app.py", cwd=git_repository)
-
-    assert linked != regular
-
-
-@pytest.mark.skipif(sys.platform != "win32", reason="Windows fail-closed contract")
-def test_windows_refuses_git_pathspec_identity_instead_of_guessing(git_repository: Path) -> None:
-    answer = codex_tool_output_native("git_pathspec_identity", command=_DIFF_ENV_COMMAND, cwd=git_repository)
-
-    assert answer.allowed is False
-    assert answer.value is None
-    assert answer.error_code == "native_codex_tool_output_unsupported_platform"
-    # Without the resident's proof even a POSIX-safe source pathspec stays unproven.
-    assert not codex_command_is_read_only_source_inspection(
-        "git diff -- ':(top,glob)src/**/*.py' | sed -n '1,40p'",
-        cwd=git_repository,
-    )

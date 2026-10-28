@@ -305,16 +305,6 @@
       "note": "The fixed deny render_pre_tool falls back to when the resident cannot compose the silent block."
     },
     {
-      "file": "src/codex_plugin_scanner/guard/daemon/hook_native_local_cli.py",
-      "func": "native_local_cli_grant_response",
-      "root": "hook",
-      "reading": "renders-native",
-      "actions": [
-        "allow"
-      ],
-      "note": "Lifts an overridable review only on the resident's `hook_local_cli_rule` verdict; an unreadable rule leaves the review standing."
-    },
-    {
       "file": "src/codex_plugin_scanner/guard/daemon/hook_native_package_review.py",
       "func": "_blocked",
       "root": "hook",

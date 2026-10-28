@@ -24,9 +24,6 @@ from codex_plugin_scanner.guard.runtime.shell_execution_context import (
     SHELL_CWD_WORKSPACE_ESCAPE,
     model_shell_execution_context,
 )
-from tests.codex_read_only_inspection import (
-    codex_command_is_read_only_source_inspection,
-)
 from tests.live_hook_review_support import live_post_tool_flag
 from tests.resident_probe_support import validate_shell_execution_segment
 
@@ -435,17 +432,12 @@ def test_source_inspection_and_package_evidence_use_project_b(
     _write(project_a / "package.json", '{"devDependencies":{"vitest":"^3.0.0"}}\n')
     _write(project_a / "package-lock.json", '{"packages":{"node_modules/vitest":{"version":"3.0.0"}}}\n')
     project_a_runner = _write_executable(project_a / "node_modules" / ".bin" / "vitest")
-    _write(project_b / "src" / "safe.py", "SAFE = True\n")
     _write(project_b / "package.json", '{"devDependencies":{"vitest":"^4.0.0"}}\n')
     _write(project_b / "package-lock.json", '{"packages":{"node_modules/vitest":{"version":"4.0.0"}}}\n')
     local_runner = _write_executable(project_b / "node_modules" / ".bin" / "vitest")
     manager = _write_executable(tmp_path / "bin" / "npx")
     monkeypatch.setenv("PATH", str(manager.parent))
 
-    assert codex_command_is_read_only_source_inspection(
-        "cd project-b && sed -n '1,20p' src/safe.py",
-        cwd=project_a,
-    )
     intent = parse_package_intent(
         "cd project-b && npx --no-install vitest --help",
         workspace=project_a,

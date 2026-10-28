@@ -379,6 +379,7 @@ fn bash_package_binding_omp_preview_uses_the_hosts_tool_directory() {
         harness: "omp".into(),
         event: "PreToolUse".into(),
         recording_only: false,
+        local_cli_rules: None,
         deadline_budget_ms: Some(1000),
         policy_generation: 0,
         policy_snapshot: json!({}),

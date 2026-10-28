@@ -438,6 +438,65 @@ def test_raw_hook_bridge_preserves_payload_for_rust_parsing(
         assert captured == {}
 
 
+@pytest.mark.parametrize("rules", (False, True))
+def test_a_custom_rule_check_gets_its_own_allowance_past_the_review_deadline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rules: bool
+) -> None:
+    runtime = tmp_path / "hol-guard-runtime"
+    runtime.write_bytes(b"runtime")
+    identity = NativeRuntimeIdentity(
+        path=runtime, size=runtime.stat().st_size, mtime_ns=runtime.stat().st_mtime_ns, sha256="a" * 64
+    )
+    capabilities = NativeRuntimeCapabilities(
+        protocol_version=1,
+        runtime_version="test",
+        rule_digest="b" * 64,
+        build_sha="c" * 40,
+        target="test",
+        features=(
+            "hook-envelope-v2",
+            "hook-harness-response-v1",
+            "edge-self-check-v1",
+            "native-resident-client-v1",
+            "pre-tool-generic-authority-v1",
+            "git-execution-context-v1",
+            "edge-local-cli-rule-v1",
+        ),
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.native_hook_edge.native_runtime_status",
+        lambda: NativeRuntimeStatus(
+            mode="auto", available=True, compatible=True, reason="ready", identity=identity, capabilities=capabilities
+        ),
+    )
+    captured: dict[str, object] = {}
+
+    def fake_client(**kwargs: object) -> bytes:
+        captured.update(kwargs)
+        return json.dumps(_edge_result(), separators=(",", ":")).encode()
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.native_hook_edge.native_resident_client_request", fake_client)
+    deadline = time.monotonic() + 1.0
+    review_raw_hook_native(
+        payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "pwd"}},
+        harness="claude",
+        event="PreToolUse",
+        guard_home=tmp_path,
+        home_dir=tmp_path,
+        cwd=tmp_path,
+        source_ref_external_allowed=False,
+        observe_mode=False,
+        deadline=deadline,
+        policy_snapshot={"generation": 1},
+        local_cli_rules={"store_path": str(tmp_path / "guard.db"), "user_home": str(tmp_path), "env": {}}
+        if rules
+        else None,
+    )
+    envelope = json.loads(captured["payload"])
+    assert envelope["deadline_budget_ms"] <= 1_000
+    assert captured["deadline_monotonic"] == deadline + (5.0 if rules else 0.0)
+
+
 @pytest.mark.parametrize(
     ("features", "resident_called"),
     (

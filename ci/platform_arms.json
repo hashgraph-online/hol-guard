@@ -43,22 +43,6 @@
    "body": "8a70fafed4dc"
   },
   {
-   "file": "rust/crates/guard-command/src/codex_output_pathspecs.rs",
-   "item": "fn executable -- non-Unix block",
-   "verdict": "windows-permissive",
-   "note": "No mode-bit probe, so the resolved Git path always reads as executable. The caller still requires it to canonicalise onto the host's own Git executable, which is the load-bearing half of that check.",
-   "cfg": "not(unix)",
-   "body": "6b5b80b15b0b"
-  },
-  {
-   "file": "rust/crates/guard-command/src/codex_output_pathspecs.rs",
-   "item": "fn metadata_fields -- non-Unix block",
-   "verdict": "posix-primitive",
-   "note": "`st_dev`, `st_ino` and `st_mode` have no stable Windows reading, so identity falls back to size and mtime. The tuple is used to notice a file that changed under the scan, not to prove two paths are the same file.",
-   "cfg": "not(unix)",
-   "body": "2385428e2299"
-  },
-  {
    "verdict": "windows-equivalent",
    "note": "`runtime/harness_attribution.py` returns `None` on `os.name == \"nt\"` before it ever reaches `/bin/ps`, so there is no Windows behaviour to keep parity with rather than an absent one. A Windows harness is still attributed by its environment markers, which every supported harness sets; only the fallback parent walk is missing, and its absence leaves the origin unknown rather than wrong. The slug is receipt and display identity, never a policy selector, so an unknown origin softens nothing.",
    "file": "rust/crates/guard-command/src/harness_attribution.rs",

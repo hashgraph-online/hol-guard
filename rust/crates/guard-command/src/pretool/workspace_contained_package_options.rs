@@ -61,7 +61,7 @@ pub(super) fn skip_inert_options(manager: &str, arguments: &[&str]) -> usize {
 /// refused with them, since what it names is not in the text. A scoped name
 /// such as `@acme/web` still passes, and so does a changed-since selector
 /// such as `[origin/main]`, which names a git ref rather than a place on disk.
-fn inert_value(value: &str) -> bool {
+pub(super) fn inert_value(value: &str) -> bool {
     !value.is_empty()
         && !value.starts_with(['-', '.', '/', '~'])
         && !value.contains("..")

@@ -1,13 +1,13 @@
 //! `hook_local_cli_rule`: the daemon's custom extension rule for a native
 //! `PreToolUse`, decided by the same launch identity and grant read the
-//! direct lane uses.
+//! direct lane uses. The hook edge settles it in its answer
+//! (`edge_local_cli.rs`); the resident op stays for callers that ask alone.
 //!
-//! `allowed` is `native_local_cli_block_response`: while any custom block
-//! rule exists, a command the edge allowed is blocked when its grant blocks
-//! it, and blocked as unverified when its identity or grant cannot be
-//! checked. `review` is `native_local_cli_grant_response`: a block applies to
-//! any review, and an allow lifts only an overridable review due to
-//! non-recognition alone. The daemon renders the verdict.
+//! `allowed`: while any custom block rule exists, a command the edge allowed
+//! is blocked when its grant blocks it, and blocked as unverified when its
+//! identity or grant cannot be checked. `review`: a block applies to any
+//! review, and an allow lifts only an overridable review due to
+//! non-recognition alone.
 
 use guard_contracts::{
     HookLocalCliRuleRequestV1, HookLocalCliRuleResultV1, HOOK_LOCAL_CLI_RULE_REQUEST_SCHEMA,
@@ -94,6 +94,11 @@ pub(crate) fn allowed_verdict(request: &HookLocalCliRuleRequestV1) -> RuleVerdic
     {
         return RuleVerdict::None;
     }
+    allowed_verdict_with_block_rules(request)
+}
+
+/// `allowed_verdict` once the caller found a custom block rule.
+pub(crate) fn allowed_verdict_with_block_rules(request: &HookLocalCliRuleRequestV1) -> RuleVerdict {
     let check = check(request);
     let launched = match super::launch_for(
         &request.payload,

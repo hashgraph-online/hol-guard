@@ -56,6 +56,17 @@ def _environment_snapshot() -> dict[str, str]:
     return {key: value for key, value in os.environ.items() if key.startswith("GIT_") or key in _SNAPSHOT_NAMES}
 
 
+# The source-search and locale names a resident command review also reads.
+_TOOL_SNAPSHOT_NAMES = frozenset({"RIPGREP_CONFIG_PATH", "LANG", "LC_ALL", "LC_CTYPE", "TMP", "TEMP", "TMPDIR"})
+
+
+def _tool_environment_snapshot() -> dict[str, str]:
+    """The git snapshot plus the names a resident command review reads."""
+    snapshot = _environment_snapshot()
+    snapshot.update({key: value for key, value in os.environ.items() if key in _TOOL_SNAPSHOT_NAMES})
+    return snapshot
+
+
 def _account_home_directory() -> str | None:
     try:
         import pwd

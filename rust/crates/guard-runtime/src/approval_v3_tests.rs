@@ -173,6 +173,7 @@ fn store_and_envelope_with_runtime(
             execution_environment: None,
         },
         recording_only: false,
+        local_cli_rules: None,
     };
     (root, store, envelope)
 }

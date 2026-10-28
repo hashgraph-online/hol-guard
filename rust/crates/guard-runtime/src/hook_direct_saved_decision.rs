@@ -379,7 +379,7 @@ fn saved_verdict(
 
 /// The rendered verdict marked with its reuse status, or `None` when the
 /// daemon's render request could exceed its size limit.
-fn render(harness: &str, verdict: &Object, status: &str) -> Option<Value> {
+pub(crate) fn render(harness: &str, verdict: &Object, status: &str) -> Option<Value> {
     let encoded = serde_json::to_vec(verdict).ok()?.len() + harness.len();
     if encoded * ESCAPE_FACTOR + ENVELOPE_BYTES > HOOK_RENDER_MAX_BYTES {
         return None;

@@ -25,6 +25,7 @@ Security:
 
 from __future__ import annotations
 
+import os
 import time
 from collections.abc import Mapping
 from contextlib import suppress
@@ -157,8 +158,10 @@ class HookWorker(HookWorkerNativeMixin):
         deadline: float | None,
         policy_snapshot: Mapping[str, object] | None = None,
         request_id: str | None = None,
+        local_cli_rules: bool = False,
     ) -> dict[str, object] | None:
         runtime_status = self._native_runtime_status()
+        store_path = getattr(self.store, "path", None)
         return review_raw_hook_native(
             payload=payload,
             harness=harness,
@@ -172,6 +175,13 @@ class HookWorker(HookWorkerNativeMixin):
             policy_snapshot=policy_snapshot,
             runtime_status=runtime_status,
             **({"request_id": request_id} if request_id is not None else {}),
+            # The edge settles the daemon's custom extension rules; a launch
+            # resolves against the daemon's home and environment.
+            local_cli_rules=(
+                {"store_path": str(store_path), "user_home": str(Path.home()), "env": dict(os.environ)}
+                if local_cli_rules and isinstance(store_path, Path)
+                else None
+            ),
         )
 
     def _native_runtime_status(self) -> NativeRuntimeStatus:
@@ -337,6 +347,7 @@ class HookWorker(HookWorkerNativeMixin):
         payload: dict[str, object],
     ) -> dict[str, object]:
         """Present the pending Guard approval when Claude shows a permission prompt."""
+        from ..cli import commands_support  # noqa: F401
         from ..cli._commands_shared import _now
         from ..cli.commands_support_claude_approval import (
             _claude_permission_prompt_additional_context,

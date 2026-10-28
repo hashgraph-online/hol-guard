@@ -1,9 +1,9 @@
-//! Process facts and git execution for the Codex tool-output review.
+//! Process facts and git execution for the shared command reviews.
 //!
-//! The review is pure text and filesystem logic. Everything that depends on the
-//! caller's process (environment, trusted git binary, git execution safety, a
-//! bounded git run) goes through [`InspectionHost`] so the host (the resident)
-//! owns process execution and this crate stays free of it.
+//! The reviews are pure text and filesystem logic. Everything that depends on
+//! the caller's process (environment, trusted git binary, git execution safety,
+//! bounded git probes) goes through [`InspectionHost`] so the host (the
+//! resident) owns process execution and this crate stays free of it.
 
 use guard_contracts::CompoundGitSegmentV1;
 
@@ -16,13 +16,6 @@ pub enum GitCheck {
     ConfigEnvironmentClean,
     StatusArguments,
     StatusConfig,
-}
-
-/// Outcome of one bounded git run.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum GitRun {
-    Output(Vec<u8>),
-    Failed(&'static str),
 }
 
 /// Outcome of one bounded git probe (`subprocess.run(..., timeout=1)`).
@@ -76,8 +69,6 @@ pub trait InspectionHost {
     /// Whether this exact, already canonical `git` executable is trusted to run
     /// in `cwd` (not under the home, temp or working directory, no loose modes).
     fn git_binary_trusted(&self, git: &str, cwd: &str) -> bool;
-    /// Run `git <args>` in `cwd` with the bounded pathspec profile.
-    fn run_git(&self, git: &str, args: &[String], cwd: &str) -> GitRun;
     /// `is_low_risk_compound_git_inspection` over a modeled, complete chain.
     /// Hosts without a git inspection service refuse.
     fn compound_git_chain(&self, _segments: &[CompoundGitSegmentV1], _complete: bool) -> bool {

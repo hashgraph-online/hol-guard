@@ -132,6 +132,7 @@ fn envelope(event: &str, payload: Value) -> GuardHookEnvelopeV2 {
             execution_environment: None,
         },
         recording_only: false,
+        local_cli_rules: None,
     }
 }
 

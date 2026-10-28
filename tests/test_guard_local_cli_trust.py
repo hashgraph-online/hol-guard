@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.daemon.hook_native_local_cli import native_local_cli_grant_response
 from codex_plugin_scanner.guard.local_cli_hook import observe_unlisted_cli
 from codex_plugin_scanner.guard.local_cli_trust import utc_now
 from codex_plugin_scanner.guard.runtime.local_cli_identity import identify_unlisted_cli
@@ -35,34 +34,6 @@ def test_grant_allows_matching_args_and_not_changed_script(tmp_path: Path) -> No
     script.write_text("print('changed')\n", encoding="utf-8")
     stale = review_rule_verdict(store, command=f"python3 {script} --by url", cwd=tmp_path, home_dir=tmp_path)
     assert stale is None
-
-
-def test_grant_does_not_override_block(tmp_path: Path) -> None:
-    home = tmp_path / "home"
-    home.mkdir()
-    store = GuardStore(home)
-    script = tmp_path / "cwv.py"
-    script.write_text("print('ok')\n", encoding="utf-8")
-    identity = identify_unlisted_cli(f"python3 {script}", cwd=tmp_path, home_dir=tmp_path)
-    assert identity is not None
-    store.upsert_local_cli_grant(
-        identity=identity,
-        state="allowed",
-        expected_revision=0,
-        updated_at=utc_now(),
-    )
-    blocked = {"decision": "deny", "policy_action": "block", "minimum_action": "block"}
-    assert (
-        native_local_cli_grant_response(
-            store,
-            harness="codex",
-            payload={"tool_input": {"command": f"python3 {script}"}, "cwd": str(tmp_path)},
-            native_result=blocked,
-            workspace=tmp_path,
-            home_dir=tmp_path,
-        )
-        is None
-    )
 
 
 def test_blocked_grant_applies_to_review(tmp_path: Path) -> None:

@@ -62,7 +62,6 @@ def _pause(
 
     for name, value in {
         "native_review_evidence": lambda **_k: (True, binding, token, None),
-        "native_local_cli_grant_response": lambda *_a, **_k: None,
         "native_saved_decision_response": lambda *_a, **_k: None,
         "native_review_matching_block": lambda *_a, **_k: False,
         "native_review_matching_allow": lambda *_a, **_k: False,

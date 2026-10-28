@@ -17,6 +17,10 @@ def claude_guard_question_answer(store: GuardStore, payload: dict[str, object]) 
     review and what the answer saves. ``None`` means the call is not the
     question, so the ordinary post-tool review applies.
     """
+    # The CLI helper modules resolve shared names through the command support
+    # registry, which the CLI loads at startup. A resident built in process has
+    # not loaded it, so load it before calling into those modules.
+    from ..cli import commands_support  # noqa: F401
     from ..cli.commands_support_claude_approval import _settle_claude_guard_question
 
     return None if _settle_claude_guard_question(store, payload) is None else {}
@@ -29,6 +33,7 @@ def claude_turn_stop(store: GuardStore, payload: dict[str, object]) -> None:
     instead of inheriting a block nobody chose. The Stop event itself still
     goes to the native edge for its answer.
     """
+    from ..cli import commands_support  # noqa: F401
     from ..cli._commands_shared import _now
     from ..cli.commands_support_permission_store import _discard_claude_pending_permissions
 

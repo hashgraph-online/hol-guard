@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
 
-use crate::codex_output_env::{Ctx, GitCheck, GitProbe, GitRun, InspectionHost};
+use crate::codex_output_env::{Ctx, GitCheck, GitProbe, InspectionHost};
 use crate::codex_output_py::PyPath;
 use crate::sfrs_developer_graph::GraphInputs;
 use crate::sfrs_developer_routines as dev;
@@ -162,9 +162,6 @@ impl InspectionHost for Host {
     }
     fn git_binary_trusted(&self, _: &str, _: &str) -> bool {
         self.trusted("git")
-    }
-    fn run_git(&self, _: &str, _: &[String], _: &str) -> GitRun {
-        GitRun::Failed("unavailable")
     }
     fn cached_diff_pathspecs(&self, values: &[String]) -> bool {
         !values.is_empty()

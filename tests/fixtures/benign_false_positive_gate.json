@@ -32844,6 +32844,310 @@
       },
       "cwd": "worktree",
       "expect": "not_allow"
+    },
+    {
+      "id": "group-bun-pm-ls",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bun pm ls"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "group-bun-pm-ls-all",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bun pm ls --all"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "group-bun-pm-bin-global",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bun pm bin -g"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "group-bun-pm-cache",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bun pm cache"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "group-bun-pm-trusted",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bun pm trusted"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "group-pnpm-store-path",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm store path"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "group-pnpm-store-status",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm store status"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "group-yarn-cache-dir",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "yarn cache dir"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "group-yarn-cache-list",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "yarn cache list"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-group-bun-pm-cache-rm",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bun pm cache rm"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-group-pnpm-store-add",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm store add lodash"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-group-pnpm-store-prune",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm store prune"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-group-yarn-cache-clean",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "yarn cache clean"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "session-worktree-add-pipe-semicolon-cd-inspect",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git worktree add ../wt-chain-a -b fix/chain-a origin/main 2>&1 | tail -3; cd ../wt-chain-a && git rev-parse HEAD && git status --short | wc -l"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "session-worktree-add-pipe-tail-then-cd-log",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git worktree add ../wt-chain-b -b fix/chain-b origin/main 2>&1 | tail -3 && cd ../wt-chain-b && git log -1 --oneline"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "session-worktree-add-semicolon-cd-rev-parse",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git worktree add ../wt-chain-c -b fix/chain-c origin/main; cd ../wt-chain-c && git rev-parse --abbrev-ref HEAD"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "session-worktree-add-cd-ls-files-count",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git worktree add ../wt-chain-d -b fix/chain-d origin/main && cd ../wt-chain-d && git ls-files | wc -l"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "session-worktree-add-cd-rev-parse-head",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git worktree add ../wt-chain-e -b fix/chain-e origin/main && cd ../wt-chain-e && git rev-parse HEAD"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "session-worktree-add-cd-status-count",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git worktree add ../wt-chain-f -b fix/chain-f origin/main && cd ../wt-chain-f && git status --short | wc -l"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
     }
   ],
   "mcp_cases": [

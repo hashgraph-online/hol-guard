@@ -421,6 +421,7 @@ fn answer(
             execution_environment,
         },
         recording_only,
+        local_cli_rules: None,
     };
     let (edge, fence_wait) = fence::evaluate(envelope, policy_store)?;
     // Removed again unless the answer that runs it is returned.

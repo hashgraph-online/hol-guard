@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Value};
 
-use crate::codex_output_env::{Ctx, GitCheck, GitRun, InspectionHost};
+use crate::codex_output_env::{Ctx, GitCheck, InspectionHost};
 use crate::sfrs_gh_body_safety as gbs;
 use crate::sfrs_interpreter_heredoc::shell_heredoc_payloads;
 use crate::sfrs_node_heredoc as heredoc;
@@ -130,9 +130,6 @@ impl InspectionHost for Host {
     }
     fn git_binary_trusted(&self, _: &str, _: &str) -> bool {
         false
-    }
-    fn run_git(&self, _: &str, _: &[String], _: &str) -> GitRun {
-        GitRun::Failed("replay host does not run git")
     }
     fn path_exists(&self, path: &str) -> bool {
         fs::symlink_metadata(path).is_ok() || Path::new(path).exists()

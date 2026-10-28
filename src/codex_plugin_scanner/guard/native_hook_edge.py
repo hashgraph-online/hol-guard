@@ -29,6 +29,11 @@ _RESPONSE_FEATURE = "hook-harness-response-v1"
 _SELF_CHECK_FEATURE = "edge-self-check-v1"
 _UNSUPPORTED_EVENT_CODE = "native_hook_event_unsupported"
 _MAX_REQUEST_BYTES = 6 * 1024 * 1024
+_LOCAL_CLI_RULE_FEATURE = "edge-local-cli-rule-v1"
+# The custom extension rule is read after the review, and identifying a
+# launch can take seconds. It once had its own request with this timeout;
+# the edge keeps that allowance rather than spending the review's budget.
+_LOCAL_CLI_RULE_SECONDS = 5.0
 
 
 def _capture_deadline(deadline: float | None) -> tuple[float, int]:
@@ -53,7 +58,7 @@ def _decode_edge(payload: object) -> dict[str, Any] | None:
         "result",
         "receipt",
     }
-    allowed = required | {"request_id", "harness_response", "containment_route"}
+    allowed = required | {"request_id", "harness_response", "containment_route", "local_cli_rule"}
     if not isinstance(payload, dict) or not required <= set(payload) or set(payload) - allowed:
         return None
     event_name = payload.get("event_name")
@@ -78,6 +83,14 @@ def _decode_edge(payload: object) -> dict[str, Any] | None:
     receipt = payload.get("receipt")
     if not isinstance(receipt, dict) or not isinstance(receipt.get("request_id"), str):
         return None
+    rule = payload.get("local_cli_rule")
+    if rule is not None and (
+        not isinstance(rule, dict)
+        or set(rule) != {"blocked", "harness_response"}
+        or not isinstance(rule["blocked"], bool)
+        or not isinstance(rule["harness_response"], dict)
+    ):
+        return None
     return payload
 
 
@@ -95,6 +108,7 @@ def _encode_hook_envelope(
     execution_context_supported: bool = False,
     request_id: str | None = None,
     recording_only: bool = False,
+    local_cli_rules: Mapping[str, object] | None = None,
 ) -> bytes | None:
     from .hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY, collect_hook_execution_environment
 
@@ -126,6 +140,8 @@ def _encode_hook_envelope(
     }
     if recording_only:
         envelope["recording_only"] = True
+    if local_cli_rules is not None:
+        envelope["local_cli_rules"] = dict(local_cli_rules)
     if execution_context_supported:
         # Direct CLI calls capture locally; daemon workers explicitly pass
         # None when caller context is unavailable instead of using daemon env.
@@ -161,6 +177,7 @@ def review_raw_hook_native(
     policy_snapshot: Mapping[str, object] | None = None,
     runtime_status: NativeRuntimeStatus | None = None,
     request_id: str | None = None,
+    local_cli_rules: Mapping[str, object] | None = None,
 ) -> dict[str, Any] | None:
     """Return a typed Rust edge result, or fail closed without reinterpretation."""
     record_native_resident_client_failure_code(None)
@@ -185,6 +202,11 @@ def review_raw_hook_native(
         required_features.add("pre-tool-generic-authority-v1")
         if event_key not in {"userpromptsubmit", "userpromptsubmitted", "prompt"}:
             required_features.add("git-execution-context-v1")
+            if local_cli_rules is not None:
+                required_features.add(_LOCAL_CLI_RULE_FEATURE)
+    if _LOCAL_CLI_RULE_FEATURE not in required_features:
+        # Only a tool call has a custom extension rule to settle.
+        local_cli_rules = None
     if (
         not status.available
         or not status.compatible
@@ -213,6 +235,7 @@ def review_raw_hook_native(
         execution_context_supported="git-execution-context-v1" in status.capabilities.features,
         request_id=request_id,
         recording_only=observe_mode,
+        local_cli_rules=local_cli_rules,
     )
     if encoded is None:
         return record_native_hook_result("native_fail_safe", None)
@@ -221,7 +244,7 @@ def review_raw_hook_native(
         guard_home=guard_home,
         environment=_isolated_environment(),
         payload=encoded,
-        deadline_monotonic=deadline_monotonic,
+        deadline_monotonic=deadline_monotonic + (_LOCAL_CLI_RULE_SECONDS if local_cli_rules is not None else 0.0),
         raw_hook_envelope=True,
     )
     if output is None:

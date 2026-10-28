@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from contextlib import suppress
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Protocol, cast
 
 from ..cli.commands_support_command_activity import hook_post_succeeded
 from ..native_codex_binding_capture import CodexBindingCaptureWriter
@@ -30,7 +30,6 @@ from .hook_contained_grant import granted_containment_response
 from .hook_evidence_dispatch import run_hook_evidence
 from .hook_fail_closed import render_pre_tool, render_recording_only_pre_tool
 from .hook_native_cli_observer import observe_native_pre_tool_cli
-from .hook_native_local_cli import native_local_cli_block_response
 from .hook_native_review_approval import (
     pause_native_pre_tool_for_approval,
 )
@@ -431,6 +430,7 @@ class HookWorkerNativeMixin:
                 deadline=deadline,
                 policy_snapshot=policy_snapshot,
                 **({"request_id": probe[1]} if probe is not None else {}),
+                local_cli_rules=True,
             )
             refreshed = (
                 None
@@ -603,27 +603,21 @@ class HookWorkerNativeMixin:
                     claim_saved_approval=claim_saved_approval,
                     claimed_saved_allow_hash=claimed_saved_allow_hash,
                     claimed_approval_request_id=claimed_approval_request_id,
+                    local_cli_rule=cast("Mapping[str, object] | None", edge.get("local_cli_rule")),
                 )
                 return (_record_native_pre_activity(self, native_harness, payload, response, accepted_receipt), True)
-            custom_block = native_local_cli_block_response(
-                self.store,
-                harness=native_harness,
-                payload=payload,
-                native_result=native_result,
-                workspace=workspace,
-                home_dir=home_dir,
-            )
-            if custom_block is not None:
-                if recording_only:
-                    custom_block = render_recording_only_pre_tool(
-                        native_harness,
-                        reason_code="local_cli_extension_blocked",
-                        reason="Watch recorded this action without stopping it.",
-                        guard_home=guard_home,
-                        deadline=deadline,
-                    )
+            # The edge settled the custom extension rules; a block it found
+            # answers an allowed call (in Watch, as a recorded continue).
+            custom_block = edge.get("local_cli_rule")
+            if isinstance(custom_block, dict) and custom_block["blocked"] is True:
                 return (
-                    _record_native_pre_activity(self, native_harness, payload, custom_block, accepted_receipt),
+                    _record_native_pre_activity(
+                        self,
+                        native_harness,
+                        payload,
+                        dict(cast("Mapping[str, object]", custom_block["harness_response"])),
+                        accepted_receipt,
+                    ),
                     True,
                 )
             from ..adapters.zcode_contained_tests import route_zcode_containment

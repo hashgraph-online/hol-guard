@@ -23,6 +23,8 @@ use edge_identity::{
     verdict_policy_identity, MAX_EVENT_BYTES, MAX_HARNESS_BYTES, MAX_PATH_BYTES,
 };
 pub(crate) use edge_identity::{policy_generation_matches, stable_policy_identity};
+#[path = "edge_local_cli.rs"]
+mod edge_local_cli;
 #[path = "edge_result_check.rs"]
 mod edge_result_check;
 pub(crate) use edge_result_check::standalone_receipt;
@@ -447,9 +449,11 @@ fn evaluate_validated_envelope(
         // Guard's Claude Code notice outside Watch; the typed result's reason is always text.
         let _ = crate::hook_direct::claude_prompt_text::brand(response, &result);
     }
+    let local_cli_rule = edge_local_cli::settle(&envelope, &harness, &event_name, &result)?;
     let edge = GuardHookEdgeResultV2 {
         // Every edge carries its route so no hook asks again; only PreToolUse is routed.
         containment_route: Some(edge_route(&event_name, &result, envelope.recording_only)),
+        local_cli_rule,
         schema: GUARD_HOOK_EDGE_RESULT_V2_SCHEMA.to_owned(),
         authority: "rust".to_owned(),
         request_id: Some(request_id),

@@ -91,7 +91,12 @@ def test_a_failed_ask_binds_nothing_and_still_checks_the_receipt(
     assert [ask["query"]["kind"] for ask in asked] == ["hook_review", "hook_review"]
 
 
-def _pause(review: Any, tmp_path: Path, native_result: Mapping[str, object]) -> dict[str, object]:
+def _pause(
+    review: Any,
+    tmp_path: Path,
+    native_result: Mapping[str, object],
+    local_cli_rule: Mapping[str, object] | None = None,
+) -> dict[str, object]:
     return review.pause_native_pre_tool_for_approval(
         object(),
         harness="codex",
@@ -100,6 +105,7 @@ def _pause(review: Any, tmp_path: Path, native_result: Mapping[str, object]) -> 
         native_receipt=None,
         workspace=tmp_path,
         guard_home=tmp_path / "guard-home",
+        local_cli_rule=local_cli_rule,
     )
 
 
@@ -112,13 +118,11 @@ def test_a_review_whose_policy_binding_fails_is_denied_before_any_grant(
     from codex_plugin_scanner.guard.daemon import hook_native_review_approval as review
 
     monkeypatch.setattr(review, "native_review_evidence", lambda **_k: pytest.fail("no ask before the binding holds"))
-    monkeypatch.setattr(
-        review, "native_local_cli_grant_response", lambda *_a, **_k: pytest.fail("no grant before the binding holds")
-    )
     monkeypatch.setattr(review, "render_pre_tool", lambda _harness, verdict, **_k: dict(verdict))
 
     # The verdict claims extension policy and no receipt proves it.
-    response = _pause(review, tmp_path, {**_REVIEW, "command_extensions": {"uncertainty_count": 0}})
+    custom = {"blocked": True, "harness_response": {"decision": "deny", "source": "custom"}}
+    response = _pause(review, tmp_path, {**_REVIEW, "command_extensions": {"uncertainty_count": 0}}, custom)
 
     assert response["reason_code"] == "native_review_policy_binding_invalid"
     assert response["policy_action"] == "block"
@@ -131,9 +135,8 @@ def test_a_matching_custom_grant_settles_without_the_evidence_ask(
 
     granted = {"decision": "allow"}
     monkeypatch.setattr(review, "native_review_evidence", lambda **_k: pytest.fail("a custom grant needs no evidence"))
-    monkeypatch.setattr(review, "native_local_cli_grant_response", lambda *_a, **_k: (True, granted))
 
-    assert _pause(review, tmp_path, _REVIEW) is granted
+    assert _pause(review, tmp_path, _REVIEW, local_cli_rule={"blocked": True, "harness_response": granted}) is granted
 
 
 def test_a_binding_the_resident_rejects_is_denied_before_any_saved_decision(
@@ -142,7 +145,6 @@ def test_a_binding_the_resident_rejects_is_denied_before_any_saved_decision(
     from codex_plugin_scanner.guard.daemon import hook_native_review_approval as review
 
     monkeypatch.setattr(review, "native_review_evidence", lambda **_k: (False, "binding", "token", None))
-    monkeypatch.setattr(review, "native_local_cli_grant_response", lambda *_a, **_k: None)
     monkeypatch.setattr(
         review, "native_saved_decision_response", lambda *_a, **_k: pytest.fail("no saved decision without a binding")
     )

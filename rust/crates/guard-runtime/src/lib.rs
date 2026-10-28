@@ -152,18 +152,12 @@ mod codex_hooks;
 #[cfg(test)]
 mod codex_hooks_parity_tests;
 mod codex_identity;
-#[cfg(all(test, unix))]
-mod codex_post_tool_output_vectors_tests;
 mod codex_proxy;
 mod codex_request_resume_busy;
 mod codex_request_resume_op;
 mod codex_request_resume_store;
 mod codex_sources;
 mod codex_thread_continue_op;
-mod codex_tool_output_git;
-mod codex_tool_output_op;
-#[cfg(all(test, unix))]
-mod codex_tool_output_vectors_tests;
 mod codex_value;
 #[cfg(all(test, unix))]
 mod codex_vectors_tests;
@@ -729,6 +723,7 @@ mod request_context_shell;
 mod resident_client;
 mod resident_diagnostics;
 mod resident_endpoint;
+mod resident_inspection_host;
 mod resident_inspection_services;
 mod resident_op_features;
 mod resident_ops;

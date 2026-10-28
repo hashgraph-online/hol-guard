@@ -138,6 +138,16 @@ pub(super) fn install_test_key(root: &Path, value: u8) -> [u8; VERIFIER_KEY_BYTE
     key
 }
 
+fn workspace_source(root: &Path) -> GuardHookSourceMetadataV2 {
+    GuardHookSourceMetadataV2 {
+        cwd: Some("/workspace".into()),
+        home_dir: "/home/test".into(),
+        guard_home: root.to_string_lossy().into_owned(),
+        source_ref_external_allowed: false,
+        execution_environment: None,
+    }
+}
+
 #[cfg(windows)]
 #[test]
 fn windows_scope_aliases_share_one_digest_identity() {
@@ -340,14 +350,9 @@ fn restarted_resident_applies_installed_policy_without_request_time_io() {
         deadline_budget_ms: Some(750),
         policy_generation: 1,
         policy_snapshot: serde_json::to_value(&snapshot).unwrap(),
-        source: GuardHookSourceMetadataV2 {
-            cwd: Some("/workspace".into()),
-            home_dir: "/home/test".into(),
-            guard_home: root.to_string_lossy().into_owned(),
-            source_ref_external_allowed: false,
-            execution_environment: None,
-        },
+        source: workspace_source(&root),
         recording_only: false,
+        local_cli_rules: None,
     };
     let result = crate::edge::evaluate_envelope_with_store(envelope, &restarted).unwrap();
     let result: GuardHookEdgeResultV2 = serde_json::from_slice(&result).unwrap();
@@ -382,14 +387,9 @@ fn authenticated_edge_preserves_clean_default_warning() {
         deadline_budget_ms: Some(750),
         policy_generation: 1,
         policy_snapshot: serde_json::to_value(&snapshot).unwrap(),
-        source: GuardHookSourceMetadataV2 {
-            cwd: Some("/workspace".into()),
-            home_dir: "/home/test".into(),
-            guard_home: root.to_string_lossy().into_owned(),
-            source_ref_external_allowed: false,
-            execution_environment: None,
-        },
+        source: workspace_source(&root),
         recording_only: false,
+        local_cli_rules: None,
     };
     let result = crate::edge::evaluate_envelope_with_store(envelope, &store).unwrap();
     let result: GuardHookEdgeResultV2 = serde_json::from_slice(&result).unwrap();
@@ -427,14 +427,9 @@ fn authenticated_observe_edge_preserves_intrinsic_pretool_floor() {
         deadline_budget_ms: Some(750),
         policy_generation: 1,
         policy_snapshot: serde_json::to_value(&snapshot).unwrap(),
-        source: GuardHookSourceMetadataV2 {
-            cwd: Some("/workspace".into()),
-            home_dir: "/home/test".into(),
-            guard_home: root.to_string_lossy().into_owned(),
-            source_ref_external_allowed: false,
-            execution_environment: None,
-        },
+        source: workspace_source(&root),
         recording_only: false,
+        local_cli_rules: None,
     };
     let result = crate::edge::evaluate_envelope_with_store(envelope, &store).unwrap();
     let result: GuardHookEdgeResultV2 = serde_json::from_slice(&result).unwrap();

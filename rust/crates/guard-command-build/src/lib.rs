@@ -45,8 +45,6 @@ mod codex_output_py;
 mod codex_output_search;
 #[path = "../../guard-command/src/codex_output_shlex.rs"]
 mod codex_output_shlex;
-#[path = "../../guard-command/src/codex_output_source_paths.rs"]
-mod codex_output_source_paths;
 #[path = "../../guard-command/src/command_ascii_comparison.rs"]
 mod command_ascii_comparison;
 #[path = "../../guard-command/src/command_common_cli_matchers.rs"]

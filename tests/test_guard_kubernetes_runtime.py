@@ -11,9 +11,6 @@ import pytest
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
-from tests.codex_read_only_inspection import (
-    codex_post_tool_command_is_read_only_source_inspection,
-)
 from tests.live_hook_review_support import assert_secret_output_held, live_post_tool_flag
 from tests.native_shell_helpers_client import kubernetes_secret_read_source
 
@@ -449,16 +446,6 @@ def test_pi_post_tool_output_keeps_sensitive_batched_command_even_with_read_only
 
     assert rc == 1  # canonical: pi "PostToolUse" deny
     assert output["decision"] == "deny"
-
-
-def test_read_only_command_batches_stay_read_only_for_post_tool_skip(tmp_path: Path) -> None:
-    payload = {"tool_input": {"commands": ["rg foo src", "grep bar src/app.py"]}}
-
-    assert codex_post_tool_command_is_read_only_source_inspection(
-        payload=payload,
-        cwd=tmp_path,
-        home_dir=tmp_path,
-    )
 
 
 def test_pi_post_tool_output_holds_secret_from_wrapped_kubernetes_read(live_hook_root: Path) -> None:

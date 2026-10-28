@@ -18,6 +18,10 @@ def claude_permission_request_response(store: GuardStore, payload: dict[str, obj
     dialog is denied and Claude is directed to the Guard approval question.
     Otherwise Guard shows any review reason and defers to Claude's dialog.
     """
+    # The CLI helper modules resolve shared names through the command support
+    # registry, which the CLI loads at startup. A resident built in process has
+    # not loaded it, so load it before calling into those modules.
+    from ..cli import commands_support  # noqa: F401
     from ..cli.commands_support_claude_approval import (
         _claude_guard_approval_question_message,
         _claude_permission_notice_prefers_ask_user_question,

@@ -456,9 +456,6 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
                     &request,
                 )
             }
-            ResidentOperationV1::CodexToolOutput(request) => {
-                crate::codex_tool_output_op::evaluate_codex_tool_output_request(&request)
-            }
             ResidentOperationV1::PolicyBundleAuthority(request) => {
                 crate::policy_bundle_op::evaluate_policy_bundle_authority_request(&request)
             }

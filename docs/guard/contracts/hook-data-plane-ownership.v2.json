@@ -396,7 +396,6 @@
     "src/codex_plugin_scanner/guard/native_mcp_tool_policy.py",
     "src/codex_plugin_scanner/guard/native_mcp_extension_input.py",
     "src/codex_plugin_scanner/guard/native_git_execution_safety.py",
-    "src/codex_plugin_scanner/guard/native_codex_tool_output.py",
     "src/codex_plugin_scanner/guard/native_sensitive_request.py",
     "src/codex_plugin_scanner/guard/native_policy_bundle.py",
     "src/codex_plugin_scanner/guard/native_mcp_proxy_decision.py",
@@ -559,7 +558,6 @@
     "src/codex_plugin_scanner/guard/daemon/hook_native_review_binding.py",
     "src/codex_plugin_scanner/guard/daemon/hook_native_saved_approval.py",
     "src/codex_plugin_scanner/guard/daemon/hook_native_exact_action.py",
-    "src/codex_plugin_scanner/guard/daemon/hook_native_local_cli.py",
     "src/codex_plugin_scanner/guard/daemon/hook_contained_grant.py",
     "src/codex_plugin_scanner/guard/daemon/hook_native_review_fence.py",
     "src/codex_plugin_scanner/guard/**/continuation*.py"

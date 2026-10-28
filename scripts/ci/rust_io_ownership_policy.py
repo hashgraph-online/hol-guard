@@ -77,8 +77,6 @@ _TRANSPORT_IDENTITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/daemon/manager_process_query.py",
         # Interpreter bootstrap identity only; no policy or command decisions.
         "src/codex_plugin_scanner/guard/daemon/pipx_import_paths.py",
-        # Resident request transport; the observed git path is a fact, never a verdict.
-        "src/codex_plugin_scanner/guard/native_codex_tool_output.py",
         # Resident sensitive-request transport; the observed git path is a fact, never a verdict.
         "src/codex_plugin_scanner/guard/native_sensitive_request.py",
         "src/codex_plugin_scanner/guard/frozen_runtime_commands.py",
@@ -216,7 +214,6 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         # DTO is strictly validated and never reinterpreted.
         "src/codex_plugin_scanner/guard/native_mcp_tool_policy.py",
         "src/codex_plugin_scanner/guard/native_git_execution_safety.py",
-        "src/codex_plugin_scanner/guard/native_codex_tool_output.py",
         "src/codex_plugin_scanner/guard/native_policy_bundle.py",
         # Gathers ambient facts for and decodes the resident package-shim admin envelope; results stay Rust.
         "src/codex_plugin_scanner/guard/native_shim_admin.py",

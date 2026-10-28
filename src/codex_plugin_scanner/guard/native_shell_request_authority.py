@@ -12,9 +12,9 @@ from pathlib import Path
 from typing import Any
 
 from .fork_safety import forget_in_child
-from .native_codex_tool_output import _environment_snapshot
 from .native_context import _native_runtime_status_memo, _resolve_digest_home
 from .native_git_execution_safety import _account_home_directory, _process_groups
+from .native_git_execution_safety import _tool_environment_snapshot as _environment_snapshot
 from .native_resident_client import native_resident_client_ready
 from .native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 

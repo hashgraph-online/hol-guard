@@ -11,9 +11,6 @@ from codex_plugin_scanner.guard import native_sensitive_request as client
 from codex_plugin_scanner.guard.native_request_context import NativeRequestContextFailure
 from codex_plugin_scanner.guard.runtime import secret_file_requests
 from tests import resident_probe_support as probes
-from tests.codex_read_only_inspection import (
-    codex_post_tool_command_is_read_only_source_inspection,
-)
 
 
 def _reply(query: str, result: object) -> dict[str, object]:
@@ -194,34 +191,6 @@ def test_tool_action_reply_keeps_embedded_command_text(monkeypatch: pytest.Monke
     texts = [item.text for item in found.canonical_command.embedded_commands]
     assert "echo ~/.ssh/id_rsa" in texts
     assert "secret\n" in texts
-
-
-def test_resident_outage_is_not_a_read_only_post_tool(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.native_codex_tool_output import ToolOutputAnswer
-    from tests import codex_read_only_inspection as codex
-
-    sent: list[tuple[str, dict[str, object]]] = []
-
-    def down(kind: str, *, body: dict[str, object]) -> ToolOutputAnswer:
-        sent.append((kind, body))
-        return ToolOutputAnswer(False, None, "native_codex_tool_output_unavailable")
-
-    monkeypatch.setattr(codex, "codex_tool_output_native", down)
-    assert (
-        codex_post_tool_command_is_read_only_source_inspection(
-            payload={"tool_name": "Bash", "tool_input": {"commands": ["ls"]}, "session_id": "s"},
-            cwd=tmp_path,
-            home_dir=None,
-        )
-        is False
-    )
-    # The resident reads the commands from the tool name and input alone.
-    assert sent == [
-        (
-            "post_tool_read_only_payload",
-            {"tool_name": "Bash", "tool_input": {"commands": ["ls"]}, "cwd": str(tmp_path), "home_dir": None},
-        )
-    ]
 
 
 def test_command_list_texts_are_a_tuple_of_strings(monkeypatch: pytest.MonkeyPatch) -> None:

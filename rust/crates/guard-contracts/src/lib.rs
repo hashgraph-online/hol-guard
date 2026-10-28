@@ -363,6 +363,34 @@ pub struct GuardHookEnvelopeV2 {
     /// envelope; it never changes the verdict, receipt, or request identity.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub recording_only: bool,
+    /// The daemon's custom extension rules, which settle a `PreToolUse` with
+    /// the answer they change. Only the daemon sends them; without them the
+    /// edge reads no rule. They never change the request identity.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_cli_rules: Option<GuardHookLocalCliRulesV1>,
+}
+
+/// Where the daemon's custom extension rules live and what a command's
+/// launch resolves against: the daemon's own home and environment.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct GuardHookLocalCliRulesV1 {
+    /// Absolute path of `guard.db`; must sit directly under the guard home.
+    pub store_path: String,
+    /// The daemon's home, which the launch resolves `~` against.
+    pub user_home: String,
+    /// The daemon's environment, which the launch resolves `PATH` against.
+    pub env: std::collections::BTreeMap<String, String>,
+}
+
+/// The custom extension rule for a reviewed `PreToolUse`: a block the
+/// daemon returns before any saved decision, or an allow it returns once no
+/// saved decision blocks the action. `harness_response` answers either.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct GuardHookLocalCliRuleV1 {
+    pub blocked: bool,
+    pub harness_response: Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -394,6 +422,11 @@ pub struct GuardHookEdgeResultV2 {
     /// second round trip.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub containment_route: Option<String>,
+    /// The daemon's custom extension rule for a reviewed `PreToolUse`, when
+    /// one applies. An allowed `PreToolUse` a rule blocks carries the block as
+    /// its `harness_response` instead.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_cli_rule: Option<GuardHookLocalCliRuleV1>,
     /// Rust-owned decision evidence.  The Python edge may only transport it
     /// to a non-authoritative asynchronous consumer.
     pub receipt: NativeHookDecisionReceiptV1,
