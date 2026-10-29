@@ -133,7 +133,12 @@ def native_command_capability_issue(
         "requested": [str(word) for word in requested],
         "supported_operations": [str(operation) for operation in supported_operations],
         "issuer": issuer,
-        "ttl_seconds": int(ttl_seconds),
+        # A lifetime too large for the wire's signed 64-bit field would make the
+        # request unparseable, and the user would read that as the resident being
+        # unavailable rather than as the refusal it is. Carrying the nearest
+        # representable value instead leaves the allowed range the resident's to
+        # decide, and it refuses both ends of that range alike.
+        "ttl_seconds": max(-(2**63), min(int(ttl_seconds), 2**63 - 1)),
     }
     try:
         response = _resident_request(

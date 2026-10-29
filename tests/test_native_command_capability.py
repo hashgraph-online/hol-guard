@@ -170,6 +170,25 @@ def test_the_issue_request_ships_the_words_as_typed(monkeypatch: pytest.MonkeyPa
     assert seen["bound"] == seen["wire"]
 
 
+@pytest.mark.parametrize("days", [10**15, -(10**15)])
+def test_a_lifetime_past_the_wire_still_reaches_the_resident_as_a_refusal(
+    monkeypatch: pytest.MonkeyPatch, days: int
+) -> None:
+    """`--expires-in-days 1000000000000000` is refused, not reported unavailable.
+
+    Python counts a lifetime without a ceiling and the wire field is signed
+    64-bit, so an absurd number of days would make the request unparseable and
+    the user would read that as the resident being down. The nearest
+    representable value is carried instead, and it is outside the allowed range
+    at both ends, so the resident answers with the refusal it would have given.
+    """
+    seen = _capture(monkeypatch, {"granted": False, "reason": "invalid_capability_ttl", "operations": []})
+    answer = _issue_call(ttl_seconds=days * 24 * 60 * 60)
+    assert answer["reason"] == "invalid_capability_ttl"
+    assert -(2**63) <= seen["wire"]["ttl_seconds"] <= 2**63 - 1
+    assert seen["wire"]["ttl_seconds"] == (2**63 - 1 if days > 0 else -(2**63))
+
+
 def test_an_unprepared_resident_issues_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(module, "ensure_resident_prerequisite", lambda home: False)
     with pytest.raises(CommandCapabilityUnavailableError):
