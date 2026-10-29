@@ -1884,6 +1884,7 @@ class UserRecoveryCoordinator:
         runtime_state = store.get_runtime_state()
         health = build_runtime_protection_health(
             store=store,
+            guard_home=self.guard_home,
             runtime_state=runtime_state,
             managed_installs=managed_installs,
             hook_verification=_live_hook_verification(managed_installs, store),

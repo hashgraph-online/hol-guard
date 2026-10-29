@@ -25,8 +25,8 @@ function render(runtime: Parameters<typeof RuntimeGate>[0]["runtime"]): string {
 }
 
 const offline = render({ kind: "error", message: "Failed to fetch" });
-assert(offline.includes("Guard is not responding"), "an unreachable daemon names the problem instead of a blank page");
-assert(offline.includes("Retry"), "an unreachable daemon offers Retry");
+assert(offline.includes("connect to Guard."), "an unreachable daemon names the problem instead of a blank page");
+assert(offline.includes("Retry connection"), "an unreachable daemon offers to retry the connection");
 assert(!offline.includes("hub-marker"), "the hub is not rendered without a snapshot");
 
 const signedOut = render({ kind: "error", message: "unauthorized (401)" });
