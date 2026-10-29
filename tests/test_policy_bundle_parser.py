@@ -215,6 +215,7 @@ def test_policy_bundle_rejection_message_does_not_blame_guard_version_for_downgr
     assert "keeps the policy it already had" in message
     assert "Publish the policy again in Guard Cloud" in message
     assert "sync again" in message
+    assert "policy record on this device may be damaged" in message
 
 
 def test_policy_bundle_rejection_message_ignores_unknown_reason() -> None:

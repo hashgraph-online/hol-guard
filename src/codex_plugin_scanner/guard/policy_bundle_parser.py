@@ -233,7 +233,9 @@ def policy_bundle_rejection_message(reason: str | None) -> str | None:
         return (
             "The policy bundle was not applied because it is older than, or conflicts with, "
             "the policy this device already accepted. This device keeps the policy it already had. "
-            "Publish the policy again in Guard Cloud so it gets a newer version, then sync again."
+            "Publish the policy again in Guard Cloud so it gets a newer version, then sync again. "
+            "If a newer publish is also rejected, the policy record on this device may be damaged; "
+            "contact your workspace administrator."
         )
     if reason in _POLICY_BUNDLE_VERSION_REMEDIATION_REASONS:
         return (

@@ -180,7 +180,13 @@ class _ControlSyncRoutes:
                 _policy_bundle_downgrade_reference(self.server.store, existing_policy_bundle),  # type: ignore[attr-defined]
                 validated_policy_bundle,
             ):
-                self._write_json({"error": "bundle_version_downgrade"}, status=400)
+                self._write_json(
+                    {
+                        "error": "bundle_version_downgrade",
+                        "message": policy_bundle_rejection_message("bundle_version_downgrade"),
+                    },
+                    status=400,
+                )
                 return
             device_id, device_name = _guard_device_metadata(self.server.store)  # type: ignore[attr-defined]
             if validated_policy_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT:

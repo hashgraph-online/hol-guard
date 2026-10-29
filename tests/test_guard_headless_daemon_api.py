@@ -2783,6 +2783,45 @@ def test_headless_policy_sync_rejects_authenticated_inactive_rollout(
     assert store.list_policy_decisions() == []
 
 
+def test_headless_policy_sync_explains_rejected_downgrade(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.daemon import server_control_sync as server_control_sync_module
+
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-1")
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(),
+        "2026-05-19T00:00:00Z",
+    )
+    bundle = sign_policy_bundle(build_cloud_exception_policy_bundle(workspace_id="workspace-1"))
+    monkeypatch.setattr(server_control_sync_module, "_policy_bundle_is_version_downgrade", lambda *_args: True)
+
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/policy/sync",
+                token=token,
+                payload={
+                    "harness": "codex",
+                    "operation": "policy_sync",
+                    "policy_bundle": json.dumps(bundle),
+                },
+            )
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 400
+    assert payload["error"] == "bundle_version_downgrade"
+    assert "keeps the policy it already had" in str(payload["message"])
+    assert "Publish the policy again in Guard Cloud" in str(payload["message"])
+    assert store.get_sync_payload("policy_bundle") is None
+
+
 def test_headless_signed_empty_policy_bundle_clears_stale_remote_authority(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-1")
