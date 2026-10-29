@@ -7,7 +7,7 @@
 //! hands such a session to the Python proxy, which decides those calls as it
 //! does without the relay:
 //!
-//! - an unparsable view, an unbound harness or unverified extension layers;
+//! - unverified extension layers;
 //! - a blocked-request mode the bound configs do not resolve to one the queue
 //!   route answers natively, or a receipt redaction level the configs do not
 //!   agree on. The route is native under `safe-alternative`, and under `ask`

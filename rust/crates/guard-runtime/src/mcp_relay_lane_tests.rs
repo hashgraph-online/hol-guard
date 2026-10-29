@@ -1,6 +1,6 @@
 use super::{
-    ensure_argv, gate_line, hands_off, kickable, startup, warms_up, Gate, Kick, LaneKick,
-    DAEMON_REFUSED, DAEMON_UNREACHABLE,
+    ensure_argv, gate_line, hands_off, kickable, startup, Gate, Kick, LaneKick, DAEMON_REFUSED,
+    DAEMON_UNREACHABLE,
 };
 use crate::mcp_relay_args::parse;
 use std::cell::Cell;
@@ -172,7 +172,21 @@ fn the_gate_line_has_a_fixed_shape() {
 }
 
 #[test]
-fn only_a_lane_the_daemon_has_not_prepared_yet_keeps_the_session_native() {
+fn only_an_unported_feature_or_a_newer_runtime_hands_the_session_to_the_proxy() {
+    for code in [
+        "mcp_relay_runtime_superseded",
+        "mcp_relay_store_unreadable",
+        "mcp_relay_layers_unavailable",
+        "mcp_relay_session_review_mode",
+        "mcp_relay_session_redaction_unbound",
+        "mcp_relay_saved_remote_policy",
+        "mcp_relay_saved_policy_unverifiable",
+        "mcp_relay_session_server_proxy_tools",
+    ] {
+        assert!(hands_off(code), "{code}");
+    }
+    // A lane the daemon has not prepared yet keeps the session native and
+    // its first call waits for it.
     for code in [
         DAEMON_UNREACHABLE,
         "direct_lane_unbound",
@@ -187,34 +201,27 @@ fn only_a_lane_the_daemon_has_not_prepared_yet_keeps_the_session_native() {
         "mcp_relay_resident_unreachable",
         "mcp_relay_session_server_unknown",
     ] {
-        assert!(warms_up(code) && !hands_off(code), "{code}");
+        assert!(!hands_off(code), "{code}");
     }
-    // Every other reason `mcp_relay_ready`, the probe or the gate can name
-    // runs the session as the Python proxy, as before the lane warmed up.
+    // A binding, store or daemon the resident cannot use keeps the session
+    // native too: each call the lane cannot decide is refused, never decided
+    // by the proxy.
     for code in [
         DAEMON_REFUSED,
         "direct_lane_unsupported",
-        "mcp_relay_runtime_superseded",
         "mcp_relay_workspace_invalid",
         "mcp_relay_evidence_undrained",
         "mcp_relay_binding_incomplete",
         "mcp_relay_view_invalid",
-        "mcp_relay_layers_unavailable",
-        "mcp_relay_session_review_mode",
-        "mcp_relay_session_redaction_unbound",
-        "mcp_relay_store_unreadable",
-        "mcp_relay_saved_remote_policy",
-        "mcp_relay_saved_policy_unverifiable",
-        "mcp_relay_session_server_proxy_tools",
         "mcp_relay_facts_unavailable",
         "mcp_relay_request_unsendable",
         "mcp_relay_reply_invalid",
     ] {
-        assert!(hands_off(code), "{code}");
+        assert!(!hands_off(code), "{code}");
     }
     assert!(
-        hands_off("mcp_relay_a_code_added_later"),
-        "an unknown code hands off"
+        !hands_off("mcp_relay_a_code_added_later"),
+        "an unknown code keeps the session native"
     );
 }
 
