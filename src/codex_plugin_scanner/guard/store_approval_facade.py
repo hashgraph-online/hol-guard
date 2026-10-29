@@ -69,7 +69,7 @@ class StoreApprovalsMixin:
         review: dict[str, object],
         now: str,
         *,
-        extension_allow_hint: dict[str, object] | None = None,
+        hint: dict[str, object] | None = None,
         silent: bool = False,
         claude_key: dict[str, str] | None = None,
         codex_live_wait: dict[str, object] | None = None,
@@ -80,6 +80,10 @@ class StoreApprovalsMixin:
         the resident builds the approval request from it and queues it in the
         same call, and reads the row back in the queue write's own
         transaction. A row it could not read is read separately.
+
+        ``hint`` (``native_review_hint_ask``) bounds the time the resident may
+        spend deciding the review's extension or connector setup hint before
+        the write; ``None`` stores no hint.
 
         ``silent`` queues a review the agent never sees: its
         ``approval.created`` event is written in the same transaction, best
@@ -97,7 +101,7 @@ class StoreApprovalsMixin:
         """
         args: dict[str, object] = {
             "review": review,
-            "extension_allow_hint": extension_allow_hint,
+            "hint": hint,
             "now": now,
             "silent": silent,
             "claude_notice": claude_key is not None,

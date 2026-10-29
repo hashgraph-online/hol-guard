@@ -2,8 +2,15 @@
 
 use serde_json::{json, Map, Value};
 
-use super::{delegate, METHOD};
+use super::{Delegated, METHOD};
 use crate::guard_store_db::StoreError;
+
+const CONNECTOR_HASH: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+/// A call with no admitted snapshot, as the unit tests have none.
+fn delegate(args: &Map<String, Value>) -> Result<Delegated, StoreError> {
+    super::delegate(args, None, 10_000)
+}
 
 fn query(payload: Value) -> Value {
     json!({
@@ -42,7 +49,7 @@ fn shell() -> Value {
 fn args(extra: Value) -> Map<String, Value> {
     let mut args = json!({
         "review": query(shell()),
-        "extension_allow_hint": null,
+        "hint": null,
         "now": "2026-10-29T00:00:00+00:00",
         "return_row": true,
         "cwd": "/work",
@@ -53,7 +60,7 @@ fn args(extra: Value) -> Map<String, Value> {
     args.as_object().unwrap().clone()
 }
 
-fn invalid(result: Result<super::Delegated, StoreError>) -> bool {
+fn invalid(result: Result<Delegated, StoreError>) -> bool {
     matches!(
         result,
         Err(StoreError::Invalid(
@@ -69,22 +76,15 @@ fn the_method_name_is_the_one_the_daemon_sends() {
 
 #[test]
 fn a_prompted_review_becomes_the_plain_queue_write() {
-    let hint = json!({"kind": "extension", "extension_id": "command.example"});
-    let delegated = delegate(&args(json!({"extension_allow_hint": hint}))).unwrap();
+    let delegated = delegate(&args(json!({}))).unwrap();
     assert_eq!(delegated.method, "add_approval_request");
     let request = &delegated.args["request"];
     assert_eq!(request["request_id"], "req1");
     assert_eq!(request["artifact_hash"], "binding-1");
     assert_eq!(request["launch_target"], "rm -rf build");
-    assert_eq!(request["extension_allow_hint"], hint);
+    assert_eq!(request["extension_allow_hint"], Value::Null);
     // The query and the flags never reach the queue write; its own args do.
-    for key in [
-        "review",
-        "silent",
-        "claude_notice",
-        "extension_allow_hint",
-        "daemon",
-    ] {
+    for key in ["review", "hint", "silent", "claude_notice", "daemon"] {
         assert!(!delegated.args.contains_key(key), "{key}");
     }
     assert_eq!(delegated.args["now"], "2026-10-29T00:00:00+00:00");
@@ -92,11 +92,83 @@ fn a_prompted_review_becomes_the_plain_queue_write() {
     assert_eq!(delegated.args["cwd"], "/work");
 }
 
+fn paused_with(extensions: Value) -> Value {
+    let mut review = query(shell());
+    review["result"]["command_extensions"] = extensions;
+    review
+}
+
+fn local_cli() -> Value {
+    json!({
+        "cli_id": "local-cli.acme@1+x",
+        "identity_hash": CONNECTOR_HASH,
+        "name": " acme ",
+        "surface": "cli",
+        "queue_group_id": format!("connector:{CONNECTOR_HASH}:0123456789abcdef"),
+    })
+}
+
 #[test]
 fn a_missing_hint_is_stored_as_none() {
     let mut without = args(json!({}));
-    without.remove("extension_allow_hint");
+    without.remove("hint");
     let delegated = delegate(&without).unwrap();
+    assert_eq!(
+        delegated.args["request"]["extension_allow_hint"],
+        Value::Null
+    );
+}
+
+#[test]
+fn a_review_without_extension_evidence_has_no_hint() {
+    let delegated = delegate(&args(json!({"hint": {"budget_ms": 2_000}}))).unwrap();
+    assert_eq!(
+        delegated.args["request"]["extension_allow_hint"],
+        Value::Null
+    );
+}
+
+#[test]
+fn a_connector_review_stores_its_setup_hint() {
+    let delegated = delegate(&args(json!({
+        "review": paused_with(json!({"observations": []})),
+        "hint": {"budget_ms": 2_000, "connector": local_cli()},
+    })))
+    .unwrap();
+    let hint = &delegated.args["request"]["extension_allow_hint"];
+    assert_eq!(hint["schema"], "guard.connector-setup-hint.v1");
+    assert_eq!(hint["cli_id"], "local-cli.acme@1+x");
+    assert_eq!(hint["display_name"], "acme");
+    assert_eq!(hint["risk_classes"], json!([]));
+}
+
+#[test]
+fn the_hint_never_spends_the_time_the_write_needs() {
+    let connector = args(json!({
+        "review": paused_with(json!({"observations": []})),
+        "hint": {"budget_ms": 2_000, "connector": local_cli()},
+    }));
+    let delegated = super::delegate(&connector, None, 350).unwrap();
+    assert_eq!(
+        delegated.args["request"]["extension_allow_hint"],
+        Value::Null
+    );
+    let delegated = super::delegate(&connector, None, 351).unwrap();
+    assert_eq!(
+        delegated.args["request"]["extension_allow_hint"]["schema"],
+        "guard.connector-setup-hint.v1"
+    );
+}
+
+#[test]
+fn a_connector_hint_needs_a_local_cli() {
+    let mut mcp = local_cli();
+    mcp["surface"] = json!("mcp");
+    let delegated = delegate(&args(json!({
+        "review": paused_with(json!({"observations": []})),
+        "hint": {"budget_ms": 2_000, "connector": mcp},
+    })))
+    .unwrap();
     assert_eq!(
         delegated.args["request"]["extension_allow_hint"],
         Value::Null
@@ -170,9 +242,11 @@ fn malformed_calls_are_refused() {
     let mut unknown = query(shell());
     unknown["kind"] = json!("review_request");
     assert!(invalid(delegate(&args(json!({"review": unknown})))));
+    assert!(invalid(delegate(&args(json!({"hint": "hint"})))));
     assert!(invalid(delegate(&args(
-        json!({"extension_allow_hint": "hint"})
+        json!({"hint": {"budget_ms": 2_000, "paused": {}}})
     ))));
+    assert!(invalid(delegate(&args(json!({"hint": {"budget_ms": -1}})))));
     assert!(invalid(delegate(&args(json!({"silent": "yes"})))));
     assert!(invalid(delegate(&args(json!({
         "silent": true,

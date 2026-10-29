@@ -64,10 +64,8 @@ class _RowStore(StoreApprovalsMixin):
 def test_a_claude_review_queues_with_its_notice_in_one_store_write() -> None:
     store = _RowStore({"request_id": "req-1", "row": {"request_id": "req-1"}})
     key = {"integrity_key_b64": "a2V5", "integrity_key_id": "kid"}
-    hint = {"kind": "extension"}
-    assert store.queue_native_review(_QUERY, "now", extension_allow_hint=hint, claude_key=key) == {
-        "request_id": "req-1"
-    }
+    hint = {"budget_ms": 500}
+    assert store.queue_native_review(_QUERY, "now", hint=hint, claude_key=key) == {"request_id": "req-1"}
     # The key rides in the top-level args the request digest leaves out; the
     # resident builds the notice's facts from the query itself.
     ((method, args),) = store.calls
@@ -75,7 +73,7 @@ def test_a_claude_review_queues_with_its_notice_in_one_store_write() -> None:
     args.pop("cwd")
     assert args == {
         "review": _QUERY,
-        "extension_allow_hint": hint,
+        "hint": hint,
         "now": "now",
         "silent": False,
         "claude_notice": True,
@@ -193,7 +191,6 @@ class _RefusingStore:
 def test_a_refused_queue_is_logged_by_its_reason_code_only(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    monkeypatch.setattr(hook_native_review_approval, "native_review_hint", lambda *_a, **_k: None)
     with caplog.at_level(logging.WARNING, logger=hook_native_review_approval.__name__):
         queued = hook_native_review_approval.queue_native_pre_tool_review(
             _RefusingStore(),

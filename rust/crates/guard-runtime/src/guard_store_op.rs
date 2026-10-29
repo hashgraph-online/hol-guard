@@ -186,7 +186,7 @@ fn evaluate_tracked(
     // A paused review's request is built here and queued by the write it
     // names, so everything below sees that method.
     let delegated = (request.method == native_review_queue::METHOD)
-        .then(|| native_review_queue::delegate(&request.args))
+        .then(|| native_review_queue::delegate(&request.args, owner, request.busy_timeout_ms))
         .transpose()?;
     let (method, request_args) = match &delegated {
         Some(delegated) => (delegated.method, &delegated.args),

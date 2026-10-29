@@ -14,14 +14,19 @@
 //! - `add_approval_request` otherwise.
 //!
 //! The rewrite runs before the store opens its write, so the Codex live wait
-//! and the read-back behave exactly as for the method it names.
+//! and the read-back behave exactly as for the method it names. The review's
+//! extension or connector hint is decided here too, under the snapshot the
+//! resident admitted, within the budget the call's `hint` names.
 
 use guard_contracts::ReviewRequestQueryV1;
+use serde::Deserialize;
 use serde_json::{json, Map, Value};
 use zeroize::Zeroize;
 
 use crate::guard_store_db::{StoreError, StoreResult};
 use crate::hook_adapter_op::review_request::{self, pre_tool_command};
+use crate::hook_direct::saved_decision::review_hint::op::queued_hint;
+use crate::policy_store::PolicySnapshotStore;
 
 pub(crate) const METHOD: &str = "queue_native_review";
 
@@ -32,6 +37,19 @@ const REFUSED: StoreError = StoreError::Invalid("native_guard_store_review_reque
 /// What the notice reads from the hook payload besides the command: the
 /// session and the tool name fields.
 const NOTICE_PAYLOAD_FIELDS: [&str; 4] = ["session_id", "tool_name", "toolName", "tool"];
+/// What the call keeps after the hint for the queue write and its reply, as
+/// the daemon kept when it asked for the hint itself.
+const WRITE_RESERVE_MS: u64 = 350;
+
+/// The hint a call asks for: how long the daemon can wait for it, and the
+/// local CLI a connector-setup review waits on.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct HintAsk {
+    budget_ms: u32,
+    #[serde(default)]
+    connector: Option<Value>,
+}
 
 /// The queue write a `queue_native_review` call stands for.
 pub(crate) struct Delegated {
@@ -49,21 +67,51 @@ impl Drop for Delegated {
 }
 
 /// The queue method and arguments a `queue_native_review` call stands for.
-pub(crate) fn delegate(args: &Map<String, Value>) -> StoreResult<Delegated> {
+///
+/// `call_budget_ms` is the call's own busy budget: the hint never spends the
+/// part of it the queue write needs.
+pub(crate) fn delegate(
+    args: &Map<String, Value>,
+    owner: Option<&PolicySnapshotStore>,
+    call_budget_ms: u64,
+) -> StoreResult<Delegated> {
     let mut delegated = args.clone();
     let query: ReviewRequestQueryV1 =
         serde_json::from_value(delegated.remove("review").ok_or(INVALID)?).map_err(|_| INVALID)?;
-    let hint = delegated
-        .remove("extension_allow_hint")
-        .unwrap_or(Value::Null);
+    let ask: Option<HintAsk> = match delegated.remove("hint") {
+        None | Some(Value::Null) => None,
+        Some(ask) => Some(serde_json::from_value(ask).map_err(|_| INVALID)?),
+    };
     let silent = take_flag(&mut delegated, "silent")?;
     let claude_notice = take_flag(&mut delegated, "claude_notice")?;
-    if !(hint.is_null() || hint.is_object()) || (silent && claude_notice) {
+    if silent && claude_notice {
         return Err(INVALID);
     }
     let built = review_request::build(&query).map_err(|_| REFUSED)?;
+    let paused = query.result.as_object().ok_or(INVALID)?;
+    // The hint is advisory: whatever it cannot decide in time is left out,
+    // and the review queues regardless.
+    let hint = ask.and_then(|ask| {
+        let budget_ms =
+            u64::from(ask.budget_ms).min(call_budget_ms.saturating_sub(WRITE_RESERVE_MS));
+        if budget_ms == 0 {
+            return None;
+        }
+        queued_hint(
+            owner,
+            &built.fields,
+            query.envelope.workspace.as_deref().unwrap_or_default(),
+            query.envelope.home_dir.as_deref().unwrap_or_default(),
+            paused,
+            ask.connector.as_ref(),
+            u32::try_from(budget_ms).unwrap_or(u32::MAX),
+        )
+    });
     let mut request = built.request;
-    request.insert("extension_allow_hint".to_owned(), hint);
+    request.insert(
+        "extension_allow_hint".to_owned(),
+        hint.unwrap_or(Value::Null),
+    );
     let method = if silent {
         delegated.insert("daemon".to_owned(), Value::Bool(true));
         "add_silent_native_review_approval_request"

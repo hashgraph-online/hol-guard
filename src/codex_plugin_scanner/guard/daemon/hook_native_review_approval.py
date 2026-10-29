@@ -32,7 +32,7 @@ from .hook_native_review_binding import (
 from .hook_native_saved_approval import native_saved_decision_response
 from .hook_request_parsing import native_review_launch_target as _native_review_launch_target
 from .hook_request_parsing import native_review_tool_name as _native_review_tool_name
-from .native_review_allow_hint import native_review_hint
+from .native_review_allow_hint import native_review_hint_ask
 from .native_review_connector import (
     connector_agent_reason,
     connector_is_local,
@@ -351,7 +351,6 @@ def queue_native_pre_tool_review(
     }
     try:
         query = native_review_query(harness, payload, review, workspace=workspace, home_dir=home_dir)
-        hint = native_review_hint(store, payload, native_result, workspace, home_dir, deadline, connector)
     except (OSError, RuntimeError, TypeError, ValueError, KeyError) as error:
         # Never make an action approvable when its details could not be safely presented.
         # Exception messages can contain private tool input; log only the error class and, for
@@ -361,13 +360,14 @@ def queue_native_pre_tool_review(
         return None
     now = datetime.now(tz=timezone.utc).isoformat()
     try:
-        # The resident builds the request from the query and queues it in one
-        # store call. A waiting Codex hook's operation and resume record, and
-        # a prompted Claude review's permission notice, are written with it.
+        # The resident builds the request from the query, decides its hint
+        # and queues it in one store call. A waiting Codex hook's operation and
+        # resume record, and a prompted Claude review's permission notice, are
+        # written with it.
         stored = queue(
             query,
             now,
-            extension_allow_hint=hint,
+            hint=native_review_hint_ask(deadline, connector),
             silent=silent,
             claude_key=_claude_notice_key(store, deadline) if claude_notice else None,
             codex_live_wait=live_wait,

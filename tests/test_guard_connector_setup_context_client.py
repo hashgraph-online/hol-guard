@@ -477,7 +477,7 @@ def _queue(
     monkeypatch.setattr(review, "record_native_review_connector_context", record)
     monkeypatch.setattr(review, "native_review_policy_binding", lambda **_kwargs: None)
     monkeypatch.setattr(review, "native_review_query", _native_request)
-    monkeypatch.setattr(review, "native_review_hint", lambda *_a, **_k: None)
+    monkeypatch.setattr(review, "native_review_hint_ask", lambda *_a, **_k: None)
     queued = review.queue_native_pre_tool_review(
         _ApprovalStore(),
         harness="codex",

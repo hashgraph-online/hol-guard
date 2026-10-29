@@ -146,7 +146,7 @@ def _queue(
     monkeypatch.setattr(review.uuid, "uuid4", lambda: SimpleNamespace(hex=request_id))
     for name, value in {
         "native_review_policy_binding": lambda **_k: None,
-        "native_review_hint": lambda *_a, **_k: None,
+        "native_review_hint_ask": lambda *_a, **_k: None,
         "native_review_query": _native_request,
     }.items():
         monkeypatch.setattr(review, name, value)
