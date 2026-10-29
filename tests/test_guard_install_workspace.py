@@ -422,6 +422,11 @@ def test_install_cursor_hook_script_allows_benign_shell_command(
     subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
     monkeypatch.chdir(repo)
     monkeypatch.delenv("CURSOR_PROJECT_DIR", raising=False)
+    # Guard state follows the home this install writes into. Without the
+    # override the hook, the daemon it asks and every other worker in the
+    # run share the account's own Guard home, where one worker's resident
+    # answers another worker's hook.
+    monkeypatch.setenv("HOME", str(home_dir))
 
     rc = main(
         [
