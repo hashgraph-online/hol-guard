@@ -3,16 +3,19 @@
 //! its standard input opens no file, so a word such as `.git`, `.ssh/` or
 //! `config` there names no path: it selects lines of output the earlier
 //! stages already produced. Every other token of the command still meets the
-//! sensitive-text and path screens, and a credential keyword in a pattern
-//! still reads as a credential search.
+//! sensitive-text and path screens. A credential keyword in the pattern is
+//! not one of them: a stdin-only stage can only narrow what the stages
+//! before it already wrote, so `git diff | rg -n password` discloses less
+//! than the `git diff` the screens already allowed on its own.
 
 use crate::{CanonicalCommandV1, CommandSegmentV1};
 
-/// Whether `text`, the whole command, trips the sensitive-text floor once its
-/// filter patterns are left out. `without_patterns` is the same text with the
-/// arguments of each stdin-only matcher removed.
-pub(super) fn sensitive_beyond_filters(text: &str, without_patterns: &str) -> bool {
-    super::credential_keyword_text(text) || super::sensitive_command(without_patterns)
+/// Whether the command trips the sensitive-text floor once its filter
+/// patterns are left out. `without_patterns` is the command's text with the
+/// arguments of each stdin-only matcher removed; nothing that was masked is
+/// read again, because a pattern selects lines rather than naming a target.
+pub(super) fn sensitive_beyond_filters(without_patterns: &str) -> bool {
+    super::sensitive_command(without_patterns)
 }
 
 /// The command's text with each stdin-only matcher's arguments left out, or

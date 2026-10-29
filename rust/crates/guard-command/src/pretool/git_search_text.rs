@@ -3,8 +3,10 @@
 //! of `git describe`. Git compares them against content, messages and ref
 //! names and never opens them, so a pattern such as `process.env`, `.ssh/`
 //! or `v*` names no path. Every other token still meets the sensitive-text
-//! and path screens, and a credential keyword in a pattern still reads as a
-//! credential search.
+//! and path screens. A credential keyword in the pattern is not one of them:
+//! the search reports lines of content the same command would already print
+//! without it, so `git grep -n password` discloses less than the `git grep`
+//! and `git log -p` the screens already allow.
 
 use super::search_scope_tracked::names;
 use crate::{CanonicalCommandV1, CommandSegmentV1};
@@ -30,12 +32,10 @@ pub(super) fn pattern_positions(arguments: &[String]) -> Vec<usize> {
 
 /// Whether `text`, the whole command or one of its segments, trips the
 /// sensitive-text floor. `without_patterns` is the same text with its Git
-/// search patterns left out: only a credential keyword in a pattern counts.
+/// search patterns left out, and the screen reads that text instead; `None`
+/// means the text holds no pattern and is screened whole.
 pub(super) fn sensitive_beyond_patterns(text: &str, without_patterns: Option<String>) -> bool {
-    match without_patterns {
-        Some(rest) => super::credential_keyword_text(text) || super::sensitive_command(&rest),
-        None => super::sensitive_command(text),
-    }
+    super::sensitive_command(without_patterns.as_deref().unwrap_or(text))
 }
 
 /// [`sensitive_beyond_patterns`] for one segment of `model`, reading `text`
@@ -242,6 +242,7 @@ fn log_option(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::pattern_positions;
+    use crate::pretool::source_reads::sensitive_command_input;
 
     fn positions(command: &str) -> Vec<usize> {
         let arguments: Vec<String> = command.split(' ').map(str::to_owned).collect();
@@ -283,5 +284,44 @@ mod tests {
         assert!(positions("describe --textconv --match v*").is_empty());
         assert!(positions("describe --match").is_empty());
         assert_eq!(positions("describe --match v* -- .env"), vec![2]);
+    }
+
+    /// A Git search pattern is content Git compares, never a path it opens,
+    /// so a credential word written there is a pattern like any other. The
+    /// search prints lines of the same tracked content `git grep` and
+    /// `git log -p` already print without it.
+    #[test]
+    fn a_credential_word_in_a_search_pattern_is_not_a_sensitive_target() {
+        for command in [
+            "git grep -n password -- src",
+            "git grep -ln api_key",
+            "git log -S aws_secret_access_key --oneline",
+            "git log --grep=password --oneline",
+            "git log -Gprivate_key -- src",
+        ] {
+            assert!(
+                !sensitive_command_input(command),
+                "{command} still reads as a sensitive target"
+            );
+        }
+    }
+
+    /// Only the pattern is set aside. A path operand, a pattern file and a
+    /// second stage that could open a secret of its own all name something
+    /// Git would read, so each keeps its screen.
+    #[test]
+    fn everything_outside_the_pattern_keeps_its_screen() {
+        for command in [
+            "git grep -n foo -- .env",
+            "git grep -f .env -- src",
+            "git log -p -- .env | grep password",
+            "git grep -n foo -- ~/.ssh/config",
+            "git log -S foo -- ~/.aws/credentials",
+        ] {
+            assert!(
+                sensitive_command_input(command),
+                "{command} lost a signal the pattern exemption must keep"
+            );
+        }
     }
 }
