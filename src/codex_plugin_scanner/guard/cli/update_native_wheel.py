@@ -178,11 +178,13 @@ def _account_free_executable(executable: str) -> str:
     it is not under the home directory, or when there is no home to find.
     """
 
-    try:
-        home = os.path.expanduser("~")
-    except (OSError, RuntimeError):
-        return executable
-    home = home.rstrip(os.sep)
+    # The rewritten command expands ``$HOME`` in the reader's shell, so the
+    # directory the path must match is the one that variable names, not the
+    # password-database home ``expanduser`` falls back to when ``HOME`` is
+    # unset. Matching against the fallback would print ``"$HOME/..."`` for a
+    # reader whose shell expands ``$HOME`` to nothing, naming an interpreter
+    # under ``/`` that is not there.
+    home = os.environ.get("HOME", "").rstrip(os.sep)
     if not home or home == executable:
         return executable
     prefix = home + os.sep

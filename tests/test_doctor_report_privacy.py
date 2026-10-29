@@ -15,6 +15,7 @@ from typing import Any
 
 import pytest
 
+from codex_plugin_scanner.guard.cli import update_commands
 from codex_plugin_scanner.guard.cli import update_native_wheel as native
 from codex_plugin_scanner.guard.cli.doctor_native_runtime import native_runtime_section
 
@@ -51,6 +52,26 @@ def account_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     return home
 
 
+@pytest.fixture
+def blocked_install(monkeypatch: pytest.MonkeyPatch, account_home: Path) -> Path:
+    """An install whose native runtime is missing and recoverable by hand.
+
+    The report only carries ``manual_install`` for a host that has no bundled
+    runtime, runs on a platform the release publishes a wheel for, knows its
+    own version, and is not managed by Desktop. A checkout that has the native
+    binary built satisfies none of that, so without these inputs the privacy
+    assertions below would pass over a report with nothing in it to redact.
+    """
+
+    monkeypatch.setattr(update_commands, "_is_desktop_managed_runtime", lambda: False)
+    monkeypatch.setattr(update_commands, "bundled_native_runtime_missing", lambda: True)
+    monkeypatch.setattr(update_commands, "native_platform_supported", lambda: True)
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "3.58.0")
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pip")
+    monkeypatch.setattr(native, "_platform_tags", lambda: ["macosx_11_0_arm64"])
+    return account_home
+
+
 def test_an_interpreter_under_the_home_directory_is_named_through_home(account_home: Path) -> None:
     executable = str(account_home / "venv" / "bin" / "python")
 
@@ -84,20 +105,28 @@ def test_the_home_directory_itself_is_left_alone(account_home: Path) -> None:
     assert native._account_free_executable(str(account_home)) == str(account_home)
 
 
-def test_a_home_the_platform_will_not_name_leaves_the_path_as_it_is(
-    monkeypatch: pytest.MonkeyPatch, account_home: Path
-) -> None:
-    def no_home(_path: str) -> str:
-        raise RuntimeError("this platform has no home directory")
+def test_a_shell_with_no_home_set_leaves_the_path_as_it_is(monkeypatch: pytest.MonkeyPatch, account_home: Path) -> None:
+    # On POSIX the home lookup falls back to the password database when `HOME`
+    # is unset, so it still answers with the account's directory -- but the
+    # printed command expands `$HOME` in the reader's shell, where it is empty.
+    # Rewriting against the fallback would name an interpreter under `/`.
+    monkeypatch.delenv("HOME", raising=False)
+    monkeypatch.setattr(native.os.path, "expanduser", lambda _path: str(account_home))
+    executable = str(account_home / "venv" / "bin" / "python")
 
-    monkeypatch.setattr(native.os.path, "expanduser", no_home)
-
-    assert native._account_free_executable(str(account_home / "venv" / "bin" / "python")) == str(
-        account_home / "venv" / "bin" / "python"
-    )
+    assert native._account_free_executable(executable) == executable
 
 
-def test_the_whole_report_names_no_account(account_home: Path, tmp_path: Path) -> None:
+def test_an_empty_home_leaves_the_path_as_it_is(monkeypatch: pytest.MonkeyPatch, account_home: Path) -> None:
+    # `HOME=/` rstrips to the empty string, which every absolute path starts
+    # with; rewriting against it would turn the whole path into `$HOME/...`.
+    monkeypatch.setenv("HOME", "/")
+    executable = str(account_home / "venv" / "bin" / "python")
+
+    assert native._account_free_executable(executable) == executable
+
+
+def test_the_whole_report_names_no_account(blocked_install: Path, tmp_path: Path) -> None:
     guard_home = tmp_path / ACCOUNT / ".hol-guard"
     guard_home.mkdir(parents=True)
 
@@ -107,10 +136,10 @@ def test_the_whole_report_names_no_account(account_home: Path, tmp_path: Path) -
     # as the structure it is and as the text a reader copies out of a terminal.
     for text in [*_strings(section), json.dumps(section, default=str)]:
         assert ACCOUNT not in text, text
-        assert str(account_home) not in text, text
+        assert str(blocked_install) not in text, text
 
 
-def test_the_report_still_tells_a_blocked_install_what_to_run(account_home: Path, tmp_path: Path) -> None:
+def test_the_report_still_tells_a_blocked_install_what_to_run(blocked_install: Path, tmp_path: Path) -> None:
     # The redaction above is worth nothing if it empties the one field that
     # tells a user how to recover, so the command has to survive it.
     guard_home = tmp_path / ACCOUNT / ".hol-guard"
@@ -118,8 +147,9 @@ def test_the_report_still_tells_a_blocked_install_what_to_run(account_home: Path
 
     bundled: Any = native_runtime_section(guard_home).get("bundled")
 
-    if bundled is not None and bundled.get("status") == "missing":
-        manual = bundled.get("manual_install")
-        if manual is not None:
-            assert "hol_guard-" in manual
-            assert ACCOUNT not in manual
+    assert bundled is not None
+    assert bundled.get("status") == "missing"
+    manual = bundled["manual_install"]
+    assert "hol_guard-" in manual
+    assert ACCOUNT not in manual
+    assert manual.startswith('"$HOME/venv/bin/python" -m pip install')
