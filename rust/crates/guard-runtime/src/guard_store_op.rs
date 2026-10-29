@@ -267,6 +267,11 @@ fn evaluate_tracked(
     let generation = (connection.total_changes() > initial_changes)
         .then(|| outbox_generation(&connection))
         .transpose()?;
+    // A paused review's hook response is rendered once its row is stored.
+    let payload = match &delegated {
+        Some(delegated) => delegated.with_response(payload, &request.guard_home),
+        None => payload,
+    };
     Ok((payload, generation))
 }
 

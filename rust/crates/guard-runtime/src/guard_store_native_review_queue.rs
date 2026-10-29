@@ -17,14 +17,20 @@
 //! and the read-back behave exactly as for the method it names. The review's
 //! extension or connector hint is decided here too, under the snapshot the
 //! resident admitted, within the budget the call's `hint` names.
+//!
+//! A call that names its `respond` also answers the hook response for the row
+//! it stored, the paused review or the silent block the hook used to ask the
+//! resident for in a call of its own. A reply without its row carries none,
+//! and the hook renders it separately.
 
-use guard_contracts::ReviewRequestQueryV1;
+use guard_contracts::{PausedReviewInputsV1, ReviewRequestQueryV1, SilentReviewBlockInputsV1};
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 use zeroize::Zeroize;
 
 use crate::guard_store_db::{StoreError, StoreResult};
 use crate::hook_adapter_op::review_request::{self, pre_tool_command};
+use crate::hook_decision_review_response::{paused_review, silent_review_block};
 use crate::hook_direct::saved_decision::review_hint::op::queued_hint;
 use crate::policy_store::PolicySnapshotStore;
 
@@ -51,10 +57,47 @@ struct HintAsk {
     connector: Option<Value>,
 }
 
+/// The hook response a call asks for with the stored row.
+#[derive(Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum RespondAsk {
+    /// A prompted review.
+    PausedReview(PausedAsk),
+    /// A review the agent never sees.
+    SilentReviewBlock(SilentAsk),
+}
+
+/// The prompted review's text, when it differs from the verdict's.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PausedAsk {
+    reason: Option<String>,
+}
+
+/// The silent block's facts that do not come from the review or its row.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SilentAsk {
+    setup_reason: Option<String>,
+    ask: bool,
+    retry_reuses_approval: bool,
+    exact_action_allowable: bool,
+    connector_is_local: bool,
+    home_dir: String,
+}
+
+/// What the response is rendered from besides the stored row.
+struct Respond {
+    ask: RespondAsk,
+    harness: String,
+    result: Map<String, Value>,
+}
+
 /// The queue write a `queue_native_review` call stands for.
 pub(crate) struct Delegated {
     pub(crate) method: &'static str,
     pub(crate) args: Map<String, Value>,
+    respond: Option<Respond>,
 }
 
 impl Drop for Delegated {
@@ -82,9 +125,14 @@ pub(crate) fn delegate(
         None | Some(Value::Null) => None,
         Some(ask) => Some(serde_json::from_value(ask).map_err(|_| INVALID)?),
     };
+    let respond: Option<RespondAsk> = match delegated.remove("respond") {
+        None | Some(Value::Null) => None,
+        Some(respond) => Some(serde_json::from_value(respond).map_err(|_| INVALID)?),
+    };
     let silent = take_flag(&mut delegated, "silent")?;
     let claude_notice = take_flag(&mut delegated, "claude_notice")?;
-    if silent && claude_notice {
+    let silent_response = matches!(respond, Some(RespondAsk::SilentReviewBlock(_)));
+    if (silent && claude_notice) || (respond.is_some() && silent_response != silent) {
         return Err(INVALID);
     }
     let built = review_request::build(&query).map_err(|_| REFUSED)?;
@@ -130,7 +178,73 @@ pub(crate) fn delegate(
     Ok(Delegated {
         method,
         args: delegated,
+        respond: respond.map(|ask| Respond {
+            ask,
+            harness: query.envelope.harness.clone(),
+            result: paused.clone(),
+        }),
     })
+}
+
+impl Delegated {
+    /// `reply` with the hook response rendered from the row it stored, under
+    /// `response`. A reply without its row, or a block the resident cannot
+    /// compose, is answered unchanged and the hook renders separately.
+    pub(crate) fn with_response(&self, mut reply: Value, guard_home: &str) -> Value {
+        let Some(respond) = &self.respond else {
+            return reply;
+        };
+        let Some(object) = reply.as_object_mut() else {
+            return reply;
+        };
+        let Some(row) = object.get("row").and_then(Value::as_object) else {
+            return reply;
+        };
+        let text = |key: &str| row.get(key).and_then(Value::as_str).map(str::to_owned);
+        let (request_id, approval_url) = (text("request_id"), text("approval_url"));
+        let response = match &respond.ask {
+            RespondAsk::PausedReview(PausedAsk { reason }) => {
+                let mut verdict = respond.result.clone();
+                if let Some(reason) = reason {
+                    verdict.insert("reason".to_owned(), Value::String(reason.clone()));
+                }
+                // The renderer reads only the link and the request id.
+                let approval = [("approval_url", approval_url), ("request_id", request_id)]
+                    .into_iter()
+                    .filter_map(|(key, value)| Some((key.to_owned(), Value::String(value?))))
+                    .collect();
+                paused_review(&PausedReviewInputsV1 {
+                    harness: respond.harness.clone(),
+                    verdict,
+                    approval: Some(approval),
+                    guard_home: guard_home.to_owned(),
+                })
+                .response
+            }
+            RespondAsk::SilentReviewBlock(ask) => {
+                let inputs = SilentReviewBlockInputsV1 {
+                    harness: respond.harness.clone(),
+                    result: respond.result.clone(),
+                    setup_reason: ask.setup_reason.clone(),
+                    queued: true,
+                    request_id,
+                    approval_url,
+                    ask: ask.ask,
+                    retry_reuses_approval: ask.retry_reuses_approval,
+                    exact_action_allowable: ask.exact_action_allowable,
+                    connector_is_local: ask.connector_is_local,
+                    guard_home: guard_home.to_owned(),
+                    home_dir: ask.home_dir.clone(),
+                };
+                match silent_review_block(&inputs) {
+                    Ok(block) => block.response,
+                    Err(_) => return reply,
+                }
+            }
+        };
+        object.insert("response".to_owned(), Value::Object(response));
+        reply
+    }
 }
 
 fn take_flag(args: &mut Map<String, Value>, key: &str) -> StoreResult<bool> {

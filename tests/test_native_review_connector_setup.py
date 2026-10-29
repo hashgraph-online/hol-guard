@@ -46,6 +46,7 @@ def _pause(
     binding: str | None = "binding",
     token: str | None = None,
     queue_fails: bool = False,
+    rendered: dict[str, object] | None = None,
 ) -> tuple[str, list[dict[str, object]], dict[str, object]]:
     queued: list[dict[str, object]] = []
     silent: dict[str, object] = {}
@@ -58,7 +59,10 @@ def _pause(
 
     def queue(*_args: object, **kwargs: object) -> dict[str, object] | None:
         queued.append(kwargs)
-        return None if queue_fails else {"request_id": "abc", "approval_url": _URL}
+        if queue_fails:
+            return None
+        row: dict[str, object] = {"request_id": "abc", "approval_url": _URL}
+        return row if rendered is None else {**row, "hook_response": dict(rendered)}
 
     for name, value in {
         "review_evidence_parts": lambda _evidence: (True, binding, token, None),
@@ -300,3 +304,31 @@ def test_a_local_tool_setup_text_is_an_approval_wait_and_an_mcp_one_is_not() -> 
     assert "approve" not in mcp.lower()
     assert "one-time decision" in mcp_ask
     assert SAFE_ALTERNATIVE_GUIDANCE not in mcp_ask
+
+
+def test_the_queue_call_renders_the_silent_block_with_its_row(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    text, queued, silent = _pause(
+        tmp_path, monkeypatch, ask=False, connector=_CONNECTOR, rendered={"reason": "rendered with the row"}
+    )
+
+    assert json.loads(text) == {"reason": "rendered with the row"}
+    # The block's facts ride the queue call; no second render is asked for.
+    assert not silent
+    respond: Any = queued[0]["respond"]
+    facts = respond["silent_review_block"]
+    assert (facts["ask"], facts["connector_is_local"], facts["retry_reuses_approval"]) == (False, True, True)
+    assert facts["exact_action_allowable"] is False
+    assert "has not been set up for `lanectl`" in facts["setup_reason"]
+
+
+def test_the_queue_call_renders_the_paused_review_with_its_row(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    text, queued, _silent = _pause(
+        tmp_path, monkeypatch, ask=True, connector=_CONNECTOR, rendered={"reason": "rendered with the row"}
+    )
+
+    response = json.loads(text)
+    assert response["reason"] == "rendered with the row"
+    assert response["prompted"] is True
+    assert response["approval_center_url"] == "http://127.0.0.1:4781"
+    respond: Any = queued[0]["respond"]
+    assert "has not been set up for `lanectl`" in respond["paused_review"]["reason"]

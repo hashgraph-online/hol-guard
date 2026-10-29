@@ -132,6 +132,24 @@ def test_a_silent_review_reads_back_in_its_daemon_write() -> None:
     assert store.reads == []
 
 
+def test_the_hook_response_rendered_with_the_row_rides_on_it() -> None:
+    respond = {"paused_review": {"reason": None}}
+    store = _RowStore({"request_id": "req-1", "row": {"request_id": "req-1"}, "response": {"decision": "ask"}})
+    assert store.queue_native_review(_QUERY, "now", respond=respond) == {
+        "request_id": "req-1",
+        "hook_response": {"decision": "ask"},
+    }
+    ((_method, args),) = store.calls
+    assert args["respond"] == respond
+
+
+def test_a_call_that_asks_for_no_response_sends_no_respond() -> None:
+    store = _RowStore({"request_id": "req-1", "row": {"request_id": "req-1"}})
+    assert store.queue_native_review(_QUERY, "now") == {"request_id": "req-1"}
+    ((_method, args),) = store.calls
+    assert "respond" not in args
+
+
 def test_a_row_the_write_did_not_read_back_is_read_separately() -> None:
     store = _RowStore({"request_id": "req-1", "row_error": "native_guard_store_invalid"})
     assert store.queue_native_review(_QUERY, "now") == {"request_id": "req-1", "read": "separately"}

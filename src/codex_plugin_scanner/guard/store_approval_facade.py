@@ -73,6 +73,7 @@ class StoreApprovalsMixin:
         silent: bool = False,
         claude_key: dict[str, str] | None = None,
         codex_live_wait: dict[str, object] | None = None,
+        respond: dict[str, object] | None = None,
     ) -> dict[str, object] | None:
         """Queue a paused native review and answer the row it was stored as.
 
@@ -98,6 +99,12 @@ class StoreApprovalsMixin:
         resume record after it, in the same write. A bridge that is not live
         (``not_live``), or a wait the resident could not link or seed, leaves
         the request a manual retry.
+
+        ``respond`` asks for the hook response with the row: ``paused_review``
+        (its ``reason``) or ``silent_review_block`` (the block's facts besides
+        the row). The resident renders it once the row is stored and the row
+        carries it as ``hook_response``. A row read back separately carries
+        none, and the hook renders it itself.
         """
         args: dict[str, object] = {
             "review": review,
@@ -111,6 +118,8 @@ class StoreApprovalsMixin:
             args["integrity_key_id"] = claude_key["integrity_key_id"]
         if codex_live_wait is not None:
             args["codex_live_wait_facts"] = codex_live_wait
+        if respond is not None:
+            args["respond"] = respond
         try:
             # `Path.resolve` of a relative config path starts from this process's directory.
             cwd: str | None = os.getcwd()
@@ -126,7 +135,13 @@ class StoreApprovalsMixin:
         if "row" not in queued:
             return self._read_back_queued_request(queued["request_id"])
         row = queued["row"]
-        return _with_approval_hints(row) if isinstance(row, dict) else None
+        if not isinstance(row, dict):
+            return None
+        hinted = _with_approval_hints(row)
+        response = queued.get("response")
+        if isinstance(response, dict):
+            hinted["hook_response"] = response
+        return hinted
 
     def _read_back_queued_request(self, request_id: str) -> dict[str, object] | None:
         # The write has committed. A failed read answers no row rather than

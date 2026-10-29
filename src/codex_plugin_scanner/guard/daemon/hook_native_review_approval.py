@@ -208,6 +208,17 @@ def pause_native_pre_tool_for_approval(
         )
     if not ask or (identity is None and exact_token is None):
         # The agent stays on the silent block. The inbox row is a separate record.
+        facts = {
+            # The resident drops the setup text when the review never reached the inbox.
+            "setup_reason": setup_reason,
+            "ask": ask,
+            # The queued row is stored with this same binding; without one a
+            # one-time approval cannot match the agent's retry.
+            "retry_reuses_approval": identity is not None,
+            "exact_action_allowable": exact_token is not None,
+            "connector_is_local": connector_is_local(connector),
+            "home_dir": str(home_dir or Path.home()),
+        }
         queued = queue_native_pre_tool_review(
             store,
             harness=harness,
@@ -225,26 +236,22 @@ def pause_native_pre_tool_for_approval(
             connector=connector,
             policy_binding_verified=True,
             silent=True,
+            respond={"silent_review_block": facts},
         )
         if queued is None:
             _LOGGER.warning("Silent review blocked without an inbox row for %s", harness)
+        block = queued.pop("hook_response", None) if queued else None
+        if isinstance(block, dict):
+            return block
         request_id, approval_url = (queued.get("request_id"), queued.get("approval_url")) if queued else (None, None)
         inputs = {
             "harness": harness,
             "result": dict(native_result),
-            # The resident drops the setup text when the review never reached the inbox.
-            "setup_reason": setup_reason,
             "queued": queued is not None,
             "request_id": request_id if isinstance(request_id, str) else None,
             "approval_url": approval_url if isinstance(approval_url, str) else None,
-            "ask": ask,
-            # The queued row is stored with this same binding; without one a
-            # one-time approval cannot match the agent's retry.
-            "retry_reuses_approval": identity is not None,
-            "exact_action_allowable": exact_token is not None,
-            "connector_is_local": connector_is_local(connector),
             "guard_home": str(guard_home),
-            "home_dir": str(home_dir or Path.home()),
+            **facts,
         }
         return render_silent_review_block(harness, inputs, guard_home=guard_home, deadline=deadline)
 
@@ -266,6 +273,7 @@ def pause_native_pre_tool_for_approval(
         policy_binding_verified=True,
         claude_notice=canonical_harness(harness) == "claude-code",
         codex_live_wait=canonical_harness(harness) == "codex",
+        respond={"paused_review": {"reason": setup_reason}},
     )
     if queued is None:
         failed = dict(native_result)
@@ -275,13 +283,17 @@ def pause_native_pre_tool_for_approval(
         failed["reason_code"] = "native_review_queue_failed"
         failed["reason"] = "HOL Guard could not record this review for approval."
         return render_pre_tool(harness, failed, guard_home=guard_home, deadline=deadline)
-    response = render_pre_tool_review(
-        harness,
-        native_result if setup_reason is None else {**native_result, "reason": setup_reason},
-        approval=queued,
-        guard_home=guard_home,
-        deadline=deadline,
-    )
+    # The queue call renders the paused review with the row it stored; a row
+    # read back separately carries none.
+    response = queued.pop("hook_response", None)
+    if not isinstance(response, dict):
+        response = render_pre_tool_review(
+            harness,
+            native_result if setup_reason is None else {**native_result, "reason": setup_reason},
+            approval=queued,
+            guard_home=guard_home,
+            deadline=deadline,
+        )
     response["prompted"] = True
     response["approval_center_url"] = approval_center_url
     return response
@@ -308,6 +320,7 @@ def queue_native_pre_tool_review(
     policy_binding_verified: bool = False,
     codex_live_wait: bool = False,
     silent: bool = False,
+    respond: dict[str, object] | None = None,
 ) -> dict[str, object] | None:
     if not policy_binding_verified:
         try:
@@ -371,6 +384,7 @@ def queue_native_pre_tool_review(
             silent=silent,
             claude_key=_claude_notice_key(store, deadline) if claude_notice else None,
             codex_live_wait=live_wait,
+            respond=respond,
         )
     except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error) as error:
         # The action fails closed. Only the store's fixed reason code, never an
