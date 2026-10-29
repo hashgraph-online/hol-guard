@@ -2,6 +2,7 @@
 #[cfg(test)]
 #[path = "contained_argv_tests.rs"]
 mod tests;
+use crate::contained_node_tool::local_package_entry;
 use crate::restricted_command::{normalized_command, RestrictedPytestError};
 use regex::Regex;
 use serde_json::{json, Value};
@@ -10,14 +11,6 @@ use std::sync::LazyLock;
 
 const NODE_INVALID: &str = "node_test_restricted_invalid_command";
 const VITEST_INVALID: &str = "vitest_restricted_invalid_command";
-
-/// `node_modules/<entry>`, `./node_modules/<entry>`, or `<dir>/node_modules/<entry>`.
-fn local_package_entry(argument: &str, package_entry: &str) -> bool {
-    argument
-        .strip_suffix(package_entry)
-        .and_then(|prefix| prefix.strip_suffix("node_modules/"))
-        .is_some_and(|prefix| prefix.is_empty() || prefix.ends_with('/'))
-}
 
 /// Vitest's installed entry points. `vitest.mjs` is the package's declared
 /// `bin` shim and `dist/cli.js` is the module that shim imports, so both
@@ -537,6 +530,7 @@ pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
             | "transparent_prefix"
             | "command_prefix_split"
             | "run_prefix_peel"
+            | "node_tool_route"
     ) {
         return None;
     }
@@ -565,6 +559,29 @@ pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
         "transparent_prefix" => {
             let prefix = crate::parser_wrappers::transparent_prefix(&command, 0);
             Ok(json!(prefix.map(|(index, _)| index)))
+        }
+        "node_tool_route" => {
+            let windows = input
+                .get("windows")
+                .and_then(Value::as_bool)
+                .unwrap_or(cfg!(windows));
+            let body = input.get("script_body").cloned().unwrap_or(Value::Null);
+            let script_body = if body.is_null() {
+                None
+            } else {
+                match serde_json::from_value::<Vec<String>>(body) {
+                    Ok(body) => Some(body),
+                    Err(_) => {
+                        return Some(crate::restricted_command::error_reply(
+                            RestrictedPytestError::new(
+                                "pytest_restricted_invalid_command",
+                                "Invalid restricted execution request.",
+                            ),
+                        ))
+                    }
+                }
+            };
+            crate::contained_node_tool::route_reply(&command, script_body.as_deref(), windows)
         }
         "run_prefix_peel" => {
             let (core, seconds) = crate::contained_run_prefix::run_prefix_peel(&command);

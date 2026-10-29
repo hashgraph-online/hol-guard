@@ -9,6 +9,7 @@
 mod tests;
 
 use crate::contained_argv::{contained_runner_call, jest_contained_call};
+use crate::contained_node_tool::{local_package_entry, prettier_checks, PRETTIER_ENTRIES};
 use crate::CanonicalCommandV1;
 
 #[path = "bun_eval_screen.rs"]
@@ -202,21 +203,6 @@ pub(super) fn requires_pytest_containment(model: &CanonicalCommandV1) -> bool {
 
 /// The entrypoints Prettier publishes: version 3 moved the executable into
 /// `bin/`, and version 2 is still installed widely enough to name as well.
-pub(crate) const PRETTIER_ENTRIES: [&str; 2] =
-    ["prettier/bin/prettier.cjs", "prettier/bin-prettier.js"];
-
-/// Whether a Prettier command asks only whether the files are formatted.
-/// `--check` and `--list-different` print and exit; every other spelling may
-/// reach `--write`, which rewrites each file it visits.
-pub(crate) fn prettier_checks(arguments: &[String]) -> bool {
-    arguments.iter().any(|argument| {
-        matches!(
-            argument.as_str(),
-            "--check" | "-c" | "--list-different" | "-l"
-        )
-    })
-}
-
 fn executable_is_bunx(executable: &str) -> bool {
     super::executable_basename(executable) == "bunx"
 }
@@ -423,7 +409,7 @@ const MANAGER_SUBCOMMANDS: &[&str] = &[
 /// string rather than a binary, so it is not one of these, and a manager
 /// option before the subcommand (`pnpm -r`, `--filter`) fans the run out past
 /// one package and keeps the review.
-pub(super) fn manager_local_bin_arguments<'a>(
+pub(crate) fn manager_local_bin_arguments<'a>(
     manager: &str,
     arguments: &'a [String],
 ) -> Option<&'a [String]> {
@@ -442,7 +428,7 @@ pub(super) fn manager_local_bin_arguments<'a>(
     Some(rest)
 }
 
-pub(super) fn manager_script_task<'a>(manager: &str, arguments: &'a [String]) -> Option<&'a str> {
+pub(crate) fn manager_script_task<'a>(manager: &str, arguments: &'a [String]) -> Option<&'a str> {
     match arguments {
         [run, task] if run == "run" => Some(task.as_str()),
         [task]
@@ -682,13 +668,4 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
         return Some("native_node_test_readonly_containment_required");
     }
     None
-}
-
-/// `node node_modules/<entry>` and `node <dir>/node_modules/<entry>`. The sink
-/// still proves the file is the project's own installed entrypoint.
-fn local_package_entry(entry: &str, package_entry: &str) -> bool {
-    entry
-        .strip_suffix(package_entry)
-        .and_then(|prefix| prefix.strip_suffix("node_modules/"))
-        .is_some_and(|prefix| prefix.is_empty() || prefix.ends_with('/'))
 }
