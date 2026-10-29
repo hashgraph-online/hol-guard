@@ -535,6 +535,7 @@ pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
             | "contained_kind"
             | "launcher_program"
             | "transparent_prefix"
+            | "command_prefix_split"
     ) {
         return None;
     }
@@ -563,6 +564,23 @@ pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
         "transparent_prefix" => {
             let prefix = crate::parser_wrappers::transparent_prefix(&command, 0);
             Ok(json!(prefix.map(|(index, _)| index)))
+        }
+        "command_prefix_split" => {
+            let drop_data = input
+                .get("drop_data")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            let (core_index, assignments, dropped_data) =
+                crate::contained_prefix::command_prefix_split(&command, drop_data);
+            let assignments: Vec<Value> = assignments
+                .into_iter()
+                .map(|(name, value)| json!([name, value]))
+                .collect();
+            Ok(json!({
+                "core_index": core_index,
+                "assignments": assignments,
+                "dropped_data": dropped_data,
+            }))
         }
         _ => unreachable!(),
     };

@@ -33,22 +33,32 @@ _PROGRAM = {
     ("nice", "-n", "10", "timeout", "20", "pytest", "-q"): 3,
     ("stdbuf", "-oL", "env", "CI=1", "pytest", "-q"): 2,
 }
-# And where it reads the program behind a transparent prefix; that grammar is
-# tested in `guard-command` (`parser_wrappers.rs`).
-_PREFIX = {
-    ("env", "CI=1", "pytest", "-q"): 2,
-    ("/usr/bin/env", "CI=1", "pytest", "-q"): 2,
-    ("command", "pytest", "-q"): 1,
-    ("env", "REPORT_DIR=/tmp/r", "pytest", "-q"): 2,
+# And how it splits an inert prefix off a command; that reading is tested in
+# `guard-command` (`contained_prefix_tests.rs`). A command named here peels as
+# the answer says, and every other one peels not at all.
+_SPLIT: dict[tuple[tuple[str, ...], bool], dict[str, object]] = {
+    (("env", "CI=1", "pytest", "-q"), False): {"core_index": 2, "assignments": [["CI", "1"]]},
+    (("/usr/bin/env", "CI=1", "pytest", "-q"), False): {
+        "core_index": 2,
+        "assignments": [["CI", "1"]],
+    },
+    (("command", "pytest", "-q"), False): {"core_index": 1, "assignments": []},
+    (("env", "REPORT_DIR=/tmp/r", "pytest", "-q"), True): {
+        "core_index": 2,
+        "assignments": [],
+        "dropped_data": True,
+    },
 }
+_WHOLE: dict[str, object] = {"core_index": 0, "assignments": [], "dropped_data": False}
 _KINDS = dict.fromkeys(("inline_eval", "node_test", "vitest", "git", "node_tool"), False)
 
 
 def _native(operation: str, fields: dict[str, object], expected: object) -> object:
     if operation == "launcher_program":
         return _PROGRAM.get(tuple(fields["command"]))  # type: ignore[arg-type]
-    if operation == "transparent_prefix":
-        return _PREFIX.get(tuple(fields["command"]))  # type: ignore[arg-type]
+    if operation == "command_prefix_split":
+        key = (tuple(fields["command"]), bool(fields["drop_data"]))  # type: ignore[arg-type]
+        return _WHOLE | _SPLIT.get(key, {})
     return dict(_KINDS) if operation == "contained_kind" else None
 
 
@@ -137,10 +147,10 @@ def test_the_parser_names_the_launchers_and_the_sink_does_not(monkeypatch: pytes
     # nothing is left to peel and nothing further is asked.
     assert asked == [
         ("launcher_program", ["nice", "pytest", "-q"]),
-        ("transparent_prefix", ["pytest", "-q"]),
+        ("command_prefix_split", ["pytest", "-q"]),
         ("launcher_program", ["pytest", "-q"]),
         ("launcher_program", ["exec", "pytest", "-q"]),
-        ("transparent_prefix", ["pytest", "-q"]),
+        ("command_prefix_split", ["pytest", "-q"]),
         ("launcher_program", ["pytest", "-q"]),
         ("launcher_program", ["wget", "https://example.test"]),
     ]
