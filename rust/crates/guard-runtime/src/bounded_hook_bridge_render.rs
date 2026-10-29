@@ -587,12 +587,15 @@ pub(crate) fn rendered(
 /// The output for a hook a resident continued under the emergency-safe
 /// profile.
 ///
-/// The resident answers the finished harness payload, the same shape
-/// [`failure_payload`] writes for an event that does not pause, so it is
-/// written as it stands rather than read as a daemon answer: nothing
-/// reviewed the call, and there is no decision to restyle. The payload it
-/// replaces is the one `failure_output_for` writes, down to the trailing
-/// newline.
+/// The resident answers the finished harness payload, the same keys and
+/// values [`failure_payload`] writes for an event that does not pause, so
+/// it is written as it stands rather than read as a daemon answer: nothing
+/// reviewed the call, and there is no decision to restyle. The resident
+/// builds that payload through `serde_json`, whose maps this workspace
+/// keeps sorted, so the keys are written sorted rather than in the order
+/// `failure_output_for` lists them. Every harness reads the payload as
+/// JSON, where that order carries no meaning, and the trailing newline is
+/// the one `failure_output_for` writes.
 pub(crate) fn emergency_safe_output(response: &[(String, PyVal)], unmap: bool) -> Rendered {
     let mut stdout = String::new();
     dumps(&PyVal::Dict(response.to_vec()), true, unmap, &mut stdout);

@@ -13,9 +13,9 @@ use std::path::PathBuf;
 
 use super::config::{daemon_start_command, MANAGED_MARKER};
 use super::*;
-use crate::bounded_hook_bridge_render::failure_payload;
 use crate::bounded_hook_bridge_render::Rendered;
 use crate::bounded_hook_bridge_render::NATIVE_HARNESSES;
+use crate::bounded_hook_bridge_render::{failure_output_for, failure_payload};
 use crate::claude_hook_bridge_fixture::{
     read_request, write_private, write_response, GuardHome, Request,
 };
@@ -340,7 +340,11 @@ fn an_emergency_safe_continue_is_written_as_the_resident_sent_it() {
     let prepared = pre_tool_prepared(false, false);
     // The resident answers a finished harness payload. Nothing reviewed the
     // call and there is no decision to restyle, so the bridge writes what it
-    // was sent, down to the order the keys came in.
+    // was sent, down to the order the keys came in. The last answer is the
+    // one the resident builds for a generic harness, serialized the way it
+    // serializes it: `serde_json` maps are sorted in this workspace, so
+    // `continue` is followed by `hookSpecificOutput` and only then by
+    // `systemMessage`.
     for answer in [
         r#"{"permissionDecision":"allow"}"#.to_owned(),
         format!(r#"{{"decision":"allow","reason":"{CONTINUE_REASON}"}}"#),
@@ -351,6 +355,12 @@ fn an_emergency_safe_continue_is_written_as_the_resident_sent_it() {
             ),
             CONTINUE_REASON
         ),
+        json!({
+            "continue": true,
+            "systemMessage": CONTINUE_REASON,
+            "hookSpecificOutput": {"hookEventName": "PreToolUse"},
+        })
+        .to_string(),
     ] {
         assert_eq!(
             emergency_safe_response(&prepared, &answer, soon()),
@@ -367,20 +377,48 @@ fn an_emergency_safe_continue_is_written_as_the_resident_sent_it() {
 #[test]
 fn an_emergency_safe_continue_writes_what_the_pause_would_have_written() {
     // The payload the resident answers is the one `_emit_failure` writes for
-    // an event that does not pause, so the two render identically.
+    // an event that does not pause. The resident builds it through
+    // `serde_json`, whose maps this workspace keeps sorted, so the bridge
+    // writes a generic harness its keys sorted rather than in the order
+    // `failure_output_for` lists them. Every harness reads the payload as
+    // JSON, where that order carries no meaning, so the two are compared as
+    // the payloads they are.
     let prepared = pre_tool_prepared(false, false);
-    for harness in ["copilot", "openclaw", "hermes"] {
-        let (payload, exit_code) = failure_payload(harness, "PostToolUse", CONTINUE_REASON);
-        let mut answer = String::new();
-        dumps(&payload, true, false, &mut answer);
-        let (expected, _) = failure_output_for(harness, "PostToolUse", CONTINUE_REASON, false);
-        assert_eq!(
-            emergency_safe_response(&prepared, &answer, soon()),
-            Some(Route::Respond {
-                stdout: expected,
-                stderr: String::new(),
-                exit_code,
+    for (harness, answer) in [
+        ("copilot", json!({"permissionDecision": "allow"})),
+        (
+            "openclaw",
+            json!({"decision": "allow", "reason": CONTINUE_REASON}),
+        ),
+        (
+            "hermes",
+            json!({"decision": "allow", "reason": CONTINUE_REASON}),
+        ),
+        (
+            "kimi",
+            json!({
+                "continue": true,
+                "systemMessage": CONTINUE_REASON,
+                "hookSpecificOutput": {"hookEventName": "PostToolUse"},
             }),
+        ),
+    ] {
+        let (_, exit_code) = failure_payload(harness, "PostToolUse", CONTINUE_REASON);
+        let (expected, _) = failure_output_for(harness, "PostToolUse", CONTINUE_REASON, false);
+        let Some(Route::Respond {
+            stdout,
+            stderr,
+            exit_code: answered_exit_code,
+        }) = emergency_safe_response(&prepared, &answer.to_string(), soon())
+        else {
+            panic!("{harness} did not continue");
+        };
+        assert_eq!(stderr, String::new(), "{harness}");
+        assert_eq!(answered_exit_code, exit_code, "{harness}");
+        assert!(stdout.ends_with('\n'), "{harness}");
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&stdout).unwrap(),
+            serde_json::from_str::<serde_json::Value>(&expected).unwrap(),
             "{harness}"
         );
     }
