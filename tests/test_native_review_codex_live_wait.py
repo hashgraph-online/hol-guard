@@ -22,6 +22,7 @@ from codex_plugin_scanner.guard.codex_live_decision import (
 from codex_plugin_scanner.guard.codex_live_decision_revalidation import revalidate_codex_live_allow
 from codex_plugin_scanner.guard.continuation_snapshot import validated_continuation_snapshot
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+from codex_plugin_scanner.guard.daemon.local_approval_continuation import apply_local_approval_continuation
 from codex_plugin_scanner.guard.live_process_identity import (
     CODEX_BROWSER_WAIT_PROCESS_KEY,
     CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
@@ -399,6 +400,79 @@ def test_a_wait_that_cannot_be_linked_is_queued_as_a_manual_retry(
     snapshot = _snapshot(row)
     assert snapshot is not None
     assert snapshot["capability"] == "retry-only"
+
+
+def test_a_block_the_waiting_hook_already_completed_is_not_recorded_again_after_it_exits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
+) -> None:
+    workspace = _workspace(tmp_path)
+    worker, store = _hook_worker(tmp_path, monkeypatch)
+    bridge = subprocess.Popen(["sleep", "60"])
+    try:
+        start_token = process_start_token(bridge.pid)
+        assert start_token is not None
+        review = _review(
+            worker,
+            tmp_path,
+            workspace,
+            {
+                CODEX_BROWSER_WAIT_PROCESS_KEY: {"pid": bridge.pid, "startToken": start_token},
+                CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY: 120,
+            },
+        )
+        request_id = review["approval_request_id"]
+        assert isinstance(request_id, str)
+        row = store.get_approval_request(request_id)
+        assert row is not None
+        apply_approval_resolution(
+            store=store,
+            request_id=request_id,
+            action="block",
+            scope="artifact",
+            workspace=str(workspace),
+            reason="block",
+            persist_policy=None,
+            scope_contract_version=str(row["scope_contract_version"]),
+            scope_contract_digest=str(row["scope_contract_digest"]),
+        )
+        resolved = store.get_approval_request(request_id)
+        assert resolved is not None
+        completed = complete_codex_live_decision(store, request_id=request_id, now=str(resolved["resolved_at"]))
+        assert completed["completed"] is True, completed
+    finally:
+        bridge.kill()
+        bridge.wait()
+    recorded = store.get_request_resume(request_id)
+    assert recorded is not None
+    assert recorded["continuation_capability"] == "suspended-response"
+    assert recorded["continuation_status"] == "blocked_not_resumed"
+
+    # The daemon's decision handler continues the request after the bridge has
+    # already consumed the block and exited, so it sees no live hook.
+    later = (datetime.fromisoformat(str(resolved["resolved_at"])) + timedelta(seconds=1)).isoformat()
+    updated, _ = apply_local_approval_continuation(
+        store=store,
+        updated={},
+        request_id=request_id,
+        action="block",
+        harness="codex",
+        copy={"title": "Decision saved.", "body": "Return to Codex."},
+        now=lambda: later,
+    )
+
+    after = store.get_request_resume(request_id)
+    assert after is not None
+    assert after["continuation_capability"] == "suspended-response"
+    assert after["continuation_offer_hash"] == recorded["continuation_offer_hash"]
+    assert after["continuation_evidence"] == recorded["continuation_evidence"]
+    codex_resume = updated.get("codexResume")
+    assert isinstance(codex_resume, dict)
+    assert codex_resume.get("capability") == "suspended-response"
+    with sqlite3.connect(store.path) as connection:
+        terminals = connection.execute(
+            "select count(*) from guard_events where event_name = 'review.continuation.terminal'"
+        ).fetchone()[0]
+    assert terminals == 1
 
 
 def test_a_retry_folded_into_the_pending_row_releases_the_retrying_hook(
