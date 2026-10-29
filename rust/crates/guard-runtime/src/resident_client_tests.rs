@@ -475,9 +475,21 @@ fn endpoint_fixture() -> std::path::PathBuf {
     use std::fs;
     use std::os::unix::fs::PermissionsExt;
 
+    // `sun_path` holds 104 bytes on macOS, and the endpoints built on top of
+    // this directory add a separator and a name. `temp_dir` reads `TMPDIR`,
+    // which a caller may have pointed somewhere long; a directory no socket
+    // can be bound inside would fail these cases at `bind` rather than on what
+    // they are about, so fall back to a short base when it does not fit.
+    const BUDGET: usize = 90;
+
     let mut nonce = [0u8; 8];
     getrandom::fill(&mut nonce).unwrap();
-    let path = std::env::temp_dir().join(format!("cl-{}", hex::encode(nonce)));
+    let name = format!("cl-{}", hex::encode(nonce));
+    let mut base = std::env::temp_dir();
+    if base.as_os_str().len() + 1 + name.len() > BUDGET {
+        base = std::path::PathBuf::from("/tmp");
+    }
+    let path = base.join(name);
     fs::create_dir(&path).unwrap();
     fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
     path

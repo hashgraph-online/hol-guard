@@ -408,13 +408,31 @@ fn a_resident_that_never_answers_the_handshake_does_not_spend_the_request_budget
     assert!(waited < Duration::from_secs(4), "waited {waited:?}");
 }
 
+/// A child for [`a_killed_resident_leaves_no_identity_to_match`] to kill.
+///
+/// It is started by name through the test binary, so the case below needs no
+/// program on `PATH`. The wait is only an upper bound on how long it survives
+/// a parent that never gets to kill it.
+#[cfg(unix)]
+#[test]
+#[ignore = "started as a child by a_killed_resident_leaves_no_identity_to_match"]
+fn waits_for_the_parent_that_started_it() {
+    std::thread::sleep(Duration::from_secs(30));
+}
+
 #[cfg(unix)]
 #[test]
 fn a_killed_resident_leaves_no_identity_to_match() {
-    let mut child = std::process::Command::new("sleep")
-        .arg("30")
-        .spawn()
-        .expect("a sleep process could not be started");
+    // The child is this test binary running the ignored case above. A program
+    // from `PATH` would make a runner without it fail at `spawn`, before any
+    // of the identity assertions below ran.
+    let mut child =
+        std::process::Command::new(std::env::current_exe().expect("the test binary names itself"))
+            .args(["waits_for_the_parent_that_started_it", "--ignored"])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .expect("the test binary could not be started");
     let process_id = child.id();
     let marker = crate::resident_state::process_start_marker(process_id)
         .expect("a live process has a start marker");
