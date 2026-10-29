@@ -270,6 +270,32 @@ def test_a_tool_guard_cannot_find_is_not_called_replaced(tmp_path, tool, probes,
     assert probes.calls == []
 
 
+def test_a_program_guards_path_misses_loads_from_the_file_an_agent_ran(tmp_path, tool, probes, monkeypatch):
+    store, service = _service(tmp_path, tool, source_path=tool.source_path)
+    monkeypatch.setenv("PATH", str(tmp_path / "empty"))
+    try:
+        result = _finished(service, service.refresh_job({"cli_id": tool.cli_id, "confirm_process_start": True}))
+    finally:
+        assert service.close_discovery()
+    assert result["state"] == "complete", result
+    assert len(probes.calls) == 1
+
+
+def test_a_changed_launch_file_does_not_hide_why_guards_path_missed(tmp_path, tool, probes, monkeypatch):
+    # The recorded file is no longer the tool, but the reason to show is still
+    # that Guard's PATH did not find it, not that something was replaced.
+    _, service = _service(tmp_path, tool, source_path=tool.source_path)
+    Path(tool.source_path).write_text("#!/bin/sh\necho changed\n", encoding="utf-8")
+    monkeypatch.setenv("PATH", str(tmp_path / "empty"))
+    try:
+        with pytest.raises(LocalCliApiError) as raised:
+            service.refresh_job({"cli_id": tool.cli_id, "confirm_process_start": True})
+    finally:
+        assert service.close_discovery()
+    assert (raised.value.status, raised.value.code) == (409, "cli_not_on_guard_path")
+    assert probes.calls == []
+
+
 def test_a_cancel_stops_further_help_runs(tool, monkeypatch):
     import threading
 

@@ -34,6 +34,8 @@ export function loadsAsScript(item: Pick<LocalCliItem, "kind" | "name">): boolea
   return item.kind !== "executable" || !BARE_PROGRAM_NAME.test(item.name) || SCRIPT_SUFFIXES.has(suffix);
 }
 
+const CODE_CLASS = "break-all rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-xs font-semibold text-brand-dark";
+
 const ABSOLUTE_PATH = /^(?:\/|~\/|[A-Za-z]:[\\/])/;
 
 /**
@@ -125,11 +127,21 @@ export function LocalCliLoadCommands(props: {
   const listedCount = item.commands.filter((command) => command.command_id !== "root" && command.command_id !== "other").length;
   const hasCommands = listedCount > 0;
   const script = loadsAsScript(item);
-  const helpTarget = recordedToolPath(item) || item.name;
+  const recorded = recordedToolPath(item);
   return (
     <div className="mt-3 max-w-2xl" aria-busy={busy}>
       <p className="text-sm leading-6 text-brand-dark/75">
-        Guard runs <code className="break-all rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-xs font-semibold text-brand-dark">{helpTarget} --help</code>{" "}
+        {recorded || !script ? (
+          <>
+            Guard runs <code className={CODE_CLASS}>{recorded || item.name} --help</code>
+          </>
+        ) : (
+          // An older record names no file yet; the daemon finds the one an
+          // agent ran and shows it here once it has read its help.
+          <>
+            Guard finds the {item.name} file your agent ran and runs it with <code className={CODE_CLASS}>--help</code>
+          </>
+        )}{" "}
         from an empty temporary folder, then the same for each command it lists.{" "}
         {script
           ? "A script that ignores --help may do its normal work instead, so load commands only for scripts you trust."

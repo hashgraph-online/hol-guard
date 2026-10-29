@@ -3428,6 +3428,7 @@ function loadsAsScript(item) {
   const suffix = dot > 0 ? item.name.slice(dot).toLowerCase() : "";
   return item.kind !== "executable" || !BARE_PROGRAM_NAME.test(item.name) || SCRIPT_SUFFIXES.has(suffix);
 }
+const CODE_CLASS = "break-all rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-xs font-semibold text-brand-dark";
 const ABSOLUTE_PATH = /^(?:\/|~\/|[A-Za-z]:[\\/])/;
 function recordedToolPath(item) {
   const recorded2 = item.source_path ?? "";
@@ -3484,14 +3485,25 @@ function LocalCliLoadCommands(props) {
   const listedCount = item.commands.filter((command) => command.command_id !== "root" && command.command_id !== "other").length;
   const hasCommands = listedCount > 0;
   const script = loadsAsScript(item);
-  const helpTarget = recordedToolPath(item) || item.name;
+  const recorded2 = recordedToolPath(item);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 max-w-2xl", "aria-busy": busy, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm leading-6 text-brand-dark/75", children: [
-      "Guard runs ",
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("code", { className: "break-all rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-xs font-semibold text-brand-dark", children: [
-        helpTarget,
-        " --help"
-      ] }),
+      recorded2 || !script ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        "Guard runs ",
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("code", { className: CODE_CLASS, children: [
+          recorded2 || item.name,
+          " --help"
+        ] })
+      ] }) : (
+        // An older record names no file yet; the daemon finds the one an
+        // agent ran and shows it here once it has read its help.
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          "Guard finds the ",
+          item.name,
+          " file your agent ran and runs it with ",
+          /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: CODE_CLASS, children: "--help" })
+        ] })
+      ),
       " ",
       "from an empty temporary folder, then the same for each command it lists.",
       " ",

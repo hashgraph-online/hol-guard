@@ -122,8 +122,14 @@ def verified_cli_for_reload(
         return launched
     try:
         return _verified_on_path(item, name, label, home_dir=home_dir)
-    except LocalCliApiError:
-        launched = _verified_at_launch(item, label, launched_paths, home_dir=home_dir)
+    except LocalCliApiError as missed:
+        # Guard's PATH can miss a program the agent ran from its own PATH. The
+        # file Guard saw launched replaces that refusal only when it verifies;
+        # otherwise the PATH refusal is the accurate one to show.
+        try:
+            launched = _verified_at_launch(item, label, launched_paths, home_dir=home_dir)
+        except LocalCliApiError:
+            raise missed from None
         if launched is None:
             raise
         return launched

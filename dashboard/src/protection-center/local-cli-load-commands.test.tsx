@@ -86,7 +86,11 @@ assert.equal(recordedToolPath({ source_path: "C:\\tools\\approve-merge.ps1" }), 
 for (const recorded of ["user-tool", "approve-merge.sh", "", null]) {
   assert.equal(recordedToolPath({ source_path: recorded }), "", String(recorded));
 }
-assert.match(render({ ...raw, name: "approve-merge.sh", source_path: "user-tool" }), /approve-merge.sh --help/);
+// With no file recorded yet, the page does not name one Guard may not run.
+const older = render({ ...raw, name: "approve-merge.sh", source_path: "user-tool" });
+assert.doesNotMatch(older, /approve-merge.sh --help/);
+assert.match(older, /finds the approve-merge.sh file your agent ran/);
+assert.doesNotMatch(older, /<input/);
 
 // A path copied from a shell keeps its quotes; Guard sends the path alone.
 assert.equal(enteredToolPath("  '/opt/my tools/approve-merge.sh' "), "/opt/my tools/approve-merge.sh");
