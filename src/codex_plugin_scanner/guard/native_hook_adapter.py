@@ -68,6 +68,9 @@ _CLIENT_TIMED_OUT = "native_client_timed_out"
 _MAX_REQUEST_BYTES = 4 * 1024 * 1024
 # Transport framing around ``request`` (operation name, deadline budget).
 _ENVELOPE_OVERHEAD_BYTES = 256
+# A paused review's query is sent inside a Guard store call capped at the same
+# size; this leaves room for that call's own arguments (paths, hint, keys).
+_STORE_CALL_RESERVE_BYTES = 64 * 1024
 _MAX_PLAIN_BYTES = 1024 * 1024
 _MAX_PLAIN_CHARS = _MAX_PLAIN_BYTES // 4
 # Root keys the envelope redacts wholesale (``[redacted]``) and never parses.
@@ -170,22 +173,22 @@ def _remaining_seconds(deadline: float | None) -> float:
     return min(_TIMEOUT_SECONDS, remaining)
 
 
-def _build_request(build: _Builder) -> tuple[dict[str, object], _Tagger]:
-    """Build the request, shrinking pass-through blobs only when it is over the cap."""
+def _build_request(build: _Builder, max_bytes: int = _MAX_REQUEST_BYTES) -> tuple[dict[str, object], _Tagger]:
+    """Build the request, shrinking pass-through blobs only when it is over ``max_bytes``."""
 
     built = build(False)
     if built is None:
         raise NativeHookAdapterError("native_hook_adapter_request_invalid")
     query, tagger = built
     request: dict[str, object] = {"schema": _REQUEST_SCHEMA, "request_id": "", "query": query}
-    if _request_bytes(request) <= _MAX_REQUEST_BYTES:
+    if _request_bytes(request) <= max_bytes:
         return request, tagger
     shrunk = build(True)
     if shrunk is None:
         raise NativeHookAdapterError(_REQUEST_TOO_LARGE)
     query, tagger = shrunk
     request = {"schema": _REQUEST_SCHEMA, "request_id": "", "query": query}
-    if _request_bytes(request) > _MAX_REQUEST_BYTES:
+    if _request_bytes(request) > max_bytes:
         raise NativeHookAdapterError(_REQUEST_TOO_LARGE)
     return request, tagger
 
@@ -424,7 +427,9 @@ def native_review_query(
         workspace=workspace,
         home_dir=home_dir,
     )
-    request, _tagger = _build_request(build)
+    # The query rides inside a Guard store request with the same byte cap, so
+    # it leaves room for the queue call's own arguments.
+    request, _tagger = _build_request(build, _MAX_REQUEST_BYTES - _STORE_CALL_RESERVE_BYTES)
     query = request["query"]
     if not isinstance(query, dict):
         raise NativeHookAdapterError(_INVALID)

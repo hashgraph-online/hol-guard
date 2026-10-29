@@ -26,6 +26,9 @@ use crate::hook_adapter_op::review_request::{self, pre_tool_command};
 pub(crate) const METHOD: &str = "queue_native_review";
 
 const INVALID: StoreError = StoreError::Invalid("native_guard_store_review_queue_invalid");
+/// The resident could not build the review's request from a well-formed
+/// query; the hook fails closed and logs this code.
+const REFUSED: StoreError = StoreError::Invalid("native_guard_store_review_request_refused");
 /// What the notice reads from the hook payload besides the command: the
 /// session and the tool name fields.
 const NOTICE_PAYLOAD_FIELDS: [&str; 4] = ["session_id", "tool_name", "toolName", "tool"];
@@ -58,7 +61,7 @@ pub(crate) fn delegate(args: &Map<String, Value>) -> StoreResult<Delegated> {
     if !(hint.is_null() || hint.is_object()) || (silent && claude_notice) {
         return Err(INVALID);
     }
-    let built = review_request::build(&query).map_err(|_| INVALID)?;
+    let built = review_request::build(&query).map_err(|_| REFUSED)?;
     let mut request = built.request;
     request.insert("extension_allow_hint".to_owned(), hint);
     let method = if silent {

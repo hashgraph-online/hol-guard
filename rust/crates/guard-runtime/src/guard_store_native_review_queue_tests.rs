@@ -182,5 +182,11 @@ fn malformed_calls_are_refused() {
     })))));
     let mut unreadable = query(shell());
     unreadable["result"] = json!("review");
-    assert!(invalid(delegate(&args(json!({"review": unreadable})))));
+    // A well-formed call whose review cannot be built names that apart.
+    assert!(matches!(
+        delegate(&args(json!({"review": unreadable}))),
+        Err(StoreError::Invalid(
+            "native_guard_store_review_request_refused"
+        ))
+    ));
 }

@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import time
+from pathlib import Path
 from typing import Any
 
 import pytest
 
 from codex_plugin_scanner.guard.daemon import hook_native_review_approval
+from codex_plugin_scanner.guard.native_guard_store import GUARD_STORE_MAX_REQUEST_BYTES, NativeGuardStoreUnavailable
+from codex_plugin_scanner.guard.native_hook_adapter import native_review_query
 from codex_plugin_scanner.guard.store_approval_facade import StoreApprovalsMixin
 
 _QUERY = {"envelope": {"harness": "claude-code"}, "request_id": "req-1"}
@@ -175,3 +179,49 @@ def test_a_queue_write_without_a_request_id_is_refused() -> None:
         store = _RowStore(reply)
         with pytest.raises(NativeSignalProjectionUnavailableError):
             store.queue_native_review(_QUERY, "now")
+
+
+class _RefusingStore:
+    """A store whose queue call the resident refuses."""
+
+    def queue_native_review(self, *_args: object, **_kwargs: object) -> dict[str, object]:
+        error = NativeGuardStoreUnavailable("Guard store native runtime unavailable: rm -rf private-build")
+        error.reason = "native_guard_store_review_request_refused"
+        raise error
+
+
+def test_a_refused_queue_is_logged_by_its_reason_code_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(hook_native_review_approval, "native_review_hint", lambda *_a, **_k: None)
+    with caplog.at_level(logging.WARNING, logger=hook_native_review_approval.__name__):
+        queued = hook_native_review_approval.queue_native_pre_tool_review(
+            _RefusingStore(),
+            harness="codex",
+            payload={"tool_name": "Bash", "tool_input": {"command": "rm -rf private-build"}},
+            native_result={"decision": "review", "reason": "Deletes files."},
+            native_receipt=None,
+            workspace=tmp_path,
+            guard_home=tmp_path / "guard",
+            exact_token=None,
+            review_binding="binding-1",
+            approval_center_url="http://127.0.0.1:4781",
+            policy_binding_verified=True,
+        )
+    assert queued is None
+    assert "native_guard_store_review_request_refused" in caplog.text
+    assert "private-build" not in caplog.text
+
+
+def test_a_review_query_leaves_room_for_the_store_call_around_it(tmp_path: Path) -> None:
+    # A pass-through blob just under the adapter's own cap would push the store
+    # call over its cap once the queue arguments wrap it; the query drops it.
+    blob = "x" * (GUARD_STORE_MAX_REQUEST_BYTES - 16 * 1024)
+    query = native_review_query(
+        "codex",
+        {"tool_name": "Bash", "tool_input": {"command": "ls"}, "tool_response": blob},
+        {"result": {"decision": "review"}, "request_id": "req-1"},
+        workspace=tmp_path,
+        home_dir=tmp_path,
+    )
+    assert len(json.dumps(query).encode("utf-8")) < GUARD_STORE_MAX_REQUEST_BYTES - 32 * 1024

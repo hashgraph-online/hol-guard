@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 from ..live_process_identity import CODEX_BROWSER_WAIT_PROCESS_KEY, CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY
+from ..native_guard_store import NativeGuardStoreUnavailable
 from ..native_hook_adapter import NativeHookAdapterError, native_review_query
 from ..native_hook_authority_state import hook_authority_integrity_key
 from .hook_fail_closed import (
@@ -371,7 +372,11 @@ def queue_native_pre_tool_review(
             claude_key=_claude_notice_key(store, deadline) if claude_notice else None,
             codex_live_wait=live_wait,
         )
-    except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
+    except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error) as error:
+        # The action fails closed. Only the store's fixed reason code, never an
+        # exception message that can carry tool input, reaches the log.
+        reason = error.reason if isinstance(error, NativeGuardStoreUnavailable) else type(error).__name__
+        _LOGGER.warning("Native review queue failed for %s (%s)", request_id, reason)
         return None
     if connector is not None and isinstance(stored, dict):
         record_native_review_connector_context(
