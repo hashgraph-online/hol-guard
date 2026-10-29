@@ -4,8 +4,10 @@ import { resolve } from "node:path";
 import { daemonApi, expect, expectNoErrorBoundary, readIntegrationState, test, type IntegrationState } from "./fixtures";
 
 type SeededScript = { script: string; name: string; options: string[] };
-type Hook = { permission_decision: string | null; decision: string | null; reason_code: string | null };
-type LocalCliList = { items: { cli_id: string; name: string }[] };
+type Hook = { permission_decision: string | null; decision: string | null; reason_code: string | null; reason: string };
+type LocalCliList = {
+  items: { cli_id: string; name: string; kind: string; state: string; commands: { command_id: string; state: string }[] }[];
+};
 
 // The first save writes the control authority, which takes longer than the
 // default wait.
@@ -88,9 +90,24 @@ test("a script's options load as separate commands, and Allow and Block are what
   await dialog.getByRole("button", { name: "Confirm" }).click();
   await expect(dialog).toBeHidden({ timeout: SAVE_TIMEOUT_MS });
 
+  // The daemon holds the choices the page saved.
+  const savedStates = async () => {
+    const list = await daemonApi<LocalCliList>(state, "/v1/local-clis");
+    const item = list.items.find((entry) => entry.cli_id === cliId);
+    return Object.fromEntries((item?.commands ?? []).map((command) => [command.command_id, command.state]));
+  };
+  await expect.poll(async () => (await savedStates())["--dry-run"]).toBe("allow");
+  expect((await savedStates())["--skip-billing"]).toBe("block");
+
   // What was saved is what the hook enforces: the allowed option runs, the
   // blocked one is denied, and an option left on Recommended is still reviewed.
-  await expect.poll(() => outcome(hook(state, `${script} 1.0.0 --dry-run`)), { timeout: SAVE_TIMEOUT_MS }).toBe("allow");
+  let allowed = hook(state, `${script} 1.0.0 --dry-run`);
+  for (let attempt = 0; attempt < 20 && outcome(allowed) !== "allow"; attempt += 1) {
+    await new Promise((done) => setTimeout(done, 2_000));
+    allowed = hook(state, `${script} 1.0.0 --dry-run`);
+  }
+  const listed = (await daemonApi<LocalCliList>(state, "/v1/local-clis")).items.find((entry) => entry.cli_id === cliId);
+  expect(outcome(allowed), JSON.stringify({ allowed, kind: listed?.kind, state: listed?.state })).toBe("allow");
   const blocked = hook(state, `${script} 1.0.0 --skip-billing`);
   expect(outcome(blocked), JSON.stringify(blocked)).toBe("deny");
   const unset = hook(state, `${script} 1.0.0 --repo acme/site`);

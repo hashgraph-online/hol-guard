@@ -4,7 +4,8 @@ Usage: dashboard_integration_hook.py GUARD_HOME WORKSPACE COMMAND
 
 The request goes through the daemon's Claude hook route with the same identity
 challenge a hook bridge uses, and only the decisions and the reason code are
-printed, as one JSON object. Specs use it to check that a choice saved in the
+printed, as one JSON object, with the reason text cut short and any link
+in it removed. Specs use it to check that a choice saved in the
 dashboard is the one Guard enforces.
 """
 
@@ -12,6 +13,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import sys
 import urllib.parse
 import uuid
@@ -53,12 +55,16 @@ def main() -> None:
     response = json.loads(text)
     specific = response.get("hookSpecificOutput")
     permission = specific.get("permissionDecision") if isinstance(specific, dict) else None
+    reason = specific.get("permissionDecisionReason") if isinstance(specific, dict) else None
+    if not isinstance(reason, str):
+        reason = response.get("reason") if isinstance(response.get("reason"), str) else ""
     print(
         json.dumps(
             {
                 "permission_decision": permission,
                 "decision": response.get("decision"),
                 "reason_code": response.get("reason_code"),
+                "reason": re.sub(r"\S+://\S+", "<link>", reason)[:240],
             }
         )
     )
