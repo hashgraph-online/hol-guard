@@ -220,6 +220,21 @@ def test_the_lookup_uses_the_path_the_agent_runs_with(tmp_path: Path, monkeypatc
     assert seen == ["/home/dev/.local/bin:/usr/bin", "/daemon/bin", "/daemon/bin"]
 
 
+def test_a_launch_too_large_for_the_queue_call_queues_an_ordinary_review(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The lookup shares the review's store request; a launch that could push it
+    # past the request limit is left out so the review still queues.
+    monkeypatch.setenv("HOL_GUARD_TEST_LARGE_VALUE", "x" * (256 * 1024))
+
+    assert (
+        native_review_connector.native_review_connector_lookup(
+            payload=_payload(tmp_path), native_result=_native_review(), workspace=tmp_path, home_dir=None
+        )
+        is None
+    )
+
+
 def test_a_local_tool_setup_text_is_an_approval_wait_and_an_mcp_one_is_not() -> None:
     local = connector_setup_reason("lanectl", "package-scripts", ask=False)
     mcp = connector_setup_reason("echo-mcp", "mcp", ask=False)

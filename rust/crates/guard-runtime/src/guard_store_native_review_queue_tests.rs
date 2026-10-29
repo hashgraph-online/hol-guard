@@ -241,7 +241,7 @@ fn the_lookup_asks_about_the_launch_in_the_store_the_call_names() {
     assert_eq!(request.store_path, store.store_path);
     assert_eq!(request.guard_home, store.guard_home);
     assert_eq!(request.source, "local");
-    assert_eq!(request.busy_timeout_ms, 5_000);
+    assert_eq!(request.busy_timeout_ms, 250);
     assert_eq!(request.command, "acme deploy staging");
     assert_eq!(request.cwd, "/work");
     assert_eq!(request.home_dir.as_deref(), Some("/home/u"));
@@ -495,4 +495,41 @@ fn a_respond_that_does_not_match_the_call_is_refused() {
         "silent": true,
         "respond": {"paused_review": {}},
     })))));
+}
+
+#[test]
+fn the_lookup_never_waits_into_the_writes_reserve() {
+    for (busy_timeout_ms, lookup_ms) in [(5_000, 250), (400, 50), (351, 1), (350, 1), (1, 1)] {
+        let store: guard_contracts::GuardStoreRequestV1 = serde_json::from_value(json!({
+            "schema": "guard-store-request.v1",
+            "request_id": "store-1",
+            "store_path": "/home/u/.hol-guard/guard.db",
+            "guard_home": "/home/u/.hol-guard",
+            "method": METHOD,
+            "source": "local",
+            "busy_timeout_ms": busy_timeout_ms,
+            "args": {},
+        }))
+        .unwrap();
+        let ask: super::LookupAsk = serde_json::from_value(launch()).unwrap();
+        assert_eq!(ask.request(&store).busy_timeout_ms, lookup_ms);
+    }
+}
+
+#[test]
+fn a_call_with_no_time_past_the_writes_reserve_skips_the_lookup() {
+    let mut asked = false;
+    let delegated = super::delegate(&unrecognised(json!({})), None, 350, |_| {
+        asked = true;
+        None
+    })
+    .unwrap();
+
+    assert!(!asked);
+    assert_eq!(delegated.args["request"]["queue_group_id"], Value::Null);
+    let delegated = looked_up(&unrecognised(json!({})), 351, local_cli()).unwrap();
+    assert_eq!(
+        delegated.args["request"]["queue_group_id"],
+        local_cli()["queue_group_id"]
+    );
 }

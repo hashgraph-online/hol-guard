@@ -66,6 +66,9 @@ const NOTICE_PAYLOAD_FIELDS: [&str; 4] = ["session_id", "tool_name", "toolName",
 /// What the call keeps after the hint for the queue write and its reply, as
 /// the daemon kept when it asked for the hint itself.
 const WRITE_RESERVE_MS: u64 = 350;
+/// The most the connector lookup waits for the store lock, as the direct
+/// lane's own lookup does; the queue write keeps the rest of the call.
+const LOOKUP_BUSY_TIMEOUT_MS: u64 = 250;
 /// The most a stored-row reply carrying its rendered response may encode to,
 /// leaving room for the resident's reply envelope.
 const REPLY_BUDGET_BYTES: usize = MAX_NATIVE_RESPONSE_BYTES - 128 * 1024;
@@ -97,15 +100,19 @@ pub(crate) struct LookupAsk {
 
 impl LookupAsk {
     /// The `local_cli_hook` request for this launch, bound to the store the
-    /// call names.
+    /// call names. Its store waits never reach into the write's reserve.
     pub(crate) fn request(self, store: &GuardStoreRequestV1) -> LocalCliHookRequestV1 {
+        let busy_timeout_ms = store
+            .busy_timeout_ms
+            .saturating_sub(WRITE_RESERVE_MS)
+            .clamp(1, LOOKUP_BUSY_TIMEOUT_MS);
         LocalCliHookRequestV1 {
             schema: LOCAL_CLI_HOOK_REQUEST_SCHEMA.to_owned(),
             request_id: format!("local-cli-hook-{}", store.request_id),
             store_path: store.store_path.clone(),
             guard_home: store.guard_home.clone(),
             source: store.source.clone(),
-            busy_timeout_ms: store.busy_timeout_ms,
+            busy_timeout_ms,
             command: self.command,
             cwd: self.cwd,
             home_dir: self.home_dir,
@@ -208,9 +215,11 @@ pub(crate) fn delegate(
         .map(str::to_owned);
     let reason_code = reason_code.as_deref();
     // Any other review code carries a risk signal and keeps its per-action
-    // review, whatever the launch.
+    // review, whatever the launch. A call with no time beyond the write's
+    // reserve skips the lookup and queues an ordinary review.
     let connector = lookup
         .filter(|_| crate::connector_setup::is_non_recognition(reason_code))
+        .filter(|_| call_budget_ms > WRITE_RESERVE_MS)
         .and_then(look_up);
     if let Some(connector) = &connector {
         query.queue_group_id = Some(connector.queue_group_id().to_owned());

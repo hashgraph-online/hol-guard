@@ -15,6 +15,7 @@ under ``connector_setup``.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -28,6 +29,9 @@ CONNECTOR_SETUP_REQUIRED = "connector_setup_required"
 NON_RECOGNITION_REASON_CODES = frozenset(
     {"native_command_review_required", "native_workspace_containment_executable_outside_roots"}
 )
+# The lookup rides on the review's own store request, under its 4 MiB limit;
+# a launch past this leaves the review an ordinary one rather than unqueued.
+_LOOKUP_MAX_BYTES = 256 * 1024
 
 
 def native_review_connector_lookup(
@@ -45,13 +49,16 @@ def native_review_connector_lookup(
     cwd = launch_cwd(payload, workspace)
     if command is None or cwd is None:
         return None
-    return {
+    lookup: dict[str, object] = {
         "command": command,
         "cwd": str(cwd),
         "home_dir": None if home_dir is None else str(home_dir),
         "user_home": str(Path.home()),
         "env": launch_env(launch_path(payload)),
     }
+    if len(json.dumps(lookup, ensure_ascii=False).encode("utf-8")) > _LOOKUP_MAX_BYTES:
+        return None
+    return lookup
 
 
 def raise_connector_setup_notice(store: object, queued: object) -> None:
