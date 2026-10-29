@@ -263,12 +263,14 @@ fn anchored_at_install_root(executable: &str, context: super::PathContext<'_>) -
         [drive, b':', b'/', ..] if drive.is_ascii_alphabetic() => &lowered[2..],
         _ => lowered.as_str(),
     };
-    INSTALL_ROOTS.iter().any(|root| match root.strip_prefix('~') {
-        Some(rest) => home
-            .as_deref()
-            .is_some_and(|home| lowered.starts_with(&format!("{home}{rest}"))),
-        None => rooted.starts_with(*root),
-    })
+    INSTALL_ROOTS
+        .iter()
+        .any(|root| match root.strip_prefix('~') {
+            Some(rest) => home
+                .as_deref()
+                .is_some_and(|home| lowered.starts_with(&format!("{home}{rest}"))),
+            None => rooted.starts_with(*root),
+        })
 }
 
 pub(super) fn safe_hol_guard_arguments(arguments: &[String]) -> bool {
