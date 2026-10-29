@@ -26,8 +26,15 @@ fn fixture() -> (PathBuf, PathBuf) {
     std::fs::create_dir_all(root.join("home/.local/bin")).unwrap();
     std::fs::create_dir_all(root.join("home/projects/app")).unwrap();
     let home = root.join("home").canonicalize().unwrap();
-    std::fs::write(home.join(".local/bin/run-queued"), "#!/bin/sh\nexec \"$@\"\n").unwrap();
-    (home.clone(), home.join("projects/app").canonicalize().unwrap())
+    std::fs::write(
+        home.join(".local/bin/run-queued"),
+        "#!/bin/sh\nexec \"$@\"\n",
+    )
+    .unwrap();
+    (
+        home.clone(),
+        home.join("projects/app").canonicalize().unwrap(),
+    )
 }
 
 fn parse(command: &str) -> crate::CanonicalCommandV1 {
@@ -88,7 +95,13 @@ fn every_guard_the_launcher_projection_applies_admits_a_home_spelled_launcher() 
         "projected text"
     );
     assert_eq!(
-        projected.model.segments.first().unwrap().executable.as_deref(),
+        projected
+            .model
+            .segments
+            .first()
+            .unwrap()
+            .executable
+            .as_deref(),
         home.join(".local/bin/run-queued").to_str(),
         "projected executable"
     );
