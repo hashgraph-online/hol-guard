@@ -31,6 +31,7 @@ from .native_package_audit_projection import (
     native_workspace_package_findings,
 )
 from .native_supply_chain_egress import offline_egress
+from .native_workspace_inventory import AuditDeadlineError, audit_deadline
 from .native_workspace_snapshot import WorkspaceSnapshot, WorkspaceSnapshotError, workspace_snapshot
 from .store_workspace_assessment_schema import FINDINGS_BYTE_BUDGET, MAX_FINDINGS
 from .workspace_ci_workflow_findings import (
@@ -97,6 +98,13 @@ DETECTOR_SET_DIGEST: Final = hashlib.sha256(
 _SEVERITY_ORDER: Final = ("critical", "high", "medium", "low", "info", "unknown")
 
 
+# The package audit stops starting resident requests after this long. The one
+# already in flight is bounded on its own (about 25 seconds per evaluation), so
+# the stage ends well inside the 5 minute lease instead of the lease expiring
+# and the run being retried.
+AUDIT_STAGE_SECONDS: Final = 3 * 60
+
+
 # A run that lost its lease (canceled, expired or fenced) records nothing;
 # finish refuses it.
 _LEASE_LOST: Final = assessments.RunOutcome(state="failed", error_code="lease_lost")
@@ -158,9 +166,16 @@ def execute(
         return _LEASE_LOST
     automatic = run.trigger_kind not in assessments.USER_TRIGGERS
     try:
-        with offline_egress() if automatic else nullcontext(None) as offline:
+        with offline_egress() if automatic else nullcontext(None) as offline, audit_deadline(AUDIT_STAGE_SECONDS):
             payload = _local_audit(store, config, root)
         supply, supply_truncated = project_supply_chain_findings(run.keys.worktree_key, payload, store=store)
+    except AuditDeadlineError:
+        return assessments.RunOutcome(
+            state="failed",
+            snapshot_digest=before.snapshot_digest,
+            input_manifest_digest=before.input_manifest_digest,
+            error_code="supply_chain_audit_timed_out",
+        )
     except Exception:
         return assessments.RunOutcome(
             state="failed",
