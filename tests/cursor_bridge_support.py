@@ -31,7 +31,12 @@ def keyed_guard_home(guard_home: Path) -> Iterator[Path]:
 
     from .mcp_policy_native_fixture import _FIXTURE_KEYS
 
-    key = b"\x07" * 32
+    # Sign first, verify second: the store refuses to mint a policy signing
+    # key once verifier material exists, so a home that is keyed before its
+    # store is built can never publish a snapshot the resident accepts.
+    store = GuardStore(guard_home)
+    key, _key_id = store._policy_integrity_secret_material(create=True)
+    assert key is not None
     (guard_home / "native-runtime").mkdir(mode=0o700, parents=True, exist_ok=True)
     provision_native_policy_verifier_key(guard_home, key)
     _FIXTURE_KEYS[guard_home] = key

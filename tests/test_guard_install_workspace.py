@@ -434,7 +434,7 @@ def test_install_cursor_hook_script_allows_benign_shell_command(
     # key this one before anything can spawn a resident against it; without
     # the key the resident comes up, refuses the hook, and the bridge fails
     # closed on a command the harness really allows.
-    with keyed_guard_home(resolve_guard_home(None)) as guard_home:
+    with keyed_guard_home(resolve_guard_home(str(home_dir))) as guard_home:
         rc = main(
             [
                 "guard",
