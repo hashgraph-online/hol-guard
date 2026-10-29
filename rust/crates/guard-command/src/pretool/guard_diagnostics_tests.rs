@@ -456,3 +456,18 @@ fn working_directory_launcher_or_unknown_cwd_keeps_review() {
     std::fs::remove_dir_all(&workspace).unwrap();
     assert!(!shadowed);
 }
+
+#[test]
+fn only_the_installed_desktop_bundle_names_the_launcher() {
+    assert!(super::desktop_launcher(
+        "/Applications/HOL Guard.app/Contents/MacOS/hol-guard"
+    ));
+    for executable in [
+        "/tmp/HOL Guard.app/Contents/MacOS/hol-guard",
+        "/Applications/HOL Guard.app/Contents/MacOS/hol-guard-runtime",
+        "/Applications/hol-guard",
+        "hol-guard",
+    ] {
+        assert!(!super::desktop_launcher(executable), "{executable}");
+    }
+}

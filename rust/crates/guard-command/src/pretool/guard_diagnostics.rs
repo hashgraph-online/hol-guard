@@ -118,6 +118,19 @@ fn cwd_shadows_launcher(cwd: &Path) -> bool {
         })
 }
 
+/// The launcher inside an installed HOL Guard Desktop bundle. An agent waiting
+/// on an approval raised by the desktop application spells the launcher this
+/// way, and a path spelling drops the read-only admission the bare name gets,
+/// so every `approvals wait` on a Desktop install raised the second approval
+/// row the first one was already waiting on. Only the installed location
+/// counts: a bundle a session could write somewhere else would name a program
+/// of its own, not this one.
+const DESKTOP_LAUNCHER: &str = "/Applications/HOL Guard.app/Contents/MacOS/hol-guard";
+
+pub(super) fn desktop_launcher(executable: &str) -> bool {
+    executable == DESKTOP_LAUNCHER
+}
+
 pub(super) fn safe_hol_guard_arguments(arguments: &[String]) -> bool {
     let words: Vec<&str> = arguments.iter().map(String::as_str).collect();
     matches!(
