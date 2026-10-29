@@ -343,6 +343,8 @@ pub mod supply_chain_package_eval;
 pub mod target_identities;
 #[path = "../../guard-command/src/typescript_launch_evidence.rs"]
 pub mod typescript_launch_evidence;
+#[path = "../../guard-command/src/vite_output.rs"]
+pub mod vite_output;
 #[path = "../../guard-command/src/workspace_inventory.rs"]
 pub mod workspace_inventory;
 #[cfg(unix)]
