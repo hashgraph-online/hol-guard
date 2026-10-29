@@ -122,3 +122,42 @@ def test_a_host_that_will_not_name_a_home_leaves_the_path_as_it_is(
 
 def _no_distribution(name: str):
     raise update_commands.importlib.metadata.PackageNotFoundError(name)
+
+
+@pytest.fixture
+def symlinked_account_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    """A home reached through a symlink whose target spells out the account."""
+
+    target = tmp_path / "volumes" / ACCOUNT
+    scripts = target / "venv" / "bin"
+    scripts.mkdir(parents=True)
+    home = tmp_path / "home"
+    home.symlink_to(target, target_is_directory=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    monkeypatch.setattr(update_commands.sys, "executable", str(home / "venv" / "bin" / "python"))
+    return home
+
+
+@pytest.mark.skipif(not hasattr(Path, "symlink_to"), reason="no symlink support")
+def test_a_desktop_bundle_behind_a_symlinked_home_names_no_account(
+    monkeypatch: pytest.MonkeyPatch, symlinked_account_home: Path
+) -> None:
+    # The desktop payload resolves its executable, so the prefix it is compared
+    # against has to be resolved too or the symlink target keeps the account.
+    monkeypatch.setattr(update_commands, "_is_desktop_managed_runtime", lambda: True)
+
+    payload = update_commands.build_guard_install_surface_payload()
+
+    assert ACCOUNT not in "\n".join(_strings(payload))
+    diagnostics = payload["binary_diagnostics"]
+    assert isinstance(diagnostics, dict)
+    assert diagnostics["resolved_hol_guard"] == "~/venv/bin/python"
+
+
+def test_a_resolved_path_under_a_symlinked_home_is_named_as_the_home(
+    symlinked_account_home: Path,
+) -> None:
+    resolved = str((symlinked_account_home / "venv" / "bin" / "hol-guard").resolve())
+
+    assert update_commands._account_free_path(resolved) == "~/venv/bin/hol-guard"

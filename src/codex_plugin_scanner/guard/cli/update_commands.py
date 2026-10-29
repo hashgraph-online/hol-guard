@@ -1450,23 +1450,40 @@ def _account_free_path(path: str) -> str:
     if not path:
         return path
     try:
-        home = str(Path.home())
+        home = Path.home()
     except Exception:
         return path
-    home = home.rstrip("/\\")
-    if not home:
+    # A caller may hand us a resolved path while the home directory is reached
+    # through a symlink, so the account name only disappears when the resolved
+    # home is a candidate prefix too.
+    candidates: list[str] = []
+    for candidate in (home, _resolved_home(home)):
+        if candidate is None:
+            continue
+        spelling = str(candidate).rstrip("/\\")
+        if spelling and spelling not in candidates:
+            candidates.append(spelling)
+    if not candidates:
         return path
     # Windows paths differ from their home prefix in case and separator alone,
     # so compare normalised and slice the original.
     normalised = os.path.normcase(path)
-    normalised_home = os.path.normcase(home)
-    if normalised == normalised_home:
-        return "~"
-    for separator in ("/", "\\"):
-        prefix = normalised_home + os.path.normcase(separator)
-        if normalised.startswith(prefix):
-            return "~" + separator + path[len(prefix) :]
+    for candidate in candidates:
+        normalised_home = os.path.normcase(candidate)
+        if normalised == normalised_home:
+            return "~"
+        for separator in ("/", "\\"):
+            prefix = normalised_home + os.path.normcase(separator)
+            if normalised.startswith(prefix):
+                return "~" + separator + path[len(prefix) :]
     return path
+
+
+def _resolved_home(home: Path) -> Path | None:
+    try:
+        return home.resolve()
+    except Exception:
+        return None
 
 
 def _binary_diagnostics(command: list[str], installer: str) -> dict[str, object]:
