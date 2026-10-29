@@ -10,6 +10,7 @@ from .network_transport import (
     managed_ssl_context,
     managed_urlopen,
     platform_system_proxies,
+    refuse_encoded_responses,
 )
 
 __all__ = [
@@ -20,4 +21,5 @@ __all__ = [
     "managed_ssl_context",
     "managed_urlopen",
     "platform_system_proxies",
+    "refuse_encoded_responses",
 ]

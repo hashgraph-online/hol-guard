@@ -16,7 +16,7 @@ def test_macos_gates_require_every_disjoint_shard(node_count):
     indices = job["strategy"]["matrix"]["shard-index"]
     assert indices == list(range(12))
     assert job["strategy"]["fail-fast"] is False
-    assert job["timeout-minutes"] == 5
+    assert job["timeout-minutes"] == 8
     assert "macos-gates" in workflow["jobs"]["required"]["needs"]
     action = next(step for step in job["steps"] if step.get("uses", "").endswith("ci-job-macos-skill-identity"))
     assert action["with"]["shard-index"] == "${{ matrix.shard-index }}"
