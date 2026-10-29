@@ -384,6 +384,11 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             ResidentOperationV1::CommandCapability(request) => {
                 crate::command_capability_op::evaluate_command_capability_request(&request)
             }
+            ResidentOperationV1::CommandCapabilityIssue(request) => {
+                crate::command_capability_issue_op::evaluate_command_capability_issue_request(
+                    &request,
+                )
+            }
             ResidentOperationV1::CommandEnvelope(request) => {
                 crate::command_envelope_op::evaluate_command_envelope_request(&request)
             }

@@ -1915,6 +1915,39 @@
   "tests/test_guard_shell_static_path_boundaries.py"
  ],
  "retired_bodies": [
+ {
+  "path": "src/codex_plugin_scanner/guard/runtime/effect_contract.py",
+  "source_sha256": "9038e0b37af50bedc19d635fb3be92bfe0ec9cfc91771fcfbbf376271e71e8d3",
+  "forbidden_symbols": [
+   "UNCERTAINTY_FLOOR"
+  ],
+  "native_replacements": [
+   "rust/crates/guard-command/src/effect_decision.rs"
+  ]
+ },
+ {
+  "path": "src/codex_plugin_scanner/guard/runtime/command_model.py",
+  "source_sha256": "11ab5a21f22eefd813957346a81606209bb78b85e0941f84a35c42af5ce5ee6a",
+  "forbidden_symbols": [
+   "MAX_COMMAND_SEGMENTS",
+   "MAX_COMMAND_TOKENS"
+  ],
+  "native_replacements": [
+   "rust/crates/guard-command/src/command_model.rs",
+   "rust/crates/guard-command/src/command_parse_surface.rs"
+  ]
+ },
+ {
+  "path": "src/codex_plugin_scanner/guard/runtime/approval_reuse.py",
+  "source_sha256": "d0b0a011a9f33c5de6390ecad17cbfb3fc492ad3c8fd2e00b8b0d5d47f0e1d55",
+  "forbidden_symbols": [
+   "APPROVAL_REUSE_REAPPROVAL_REQUIRED",
+   "APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM"
+  ],
+  "native_replacements": [
+   "rust/crates/guard-command/src/approval_reuse.rs"
+  ]
+ },
   {
    "path": "src/codex_plugin_scanner/guard/policy_document.py",
    "source_sha256": "c20051517d9e4c1a4ead1dea82e80bbc348adbc3082d8ae6baf7cc430157c3d3",

@@ -532,6 +532,7 @@
       "src/pretool/search/tree.rs",
       "src/pretool/search/walk_memo.rs",
       "src/pretool/search_pattern_clearance.rs",
+      "src/pretool/search_pattern_text.rs",
       "src/pretool/search_scope.rs",
       "src/pretool/search_scope_filter.rs",
       "src/pretool/search_scope_glob.rs",

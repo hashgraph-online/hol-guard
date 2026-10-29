@@ -99,3 +99,61 @@ def native_command_capability(
     if not isinstance(payload, dict):
         raise CommandCapabilityUnavailableError
     return payload
+
+
+COMMAND_CAPABILITY_ISSUE_FEATURE = "command-capability-issue-v1"
+_ISSUE_REQUEST_SCHEMA = "guard-command-capability-issue-request.v1"
+_ISSUE_RESULT_SCHEMA = "guard-command-capability-issue-result.v1"
+_ISSUE_MAX_REQUEST_BYTES = 256 * 1024
+
+
+def native_command_capability_issue(
+    *,
+    requested: Sequence[str],
+    supported_operations: Sequence[str],
+    issuer: str,
+    ttl_seconds: int,
+    guard_home: Path | None = None,
+) -> dict[str, object]:
+    """Decide which operations a new capability may carry.
+
+    ``requested`` is the ``--operations`` words as the user typed them: the
+    group name, comma-joined lists and stray spacing all reach the resident
+    unexpanded, so what a grant can authorize is decided once. The answer says
+    whether it is ``granted``, the exact ``operations`` it carries, and the
+    refusal ``reason`` when it is not.
+    """
+
+    home = Path(_resolve_digest_home(guard_home))
+    if not ensure_resident_prerequisite(home):
+        raise CommandCapabilityUnavailableError
+    wire: dict[str, Any] = {
+        "schema": _ISSUE_REQUEST_SCHEMA,
+        "request_id": f"command-capability-issue-{uuid4().hex}",
+        "requested": [str(word) for word in requested],
+        "supported_operations": [str(operation) for operation in supported_operations],
+        "issuer": issuer,
+        # A lifetime too large for the wire's signed 64-bit field would make the
+        # request unparseable, and the user would read that as the resident being
+        # unavailable rather than as the refusal it is. Carrying the nearest
+        # representable value instead leaves the allowed range the resident's to
+        # decide, and it refuses both ends of that range alike.
+        "ttl_seconds": max(-(2**63), min(int(ttl_seconds), 2**63 - 1)),
+    }
+    try:
+        response = _resident_request(
+            operation="command_capability_issue",
+            request=wire,
+            guard_home=home,
+            timeout_seconds=_TIMEOUT_SECONDS,
+            required_feature=COMMAND_CAPABILITY_ISSUE_FEATURE,
+            response_schema=_ISSUE_RESULT_SCHEMA,
+            max_request_bytes=_ISSUE_MAX_REQUEST_BYTES,
+            record_success=False,
+        )
+    except (TypeError, ValueError, OSError, RuntimeError):
+        raise CommandCapabilityUnavailableError from None
+    payload = _payload(response, wire, home)
+    if not isinstance(payload, dict):
+        raise CommandCapabilityUnavailableError
+    return payload

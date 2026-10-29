@@ -172,6 +172,7 @@ mod script_content;
 pub(crate) use script_content::{argv_script, ArgvScript};
 mod search;
 mod search_pattern_clearance;
+mod search_pattern_text;
 mod search_scope;
 mod search_scope_filter;
 mod search_scope_glob;
@@ -216,6 +217,7 @@ pub use git_push::{
     install_git_push_verdict, push_environment_git, GitPushRequest, GitPushVerdict,
 };
 pub(crate) use git_read_after_allow::git_reads_after_allowed_steps;
+pub use read_paths::proven_repository_hidden_document;
 pub use safe_scalar::PsqlEnvironment;
 #[cfg_attr(not(unix), allow(unused_imports))]
 pub(crate) use script_content::launch_loopback_ports;
@@ -1247,7 +1249,7 @@ fn evaluate_single_command(
             "The Rust command authority proved this bounded command explicitly benign.",
         ));
     }
-    if git_search_text::command_sensitive(&model, normalized, context.cwd)
+    if search_pattern_text::command_sensitive(&model, normalized, context.cwd)
         || secret_aliases::names_secret_alias(&model, context)
         || glob_words::names_hidden_glob(&model, context)
     {

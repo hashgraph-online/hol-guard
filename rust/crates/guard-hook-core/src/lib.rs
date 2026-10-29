@@ -510,19 +510,18 @@ fn review_source(
     }
     let allow_external =
         matches!(request.harness.as_str(), "pi" | "omp") && request.source_ref_external_allowed;
-    let candidate_decision =
-        classify_scannable_source_path(candidate, cwd, Some(home), allow_external);
-    if !candidate_decision.allowed {
-        return inconclusive_source();
-    }
-    let target_decision = classify_scannable_source_path(&target, cwd, Some(home), allow_external);
-    if !target_decision.allowed {
-        return inconclusive_source();
-    }
-    let Some(path) = candidate_decision.resolved_path else {
+    let scannable = |value: &str| {
+        let decision = classify_scannable_source_path(value, cwd, Some(home), allow_external);
+        if decision.allowed {
+            decision.resolved_path
+        } else {
+            repository_hidden_document(value, request, cwd, home)
+        }
+    };
+    let Some(path) = scannable(candidate) else {
         return inconclusive_source();
     };
-    let Some(target_path) = target_decision.resolved_path else {
+    let Some(target_path) = scannable(&target) else {
         return inconclusive_source();
     };
     if path != target_path {
@@ -575,6 +574,29 @@ fn review_source(
     let mut response = HookReviewResponseV1::allow("source_full_scan_allow");
     response.reviewed_output_sha256 = Some(source.output_sha256.clone());
     response
+}
+
+/// The resolved file behind `value` when it is a document the session's
+/// repository keeps below a hidden directory, such as
+/// `.claude-plugin/plugin.json` in the checkout or in a linked worktree of it
+/// that `git worktree add` put under the temporary directory. PreToolUse
+/// admits that read with the same proof. The file is still read and scanned
+/// in full afterwards, so a manifest that holds a credential keeps its
+/// refusal.
+fn repository_hidden_document(
+    value: &str,
+    request: &NativeHookRequestV1,
+    cwd: &Path,
+    home: &Path,
+) -> Option<std::path::PathBuf> {
+    let resolved = guard_secure_fs::resolve_candidate(value.trim(), Some(cwd), home).ok()?;
+    let canonical = std::fs::canonicalize(resolved).ok()?;
+    guard_command::pretool::proven_repository_hidden_document(
+        &canonical,
+        Some(&request.home_dir),
+        request.cwd.as_deref(),
+    )
+    .then_some(canonical)
 }
 
 /// Review the text the host presented on its own. Only complete output whose

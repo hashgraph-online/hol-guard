@@ -41,6 +41,21 @@ pub const COMMAND_CAPABILITY_ISSUE_SKEW_SECONDS: i64 = 5 * 60;
 /// Furthest ahead a leased job's expiry may sit from the decision instant.
 pub const COMMAND_JOB_MAX_LIFETIME_SECONDS: i64 = 24 * 60 * 60;
 
+/// Schema discriminator for the issue request.
+pub const COMMAND_CAPABILITY_ISSUE_REQUEST_SCHEMA: &str =
+    "guard-command-capability-issue-request.v1";
+/// Schema discriminator for the issue result.
+pub const COMMAND_CAPABILITY_ISSUE_RESULT_SCHEMA: &str = "guard-command-capability-issue-result.v1";
+/// Capability advertised by the runtime when the issue operation is available.
+pub const COMMAND_CAPABILITY_ISSUE_FEATURE: &str = "command-capability-issue-v1";
+/// Largest canonical issue-request serialization the op will accept.
+pub const COMMAND_CAPABILITY_ISSUE_MAX_BYTES: usize = 256 * 1024;
+/// The one group name `--operations` admits in place of exact operations.
+pub const READ_ONLY_COMMAND_OPERATION_GROUP: &str = "read-only";
+/// The operation whose grant the local review path issues for itself; a
+/// capability may never name it.
+pub const EXACT_CLOUD_REVIEW_OPERATION: &str = "guard.review.resolveExact";
+
 /// Operations a capability may grant that only read local state.
 pub const READ_ONLY_COMMAND_OPERATIONS: &[&str] = &[
     "guard.packageShims.status",
@@ -66,6 +81,10 @@ pub const STATE_CHANGING_COMMAND_OPERATIONS: &[&str] = &[
 /// State-changing operations whose remote step-up stands in for the local
 /// approval. Empty: no operation currently qualifies.
 pub const REMOTE_STEP_UP_COMMAND_OPERATIONS: &[&str] = &[];
+/// Operations that carry decision memory off this machine. A capability that
+/// names one may name nothing else, so approving it can never also approve a
+/// routine operation.
+pub const POLICY_MEMORY_COMMAND_OPERATIONS: &[&str] = &["guard.review.syncPolicyMemory"];
 
 /// Whether this runtime still recognizes `operation` as something a signed
 /// grant can carry. A grant naming anything else is projected away rather
@@ -139,6 +158,47 @@ pub struct CommandCapabilityResultV1 {
     pub code: String,
     /// The capability verdict, its projected grants, and the job verdict when
     /// one was asked for.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub payload: Option<Value>,
+}
+
+/// What `hol-guard commands enable` asks the runtime to admit.
+///
+/// The caller forwards the words the user typed, unexpanded: the group name,
+/// comma-joined lists and stray spacing are all read here, so which operations
+/// a capability may carry is decided in one place rather than once per caller.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct CommandCapabilityIssueRequestV1 {
+    pub schema: String,
+    #[serde(default)]
+    pub request_id: String,
+    /// The `--operations` words as typed, before any expansion.
+    #[serde(default)]
+    pub requested: Vec<String>,
+    /// The operations this installation can actually execute.
+    #[serde(default)]
+    pub supported_operations: Vec<String>,
+    /// Who is issuing the capability.
+    #[serde(default)]
+    pub issuer: String,
+    /// How long the capability may live, in seconds.
+    pub ttl_seconds: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct CommandCapabilityIssueResultV1 {
+    pub schema: String,
+    pub request_id: String,
+    /// SHA-256 of the canonical request, binding the result to its request.
+    pub request_sha256: String,
+    /// `ok` or `error`.
+    pub status: String,
+    /// `ok`, or one of the `native_command_capability_issue_*` codes.
+    pub code: String,
+    /// Whether the request may be issued, the exact operations it carries,
+    /// and the refusal code when it may not.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub payload: Option<Value>,
 }

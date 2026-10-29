@@ -35,7 +35,6 @@ from ..mdm.user_health import (
     user_health_status,
 )
 from ..runtime.command_capability import (
-    READ_ONLY_COMMAND_OPERATIONS,
     CommandCapabilityError,
     approve_pending_command,
     issue_command_capability,
@@ -654,18 +653,13 @@ def _run_guard_commands_command(
         _emit("commands", command_queue_status(store), getattr(args, "json", False))
         return 0
     if commands_command == "enable":
-        operations: list[str] = []
-        for value in getattr(args, "operations", []):
-            for operation in str(value).split(","):
-                normalized = operation.strip()
-                if normalized == "read-only":
-                    operations.extend(READ_ONLY_COMMAND_OPERATIONS)
-                elif normalized:
-                    operations.append(normalized)
+        # The words as typed, unexpanded: the runtime reads the group name and
+        # the comma-joined lists, so only one side decides what a grant carries.
+        operations = tuple(str(value) for value in getattr(args, "operations", []))
         try:
             capability = issue_command_capability(
                 store,
-                operations=tuple(operations),
+                operations=operations,
                 supported_operations=SUPPORTED_COMMAND_OPERATIONS,
                 ttl_seconds=int(getattr(args, "expires_in_days", 30)) * 24 * 60 * 60,
             )
