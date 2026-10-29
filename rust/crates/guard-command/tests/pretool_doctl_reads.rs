@@ -69,3 +69,69 @@ fn doctl_effects_secrets_and_unbound_launches_stay_reviewed() {
         }
     }
 }
+
+/// The same commands with the packaged command extensions compiled in and no
+/// control of the user's own. `command.cloud.digitalocean.credential-exposure`
+/// reviews the whole `databases` group, so a native read proof alone leaves a
+/// cluster listing under review; only `doctl_reads::settle` lifts it.
+fn decide_with_extensions(
+    harness: &str,
+    command: &str,
+    controls: &guard_command::native_command_controls::CompiledNativeCommandControls,
+) -> guard_contracts::PreToolResultV1 {
+    evaluate_pre_tool_envelope_with_context(
+        harness,
+        "PreToolUse",
+        &json!({"tool_name":"bash","tool_input":{"command":command}}),
+        Some(controls),
+        None,
+        None,
+        None,
+    )
+}
+
+#[test]
+fn a_cluster_listing_of_named_inventory_columns_runs_with_the_extensions_loaded() {
+    let controls = crate::git_helper_fixture::github_controls("default");
+    for harness in ["omp", "zcode", "codex", "claude-code"] {
+        for command in [
+            "doctl databases list --format ID,Name,Engine,Status,Region",
+            "doctl databases list --format ID,Name,Engine,Status,Region --no-header 2>&1 | head -20",
+            "doctl d ls --format=ID,Name,Region --no-header",
+        ] {
+            let result = decide_with_extensions(harness, command, &controls);
+            assert_eq!(
+                result.decision, "allow",
+                "{harness}: {command}: {}",
+                result.reason_code
+            );
+            assert_eq!(
+                result.reason_code, "native_exact_safe_doctl_cluster_listing",
+                "{harness}: {command}"
+            );
+        }
+    }
+}
+
+#[test]
+fn the_rest_of_the_database_group_stays_reviewed_with_the_extensions_loaded() {
+    let controls = crate::git_helper_fixture::github_controls("default");
+    for harness in ["omp", "zcode", "codex", "claude-code"] {
+        for command in [
+            "doctl databases list",
+            "doctl databases list --format ID,URI",
+            "doctl databases list --format ID,Name --output json",
+            "doctl databases user list --format Name,Password",
+            "doctl databases connection mydb",
+            "doctl auth token",
+            "doctl compute droplet delete web --force",
+        ] {
+            let result = decide_with_extensions(harness, command, &controls);
+            assert_ne!(
+                result.decision, "allow",
+                "{harness}: {command}: {}",
+                result.reason_code
+            );
+        }
+    }
+}

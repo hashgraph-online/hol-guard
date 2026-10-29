@@ -1159,6 +1159,9 @@ fn evaluate_envelope(
         deadline,
         execution_environment,
     );
+    // A cluster listing that names only inventory columns runs directly; the
+    // rule that reviews it covers the whole `databases` group.
+    super::doctl_reads::settle(&mut result, command_model, controls);
     super::workspace_contained::convert(
         &mut result,
         &pre_floor,

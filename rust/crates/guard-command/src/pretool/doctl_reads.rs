@@ -13,7 +13,10 @@
 //! One `databases` shape is admitted beside the table, by
 //! [`databases_list_arguments`]: a cluster listing whose columns the command
 //! text itself names, and which are all inventory. See that function for why
-//! the columns have to be spelled out.
+//! the columns have to be spelled out. The declarative
+//! `command.cloud.digitalocean.credential-exposure` rule covers the whole
+//! `databases` group, so that listing also needs [`settle`] to lift the
+//! review that rule puts on it.
 //!
 //! The flags `--access-token`/`-t`, `--api-url`/`-u`, `--config`/`-c`,
 //! `--trace` and `--show` are never admitted. They put a token on the command
@@ -173,6 +176,107 @@ const DENIED_LONG_FLAGS: [&str; 5] = [
     "--trace",
     "--show",
 ];
+
+/// The declarative rule that reviews every `doctl` command printing or
+/// storing a credential. It covers the `databases` group as a whole, because
+/// a cluster's connection string and its users' passwords are read through
+/// that group.
+const CREDENTIAL_EXPOSURE_RULE: &str = "command.cloud.digitalocean.credential-exposure";
+
+pub(crate) const SETTLE_REASON: &str = "native_exact_safe_doctl_cluster_listing";
+
+/// Lifts the review `command.cloud.digitalocean.credential-exposure` puts on
+/// the `databases` group once every segment it covers is a cluster listing
+/// that names its own columns and they are all inventory
+/// ([`databases_list_arguments`]). The rule is right about the group: a
+/// connection string and a user password are both read through it. It is read
+/// off the command path alone, though, so it cannot see that this particular
+/// listing asked for identifiers, engines and regions and nothing else.
+///
+/// Only that rule's own review is lifted. Another rule effective on the
+/// command, an extension permission the user keeps under review, an uncertain
+/// match, a failed evaluation or a sensitive target all keep their verdict,
+/// and a command the rule does not review is left as it is.
+pub(super) fn settle(
+    result: &mut guard_contracts::PreToolResultV1,
+    model: Option<&crate::CanonicalCommandV1>,
+    controls: Option<&crate::native_command_controls::CompiledNativeCommandControls>,
+) {
+    if result.minimum_action != "review"
+        || result.reason_code != "native_command_extension_review"
+        || result.action.action_type != guard_contracts::PreToolActionTypeV1::Command
+        || result.action.sensitive_target
+    {
+        return;
+    }
+    let (Some(model), Some(extensions)) = (model, result.command_extensions.as_ref()) else {
+        return;
+    };
+    if extensions.evaluation_error.is_some() || extensions.binding.uncertainty_count != 0 {
+        return;
+    }
+    if !extensions.permission_observations.iter().all(|observation| {
+        observation.uncertainty_reasons.is_empty()
+            && controls.is_some_and(|controls| {
+                controls.permission_settles_at_allow(
+                    &observation.extension_id,
+                    &observation.permission_id,
+                )
+            })
+    }) {
+        return;
+    }
+    let mut listing_seen = false;
+    for observation in &extensions.observations {
+        if !observation.uncertainty_reasons.is_empty() {
+            return;
+        }
+        // A rule that matched without becoming effective asks for nothing, so
+        // it holds nothing back.
+        if observation.effective_segment_indexes.is_empty() {
+            continue;
+        }
+        if observation.rule_id != CREDENTIAL_EXPOSURE_RULE {
+            if controls.is_some_and(|controls| controls.rule_settles_at_allow(&observation.rule_id))
+            {
+                continue;
+            }
+            return;
+        }
+        for index in &observation.effective_segment_indexes {
+            match model.segments.get(*index) {
+                Some(segment) if cluster_listing(segment) => listing_seen = true,
+                _ => return,
+            }
+        }
+    }
+    if !listing_seen {
+        return;
+    }
+    result.minimum_action = "allow".into();
+    result.policy_action = "allow".into();
+    result.decision = "allow".into();
+    result.explicitly_benign = true;
+    result.reason_code = SETTLE_REASON.into();
+    result.reason = concat!(
+        "The Rust command authority proved this lists DigitalOcean database clusters with the ",
+        "columns the command itself names, and that every one of them is cluster inventory ",
+        "rather than a connection string or a password.",
+    )
+    .into();
+}
+
+/// A `doctl` segment that is a cluster listing of named inventory columns and
+/// nothing else: no wrapper, no leading environment assignment and no `PATH`
+/// of its own, since each of those decides which program actually runs.
+fn cluster_listing(segment: &crate::CommandSegmentV1) -> bool {
+    matches!(segment.executable.as_deref(), Some("doctl" | "doctl.exe"))
+        && segment.environment_names.is_empty()
+        && !segment.path_overridden
+        && segment.wrapper_chain.is_empty()
+        && !super::sensitive_command(&segment.text)
+        && databases_list_arguments(&segment.arguments)
+}
 
 pub(super) fn safe_doctl_arguments(arguments: &[String]) -> bool {
     help_arguments(arguments) || read_arguments(arguments) || databases_list_arguments(arguments)
