@@ -119,8 +119,11 @@ def record_direct_hook_evidence(host: _DrainHost, record: object) -> bool:
         return True
     # A hook the resident held through a policy update's fence reports its wait.
     record_direct_fence_wait(host.store, record.get("fence_wait_ms"))
-    # Activity may cite only a receipt the store will accept.
-    accepted = validate_native_decision_receipt(receipt, guard_home=host.guard_home) if receipt is not None else None
+    # Activity may cite only a receipt the store will accept, which the resident checks on its page.
+    checked = record.get("receipt_valid")
+    if not isinstance(checked, bool):  # An older resident's page carries no check.
+        checked = validate_native_decision_receipt(receipt, guard_home=host.guard_home) is not None
+    accepted = dict(receipt) if checked and isinstance(receipt, dict) else None
     if accepted is not None:
         submit = getattr(host.activity_writer, "submit_native_decision_receipt", None)
         # A current resident queues the receipt with a running writer itself.

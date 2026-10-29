@@ -267,3 +267,15 @@ fn a_drain_with_no_store_hands_the_receipt_back_to_the_daemon() {
         std::thread::sleep(std::time::Duration::from_millis(10));
     }
 }
+
+#[test]
+fn a_paged_receipt_says_whether_the_native_runtime_accepts_it() {
+    let queue = DirectEvidenceQueue::default();
+    assert!(queue.offer(json!({ "event": "PreToolUse", "receipt": { "decision_id": "d" } })));
+    assert!(queue.offer(json!({ "event": "PreToolUse", "receipt": null })));
+    assert!(queue.offer(json!({ "event": "PreToolUse" })));
+    let records = drained(&queue, None, None)["records"].clone();
+    assert_eq!(records[0]["receipt_valid"], json!(false));
+    assert!(records[1].get("receipt_valid").is_none());
+    assert!(records[2].get("receipt_valid").is_none());
+}

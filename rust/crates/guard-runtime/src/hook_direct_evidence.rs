@@ -15,6 +15,11 @@
 //! Each page also carries the queue's diagnostic hook counts, which the
 //! daemon only logs.
 //!
+//! A paged record that carries a decision receipt also says whether the
+//! receipt is one the native runtime accepts, checked here as the daemon's
+//! own validation request would check it, so the daemon records it without
+//! another resident request per hook.
+//!
 //! A plain relayed MCP call's record is never paged: the page's cursor passes
 //! over it, and once the daemon acknowledges that cursor the resident writes
 //! the call's receipt itself (see [`crate::mcp_relay_receipt`]). A receipt the
@@ -31,6 +36,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 pub(crate) const HOOK_DIRECT_EVIDENCE_FEATURE: &str = "hook-direct-evidence-v1";
 const DRAIN_RESULT_SCHEMA: &str = "guard-hook-direct-evidence.v1";
+/// The field of a paged record that says whether its `receipt` is valid.
+const RECEIPT_VALID: &str = "receipt_valid";
 const MAX_QUEUED_RECORDS: usize = 1_024;
 const MAX_QUEUED_BYTES: usize = 8 * 1024 * 1024;
 /// One drain page stays well under the resident response cap.
@@ -353,15 +360,29 @@ pub(crate) fn drain(
         peeked.settled,
         queue.unwritten(),
     );
+    let records: Vec<Value> = peeked.records.into_iter().map(checked_receipt).collect();
     serde_json::to_vec(&json!({
         "schema": DRAIN_RESULT_SCHEMA,
         "epoch": queue.epoch,
-        "records": peeked.records,
+        "records": records,
         "remaining": peeked.remaining,
         "through": peeked.through,
         "counters": queue.counters.snapshot(),
     }))
     .map_err(|_| "direct_hook_evidence_encoding_failed".to_owned())
+}
+
+/// `record`, marked with whether the receipt it carries is one the native
+/// runtime accepts. A record without a receipt object is paged as queued.
+fn checked_receipt(mut record: Value) -> Value {
+    let valid = record
+        .get("receipt")
+        .filter(|receipt| receipt.is_object())
+        .map(|receipt| crate::edge::standalone_receipt(receipt, &Value::Null));
+    if let (Some(valid), Some(fields)) = (valid, record.as_object_mut()) {
+        fields.insert(RECEIPT_VALID.to_owned(), Value::Bool(valid));
+    }
+    record
 }
 
 #[cfg(test)]

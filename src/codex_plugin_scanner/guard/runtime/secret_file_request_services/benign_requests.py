@@ -7,7 +7,6 @@ from ...native_tool_action_identity import tool_action_request_artifact_id
 from ...redaction import redact_text
 from ..command_decision_adapter import effect_decision_to_dict
 from ..command_evaluation import CompositeCommandEvaluation, evaluate_command
-from ..command_extensions import risk_classes_for_command_action
 from ..command_model import parse_shell_command
 from ..effect_contract import UncertaintyKind
 from ..effect_decision import DecisionFactorSource, DecisionReason, EffectDecision, FinalDisposition
@@ -97,7 +96,13 @@ def build_tool_action_request_artifact(
         decision_plane = _NATIVE_EVIDENCE_UNAVAILABLE_DECISION
         control_resolution = {"blocked": True, "failures": ["native-evidence-unavailable"]}
         command_rule_matches = []
-        risk_classes = list(risk_classes_for_command_action(request.action_class))
+        # Risk classes are an evaluation result, and nothing evaluated this
+        # request. Naming them here from an action-class label would be a
+        # second Python answer about risk. The action class rides on the
+        # artifact, and the resident adds that label's risks from the table it
+        # owns when it reads the artifact, so nothing is lost by leaving the
+        # evaluated list empty here.
+        risk_classes = []
     wrapper_chain = tuple(dict.fromkeys((*command.wrapper_chain, *request.wrapper_chain)))
     # The artifact id is the key a saved approval for this action is stored
     # under, so the resident derives it and this side never recomputes it.

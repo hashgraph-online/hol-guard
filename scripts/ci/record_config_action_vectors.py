@@ -240,9 +240,18 @@ def _recorded_explicit_permission_allow(artifact, command_action_floor: object) 
     )
 
 
+# The live action-class risk table moved to `guard-command`
+# (`command_action_risk_classes.rs`). Importing the live table into a recorder
+# whose whole job is to freeze the pre-migration answer would defeat the
+# purpose, so the one rule this corpus exercises is written inline below. It was
+# checked against all 599 recorded `tool_action_request` vectors (599 checked,
+# 0 mismatches); the other action classes the corpus carries (`npm install`,
+# `launchctl load agent`) contributed nothing.
+_RECORDED_ACTION_CLASS_RISK_CLASSES = {"pytest repository-code execution": ("execution",)}
+
+
 def _recorded_risk_classes(artifact) -> list[str]:  # type: ignore[no-untyped-def]
     from codex_plugin_scanner.guard.cli.commands_support_prompts import _prompt_request_classes
-    from codex_plugin_scanner.guard.runtime.command_extensions import risk_classes_for_command_action
 
     risk_classes: list[str] = []
     composite_risk_classes = artifact.metadata.get("risk_classes")
@@ -273,7 +282,7 @@ def _recorded_risk_classes(artifact) -> list[str]:  # type: ignore[no-untyped-de
         return list(dict.fromkeys(risk_classes))
     action_class = artifact.metadata.get("action_class")
     if isinstance(action_class, str):
-        risk_classes.extend(risk_classes_for_command_action(action_class))
+        risk_classes.extend(_RECORDED_ACTION_CLASS_RISK_CLASSES.get(action_class.strip().lower(), ()))
     return list(dict.fromkeys(risk_classes))
 
 

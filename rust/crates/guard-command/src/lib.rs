@@ -49,6 +49,8 @@ mod cloud_scrub_source_search;
 mod codex_output_args;
 mod codex_output_env;
 pub mod command_action_risk_classes;
+#[cfg(test)]
+mod command_action_risk_classes_tests;
 mod command_ascii_comparison;
 mod command_candidate_common;
 mod command_common_cli_matchers;

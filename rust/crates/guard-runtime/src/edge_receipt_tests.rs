@@ -277,7 +277,10 @@ fn a_receipt_the_writer_refuses_leaves_the_record_unmarked() {
     assert!(queue
         .try_offer_recorded(record.clone(), DIRECT_RECEIPT_RECORDED, || false)
         .is_ok());
-    assert_eq!(queued(&queue), [record]);
+    // The page still says the drain must not cite the receipt.
+    let mut expected = record;
+    expected["receipt_valid"] = json!(false);
+    assert_eq!(queued(&queue), [expected]);
 }
 
 #[test]
