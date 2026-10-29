@@ -226,6 +226,7 @@ def test_release_dispatch_binds_channel_train_version_and_sha() -> None:
     assert '"$EXPECTED_SHA" != "$GITHUB_SHA"' in dispatch_gate["run"]
     assert jobs["build"]["needs"] == [
         "authorize-release",
+        "authorize-pull-request-alpha",
         "require-supply-chain-audit",
         "resolve-alpha-version",
         "resolve-canary-version",
@@ -373,3 +374,49 @@ def test_release_branch_push_is_the_single_automatic_alpha_publisher() -> None:
         condition = jobs[job_name]["if"]
         assert "github.event.action == 'closed'" not in condition
         assert "github.event.pull_request.merged" not in condition
+
+
+def test_pull_request_alpha_is_an_admin_dispatch_from_main() -> None:
+    workflow = _workflow(PUBLISH_WORKFLOW)
+    jobs = workflow["jobs"]
+    inputs = workflow[True]["workflow_dispatch"]["inputs"]
+    gate = jobs["authorize-release"]["steps"][0]["run"]
+    pull_request_gate = gate[gate.index('if [[ -n "$PULL_REQUEST" ]]') : gate.index("case ")]
+    authorize = jobs["authorize-pull-request-alpha"]
+    script = (ROOT / "scripts" / "ci" / "authorize_pull_request_alpha.sh").read_text(encoding="utf-8")
+    source = "${{ needs.authorize-pull-request-alpha.outputs.source_sha || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}"
+
+    assert inputs["pull_request"]["required"] is False
+    assert inputs["pull_request"]["default"] == ""
+    assert "Pull request alphas must be dispatched from refs/heads/main" in pull_request_gate
+    assert "Pull request alphas must use the alpha channel on the main train" in pull_request_gate
+    assert '"$GITHUB_ACTOR_ID" == "41898282"' in pull_request_gate
+    assert '"$GITHUB_ACTOR_ID" != "6068672"' not in pull_request_gate
+    assert pull_request_gate.index("exit 0") < len(pull_request_gate)
+    assert authorize["needs"] == "authorize-release"
+    assert authorize["permissions"] == {"contents": "read", "pull-requests": "read"}
+    assert authorize["if"] == "github.event_name == 'workflow_dispatch' && inputs.pull_request != ''"
+    checkout = authorize["steps"][0]["with"]
+    assert checkout["ref"] == "${{ github.sha }}"
+    assert checkout["sparse-checkout"] == "scripts/ci/authorize_pull_request_alpha.sh"
+    assert authorize["steps"][1]["run"] == "bash scripts/ci/authorize_pull_request_alpha.sh"
+    assert 'permission" != "admin"' in script
+    assert "pulls/${PULL_REQUEST}" in script
+    assert '"$head_sha" != "$EXPECTED_SHA"' in script
+    assert jobs["precompile-native-linux-x64"]["with"]["source_sha"] == source
+    build_checkout = next(
+        step["with"]["ref"]
+        for step in jobs["build"]["steps"]
+        if str(step.get("uses", "")).startswith("actions/checkout@")
+    )
+    assert build_checkout == source
+    assert "needs.authorize-pull-request-alpha.result == 'success'" in jobs["build"]["if"]
+    assert "needs.authorize-pull-request-alpha.result == 'success'" in jobs["precompile-native-linux-x64"]["if"]
+    assert "inputs.pull_request == ''" in jobs["wake-alpha-core-feed"]["if"]
+    for job_name in ("publish-alpha-testpypi", "publish-alpha-pypi"):
+        step = next(step for step in jobs[job_name]["steps"] if "Revalidate alpha" in step.get("name", ""))
+        assert "Pull request alpha source does not match the authorized commit" in step["run"]
+        assert "bash scripts/ci/require_alpha_source_on_main.sh" in step["run"]
+    compute = next(step["run"] for step in jobs["build"]["steps"] if step.get("name") == "Compute publish version")
+    assert 'BASE_VERSION="$RESOLVED_ALPHA_BASE_VERSION"' in compute
+    assert "Checked-out pull request alpha source does not match expected_sha" in compute

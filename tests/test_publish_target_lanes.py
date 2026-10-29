@@ -77,7 +77,12 @@ def _assert_graph(jobs: dict) -> None:
         prepare = jobs[prepare_id]
         wheel = jobs[f"build-native-guard-wheel-{lane}"]
         assert prepare["uses"] == "./.github/workflows/release-native-prepare.yml"
-        assert prepare["needs"] == ["authorize-release", "resolve-alpha-version", "resolve-canary-version"]
+        assert prepare["needs"] == [
+            "authorize-release",
+            "authorize-pull-request-alpha",
+            "resolve-alpha-version",
+            "resolve-canary-version",
+        ]
         assert prepare["with"]["target"] == target
         assert wheel["uses"] == "./.github/workflows/release-native-wheel.yml"
         assert wheel["needs"] == ["build", prepare_id]
