@@ -7,7 +7,6 @@
 //! hands such a session to the Python proxy, which decides those calls as it
 //! does without the relay:
 //!
-//! - unverified extension layers;
 //! - a store holding a policy bundle the resident cannot judge the way the
 //!   daemon would, with a row this harness's lookups reach, remote policy
 //!   rows, or saved rows whose
@@ -23,6 +22,12 @@
 //! `safe-alternative`, and under `ask` (`mcp_relay_decide_ask.rs`), which
 //! also needs the approval center and the review OAuth source the daemon
 //! binds with it.
+//!
+//! Extension layers the publisher could not read hand nothing off either. The
+//! call is decided with the layers marked unavailable. Contributed tools are
+//! decided from the admitted snapshot's compiled controls, which bound
+//! activation, lockdown and quarantine at admission and never read request
+//! layers, so the missing layers change no decision.
 //!
 //! `mode = "observe"` alone hands nothing off: the resident takes its
 //! observe-forward route and its downgrade of a pending saved approval

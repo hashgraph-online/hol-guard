@@ -48,6 +48,7 @@ fn view(config: Map<String, Value>) -> HarnessView {
         config,
         hash_config,
         layers: Vec::new(),
+        layers_unavailable: false,
         receipt_redaction_level: None,
     }
 }

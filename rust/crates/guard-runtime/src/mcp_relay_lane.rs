@@ -109,7 +109,6 @@ pub(crate) fn hands_off(code: &str) -> bool {
         code,
         "mcp_relay_runtime_superseded"
             | "mcp_relay_store_newer"
-            | "mcp_relay_layers_unavailable"
             | "mcp_relay_saved_remote_policy"
             | "mcp_relay_saved_policy_unverifiable"
             | "mcp_relay_session_server_proxy_tools"
