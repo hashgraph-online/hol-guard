@@ -1466,16 +1466,24 @@ def _account_free_path(path: str) -> str:
     if not candidates:
         return path
     # Windows paths differ from their home prefix in case and separator alone,
-    # so compare normalised and slice the original.
-    normalised = os.path.normcase(path)
-    for candidate in candidates:
-        normalised_home = os.path.normcase(candidate)
-        if normalised == normalised_home:
-            return "~"
-        for separator in ("/", "\\"):
-            prefix = normalised_home + os.path.normcase(separator)
-            if normalised.startswith(prefix):
-                return "~" + separator + path[len(prefix) :]
+    # so compare normalised and slice the spelling that matched. ``normcase``
+    # leaves redundant separators in place, so ``/home//harriet-example/bin``
+    # would miss the prefix and keep the account name; the lexically collapsed
+    # spelling is tried as well so that path is redacted too.
+    spellings = [path]
+    collapsed = os.path.normpath(path)
+    if collapsed != path:
+        spellings.append(collapsed)
+    for spelling in spellings:
+        normalised = os.path.normcase(spelling)
+        for candidate in candidates:
+            normalised_home = os.path.normcase(candidate)
+            if normalised == normalised_home:
+                return "~"
+            for separator in ("/", "\\"):
+                prefix = normalised_home + os.path.normcase(separator)
+                if normalised.startswith(prefix):
+                    return "~" + separator + spelling[len(prefix) :]
     return path
 
 
