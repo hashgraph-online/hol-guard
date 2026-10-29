@@ -667,6 +667,89 @@ def test_launcher_accepts_bootstrap_code_whose_module_the_wheel_ships(tmp_path: 
     _validate(root, contract)
 
 
+def test_launcher_rejects_a_retired_submodule_imported_from_its_package(tmp_path: Path) -> None:
+    root, contract = _retired_oracle_repository(tmp_path)
+    package = _shipped_package(root)
+    for part in ("guard", "guard/runtime"):
+        (package / part).mkdir(parents=True, exist_ok=True)
+        (package / part / "__init__.py").write_text("", encoding="utf-8")
+    # `from a.b import c` names `a.b` in the import statement and `a.b.c`
+    # nowhere, so only walking the statement's module leaves the retired
+    # submodule unseen.
+    (package / "bootstrap.py").write_text(
+        'CODE = "from codex_plugin_scanner.guard.runtime import hook_review_engine"\n'
+        'ARGV = [executable, "-c", CODE, "guard"]\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="launcher runs retired module"):
+        _validate(root, contract)
+
+
+def test_launcher_accepts_an_attribute_imported_from_a_module_the_wheel_ships(tmp_path: Path) -> None:
+    root, contract = _retired_oracle_repository(tmp_path)
+    package = _shipped_package(root)
+    (package / "cli.py").write_text("def main(argv):\n    return 0\n", encoding="utf-8")
+    # `main` is an attribute of `cli`, not a module beside it, so the existence
+    # check must not ask the install for `codex_plugin_scanner.cli.main`.
+    (package / "bootstrap.py").write_text(
+        'CODE = "from codex_plugin_scanner.cli import main"\nARGV = [executable, "-c", CODE, "guard"]\n',
+        encoding="utf-8",
+    )
+
+    _validate(root, contract)
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        "importlib.import_module('{target}')",
+        "__import__('{target}')",
+    ],
+)
+def test_launcher_rejects_a_retired_module_loaded_dynamically_after_dash_c(tmp_path: Path, call: str) -> None:
+    root, contract = _retired_oracle_repository(tmp_path)
+    package = _shipped_package(root)
+    code = "import importlib;" + call.format(target=RETIRED_ORACLE)
+    (package / "bootstrap.py").write_text(
+        f'CODE = "{code}"\nARGV = [executable, "-c", CODE, "guard"]\n', encoding="utf-8"
+    )
+
+    with pytest.raises(RuntimeError, match="launcher runs retired module"):
+        _validate(root, contract)
+
+
+def test_launcher_rejects_a_missing_module_loaded_dynamically_after_dash_c(tmp_path: Path) -> None:
+    root, contract = _retired_oracle_repository(tmp_path)
+    package = _shipped_package(root)
+    (package / "bootstrap.py").write_text(
+        "CODE = \"import importlib;importlib.import_module('codex_plugin_scanner.cli')\"\n"
+        'ARGV = [executable, "-c", CODE, "guard"]\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="launcher runs a module that does not exist"):
+        _validate(root, contract)
+
+
+def test_a_wheel_member_under_a_scripts_package_is_read_as_shipped(tmp_path: Path) -> None:
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    _, contract = _retired_oracle_repository(repository)
+    wheel = tmp_path / "fixture.whl"
+    with ZipFile(wheel, "w") as archive:
+        # A wheel installs every member it carries, including a package of the
+        # project's own named `scripts`. Reading the first path components the
+        # way an sdist is read would excuse this file from the shipped rules.
+        archive.writestr(
+            "codex_plugin_scanner/scripts/boot.py",
+            f'TARGET = "{RETIRED_ORACLE}"\n'.encode(),
+        )
+
+    with pytest.raises(RuntimeError, match="names retired module"):
+        GATE.validate_retired_artifacts(contract, [wheel])
+
+
 def test_shipped_source_rejects_a_retired_module_spelled_across_a_concatenation(tmp_path: Path) -> None:
     root, contract = _retired_oracle_repository(tmp_path)
     _shipped_package(root)

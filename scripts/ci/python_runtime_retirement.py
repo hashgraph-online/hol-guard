@@ -308,7 +308,9 @@ def _artifact_member_is_shipped(name: str) -> bool:
 
     An sdist also carries `tests`, `ci` and `scripts`, which a wheel never
     installs. Those files may name a retired module on purpose to prove it is
-    gone, so they are held to the same rules as the repository copies.
+    gone, so they are held to the same rules as the repository copies. Only an
+    sdist is read this way: a wheel's members are the install, and one of its
+    packages may itself be called `scripts`.
     """
     parts = PurePosixPath(name.replace("\\", "/")).parts
     return not any(part in _SOURCE_ROOTS[1:] for part in parts[:2])
@@ -333,7 +335,8 @@ def validate_retired_artifacts(contract: Mapping[str, object], artifacts: Sequen
             ):
                 raise RuntimeError(f"package artifact contains retired module: {name}")
             if data is not None:
-                check_content(name, data, shipped=_artifact_member_is_shipped(name))
+                shipped = artifact.name.endswith(".whl") or _artifact_member_is_shipped(name)
+                check_content(name, data, shipped=shipped)
                 _check_retired_body_content(name, data, bodies)
 
 
@@ -500,8 +503,25 @@ def _dotted_module_name(value: str) -> bool:
     return len(parts) > 1 and all(part.isidentifier() for part in parts)
 
 
-def _code_imports(text: str) -> Iterator[str]:
-    """Each module the code of a `-c` launch imports."""
+def _dynamic_import_name(node: ast.AST) -> str | None:
+    """The module a literal `importlib.import_module` or `__import__` call names."""
+    if not isinstance(node, ast.Call) or not node.args:
+        return None
+    func = node.func
+    named = isinstance(func, ast.Name) and func.id == "__import__"
+    attributed = isinstance(func, ast.Attribute) and func.attr in {"import_module", "__import__"}
+    if not named and not attributed:
+        return None
+    return _literal_string(node.args[0])
+
+
+def _code_imports(text: str) -> Iterator[tuple[str, bool]]:
+    """Each `(name, must_exist)` the code of a `-c` launch loads.
+
+    `from a import b` names `a`, which has to be a module, and `a.b`, which may
+    be an attribute of it instead. Both are checked against the retired modules;
+    only the one that has to be a module is checked for existence.
+    """
     try:
         tree = ast.parse(text)
     except SyntaxError:
@@ -509,9 +529,16 @@ def _code_imports(text: str) -> Iterator[str]:
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                yield alias.name
+                yield alias.name, True
         elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
-            yield node.module
+            yield node.module, True
+            for alias in node.names:
+                if alias.name != "*":
+                    yield f"{node.module}.{alias.name}", False
+        else:
+            dynamic = _dynamic_import_name(node)
+            if dynamic is not None:
+                yield dynamic, True
 
 
 def _string_bindings(tree: ast.AST) -> dict[str, ast.expr]:
@@ -538,7 +565,7 @@ def _string_bindings(tree: ast.AST) -> dict[str, ast.expr]:
     return bindings
 
 
-def _launch_targets(tree: ast.AST, packages: set[str]) -> Iterator[tuple[int, str]]:
+def _launch_targets(tree: ast.AST, packages: set[str]) -> Iterator[tuple[int, str, bool]]:
     """Module names a `-m` or `-c` launch sequence carries.
 
     A shim, a relaunch and a bootstrap all name their module in an argument
@@ -565,16 +592,16 @@ def _launch_targets(tree: ast.AST, packages: set[str]) -> Iterator[tuple[int, st
             continue
         for element, literal in zip(elements, literals, strict=True):
             if literal is not None and _dotted_module_name(literal) and literal.split(".")[0] in packages:
-                yield element.lineno, literal
+                yield element.lineno, literal, True
         if "-c" not in literals:
             continue
         for element, code in zip(elements, resolved, strict=True):
             text = _code_text(code)
             if text is None:
                 continue
-            for module in _code_imports(text):
+            for module, must_exist in _code_imports(text):
                 if module.split(".")[0] in packages:
-                    yield element.lineno, module
+                    yield element.lineno, module, must_exist
 
 
 def validate_launcher_module_targets(root: Path, retired_modules: set[str]) -> None:
@@ -595,10 +622,10 @@ def validate_launcher_module_targets(root: Path, retired_modules: set[str]) -> N
         if "-m" not in text and "-c" not in text:
             continue
         name = path.relative_to(root).as_posix()
-        for lineno, module in _launch_targets(ast.parse(text, filename=name), packages):
+        for lineno, module, must_exist in _launch_targets(ast.parse(text, filename=name), packages):
             if _matches_module(module, retired_modules):
                 raise RuntimeError(f"{name}:{lineno}: launcher runs retired module {module}")
-            if _module_source(root, module) is None:
+            if must_exist and _module_source(root, module) is None:
                 raise RuntimeError(f"{name}:{lineno}: launcher runs a module that does not exist: {module}")
 
 
