@@ -17,9 +17,10 @@ pub const CONTENT_DECODE_RESULT_SCHEMA: &str = "guard-content-decode-result.v1";
 pub const CONTENT_DECODE_FEATURE: &str = "content-decode-v1";
 
 /// Upper bounds the runtime enforces on caller-supplied caps. The raw body
-/// travels base64-encoded inside the native request, so its ceiling keeps the
-/// whole request under `MAX_NATIVE_REQUEST_BYTES`.
-pub const CONTENT_CAP_INPUT_BYTES: u64 = 4 * 1024 * 1024;
+/// travels base64-encoded inside the native request, so its ceiling is the
+/// largest body whose encoding still fits the strict parser's 4 MiB string
+/// limit (3 MiB encodes to exactly 4 MiB) and so the request frame.
+pub const CONTENT_CAP_INPUT_BYTES: u64 = 3 * 1024 * 1024;
 pub const CONTENT_CAP_OUTPUT_BYTES: u64 = 32 * 1024 * 1024;
 pub const CONTENT_CAP_RATIO: u64 = 1_000;
 pub const CONTENT_CAP_LAYERS: u64 = 4;

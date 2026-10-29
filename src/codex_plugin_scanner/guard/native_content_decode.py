@@ -62,7 +62,7 @@ _FETCH_REFUSALS = frozenset(
     }
 )
 
-# Runtime ceilings: input 4 MiB, output 32 MiB, ratio 1000, 4 layers,
+# Runtime ceilings: input 3 MiB, output 32 MiB, ratio 1000, 4 layers,
 # 1 GiB memory, 30 s. Defaults stay well inside them.
 _DEFAULT_TIMEOUT_SECONDS = 5.0
 _DEFAULT_MAX_OUTPUT_BYTES = 8 * 1024 * 1024

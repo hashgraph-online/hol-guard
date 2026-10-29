@@ -259,7 +259,7 @@ def test_oversized_raw_bodies_never_reach_the_worker(
     [
         {"timeout_seconds": 0},
         {"timeout_seconds": float("nan")},
-        {"max_input_bytes": 4 * 1024 * 1024 + 1},
+        {"max_input_bytes": 3 * 1024 * 1024 + 1},
         {"max_output_bytes": 0},
         {"max_layers": 0},
     ],
@@ -350,7 +350,7 @@ def test_raw_fetch_returns_the_encoded_body_and_cleans_its_spool(
     assert raw.content_encoding == ("br",)
     query = calls[0]["query"]
     assert query["action"] == "content"
-    assert query["max_bytes"] == 4 * 1024 * 1024
+    assert query["max_bytes"] == 3 * 1024 * 1024
     assert not Path(query["temp_dir"]).exists()
 
 
@@ -482,6 +482,16 @@ def test_identity_bodies_pass_through_without_a_decoder(native_hook_force: Path,
 
     assert result.body == b"plain body"
     assert result.counters is not None and result.counters.decoder_calls == 0
+
+
+@_unix_only
+def test_a_body_exactly_at_the_raw_cap_reaches_the_worker(native_hook_force: Path, state_dir: Path) -> None:
+    body = b"a" * client.MANAGED_CONTENT_MAX_RAW_BYTES
+
+    result = _decode(body, [], state_dir)
+
+    assert (result.status, result.code) == ("decoded", "content_decoded")
+    assert result.body == body
 
 
 @_unix_only

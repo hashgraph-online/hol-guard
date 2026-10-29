@@ -30,7 +30,7 @@ from .strict_json_pairs import unique_json_object
 _FEATURE = "archive-acquisition-v1"
 _CONTENT_FEATURE = "managed-content-fetch-v1"
 # The contained decoder's raw input ceiling; a larger body is never fetched.
-MANAGED_CONTENT_MAX_RAW_BYTES = 4 * 1024 * 1024
+MANAGED_CONTENT_MAX_RAW_BYTES = 3 * 1024 * 1024
 _MAX_CONTENT_ENCODING_VALUES = 8
 _REQUEST_SCHEMA = "hol-guard.archive-acquisition-request.v1"
 _RESULT_SCHEMA = "hol-guard.archive-acquisition-result.v1"
