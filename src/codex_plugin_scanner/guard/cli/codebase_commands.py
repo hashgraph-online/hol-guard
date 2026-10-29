@@ -1,0 +1,139 @@
+"""``hol-guard codebases add`` and ``hol-guard codebases list``.
+
+``add`` admits a folder for background checks, as choosing it under Supply Chain,
+then Workspaces in ``hol-guard dashboard`` does: the daemon checks it and receipt
+sync sends the result to Guard Cloud's Codebases page. There is no ``remove``:
+a command an agent can run may widen what Guard checks but never narrow it, so
+pausing a codebase stays in the dashboard.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+from typing import TYPE_CHECKING, TextIO
+
+if TYPE_CHECKING:
+    from ..config import GuardConfig
+    from ..store import GuardStore
+
+_ADMISSION_ERRORS: dict[str, str] = {
+    "workspace_root_missing": "That folder does not exist.",
+    "workspace_root_not_directory": "That path is not a folder.",
+    "workspace_snapshot_native_unavailable": (
+        "Guard's native runtime is not available on this machine, so it cannot check codebases. "
+        "Run `hol-guard doctor` to repair it."
+    ),
+}
+
+
+def configure_codebases_parser(guard_subparsers: argparse._SubParsersAction) -> None:
+    from ...argparse_utils import FriendlyArgumentParser
+    from .commands_parser_helpers import _add_guard_common_args
+
+    parser = guard_subparsers.add_parser("codebases", help="Add codebases for Guard to check in the background")
+    _add_guard_common_args(parser)
+    parser.add_argument("--json", action="store_true")
+    subparsers = parser.add_subparsers(dest="codebases_command", required=True, parser_class=FriendlyArgumentParser)
+    add_parser = subparsers.add_parser(
+        "add",
+        help="Check a codebase in the background and send the results to Guard Cloud",
+    )
+    add_parser.add_argument(
+        "path",
+        nargs="?",
+        help="Folder to check (default: the Git repository holding the current folder, or the current folder)",
+    )
+    _add_guard_common_args(add_parser)
+    add_parser.add_argument("--json", action="store_true")
+    list_parser = subparsers.add_parser("list", help="List the codebases Guard checks on this machine")
+    _add_guard_common_args(list_parser)
+    list_parser.add_argument("--json", action="store_true")
+
+
+def default_codebase_root(start: Path) -> Path:
+    """The nearest folder at or above ``start`` holding ``.git``, else ``start``."""
+
+    for folder in (start, *start.parents):
+        if (folder / ".git").exists():
+            return folder
+    return start
+
+
+def _write(stream: TextIO | None, payload: dict[str, object], text: str, *, as_json: bool) -> None:
+    target = stream or sys.stdout
+    target.write(json.dumps(payload, sort_keys=True) + "\n" if as_json else text + "\n")
+
+
+def _checks_off_note(config: GuardConfig | None) -> str | None:
+    if config is None or config.workspace_assessment_enabled:
+        return None
+    return "Background checks are turned off in Guard settings (workspace_assessment_enabled), so none will run."
+
+
+def _add(args: argparse.Namespace, store: GuardStore, config: GuardConfig | None, stream: TextIO | None) -> int:
+    from ..workspace_assessment_worker import WorkspaceAdmissionError, admit_workspace
+
+    as_json = bool(getattr(args, "json", False))
+    raw = getattr(args, "path", None)
+    root = Path(raw).expanduser().absolute() if raw else default_codebase_root(Path.cwd())
+    try:
+        admitted = admit_workspace(store, str(root))
+    except WorkspaceAdmissionError as error:
+        message = _ADMISSION_ERRORS.get(error.code, f"Guard could not read that folder ({error.code}).")
+        _write(stream, {"added": False, "error": error.code, "message": message}, f"Error: {message}", as_json=as_json)
+        return 1
+    note = _checks_off_note(config)
+    queued = admitted.get("run_id") is not None
+    lines = [
+        f"Added {root}." if queued else f"Guard already checks {root}; a check is waiting to run.",
+        "Guard checks it in the background on this machine. The result appears on the Codebases page "
+        "in Guard Cloud after the next sync (`hol-guard sync`).",
+    ]
+    if note:
+        lines.append(note)
+    payload: dict[str, object] = {"added": True, "root": str(root), "queued": queued, **admitted}
+    if note:
+        payload["warning"] = note
+    _write(stream, payload, "\n".join(lines), as_json=as_json)
+    return 0
+
+
+def _list(args: argparse.Namespace, store: GuardStore, config: GuardConfig | None, stream: TextIO | None) -> int:
+    from ..workspace_assessment_reads import list_worktrees
+
+    worktrees = list_worktrees(store)
+    note = _checks_off_note(config)
+    payload: dict[str, object] = {"codebases": worktrees}
+    if note:
+        payload["warning"] = note
+    if not worktrees:
+        text = "Guard checks no codebases on this machine. Add one with `hol-guard codebases add` from its folder."
+    else:
+        rows = []
+        for item in worktrees:
+            state = "paused" if item["paused"] else "checking" if item["stale"] else "up to date"
+            rows.append(f"  {item['root']}  ({state})")
+        text = "Codebases Guard checks on this machine:\n" + "\n".join(rows)
+    if note:
+        text += "\n" + note
+    _write(stream, payload, text, as_json=bool(getattr(args, "json", False)))
+    return 0
+
+
+def run_codebases_command(
+    args: argparse.Namespace,
+    *,
+    store: GuardStore,
+    config: GuardConfig | None = None,
+    output_stream: TextIO | None = None,
+    **_: object,
+) -> int:
+    if getattr(args, "codebases_command", None) == "add":
+        return _add(args, store, config, output_stream)
+    return _list(args, store, config, output_stream)
+
+
+__all__ = ["configure_codebases_parser", "default_codebase_root", "run_codebases_command"]
