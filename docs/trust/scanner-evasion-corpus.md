@@ -11,13 +11,13 @@ Static scanners for agent skills and plugins can be evaded. Public research in 2
 
 ## Results
 
-11 evasion cases (one is a plain control): 5 detected, 6 missed. The benign control stays clean.
+11 evasion cases (one is a plain control): 4 detected, 7 missed. The benign control stays clean.
 
 | Case | Class | Outcome | Technique |
 | --- | --- | --- | --- |
 | `control-plain-exfil` | control | detected | A plain shell command that reads `.env` and posts it to a remote host. |
 | `split-across-lines` | split stream | detected | The same command split over continued lines in a fenced block. |
-| `zero-width-joined-command` | unicode | detected | A zero-width space inside the command name. |
+| `zero-width-joined-command` | unicode | missed | A zero-width space inside each command and file name. A shell would reject the text as written, but a model reading it sees the plain command and may retype it without the hidden characters. |
 | `html-comment-hidden` | hidden content | detected | The command sits in an HTML comment that renderers hide. |
 | `remote-fetched-payload` | remote payload | detected | The instruction pipes a downloaded script into a shell, so the payload is never in the repository. |
 | `base64-decoded-command` | encoding | missed | The command is base64-encoded and decoded into a shell. |

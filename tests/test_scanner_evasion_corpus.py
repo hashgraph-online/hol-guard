@@ -19,6 +19,8 @@ CORPUS = PROJECT_ROOT / "tests" / "fixtures" / "scanner-evasion-corpus" / "corpu
 SUMMARY = PROJECT_ROOT / "docs" / "trust" / "scanner-evasion-corpus.md"
 REPORTED = {Severity.CRITICAL, Severity.HIGH, Severity.MEDIUM}
 OUTCOMES = {"detected", "missed", "clean"}
+# Findings that mean the scan did not finish. They must never count as a detection.
+INCOMPLETE_ANALYSIS_RULES = {"SCAN_INPUT_UNREADABLE", "SCAN_RESOURCE_BUDGET_EXCEEDED"}
 
 CORPUS_DATA = json.loads(CORPUS.read_text(encoding="utf-8"))
 CASES = CORPUS_DATA["cases"]
@@ -49,12 +51,10 @@ def _materialize(case: dict, destination: Path) -> Path:
 def _outcome(case: dict, plugin_dir: Path) -> str:
     result = scan_plugin(plugin_dir, ScanOptions(cisco_skill_scan=CORPUS_DATA["scan"]["options"]["cisco_skill_scan"]))
     case_files = set(case["files"])
-    flagged = any(
-        finding.severity in REPORTED and finding.file_path in case_files
-        for category in result.categories
-        for check in category.checks
-        for finding in check.findings
-    )
+    findings = [finding for category in result.categories for check in category.checks for finding in check.findings]
+    incomplete = sorted({finding.rule_id for finding in findings if finding.rule_id in INCOMPLETE_ANALYSIS_RULES})
+    assert not incomplete, f"{case['id']}: scan did not complete ({', '.join(incomplete)})"
+    flagged = any(finding.severity in REPORTED and finding.file_path in case_files for finding in findings)
     if case["expected"] == "clean":
         return "flagged" if flagged else "clean"
     return "detected" if flagged else "missed"
