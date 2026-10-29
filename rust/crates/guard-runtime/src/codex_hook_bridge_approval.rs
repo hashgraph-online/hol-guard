@@ -257,10 +257,16 @@ fn open_pending(approval_url: Option<&str>, state_path: &Path) {
         )
     });
     let Some(browser_url) = browser_url else {
-        eprintln!("{}", crate::native_review_link::SIGNED_LINK_UNAVAILABLE);
+        notify(
+            &mut std::io::stderr(),
+            crate::native_review_link::SIGNED_LINK_UNAVAILABLE,
+        );
         return;
     };
-    eprintln!("HOL Guard is waiting for approval in your browser: {browser_url}");
+    notify(
+        &mut std::io::stderr(),
+        &format!("HOL Guard is waiting for approval in your browser: {browser_url}"),
+    );
     crate::browser_open::open_browser_url(&browser_url);
 }
 
@@ -378,6 +384,13 @@ fn rejected_allow_notice(code: &str) -> String {
     )
 }
 
+/// Writes one notice line for the person and ignores a failed write. The
+/// bridge must still answer with the original deny when stderr is closed or
+/// broken, and `eprintln!` would panic before it could.
+fn notify(out: &mut impl std::io::Write, text: &str) {
+    let _ = writeln!(out, "{text}");
+}
+
 /// Wait for the browser's decision on `pending`: whether the daemon
 /// recorded an allow for this hook before `deadline`.
 pub(crate) fn approved(
@@ -400,7 +413,7 @@ pub(crate) fn approved(
         Ok(recorded) => recorded == Some(Action::Allow),
         Err(code) => {
             if action == Action::Allow {
-                eprintln!("{}", rejected_allow_notice(&code));
+                notify(&mut std::io::stderr(), &rejected_allow_notice(&code));
             }
             false
         }

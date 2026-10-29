@@ -376,3 +376,25 @@ fn the_rejection_notice_ends_with_the_stable_marker_line() {
         "guard_live_decision_rejection exact_approval_authority_missing"
     );
 }
+
+/// A writer whose every write fails, as a closed or broken stderr does.
+struct BrokenStderr;
+
+impl std::io::Write for BrokenStderr {
+    fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+        Err(std::io::ErrorKind::BrokenPipe.into())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Err(std::io::ErrorKind::BrokenPipe.into())
+    }
+}
+
+#[test]
+fn a_broken_stderr_does_not_stop_a_notice_caller() {
+    let notice = rejected_allow_notice("fresh_policy_revalidation_failed");
+    notify(&mut BrokenStderr, &notice);
+    let mut written = Vec::new();
+    notify(&mut written, &notice);
+    assert_eq!(String::from_utf8(written).unwrap(), format!("{notice}\n"));
+}
