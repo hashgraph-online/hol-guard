@@ -458,16 +458,40 @@ fn working_directory_launcher_or_unknown_cwd_keeps_review() {
 }
 
 #[test]
-fn only_the_installed_desktop_bundle_names_the_launcher() {
-    assert!(super::desktop_launcher(
-        "/Applications/HOL Guard.app/Contents/MacOS/hol-guard"
-    ));
+fn only_the_running_guard_binary_names_the_launcher() {
+    let running = std::env::current_exe().unwrap();
+    let root = running.parent().unwrap().join("guard-launcher-proof");
+    let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(root.join("installed")).unwrap();
+    std::fs::create_dir_all(root.join("planted")).unwrap();
+    let launcher = root.join("installed/hol-guard");
+    let planted = root.join("planted/hol-guard");
+    #[cfg(unix)]
+    {
+        // The installed bundle's launcher: a spelling of the running binary.
+        std::os::unix::fs::symlink(&running, &launcher).unwrap();
+        // A bundle a session writes reaches the same shape and is still a
+        // program of its own.
+        std::fs::write(&planted, "#!/bin/sh\nexit 0\n").unwrap();
+        assert!(super::running_executable(
+            launcher.to_str().unwrap(),
+            Some(&running)
+        ));
+        assert!(!super::running_executable(
+            planted.to_str().unwrap(),
+            Some(&running)
+        ));
+        assert!(!super::running_executable(launcher.to_str().unwrap(), None));
+    }
     for executable in [
-        "/tmp/HOL Guard.app/Contents/MacOS/hol-guard",
-        "/Applications/HOL Guard.app/Contents/MacOS/hol-guard-runtime",
-        "/Applications/hol-guard",
+        "/Applications/HOL Guard.app/Contents/MacOS/hol-guard",
+        root.join("installed/hol-guard-desktop").to_str().unwrap(),
         "hol-guard",
     ] {
-        assert!(!super::desktop_launcher(executable), "{executable}");
+        assert!(
+            !super::running_executable(executable, Some(&running)),
+            "{executable}"
+        );
     }
+    std::fs::remove_dir_all(&root).unwrap();
 }
