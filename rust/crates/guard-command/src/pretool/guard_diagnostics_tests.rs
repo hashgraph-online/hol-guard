@@ -308,6 +308,43 @@ fn admits_only_exact_read_only_diagnostics() {
 }
 
 #[test]
+fn explain_reads_one_artifact_or_local_path() {
+    for command in [
+        "explain install-connect",
+        "explain codex.plugin-7",
+        "explain /tmp/project",
+        "explain /tmp/project/src/index.ts",
+        "explain ./src/index.ts",
+        "explain --json /tmp/project",
+        "explain /tmp/project --json",
+        "explain /tmp/project --cisco-mode off",
+        "explain --cisco-mode on /tmp/project",
+        "explain --json /tmp/project --cisco-mode auto",
+        "explain /tmp/project --cisco-mode auto --json",
+        "explain --help",
+        "help explain",
+    ] {
+        assert!(safe_hol_guard_arguments(&arguments(command)), "{command}");
+    }
+
+    for command in [
+        "explain",
+        "explain --json",
+        "explain -x",
+        "explain --cisco-mode off",
+        "explain /tmp/project /tmp/other",
+        "explain /tmp/project --cisco-mode",
+        "explain /tmp/project --cisco-mode deep",
+        "explain --json --json /tmp/project",
+        "explain /tmp/project --home /tmp/elsewhere",
+        "explain --guard-home /tmp/elsewhere /tmp/project",
+        "explain /tmp/project --workspace /tmp/elsewhere",
+    ] {
+        assert!(!safe_hol_guard_arguments(&arguments(command)), "{command}");
+    }
+}
+
+#[test]
 fn runtime_posture_reads_quietly_and_help_follows_the_parser_down() {
     for command in [
         // `runtime` prints the executables configured MCP servers would launch

@@ -35694,6 +35694,91 @@
       "expect": "allow"
     },
     {
+      "id": "guard-explain-local-path",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard explain ${WORKTREE}/src/index.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "guard-explain-local-path-json",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard explain --json ${WORKTREE}/src/index.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "guard-explain-inventory-artifact",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard explain install-connect"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "guard-explain-cisco-mode-before-target",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard explain --cisco-mode off ${WORKTREE}"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "guard-explain-home-override-stays-reviewed",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "hol-guard explain ${WORKTREE}/src/index.ts --home ${SCRATCH}"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "guard-approvals-json-before-list",
       "fix_area": "shell",
       "harnesses": [

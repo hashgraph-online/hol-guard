@@ -41,6 +41,14 @@
 //! turned on their order would pause the second spelling of a command it had
 //! already proved read-only.
 //!
+//! `hol-guard explain <target>` is admitted with it (`artifact_explanation`).
+//! It prints what Guard already knows about one inventory artifact, or scans
+//! one local path and reports the scan's own summary: scores, ecosystems,
+//! package names, finding titles and severity counts, never the target's
+//! bytes. It writes nothing to the local store, and the optional
+//! `--cisco-mode` selector only decides whether that scan may add Cisco's
+//! offline evidence.
+//!
 //! `hol-guard runtime` and `hol-guard runtime posture` print the executables
 //! the configured MCP servers would launch and the advisory coverage Guard
 //! already holds for them. Nothing is started, no Cloud call is made and no
@@ -147,7 +155,45 @@ pub(super) fn safe_hol_guard_arguments(arguments: &[String]) -> bool {
         || command_inspection(&words)
         || approval_inspection(&words)
         || record_inspection(&words)
+        || artifact_explanation(&words)
         || posture_inspection(&words)
+}
+
+/// `hol-guard explain <target>` prints the evidence Guard already holds for
+/// one inventory artifact, or scans one local path and reports what the scan
+/// found about it: scores, detected ecosystems, package names, finding titles
+/// and severity counts. The payload never carries the target's own bytes, and
+/// nothing in the local store is written.
+///
+/// `--cisco-mode` only chooses whether that scan may add Cisco's offline
+/// evidence, so it is admitted beside the target. `--json` is lifted out
+/// before the path is compared, as it is for the other readers here, so
+/// neither flag has to be written last. Every root override (`--home`,
+/// `--guard-home`, `--workspace`) stays under review: this proof covers the
+/// evidence Guard holds for this home, not for one a flag names.
+fn artifact_explanation(words: &[&str]) -> bool {
+    let json_flags = words.iter().filter(|word| **word == "--json").count();
+    let rest: Vec<&str> = words
+        .iter()
+        .copied()
+        .filter(|word| *word != "--json")
+        .collect();
+    json_flags <= 1
+        && match rest.as_slice() {
+            ["explain", target] => explained_target(target),
+            ["explain", target, "--cisco-mode", mode]
+            | ["explain", "--cisco-mode", mode, target] => {
+                explained_target(target) && matches!(*mode, "auto" | "on" | "off")
+            }
+            _ => false,
+        }
+}
+
+/// The single artifact `explain` reads: an inventory id or a local path. A
+/// leading dash is refused so the target can never be read as an option the
+/// shapes above did not admit.
+fn explained_target(target: &str) -> bool {
+    !target.starts_with('-') && inspected_text(target)
 }
 
 /// `repair --dry-run`, the recovery path's own preview: every repair step
