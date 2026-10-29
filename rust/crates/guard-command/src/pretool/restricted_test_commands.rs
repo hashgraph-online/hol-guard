@@ -449,6 +449,11 @@ fn node_tool_mode(executable: &str, arguments: &[String]) -> Option<ToolMode> {
     let (name, rest) = match (executable, arguments) {
         // A local-bin runner names the tool, and `node` names the entrypoint
         // file the tool published, so each is read back to the tool's own name.
+        // `--no-install` only refuses to fetch what is missing, so the route
+        // steps over it and this reading does too.
+        ("bunx" | "npx", [flag, tool, rest @ ..]) if flag == "--no-install" => {
+            (tool.as_str(), rest)
+        }
         ("bunx" | "npx", [tool, rest @ ..]) => (tool.as_str(), rest),
         ("node" | "nodejs", [entry, rest @ ..]) => (entry_tool(entry), rest),
         ("bunx" | "npx" | "node" | "nodejs", []) => return None,
@@ -575,8 +580,12 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
     };
     let mode = node_tool_mode(executable, arguments);
     let manager = matches!(executable, "bun" | "npm" | "pnpm" | "yarn");
-    if mode == Some(ToolMode::Build)
-        || (manager && manager_script_task(executable, arguments) == Some("build"))
+    // The sink refuses a write or a chain in every mode, so a build carrying
+    // one is left to ordinary review rather than sent to a route that would
+    // only turn it away.
+    if (mode == Some(ToolMode::Build)
+        || (manager && manager_script_task(executable, arguments) == Some("build")))
+        && !writes_or_chains(arguments)
     {
         return Some("native_node_build_output_containment_required");
     }

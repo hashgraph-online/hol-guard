@@ -87,6 +87,10 @@ fn admission_and_the_route_read_one_tool_table() {
             Some(ToolMode::Report),
         ),
         ("npx vite build", Some(ToolMode::Build)),
+        // `--no-install` only refuses to fetch a missing tool, so it names no
+        // tool and both sides step over it.
+        ("npx --no-install eslint src", Some(ToolMode::Report)),
+        ("bunx --no-install vite build", Some(ToolMode::Build)),
         (
             "node node_modules/vite/bin/vite.js build",
             Some(ToolMode::Build),
@@ -97,6 +101,10 @@ fn admission_and_the_route_read_one_tool_table() {
         ("npx prettier .", None),
         ("npx eslint src --fix", None),
         ("npx rimraf dist", None),
+        // A build that writes or chains is one the sink turns away in every
+        // mode, so it is not admitted to containment either.
+        ("npx vite build -w", None),
+        ("npx vite build --output-file dist/log", None),
     ] {
         let words: Vec<String> = command.split(' ').map(str::to_owned).collect();
         let routed = match node_tool_route(&words, None, false) {
