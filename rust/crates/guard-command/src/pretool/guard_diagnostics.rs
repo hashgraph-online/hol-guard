@@ -142,7 +142,7 @@ fn cwd_shadows_launcher(cwd: &Path) -> bool {
 /// drops the read-only admission the bare name gets, so every such wait
 /// raised a second approval row for the row it was already waiting on.
 ///
-/// Neither the install path nor its permissions prove what the file is —
+/// Neither the install path nor its permissions prove what the file is --
 /// every one of those directories is writable by the account the agent runs
 /// as. What bounds them is Guard's own floor: a command that writes a path
 /// [`names_guard_location`](super::guard_names::names_guard_location)
@@ -151,9 +151,20 @@ fn cwd_shadows_launcher(cwd: &Path) -> bool {
 /// spellings. That is the same bound the bare name has always rested on, and
 /// it stops at the same place: a write Guard never reviews is outside it.
 ///
+/// Two spellings sit outside that bound, so they are refused before the
+/// location screen reads them. A relative path resolves against the working
+/// directory, which the agent fills with writes that name no Guard location
+/// at all -- a clone, an unpacked archive, a generated `bin`. An absolute
+/// path inside the working directory is the same file reached the long way
+/// round. `bin/hol-guard status` and `<workspace>/bin/hol-guard status` would
+/// otherwise both run repository content with no review, which is why the
+/// bare-name proof already refuses a launcher it can see in the working
+/// directory ([`cwd_shadows_launcher`]). A `..` component is refused with
+/// them: an install is never spelled by walking back out of somewhere.
+///
 /// [`safe_hol_guard_arguments`] still decides which subcommands the
 /// admission covers, so the control surface keeps its review.
-pub(super) fn guard_install_executable(executable: &str) -> bool {
+pub(super) fn guard_install_executable(executable: &str, context: super::PathContext<'_>) -> bool {
     // The same spelling the admission arm dispatches on, so a name that could
     // not reach that arm never pays for the walk below.
     let basename = super::executable_basename(executable).to_ascii_lowercase();
@@ -162,10 +173,43 @@ pub(super) fn guard_install_executable(executable: &str) -> bool {
         .or_else(|| basename.strip_suffix(".cmd"))
         .unwrap_or(&basename);
     name == "hol-guard"
+        && anchored_outside_workspace(executable, context)
         && super::guard_names::names_guard_location(
             executable,
             &super::guard_names::Moved::default(),
         )
+}
+
+/// Whether `executable` names a fixed place on the host rather than one the
+/// working directory supplies. `~` is expanded, because the shell expands it
+/// before the lookup; every other spelling is read as written, since this
+/// screen proves where the word points, not what is on disk there.
+fn anchored_outside_workspace(executable: &str, context: super::PathContext<'_>) -> bool {
+    let spelled = executable.replace('\\', "/");
+    let Some(cwd) = context.cwd.filter(|cwd| Path::new(cwd).is_absolute()) else {
+        return false;
+    };
+    let tilde_rest = spelled.strip_prefix("~/").map(str::to_owned);
+    let spelled = match tilde_rest {
+        Some(rest) => match context.home_dir {
+            Some(home) if Path::new(home).is_absolute() => {
+                format!("{}/{rest}", home.replace('\\', "/").trim_end_matches('/'))
+            }
+            _ => return false,
+        },
+        None => spelled,
+    };
+    let absolute = spelled.starts_with('/')
+        || matches!(spelled.as_bytes(), [drive, b':', b'/', ..] if drive.is_ascii_alphabetic());
+    if !absolute || spelled.split('/').any(|component| component == "..") {
+        return false;
+    }
+    let lowered = spelled.to_ascii_lowercase();
+    let workspace = cwd
+        .replace('\\', "/")
+        .trim_end_matches('/')
+        .to_ascii_lowercase();
+    !lowered.starts_with(&format!("{workspace}/"))
 }
 
 pub(super) fn safe_hol_guard_arguments(arguments: &[String]) -> bool {

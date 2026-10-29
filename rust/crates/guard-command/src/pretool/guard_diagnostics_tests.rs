@@ -507,27 +507,58 @@ fn working_directory_launcher_or_unknown_cwd_keeps_review() {
 
 #[test]
 fn an_installed_guard_program_names_the_launcher_and_a_stray_file_does_not() {
+    let context = super::super::PathContext {
+        home_dir: Some("/Users/u"),
+        cwd: Some("/Users/u/projects/app"),
+        ..Default::default()
+    };
     // The spellings real waits arrive with: the desktop bundle, Guard's own
     // home, and the virtual environment Guard was installed into.
     for executable in [
         "/Applications/HOL Guard.app/Contents/MacOS/hol-guard",
         "/Users/u/.hol-guard/bin/hol-guard",
+        "~/.hol-guard/bin/hol-guard",
         "/Users/u/work/venv/bin/hol-guard",
         "/opt/homebrew/bin/hol-guard",
         "C:\\Program Files\\HOL Guard\\hol-guard.exe",
     ] {
-        assert!(super::guard_install_executable(executable), "{executable}");
+        assert!(
+            super::guard_install_executable(executable, context),
+            "{executable}"
+        );
     }
     for executable in [
         // A file a session leaves somewhere of its own is not an install.
         "/tmp/stage/hol-guard",
         "/Users/u/projects/hol-guard-pr-12/hol-guard",
         "./hol-guard",
+        // A relative spelling resolves against the directory the agent
+        // writes, so a `bin` a clone or an archive left there would run
+        // without review.
+        "bin/hol-guard",
+        "./bin/hol-guard",
+        "scripts/hol-guard",
+        "tools/hol-guard.exe",
+        // The same file reached by its absolute spelling inside the
+        // workspace, and by walking back out of one.
+        "/Users/u/projects/app/bin/hol-guard",
+        "/Users/u/projects/app/vendor/opt/hol-guard",
+        "/Users/u/projects/app/../app/bin/hol-guard",
+        "~/projects/app/bin/hol-guard",
         // The desktop application itself is not the read-only CLI.
         "/Applications/HOL Guard.app/Contents/MacOS/hol-guard-desktop",
         // The bare name reaches the admission arm without this screen.
         "hol-guard",
     ] {
-        assert!(!super::guard_install_executable(executable), "{executable}");
+        assert!(
+            !super::guard_install_executable(executable, context),
+            "{executable}"
+        );
     }
+    // Without a working directory to place the spelling against, nothing is
+    // anchored, so every path keeps its review.
+    assert!(!super::guard_install_executable(
+        "/opt/homebrew/bin/hol-guard",
+        super::super::PathContext::default()
+    ));
 }
