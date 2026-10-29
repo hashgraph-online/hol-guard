@@ -115,6 +115,11 @@ def windows(monkeypatch):
     """Install the resident's answer for a run, and report what it was asked."""
     monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.setattr(restricted_node_tool, "_normalized_command", tuple)
+    # Where a Vite config says the build writes is native authority's reading,
+    # tested there (`vite_output_tests.rs`). These fixtures carry no config, so
+    # the answer for them is the one below, and the staging the resident does
+    # is what these tests are about.
+    monkeypatch.setattr(transport, "restricted_native", lambda *_: None)
 
     def install(route: dict[str, object] | RestrictedPytestError) -> _Resident:
         resident = _Resident(route)

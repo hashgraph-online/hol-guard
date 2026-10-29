@@ -31,8 +31,6 @@ use super::super::PathContext;
 
 #[path = "bun_package_entry.rs"]
 mod bun_package_entry;
-#[path = "package_script_vite.rs"]
-mod package_script_vite;
 
 #[cfg(unix)]
 const PACKAGE_TEST: &str = "native_package_test_readonly_containment_required";
@@ -252,7 +250,7 @@ fn build_output_allowed(arguments: &[String], roots: Option<(&Path, &Path)>) -> 
         // literal output. A config that names an output the sink cannot
         // verify must not take the narrow receipt.
         return roots.is_none_or(|(directory, workspace)| {
-            package_script_vite::vite_config_output_is_verifiable(directory, workspace)
+            crate::vite_output::config_output_is_verifiable(directory, workspace)
         });
     };
     let output = Path::new(output);

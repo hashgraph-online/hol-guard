@@ -571,3 +571,6 @@ mod verified_read_decision_tests;
 pub mod verified_read_plan;
 #[cfg(test)]
 mod verified_read_plan_tests;
+pub mod vite_output;
+#[cfg(test)]
+mod vite_output_tests;

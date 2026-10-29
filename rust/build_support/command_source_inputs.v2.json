@@ -458,7 +458,6 @@
       "src/pretool/package_directory_flags.rs",
       "src/pretool/package_directory_flags_tests.rs",
       "src/pretool/package_script_route.rs",
-      "src/pretool/package_script_vite.rs",
       "src/pretool/package_scripts_disabled.rs",
       "src/pretool/package_source_reads.rs",
       "src/pretool/path_trust.rs",
@@ -790,6 +789,8 @@
       "src/supply_chain_support.rs",
       "src/target_identities.rs",
       "src/typescript_launch_evidence.rs",
+      "src/vite_output.rs",
+      "src/vite_output_tests.rs",
       "src/workspace_inventory.rs",
       "src/workspace_roots.rs"
     ]
