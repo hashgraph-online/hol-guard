@@ -899,6 +899,22 @@
    "body": "40044ed07203"
   },
   {
+   "verdict": "posix-primitive",
+   "note": "There is no parent-process reparent check to make, so `original_parent` is zero; the request is still parsed and refused before any decode, and the decode arm reports the unsupported platform.",
+   "file": "rust/crates/guard-runtime/src/content_decode.rs",
+   "item": "fn evaluate_content_decode_bytes -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "2a7c910f6277"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Contained content decoding does not run off Unix; the outcome is `content_containment_unavailable` and nothing is decoded.",
+   "file": "rust/crates/guard-runtime/src/content_decode.rs",
+   "item": "fn contained_decode( _request: &ContentDecodeRequestV1, _raw: &[u8], _codings: &[ContentCoding], _caps: &ContentCodingCaps, _original_parent: i32, _started: Instant, _counters: &mut ContentDecodeCounters, ) -> Result<Vec<u8>, ContentDecodeError>",
+   "cfg": "not(unix)",
+   "body": "8ebb1bb3d55c"
+  },
+  {
    "verdict": "other-platform",
    "note": "Windows reads the file through its own private-open arm; elsewhere `None` refuses the read rather than reading a file whose privacy is unproven.",
    "file": "rust/crates/guard-runtime/src/daemon_policy_authority.rs",
