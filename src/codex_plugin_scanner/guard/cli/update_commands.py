@@ -1434,6 +1434,41 @@ def _shell_command(command: list[str]) -> str:
     return shlex.join(command)
 
 
+def _account_free_path(path: str) -> str:
+    """``path`` with the user's home directory written as ``~``.
+
+    The install-surface diagnostics are facts a reader pastes into an issue or
+    a support request, and an install under the home directory spells out the
+    account name of whoever ran it. Unlike the manual install command in the
+    native runtime report, nothing here is meant to be run, so there is no
+    shell that has to expand the result and the same spelling works on every
+    platform: ``~`` names the home directory to a reader without naming the
+    account. A path outside the home directory, and a host that will not name
+    a home at all, are left exactly as they are.
+    """
+
+    if not path:
+        return path
+    try:
+        home = str(Path.home())
+    except Exception:
+        return path
+    home = home.rstrip("/\\")
+    if not home:
+        return path
+    # Windows paths differ from their home prefix in case and separator alone,
+    # so compare normalised and slice the original.
+    normalised = os.path.normcase(path)
+    normalised_home = os.path.normcase(home)
+    if normalised == normalised_home:
+        return "~"
+    for separator in ("/", "\\"):
+        prefix = normalised_home + os.path.normcase(separator)
+        if normalised.startswith(prefix):
+            return "~" + separator + path[len(prefix) :]
+    return path
+
+
 def _binary_diagnostics(command: list[str], installer: str) -> dict[str, object]:
     resolved_binary = shutil.which("hol-guard")
     installer_binary = command[0] if command else ""
@@ -1450,9 +1485,11 @@ def _binary_diagnostics(command: list[str], installer: str) -> dict[str, object]
     else:
         path_status = "path_mismatch"
     return {
-        "resolved_hol_guard": resolved_binary,
-        "installer_binary": installer_binary,
-        "expected_script_dir": str(expected_script_dir) if expected_script_dir is not None else None,
+        "resolved_hol_guard": _account_free_path(resolved_binary) if resolved_binary is not None else None,
+        "installer_binary": _account_free_path(installer_binary),
+        "expected_script_dir": (
+            _account_free_path(str(expected_script_dir)) if expected_script_dir is not None else None
+        ),
         "path_status": path_status,
     }
 
@@ -1474,7 +1511,7 @@ def build_guard_install_surface_payload() -> dict[str, object]:
         return {
             "installer": "desktop",
             "binary_diagnostics": {
-                "resolved_hol_guard": str(Path(sys.executable).resolve()),
+                "resolved_hol_guard": _account_free_path(str(Path(sys.executable).resolve())),
                 "installer_binary": None,
                 "expected_script_dir": None,
                 "path_status": "bundled",
