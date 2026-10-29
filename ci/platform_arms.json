@@ -1,6 +1,6 @@
 {
  "schema_version": 1,
- "comment": "Every non-Unix behaviour arm in rust/crates/*/src \u2014 `#[cfg(..)]` attribute or `cfg!(..)` expression \u2014 with the verdict a reviewer gave it. scripts/ci/platform_arm_inventory.py keeps this list honest.",
+ "comment": "Every non-Unix behaviour arm in rust/crates/*/src — `#[cfg(..)]` attribute or `cfg!(..)` expression — with the verdict a reviewer gave it. scripts/ci/platform_arm_inventory.py keeps this list honest.",
  "arms": [
   {
    "file": "rust/crates/guard-command/src/adapters/hook/hook_adapter_paths.rs",
@@ -342,9 +342,9 @@
    "file": "rust/crates/guard-command/src/pretool/package_script_route.rs",
    "item": "fn staged_tool_entries(program: &str, arguments: &[String]) -> Option<&'static [&'static str]>",
    "verdict": "windows-equivalent",
-   "note": "Resolves the staged tool entry by name the same way the Unix arm does; the entry names are platform-neutral.",
+   "note": "Resolves the staged tool entry by name the same way the Unix arm does, now through the shared tool table; the entry names are platform-neutral.",
    "cfg": "not(unix)",
-   "body": "6621570bd414"
+   "body": "db39b3c2f238"
   },
   {
    "file": "rust/crates/guard-command/src/pretool/package_script_route.rs",

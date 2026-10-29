@@ -406,10 +406,7 @@ fn tool_script(
     }
     let tokens = split_with(PLAIN_LEXER, scripts.get(task)?.as_str()?).ok()?;
     let (tool, arguments) = tokens.split_first()?;
-    let Some((_, entries, mode)) = crate::contained_node_tool::supported_tool(tool, arguments)
-    else {
-        return None;
-    };
+    let (_, entries, mode) = crate::contained_node_tool::supported_tool(tool, arguments)?;
     let build = mode == crate::contained_node_tool::ToolMode::Build;
     let reason = if build { NODE_BUILD } else { NODE_TOOL };
     if build && !build_output_allowed(arguments, Some((directory, workspace))) {

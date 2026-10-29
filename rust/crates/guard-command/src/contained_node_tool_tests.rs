@@ -143,8 +143,8 @@ fn an_exec_spelling_without_a_runner_names_the_missing_runner() {
 
 #[test]
 fn node_started_on_a_published_entrypoint_resolves_the_tool_it_is() {
-    let route = route(&["node", "node_modules/typescript/bin/tsc", "--noEmit"]);
-    match &route {
+    let routed = route(&["node", "node_modules/typescript/bin/tsc", "--noEmit"]);
+    match &routed {
         NodeToolRoute::Tool {
             name,
             expected_entry,
