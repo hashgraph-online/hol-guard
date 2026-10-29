@@ -20,6 +20,10 @@ Advanced distribution paths are available when you need them:
 - `install_source: local` is the explicit dogfood path for `uses: ./action` inside the source repo.
 - `ghcr.io/hashgraph-online/hol-guard` is the container distribution for enterprise runners that prefer a reviewed OCI image over runtime package installation.
 
+## Find scanned plugins
+
+Public plugin repositories can be listed in the [HOL Plugins marketplace](https://hol.org/registry/plugins?utm_source=hol_marketplace&utm_medium=plugins_github_action). Each listing shows its latest scan, trust evidence and install steps for every supported runtime. Claiming your own listing is free.
+
 ## Usage
 
 ```yaml
