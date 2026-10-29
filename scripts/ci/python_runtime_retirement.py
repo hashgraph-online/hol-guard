@@ -10,6 +10,7 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import re
 import tarfile
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from pathlib import Path, PurePosixPath
@@ -108,6 +109,42 @@ def _literal_string(node: ast.AST) -> str | None:
     return None
 
 
+def _string_texts(node: ast.AST) -> list[str]:
+    """Every string this node certainly produces.
+
+    A module name can be spelled across a concatenation, so the value a node
+    evaluates to is what names it, not the text of any one fragment. An
+    f-string's holes break a name, so only its constant runs count.
+    """
+    folded = _literal_string(node)
+    if folded is not None:
+        return [folded]
+    if isinstance(node, ast.JoinedStr):
+        return [
+            value.value for value in node.values if isinstance(value, ast.Constant) and isinstance(value.value, str)
+        ]
+    return []
+
+
+def _code_text(node: ast.AST) -> str | None:
+    """The code a `-c` argument carries, with each interpolation left as a hole."""
+    literal = _literal_string(node)
+    if literal is not None:
+        return literal
+    if not isinstance(node, ast.JoinedStr):
+        return None
+    parts: list[str] = []
+    for value in node.values:
+        if isinstance(value, ast.Constant) and isinstance(value.value, str):
+            parts.append(value.value)
+            continue
+        # What an interpolation produces is not known here. `None` stands in for
+        # it so the statements around it still parse.
+        parts.append("None")
+    text = "".join(parts)
+    return text if len(text) <= 4096 else None
+
+
 def _retired_flag_reads(tree: ast.AST, name: str, flags: set[str]) -> list[str]:
     """Reject environment reads of removed runtime flags (writes stay legal)."""
 
@@ -145,6 +182,7 @@ def _source_violations(text: str, name: str, modules: set[str], symbols: set[str
     else:
         parts = parts[:-1]
     failures: list[str] = []
+    named: set[tuple[int, str]] = set()
     dynamic_aliases = {"import_module", "__import__"}
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module in {"importlib", "builtins"}:
@@ -174,13 +212,17 @@ def _source_violations(text: str, name: str, modules: set[str], symbols: set[str
             target = _literal_string(node.args[0]) if dynamic else None
             if target is not None and _matches_module(target, modules):
                 failures.append(f"{name}:{node.lineno}: dynamically imports retired module {target}")
-        elif shipped and isinstance(node, ast.Constant) and isinstance(node.value, str):
+        elif shipped:
             # A shim, a relaunch and a manifest all name their module in a
-            # string, which no import graph reaches. A test may name a retired
+            # string, which no import graph reaches. The name is read from the
+            # value the node produces, so a concatenation or an escape spells it
+            # as plainly as a single literal does. A test may name a retired
             # module to prove it is gone, so only shipped source counts.
-            for module in sorted(modules):
-                if module in node.value:
-                    failures.append(f"{name}:{node.lineno}: names retired module {module} in a string")
+            for text in _string_texts(node):
+                for module in sorted(modules):
+                    if module in text and (node.lineno, module) not in named:
+                        named.add((node.lineno, module))
+                        failures.append(f"{name}:{node.lineno}: names retired module {module} in a string")
     return failures
 
 
@@ -223,6 +265,9 @@ def _removed_runtime_flags(contract: Mapping[str, object]) -> set[str]:
     return set(flags)
 
 
+_ESCAPED_TEXT = re.compile(r"\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|N\{)")
+
+
 def _retired_content_validator(records: list[dict[str, object]], flags: set[str]) -> Callable[[str, bytes], None]:
     modules = {str(record["module"]) for record in records}
     symbols = {symbol for record in records for symbol in record["forbidden_symbols"]}
@@ -233,7 +278,11 @@ def _retired_content_validator(records: list[dict[str, object]], flags: set[str]
         if hashlib.sha256(data).hexdigest() in digests:
             raise RuntimeError(f"copied retired Python implementation: {name}")
         text = data.decode("utf-8-sig")
-        if not any(token in text for token in symbols | basenames | flags | {"import"}):
+        # An escape sequence spells a name the raw text does not carry, so a file
+        # that escapes anything is parsed rather than skipped on its text alone.
+        if _ESCAPED_TEXT.search(text) is None and not any(
+            token in text for token in symbols | basenames | flags | {"import"}
+        ):
             return
         failures = _source_violations(text, name, modules, symbols, shipped=shipped)
         if flags:
@@ -441,13 +490,58 @@ def _dotted_module_name(value: str) -> bool:
     return len(parts) > 1 and all(part.isidentifier() for part in parts)
 
 
+def _code_imports(text: str) -> Iterator[str]:
+    """Each module the code of a `-c` launch imports."""
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                yield alias.name
+        elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
+            yield node.module
+
+
+def _string_bindings(tree: ast.AST) -> dict[str, ast.expr]:
+    """Each name a module binds exactly once to a string.
+
+    A launcher is usually built in one statement and run in the next, so the
+    argument the command carries is a name rather than the string itself. A
+    name bound more than once is dropped: which string reaches the launcher is
+    not something reading one file can decide.
+    """
+    bindings: dict[str, ast.expr] = {}
+    rebound: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        for target in node.targets:
+            if not isinstance(target, ast.Name):
+                continue
+            if target.id in bindings or target.id in rebound:
+                bindings.pop(target.id, None)
+                rebound.add(target.id)
+            elif _code_text(node.value) is not None:
+                bindings[target.id] = node.value
+    return bindings
+
+
 def _launch_targets(tree: ast.AST, packages: set[str]) -> Iterator[tuple[int, str]]:
-    """Module names a `-m` or `-c` launch sequence carries as plain strings.
+    """Module names a `-m` or `-c` launch sequence carries.
 
     A shim, a relaunch and a bootstrap all name their module in an argument
-    list rather than in an import, so the import graph never reaches it. The
-    module still has to be installed when the command runs.
+    list rather than in an import, so the import graph never reaches it. A
+    `-c` bootstrap names it inside the code it passes, which is the same
+    stranded module one step further in. Either way the module has to be
+    installed when the command runs.
     """
+    bindings = _string_bindings(tree)
+
+    def resolve(element: ast.expr) -> ast.expr:
+        return bindings.get(element.id, element) if isinstance(element, ast.Name) else element
+
     for node in ast.walk(tree):
         if isinstance(node, (ast.List, ast.Tuple)):
             elements: Sequence[ast.expr] = node.elts
@@ -455,14 +549,22 @@ def _launch_targets(tree: ast.AST, packages: set[str]) -> Iterator[tuple[int, st
             elements = node.args
         else:
             continue
-        literals = [_literal_string(element) for element in elements]
+        resolved = [resolve(element) for element in elements]
+        literals = [_literal_string(element) for element in resolved]
         if not any(literal in {"-m", "-c"} for literal in literals):
             continue
         for element, literal in zip(elements, literals, strict=True):
-            if literal is None or not _dotted_module_name(literal):
-                continue
-            if literal.split(".")[0] in packages:
+            if literal is not None and _dotted_module_name(literal) and literal.split(".")[0] in packages:
                 yield element.lineno, literal
+        if "-c" not in literals:
+            continue
+        for element, code in zip(elements, resolved, strict=True):
+            text = _code_text(code)
+            if text is None:
+                continue
+            for module in _code_imports(text):
+                if module.split(".")[0] in packages:
+                    yield element.lineno, module
 
 
 def validate_launcher_module_targets(root: Path, retired_modules: set[str]) -> None:

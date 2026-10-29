@@ -634,6 +634,64 @@ def test_launcher_screens_a_bootstrap_that_passes_the_module_after_dash_c(tmp_pa
         _validate(root, contract)
 
 
+def test_launcher_screens_the_code_a_bootstrap_passes_through_a_name(tmp_path: Path) -> None:
+    root, contract = _retired_oracle_repository(tmp_path)
+    package = _shipped_package(root)
+    # Guard's own relaunch builds its code in one statement, interpolates the
+    # package root into it, and passes the name to the command in the next.
+    (package / "bootstrap.py").write_text(
+        "def parts(root):\n"
+        "    code = (\n"
+        '        "import sys;"\n'
+        '        f"sys.path.insert(0, {str(root)!r});"\n'
+        '        "from codex_plugin_scanner.cli import main;"\n'
+        '        "raise SystemExit(main(sys.argv[1:]))"\n'
+        "    )\n"
+        '    return (executable, "-c", code, "guard")\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="launcher runs a module that does not exist"):
+        _validate(root, contract)
+
+
+def test_launcher_accepts_bootstrap_code_whose_module_the_wheel_ships(tmp_path: Path) -> None:
+    root, contract = _retired_oracle_repository(tmp_path)
+    package = _shipped_package(root)
+    (package / "cli.py").write_text("", encoding="utf-8")
+    (package / "bootstrap.py").write_text(
+        'CODE = "from codex_plugin_scanner.cli import main"\nARGV = [executable, "-c", CODE, "guard"]\n',
+        encoding="utf-8",
+    )
+
+    _validate(root, contract)
+
+
+def test_shipped_source_rejects_a_retired_module_spelled_across_a_concatenation(tmp_path: Path) -> None:
+    root, contract = _retired_oracle_repository(tmp_path)
+    _shipped_package(root)
+    prefix, _, basename = RETIRED_ORACLE.rpartition(".")
+    # Neither fragment names the module; the value the two of them produce does,
+    # and that is the name the interpreter would import.
+    (root / "src/codex_plugin_scanner/shim.py").write_text(f'TARGET = "{prefix}." + "{basename}"\n', encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="names retired module"):
+        _validate(root, contract)
+
+
+def test_shipped_source_rejects_a_retired_module_spelled_with_an_escape(tmp_path: Path) -> None:
+    root, contract = _retired_oracle_repository(tmp_path)
+    _shipped_package(root)
+    basename = RETIRED_ORACLE.rpartition(".")[2]
+    escaped = RETIRED_ORACLE.replace(basename, f"\\x{ord(basename[0]):02x}{basename[1:]}")
+    # The file carries no import and no plain basename, so only the decoded
+    # value of the string says which module this would load.
+    (root / "src/codex_plugin_scanner/shim.py").write_text(f'TARGET = "{escaped}"\n', encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="names retired module"):
+        _validate(root, contract)
+
+
 def test_contribution_rejects_a_retired_detector_module(tmp_path: Path) -> None:
     root, contract = _retired_oracle_repository(tmp_path)
     _shipped_package(root)
