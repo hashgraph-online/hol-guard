@@ -37,7 +37,7 @@ def test_add_admits_the_repository_holding_the_current_folder(tmp_path: Path, mo
 
     assert code == 0
     payload = json.loads(output)
-    assert payload["added"] is True and payload["queued"] is True
+    assert payload["added"] is True and payload["run_id"]
     assert payload["root"] == str(repo.resolve())
     [worktree] = list_worktrees(store)
     assert worktree["root"] == str(repo.resolve())
@@ -76,6 +76,59 @@ def test_list_names_each_codebase_and_points_to_add_when_empty(tmp_path: Path, m
 
     assert code == 0
     assert f"{tmp_path.resolve()}  (checking)" in output
+
+
+def test_add_again_reports_the_codebase_without_queueing_another_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    snapshots(monkeypatch, worker, STAT)
+    store = GuardStore(tmp_path / "home")
+    run(store, ["add", str(tmp_path)])
+    [before] = list_worktrees(store)
+
+    code, output = run(store, ["add", str(tmp_path)])
+
+    assert code == 0
+    assert output.startswith(f"Guard already checks {tmp_path.resolve()}.")
+    [after] = list_worktrees(store)
+    assert after["dirty_generation"] == before["dirty_generation"]
+
+
+def test_add_reports_the_resolved_folder_it_admitted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    snapshots(monkeypatch, worker, STAT)
+    real = tmp_path / "real"
+    real.mkdir()
+    (tmp_path / "link").symlink_to(real)
+    store = GuardStore(tmp_path / "home")
+
+    payload = json.loads(run(store, ["add", str(tmp_path / "link"), "--json"])[1])
+
+    assert payload["root"] == str(real.resolve()) == list_worktrees(store)[0]["root"]
+
+
+def test_options_before_the_subcommand_are_kept() -> None:
+    parser = _build_parser("hol-guard", program_mode="combined")
+
+    before = parser.parse_args(["guard", "codebases", "--home", "/x", "--json", "add", "/repo"])
+    after = parser.parse_args(["guard", "codebases", "list", "--home", "/y", "--json"])
+    neither = parser.parse_args(["guard", "codebases", "list"])
+
+    assert (before.home, before.json, before.path) == ("/x", True, "/repo")
+    assert (after.home, after.json) == ("/y", True)
+    assert (neither.home, neither.json) == (None, False)
+
+
+def test_list_shows_a_failed_check_as_failed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    snapshots(monkeypatch, worker, STAT)
+    store = GuardStore(tmp_path / "home")
+    run(store, ["add", str(tmp_path)])
+    with store._connect() as connection:
+        connection.execute("update workspace_assessment_runs set state = 'failed', finished_at_ms = created_at_ms")
+
+    payload = json.loads(run(store, ["list", "--json"])[1])
+
+    assert [item["check_state"] for item in payload["codebases"]] == ["last check failed"]
+    assert f"{tmp_path.resolve()}  (last check failed)" in run(store, ["list"])[1]
 
 
 def test_default_root_falls_back_to_the_folder_outside_a_repository(tmp_path: Path) -> None:

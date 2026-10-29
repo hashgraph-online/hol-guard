@@ -46,11 +46,16 @@ def configure_codebases_parser(guard_subparsers: argparse._SubParsersAction[argp
         nargs="?",
         help="Folder to check (default: the Git repository holding the current folder, or the current folder)",
     )
-    _add_guard_common_args(add_parser)
-    add_parser.add_argument("--json", action="store_true")
     list_parser = subparsers.add_parser("list", help="List the codebases Guard checks on this machine")
-    _add_guard_common_args(list_parser)
-    list_parser.add_argument("--json", action="store_true")
+    for subparser in (add_parser, list_parser):
+        options = len(subparser._actions)
+        _add_guard_common_args(subparser)
+        subparser.add_argument("--json", action="store_true")
+        # The options are accepted on either side of the subcommand. argparse copies every
+        # subparser default over the parent's namespace, so an option given before
+        # `add`/`list` would be reset unless the repeated options leave absent values unset.
+        for action in subparser._actions[options:]:
+            action.default = argparse.SUPPRESS
 
 
 def default_codebase_root(start: Path) -> Path:
@@ -73,38 +78,83 @@ def _checks_off_note(config: GuardConfig | None) -> str | None:
     return "Background checks are turned off in Guard settings (workspace_assessment_enabled), so none will run."
 
 
+def _admitted(store: GuardStore, root: Path) -> dict[str, object] | None:
+    from ..workspace_assessment_reads import list_worktrees
+
+    for item in list_worktrees(store):
+        if item["root"] == str(root) and not item["paused"]:
+            return item
+    return None
+
+
 def _add(args: argparse.Namespace, store: GuardStore, config: GuardConfig | None, stream: TextIO | None) -> int:
     from ..workspace_assessment_worker import WorkspaceAdmissionError, admit_workspace
 
     as_json = bool(getattr(args, "json", False))
     raw = getattr(args, "path", None)
-    root = Path(raw).expanduser().absolute() if raw else default_codebase_root(Path.cwd())
-    try:
-        admitted = admit_workspace(store, str(root))
-    except WorkspaceAdmissionError as error:
-        message = _ADMISSION_ERRORS.get(error.code, f"Guard could not read that folder ({error.code}).")
-        _write(stream, {"added": False, "error": error.code, "message": message}, f"Error: {message}", as_json=as_json)
-        return 1
+    requested = Path(raw).expanduser().absolute() if raw else default_codebase_root(Path.cwd())
+    root = requested.resolve() if requested.exists() else requested
     note = _checks_off_note(config)
-    queued = admitted.get("run_id") is not None
-    lines = [
-        f"Added {root}." if queued else f"Guard already checks {root}; a check is waiting to run.",
+    follow_up = (
         "Guard checks it in the background on this machine. The result appears on the Codebases page "
-        "in Guard Cloud after the next sync (`hol-guard sync`).",
-    ]
+        "in Guard Cloud after the next sync (`hol-guard sync`)."
+    )
+    existing = _admitted(store, root)
+    if existing is not None:
+        # A repeat leaves the admission and its queue alone instead of queueing another check.
+        payload: dict[str, object] = {
+            "added": False,
+            "already_checked": True,
+            "root": str(root),
+            "codebase_key": existing["codebase_key"],
+            "worktree_key": existing["worktree_key"],
+        }
+        lines = [f"Guard already checks {root}.", follow_up]
+    else:
+        try:
+            admitted = admit_workspace(store, str(root))
+        except WorkspaceAdmissionError as error:
+            message = _ADMISSION_ERRORS.get(error.code, f"Guard could not read that folder ({error.code}).")
+            _write(
+                stream, {"added": False, "error": error.code, "message": message}, f"Error: {message}", as_json=as_json
+            )
+            return 1
+        payload = {"added": True, "already_checked": False, "root": str(root), **admitted}
+        lines = [f"Added {root}.", follow_up]
     if note:
         lines.append(note)
-    payload: dict[str, object] = {"added": True, "root": str(root), "queued": queued, **admitted}
-    if note:
         payload["warning"] = note
     _write(stream, payload, "\n".join(lines), as_json=as_json)
     return 0
 
 
-def _list(args: argparse.Namespace, store: GuardStore, config: GuardConfig | None, stream: TextIO | None) -> int:
-    from ..workspace_assessment_reads import list_worktrees
+_RUN_STATES: dict[str, str] = {
+    "queued": "checking",
+    "running": "checking",
+    "failed": "last check failed",
+    "partial": "partly checked",
+}
 
-    worktrees = list_worktrees(store)
+
+def _check_state(item: dict[str, object], latest: dict[str, object] | None) -> str:
+    if item["paused"]:
+        return "paused"
+    if latest is None:
+        return "waiting to check"
+    state = _RUN_STATES.get(str(latest.get("state")))
+    if state is not None:
+        return state
+    return "changed since last check" if item["stale"] else "up to date"
+
+
+def _list(args: argparse.Namespace, store: GuardStore, config: GuardConfig | None, stream: TextIO | None) -> int:
+    from ..workspace_assessment_reads import latest_runs, list_worktrees
+
+    latest = {(run["codebase_key"], run["worktree_key"]): run for run in latest_runs(store)}
+    worktrees = [
+        {**item, "check_state": _check_state(item, latest.get((item["codebase_key"], item["worktree_key"])))}
+        for item in list_worktrees(store)
+    ]
     note = _checks_off_note(config)
     payload: dict[str, object] = {"codebases": worktrees}
     if note:
@@ -112,10 +162,7 @@ def _list(args: argparse.Namespace, store: GuardStore, config: GuardConfig | Non
     if not worktrees:
         text = "Guard checks no codebases on this machine. Add one with `hol-guard codebases add` from its folder."
     else:
-        rows = []
-        for item in worktrees:
-            state = "paused" if item["paused"] else "checking" if item["stale"] else "up to date"
-            rows.append(f"  {item['root']}  ({state})")
+        rows = [f"  {item['root']}  ({item['check_state']})" for item in worktrees]
         text = "Codebases Guard checks on this machine:\n" + "\n".join(rows)
     if note:
         text += "\n" + note
