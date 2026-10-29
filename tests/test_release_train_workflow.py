@@ -384,7 +384,11 @@ def test_pull_request_alpha_is_an_admin_dispatch_from_main() -> None:
     pull_request_gate = gate[gate.index('if [[ -n "$PULL_REQUEST" ]]') : gate.index("case ")]
     authorize = jobs["authorize-pull-request-alpha"]
     script = (ROOT / "scripts" / "ci" / "authorize_pull_request_alpha.sh").read_text(encoding="utf-8")
-    source = "${{ needs.authorize-pull-request-alpha.outputs.source_sha || (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}"
+    source = (
+        "${{ needs.authorize-pull-request-alpha.outputs.source_sha || "
+        "(github.event_name == 'pull_request' && github.event.pull_request.head.sha) || "
+        "github.sha }}"
+    )
 
     assert inputs["pull_request"]["required"] is False
     assert inputs["pull_request"]["default"] == ""
