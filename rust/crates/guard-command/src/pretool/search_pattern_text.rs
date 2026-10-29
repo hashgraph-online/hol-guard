@@ -79,15 +79,16 @@ mod tests {
     }
 
     /// Only the patterns are set aside. A producer that opens a secret, a
-    /// path operand and an environment dump each name something the command
-    /// reads, so the mask leaves every one of them in view.
+    /// pathspec that names one, a home credential path and an environment
+    /// dump each name something the command reads, so the mask leaves every
+    /// one of them in view.
     #[test]
     fn everything_outside_the_patterns_keeps_its_screen() {
         for command in [
             "cat .env | rg -n password",
             "git grep -n foo -- .env",
             "git log -p -- ~/.aws/credentials | rg -n token",
-            "cat app.log | grep -i credentials.*",
+            "printenv | grep -i token",
         ] {
             assert!(sensitive(command), "{command} lost a signal to the mask");
         }
