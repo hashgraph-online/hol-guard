@@ -174,6 +174,14 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # `gh config set` changes only the CLI configuration under the home directory, which a
         # contained run cannot write.
         "neg-github-config-set",
+        # A Guard launcher spelled against the working directory, which a clone,
+        # an unpacked archive or a generated shim directory can fill: the
+        # command keeps its review, and a contained run reaches only the
+        # workspace copy, so whatever sits at that path runs with no host
+        # access and changes no enrolled home.
+        "neg-guard-relative-bin-launcher",
+        "neg-guard-relative-scripts-launcher",
+        "neg-guard-dot-relative-bin-launcher",
         # A listing below a hidden home directory: a contained run has no home access, so it
         # names nothing the home keeps there.
         "neg-ls-home-dot-glob",
