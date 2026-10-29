@@ -99,7 +99,6 @@ _POLICY_BUNDLE_FRESHNESS_REMEDIATION_REASONS = frozenset(
 )
 _POLICY_BUNDLE_VERSION_REMEDIATION_REASONS = frozenset(
     {
-        "bundle_version_downgrade",
         "invalid_bundle_version",
         "invalid_min_daemon_version",
         "unsupported_contract_version",
@@ -229,6 +228,12 @@ def policy_bundle_rejection_message(reason: str | None) -> str | None:
         return (
             "The policy bundle was not applied because its validity period is not current. "
             "Check the system clock. Sync again to fetch the current workspace policy."
+        )
+    if reason == "bundle_version_downgrade":
+        return (
+            "The policy bundle was not applied because it is older than, or conflicts with, "
+            "the policy this device already accepted. This device keeps the policy it already had. "
+            "Publish the policy again in Guard Cloud so it gets a newer version, then sync again."
         )
     if reason in _POLICY_BUNDLE_VERSION_REMEDIATION_REASONS:
         return (
