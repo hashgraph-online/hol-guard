@@ -22,8 +22,8 @@ _ROOT_RULE = "command.secret-blast-radius.op-75eb278d6a9fb4cf"
 _UNCLASSIFIED_RULE = "command.secret-blast-radius.unclassified"
 
 # Reviewed literal invocations: offline, and they write nothing. The root rule
-# accepts them as safe variants; the conservative unclassified fallback has no
-# safe variants, so it keeps review for them as for every invocation.
+# and the unclassified fallback both carry them as safe variants, so neither
+# leaves an effective segment; the action stays at the review floor.
 REVIEWED_LITERAL_COMMANDS: tuple[str, ...] = (
     "secret-blast-radius --harden",
     "secret-blast-radius --help",
@@ -63,7 +63,7 @@ def _supplementary_cases() -> list[dict[str, object]]:
     cases: list[dict[str, object]] = []
     for index, command in enumerate(REVIEWED_LITERAL_COMMANDS):
         cases.append(_case(f"literal-{index}-root", command, _ROOT_RULE, []))
-        cases.append(_case(f"literal-{index}-unclassified", command, _UNCLASSIFIED_RULE, [0]))
+        cases.append(_case(f"literal-{index}-unclassified", command, _UNCLASSIFIED_RULE, []))
     for index, command in enumerate(ROOT_REVIEW_COMMANDS):
         cases.append(_case(f"review-{index}-root", command, _ROOT_RULE, [0]))
         cases.append(_case(f"review-{index}-unclassified", command, _UNCLASSIFIED_RULE, [0]))
