@@ -245,26 +245,18 @@ def execute(
 
 
 def _detector_snapshot(root: Path, secret_key: str) -> WorkspaceSnapshot:
-    """Snapshot with the content detectors, dropping each one the runtime lacks.
+    """Snapshot with every content detector, or fail the run.
 
-    The run is then partial: coverage reports a dropped detector as not run.
+    The runtime is the one shipped beside this package and is accepted only at
+    the package's own version, so it carries every detector this release asks
+    for. A runtime that is missing one is a runtime this release never agreed
+    to use: the run fails with that detector's own reason instead of asking
+    again without it, which would have reported the check as not run and the
+    worktree as covered by the detectors that remained.
     """
 
-    scans = _CONTENT_SCANS
-    while True:
-        try:
-            return _content_snapshot(root, secret_key, scans)
-        except WorkspaceSnapshotError as error:
-            missing = next((scan for scan in scans if error.code == f"workspace_snapshot_{scan}_unavailable"), None)
-            if missing is None:
-                raise
-            scans = tuple(scan for scan in scans if scan != missing)
-
-
-def _content_snapshot(root: Path, secret_key: str, scans: tuple[str, ...]) -> WorkspaceSnapshot:
-    requested: dict[str, Any] = dict.fromkeys(scans, True)
-    if "secrets" in scans:
-        requested["secret_key"] = secret_key
+    requested: dict[str, Any] = dict.fromkeys(_CONTENT_SCANS, True)
+    requested["secret_key"] = secret_key
     return workspace_snapshot(root, mode="content", **requested)
 
 

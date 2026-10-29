@@ -333,6 +333,41 @@ def test_snapshot_failure_fails_the_run(tmp_path: Path, monkeypatch) -> None:
     assert (outcome.state, outcome.error_code) == ("failed", "workspace_snapshot_native_unavailable")
 
 
+def test_a_detector_the_runtime_lacks_fails_the_run(tmp_path: Path, monkeypatch) -> None:
+    """A missing detector ends the run; it is never dropped to keep going.
+
+    Dropping it would leave the worktree reported as covered by whatever the
+    runtime did carry, with one line of coverage saying the rest never ran.
+    """
+
+    store, claimed = queued_run(tmp_path)
+    asked: list[dict[str, object]] = []
+
+    def missing_secrets(root: Path, *, mode: str = "content", **requested: object):
+        asked.append(dict(requested))
+        raise native.WorkspaceSnapshotError("workspace_snapshot_secrets_unavailable")
+
+    monkeypatch.setattr(runner, "workspace_snapshot", missing_secrets)
+    outcome = runner.execute(store, None, claimed, clock=lambda: T0)
+    assert (outcome.state, outcome.error_code) == ("failed", "workspace_snapshot_secrets_unavailable")
+    assert len(asked) == 1, "the run asked again without the detector the runtime lacks"
+
+
+def test_the_snapshot_asks_for_every_content_detector(tmp_path: Path, monkeypatch) -> None:
+    store, claimed = queued_run(tmp_path)
+    asked: list[dict[str, object]] = []
+
+    def record(root: Path, *, mode: str = "content", **requested: object):
+        asked.append(dict(requested))
+        raise native.WorkspaceSnapshotError("workspace_snapshot_native_unavailable")
+
+    monkeypatch.setattr(runner, "workspace_snapshot", record)
+    runner.execute(store, None, claimed, clock=lambda: T0)
+    requested = asked[0]
+    assert all(requested.get(scan) is True for scan in runner._CONTENT_SCANS)
+    assert isinstance(requested.get("secret_key"), str)
+
+
 def test_partial_snapshot_and_missing_lockfile_report_partial_coverage() -> None:
     partial = replace(SNAPSHOT, coverage="partial", partial_reasons=("entry_limit",))
     payload = {"audit_status": "incomplete", "manifest_paths": ["package.json"], "lockfile_warnings": ["x"]}
