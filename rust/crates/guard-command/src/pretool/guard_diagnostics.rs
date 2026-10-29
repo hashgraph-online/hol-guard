@@ -169,8 +169,11 @@ fn cwd_shadows_launcher(cwd: &Path) -> bool {
 /// working directory, which the agent fills with writes that name no Guard
 /// location at all -- a clone, an unpacked archive, a generated `bin`. That
 /// is why the bare-name proof already refuses a launcher it can see in the
-/// working directory ([`cwd_shadows_launcher`]). A `..` component is refused
-/// with it: an install is never spelled by walking back out of somewhere.
+/// working directory ([`cwd_shadows_launcher`]). A component that names no
+/// directory of its own -- `..`, `.`, or the empty one a doubled separator
+/// leaves -- is refused with it: an install is never spelled by walking back
+/// out of somewhere, and the detour would otherwise reach a file inside the
+/// working directory without matching the prefix that refuses it.
 ///
 /// [`safe_hol_guard_arguments`] still decides which subcommands the
 /// admission covers, so the control surface keeps its review.
@@ -206,7 +209,9 @@ const INSTALL_ROOTS: &[&str] = &[
     "~/.local/share/hol-guard/",
     "~/.local/share/uv/",
     "~/applications/",
-    "~/appdata/local/",
+    "~/appdata/local/hol-guard/",
+    "~/appdata/local/pipx/",
+    "~/appdata/local/programs/",
     "~/appdata/roaming/",
     "~/library/application support/",
     "/applications/",
@@ -242,7 +247,13 @@ fn anchored_at_install_root(executable: &str, context: super::PathContext<'_>) -
     };
     let absolute = spelled.starts_with('/')
         || matches!(spelled.as_bytes(), [drive, b':', b'/', ..] if drive.is_ascii_alphabetic());
-    if !absolute || spelled.split('/').any(|component| component == "..") {
+    // Everything below compares the spelling itself, so a component that names
+    // no directory would let the same file be written two ways: `/root/./dir`
+    // and `/root//dir` both reach `/root/dir` while defeating the prefix the
+    // workspace is refused by.
+    let mut components = spelled.split('/');
+    components.next();
+    if !absolute || components.any(|component| matches!(component, "" | "." | "..")) {
         return false;
     }
     let lowered = spelled.to_ascii_lowercase();

@@ -505,6 +505,7 @@ fn working_directory_launcher_or_unknown_cwd_keeps_review() {
     assert!(!shadowed);
 }
 
+#[cfg(unix)]
 #[test]
 fn an_installed_guard_program_names_the_launcher_and_a_stray_file_does_not() {
     let context = super::super::PathContext {
@@ -523,8 +524,6 @@ fn an_installed_guard_program_names_the_launcher_and_a_stray_file_does_not() {
         "/Users/u/.local/share/uv/tools/hol-guard/bin/hol-guard",
         "/opt/homebrew/bin/hol-guard",
         "/usr/local/bin/hol-guard",
-        "C:\\Program Files\\HOL Guard\\hol-guard.exe",
-        "C:\\ProgramData\\hol-guard\\bin\\hol-guard.exe",
     ] {
         assert!(
             super::guard_install_executable(executable, context),
@@ -577,4 +576,72 @@ fn an_installed_guard_program_names_the_launcher_and_a_stray_file_does_not() {
         "/opt/homebrew/bin/hol-guard",
         super::super::PathContext::default()
     ));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_component_naming_no_directory_cannot_walk_back_into_the_workspace() {
+    // The checkout sits directly below an install root, so the spelling the
+    // agent writes is one detour away from a root that would admit it.
+    let context = super::super::PathContext {
+        home_dir: Some("/Users/u"),
+        cwd: Some("/opt/project"),
+        ..Default::default()
+    };
+    assert!(!super::guard_install_executable(
+        "/opt/project/bin/hol-guard",
+        context
+    ));
+    for detour in [
+        "/opt/./project/bin/hol-guard",
+        "/opt//project/bin/hol-guard",
+        "/opt/project/./bin/hol-guard",
+        "/opt/project/bin/./hol-guard",
+    ] {
+        assert!(!super::guard_install_executable(detour, context), "{detour}");
+    }
+    // The same detour spelling of a genuine install root is refused too: the
+    // proof reads the spelling it was handed rather than resolving it.
+    assert!(!super::guard_install_executable(
+        "/usr/./local/bin/hol-guard",
+        context
+    ));
+}
+
+#[cfg(windows)]
+#[test]
+fn an_installed_guard_program_names_the_launcher_on_windows() {
+    let context = super::super::PathContext {
+        home_dir: Some("C:\\Users\\u"),
+        cwd: Some("C:\\Users\\u\\projects\\app"),
+        ..Default::default()
+    };
+    for executable in [
+        "C:\\Program Files\\HOL Guard\\hol-guard.exe",
+        "C:\\ProgramData\\hol-guard\\bin\\hol-guard.exe",
+        "C:\\Users\\u\\AppData\\Local\\Programs\\HOL Guard\\hol-guard.exe",
+        "C:\\Users\\u\\AppData\\Local\\pipx\\pipx\\venvs\\hol-guard\\Scripts\\hol-guard.exe",
+        "C:\\Users\\u\\AppData\\Roaming\\uv\\tools\\hol-guard\\Scripts\\hol-guard.exe",
+    ] {
+        assert!(
+            super::guard_install_executable(executable, context),
+            "{executable}"
+        );
+    }
+    for executable in [
+        // `%LOCALAPPDATA%\Temp` is where a session's own scratch files land,
+        // so a `bin` unpacked there is the Windows spelling of `/tmp/stage`.
+        "C:\\Users\\u\\AppData\\Local\\Temp\\clone\\bin\\hol-guard.exe",
+        "C:\\Users\\u\\AppData\\Local\\Temp\\hol-guard\\hol-guard.exe",
+        "C:\\Users\\u\\projects\\other\\bin\\hol-guard.exe",
+        "C:\\Users\\u\\projects\\app\\bin\\hol-guard.exe",
+        "C:\\Users\\u\\projects\\app\\.\\bin\\hol-guard.exe",
+        "bin\\hol-guard.exe",
+        "hol-guard.exe",
+    ] {
+        assert!(
+            !super::guard_install_executable(executable, context),
+            "{executable}"
+        );
+    }
 }
