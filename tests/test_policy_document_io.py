@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import os
 from pathlib import Path
 
@@ -244,7 +245,25 @@ def test_compile_rejects_effect_not_supported_by_local_store() -> None:
 
 
 def test_compile_rejects_match_not_supported_by_local_store() -> None:
-    document = _policy_document(match={"commands": ["deploy"]})
+    document = _policy_document(match={"paths": ["/srv/deploy"]})
+
+    with pytest.raises(PolicyCompilationError, match="unsupported_policy_match"):
+        compile_policy_document(document)
+
+
+def test_compile_keys_an_exact_command_the_way_the_hook_looks_it_up() -> None:
+    command = "bun install --frozen-lockfile --ignore-scripts"
+
+    compiled = compile_policy_document(_policy_document(match={"commands": [command]}))
+
+    assert len(compiled) == 1
+    digest = hashlib.sha256(command.encode("utf-8")).hexdigest()
+    assert compiled[0].decision.artifact_id == f"memory:exact-shell-command:{digest}"
+    assert compiled[0].decision.scope == "artifact"
+
+
+def test_compile_refuses_an_exact_command_combined_with_a_tool() -> None:
+    document = _policy_document(match={"commands": ["deploy"], "tools": ["shell"]})
 
     with pytest.raises(PolicyCompilationError, match="unsupported_policy_match"):
         compile_policy_document(document)

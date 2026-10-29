@@ -162,6 +162,10 @@ _POLICY_DOCUMENT_VERSIONS = ("guard.hashgraphonline.com/v1alpha1",)
 _POLICY_BUNDLE_VERSIONS = ("guard-policy-bundle.v1", "guard-policy-bundle.v2")
 _POLICY_CONTRACTS = ("guard-policy-bundle/v1", "guard-policy-bundle/v2")
 _POLICY_YAML_IMPORT_ENV = "HOL_GUARD_POLICY_YAML_IMPORT"
+# The canonical compiler turns an exact `match.commands` rule into the same
+# exact-shell-command rows the hook looks up, so Guard Cloud may deliver exact
+# command rules in a v2 bundle to a device that advertises this.
+POLICY_EXACT_COMMAND_RULES_CAPABILITY = "policy-document-exact-commands.v1"
 # Re-exported for the supply-chain services; the resident derives the endpoint.
 _normalized_receipts_sync_url = _sync.normalized_receipts_sync_url
 
@@ -1842,7 +1846,13 @@ def _local_guard_runtime_session(
         "client_title": "HOL Guard CLI",
         "client_version": __version__,
         "workspace": "local-machine",
-        "capabilities": ["approval-center", "guard-cloud-sync", "local-daemon", FLEET_POSTURE_CAPABILITY],
+        "capabilities": [
+            "approval-center",
+            "guard-cloud-sync",
+            "local-daemon",
+            FLEET_POSTURE_CAPABILITY,
+            POLICY_EXACT_COMMAND_RULES_CAPABILITY,
+        ],
         "policy_document_versions": list(_POLICY_DOCUMENT_VERSIONS),
         "policy_bundle_versions": list(_POLICY_BUNDLE_VERSIONS),
         "policy_contracts": list(_POLICY_CONTRACTS),
