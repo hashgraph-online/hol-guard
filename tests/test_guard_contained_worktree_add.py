@@ -188,6 +188,8 @@ def test_a_rest_that_is_refused_says_the_worktree_exists(monkeypatch: pytest.Mon
         ("cd ../app-fix && npm test", "org/app-fix"),
         ("cd ~/app-fix && npm test", "app-fix"),
         ("cd '../app fix' && npm test", "org/app fix"),
+        ("cd ../app#fix && npm test", "org/app#fix"),
+        ("cd ../app #fix && npm test", None),
         ("cd ../app-fix; npm test", None),
         ("cd ~other/app-fix && npm test", None),
         ("cd '~/app-fix' && npm test", None),

@@ -56,6 +56,8 @@ def checkout_of(entered: str, *, workspace: Path, home: Path | None) -> Path | N
     """The directory `cd <checkout> && <checks>` enters, resolved from `workspace`."""
     lexer = shlex.shlex(entered, posix=True, punctuation_chars=True)
     lexer.whitespace_split = True
+    # The shell reads `#` inside a word as part of it, as in `../app#fix`.
+    lexer.commenters = ""
     try:
         tokens = list(lexer)
     except ValueError:
