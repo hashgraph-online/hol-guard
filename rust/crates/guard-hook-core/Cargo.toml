@@ -7,6 +7,7 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
+guard-command = { path = "../guard-command" }
 guard-contracts = { path = "../guard-contracts" }
 guard-rules = { path = "../guard-rules" }
 guard-scanner = { path = "../guard-scanner" }

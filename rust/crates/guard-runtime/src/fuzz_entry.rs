@@ -125,6 +125,7 @@ pub const CONTAINED_ARGV_OPERATIONS: &[&str] = &[
     "transparent_prefix",
     "command_prefix_split",
     "run_prefix_peel",
+    "node_tool_route",
     "pytest_command",
 ];
 

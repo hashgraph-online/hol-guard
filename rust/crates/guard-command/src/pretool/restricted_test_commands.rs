@@ -9,6 +9,9 @@
 mod tests;
 
 use crate::contained_argv::{contained_runner_call, jest_contained_call};
+use crate::contained_node_tool::{
+    entry_tool, local_package_entry, supported_tool, writes_or_chains, ToolMode,
+};
 use crate::CanonicalCommandV1;
 
 #[path = "bun_eval_screen.rs"]
@@ -198,23 +201,6 @@ pub(super) fn requires_pytest_containment(model: &CanonicalCommandV1) -> bool {
         }
         _ => false,
     }
-}
-
-/// The entrypoints Prettier publishes: version 3 moved the executable into
-/// `bin/`, and version 2 is still installed widely enough to name as well.
-pub(crate) const PRETTIER_ENTRIES: [&str; 2] =
-    ["prettier/bin/prettier.cjs", "prettier/bin-prettier.js"];
-
-/// Whether a Prettier command asks only whether the files are formatted.
-/// `--check` and `--list-different` print and exit; every other spelling may
-/// reach `--write`, which rewrites each file it visits.
-pub(crate) fn prettier_checks(arguments: &[String]) -> bool {
-    arguments.iter().any(|argument| {
-        matches!(
-            argument.as_str(),
-            "--check" | "-c" | "--list-different" | "-l"
-        )
-    })
 }
 
 fn executable_is_bunx(executable: &str) -> bool {
@@ -423,7 +409,7 @@ const MANAGER_SUBCOMMANDS: &[&str] = &[
 /// string rather than a binary, so it is not one of these, and a manager
 /// option before the subcommand (`pnpm -r`, `--filter`) fans the run out past
 /// one package and keeps the review.
-pub(super) fn manager_local_bin_arguments<'a>(
+pub(crate) fn manager_local_bin_arguments<'a>(
     manager: &str,
     arguments: &'a [String],
 ) -> Option<&'a [String]> {
@@ -442,7 +428,7 @@ pub(super) fn manager_local_bin_arguments<'a>(
     Some(rest)
 }
 
-pub(super) fn manager_script_task<'a>(manager: &str, arguments: &'a [String]) -> Option<&'a str> {
+pub(crate) fn manager_script_task<'a>(manager: &str, arguments: &'a [String]) -> Option<&'a str> {
     match arguments {
         [run, task] if run == "run" => Some(task.as_str()),
         [task]
@@ -453,6 +439,27 @@ pub(super) fn manager_script_task<'a>(manager: &str, arguments: &'a [String]) ->
         }
         _ => None,
     }
+}
+
+/// The mode the supported tool behind this command runs in, read through the
+/// same table `contained_node_tool` routes with. The admission and the sink
+/// that executes the run share one reading of which tools are supported and
+/// which of their modes only reports, so the two cannot drift apart.
+fn node_tool_mode(executable: &str, arguments: &[String]) -> Option<ToolMode> {
+    let (name, rest) = match (executable, arguments) {
+        // A local-bin runner names the tool, and `node` names the entrypoint
+        // file the tool published, so each is read back to the tool's own name.
+        // `--no-install` only refuses to fetch what is missing, so the route
+        // steps over it and this reading does too.
+        ("bunx" | "npx", [flag, tool, rest @ ..]) if flag == "--no-install" => {
+            (tool.as_str(), rest)
+        }
+        ("bunx" | "npx", [tool, rest @ ..]) => (tool.as_str(), rest),
+        ("node" | "nodejs", [entry, rest @ ..]) => (entry_tool(entry), rest),
+        ("bunx" | "npx" | "node" | "nodejs", []) => return None,
+        _ => (executable, arguments),
+    };
+    supported_tool(name, rest).map(|(_, _, mode)| mode)
 }
 
 pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'static str> {
@@ -571,54 +578,26 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
             _ => (crate::program_basename(executable), arguments),
         }
     };
-    let build = match executable {
-        "bun" | "npm" | "pnpm" | "yarn" => {
-            manager_script_task(executable, arguments) == Some("build")
-        }
-        "bunx" | "npx" => {
-            matches!(arguments, [tool, task, ..] if tool == "vite" && task == "build")
-        }
-        "vite" => arguments.first().is_some_and(|arg| arg == "build"),
-        "node" | "nodejs" => {
-            matches!(arguments, [entry, task, ..] if local_package_entry(entry, "vite/bin/vite.js") && task == "build")
-        }
-        _ => false,
-    };
-    if build {
+    let mode = node_tool_mode(executable, arguments);
+    let manager = matches!(executable, "bun" | "npm" | "pnpm" | "yarn");
+    // The sink refuses a write or a chain in every mode, so a build carrying
+    // one is left to ordinary review rather than sent to a route that would
+    // only turn it away.
+    if (mode == Some(ToolMode::Build)
+        || (manager && manager_script_task(executable, arguments) == Some("build")))
+        && !writes_or_chains(arguments)
+    {
         return Some("native_node_build_output_containment_required");
     }
-    let read_only_node_tool = match executable {
-        // The script body is what runs, not the name a project chose for it:
-        // `format:check` and `ci:lint` are the work `lint` is. The route below
-        // reads the manifest and keeps this only for a body the sink runs.
-        "bun" | "npm" | "pnpm" | "yarn" => manager_script_task(executable, arguments).is_some(),
-        "bunx" | "npx" => {
-            matches!(arguments, [tool, rest @ ..] if tool == "eslint" || (tool == "tsc" && rest.iter().any(|arg| arg == "--noEmit")) || (tool == "prettier" && prettier_checks(rest)))
-        }
-        "eslint" => true,
-        "tsc" => arguments.iter().any(|arg| arg == "--noEmit"),
-        "prettier" => prettier_checks(arguments),
-        "node" | "nodejs" => {
-            matches!(arguments, [entry, rest @ ..] if local_package_entry(entry, "eslint/bin/eslint.js") || (local_package_entry(entry, "typescript/bin/tsc") && rest.iter().any(|arg| arg == "--noEmit")) || (PRETTIER_ENTRIES.iter().any(|name| local_package_entry(entry, name)) && prettier_checks(rest)))
-        }
-        _ => false,
+    // The script body is what runs, not the name a project chose for it:
+    // `format:check` and `ci:lint` are the work `lint` is. The route below
+    // reads the manifest and keeps this only for a body the sink runs.
+    let read_only_node_tool = if manager {
+        manager_script_task(executable, arguments).is_some()
+    } else {
+        mode == Some(ToolMode::Report)
     };
-    if read_only_node_tool
-        && !arguments.iter().any(|arg| {
-            matches!(
-                arg.as_str(),
-                "--fix"
-                    | "--fix-dry-run"
-                    | "--output-file"
-                    | "-o"
-                    | "--emitDeclarationOnly"
-                    | "--write"
-                    | "-w"
-            ) || arg.starts_with("--output-file=")
-                || arg.starts_with("--fix=")
-                || arg.starts_with("--write=")
-        })
-    {
+    if read_only_node_tool && !writes_or_chains(arguments) {
         return Some("native_node_tool_readonly_containment_required");
     }
     if super::executable_basename(executable) == "git"
@@ -682,13 +661,4 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
         return Some("native_node_test_readonly_containment_required");
     }
     None
-}
-
-/// `node node_modules/<entry>` and `node <dir>/node_modules/<entry>`. The sink
-/// still proves the file is the project's own installed entrypoint.
-fn local_package_entry(entry: &str, package_entry: &str) -> bool {
-    entry
-        .strip_suffix(package_entry)
-        .and_then(|prefix| prefix.strip_suffix("node_modules/"))
-        .is_some_and(|prefix| prefix.is_empty() || prefix.ends_with('/'))
 }

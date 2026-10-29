@@ -30,6 +30,17 @@ pub(crate) fn screen(
     names::segment_screen_text(model, segment, None, cwd)
 }
 
+/// Whether `target`, a path as a tool envelope spells it, resolves to a
+/// document the name screens accept as a tracked project file of the
+/// session's repository or of a linked worktree of the same repository. The
+/// output review after a tool runs rechecks the resolved target; it needs the
+/// same proof PreToolUse used, or a committed catalog entry such as
+/// `command.kubernetes-secrets.json` is admitted for an edit and then has the
+/// edit's result withheld.
+pub fn proven_project_document(target: &str, cwd: Option<&str>) -> bool {
+    names::resolves_to_tracked(target, cwd)
+}
+
 #[derive(Default)]
 pub(super) struct TrackedFiles {
     indexes: HashMap<PathBuf, Option<HashSet<Vec<u8>>>>,
