@@ -173,26 +173,62 @@ def test_the_build_requirement_gate_reads_through_the_package_the_hook_imports()
     assert {"hatchling", "jsonschema"} <= _build_time_modules()
 
 
+def _selects(name: str, flag: str, text: str) -> bool:
+    """Whether this text selects `name` the way an installer reads it.
+
+    The name has to stand as the whole argument of its own selection flag, or
+    inside the extras bracket of a requirement spelling. A bare quoted word is
+    not a selection: `"dev"` and `"publish"` are also an argparse choice and a
+    dictionary key under `scripts/`, so counting those would let the last job
+    that installed an extra be deleted while the extra stayed declared.
+    """
+
+    escaped = re.escape(name)
+    if re.search(rf"{flag}[= ]{escaped}(?![\w.-])", text):
+        return True
+    # `hol-guard[cisco]`, `.[dev,publish]`: the extras bracket of a spec.
+    return flag == "--extra" and bool(re.search(rf"\[(?:[\w.-]+,\s*)*{escaped}(?:\s*,\s*[\w.-]+)*\]", text))
+
+
 def test_every_extra_and_group_is_selected_by_something_that_installs_it() -> None:
     """Verify every extra and dependency group is selected by something that installs it."""
     metadata = _metadata()
     text = _selection_text()
     unselected = sorted(
-        name
-        for name in metadata["project"]["optional-dependencies"]
-        if f"--extra {name}" not in text and f'"{name}"' not in text
+        name for name in metadata["project"]["optional-dependencies"] if not _selects(name, "--extra", text)
     )
     assert not unselected, (
         f"These extras are declared but no workflow, action or script selects them: {unselected}. "
         "Remove the extra, or restore the job that installed it."
     )
     groups = sorted(
-        name for name in metadata["dependency-groups"] if name != DEFAULT_GROUP and f"--group {name}" not in text
+        name for name in metadata["dependency-groups"] if name != DEFAULT_GROUP and not _selects(name, "--group", text)
     )
     assert not groups, (
         f"These dependency groups are declared but no workflow, action or script selects them: {groups}. "
         "Remove the group, or restore the job that installed it."
     )
+
+
+def test_a_name_that_merely_appears_somewhere_is_not_a_selection() -> None:
+    """The gate reads selection syntax, not any occurrence of the name.
+
+    Every declared extra is an ordinary English word that `scripts/` and `ci/`
+    also use as a dictionary key, an argparse choice or a path segment. If one
+    of those counted, retiring the last job that installed an extra would leave
+    the gate green and the extra declared.
+    """
+
+    quoted = "\n".join(('choices=["publish", "dev"]', '{"cisco": 1}', 'path = "dev/publish"'))
+    for name in ("publish", "dev", "cisco"):
+        assert not _selects(name, "--extra", quoted), name
+        assert not _selects(name, "--group", quoted), name
+    assert _selects("publish", "--extra", "uv sync --frozen --extra publish --python 3.12")
+    assert _selects("ci-test", "--group", "uv sync --no-dev --group ci-test")
+    assert _selects("cisco", "--extra", "uv tool install 'hol-guard[cisco]'")
+    # A longer name that merely starts with this one is a different selection.
+    assert not _selects("dev", "--extra", "uv sync --extra dev-tools")
+    assert not _selects("cisco", "--group", "uv sync --group cisco-mcp")
 
 
 def test_every_resolver_override_still_has_a_package_to_override() -> None:
