@@ -70,7 +70,7 @@ pub(crate) const OMP: DirectHarness = DirectHarness {
 /// The bounded bridge harnesses the resident answers. The resident routes a
 /// ZCode sandbox requirement to contained execution as the daemon does.
 /// Grok runs its own client, which asks through [`grok_direct_answer`].
-const BOUNDED_DIRECT_HARNESSES: [&str; 8] = [
+pub(crate) const BOUNDED_DIRECT_HARNESSES: [&str; 8] = [
     "copilot", "kimi", "devin", "zcode", "openclaw", "hermes", "cline", "opencode",
 ];
 const BOUNDED_DIRECT_SWITCH: &str = "HOL_GUARD_BOUNDED_DIRECT_HOOK";

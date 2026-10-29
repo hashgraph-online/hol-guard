@@ -251,7 +251,12 @@ fn restarted_route(
 ) -> Route {
     // An empty command (no home to start the daemon for) fails closed.
     if config.start_command.is_empty()
-        || !start_daemon(&config.start_command, TRANSPORT_FAILURE, deadline)
+        || !start_daemon(
+            &config.start_command,
+            TRANSPORT_FAILURE,
+            deadline,
+            Some(&config.guard_home),
+        )
     {
         return prepared.failed();
     }

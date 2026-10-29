@@ -160,10 +160,10 @@ fn restarted_reply(
 ) -> Reply {
     let failure_kind = failure.failure_kind();
     let command = recovery_argv(&client.recovery_command, failure_kind);
-    if !start_daemon(&command, failure_kind, client.deadline) {
+    let guard_home = Path::new(&client.guard_home);
+    if !start_daemon(&command, failure_kind, client.deadline, Some(guard_home)) {
         return fail_closed(&request.event);
     }
-    let guard_home = Path::new(&client.guard_home);
     let started = await_daemon(client.deadline, || {
         match daemon_target(guard_home, DAEMON_HARNESS) {
             Some(target) if failed.is_none_or(|old| !old.same_daemon(&target)) => {

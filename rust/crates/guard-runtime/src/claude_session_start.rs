@@ -368,8 +368,15 @@ pub(crate) fn run(config_text: &str) -> i32 {
     };
     // Before the checks, so a session that hands off to Python warms too.
     prewarm_resident(config_text);
-    let start =
-        |command: &[String]| start_daemon(command, TRANSPORT_FAILURE, started + START_BUDGET);
+    let home = guard_home(config_text);
+    let start = |command: &[String]| {
+        start_daemon(
+            command,
+            TRANSPORT_FAILURE,
+            started + START_BUDGET,
+            home.as_deref(),
+        )
+    };
     match session_output(config_text, &SessionEnvironment::current(), deadline, start) {
         Ok(output) => {
             let mut stdout = io::stdout().lock();
@@ -382,8 +389,8 @@ pub(crate) fn run(config_text: &str) -> i32 {
             }
         }
         Err(_) => {
-            if let Some(home) = guard_home(config_text) {
-                hook_bridge_fallback::note(&home, "claude-code", Fallback::ContractDrift);
+            if let Some(home) = &home {
+                hook_bridge_fallback::note(home, "claude-code", Fallback::ContractDrift);
             }
             hand_off(&fallback)
         }

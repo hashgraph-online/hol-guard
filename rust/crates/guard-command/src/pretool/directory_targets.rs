@@ -434,7 +434,7 @@ impl<'a> super::PathContext<'a> {
                 environment.has_valid_shape()
                     && !environment.environment_names.iter().any(|name| {
                         npm_selector(name)
-                            && !super::npm_environment::inert_npm_config_name(name)
+                            && !super::npm_environment::inert_stamped_name(environment, name)
                             && !super::npm_environment::trusted_stamped_loader(
                                 environment,
                                 name,
@@ -447,7 +447,7 @@ impl<'a> super::PathContext<'a> {
                 let name = name.to_string_lossy();
                 !value.is_empty()
                     && npm_selector(&name)
-                    && !super::npm_environment::inert_npm_config_name(&name)
+                    && !super::npm_environment::inert_inherited(&name, &value)
             }),
         };
         // pip reads a configuration file and a variable for every option

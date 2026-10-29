@@ -63,7 +63,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     assert_eq!(evaluate(&context).decision, "allow");
     // The absent HOME field falls back to the verified home spelling. This
@@ -286,7 +286,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             pager_disabled: false,
             xdg_config_home: None,
             git_config_no_system: false,
-            library_search_paths: Default::default(),
+            ..Default::default()
         },
         GuardExecutionEnvironmentV1 {
             path: original_path.clone(),
@@ -297,7 +297,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             pager_disabled: false,
             xdg_config_home: None,
             git_config_no_system: false,
-            library_search_paths: Default::default(),
+            ..Default::default()
         },
         GuardExecutionEnvironmentV1 {
             path: original_path.clone(),
@@ -308,7 +308,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             pager_disabled: false,
             xdg_config_home: None,
             git_config_no_system: false,
-            library_search_paths: Default::default(),
+            ..Default::default()
         },
         GuardExecutionEnvironmentV1 {
             path: original_path.clone(),
@@ -319,7 +319,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             pager_disabled: false,
             xdg_config_home: None,
             git_config_no_system: false,
-            library_search_paths: Default::default(),
+            ..Default::default()
         },
         GuardExecutionEnvironmentV1 {
             path: original_path.clone(),
@@ -330,7 +330,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             pager_disabled: false,
             xdg_config_home: None,
             git_config_no_system: false,
-            library_search_paths: Default::default(),
+            ..Default::default()
         },
         GuardExecutionEnvironmentV1 {
             path: original_path.clone(),
@@ -341,7 +341,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             pager_disabled: false,
             xdg_config_home: Some(xdg.to_string_lossy().into_owned()),
             git_config_no_system: false,
-            library_search_paths: Default::default(),
+            ..Default::default()
         },
         GuardExecutionEnvironmentV1 {
             path: original_path.clone(),
@@ -352,7 +352,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             pager_disabled: false,
             xdg_config_home: None,
             git_config_no_system: false,
-            library_search_paths: Default::default(),
+            ..Default::default()
         },
         GuardExecutionEnvironmentV1 {
             path: "x".repeat(32769),
@@ -363,7 +363,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             pager_disabled: false,
             xdg_config_home: None,
             git_config_no_system: false,
-            library_search_paths: Default::default(),
+            ..Default::default()
         },
     ] {
         assert_eq!(evaluate(&context).decision, "deny");
@@ -388,7 +388,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     assert_eq!(evaluate(&context).decision, "deny");
 }
@@ -429,7 +429,7 @@ fn stamped_git_reads_allow_only_when_no_diff_helper_is_configured() {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     let evaluate = |command: &str, context: Option<&GuardExecutionEnvironmentV1>| {
         evaluate_pre_tool_envelope_with_execution_context(
@@ -525,7 +525,7 @@ fn a_route_to_no_repository_still_needs_a_trusted_git() {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     let evaluate = |command: &str, context: &GuardExecutionEnvironmentV1| {
         evaluate_pre_tool_envelope_with_execution_context(

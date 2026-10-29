@@ -4,7 +4,7 @@
 //! denial the evaluator gives it instead of failing quietly in the sandbox.
 
 use crate::CommandSegmentV1;
-use std::path::{Component, Path};
+use std::path::{Component, Path, PathBuf};
 
 /// Guard's own command line manages state outside any workspace.
 const GUARD_CLIS: &[&str] = &["hol-guard", "guard"];
@@ -423,7 +423,7 @@ fn outside_from(value: &str, name: &str, workspace: &Path, below: usize) -> bool
         let names_file_system =
             top.is_some_and(|top| Path::new("/").join(top.as_os_str()).exists());
         return names_file_system
-            && !path.starts_with(workspace)
+            && !inside_workspace(path, workspace)
             && !through_root_link(path, workspace)
             && !DEVICES.contains(&value);
     }
@@ -444,6 +444,38 @@ fn outside_from(value: &str, name: &str, workspace: &Path, below: usize) -> bool
     })
 }
 
+/// Whether an absolute path still stands inside the workspace once the shell
+/// has walked its `..` steps. `Path::starts_with` compares components, so
+/// `<workspace>/../secrets` starts with the workspace although it names a
+/// directory beside it; the sandbox resolves the path and refuses the effect,
+/// which is the quiet failure this module exists to replace with a review.
+/// The walk is the shell's own, not the file system's: a `..` after a symlink
+/// to another directory lands elsewhere, and such a path keeps the review it
+/// would have had before the link was followed.
+fn inside_workspace(path: &Path, workspace: &Path) -> bool {
+    let mut walked = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::ParentDir => {
+                if walks_past_a_link(&walked) || !walked.pop() {
+                    return false;
+                }
+            }
+            Component::CurDir => {}
+            other => walked.push(other.as_os_str()),
+        }
+    }
+    walked.starts_with(workspace)
+}
+
+/// Whether the directory a `..` step leaves is a link. The step lands in the
+/// link's target, so the walk below it describes another place on the file
+/// system and the path keeps its review. A directory that is absent is not a
+/// link: a path the command would itself create still walks by its spelling.
+fn walks_past_a_link(walked: &Path) -> bool {
+    std::fs::symlink_metadata(walked).is_ok_and(|entry| entry.file_type().is_symlink())
+}
+
 /// On macOS `/tmp` and `/var` are fixed root links into `/private`, so
 /// `$TMPDIR` spells a worktree there as `/var/folders/…` while its canonical
 /// workspace is `/private/var/folders/…`.
@@ -457,6 +489,10 @@ pub(super) fn through_root_link(path: &Path, workspace: &Path) -> bool {
             .join(path.strip_prefix("/").unwrap_or(path))
             .starts_with(workspace)
 }
+
+#[cfg(test)]
+#[path = "workspace_contained_reach_prefix_tests.rs"]
+mod workspace_prefix_tests;
 
 #[cfg(test)]
 #[path = "workspace_contained_identity_tests.rs"]

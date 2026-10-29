@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+import shlex
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -18,7 +20,7 @@ from ci.gauntlet.clone_fixtures import (
     long_lived_clone_checks,
     long_lived_clone_config,
 )
-from ci.gauntlet.command_outputs import TOKEN_SHELL_CASES, command_outputs_match
+from ci.gauntlet.command_outputs import BUN_ENTRY_CASE, TOKEN_SHELL_CASES, command_outputs_match
 from ci.gauntlet.fast_forward_fixtures import (
     FAST_FORWARD_CASE,
     FAST_FORWARD_HOOK_CASE,
@@ -41,7 +43,7 @@ from ci.gauntlet.fixtures import (
 from ci.gauntlet.host_process import realistic_environment
 from ci.gauntlet.native_tools import native_tools_scope_error
 from ci.gauntlet.parent_fixtures import PARENT_WORKSPACE_CASE
-from ci.gauntlet.realism_fixtures import DASHBOARD, REVIEW_NOTES_MARKER
+from ci.gauntlet.realism_fixtures import DASHBOARD, REVIEW_NOTES_MARKER, VITE_BUILD_MARKER
 from ci.gauntlet.source_output_fixtures import HELPER_MARKER, ROUTE_MARKER, SOURCES, WORKER_MARKER
 
 NEW_IDS = {
@@ -137,6 +139,7 @@ REALISM_IDS = {
     "omp-native-read-credential-placeholder-docs",
     "omp-native-shell-read-credential-placeholder-docs",
     "omp-native-shell-linked-modules-build",
+    "omp-native-shell-linked-modules-bun-entry",
     "omp-native-shell-doctl-reads",
     "omp-native-shell-docker-imagetools-inspect",
     "omp-native-read-token-handling-sources",
@@ -189,12 +192,39 @@ def test_worktree_borrows_gitignored_modules_from_the_main_checkout(tmp_path: Pa
 
 def test_linked_modules_build_and_doctl_reads_run_on_the_host(tmp_path: Path) -> None:
     fixture = create_fixture(tmp_path / "fx", realistic=True)
-    build = _shell(fixture, commands_for("omp-native-shell-linked-modules-build")[0])
-    assert build.returncode == 0 and "built in" in build.stdout, build.stderr
+    command = commands_for("omp-native-shell-linked-modules-build")[0]
+    build = _shell(fixture, command)
+    assert build.returncode == 0 and VITE_BUILD_MARKER in build.stdout, build.stderr
+    # The marker is the finished build's own line, not a sign the entry ran:
+    # the same entry without `build` prints no build at all.
+    unbuilt = _shell(fixture, command.replace(" build ", " ", 1))
+    assert VITE_BUILD_MARKER not in unbuilt.stdout, unbuilt.stdout
     for command in commands_for("omp-native-shell-doctl-reads"):
         result = _shell(fixture, command)
         assert result.returncode == 0 and result.stdout.strip(), (command, result.stderr)
     assert _shell(fixture, "doctl auth token").returncode != 0
+
+
+def test_the_linked_install_carries_the_node_entry_bun_is_handed(tmp_path: Path) -> None:
+    """`bun node_modules/vite/bin/vite.js build` names the package's own Node entry.
+
+    Guard runs that spelling on the project's Node image, so the installed
+    fixture has to carry the entry on every platform rather than only where
+    Windows needs it.
+    """
+    fixture = create_fixture(tmp_path / "fx", realistic=True)
+    entry = fixture.workspace / DASHBOARD / "node_modules/vite/bin/vite.js"
+    assert entry.is_file()
+    command = commands_for("omp-native-shell-linked-modules-bun-entry")[0]
+    assert "node_modules/vite/bin/vite.js" in command
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("Node is not installed on this host")
+    on_node = command.replace("bun ", f"{shlex.quote(node)} ", 1)
+    build = _shell(fixture, on_node)
+    assert build.returncode == 0 and VITE_BUILD_MARKER in build.stdout, build.stderr
+    unbuilt = _shell(fixture, on_node.replace(" build ", " ", 1))
+    assert VITE_BUILD_MARKER not in unbuilt.stdout, unbuilt.stdout
 
 
 def test_docker_stand_in_answers_only_the_registry_manifest_query(tmp_path: Path) -> None:
@@ -374,3 +404,20 @@ def test_the_parent_search_accepts_the_spelling_the_redactor_writes() -> None:
     assert native_tools_scope_error(scenario, stray, {}) == (
         "the model ran a shell command the scenario did not list"
     )
+
+
+def test_the_bun_entry_case_needs_the_build_line_tail_cannot_supply() -> None:
+    """`| tail -15` answers with its own successful status, whatever the build did.
+
+    The case keeps that shape, because it is the shape the report came from, so its
+    oracle asks for the line the finished build prints instead of the host status.
+    """
+    scenario = {case.id: case for case in load_catalog()}[BUN_ENTRY_CASE]
+    command = scenario.commands[0]
+    assert command.endswith("| tail -15")
+    finished = _tool_call("bash", {"command": command}, f"dist/index.html  0.40 kB\n{VITE_BUILD_MARKER}\n")
+    assert command_outputs_match(scenario, [finished])
+    for text in ("", 'error: Cannot find module "vite"\n', "vite v5.4.0 building for production...\n"):
+        assert not command_outputs_match(scenario, [_tool_call("bash", {"command": command}, text)]), text
+    assert not command_outputs_match(scenario, [])
+    assert not command_outputs_match(scenario, [finished, finished])

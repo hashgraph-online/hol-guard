@@ -219,7 +219,7 @@ pub(crate) fn collect_hook_execution_environment(environment: &DecodedEnvironmen
         Some(value) => PyVal::Str(value.to_owned()),
         None => PyVal::Null,
     };
-    PyVal::Dict(vec![
+    let mut stamp = vec![
         (
             "path".to_owned(),
             PyVal::Str(lookup(environment, "PATH").unwrap_or_default().to_owned()),
@@ -256,7 +256,13 @@ pub(crate) fn collect_hook_execution_environment(environment: &DecodedEnvironmen
             "environment_digest".to_owned(),
             PyVal::Str(sha256_hex(digest_text.as_bytes())),
         ),
-    ])
+    ];
+    // Present only when true, so stamps from hosts without the variable are
+    // byte-identical to the Python hook's older output.
+    if lookup(environment, "NODE_OPTIONS").is_some_and(guard_contracts::node_options_inert) {
+        stamp.push(("node_options_inert".to_owned(), PyVal::Bool(true)));
+    }
+    PyVal::Dict(stamp)
 }
 
 /// `stamp_hook_input_text(text)` against `environment`.

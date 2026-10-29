@@ -64,7 +64,7 @@ from .native_tools import CREDENTIAL_REPORT_CASE, TASK_SCHEMA_CASE, cleanup_priv
 from .observed_extension import generate_observed_extension
 from .parallel import HostSlots, Lease, LoadGate, run_scheduled, validate_jobs
 from .provider import InferenceRelay, LoopbackCollector
-from .review_fixtures import GITHUB_ENABLED_CASES, GITHUB_STUB_CASES, WORKTREE_CASE, configure_github_review_controls
+from .review_fixtures import GITHUB_ENABLED_CASES, GITHUB_STUB_CASES, WORKTREE_CASES, configure_github_review_controls
 from .runtime_cases import stage_runtime_cases
 from .script_cases import stage_script_cases
 from .session_folder import seed_session_folder, session_cwd
@@ -155,8 +155,8 @@ def run_case(
     first_contact = scenario.oracle == "native-tools"
     fixture = create_fixture(
         root / case_fixture_name(scenario.id, attempt),
-        realistic=first_contact and scenario.id != WORKTREE_CASE,
-        linked_worktree=scenario.id == WORKTREE_CASE,
+        realistic=first_contact and scenario.id not in WORKTREE_CASES,
+        linked_worktree=scenario.id in WORKTREE_CASES,
         scenario_id=scenario.id,
     )
     stage_supply_chain(fixture.workspace, scenario.id)

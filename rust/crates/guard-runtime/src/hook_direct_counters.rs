@@ -70,8 +70,9 @@ const OUTCOMES: [Option<HookDirectDefer>; OUTCOME_SLOTS] = [
     Some(HookDirectDefer::Lane(DirectLaneDefer::AckExpired)),
     Some(HookDirectDefer::Lane(DirectLaneDefer::WorkspaceUnknown)),
     Some(HookDirectDefer::Lane(DirectLaneDefer::InputChanged)),
+    Some(HookDirectDefer::EmergencySafeProfile),
 ];
-const OUTCOME_SLOTS: usize = 30;
+const OUTCOME_SLOTS: usize = 31;
 const ANSWER: &str = "answer";
 
 /// The counting slot of a harness name.
@@ -136,6 +137,7 @@ fn outcome_slot(outcome: Option<HookDirectDefer>) -> usize {
             DirectLaneDefer::WorkspaceUnknown => 28,
             DirectLaneDefer::InputChanged => 29,
         },
+        HookDirectDefer::EmergencySafeProfile => 30,
     }
 }
 

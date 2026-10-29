@@ -65,9 +65,11 @@ pub(super) fn request_payload_identity(
     }
     // A retry of an unchanged action mints a new transport call ID: Pi's
     // `tool_call_id`, and the `tool_use_id` Claude Code and Codex stamp on each
-    // tool-use block the model emits. Dropping it lets an Allow once approval
-    // reach the agent's own retry. Nested tool arguments and session identity
-    // stay in the commitment, and a request without a session keeps the ID.
+    // tool-use block the model emits. Claude Code also stamps the user turn as
+    // `prompt_id`, and the retry an approval unblocks comes in the turn after
+    // the user answers. Dropping them lets an Allow once approval reach the
+    // agent's own retry. Nested tool arguments and session identity stay in
+    // the commitment, and a request without a session keeps the IDs.
     if event == "PreToolUse"
         && identity
             .get("session_id")
@@ -85,7 +87,8 @@ pub(super) fn request_payload_identity(
 fn transport_call_id_keys(harness: &str) -> &'static [&'static str] {
     match harness {
         "pi" | "omp" => &["tool_call_id"],
-        "claude-code" | "codex" => &["tool_use_id"],
+        "claude-code" => &["tool_use_id", "prompt_id"],
+        "codex" => &["tool_use_id"],
         _ => &[],
     }
 }

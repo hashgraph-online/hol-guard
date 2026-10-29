@@ -299,7 +299,7 @@ fn decide_in_session(
         pager_disabled: live_environment,
         xdg_config_home: None,
         git_config_no_system: !live_environment,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
         "omp",

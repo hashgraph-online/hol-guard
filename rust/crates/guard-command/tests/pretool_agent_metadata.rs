@@ -160,3 +160,32 @@ fn claude_user_questions_only_display_choices() {
         assert_ne!(evaluate(payload).minimum_action, "allow");
     }
 }
+
+#[test]
+fn current_claude_code_turn_fields_keep_task_metadata_proven() {
+    // Claude Code now stamps every hook with its turn, reasoning effort and
+    // session scratch directory beside the transcript and permission mode.
+    let host = json!({
+        "hook_event_name":"PreToolUse", "session_id":"session", "tool_use_id":"call",
+        "transcript_path":"/project/transcript.jsonl", "cwd":"/project",
+        "permission_mode":"default", "prompt_id":"prompt", "effort":"high",
+        "scratchpad_dir":"/tmp/session/scratchpad"
+    });
+    let question = json!({"question":"Which option?", "header":"Choice",
+        "options":[{"label":"A", "description":"First"}, {"label":"B", "description":"Second"}],
+        "multiSelect":false});
+    for (tool, input) in [
+        (
+            "TodoWrite",
+            json!({"todos":[{"content":"Task", "status":"pending"}]}),
+        ),
+        ("AskUserQuestion", json!({"questions":[question]})),
+    ] {
+        let mut payload = host.clone();
+        payload["tool_name"] = json!(tool);
+        payload["tool_input"] = input;
+        let result = evaluate(payload);
+        assert_eq!(result.minimum_action, "allow", "{tool}");
+        assert_eq!(result.reason_code, "native_agent_task_metadata", "{tool}");
+    }
+}

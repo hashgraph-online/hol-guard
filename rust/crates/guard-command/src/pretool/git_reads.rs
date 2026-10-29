@@ -15,6 +15,20 @@ fn has_argument(arguments: &[String], exact: &[&str], prefixes: &[&str]) -> bool
     })
 }
 
+/// Whether `value`, a `git grep` target, is a tracked document whose name
+/// only reads like a credential, such as a committed
+/// `command.kubernetes-secrets.json`. A leading option other than the pager
+/// switch can move Git elsewhere, so a relative target is proven only
+/// without one.
+fn tracked_target(value: &str, leading: &[String], context: super::PathContext<'_>) -> bool {
+    (std::path::Path::new(value).is_absolute()
+        || leading
+            .iter()
+            .all(|option| matches!(option.as_str(), "--no-pager" | "-P")))
+        && !super::sensitive_path_argument(value)
+        && super::search_scope_tracked::names::resolves_to_tracked(value, context.cwd)
+}
+
 pub(super) fn safe_git_arguments(
     arguments: &[String],
     allow_helper_context: bool,
@@ -47,8 +61,16 @@ pub(super) fn safe_git_arguments(
                 return leading_safe
                     && allow_helper_context
                     && super::git_grep::targets(rest).is_some_and(|targets| {
+                        // The tracked proof reads the working-tree file, so it
+                        // covers only pathspecs Git searches there: after a
+                        // `--` with no revision before it, and without
+                        // `--cached`, which searches the index instead.
+                        let working_tree = targets.first().is_some_and(|first| first == "--")
+                            && !rest.iter().any(|argument| argument == "--cached");
                         !targets.iter().any(|value| {
-                            value.starts_with(':') || super::sensitive_read_path_argument(value)
+                            value.starts_with(':')
+                                || (super::sensitive_read_path_argument(value)
+                                    && !(working_tree && tracked_target(value, leading, context)))
                         })
                     });
             }

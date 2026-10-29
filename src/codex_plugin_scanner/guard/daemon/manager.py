@@ -104,8 +104,7 @@ _GUARD_DAEMON_RECOVERY_LOCK_FILE = "daemon-recovery.lock"
 _GUARD_DAEMON_STATE_MAX_BYTES = 64 * 1024
 _GUARD_DAEMON_PENDING_LAUNCH_MAX_BYTES = 4096
 _GUARD_DAEMON_START_PROGRESS_MAX_BYTES = 4096
-_GUARD_DAEMON_WAKE_RESERVATION_MAX_BYTES = 4096
-_GUARD_DAEMON_RECOVERY_RESERVATION_MAX_BYTES = 4096
+_GUARD_DAEMON_RESERVATION_MAX_BYTES = 4096
 _GUARD_DAEMON_RECOVERY_WORKER_TIMEOUT_SECONDS = 30.0
 _START_CLASSIFICATION_RESERVE_SECONDS = 3.0
 _START_CLASSIFICATION_RESERVE_FRACTION = 0.25
@@ -890,27 +889,6 @@ def schedule_guard_daemon_recovery(
     )
 
 
-def _guard_recovery_is_disabled(guard_home: Path) -> bool:
-    from .recovery_lifecycle import guard_recovery_is_disabled
-
-    return guard_recovery_is_disabled(guard_home)
-
-
-def _terminate_recovery_worker(process: subprocess.Popen[bytes]) -> bool:
-    from .recovery_lifecycle import terminate_recovery_worker
-
-    return terminate_recovery_worker(process)
-
-
-def _authenticated_live_current_daemon_url(
-    guard_home: Path,
-    state: dict[str, object] | None,
-) -> str | None:
-    from .recovery_lifecycle import authenticated_live_current_daemon_url
-
-    return authenticated_live_current_daemon_url(guard_home, state)
-
-
 def retire_all_guard_daemons_for_home(
     guard_home: Path,
     *,
@@ -1123,10 +1101,10 @@ def _guard_daemon_wake_reservation_path(guard_home: Path) -> Path:
     return guard_home / _GUARD_DAEMON_WAKE_RESERVATION_FILE
 
 
-def _load_guard_daemon_wake_reservation(guard_home: Path) -> dict[str, object] | None:
+def _load_reservation(path: Path) -> dict[str, object] | None:
     raw_payload = read_private_regular_text(
-        _guard_daemon_wake_reservation_path(guard_home),
-        max_bytes=_GUARD_DAEMON_WAKE_RESERVATION_MAX_BYTES,
+        path,
+        max_bytes=_GUARD_DAEMON_RESERVATION_MAX_BYTES,
         require_private_parent=True,
     )
     if raw_payload is None:
@@ -1138,12 +1116,24 @@ def _load_guard_daemon_wake_reservation(guard_home: Path) -> dict[str, object] |
     return payload if isinstance(payload, dict) else None
 
 
+def _clear_reservation(guard_home: Path, path: Path, token: str) -> bool:
+    with _guard_daemon_state_write_lock(guard_home):
+        reservation = _load_reservation(path)
+        if not isinstance(reservation, dict) or not secrets.compare_digest(
+            str(reservation.get("token", "")),
+            token,
+        ):
+            return False
+        _write_private_atomic_text(path, "{}")
+    return True
+
+
 def _claim_guard_daemon_wake_reservation(guard_home: Path) -> str | None:
     token = secrets.token_hex(16)
     now = time.time()
     _ensure_private_directory(guard_home)
     with _guard_daemon_state_write_lock(guard_home):
-        existing = _load_guard_daemon_wake_reservation(guard_home)
+        existing = _load_reservation(_guard_daemon_wake_reservation_path(guard_home))
         query = {"existing": _reservation_facts(existing), "now": now}
         if not _lifecycle("wake_claim", query, home=guard_home)["claim"]:
             return None
@@ -1155,15 +1145,7 @@ def _claim_guard_daemon_wake_reservation(guard_home: Path) -> str | None:
 
 
 def clear_guard_daemon_wake_reservation(guard_home: Path, *, token: str) -> bool:
-    with _guard_daemon_state_write_lock(guard_home):
-        reservation = _load_guard_daemon_wake_reservation(guard_home)
-        if not isinstance(reservation, dict) or not secrets.compare_digest(
-            str(reservation.get("token", "")),
-            token,
-        ):
-            return False
-        _write_private_atomic_text(_guard_daemon_wake_reservation_path(guard_home), "{}")
-    return True
+    return _clear_reservation(guard_home, _guard_daemon_wake_reservation_path(guard_home), token)
 
 
 def _guard_daemon_recovery_reservation_path(guard_home: Path) -> Path:
@@ -1171,18 +1153,7 @@ def _guard_daemon_recovery_reservation_path(guard_home: Path) -> Path:
 
 
 def _load_guard_daemon_recovery_reservation(guard_home: Path) -> dict[str, object] | None:
-    raw_payload = read_private_regular_text(
-        _guard_daemon_recovery_reservation_path(guard_home),
-        max_bytes=_GUARD_DAEMON_RECOVERY_RESERVATION_MAX_BYTES,
-        require_private_parent=True,
-    )
-    if raw_payload is None:
-        return None
-    try:
-        payload = json.loads(raw_payload)
-    except json.JSONDecodeError:
-        return None
-    return payload if isinstance(payload, dict) else None
+    return _load_reservation(_guard_daemon_recovery_reservation_path(guard_home))
 
 
 def _claim_guard_daemon_recovery_reservation(guard_home: Path) -> str | None:
@@ -1237,15 +1208,7 @@ def _bind_guard_daemon_recovery_reservation(
 
 
 def clear_guard_daemon_recovery_reservation(guard_home: Path, *, token: str) -> bool:
-    with _guard_daemon_state_write_lock(guard_home):
-        reservation = _load_guard_daemon_recovery_reservation(guard_home)
-        if not isinstance(reservation, dict) or not secrets.compare_digest(
-            str(reservation.get("token", "")),
-            token,
-        ):
-            return False
-        _write_private_atomic_text(_guard_daemon_recovery_reservation_path(guard_home), "{}")
-    return True
+    return _clear_reservation(guard_home, _guard_daemon_recovery_reservation_path(guard_home), token)
 
 
 def schedule_guard_daemon_ensure(

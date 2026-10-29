@@ -9,7 +9,7 @@
 pub(super) mod body;
 
 use body::{
-    body_items, rebinds, redirect_tail, references_stand_alone, substitute,
+    body_items, rebinds, redirect_tail, references_are_quoted, references_stand_alone, substitute,
     unquote_whole_references,
 };
 
@@ -70,7 +70,15 @@ pub(super) fn unroll(command: &str) -> Option<String> {
     // whole word of its own, and only while the pattern reaches the unrolled
     // text bare, which is why a reference the body quotes on its own loses its
     // quotes first.
-    let items = if words.iter().any(|word| word.contains(['*', '?', '['])) {
+    // Taking those quotes off is only faithful while every word is a single
+    // field, so a header that mixes a pattern with a word holding separators
+    // has no written form that is both and keeps its review.
+    let patterned = words.iter().any(|word| word.contains(['*', '?', '[']));
+    let spaced = words.iter().any(|word| word.contains([' ', '\t']));
+    if patterned && spaced {
+        return None;
+    }
+    let items = if patterned {
         let items: Vec<(String, &'static str)> = items
             .into_iter()
             .map(|(text, separator)| (unquote_whole_references(&text), separator))
@@ -80,6 +88,9 @@ pub(super) fn unroll(command: &str) -> Option<String> {
         }
         items
     } else {
+        if spaced && !items.iter().all(|(text, _)| references_are_quoted(text)) {
+            return None;
+        }
         items
     };
     let mut out = prefix;
@@ -161,6 +172,23 @@ fn safe_value(value: &str) -> bool {
         })
 }
 
+/// A quoted word whose text holds the field separators the quotes protect,
+/// such as `for spec in "1 first" "2 second"`.
+///
+/// The word is written back where the expansion stood, and the body keeps its
+/// own quotes around that place, so a quoted reference becomes the quoted word
+/// and stays the one field the loop passed it. Every field has to be a literal
+/// word of its own, so the text written out can hold no operator, expansion or
+/// pattern the loop never ran.
+fn spaced_value(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= MAX_WORD_BYTES
+        && value.contains([' ', '\t'])
+        && value
+            .split([' ', '\t'])
+            .all(|field| field.is_empty() || safe_value(field))
+}
+
 /// A glob pattern the shell expands against the directory the loop runs in,
 /// such as `*.ts`, `src/*.ts` or `packages/*/`.
 ///
@@ -229,7 +257,8 @@ fn names_a_file_type(value: &str) -> bool {
 ///
 /// A quoted word is the text itself rather than a pattern, so it keeps the
 /// literal rule: writing it back out unquoted would otherwise hand the body a
-/// pattern the loop never expanded.
+/// pattern the loop never expanded. Its text may hold the separators the
+/// quotes protect, which [`spaced_value`] admits.
 fn header_words(text: &str) -> Option<(Vec<String>, &str)> {
     let mut words: Vec<(String, bool)> = Vec::new();
     let mut current = String::new();
@@ -251,7 +280,11 @@ fn header_words(text: &str) -> Option<(Vec<String>, &str)> {
                 }
                 return words
                     .iter()
-                    .all(|(word, quoted)| safe_value(word) || (!quoted && pattern_value(word)))
+                    .all(|(word, quoted)| {
+                        safe_value(word)
+                            || (*quoted && spaced_value(word))
+                            || (!quoted && pattern_value(word))
+                    })
                     .then(|| {
                         (
                             words.into_iter().map(|(word, _)| word).collect(),

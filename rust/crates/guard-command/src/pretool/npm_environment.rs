@@ -28,6 +28,24 @@ pub(super) fn inert_npm_config_name(name: &str) -> bool {
         .is_some_and(|key| INERT_NPM_KEYS.contains(&key))
 }
 
+/// Whether `name`, a variable the hook stamped, is an inert npm key or a
+/// `NODE_OPTIONS` the hook saw holding only heap and diagnostic flags, as
+/// `NODE_OPTIONS=--max-old-space-size=8192` in a developer's shell profile.
+pub(super) fn inert_stamped_name(environment: &GuardExecutionEnvironmentV1, name: &str) -> bool {
+    inert_npm_config_name(name)
+        || (name.eq_ignore_ascii_case("NODE_OPTIONS") && environment.node_options_inert)
+}
+
+/// [`inert_stamped_name`] for the runtime's own environment, whose values it
+/// can read directly.
+pub(super) fn inert_inherited(name: &str, value: &std::ffi::OsStr) -> bool {
+    inert_npm_config_name(name)
+        || (name.eq_ignore_ascii_case("NODE_OPTIONS")
+            && value
+                .to_str()
+                .is_some_and(guard_contracts::node_options_inert))
+}
+
 /// Whether `name` is a loader search path the hook stamped whose every entry
 /// is a trusted directory outside each of `roots`. Injection variables such
 /// as `LD_PRELOAD` are never stamped, so they never pass.
@@ -74,6 +92,7 @@ mod tests {
                 .map(|path| ("LD_LIBRARY_PATH".to_owned(), path.display().to_string()))
                 .into_iter()
                 .collect(),
+            ..Default::default()
         }
     }
 
@@ -133,5 +152,23 @@ mod tests {
         assert!(!unstamped);
         assert!(!preload);
         assert!(!registry);
+    }
+
+    #[test]
+    fn a_heap_size_node_options_keeps_npm_configuration_inert_only_when_stamped_inert() {
+        let home = std::env::temp_dir();
+        let names = ["NODE_OPTIONS", "npm_config_cache"];
+        let stamped = GuardExecutionEnvironmentV1 {
+            node_options_inert: true,
+            ..environment(&names, None)
+        };
+        assert!(inert(&home, &home, &stamped));
+        // The hook omits the flag for a preload, a loader or anything else.
+        assert!(!inert(&home, &home, &environment(&names, None)));
+        let other = GuardExecutionEnvironmentV1 {
+            node_options_inert: true,
+            ..environment(&["NODE_OPTIONS", "npm_config_registry"], None)
+        };
+        assert!(!inert(&home, &home, &other));
     }
 }

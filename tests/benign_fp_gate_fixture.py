@@ -52,7 +52,7 @@ from ci.gauntlet.fixtures import BENCH_CHECKOUT, BENCH_FILES, HOME_TOOLCHAIN_INI
 from ci.gauntlet.realism_fixtures import REVIEW_NOTES, SESSION_SOURCE
 from ci.gauntlet.source_output_fixtures import SOURCES as TOKEN_SOURCES
 from tests import codex_containment_route
-from tests.benign_fp_gate_configs import KUBECONFIG, LFS_GITCONFIG
+from tests.benign_fp_gate_configs import KUBECONFIG, LFS_GITCONFIG, write_parent_documents, write_sibling_documents
 from tests.benign_fp_gate_connectors import write_connectors
 from tests.benign_fp_gate_cursor_project import cursor_project_path, write_cursor_projects
 from tests.benign_fp_gate_developer_checkout import head_commit, write_developer_checkout
@@ -170,6 +170,7 @@ class BenignFixture:
             "org": self.org,
             "edge_clone": self.home / "edge-clone",
             "home_project": self.home / "project",
+            "home_sibling": self.home / "other-project",
             "org_app": self.org / "app-portal",
             "org_wt": self.org.parent / "app-portal-fix",
             "org_clone": self.org.parent / "app-portal-clone",
@@ -259,7 +260,7 @@ def build_fixture(root: Path) -> BenignFixture:
     _write(home / "other-project" / "notes.md", "Notes kept outside the project.\nretry policy: three attempts.\n")
     _write(home / "other-project" / "src" / "report.ts", "export const reportWindow = 'report-window-marker';\n")
     _write(home / "other-project" / "package.json", '{\n  "name": "@acme/app",\n  "version": "1.0.0"\n}\n')
-    _write(home / "other-project" / ".keep", "")
+    write_sibling_documents(home / "other-project")
     # Sibling checkout's committed lockfile: the probe that globs for one has to
     # find it, or the read is allowed for naming nothing rather than for being safe.
     _write(
@@ -276,22 +277,14 @@ def build_fixture(root: Path) -> BenignFixture:
     _git(home / "other-project", "init", "--quiet", "--initial-branch=main", home=home)
     _git(home / "other-project", "add", "-A", home=home)
     _git(home / "other-project", "commit", "--quiet", "-m", "sibling base", home=home)
-    _git(
-        home / "other-project",
-        "worktree",
-        "add",
-        "--quiet",
-        "-b",
-        "fix/report-window",
-        str(home / "other-project-wt"),
-        home=home,
-    )
+    sibling_wt = str(home / "other-project-wt")
+    _git(home / "other-project", "worktree", "add", "--quiet", "-b", "fix/report-window", sibling_wt, home=home)
     # Installed after the baseline commit, as an untracked `npm install` leaves it.
     _sibling_test_runner(home / "other-project")
 
     parent.mkdir(parents=True)
     _git(parent, "init", "--quiet", "--initial-branch=main", home=home)
-    _write(parent / "README.md", "# Parent\n")
+    write_parent_documents(parent)
     _write(parent / "src" / "one.ts", "export const one = 1;\n")
     # The one committed file long enough for a range-limited read of its history.
     _write(parent / "src" / "report-window.ts", COMMITTED_SOURCE)

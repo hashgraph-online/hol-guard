@@ -785,9 +785,8 @@ fn evaluate_envelope(
     }) {
         signals.sensitive_target = signals.independent_sensitive_target;
     }
-    // A link to a secret file is that secret under another name.
-    signals.sensitive_target |=
-        super::secret_aliases::decision_names_secret_alias(command_decision.as_ref(), context);
+    // A tracked document named for a secret is not one; a link to a secret is.
+    signals.settle_tracked_names(command_decision.as_ref(), context);
     let hashline_edit_proven = omp_hashline_edit.is_some();
     let mut result = if search_scope_proven {
         generic_result(

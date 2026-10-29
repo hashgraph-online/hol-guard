@@ -5,6 +5,7 @@ from __future__ import annotations
 from ._modules.grok.grok_hook_invocation_template import GROK_HOOK_INVOCATION_TEMPLATE
 from ._modules.grok.grok_hook_readiness_template import GROK_HOOK_READINESS_TEMPLATE
 from .bounded_cli_hook_script_native import BOUNDED_HOOK_NATIVE_TEMPLATE
+from .hook_execution_stamp import HOOK_EXECUTION_STAMP_TEMPLATE
 from .hook_http_deadline import HOOK_HTTP_DEADLINE_TEMPLATE
 from .hook_input_reader import HOOK_INPUT_READER_TEMPLATE
 
@@ -192,51 +193,7 @@ def _json_object(text: str) -> dict[str, object] | None:
     return raw if isinstance(raw, dict) else None
 
 
-def _loader_value_fits(value: str | None) -> bool:
-    if not value:
-        return False
-    try:
-        return len(value.encode()) <= 32 * 1024
-    except UnicodeEncodeError:
-        return False
-
-
-def _stamp_hook_input(text: str) -> str:
-    payload = _json_object(text)
-    if payload is None:
-        return text
-    active = {key: value for key, value in os.environ.items() if value}
-    # Git pages through `less` by default; flags taking a file argument are excluded.
-    pager_ok = re.compile(r"(?:cat|less(?: -[ABCEFGIJKLMNQRSUVWXacdefgimnqrsuw~]+)*)?").fullmatch
-    payload["guard_execution_environment"] = {
-        "path": os.environ.get("PATH", ""),
-        "environment_names": sorted(set(active) | {n for n in ("GIT_PAGER", "PAGER") if n in os.environ}),
-        "environment_digest": hashlib.sha256(
-            json.dumps(active, sort_keys=True, separators=(",", ":")).encode()
-        ).hexdigest(),
-        "xdg_config_home": os.environ.get("XDG_CONFIG_HOME") or None,
-        "git_config_no_system": _git_config_no_system_enabled(
-            os.environ.get("GIT_CONFIG_NOSYSTEM")
-        ),
-        "home": os.environ.get("HOME"),
-        "git_pager_disabled": pager_ok(os.environ.get("GIT_PAGER", "-")) is not None,
-        "pager_disabled": pager_ok(os.environ.get("PAGER", "-")) is not None,
-        "library_search_paths": {
-            name: value
-            for name in (
-                "LD_LIBRARY_PATH",
-                "DYLD_LIBRARY_PATH",
-                "DYLD_FALLBACK_LIBRARY_PATH",
-                "DYLD_FRAMEWORK_PATH",
-                "DYLD_FALLBACK_FRAMEWORK_PATH",
-            )
-            if (value := os.environ.get(name)) and _loader_value_fits(value)
-        },
-    }
-    stamped = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
-    return stamped if len(stamped) <= 1_000_000 else text
-
-
+__HOOK_EXECUTION_STAMP__
 def _compact(event_name: str) -> str:
     return event_name.replace("_", "").replace("-", "").lower()
 
@@ -667,4 +624,5 @@ if __name__ == "__main__":
     .replace("__GROK_HOOK_READINESS__", GROK_HOOK_READINESS_TEMPLATE)
     .replace("__GROK_HOOK_INVOCATION__", GROK_HOOK_INVOCATION_TEMPLATE)
     .replace("__HOOK_NATIVE_RESPONSES__\n", BOUNDED_HOOK_NATIVE_TEMPLATE)
+    .replace("__HOOK_EXECUTION_STAMP__\n", HOOK_EXECUTION_STAMP_TEMPLATE)
 )

@@ -148,6 +148,12 @@ pub(crate) struct HookDirectRequestV1 {
     pub(crate) workspace: Option<String>,
     #[serde(default)]
     pub(crate) deadline_budget_ms: Option<u64>,
+    /// Set by a bridge that has already seen the daemon fail, asking the
+    /// resident to answer only what the emergency-safe profile allows. An
+    /// older bridge sends no such field and is read as `false`, which keeps
+    /// the ordinary lane.
+    #[serde(default)]
+    pub(crate) emergency_safe_only: bool,
     pub(crate) payload: Value,
 }
 
@@ -179,6 +185,10 @@ pub(crate) enum HookDirectDefer {
     /// not carry, or does not carry readably: only the daemon can resolve
     /// what its structured output requires.
     StructuredMediation,
+    /// A hook the bridge asked about under the emergency-safe profile that
+    /// the profile does not continue, so the bridge pauses it as it would
+    /// have without asking.
+    EmergencySafeProfile,
 }
 
 impl HookDirectDefer {
@@ -207,6 +217,7 @@ impl HookDirectDefer {
             Self::ReviewQueue => "direct_hook_review_queue",
             Self::RuntimeSuperseded => "direct_hook_runtime_superseded",
             Self::StructuredMediation => "direct_hook_structured_mediation",
+            Self::EmergencySafeProfile => "direct_hook_emergency_safe_profile",
         }
     }
 }
@@ -329,6 +340,21 @@ fn answer(
     let candidate = workspace_candidate(&payload, request.workspace.as_deref(), &request_home)?
         .ok_or(HookDirectDefer::WorkspaceMissing)?;
     let workspace = settled_directory(&candidate)?;
+    // A bridge that has seen the daemon fail asks only about the ratified
+    // emergency-safe profile; nothing else is answered on that pass. The
+    // home and workspace are settled first so a call the profile continues
+    // is recorded the way every direct answer is.
+    if request.emergency_safe_only {
+        return emergency_safe::answer(
+            &request.harness,
+            &request.guard_home,
+            &request_home,
+            &workspace,
+            pre_tool,
+            &evidence_payload,
+            policy_store,
+        );
+    }
     let (snapshot, binding) = policy_store
         .admit_direct_hook_or_subdirectory(&workspace)
         .map_err(HookDirectDefer::Lane)?;
@@ -632,6 +658,8 @@ pub(crate) mod contained;
 pub(crate) mod cursor;
 #[path = "hook_direct_edge.rs"]
 mod edge;
+#[path = "hook_direct_emergency_safe.rs"]
+mod emergency_safe;
 #[path = "hook_direct_fence.rs"]
 mod fence;
 #[path = "hook_direct_lifecycle.rs"]

@@ -786,7 +786,7 @@ fn windows_contains_direct_vite_builds_of_a_flat_install() {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: false,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     let classify_in = |harness: &str, command: &str, cwd: &str| {
         guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(

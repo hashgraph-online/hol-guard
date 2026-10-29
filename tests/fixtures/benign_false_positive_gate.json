@@ -17201,6 +17201,22 @@
       "expect": "allow"
     },
     {
+      "id": "gauntlet-linked-modules-relative-bun-entry",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd dashboard && bun node_modules/vite/bin/vite.js build 2>&1 | tail -15"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "gauntlet-venv-activate-pytest",
       "fix_area": "shell",
       "harnesses": [
@@ -21257,6 +21273,70 @@
       },
       "cwd": "worktree",
       "expect": "allow"
+    },
+    {
+      "id": "session-quoted-loop-word-holds-spaces",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "for spec in \"1 aaaa\" \"2 bbbb\"; do echo \"$spec\"; done"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "session-quoted-loop-word-holds-a-flag",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "for flag in \"-l one\" \"-l two\"; do echo \"$flag\"; done"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-quoted-loop-word-holds-an-operator",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "for s in \"a; rm -rf b\"; do echo \"$s\"; done"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-quoted-loop-word-beside-a-pattern",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "for x in \"a b\" src/*.ts; do echo \"$x\"; done"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
     },
     {
       "id": "session-for-loop-bare-glob-head",
@@ -35109,6 +35189,186 @@
       "cwd": "worktree",
       "expect": "not_allow",
       "contained_ok": true
+    },
+    {
+      "id": "tracked-credential-named-catalog-read",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${WORKTREE}/contributions/extensions/command.kubernetes-secrets.json"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "tracked-credential-named-catalog-sed-edit",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sed -i '' 's|1.0.0|1.1.0|' contributions/extensions/command.kubernetes-secrets.json"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "tracked-credential-named-catalog-perl-from-main-checkout",
+      "fix_area": "git-sibling-worktree",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "perl -pi -e 's/1.0.0/1.1.0/' ${USER_TMP_SIBLING}/contributions/extensions/command.kubernetes-secrets.json"
+      },
+      "cwd": "home_sibling",
+      "expect": "allow"
+    },
+    {
+      "id": "tracked-credential-named-catalog-sed-pipe-from-main-checkout",
+      "fix_area": "git-sibling-worktree",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sed -i '' 's|1.0.0|1.1.0|' ${USER_TMP_SIBLING}/contributions/extensions/command.kubernetes-secrets.json"
+      },
+      "cwd": "home_sibling",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-sibling-sed-pipe-redirect-into-home",
+      "fix_area": "git-sibling-worktree",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sed -i '' 's|1.0.0|1.1.0|' ${USER_TMP_SIBLING}/contributions/extensions/command.kubernetes-secrets.json > ${HOME}/catalog-copy.json"
+      },
+      "cwd": "home_sibling",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-tracked-kubernetes-secret-manifest-read",
+      "fix_area": "shell",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${WORKTREE}/deploy/app-secrets.yaml"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-tracked-kubernetes-secret-manifest-sed-edit",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sed -i '' 's|app|web|' deploy/app-secrets.yaml"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-workspace-prefixed-parent-redirect",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "echo hi > ${WORKTREE}/../escaped.txt"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-workspace-prefixed-parent-copy",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cp README.md ${WORKTREE}/../../escaped.txt"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-workspace-prefixed-parent-read",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat ${WORKTREE}/../../../etc/hosts"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "session-workspace-prefixed-interior-parent-step",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat ${WORKTREE}/cmd/../cmd/README.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
     }
   ],
   "mcp_cases": [

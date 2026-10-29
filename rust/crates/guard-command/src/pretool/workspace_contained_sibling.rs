@@ -181,9 +181,7 @@ fn sibling_anchor(model: &CanonicalCommandV1, context: PathContext<'_>) -> Optio
         || !segment.environment_names.is_empty()
         || segment.pipeline_index != 0
         || executable == "cd"
-        || model
-            .normalized_text
-            .contains(['<', '>', '|', '&', ';', '`'])
+        || unquoted_operator(&model.normalized_text)
         || super::reach::expands_variable(
             &model.normalized_text,
             super::super::executable_basename(executable),
@@ -388,6 +386,31 @@ fn temporary_anchor_trusted(root: &Path, home: &str) -> bool {
             .is_some_and(|(common, _)| trusted(&common))
 }
 
+/// Whether `text` holds a shell operator or command substitution outside
+/// quotes. The parser already split every list and pipe into segments, so a
+/// `|` left in the text of one segment is either a literal, such as the
+/// delimiter in `sed -i '' 's|1.0|1.1|' f`, or a redirect the segment kept.
+/// A quote left open keeps the review. The sink anchors the same plain
+/// command through `sibling_run`, so both read the text alike.
+fn unquoted_operator(text: &str) -> bool {
+    let (mut single, mut double, mut escaped) = (false, false, false);
+    for current in text.chars() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match current {
+            '\\' if !single => escaped = true,
+            '\'' if !double => single = !single,
+            '"' if !single => double = !double,
+            '`' if !single => return true,
+            '<' | '>' | '|' | '&' | ';' if !single && !double => return true,
+            _ => {}
+        }
+    }
+    single || double
+}
+
 /// The trees the sandbox rooted at `root` can read: the root and, for a
 /// linked worktree, its main checkout.
 fn readable_trees(root: &Path) -> Vec<PathBuf> {
@@ -446,6 +469,31 @@ mod heap_size_tests {
             "-r",
         ] {
             assert!(!super::node_heap_size(word), "{word}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod operator_tests {
+    #[test]
+    fn only_operators_outside_quotes_keep_the_review() {
+        for text in [
+            "sed -i '' 's|1.0.0|1.1.0|' /tmp/wt/catalog.json",
+            "perl -pi -e \"s/a|b/c/\" /tmp/wt/notes.md",
+            "sed -i 's/a\\|b/c/' notes.md",
+            "printf 'a;b&c<d>e'",
+        ] {
+            assert!(!super::unquoted_operator(text), "{text}");
+        }
+        for text in [
+            "sed -i '' 's/a/b/' notes.md > out",
+            "perl -pi -e 's/a/b/' notes.md 2>/dev/null",
+            "echo \"`id`\"",
+            "echo 'open",
+            "printf 'a\\' > out '",
+            "cat notes.md | sh",
+        ] {
+            assert!(super::unquoted_operator(text), "{text}");
         }
     }
 }

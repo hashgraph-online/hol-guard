@@ -175,7 +175,7 @@ mod search_scope;
 mod search_scope_filter;
 mod search_scope_glob;
 mod search_scope_ignore;
-mod search_scope_tracked;
+pub(crate) mod search_scope_tracked;
 mod search_scope_walk;
 mod secret_aliases;
 pub(crate) mod sed_edits;
@@ -1245,10 +1245,8 @@ fn evaluate_single_command(
             "The Rust command authority proved this bounded command explicitly benign.",
         ));
     }
-    if git_search_text::sensitive_beyond_patterns(
-        &data_heredocs::without_data_bodies(normalized),
-        git_search_text::command_without_patterns(&model),
-    ) || secret_aliases::names_secret_alias(&model, context)
+    if git_search_text::command_sensitive(&model, normalized, context.cwd)
+        || secret_aliases::names_secret_alias(&model, context)
         || glob_words::names_hidden_glob(&model, context)
     {
         return Ok(pretool_decision(

@@ -276,10 +276,7 @@ pub(super) fn exact_safe_segment_with_context(
         secret_namespace.map(|index| github_metadata_text::without_namespace(segment, index));
     if (!inert_search
         && !super::source_file_read_segment(segment)
-        && super::git_search_text::sensitive_beyond_patterns(
-            sensitive_text.as_deref().unwrap_or(&segment.text),
-            super::git_search_text::segment_without_patterns(segment),
-        ))
+        && super::git_search_text::segment_sensitive(model, segment, sensitive_text, context.cwd))
         || (!matches!(basename, "rg" | "grep" | "egrep" | "fgrep" | "fd")
             && segment
                 .arguments

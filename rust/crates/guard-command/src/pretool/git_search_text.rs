@@ -6,6 +6,7 @@
 //! and path screens, and a credential keyword in a pattern still reads as a
 //! credential search.
 
+use super::search_scope_tracked::names;
 use crate::{CanonicalCommandV1, CommandSegmentV1};
 
 /// Positions in `arguments`, the tokens after `git`, that hold search text
@@ -35,6 +36,30 @@ pub(super) fn sensitive_beyond_patterns(text: &str, without_patterns: Option<Str
         Some(rest) => super::credential_keyword_text(text) || super::sensitive_command(&rest),
         None => super::sensitive_command(text),
     }
+}
+
+/// [`sensitive_beyond_patterns`] for one segment of `model`, reading `text`
+/// (or the segment's own) and its pattern-free rest without the words that
+/// name tracked documents.
+pub(super) fn segment_sensitive(
+    model: &CanonicalCommandV1,
+    segment: &CommandSegmentV1,
+    text: Option<String>,
+    cwd: Option<&str>,
+) -> bool {
+    let text = names::segment_screen_text(model, segment, text, cwd);
+    let rest = segment_without_patterns(segment)
+        .map(|rest| names::screened(model, rest, names::segment_words(segment), cwd));
+    sensitive_beyond_patterns(&text, rest)
+}
+
+/// [`sensitive_beyond_patterns`] for the whole command, reading `text` and
+/// its pattern-free rest without heredoc data bodies and without the words
+/// that name tracked documents.
+pub(super) fn command_sensitive(model: &CanonicalCommandV1, text: &str, cwd: Option<&str>) -> bool {
+    let rest = command_without_patterns(model)
+        .map(|rest| names::screened(model, rest, names::command_words(model), cwd));
+    sensitive_beyond_patterns(&names::command_screen_text(model, text, cwd), rest)
 }
 
 /// The command's text with each Git search pattern left out, or `None` when

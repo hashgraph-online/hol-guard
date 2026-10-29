@@ -66,7 +66,7 @@ fn shell(home: &Path, command: &str) -> String {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     let project = home.join("project");
     let [omp, zcode] = ["omp", "zcode"].map(|harness| {

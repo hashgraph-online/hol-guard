@@ -58,6 +58,17 @@ fn read_only_loops_match_their_unrolled_form() {
             "for pkg in core cli; do echo \"pkg: $pkg\"; done",
             "echo \"pkg: core\"; echo \"pkg: cli\"",
         ),
+        // Quotes in the header protect the separators inside a word. The body
+        // keeps its own quotes around the place the expansion stood, so a
+        // quoted reference stays the one field the loop passed it.
+        (
+            "for spec in \"1 aaaa\" \"2 bbbb\"; do echo \"$spec\"; done",
+            "echo \"1 aaaa\"; echo \"2 bbbb\"",
+        ),
+        (
+            "for flag in \"-l one\" \"-l two\"; do echo \"$flag\"; done",
+            "echo \"-l one\"; echo \"-l two\"",
+        ),
         (
             "for f in a b; do wc -l \"$f\" && echo checked f; done",
             "wc -l \"a\" && echo checked f; wc -l \"b\" && echo checked f",
@@ -130,6 +141,19 @@ fn unsupported_loops_fall_back_to_review() {
         "for f in /etc/*.conf; do echo $f; done",
         "for f in src/../../*.ts; do echo $f; done",
         "for f in \"src/*.ts\"; do echo $f; done",
+        // A word that holds separators is one field only while the body's own
+        // quotes stay on, so a body that reads it bare, or a pattern in the
+        // same header, which needs those quotes off, keeps the loop unmodeled.
+        "for m in \"hello world\"; do echo $m; done",
+        "for x in \"a b\" *.ts; do echo \"$x\"; done",
+        // Quotes protect the separators, not the operators: writing the word
+        // out would spell a command the loop never ran.
+        "for s in \"a; rm -rf b\"; do echo \"$s\"; done",
+        "for s in \"a | tee out\"; do echo \"$s\"; done",
+        // Quotes beside a reference are not quotes around it: this word closes
+        // one quoted run and opens another around an expansion the shell still
+        // splits into fields of its own.
+        "for s in \"a b\"; do echo \"x\"$s\"y\"; done",
         "for f in 'src/*.ts'; do echo $f; done",
         // A glob glued into a larger word writes out a pattern the loop never
         // expanded, so the names the loop's own pattern matches are never

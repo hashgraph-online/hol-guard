@@ -518,7 +518,7 @@ fn location_allowed(
             .any(|prefix| lowered == *prefix || lowered.starts_with(&format!("{prefix}/"))))
         || foreign_user_home(canonical, home_dir, cwd)
         || guard_secure_fs::sensitive_path_family(canonical).is_some()
-        || (credential_names && guard_secure_fs::credential_named_path(canonical)))
+        || (credential_names && super::search_scope_tracked::names::unproven(canonical, cwd)))
 }
 
 pub(super) fn foreign_user_home(
