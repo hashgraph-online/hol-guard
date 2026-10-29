@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import { DiscoveryFailure } from "../discovery-failure";
 import { LocalCliApiError, loadLocalCliCommands, type LocalCliItem } from "../local-cli-api";
+import { listedVariationsSummary } from "./custom-extension-command-view";
 
 /** Job failures whose shared wording names connectors; a command-line tool gets its own. */
 const CLI_FAILURE_COPY: Record<string, string> = {
@@ -124,8 +125,8 @@ export function LocalCliLoadCommands(props: {
   }, [askPath, item.cli_id, item.name, onLoaded, path]);
 
   // Root and other are Guard's own entries for every tool, not listed commands.
-  const listedCount = item.commands.filter((command) => command.command_id !== "root" && command.command_id !== "other").length;
-  const hasCommands = listedCount > 0;
+  const listed = listedVariationsSummary(item.commands);
+  const hasCommands = listed !== null;
   const script = loadsAsScript(item);
   const recorded = recordedToolPath(item);
   return (
@@ -205,8 +206,8 @@ export function LocalCliLoadCommands(props: {
       {loaded ? (
         <p role="status" className="mt-3 text-sm leading-6 text-brand-dark/75">
           {hasCommands
-            ? `${item.name} lists ${listedCount} ${listedCount === 1 ? "command" : "commands"}. Choose Allow or Block for each below.`
-            : `${item.name} --help did not list any commands, so Guard treats it as one tool. Choose Allow or Block for it below.`}
+            ? `Guard found ${listed} for ${item.name}. Choose Allow or Block for each below.`
+            : `Guard found no commands or options for ${item.name}, so it treats it as one tool. Choose Allow or Block for it below.`}
         </p>
       ) : null}
     </div>

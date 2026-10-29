@@ -40,6 +40,12 @@ pub struct LocalCliGrantRequestV1 {
     /// missing id is treated as the catch-all `other` command.
     #[serde(default)]
     pub command_id: Option<String>,
+    /// The options the invocation passes, as the shell model split them: one
+    /// entry per argument that starts with `-`, cut at `=`. Like `command_id`
+    /// it only selects stored states; an option the catalog does not name
+    /// leaves the call to review whenever the catalog names any option.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub options: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

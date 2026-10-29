@@ -24,6 +24,7 @@ _COMMAND_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,40}$")
 _HELP_TIMEOUT_SECONDS = 2.5
 _HELP_OUTPUT_LIMIT = 8192
 _MAX_NESTED_PROBES = 8
+_SCRIPT_SOURCE_LIMIT = 32 * 1024
 _SAFE_PATH = "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin"
 
 
@@ -33,6 +34,7 @@ def parse_cli_help_text(
     parent_id: str | None = None,
     invocation: Sequence[str] = (),
     guard_home: Path | None = None,
+    script_source: bool = False,
 ) -> tuple[LocalCliCommand, ...] | None:
     """Extract first-level commands from typical CLI --help output.
 
@@ -51,6 +53,9 @@ def parse_cli_help_text(
     differently: a CLI whose help names no subcommands really did name none,
     while a resident that never answered has read nothing at all, and telling
     the operator the CLI listed no subcommands would be a guess.
+
+    ``script_source`` sends a script's own source instead of help output, for
+    a script whose ``--help`` printed nothing useful.
     """
 
     from ..config import resolve_guard_home
@@ -63,6 +68,7 @@ def parse_cli_help_text(
             text=text,
             parent_id=parent_id,
             invocation=tuple(invocation),
+            script_source=script_source,
         )
     except Exception:
         return None
@@ -143,10 +149,18 @@ def discover_local_cli_commands(
     probe: Callable[[Sequence[str]], str] = runner if runner is not None else run_cli_help
     output = str(probe(tuple(argv)))
     empty: tuple[LocalCliCommand, ...] = ()
-    if output.strip() == "":
-        # The probe printed nothing, so there is nothing to send anywhere.
-        return merge_discovered_commands(identity.name, empty), "failed"
-    discovered = parse_cli_help_text(output, invocation=(identity.name,), guard_home=guard_home)
+    # The probe printed nothing, so there is no help to send anywhere.
+    discovered = (
+        parse_cli_help_text(output, invocation=(identity.name,), guard_home=guard_home) if output.strip() else None
+    )
+    # A resident that could not read the help would not read the source either.
+    resident_failed = discovered is None and bool(output.strip())
+    if not discovered and not resident_failed:
+        # Many scripts reject --help or print only an error. Their usage
+        # comment and argument loop still name what they take.
+        from_source = _script_source_commands(identity, argv, guard_home=guard_home)
+        if from_source:
+            return merge_discovered_commands(identity.name, from_source), "ok"
     if discovered is None:
         return merge_discovered_commands(identity.name, empty), "failed"
     if not discovered:
@@ -156,6 +170,31 @@ def discover_local_cli_commands(
             tuple(argv), discovered, probe, program=identity.name, parent_help=output, guard_home=guard_home
         )
     return merge_discovered_commands(identity.name, discovered), "ok"
+
+
+def _script_source_commands(
+    identity: UnlistedCliIdentity,
+    argv: Sequence[str],
+    *,
+    guard_home: Path | None,
+) -> tuple[LocalCliCommand, ...] | None:
+    """What a script's own source names, read from the verified script path.
+
+    Only a script launched through its interpreter qualifies: ``argv`` is then
+    ``(interpreter, script, "--help")`` and the script path already passed the
+    probe's checks. Nothing in the file is run.
+    """
+
+    if identity.kind != "script" or len(argv) != 3 or not _safe_probe_path(str(argv[1])):
+        return None
+    try:
+        with open(argv[1], "rb") as handle:
+            source = handle.read(_SCRIPT_SOURCE_LIMIT).decode("utf-8", errors="replace")
+    except OSError:
+        return None
+    if not source.strip():
+        return None
+    return parse_cli_help_text(source, invocation=(identity.name,), guard_home=guard_home, script_source=True)
 
 
 def run_cli_help(argv: Sequence[str]) -> str:
@@ -259,7 +298,8 @@ def _with_nested_commands(
     top_level_help = _help_words(parent_help)
     top_level_entries = _listed_entries(command for command in discovered if command.parent_id is None)
     for command in discovered:
-        if command.parent_id is not None:
+        # An option has no help of its own to probe.
+        if command.parent_id is not None or not _COMMAND_NAME.fullmatch(command.name):
             continue
         child_output = probe((*prefix, command.name, "--help"))
         # A script that reads only --help prints its own help again for every

@@ -1,10 +1,10 @@
 import { j as jsxRuntimeExports, S as SectionLabel, H as HiMiniChevronRight, f as formatRelativeTime, h as harnessDisplayName, a as formatNumber, n as normalizeHarnessSlug, r as reactExports, b as HiMiniChevronUp, c as HiMiniChevronDown, A as ActionButton, d as HiMiniArrowPath, e as HiMiniCheck, g as HiMiniNoSymbol, i as HiMiniHandRaised, k as HiMiniArrowUpTray, l as HiMiniCube, m as HiMiniPencilSquare, o as HiMiniCommandLine, p as HiMiniMagnifyingGlass, q as HiMiniDocumentText, s as HiMiniCheckCircle, T as Tag, t as HiMiniArrowRight, u as isConnectableAppHarness, v as HiMiniLockClosed, w as getHeatmapLevel, E as EvidenceInsightsShareButton, G as GuardStatMetric, x as HomeInsightsMetrics, y as EvidenceActivityHeatmapMini, z as homeCommandActivityModel, B as createCommandActivityClient, C as fetchCommandActivityApi, D as useReceiptAnalytics, F as updateSettings, I as turnProtectionOnUpdate, J as useProtectionPresentationState, K as protectionHealthFor, L as unavailableProtectionHealth, R as RuntimeErrorState, M as watchBannerModel, W as WatchProtectionBanner, N as EvidenceInsightsShareModal, O as OperatorHealthCard, P as HiMiniShieldCheck, Q as DeviceProofCard, U as guardActionDisposition, V as approvalLeftActionStopped, X as guardActionActivityCopy, Y as HiMiniSparkles, Z as HiMiniXMark, _ as EmptyState, $ as resolveCloudIntelCopy, a0 as HiMiniCloud, a1 as HiMiniQuestionMarkCircle, a2 as useFocusTrap, a3 as approvalProofRequiresPassword, a4 as HiMiniExclamationTriangle, a5 as HiMiniBolt, a6 as Badge, a7 as HiMiniMinusCircle } from "../guard-dashboard.js";
 import { a8, a9 } from "../guard-dashboard.js";
-import { H as HomeProtectionModule } from "./home-protection-module-Gmcu_gwW.js";
+import { H as HomeProtectionModule } from "./home-protection-module-ChVN6Qnn.js";
 import { B as BrandHero, a as BrandHeroFacts, b as BrandHeroBadge, u as useReducedMotion, c as brandMarkSvg } from "./brand-hero-COty1p6U.js";
 import { A as ABOUT_LOCAL_SECTION_TITLE, a as ABOUT_LOCAL_SECTION_BODY } from "./about-content-Dr9zFg1V.js";
 import { S as SUPPORTED_APPS_FULL } from "./app-catalog-By01oDVd.js";
-import "./supply-chain-protection-stats-BM1-krLn.js";
+import "./supply-chain-protection-stats-CgRZSMpf.js";
 function redactQueueArtifactName(value) {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();

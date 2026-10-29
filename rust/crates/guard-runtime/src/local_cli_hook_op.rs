@@ -361,19 +361,28 @@ fn grant(request: &LocalCliHookRequestV1, package: &Package) -> contained::Answe
     };
     let catalog = crate::local_cli_grant_op::command_catalog(&request.guard_home, &launch.cli_id)
         .map_err(|_| ())?;
-    let command_id = if catalog.is_empty() {
-        None
+    let (command_id, options) = if catalog.is_empty() {
+        (None, Vec::new())
     } else {
-        let tokens = match package {
-            Some(found) => found.command_tokens.clone(),
-            None => invocation_tokens(request, &launch)?,
+        // A package script's tokens name the script; the script itself takes
+        // no options of its own.
+        let (tokens, options) = match package {
+            Some(found) => (found.command_tokens.clone(), Vec::new()),
+            None => {
+                let arguments = invocation_arguments(request, &launch)?;
+                (
+                    leading_command_tokens(&arguments),
+                    crate::local_cli_grant_op::invocation_options(&arguments),
+                )
+            }
         };
-        Some(match_command_id(&tokens, &catalog))
+        (Some(match_command_id(&tokens, &catalog)), options)
     };
     let answer = crate::local_cli_grant_op::decide_allowed_launch(
         &request.guard_home,
         &launch.source,
         command_id.as_deref(),
+        &options,
     )
     .map_err(|_| ())?;
     if answer["cli_id"].as_str() != Some(launch.cli_id.as_str())
@@ -421,9 +430,12 @@ fn launch(
         }))
 }
 
-/// `command_tokens_for_invocation` past the package script branch: the first
-/// segment's arguments after the runner or script name.
-fn invocation_tokens(request: &LocalCliHookRequestV1, launch: &Launch) -> Result<Vec<String>, ()> {
+/// The first segment's arguments after the runner or the script's own path,
+/// which `command_tokens` and the option reading both start from.
+fn invocation_arguments(
+    request: &LocalCliHookRequestV1,
+    launch: &Launch,
+) -> Result<Vec<String>, ()> {
     if request.command.trim().is_empty() {
         return Err(());
     }
@@ -440,10 +452,13 @@ fn invocation_tokens(request: &LocalCliHookRequestV1, launch: &Launch) -> Result
         .segments
         .first()
         .map(|segment| {
-            command_tokens(
+            identity_arguments(
                 launch_arguments(segment, &launch.name, &launch.kind),
-                launch,
+                &launch.name,
+                &launch.kind,
+                launch.runner.as_deref(),
             )
+            .to_vec()
         })
         .unwrap_or_default())
 }
@@ -451,6 +466,21 @@ fn invocation_tokens(request: &LocalCliHookRequestV1, launch: &Launch) -> Result
 /// `command_tokens_for_invocation` past the package script branch, for a
 /// caller that derived the launch identity itself.
 pub(crate) fn invocation_command_tokens(
+    command: &str,
+    cwd: &str,
+    home_dir: Option<&str>,
+    name: &str,
+    kind: &str,
+    runner: Option<&str>,
+) -> Vec<String> {
+    leading_command_tokens(&invocation_command_arguments(
+        command, cwd, home_dir, name, kind, runner,
+    ))
+}
+
+/// The arguments `invocation_command_tokens` reads its tokens from: the first
+/// segment's arguments after the runner or the script's own path.
+pub(crate) fn invocation_command_arguments(
     command: &str,
     cwd: &str,
     home_dir: Option<&str>,
@@ -476,13 +506,14 @@ pub(crate) fn invocation_command_tokens(
         .segments
         .first()
         .map(|segment| {
-            tokens_for_identity(launch_arguments(segment, name, kind), name, kind, runner)
+            identity_arguments(launch_arguments(segment, name, kind), name, kind, runner).to_vec()
         })
         .unwrap_or_default()
 }
 
 /// Leading command-name tokens, after a runner's own arguments or a script's
 /// own path, up to `MAX_DEPTH`.
+#[cfg(test)]
 pub(crate) fn command_tokens(arguments: &[String], launch: &Launch) -> Vec<String> {
     tokens_for_identity(
         arguments,
@@ -493,16 +524,39 @@ pub(crate) fn command_tokens(arguments: &[String], launch: &Launch) -> Vec<Strin
 }
 
 /// `command_tokens` for an identity the caller holds as plain fields.
+#[cfg(test)]
 fn tokens_for_identity(
     arguments: &[String],
     name: &str,
     kind: &str,
     runner: Option<&str>,
 ) -> Vec<String> {
-    let arguments = match runner {
+    leading_command_tokens(identity_arguments(arguments, name, kind, runner))
+}
+
+/// The command-name tokens an argument list starts with, up to `MAX_DEPTH`.
+pub(crate) fn leading_command_tokens(arguments: &[String]) -> Vec<String> {
+    arguments
+        .iter()
+        .take_while(|argument| !argument.starts_with('-') && is_command_name(argument))
+        .take(MAX_DEPTH)
+        .cloned()
+        .collect()
+}
+
+/// The arguments the CLI itself receives: past a runner's own arguments, or
+/// past a script's own path. A runner whose arguments do not split leaves
+/// nothing to read.
+fn identity_arguments<'a>(
+    arguments: &'a [String],
+    name: &str,
+    kind: &str,
+    runner: Option<&str>,
+) -> &'a [String] {
+    match runner {
         Some(runner) => match runner_split(runner, arguments) {
             Some((_, rest)) => rest,
-            None => return Vec::new(),
+            None => &[],
         },
         None if kind == "script"
             && arguments
@@ -512,13 +566,7 @@ fn tokens_for_identity(
             &arguments[1..]
         }
         None => arguments,
-    };
-    arguments
-        .iter()
-        .take_while(|argument| !argument.starts_with('-') && is_command_name(argument))
-        .take(MAX_DEPTH)
-        .cloned()
-        .collect()
+    }
 }
 
 /// `_COMMAND_NAME`: `^[A-Za-z][A-Za-z0-9_-]{0,40}$`.

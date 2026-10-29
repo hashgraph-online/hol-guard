@@ -14,6 +14,10 @@ pub const LOCAL_CLI_HELP_PARSE_REQUEST_SCHEMA: &str = "guard-local-cli-help-pars
 pub const LOCAL_CLI_HELP_PARSE_RESULT_SCHEMA: &str = "guard-local-cli-help-parse-result.v1";
 /// Capability advertised by the runtime when this operation is available.
 pub const LOCAL_CLI_HELP_PARSE_FEATURE: &str = "local-cli-help-parse-v1";
+/// Capability advertised when the op also reads option variations and accepts
+/// [`LocalCliHelpParseRequestV1::script_source`]. A caller sends that field
+/// only to a runtime that advertises this, since older ones refuse it.
+pub const LOCAL_CLI_HELP_VARIATIONS_FEATURE: &str = "local-cli-help-variations-v1";
 /// Largest canonical request serialization the op will accept. Python bounds
 /// the probed output at 8 KiB; this leaves room for the envelope around it.
 pub const LOCAL_CLI_HELP_PARSE_MAX_BYTES: usize = 256 * 1024;
@@ -32,6 +36,15 @@ pub struct LocalCliHelpParseRequestV1 {
     /// The program and parent command path, for example `["wrangler", "d1"]`.
     #[serde(default)]
     pub invocation: Vec<String>,
+    /// `text` is the source of a script whose `--help` printed nothing usable,
+    /// not help output: read its comments, heredocs, `case` arms and option
+    /// parser calls instead of a help layout.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub script_source: bool,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 /// One command read out of help text.

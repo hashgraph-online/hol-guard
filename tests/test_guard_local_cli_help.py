@@ -20,7 +20,9 @@ import pytest
 
 from codex_plugin_scanner.guard.runtime.local_cli_commands import (
     LocalCliCommand,
+    is_local_cli_command_id,
     merge_discovered_commands,
+    slug_local_cli_command_id,
 )
 from codex_plugin_scanner.guard.runtime.local_cli_help import (
     _HELP_OUTPUT_LIMIT,
@@ -97,7 +99,9 @@ def recorded_resident(monkeypatch: pytest.MonkeyPatch) -> None:
         text: str,
         parent_id: str | None,
         invocation: Sequence[str],
+        script_source: bool = False,
     ) -> tuple[dict[str, object], ...] | None:
+        assert not script_source, "the fixture records help output, not script sources"
         key = (text, parent_id, tuple(invocation))
         assert key in answers, f"the fixture records no parse for {key[1:]!r}"
         return answers[key]
@@ -425,3 +429,132 @@ def test_a_probe_that_exits_stops_what_it_left_behind(tmp_path: Path) -> None:
     tool.chmod(0o755)
     assert "Usage: forks" in run_cli_help((str(tool), "--help"))
     _assert_stopped(int(started.read_text(encoding="utf-8")))
+
+
+MERGE_SCRIPT = """#!/usr/bin/env bash
+# Usage: merge.sh <pr-number> [--repo owner/name] [--dry-run]
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --repo) REPO=$2; shift 2 ;;
+    --dry-run) DRY=1; shift ;;
+    *) echo "unknown argument: $1" >&2; exit 2 ;;
+  esac
+done
+"""
+
+
+def _script_identity(name: str = "merge.sh") -> UnlistedCliIdentity:
+    return UnlistedCliIdentity(
+        cli_id=f"local-cli.{name}-00000000",
+        name=name,
+        kind="script",
+        identity_hash="0" * 64,
+        example_label=name,
+    )
+
+
+def _option(name: str) -> dict[str, object]:
+    return {**_row(name), "usage": f"merge.sh {name}"}
+
+
+def test_a_script_that_rejects_help_is_read_from_its_own_source(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """``--help`` printing an error still lists what the script takes."""
+
+    script = tmp_path / "merge.sh"
+    script.write_text(MERGE_SCRIPT, encoding="utf-8")
+
+    def _answer(**kwargs: object) -> tuple[dict[str, object], ...]:
+        return (_option("--repo"), _option("--dry-run")) if kwargs.get("script_source") else ()
+
+    calls = _stand_in_resident(monkeypatch, _answer)
+    commands, status = discover_local_cli_commands(
+        _script_identity(),
+        ("/bin/bash", str(script), "--help"),
+        runner=lambda _: "unknown argument: --help\n",
+    )
+    assert status == "ok"
+    assert [command.command_id for command in commands] == ["root", "--repo", "--dry-run", "other"]
+    assert commands[0].description == "Run merge.sh with no subcommand or option."
+    assert [call["text"] for call in calls if call.get("script_source")] == [MERGE_SCRIPT]
+
+
+def test_only_a_script_launched_through_its_interpreter_has_its_source_read(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    script = tmp_path / "merge.sh"
+    script.write_text(MERGE_SCRIPT, encoding="utf-8")
+    calls = _stand_in_resident(monkeypatch, lambda **_: ())
+    _, status = discover_local_cli_commands(
+        _identity("merge"),
+        (str(script), "--help"),
+        runner=lambda _: "unknown argument: --help\n",
+    )
+    assert status == "empty"
+    assert not any(call.get("script_source") for call in calls)
+
+
+def test_a_resident_that_could_not_read_the_help_is_not_asked_for_the_source(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    script = tmp_path / "merge.sh"
+    script.write_text(MERGE_SCRIPT, encoding="utf-8")
+    calls = _stand_in_resident(monkeypatch, lambda **_: None)
+    _, status = discover_local_cli_commands(
+        _script_identity(),
+        ("/bin/bash", str(script), "--help"),
+        runner=lambda _: "unknown argument: --help\n",
+    )
+    assert status == "failed"
+    assert len(calls) == 1
+
+
+def test_an_option_is_never_probed_for_help_of_its_own(monkeypatch: pytest.MonkeyPatch) -> None:
+    _stand_in_resident(monkeypatch, lambda **kwargs: (_option("--force"), _row("deploy")))
+    probed: list[tuple[str, ...]] = []
+
+    def _probe(argv: Sequence[str]) -> str:
+        probed.append(tuple(argv))
+        return "Options:\n  --force  Skip checks\n" if len(argv) == 2 else ""
+
+    discover_local_cli_commands(_identity("tool"), ("tool", "--help"), runner=_probe)
+    assert probed == [("tool", "--help"), ("tool", "deploy", "--help")]
+
+
+def test_option_ids_are_catalog_ids_but_never_tool_slugs() -> None:
+    for option in ("--dry-run", "-n", "--2fa"):
+        assert is_local_cli_command_id(option)
+    for bad in ("-", "--", "-xy", "---x", "--a.b"):
+        assert not is_local_cli_command_id(bad)
+    assert not slug_local_cli_command_id("--dry-run").startswith("-")
+
+
+def test_a_catalog_without_options_keeps_its_root_wording() -> None:
+    plain = merge_discovered_commands("tool", (_command("deploy"),))
+    assert plain[0].description == "Run tool without a subcommand."
+
+
+def test_a_source_read_asks_only_a_resident_that_reads_sources(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """An older resident refuses the field, so it is sent only behind the feature."""
+
+    from codex_plugin_scanner.guard import native_local_cli_help_parse as bridge
+
+    sent: list[tuple[dict[str, object], str]] = []
+
+    def _request(**kwargs: object) -> object:
+        sent.append((dict(kwargs["request"]), str(kwargs["required_feature"])))
+        raise ValueError("stop here")
+
+    monkeypatch.setattr(bridge, "ensure_resident_prerequisite", lambda _home: True)
+    monkeypatch.setattr(bridge, "_resident_request", _request)
+    for script_source in (False, True):
+        bridge.native_local_cli_help_commands(
+            guard_home=tmp_path, text="x", parent_id=None, invocation=("t",), script_source=script_source
+        )
+    (help_wire, help_feature), (source_wire, source_feature) = sent
+    assert "script_source" not in help_wire and help_feature == bridge.LOCAL_CLI_HELP_PARSE_FEATURE
+    assert source_wire["script_source"] is True
+    assert source_feature == bridge.LOCAL_CLI_HELP_VARIATIONS_FEATURE

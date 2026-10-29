@@ -103,16 +103,21 @@ struct Launched<'a> {
 }
 
 impl Launched<'_> {
-    /// `command_tokens_for_invocation` past the package script branch: the
-    /// first segment's arguments after the runner or the script's own path.
-    fn invocation_tokens(&self, home_dir: &str) -> Vec<String> {
-        crate::local_cli_hook_op::invocation_command_tokens(
+    /// `command_tokens_for_invocation` past the package script branch, and
+    /// the options the call passes: both read from the first segment's
+    /// arguments after the runner or the script's own path.
+    fn invocation(&self, home_dir: &str) -> (Vec<String>, Vec<String>) {
+        let arguments = crate::local_cli_hook_op::invocation_command_arguments(
             self.command,
             &self.cwd,
             Some(home_dir),
             &self.launch.name,
             &self.launch.kind,
             self.launch.runner.as_deref(),
+        );
+        (
+            crate::local_cli_hook_op::leading_command_tokens(&arguments),
+            crate::local_cli_grant_op::invocation_options(&arguments),
         )
     }
 }
@@ -182,20 +187,22 @@ fn grant_answer(
     let launch = &launched.launch;
     let catalog =
         crate::local_cli_grant_op::command_catalog(guard_home, &launch.cli_id).map_err(|_| ())?;
-    let command_id = if catalog.is_empty() {
-        None
+    let (command_id, options) = if catalog.is_empty() {
+        (None, Vec::new())
     } else {
-        let tokens = match launch.tokens.clone() {
-            Some(tokens) => tokens,
-            None => launched.invocation_tokens(home_dir),
+        // A package script's tokens name the script, which takes no options.
+        let (tokens, options) = match launch.tokens.clone() {
+            Some(tokens) => (tokens, Vec::new()),
+            None => launched.invocation(home_dir),
         };
-        block::command_selector(&catalog, &tokens)
+        (block::command_selector(&catalog, &tokens), options)
     };
     Ok(crate::local_cli_grant_op::decide_launch(
         guard_home,
         current_action,
         &launch.source,
         command_id.as_deref(),
+        &options,
     )
     .ok())
 }
