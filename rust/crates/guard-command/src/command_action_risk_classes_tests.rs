@@ -44,6 +44,14 @@ fn the_shell_and_github_actions_carry_their_risk_classes() {
         risk_classes_for_command_action("Guard approval self-authorization command"),
         &["policy_bypass"]
     );
+    // The shell secret-read label the dispatcher produces for a script that
+    // reads a credential file. The artifact a discovery build makes for it
+    // carries no evaluated risk classes of its own, so this table entry is the
+    // only thing that puts `local_secret_read` on the resident's answer.
+    assert_eq!(
+        risk_classes_for_command_action("local secret read shell command"),
+        &["local_secret_read"]
+    );
 }
 
 #[test]

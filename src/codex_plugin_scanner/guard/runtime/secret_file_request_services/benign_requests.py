@@ -98,8 +98,10 @@ def build_tool_action_request_artifact(
         command_rule_matches = []
         # Risk classes are an evaluation result, and nothing evaluated this
         # request. Naming them here from an action-class label would be a
-        # second Python answer about risk; the pinned review floor above is
-        # what preserves the request.
+        # second Python answer about risk. The action class rides on the
+        # artifact, and the resident adds that label's risks from the table it
+        # owns when it reads the artifact, so nothing is lost by leaving the
+        # evaluated list empty here.
         risk_classes = []
     wrapper_chain = tuple(dict.fromkeys((*command.wrapper_chain, *request.wrapper_chain)))
     # The artifact id is the key a saved approval for this action is stored
