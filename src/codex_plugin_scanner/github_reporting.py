@@ -15,6 +15,7 @@ from .models import GRADE_LABELS, Finding, ScanResult, max_severity
 PR_COMMENT_MARKER = "<!-- hol-guard-pr-comment -->"
 VALID_PR_COMMENT_MODES = frozenset({"auto", "always", "off"})
 VALID_PR_COMMENT_STYLES = frozenset({"concise", "detailed"})
+HOL_PLUGINS_LISTING_URL = "https://hol.org/plugins/connect"
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,6 +97,7 @@ def build_scan_pr_comment_body(
     policy_pass: bool,
     style: str,
     max_findings_to_render: int,
+    listing_hint_repository: str = "",
 ) -> str:
     guard_status = "pass" if policy_pass else "blocked"
     severity = max_severity(result.findings)
@@ -117,7 +119,17 @@ def build_scan_pr_comment_body(
     if style == "detailed":
         findings_to_render = tuple(result.findings[:max_findings_to_render])
         lines.extend(_render_findings_section(findings_to_render, max_findings_to_render, len(result.findings)))
+    if listing_hint_repository:
+        lines.extend(_render_listing_hint(listing_hint_repository))
     return "\n".join(lines)
+
+
+def _render_listing_hint(repository: str) -> list[str]:
+    query = urlencode({"repo": repository, "utm_source": "hol_marketplace", "utm_medium": "plugins_pr_comment"})
+    return [
+        "",
+        f"This repository's HOL Plugins listing: [{HOL_PLUGINS_LISTING_URL}]({HOL_PLUGINS_LISTING_URL}?{query})",
+    ]
 
 
 def build_verify_pr_comment_body(
