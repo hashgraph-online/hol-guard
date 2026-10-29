@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
-from types import MappingProxyType
 from typing import Final, cast
 
 from codex_plugin_scanner.guard.action_lattice import (
@@ -144,27 +142,6 @@ class UncertaintyKind(str, Enum):
     MALFORMED_BOUNDARY_VERSION = "malformed-boundary-version"
     UNKNOWN_BOUNDARY_VERSION = "unknown-boundary-version"
     ROLLBACK_BOUNDARY_VERSION = "rollback-boundary-version"
-
-
-UNCERTAINTY_FLOOR: Final[Mapping[UncertaintyKind, GuardAction]] = MappingProxyType(
-    {
-        UncertaintyKind.PARTIAL_PARSE: "review",
-        UncertaintyKind.DYNAMIC_INPUT: "review",
-        UncertaintyKind.UNSUPPORTED_INPUT: "review",
-        UncertaintyKind.MALFORMED_INPUT: "review",
-        UncertaintyKind.PARSER_BUDGET_EXHAUSTED: "require-reapproval",
-        UncertaintyKind.MATCHER_FAILURE: "block",
-        UncertaintyKind.PARSER_FAILURE: "block",
-        UncertaintyKind.UNRESOLVED_LAUNCH_IDENTITY: "require-reapproval",
-        UncertaintyKind.UNKNOWN_EFFECT: "require-reapproval",
-        UncertaintyKind.DEGRADED_CONTAINMENT: "block",
-        UncertaintyKind.PROTECTION_HEALTH_DEGRADED: "block",
-        UncertaintyKind.POLICY_VERSION_MISMATCH: "block",
-        UncertaintyKind.MALFORMED_BOUNDARY_VERSION: "block",
-        UncertaintyKind.UNKNOWN_BOUNDARY_VERSION: "block",
-        UncertaintyKind.ROLLBACK_BOUNDARY_VERSION: "block",
-    }
-)
 
 
 @dataclass(frozen=True, slots=True)
