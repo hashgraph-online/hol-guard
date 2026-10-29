@@ -240,6 +240,8 @@ fn git_search_patterns_naming_environment_reads_proceed() {
             "git log --oneline -G.env --grep=process.env",
             "git log --oneline --grep .env",
             "git log -S .ssh/ --author dev --oneline",
+            "git grep -n password",
+            "git log -S secret",
         ] {
             let result = classify(&home, harness, command);
             assert_eq!(result.decision, "allow", "{harness}: {command}");
@@ -247,17 +249,20 @@ fn git_search_patterns_naming_environment_reads_proceed() {
     }
 }
 
+/// A pattern names content to match, so a credential word written there is
+/// screened like any other pattern (see the test above). A *path* is what Git
+/// opens, and every one of these commands names one outside the pattern -- or
+/// is not a pattern at all, because the option takes a file or the operation
+/// prints a blob.
 #[test]
-fn git_searches_of_credential_paths_or_words_still_ask() {
+fn git_searches_of_credential_paths_still_ask() {
     let home = home();
     for harness in ["omp", "codex"] {
         for command in [
             "git grep foo -- .env",
             "git grep foo .env",
             "git grep -f .env",
-            "git grep -n password",
             "git grep -e .env -- src/.env.local",
-            "git log -S secret",
             "git log -p -S process.env -- .env",
             "git show HEAD:.env",
             "git cat-file -p HEAD:.env.local",

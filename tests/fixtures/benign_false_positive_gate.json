@@ -35847,8 +35847,13 @@
       "expect": "not_allow"
     },
     {
+<<<<<<< HEAD
       "id": "guard-approvals-wait-desktop-launcher",
       "fix_area": "shell",
+=======
+      "id": "git-diff-piped-into-credential-grep",
+      "fix_area": "git",
+>>>>>>> origin/main
       "harnesses": [
         "codex",
         "zcode",
@@ -35858,14 +35863,23 @@
       ],
       "tool": "shell",
       "tool_input": {
+<<<<<<< HEAD
         "command": "\"/Applications/HOL Guard.app/Contents/MacOS/hol-guard\" approvals wait req-1 --json"
+=======
+        "command": "git diff -- src | rg -n password"
+>>>>>>> origin/main
       },
       "cwd": "worktree",
       "expect": "allow"
     },
     {
+<<<<<<< HEAD
       "id": "guard-approvals-wait-home-launcher",
       "fix_area": "shell",
+=======
+      "id": "git-grep-credential-pattern",
+      "fix_area": "git",
+>>>>>>> origin/main
       "harnesses": [
         "codex",
         "zcode",
@@ -35875,14 +35889,23 @@
       ],
       "tool": "shell",
       "tool_input": {
+<<<<<<< HEAD
         "command": "~/.hol-guard/bin/hol-guard approvals wait req-1 --json"
+=======
+        "command": "git grep -n password -- src"
+>>>>>>> origin/main
       },
       "cwd": "worktree",
       "expect": "allow"
     },
     {
+<<<<<<< HEAD
       "id": "guard-status-installed-launcher",
       "fix_area": "shell",
+=======
+      "id": "git-log-search-credential-pattern",
+      "fix_area": "git",
+>>>>>>> origin/main
       "harnesses": [
         "codex",
         "zcode",
@@ -35892,6 +35915,7 @@
       ],
       "tool": "shell",
       "tool_input": {
+<<<<<<< HEAD
         "command": "/opt/homebrew/bin/hol-guard status --json"
       },
       "cwd": "org_app",
@@ -35899,6 +35923,15 @@
     },
     {
       "id": "guard-approvals-wait-unplaced-launcher",
+=======
+        "command": "git log --oneline -S api_key -- src"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "list-piped-into-credential-grep",
+>>>>>>> origin/main
       "fix_area": "shell",
       "harnesses": [
         "codex",
@@ -35909,6 +35942,7 @@
       ],
       "tool": "shell",
       "tool_input": {
+<<<<<<< HEAD
         "command": "/tmp/stage/hol-guard approvals wait req-1 --json"
       },
       "cwd": "worktree",
@@ -35916,6 +35950,15 @@
     },
     {
       "id": "neg-guard-workspace-bin-launcher-from-subdir",
+=======
+        "command": "ls -R src | grep -i secret"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-dotenv-piped-into-credential-grep",
+>>>>>>> origin/main
       "fix_area": "shell",
       "harnesses": [
         "codex",
@@ -35926,6 +35969,7 @@
       ],
       "tool": "shell",
       "tool_input": {
+<<<<<<< HEAD
         "command": "${WORKTREE}/bin/hol-guard status --json"
       },
       "cwd": "worktree_app",
@@ -35978,13 +36022,20 @@
       "tool": "shell",
       "tool_input": {
         "command": "bin/hol-guard status --json"
+=======
+        "command": "cat .env | grep -n password"
+>>>>>>> origin/main
       },
       "cwd": "worktree",
       "expect": "not_allow",
       "contained_ok": true
     },
     {
+<<<<<<< HEAD
       "id": "neg-guard-relative-scripts-launcher",
+=======
+      "id": "neg-printenv-piped-into-grep",
+>>>>>>> origin/main
       "fix_area": "shell",
       "harnesses": [
         "codex",
@@ -35995,15 +36046,24 @@
       ],
       "tool": "shell",
       "tool_input": {
+<<<<<<< HEAD
         "command": "scripts/hol-guard approvals wait req-1"
+=======
+        "command": "printenv | grep -i token"
+>>>>>>> origin/main
       },
       "cwd": "worktree",
       "expect": "not_allow",
       "contained_ok": true
     },
     {
+<<<<<<< HEAD
       "id": "neg-guard-dot-relative-bin-launcher",
       "fix_area": "shell",
+=======
+      "id": "neg-git-grep-pattern-with-dotenv-path",
+      "fix_area": "git",
+>>>>>>> origin/main
       "harnesses": [
         "codex",
         "zcode",
@@ -36013,7 +36073,11 @@
       ],
       "tool": "shell",
       "tool_input": {
+<<<<<<< HEAD
         "command": "./bin/hol-guard approvals list --json"
+=======
+        "command": "git grep -n foo -- .env"
+>>>>>>> origin/main
       },
       "cwd": "worktree",
       "expect": "not_allow",

@@ -160,6 +160,7 @@ mod source_reads;
 use source_reads::{plain_source_code_path, sensitive_command_input, source_file_read_segment};
 mod recursive_copy;
 mod restricted_test_commands;
+pub(crate) use restricted_test_commands::{manager_local_bin_arguments, manager_script_task};
 mod rust_toolchain;
 mod rustfmt_writes;
 mod safe_links;
@@ -171,6 +172,7 @@ mod script_content;
 pub(crate) use script_content::{argv_script, ArgvScript};
 mod search;
 mod search_pattern_clearance;
+mod search_pattern_text;
 mod search_scope;
 mod search_scope_filter;
 mod search_scope_glob;
@@ -215,6 +217,7 @@ pub use git_push::{
     install_git_push_verdict, push_environment_git, GitPushRequest, GitPushVerdict,
 };
 pub(crate) use git_read_after_allow::git_reads_after_allowed_steps;
+pub use read_paths::proven_repository_hidden_document;
 pub use safe_scalar::PsqlEnvironment;
 #[cfg_attr(not(unix), allow(unused_imports))]
 pub(crate) use script_content::launch_loopback_ports;
@@ -222,6 +225,7 @@ pub(crate) use script_content::{
     activation_script_text, backgrounded_launch, models_exactly, prefixed_launch, sequential_jobs,
     sole_program_sources, sourced_program_sources, sourcing_bounded_sources,
 };
+pub use search_scope_tracked::proven_project_document;
 pub(crate) use segment_proof::{benign_command_segments, without_stderr_merge};
 pub(crate) use worktree_add::entered_checkouts;
 pub(crate) use worktree_add::new_checkout_route;
@@ -1245,7 +1249,7 @@ fn evaluate_single_command(
             "The Rust command authority proved this bounded command explicitly benign.",
         ));
     }
-    if git_search_text::command_sensitive(&model, normalized, context.cwd)
+    if search_pattern_text::command_sensitive(&model, normalized, context.cwd)
         || secret_aliases::names_secret_alias(&model, context)
         || glob_words::names_hidden_glob(&model, context)
     {

@@ -124,32 +124,20 @@ fn resolved(
 /// `exec` spelling, or Node started on the tool's own entrypoint.
 #[cfg(not(unix))]
 fn staged_tool_entries(program: &str, arguments: &[String]) -> Option<&'static [&'static str]> {
-    const ESLINT: &[&str] = &["eslint/bin/eslint.js"];
-    const TSC: &[&str] = &["typescript/bin/tsc"];
-    // Prettier publishes one entrypoint per major; the sink resolves the same set.
-    const PRETTIER: &[&str] = &super::PRETTIER_ENTRIES;
     let tool = match program {
         "npx" | "bunx" => arguments.first()?.as_str(),
         // Only a manager's bare `exec` spelling is a local-bin run.
         "npm" | "pnpm" | "yarn" => super::manager_local_bin_arguments(program, arguments)?
             .first()?
             .as_str(),
-        "node" | "nodejs" => {
-            let entry = arguments.first()?;
-            return [ESLINT, TSC, PRETTIER].into_iter().find(|entries| {
-                entries
-                    .iter()
-                    .any(|name| super::local_package_entry(entry, name))
-            });
-        }
+        "node" | "nodejs" => crate::contained_node_tool::entry_tool(arguments.first()?),
         other => other,
     };
-    Some(match tool {
-        "eslint" => ESLINT,
-        "tsc" => TSC,
-        "prettier" => PRETTIER,
-        _ => return None,
-    })
+    // `vite build` is the build-output route, which stages its entry above.
+    if tool == "vite" {
+        return None;
+    }
+    crate::contained_node_tool::tool_entries(tool).map(|(_, entries)| entries)
 }
 
 /// Whether the nearest install carrying one of `entries` is a flat npm or
@@ -418,41 +406,13 @@ fn tool_script(
     }
     let tokens = split_with(PLAIN_LEXER, scripts.get(task)?.as_str()?).ok()?;
     let (tool, arguments) = tokens.split_first()?;
-    let (entries, reason): (&[&str], &'static str) = match tool.as_str() {
-        "eslint" => (&["eslint/bin/eslint.js"], NODE_TOOL),
-        "tsc" if arguments.iter().any(|word| word == "--noEmit") => {
-            (&["typescript/bin/tsc"], NODE_TOOL)
-        }
-        // Prettier publishes one entrypoint per major, and only a checking
-        // mode reports instead of rewriting the files it visits.
-        "prettier" if super::prettier_checks(arguments) => (&super::PRETTIER_ENTRIES, NODE_TOOL),
-        "vite" if arguments.first().is_some_and(|word| word == "build") => {
-            (&["vite/bin/vite.js"], NODE_BUILD)
-        }
-        _ => return None,
-    };
-    if reason == NODE_BUILD && !build_output_allowed(arguments, Some((directory, workspace))) {
+    let (_, entries, mode) = crate::contained_node_tool::supported_tool(tool, arguments)?;
+    let build = mode == crate::contained_node_tool::ToolMode::Build;
+    let reason = if build { NODE_BUILD } else { NODE_TOOL };
+    if build && !build_output_allowed(arguments, Some((directory, workspace))) {
         return None;
     }
-    if arguments.iter().any(|word| {
-        matches!(
-            word.as_str(),
-            ";" | "&&"
-                | "||"
-                | "|"
-                | "|&"
-                | "&"
-                | "--fix"
-                | "--fix-dry-run"
-                | "--output-file"
-                | "-o"
-                | "--emitDeclarationOnly"
-                | "--write"
-                | "-w"
-        ) || word.starts_with("--fix=")
-            || word.starts_with("--output-file=")
-            || word.starts_with("--write=")
-    }) {
+    if crate::contained_node_tool::writes_or_chains(arguments) {
         return None;
     }
     // A tool that publishes one entrypoint per major is installed under

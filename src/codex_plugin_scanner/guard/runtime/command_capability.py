@@ -13,6 +13,7 @@ from pathlib import Path
 from ..native_command_capability import (
     CommandCapabilityUnavailableError,
     native_command_capability,
+    native_command_capability_issue,
 )
 from ..native_command_envelope import (
     CommandEnvelopeUnavailableError,
@@ -21,12 +22,6 @@ from ..native_command_envelope import (
 from ..portable_command import render_portable_command
 from ..review_contracts import GuardReviewContractError, guard_review_oauth_metadata
 from ..store import GuardStore
-from .command_operation_classification import (
-    LOCAL_CONFIRMATION_COMMAND_OPERATIONS,
-    POLICY_MEMORY_COMMAND_OPERATIONS,
-    READ_ONLY_COMMAND_OPERATIONS,
-    STATE_CHANGING_COMMAND_OPERATIONS,
-)
 from .time_support import parse_utc_timestamp
 
 COMMAND_CAPABILITY_STATE_KEY = "guard_command_capability_v1"
@@ -35,7 +30,6 @@ COMMAND_LOCAL_APPROVALS_STATE_KEY = "guard_command_local_approvals_v1"
 COMMAND_REPLAY_STATE_KEY = "guard_command_replay_state_v1"
 COMMAND_QUEUE_RUNTIME_STATE_KEY = "guard_command_queue_state"
 COMMAND_CAPABILITY_VERSION = 1
-COMMAND_CAPABILITY_MAX_TTL_SECONDS = 365 * 24 * 60 * 60
 COMMAND_CAPABILITY_DEFAULT_TTL_SECONDS = 30 * 24 * 60 * 60
 COMMAND_REPLAY_MAX_ITEMS = 512
 COMMAND_QUEUE_ENABLED_ENV = "GUARD_CLOUD_COMMAND_QUEUE_ENABLED"
@@ -174,21 +168,32 @@ def issue_command_capability(
     ttl_seconds: int = COMMAND_CAPABILITY_DEFAULT_TTL_SECONDS,
     now: str | None = None,
 ) -> dict[str, object]:
-    """Issue and persist an exact local command capability."""
+    """Issue and persist an exact local command capability.
+
+    ``operations`` carries the ``--operations`` words as typed. The resident
+    reads the group name, the comma-joined lists and the spacing, and answers
+    with the exact operations the capability may carry or the code that refuses
+    it; nothing here decides what a grant can authorize.
+    """
 
     issued_at = _now_datetime(now)
-    if not issuer.strip():
-        raise CommandCapabilityError("capability_issuer_required")
-    if ttl_seconds <= 0 or ttl_seconds > COMMAND_CAPABILITY_MAX_TTL_SECONDS:
-        raise CommandCapabilityError("invalid_capability_ttl")
-    supported = frozenset(supported_operations)
-    normalized_operations = tuple(sorted(set(operations)))
-    if not normalized_operations:
-        raise CommandCapabilityError("capability_operations_required")
-    if set(normalized_operations) - supported or "guard.review.resolveExact" in operations:
+    try:
+        issued = native_command_capability_issue(
+            requested=operations,
+            supported_operations=supported_operations,
+            issuer=issuer,
+            ttl_seconds=ttl_seconds,
+            guard_home=_resident_home(store),
+        )
+    except CommandCapabilityUnavailableError as error:
+        raise CommandCapabilityError(error.reason) from None
+    if not issued.get("granted"):
+        reason = issued.get("reason")
+        raise CommandCapabilityError(str(reason) if reason else "unsupported_capability_operation")
+    granted_operations = issued.get("operations")
+    if not isinstance(granted_operations, list) or not granted_operations:
         raise CommandCapabilityError("unsupported_capability_operation")
-    if POLICY_MEMORY_COMMAND_OPERATIONS & set(normalized_operations) and len(normalized_operations) != 1:
-        raise CommandCapabilityError("policy_memory_capability_must_be_isolated")
+    normalized_operations = tuple(str(operation) for operation in granted_operations)
     device_id, workspace_id = _oauth_target(store)
     capability = _signed_payload(
         store,
@@ -648,10 +653,6 @@ def _audit(store: GuardStore, event_name: str, payload: dict[str, object], now: 
 
 __all__ = [
     "COMMAND_CAPABILITY_DEFAULT_TTL_SECONDS",
-    "COMMAND_CAPABILITY_MAX_TTL_SECONDS",
-    "LOCAL_CONFIRMATION_COMMAND_OPERATIONS",
-    "READ_ONLY_COMMAND_OPERATIONS",
-    "STATE_CHANGING_COMMAND_OPERATIONS",
     "AuthorizedCommandJob",
     "CommandCapabilityError",
     "approve_pending_command",

@@ -163,6 +163,7 @@ mod codex_thread_continue_op;
 mod codex_value;
 #[cfg(all(test, unix))]
 mod codex_vectors_tests;
+mod command_capability_issue_op;
 mod command_capability_op;
 mod command_effect;
 mod command_envelope_op;

@@ -598,7 +598,10 @@ fn a_component_naming_no_directory_cannot_walk_back_into_the_workspace() {
         "/opt/project/./bin/hol-guard",
         "/opt/project/bin/./hol-guard",
     ] {
-        assert!(!super::guard_install_executable(detour, context), "{detour}");
+        assert!(
+            !super::guard_install_executable(detour, context),
+            "{detour}"
+        );
     }
     // The same detour spelling of a genuine install root is refused too: the
     // proof reads the spelling it was handed rather than resolving it.
