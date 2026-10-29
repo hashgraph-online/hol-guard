@@ -87,6 +87,17 @@ assert(
   detectedApps.join(",") === "codex,omp,zcode",
   "Protect includes locally detected OMP and ZCode without requiring prior activity",
 );
+const museCoverageApps = visibleHarnessesFor({
+  managed: [],
+  observed: [],
+  inventory: ["muse"],
+  detected: ["muse"],
+  policies: [],
+});
+assert(
+  museCoverageApps.join(",") === "muse",
+  "App coverage includes Muse when the daemon detects it and inventory reports its artifacts",
+);
 assert(
   isHarnessDetectedItems([{ harness: "zcode", status: "found" }], "zcode"),
   "app detail preserves detection for config-only harnesses",

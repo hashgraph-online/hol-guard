@@ -17,6 +17,11 @@ import subprocess
 from pathlib import Path
 
 WORKSPACE_JEST_CASE = "omp-native-workspace-npx-jest"
+# The same installed build, launched through the Bun the installer leaves in the
+# caller's home rather than one a login shell put on PATH.
+HOME_BUN_ENTRY_CASE = "omp-native-shell-home-spelled-bun-entry"
+# Where Bun's own installer puts it, and the path its instructions tell you to run.
+_BUN_BIN = ".bun/bin"
 # Where nvm, the way most developers install Node, keeps each release.
 _NODE_VERSIONS = ".nvm/versions/node"
 _NODE_VERSION = re.compile(r"v\d+\.\d+\.\d+")
@@ -98,3 +103,21 @@ def add_workspace_node_runtime(home: Path, scenario_id: str | None) -> None:
     target = home / _NODE_VERSIONS / version / "bin" / "node"
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, target)
+
+
+def add_home_bun_runtime(home: Path, scenario_id: str | None) -> None:
+    """Install Bun where its own installer puts it, so a case can name it from home.
+
+    An agent whose login shell has not put Bun on PATH runs the launcher the
+    install instructions give it, ``~/.bun/bin/bun``. The host's binary is
+    copied rather than linked, so nothing the fixture does can reach the file
+    the host runs.
+    """
+    if scenario_id != HOME_BUN_ENTRY_CASE:
+        return
+    located = shutil.which("bun")
+    if located is None:
+        raise RuntimeError("Gauntlet prerequisite is missing: bun")
+    target = home / _BUN_BIN / "bun"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(Path(os.path.realpath(located)), target)

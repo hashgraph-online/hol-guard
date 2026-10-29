@@ -2,7 +2,8 @@
 
 use serde_json::{json, Map, Value};
 
-use super::tests::{args, delegate, invalid, query, shell, CONNECTOR_HASH};
+use super::tests::{args, delegate, local_cli, looked_up, unrecognised};
+use super::Delegated;
 
 const OBSERVATION: &str = "
 create table local_cli_observation (
@@ -38,12 +39,18 @@ fn kept(connection: &rusqlite::Connection) -> Vec<Option<String>> {
 }
 
 fn connector_call() -> Map<String, Value> {
-    let mut review = query(shell());
-    review["result"]["reason_code"] = json!("native_command_review_required");
-    args(json!({
-        "review": review,
-        "connector_context": {"cli_id": "local-cli.lanectl-1", "identity_hash": CONNECTOR_HASH},
-    }))
+    unrecognised(json!({}))
+}
+
+fn lanectl() -> Value {
+    let mut connector = local_cli();
+    connector["cli_id"] = json!("local-cli.lanectl-1");
+    connector["name"] = json!("lanectl");
+    connector
+}
+
+fn connector_review(call: &Map<String, Value>) -> Delegated {
+    looked_up(call, 10_000, lanectl()).unwrap()
 }
 
 fn connector_reply(summary: &str, why_now: &str) -> Value {
@@ -58,8 +65,8 @@ fn connector_reply(summary: &str, why_now: &str) -> Value {
 #[test]
 fn a_connector_review_keeps_its_context_with_the_row_it_stored() {
     let connection = observed();
-    let delegated = delegate(&connector_call()).unwrap();
-    assert!(!delegated.args.contains_key("connector_context"));
+    let delegated = connector_review(&connector_call());
+    assert!(!delegated.args.contains_key("connector_lookup"));
     let refused = delegated.record_connector_context(
         &connection,
         &connector_reply("Runs a local CLI Guard has not seen.", "First use here."),
@@ -82,7 +89,7 @@ fn a_connector_review_keeps_its_context_with_the_row_it_stored() {
 #[test]
 fn wording_that_repeats_an_argument_is_never_kept() {
     let connection = observed();
-    let delegated = delegate(&connector_call()).unwrap();
+    let delegated = connector_review(&connector_call());
     // `staging` is an argument of the command; the program name is not.
     delegated.record_connector_context(
         &connection,
@@ -100,23 +107,9 @@ fn a_review_without_a_connector_or_its_row_keeps_no_context() {
     delegate(&args(json!({})))
         .unwrap()
         .record_connector_context(&connection, &reply);
-    delegate(&connector_call())
-        .unwrap()
+    connector_review(&connector_call())
         .record_connector_context(&connection, &json!({"request_id": "req1"}));
     assert_eq!(kept(&connection), vec![None; 6]);
-}
-
-#[test]
-fn a_malformed_connector_context_is_refused() {
-    for context in [
-        json!("local-cli.lanectl-1"),
-        json!({"cli_id": "local-cli.lanectl-1"}),
-        json!({"cli_id": "local-cli.lanectl-1", "identity_hash": CONNECTOR_HASH, "name": "x"}),
-    ] {
-        assert!(invalid(delegate(&args(
-            json!({"connector_context": context})
-        ))));
-    }
 }
 
 #[test]
@@ -131,7 +124,7 @@ fn the_first_cause_follows_the_review_reason() {
         let connection = observed();
         let mut call = connector_call();
         call["review"]["result"]["reason_code"] = json!(reason_code);
-        delegate(&call).unwrap().record_connector_context(
+        connector_review(&call).record_connector_context(
             &connection,
             &connector_reply("Runs a local CLI.", "First use here."),
         );
@@ -142,9 +135,9 @@ fn the_first_cause_follows_the_review_reason() {
 #[test]
 fn a_context_the_store_refuses_leaves_the_review_as_it_was() {
     let connection = observed();
-    let mut call = connector_call();
-    call["connector_context"]["cli_id"] = json!("not a local cli id");
-    let delegated = delegate(&call).unwrap();
+    let mut connector = lanectl();
+    connector["cli_id"] = json!("not a local cli id");
+    let delegated = looked_up(&connector_call(), 10_000, connector).unwrap();
     // The daemon logs the code; the review stays queued.
     let refused = delegated.record_connector_context(
         &connection,

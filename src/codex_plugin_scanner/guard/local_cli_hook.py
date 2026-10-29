@@ -28,8 +28,6 @@ _TIMEOUT_SECONDS = 10.0
 # The request carries the caller environment, as the identity call it replaces did.
 _MAX_REQUEST_BYTES = 2 * 1024 * 1024
 _GRANT_ACTIONS = frozenset({"allow", "block", "review"})
-_CONNECTOR_FIELDS = frozenset({"cli_id", "identity_hash", "name", "surface", "queue_group_id"})
-_CONNECTOR_SURFACES = frozenset({"cli", "package-scripts"})
 # A sandbox-bound action an allowed grant widens rather than lifts.
 ALLOW_CONTAINED_WITH_GRANT = "allow-contained-with-grant"
 _CONTAINED_FROM = frozenset({"sandbox-required", "review"})
@@ -37,17 +35,6 @@ _CONTAINED_ROUTE_FIELDS = frozenset({"decision", "minimum_action", "policy_actio
 _CONTAINED_GRANT_FIELDS = frozenset({"cli_id", "identity_hash", "name", "capabilities"})
 _GRANT_CAPABILITIES = ("loopback-network", "state-dir-read", "state-dir-write")
 _PAYLOAD_FIELDS = frozenset({"action", "connector", "contained_grant", "contained_route"})
-
-
-@dataclass(frozen=True, slots=True)
-class SetupConnector:
-    """A local CLI this device has no allow or block decision for."""
-
-    cli_id: str
-    identity_hash: str
-    name: str
-    surface: str
-    queue_group_id: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,7 +54,6 @@ class ContainedGrant:
 @dataclass(frozen=True, slots=True)
 class _Reply:
     action: str
-    connector: SetupConnector | None
     contained_grant: ContainedGrant | None
     contained_route: Mapping[str, str] | None = None
 
@@ -98,19 +84,6 @@ def local_cli_contained_grant(
         path=path,
     )
     return None if reply is None else (reply.action, reply.contained_grant, reply.contained_route)
-
-
-def local_cli_setup_connector(
-    *, store: GuardStore, command: str, cwd: Path, home_dir: Path | None, path: str | None = None
-) -> SetupConnector | None:
-    """The connector a command review waits on, when Guard was never set up for it on this device."""
-
-    reply = _native_local_cli_hook_reply(
-        store, command=command, cwd=cwd, home_dir=home_dir, current_action="review", grant_allowed=True, path=path
-    )
-    if reply is None or reply.action != "review":
-        return None
-    return reply.connector
 
 
 def _native_local_cli_hook_reply(
@@ -149,7 +122,7 @@ def _native_local_cli_hook_reply(
         "cwd": str(cwd),
         "home_dir": None if home_dir is None else str(home_dir),
         "user_home": str(Path.home()),
-        "env": _launch_env(path),
+        "env": launch_env(path),
         "current_action": current_action,
         "grant_allowed": grant_allowed,
     }
@@ -194,7 +167,7 @@ def _native_local_cli_hook_reply(
         route = _contained_route(payload.get("contained_route"))
         if current_action not in _CONTAINED_FROM or grant is None or route is None or "connector" in payload:
             return None
-        return _Reply(action, None, grant, route)
+        return _Reply(action, grant, route)
     # Only a grant can change the action, and only to allow, block or review.
     if (
         "contained_grant" in payload
@@ -202,11 +175,12 @@ def _native_local_cli_hook_reply(
         or (action != current_action and action not in _GRANT_ACTIONS)
     ):
         return None
-    connector = _setup_connector(payload.get("connector")) if action == "review" else None
-    return _Reply(action, connector, None)
+    return _Reply(action, None)
 
 
-def _launch_env(path: str | None) -> dict[str, str]:
+def launch_env(path: str | None) -> dict[str, str]:
+    """This process's environment with the agent's ``PATH``, as the resident resolves a launch."""
+
     env = dict(os.environ)
     if path is not None:
         env["PATH"] = path
@@ -249,20 +223,6 @@ def _contained_grant(value: object) -> ContainedGrant | None:
         # Unknown, repeated or out-of-order names are not a grant Rust would send.
         return None
     return ContainedGrant(cli_id, identity_hash, name, tuple(known))
-
-
-def _setup_connector(value: object) -> SetupConnector | None:
-    if not isinstance(value, dict) or set(value) != _CONNECTOR_FIELDS:
-        return None
-    fields = cast(dict[str, object], value)
-    if not all(isinstance(fields[key], str) and fields[key] for key in _CONNECTOR_FIELDS):
-        return None
-    connector = SetupConnector(**cast(dict[str, str], fields))
-    if connector.surface not in _CONNECTOR_SURFACES or not connector.queue_group_id.startswith(
-        f"connector:{connector.identity_hash}:"
-    ):
-        return None
-    return connector
 
 
 def _raise_store_failure(store: GuardStore, code: str) -> None:

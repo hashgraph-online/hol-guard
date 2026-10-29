@@ -133,7 +133,7 @@ def test_a_silent_review_reads_back_in_its_daemon_write() -> None:
 
 
 def test_the_hook_response_rendered_with_the_row_rides_on_it() -> None:
-    respond = {"paused_review": {"reason": None}}
+    respond = {"paused_review": {}}
     store = _RowStore({"request_id": "req-1", "row": {"request_id": "req-1"}, "response": {"decision": "ask"}})
     assert store.queue_native_review(_QUERY, "now", respond=respond) == {
         "request_id": "req-1",

@@ -16,7 +16,6 @@ from codex_plugin_scanner.guard.daemon.approval_connector_recommendation import 
     build_approval_connector_recommendation,
     safe_connector_recommendation,
 )
-from codex_plugin_scanner.guard.local_cli_hook import SetupConnector
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_allow_hint import (
@@ -33,7 +32,6 @@ _HASH = "a" * 64
 _OTHER_HASH = "b" * 64
 _CLI_ID = "local-cli.lanectl-0123abcd"
 _GROUP = f"connector:{_HASH}:0123456789abcdef"
-_CONNECTOR = SetupConnector(cli_id=_CLI_ID, identity_hash=_HASH, name="lanectl", surface="cli", queue_group_id=_GROUP)
 
 
 def _hint(**overrides: object) -> dict[str, object]:

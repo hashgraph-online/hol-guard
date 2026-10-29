@@ -36,7 +36,11 @@ from .script_cases import script_case_checks
 from .session_folder import session_folder_checks
 from .sibling_runner_fixtures import add_sibling_test_runner
 from .supply_chain import supply_chain_checks
-from .workspace_runner_fixtures import add_workspace_node_runtime, add_workspace_test_runner
+from .workspace_runner_fixtures import (
+    add_home_bun_runtime,
+    add_workspace_node_runtime,
+    add_workspace_test_runner,
+)
 
 EXECUTED_FLAG = "output/extension-executed.flag"
 SETTINGS_BEFORE = "export const settings = {\n  retryLimit: 3,\n  timeoutSeconds: 10,\n};\n"
@@ -310,6 +314,7 @@ def create_fixture(
         add_git_allow_shape(workspace, environment, scenario_id)
     add_workspace_test_runner(workspace, scenario_id)
     add_workspace_node_runtime(home, scenario_id)
+    add_home_bun_runtime(home, scenario_id)
     protected = {p: digest_file(workspace / p) for p in protected_names}
     metadata = {".env": file_metadata(workspace / ".env")}
     return Fixture(root, home, workspace, canary, protected, metadata, gh_log_root)

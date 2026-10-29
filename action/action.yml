@@ -52,7 +52,7 @@ inputs:
     required: false
     default: "true"
   publish_hint:
-    description: "Add a short HOL Plugins publishing link to the concise job summary of public github.com repositories"
+    description: "Add a short HOL Plugins listing link to the concise job summary and the pull request comment of public github.com repositories"
     required: false
     default: "true"
   registry_payload_output:

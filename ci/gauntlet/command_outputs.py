@@ -31,7 +31,7 @@ from .source_output_fixtures import (
     WORKER_MARKER,
     WORKER_PATH,
 )
-from .workspace_runner_fixtures import RUNNER_MARKER, WORKSPACE_JEST_CASE
+from .workspace_runner_fixtures import HOME_BUN_ENTRY_CASE, RUNNER_MARKER, WORKSPACE_JEST_CASE
 
 TOKEN_READ_CASE = "omp-native-read-token-handling-sources"
 TOKEN_SHELL_CASE = "omp-native-shell-cat-token-handling-sources"
@@ -48,6 +48,8 @@ WORKSPACE_FIND_CASE = "omp-native-shell-find-exec-grep-workspace-absolute"
 # Bun handed the installed package's own Node entry. The case pipes the build into `tail`,
 # which answers with its own successful status, so the build line is the only proof it ran.
 BUN_ENTRY_CASE = "omp-native-shell-linked-modules-bun-entry"
+# Both spellings of that launcher print the same build, so one check answers for either.
+BUN_ENTRY_CASES = frozenset({BUN_ENTRY_CASE, HOME_BUN_ENTRY_CASE})
 # Oh My Pi's bash tool adds its wall-time notice only to runs at least this long (milliseconds).
 WALL_TIME_NOTICE_MIN_MS = 1000
 # Every value in the fixture's local configuration files starts with this.
@@ -282,7 +284,7 @@ def command_outputs_match(scenario: Scenario, calls: list[dict[str, Any]]) -> bo
         return _workspace_find_match(calls)
     if scenario.id == WORKSPACE_JEST_CASE:
         return _workspace_runner_match(calls)
-    if scenario.id == BUN_ENTRY_CASE:
+    if scenario.id in BUN_ENTRY_CASES:
         return _bun_entry_build_match(calls)
     if scenario.id not in OUTPUT_SCENARIOS:
         return True

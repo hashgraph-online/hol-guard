@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 import codex_plugin_scanner.action_runner as action_runner
+from codex_plugin_scanner.github_reporting import GitHubPrCommentResult, build_verify_pr_comment_body
 from codex_plugin_scanner.models import ScanResult, build_severity_counts
 
 CONNECT_LINK = "https://hol.org/plugins/connect?repo=acme%2Ftool&utm_source=hol-scanner-action&utm_medium=job-summary"
@@ -105,3 +106,67 @@ def test_submit_mode_summary_omits_publish_hint() -> None:
     )
 
     assert "### Publish on HOL Plugins" not in lines
+
+
+PR_COMMENT_LINK = (
+    "https://hol.org/plugins/connect?repo=acme%2Ftool&utm_source=hol_marketplace&utm_medium=plugins_pr_comment"
+)
+
+
+def _scan_comment_body(monkeypatch, tmp_path, *, event: object, publish_hint: str | None = None) -> str:
+    bodies: list[str] = []
+
+    def _fake_upsert(**kwargs):
+        bodies.append(kwargs["body"])
+        return GitHubPrCommentResult(status="created")
+
+    monkeypatch.setattr(action_runner, "upsert_pr_comment", _fake_upsert)
+    _run_scan(
+        monkeypatch,
+        tmp_path,
+        event={**event, "pull_request": {"number": 7}} if isinstance(event, dict) else event,
+        publish_hint=publish_hint,
+        PR_COMMENT="always",
+        GITHUB_EVENT_NAME="pull_request",
+        GITHUB_TOKEN="test-token",
+    )
+    assert len(bodies) == 1
+    return bodies[0]
+
+
+def test_public_repository_pr_comment_links_to_listing(monkeypatch, tmp_path) -> None:
+    body = _scan_comment_body(monkeypatch, tmp_path, event=PUBLIC_EVENT)
+
+    assert PR_COMMENT_LINK in body
+
+
+@pytest.mark.parametrize(
+    ("event", "publish_hint"),
+    [
+        ({"repository": {"full_name": "acme/tool", "private": True}}, None),
+        (PUBLIC_EVENT, "false"),
+    ],
+)
+def test_pr_comment_omits_listing_link(monkeypatch, tmp_path, event, publish_hint) -> None:
+    body = _scan_comment_body(monkeypatch, tmp_path, event=event, publish_hint=publish_hint)
+
+    assert "hol.org/plugins" not in body
+
+
+def test_verify_pr_comment_carries_listing_link_only_when_given() -> None:
+    payload = {"verify_pass": True, "cases": []}
+
+    with_link = build_verify_pr_comment_body(
+        verification_payload=payload,
+        style="concise",
+        max_findings_to_render=5,
+        listing_hint_repository="acme/tool",
+    )
+    without_link = build_verify_pr_comment_body(
+        verification_payload=payload,
+        style="concise",
+        max_findings_to_render=5,
+    )
+
+    assert PR_COMMENT_LINK in with_link
+    assert "hol.org/plugins" not in without_link

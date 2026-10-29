@@ -364,7 +364,7 @@
       {
         "id": "cli-presentation-and-parsing",
         "category": "cli_only",
-        "reason": "Argparse construction, Rich rendering and onboarding/status presentation for CLI subcommands that are not runtime routes. cli/render.py stays in scope because hook responses are redacted and emitted through it; only the doctor/uninstall renderers are excluded. commands_support_service.py (service login/status/sync, daemon start/stop/status handlers) is imported only by the commands_support facade and the excluded admin, cloud and records dispatchers.",
+        "reason": "Argparse construction, Rich rendering and onboarding/status presentation for CLI subcommands that are not runtime routes. cli/render.py stays in scope because hook responses are redacted and emitted through it; only the doctor/uninstall renderers are excluded. commands_support_service.py (service login/status/sync, daemon start/stop/status handlers) is imported only by the commands_support facade and the excluded admin, cloud and records dispatchers. codebase_commands.py backs `hol-guard codebases add|list`, which admits a folder to the background check queue and lists it; nothing on the hook path imports it.",
         "path": [
           "src/codex_plugin_scanner/guard/cli/commands_parser*.py",
           "src/codex_plugin_scanner/guard/cli/product.py",
@@ -382,7 +382,8 @@
           "src/codex_plugin_scanner/guard/cli/render_*.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_service.py",
           "src/codex_plugin_scanner/guard/cli/approval_commands.py",
-          "src/codex_plugin_scanner/guard/cli/inventory_list_commands.py"
+          "src/codex_plugin_scanner/guard/cli/inventory_list_commands.py",
+          "src/codex_plugin_scanner/guard/cli/codebase_commands.py"
         ]
       },
       {

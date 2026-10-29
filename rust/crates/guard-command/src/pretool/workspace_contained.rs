@@ -47,6 +47,8 @@ mod cwd;
 mod git_metadata;
 #[path = "workspace_contained_home_cd.rs"]
 pub(super) mod home_cd;
+#[path = "workspace_contained_home_exec.rs"]
+pub(super) mod home_exec;
 #[path = "workspace_git_keeps_work.rs"]
 mod keeps_work;
 #[path = "workspace_contained_kill.rs"]
@@ -494,6 +496,13 @@ pub(super) fn convert(
     let home = home_cd::as_absolute_cd(model, context);
     let model = home.as_ref().map_or(model, |list| &list.model);
     let command_text = home
+        .as_ref()
+        .map_or(command_text, |list| Some(list.text.as_str()));
+    // The sink expands a `~/<dir>/<program>` launcher the same way, and the
+    // session PATH grants its directory as an executable root either way.
+    let launcher = home_exec::as_absolute_program(model, context);
+    let model = launcher.as_ref().map_or(model, |list| &list.model);
+    let command_text = launcher
         .as_ref()
         .map_or(command_text, |list| Some(list.text.as_str()));
     // The home spelling and the directory it expands to are the same command

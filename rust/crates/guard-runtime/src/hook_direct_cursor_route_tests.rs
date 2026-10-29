@@ -1,6 +1,8 @@
 //! Cursor's route probe and the contained sink it rewrites a call into.
 
-use super::{admit_sink, daemon_answer, probe_answer, route, unreviewed_probe, Route, Scope};
+use super::{
+    admit_sink, daemon_answer, probe_answer, route, unreviewed_probe, CursorDefer, Route, Scope,
+};
 use crate::codex_hook_bridge::contain::discard;
 use crate::hook_direct::HookDirectDefer;
 use serde_json::{json, Map, Value};
@@ -123,12 +125,14 @@ fn only_a_named_probe_and_a_before_shell_sink_take_the_cursor_route() {
     assert_eq!(route(&probe("make build", "/repo")).unwrap(), Route::Probe);
     assert_eq!(route(&receipt_unset).unwrap(), Route::Probe);
     assert_eq!(route(&sink_call(sink)).unwrap(), Route::Sink);
-    // The daemon reviews every other call naming the probe or the sink.
-    for payload in [unnamed, elsewhere, receipt_only] {
-        assert!(matches!(
-            route(&payload),
-            Err(HookDirectDefer::PayloadUnsupported)
-        ));
+    // The daemon reviews every other call naming the probe or the sink, and
+    // each one counts under the reason it was handed over.
+    for (payload, reason) in [
+        (unnamed, CursorDefer::ProbeUnnamed),
+        (elsewhere, CursorDefer::SinkSource),
+        (receipt_only, CursorDefer::ReceiptOnly),
+    ] {
+        assert_eq!(route(&payload), Err(HookDirectDefer::Cursor(reason)));
     }
 }
 
@@ -190,17 +194,43 @@ fn a_sandboxed_probe_runs_in_the_sink_and_the_sink_is_admitted_as_written() {
     let digest_start = command.find("--request-sha256").unwrap() + "--request-sha256 ".len();
     let mut tampered = command.clone();
     tampered.replace_range(digest_start..digest_start + 1, "Z");
-    for (call, scope) in [
-        (sink_call(&command), &other_home),
-        (sink_call(&tampered), &scope),
-        (sink_call(&format!("{command} --extra")), &scope),
-        (sink_call(&command.replace(HOME, "/home/other")), &scope),
+    let elsewhere = tempfile::tempdir().unwrap();
+    let other_workspace = elsewhere.path().to_str().unwrap();
+    // A request outside the temporary directory is no snapshot the rewrite
+    // writes.
+    let other_request = "/opt/guard-elsewhere/request/request.json";
+    for (call, scope, reason) in [
+        (sink_call(&command), &other_home, CursorDefer::SinkArgv),
+        (sink_call(&tampered), &scope, CursorDefer::SinkArgv),
+        (
+            sink_call(&format!("{command} --extra")),
+            &scope,
+            CursorDefer::SinkArgv,
+        ),
+        (
+            sink_call(&command.replace(HOME, "/home/other")),
+            &scope,
+            CursorDefer::SinkArgv,
+        ),
+        (
+            sink_call(&command.replace(&format!("--home {HOME}"), "--home /home/other")),
+            &scope,
+            CursorDefer::SinkHome,
+        ),
+        (
+            sink_call(&command.replace(&workspace, other_workspace)),
+            &scope,
+            CursorDefer::SinkWorkspace,
+        ),
+        (
+            sink_call(&command.replace(&request, other_request)),
+            &scope,
+            CursorDefer::SinkSnapshot,
+        ),
     ] {
-        assert!(
-            matches!(
-                admit_sink(&call, scope),
-                Err(HookDirectDefer::PayloadUnsupported)
-            ),
+        assert_eq!(
+            admit_sink(&call, scope),
+            Err(HookDirectDefer::Cursor(reason)),
             "{call:?}"
         );
     }

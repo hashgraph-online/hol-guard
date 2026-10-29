@@ -121,6 +121,24 @@ def watched_roots(store: Any, *, unavailable_digest: str) -> set[str]:
     return {str(row[0]) for row in rows}
 
 
+def is_manual_admission(store: Any, keys: WorktreeKeys, *, root: str) -> bool:
+    """Return whether someone admitted this worktree at ``root`` themselves and it is still checked."""
+
+    with store._connect() as connection:
+        row = connection.execute(
+            """
+            select 1 from workspace_assessment_state s
+            where s.codebase_key = ? and s.worktree_key = ? and s.private_root = ? and s.paused = 0
+              and not exists (
+                select 1 from workspace_assessment_install_admissions a
+                where a.codebase_key = s.codebase_key and a.worktree_key = s.worktree_key
+              )
+            """,
+            (keys.codebase_key, keys.worktree_key, root),
+        ).fetchone()
+    return row is not None
+
+
 def end_unregistered_install_admissions(store: Any, registered_roots: Collection[str], *, now_ms: int) -> int:
     """End automatic admissions whose root no active install registers.
 
@@ -156,4 +174,4 @@ def _end_admissions(connection: Any, keys: list[tuple[str, str]], *, now_ms: int
     )
 
 
-__all__ = ["admit_and_queue", "end_unregistered_install_admissions", "watched_roots"]
+__all__ = ["admit_and_queue", "end_unregistered_install_admissions", "is_manual_admission", "watched_roots"]

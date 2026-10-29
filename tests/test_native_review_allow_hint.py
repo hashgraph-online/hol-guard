@@ -16,7 +16,6 @@ from typing import Any
 import pytest
 
 from codex_plugin_scanner.guard.daemon import native_review_allow_hint as module
-from codex_plugin_scanner.guard.local_cli_hook import SetupConnector
 from codex_plugin_scanner.guard.runtime.extension_allow_hint import validated_extension_allow_hint
 from codex_plugin_scanner.guard.runtime.extension_coverage_hint import validated_extension_coverage_hint
 
@@ -155,46 +154,19 @@ def test_a_never_enrolled_device_still_asks(monkeypatch, tmp_path: Path) -> None
 
 
 def test_the_queue_time_ask_carries_only_a_budget_without_a_deadline() -> None:
-    assert module.native_review_hint_ask(None, None) == {"budget_ms": 5000}
+    assert module.native_review_hint_ask(None) == {"budget_ms": 5000}
 
 
 def test_queue_time_hints_leave_the_hook_time_to_persist_the_review(monkeypatch) -> None:
     monkeypatch.setattr(module.time, "monotonic", lambda: 100.0)
 
-    assert module.native_review_hint_ask(100.75, None) == {"budget_ms": 400}
-    # Too little left after the margin: the review is persisted without hints.
-    assert module.native_review_hint_ask(100.45, None) is None
-
-
-_CONNECTOR = SetupConnector(
-    cli_id="local-cli.lanectl", identity_hash="a" * 64, name="lanectl", surface="cli", queue_group_id="group"
-)
-
-
-def test_a_short_review_budget_still_asks_for_the_connector_setup_hint(monkeypatch) -> None:
-    # The stored connector hint is what resolves the row once setup finishes,
-    # so it asks with the time left even below the usual minimum budget.
-    monkeypatch.setattr(module.time, "monotonic", lambda: 100.0)
-    deadline = 100.0 + module._SAFETY_MARGIN_SECONDS + 0.05
-
-    ask = module.native_review_hint_ask(deadline, _CONNECTOR)
-
-    assert ask is not None
-    assert ask["connector"] == {
-        "cli_id": "local-cli.lanectl",
-        "identity_hash": "a" * 64,
-        "name": "lanectl",
-        "surface": "cli",
-        "queue_group_id": "group",
-    }
-    assert 0 < ask["budget_ms"] < module._MIN_BUDGET_SECONDS * 1000
-
-
-def test_the_connector_ask_never_eats_the_persist_margin(monkeypatch) -> None:
-    monkeypatch.setattr(module.time, "monotonic", lambda: 100.0)
-
+    assert module.native_review_hint_ask(100.75) == {"budget_ms": 400}
+    # A short budget still asks: the resident decides whether it is enough for
+    # an extension hint, and a connector's setup hint needs no minimum.
+    assert module.native_review_hint_ask(100.45) == {"budget_ms": 100}
+    # Nothing left after the margin: the review is persisted without hints.
     for deadline in (99.0, 100.0, 100.0 + module._SAFETY_MARGIN_SECONDS / 2):
-        assert module.native_review_hint_ask(deadline, _CONNECTOR) is None
+        assert module.native_review_hint_ask(deadline) is None
 
 
 def _answering(monkeypatch, hint: object) -> list[dict[str, Any]]:

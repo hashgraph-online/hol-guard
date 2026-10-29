@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 from ._commands_shared import *
 from .approval_gate_prompt import print_approval_gate_error
+from .codebase_commands import run_codebases_command  # noqa: F401  (looked up by name in _COMMON_HANDLERS)
 from .commands_lifecycle_gate import (
     enforce_lifecycle_gate,
     explain_missing_native_runtime,
@@ -46,6 +47,7 @@ _PRESTORE_HANDLERS = {
 }
 
 _COMMON_HANDLERS = {
+    "codebases": "run_codebases_command",
     "protect": "_run_guard_protect_command",
     "start": "_run_guard_start_command",
     "status": "_run_guard_status_command",

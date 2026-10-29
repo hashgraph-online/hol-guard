@@ -113,6 +113,7 @@ AGENT_TYPE_INPUTS: tuple[str, ...] = (
     "claude-code",
     "cline",
     "hermes",
+    "muse",
     "Codex",
     "claude_code",
     "",

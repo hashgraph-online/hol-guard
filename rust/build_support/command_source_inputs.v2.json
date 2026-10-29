@@ -571,6 +571,8 @@
       "src/pretool/workspace_contained_glob.rs",
       "src/pretool/workspace_contained_home_cd.rs",
       "src/pretool/workspace_contained_home_cd_tests.rs",
+      "src/pretool/workspace_contained_home_exec.rs",
+      "src/pretool/workspace_contained_home_exec_tests.rs",
       "src/pretool/workspace_contained_kill.rs",
       "src/pretool/workspace_contained_launch.rs",
       "src/pretool/workspace_contained_launch_tests.rs",

@@ -96,7 +96,36 @@ pub fn venv_activation_target(command: &str, context: super::PathContext<'_>) ->
 pub fn contained_target(command: &str, context: super::PathContext<'_>) -> Option<String> {
     let ungrouped = super::runnable_ungrouped_command_list(command);
     let text = ungrouped.as_deref().unwrap_or(command);
-    venv_activation_target(text, context).or(ungrouped)
+    let projected = venv_activation_target(text, context).or(ungrouped);
+    let text = projected.as_deref().unwrap_or(command);
+    home_launcher_target(text, context).or(projected)
+}
+
+/// The launcher the pre-tool pass answered for, spelled as the path it names.
+///
+/// The sandbox seeds its own private HOME, so the `/bin/sh` it runs the text
+/// through would expand `~/<dir>/<program>` below a directory holding nothing
+/// and report the launcher missing. The pass admits that spelling only as the
+/// absolute path it expands to, from the declared home, and the sink runs the
+/// text the pass answered for.
+///
+/// The shell proof is set here, as the sink's own peel expands a leading
+/// `cd ~/<dir>` from the declared home without one: that proof was made
+/// before the call was admitted, under the environment the agent ran in, and
+/// only a command it admitted reaches a sink at all.
+fn home_launcher_target(command: &str, context: super::PathContext<'_>) -> Option<String> {
+    let model = crate::parse_command(&crate::CommandModelRequestV1 {
+        command: command.to_owned(),
+        dialect: "posix".into(),
+        transport: "shell_string".into(),
+        extraction_provenance: "pre-tool-generic".into(),
+    })
+    .ok()?;
+    let context = super::PathContext {
+        shell_home_matches: true,
+        ..context
+    };
+    Some(super::workspace_contained::home_exec::as_absolute_program(&model, context)?.text)
 }
 
 /// Bounded caller-supplied context, never authenticated provider facts.
