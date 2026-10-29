@@ -197,3 +197,27 @@ fn a_prefixed_launcher_is_not_projected() {
     }
     let _ = std::fs::remove_dir_all(home.parent().unwrap());
 }
+
+/// The sandbox seeds its own HOME, so the sink has to run the launcher as
+/// the path the proofs read rather than as the `~` the agent typed. It asks
+/// `contained_target` for that text, which answers without a shell proof of
+/// its own because the admitted call already carries one.
+#[cfg(unix)]
+#[test]
+fn the_sink_plans_the_launcher_as_the_path_it_names() {
+    let (home, cwd) = fixture();
+    let projected = crate::pretool::generic::contained_target(
+        "cd app && ~/.local/bin/run-queued -- npx vitest run",
+        context(&home, &cwd, false),
+    )
+    .expect("a projected command");
+    assert_eq!(
+        projected,
+        format!(
+            "cd app && {} -- npx vitest run",
+            home.join(".local/bin/run-queued").display()
+        ),
+        "projected text"
+    );
+    let _ = std::fs::remove_dir_all(home.parent().unwrap());
+}

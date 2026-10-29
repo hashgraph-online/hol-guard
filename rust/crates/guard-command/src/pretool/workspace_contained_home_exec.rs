@@ -1,12 +1,16 @@
 //! A launcher spelled `~/<dir>/<program>`, the way an agent types it.
 //!
-//! The sink runs the contained text through `/bin/sh`, which expands that
-//! `~` from the same declared home the path proofs expand, so `~/bin/run`
-//! and the absolute path it names are one command written two ways. The
-//! absolute spelling already takes the contained route, and the session
-//! PATH grants its directory as an executable root either way, so the home
-//! spelling is projected to that path before the checks below start and
-//! every later check sees one spelling.
+//! The absolute spelling already takes the contained route, and the session
+//! PATH grants its directory as an executable root either way, so `~/bin/run`
+//! and the path it names are one command written two ways. The home spelling
+//! is projected to that path before the checks below start, and every later
+//! check sees one spelling.
+//!
+//! The sandbox the sink builds seeds its own private HOME, so the `/bin/sh`
+//! it runs the contained text through would expand that `~` below a directory
+//! holding nothing. The sink asks `generic::contained_target` for this same
+//! projection and runs the path the proofs read, the way its peel expands a
+//! leading `cd ~/<dir>` from the declared home.
 //!
 //! Only the program word is projected, and only when the shell expands it:
 //! a quoted or escaped `~` is a literal relative path that names a
