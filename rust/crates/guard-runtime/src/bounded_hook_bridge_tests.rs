@@ -19,7 +19,6 @@ use crate::bounded_hook_bridge_render::{failure_output_for, failure_payload};
 use crate::claude_hook_bridge_fixture::{
     read_request, write_private, write_response, GuardHome, Request,
 };
-use crate::hook_env_stamp::dumps;
 
 const VECTORS: &str = include_str!("../testdata/bounded_hook_bridge/vectors.json");
 const TOKEN: &str = "bounded-token-fixture";
