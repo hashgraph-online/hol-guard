@@ -74,6 +74,7 @@ class StoreApprovalsMixin:
         claude_key: dict[str, str] | None = None,
         codex_live_wait: dict[str, object] | None = None,
         respond: dict[str, object] | None = None,
+        connector_context: dict[str, str] | None = None,
     ) -> dict[str, object] | None:
         """Queue a paused native review and answer the row it was stored as.
 
@@ -105,6 +106,10 @@ class StoreApprovalsMixin:
         the row). The resident renders it once the row is stored and the row
         carries it as ``hook_response``. A row read back separately carries
         none, and the hook renders it itself.
+
+        ``connector_context`` names the observed connector (``cli_id`` and
+        ``identity_hash``) a connector-setup review waits on. The resident
+        keeps the review's context with it in the same write, best effort.
         """
         args: dict[str, object] = {
             "review": review,
@@ -120,6 +125,8 @@ class StoreApprovalsMixin:
             args["codex_live_wait_facts"] = codex_live_wait
         if respond is not None:
             args["respond"] = respond
+        if connector_context is not None:
+            args["connector_context"] = connector_context
         try:
             # `Path.resolve` of a relative config path starts from this process's directory.
             cwd: str | None = os.getcwd()

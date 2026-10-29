@@ -38,7 +38,6 @@ from .native_review_connector import (
     connector_is_local,
     native_review_setup_connector,
     raise_connector_setup_notice,
-    record_native_review_connector_context,
 )
 from .native_review_records import native_review_approval_center_url
 
@@ -375,8 +374,8 @@ def queue_native_pre_tool_review(
     try:
         # The resident builds the request from the query, decides its hint
         # and queues it in one store call. A waiting Codex hook's operation and
-        # resume record, and a prompted Claude review's permission notice, are
-        # written with it.
+        # resume record, a prompted Claude review's permission notice, and a
+        # connector-setup review's context are written with it.
         stored = queue(
             query,
             now,
@@ -385,6 +384,9 @@ def queue_native_pre_tool_review(
             claude_key=_claude_notice_key(store, deadline) if claude_notice else None,
             codex_live_wait=live_wait,
             respond=respond,
+            connector_context=(
+                None if connector is None else {"cli_id": connector.cli_id, "identity_hash": connector.identity_hash}
+            ),
         )
     except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error) as error:
         # The action fails closed. Only the store's fixed reason code, never an
@@ -392,16 +394,6 @@ def queue_native_pre_tool_review(
         reason = error.reason if isinstance(error, NativeGuardStoreUnavailable) else type(error).__name__
         _LOGGER.warning("Native review queue failed for %s (%s)", request_id, reason)
         return None
-    if connector is not None and isinstance(stored, dict):
-        record_native_review_connector_context(
-            store,
-            connector=connector,
-            native_result=native_result,
-            stored=stored,
-            harness=harness,
-            workspace=workspace,
-            deadline=deadline,
-        )
     raise_connector_setup_notice(store, stored, connector)
     return stored if isinstance(stored, dict) else None
 

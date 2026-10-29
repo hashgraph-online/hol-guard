@@ -22,16 +22,27 @@
 //! it stored, the paused review or the silent block the hook used to ask the
 //! resident for in a call of its own. A reply without its row carries none,
 //! and the hook renders it separately.
+//!
+//! A connector-setup review's `connector_context` keeps the queued review's
+//! context with the connector it waits on, in the queue write's own
+//! transaction, where the daemon used to record it in a resident call of its
+//! own once the row was stored.
+
+use std::path::Path;
 
 use guard_contracts::{PausedReviewInputsV1, ReviewRequestQueryV1, SilentReviewBlockInputsV1};
+use rusqlite::Connection;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 use zeroize::Zeroize;
 
+use crate::guard_store_args::Args;
+use crate::guard_store_connector_context::{record_context, scrub_context_text, MAX_SUMMARY_CHARS};
 use crate::guard_store_db::{StoreError, StoreResult};
 use crate::hook_adapter_op::review_request::{self, pre_tool_command};
 use crate::hook_decision_review_response::{paused_review, silent_review_block};
 use crate::hook_direct::saved_decision::review_hint::op::queued_hint;
+use crate::hook_direct::saved_decision::review_queue::connector::first_blocked_cause;
 use crate::policy_store::PolicySnapshotStore;
 
 pub(crate) const METHOD: &str = "queue_native_review";
@@ -86,6 +97,14 @@ struct SilentAsk {
     home_dir: String,
 }
 
+/// The observed connector a connector-setup review waits on.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ConnectorAsk {
+    cli_id: String,
+    identity_hash: String,
+}
+
 /// What the response is rendered from besides the stored row.
 struct Respond {
     ask: RespondAsk,
@@ -98,6 +117,9 @@ pub(crate) struct Delegated {
     pub(crate) method: &'static str,
     pub(crate) args: Map<String, Value>,
     respond: Option<Respond>,
+    /// The connector context to keep once the row is stored, all but the
+    /// row's own wording.
+    context: Option<Map<String, Value>>,
 }
 
 impl Drop for Delegated {
@@ -128,6 +150,10 @@ pub(crate) fn delegate(
     let respond: Option<RespondAsk> = match delegated.remove("respond") {
         None | Some(Value::Null) => None,
         Some(respond) => Some(serde_json::from_value(respond).map_err(|_| INVALID)?),
+    };
+    let connector: Option<ConnectorAsk> = match delegated.remove("connector_context") {
+        None | Some(Value::Null) => None,
+        Some(context) => Some(serde_json::from_value(context).map_err(|_| INVALID)?),
     };
     let silent = take_flag(&mut delegated, "silent")?;
     let claude_notice = take_flag(&mut delegated, "claude_notice")?;
@@ -175,8 +201,30 @@ pub(crate) fn delegate(
         "add_approval_request"
     };
     delegated.insert("request".to_owned(), Value::Object(request));
+    let context = connector.map(|connector| {
+        let workspace = query.envelope.workspace.as_deref().map(Path::new);
+        let label = workspace
+            .and_then(Path::file_name)
+            .map(|name| name.to_string_lossy());
+        let cause = first_blocked_cause(paused.get("reason_code").and_then(Value::as_str));
+        let mut context = Map::new();
+        context.insert("cli_id".to_owned(), Value::String(connector.cli_id));
+        context.insert(
+            "identity_hash".to_owned(),
+            Value::String(connector.identity_hash),
+        );
+        context.insert("first_blocked_cause".to_owned(), json!(cause));
+        context.insert("harness".to_owned(), json!(query.envelope.harness));
+        context.insert("workspace_label".to_owned(), json!(label));
+        context.insert(
+            "observed_at".to_owned(),
+            delegated.get("now").cloned().unwrap_or(Value::Null),
+        );
+        context
+    });
     Ok(Delegated {
         method,
+        context,
         args: delegated,
         respond: respond.map(|ask| Respond {
             ask,
@@ -187,6 +235,28 @@ pub(crate) fn delegate(
 }
 
 impl Delegated {
+    /// Keep the queued review's context with the connector it waits on, on the
+    /// queue write's own connection. Best effort, as the daemon's separate
+    /// call was: the review is queued whether or not this keeps anything. The
+    /// row's wording is kept only when it repeats no argument of the command.
+    pub(crate) fn record_connector_context(&self, connection: &Connection, reply: &Value) {
+        let Some(context) = &self.context else {
+            return;
+        };
+        let Some(row) = reply.get("row").and_then(Value::as_object) else {
+            return;
+        };
+        let command = row.get("raw_command_text").and_then(Value::as_str);
+        let mut args = context.clone();
+        for key in ["trigger_summary", "why_now"] {
+            let text = row.get(key).and_then(Value::as_str);
+            let kept = without_operands(text, command)
+                .and_then(|text| scrub_context_text(text, MAX_SUMMARY_CHARS));
+            args.insert(key.to_owned(), json!(kept));
+        }
+        let _ = record_context(connection, &Args(&args));
+    }
+
     /// `reply` with the hook response rendered from the row it stored, under
     /// `response`. A reply without its row, or a block the resident cannot
     /// compose, is answered unchanged and the hook renders separately.
@@ -245,6 +315,20 @@ impl Delegated {
         object.insert("response".to_owned(), Value::Object(response));
         reply
     }
+}
+
+/// `text` unless it repeats an argument of `command` (`_without_operands`).
+/// Arguments split as Python's `str.split()` does.
+fn without_operands<'a>(text: Option<&'a str>, command: Option<&str>) -> Option<&'a str> {
+    let text = text.filter(|text| !text.trim().is_empty())?;
+    let separator = |c: char| c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c);
+    let mut operands = command.into_iter().flat_map(|command| {
+        command
+            .split(separator)
+            .filter(|part| !part.is_empty())
+            .skip(1)
+    });
+    (!operands.any(|operand| text.contains(operand))).then_some(text)
 }
 
 fn take_flag(args: &mut Map<String, Value>, key: &str) -> StoreResult<bool> {

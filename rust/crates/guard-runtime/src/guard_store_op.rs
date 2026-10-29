@@ -256,6 +256,10 @@ fn evaluate_tracked(
             return Err(error);
         }
     };
+    // A connector-setup review's context is kept in the write that stored it.
+    if let (Some(delegated), Kind::Write) = (&delegated, kind) {
+        delegated.record_connector_context(&connection, &payload);
+    }
     if kind == Kind::Snapshot {
         connection.execute_batch("ROLLBACK")?;
     } else {

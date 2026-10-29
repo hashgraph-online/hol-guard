@@ -14,7 +14,8 @@
 //! - the agent is told the CLI is not set up on this device
 //!   (`connector_agent_reason`), in the silent block and in the pause;
 //! - once the row is stored, the review's context is recorded with the
-//!   connector (`record_native_review_connector_context`, best effort), and
+//!   connector (best effort; the daemon's queue keeps it in the queue write
+//!   itself), and
 //!   the desktop setup notice is raised (`raise_connector_setup_notice`). The
 //!   resident cannot raise a desktop notice, so it hands the stored request id
 //!   and the CLI name to the evidence drain, which raises it.
@@ -72,7 +73,8 @@ const FALLBACK_NAME: &str = "this local CLI";
 const LONGEST_SURFACE: &str = "package-scripts";
 /// A hook waits this long for a busy store before the daemon takes over.
 const BUSY_TIMEOUT_MS: u64 = 250;
-/// `_CONTEXT_SAFETY_MARGIN_SECONDS` and `_MIN_CONTEXT_BUDGET_SECONDS`.
+/// The context write is optional, so it runs only while the hook has time to
+/// spare: it keeps a margin for the response and skips a nearly spent budget.
 const CONTEXT_SAFETY_MARGIN: Duration = Duration::from_millis(350);
 const MIN_CONTEXT_BUDGET: Duration = Duration::from_millis(250);
 /// The `local_cli_hook` action the lookup refines.
@@ -370,8 +372,8 @@ impl Setup {
     }
 }
 
-/// `record_native_review_connector_context`: skipped when the hook has too
-/// little time left, and any failure only leaves the connector without
+/// Keep the review's context with the connector: skipped when the hook has
+/// too little time left, and any failure only leaves the connector without
 /// context. The stored row carries no trigger summary or reason of its own,
 /// so neither is sent.
 fn record_context(context: &Context<'_>, setup: &Setup, oauth_source: &str) {
@@ -415,8 +417,8 @@ fn record_context(context: &Context<'_>, setup: &Setup, oauth_source: &str) {
     repair_store_permissions(guard_home);
 }
 
-/// `_FIRST_CAUSE_BY_REASON_CODE`.
-fn first_blocked_cause(reason_code: Option<&str>) -> Option<&'static str> {
+/// What first stopped a connector, by the review reason that queued it.
+pub(crate) fn first_blocked_cause(reason_code: Option<&str>) -> Option<&'static str> {
     match reason_code? {
         "native_workspace_containment_executable_outside_roots" => Some("exec_outside_roots"),
         "native_command_review_required" => Some("unrecognised_tool"),
