@@ -4,6 +4,10 @@
 //! Each screen decides whether the command stays inside an already-admitted
 //! containment boundary, so the file is runtime policy, not a test module.
 
+#[cfg(test)]
+#[path = "restricted_test_commands_tests.rs"]
+mod tests;
+
 use crate::contained_argv::{contained_runner_call, jest_contained_call};
 use crate::CanonicalCommandV1;
 
@@ -662,8 +666,8 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
         "vitest" => arguments.first().is_some_and(|arg| arg == "run"),
         "jest" => jest_contained_call(arguments),
         "node" | "nodejs" => {
-            matches!(arguments, [entry, run, ..] if entry.replace('\\', "/").contains("/node_modules/vitest/") && entry.ends_with("/vitest.mjs") && run == "run")
-                || matches!(arguments, [entry, rest @ ..] if entry.replace('\\', "/").ends_with("/node_modules/jest/bin/jest.js") && jest_contained_call(rest))
+            matches!(arguments, [entry, run, ..] if local_package_entry(&entry.replace('\\', "/"), "vitest/vitest.mjs") && run == "run")
+                || matches!(arguments, [entry, rest @ ..] if local_package_entry(&entry.replace('\\', "/"), "jest/bin/jest.js") && jest_contained_call(rest))
         }
         _ => false,
     };

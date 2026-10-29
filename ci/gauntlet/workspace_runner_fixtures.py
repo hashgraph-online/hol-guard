@@ -17,6 +17,11 @@ import subprocess
 from pathlib import Path
 
 WORKSPACE_JEST_CASE = "omp-native-workspace-npx-jest"
+# The same install, launched the way a Node project's own scripts name it: the
+# installed entry point relative to the workspace root rather than through
+# ``node_modules/.bin``.
+WORKSPACE_NODE_ENTRY_CASE = "omp-native-workspace-node-jest-entry"
+WORKSPACE_RUNNER_CASES = frozenset({WORKSPACE_JEST_CASE, WORKSPACE_NODE_ENTRY_CASE})
 # The same installed build, launched through the Bun the installer leaves in the
 # caller's home rather than one a login shell put on PATH.
 HOME_BUN_ENTRY_CASE = "omp-native-shell-home-spelled-bun-entry"
@@ -57,7 +62,7 @@ _FILES = {
 
 def add_workspace_test_runner(workspace: Path, scenario_id: str | None) -> None:
     """Install the runner inside the workspace, untracked as ``npm install`` leaves it."""
-    if scenario_id != WORKSPACE_JEST_CASE:
+    if scenario_id not in WORKSPACE_RUNNER_CASES:
         return
     for relative, text in _FILES.items():
         target = workspace / relative
@@ -89,7 +94,7 @@ def add_workspace_node_runtime(home: Path, scenario_id: str | None) -> None:
     owns. The host's Node is copied, not linked, so nothing the fixture does
     can reach the file the host runs.
     """
-    if scenario_id != WORKSPACE_JEST_CASE:
+    if scenario_id not in WORKSPACE_RUNNER_CASES:
         return
     located = shutil.which("node")
     if located is None:

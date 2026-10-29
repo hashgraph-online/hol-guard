@@ -6145,6 +6145,57 @@
       "expect": "allow"
     },
     {
+      "id": "session-vitest-node-entry-root-sibling",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "node node_modules/vitest/vitest.mjs run --root ${ORG_WT}"
+      },
+      "cwd": "org_app",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "session-vitest-node-entry-sibling-file",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "node node_modules/vitest/vitest.mjs run ${ORG_WT}/src/index.test.ts"
+      },
+      "cwd": "org_app",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "session-vitest-bun-entry-root-sibling",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bun node_modules/vitest/vitest.mjs run --root ${ORG_WT}"
+      },
+      "cwd": "org_app",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
       "id": "cat-readme",
       "fix_area": "shell",
       "harnesses": [

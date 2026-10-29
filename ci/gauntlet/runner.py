@@ -71,7 +71,7 @@ from .session_folder import seed_session_folder, session_cwd
 from .source_identity import source_identity
 from .summary import inference_usage, render_summary_markdown
 from .supply_chain import stage_supply_chain
-from .workspace_runner_fixtures import WORKSPACE_JEST_CASE, workspace_node_bin
+from .workspace_runner_fixtures import WORKSPACE_RUNNER_CASES, workspace_node_bin
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
@@ -518,9 +518,9 @@ def run_suite(
     if selected_ids and (set(selected_ids) - {scenario.id for scenario in catalog}):
         raise ValueError("unknown scenario selection")
     selected = tuple(s for s in catalog if not selected_ids or s.id in selected_ids)
-    # Only the workspace runner case needs Node, so a selection without it runs
-    # on a host that has none.
-    if any(scenario.id == WORKSPACE_JEST_CASE for scenario in selected) and shutil.which("node") is None:
+    # Only the workspace runner cases need Node, so a selection without them
+    # runs on a host that has none.
+    if any(scenario.id in WORKSPACE_RUNNER_CASES for scenario in selected) and shutil.which("node") is None:
         raise RuntimeError("Gauntlet prerequisite is missing: node")
     parent = (work_root or output.parent).resolve()
     parent.mkdir(parents=True, exist_ok=True)

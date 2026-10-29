@@ -1360,6 +1360,21 @@
       ]
     },
     {
+      "id": "omp-native-workspace-node-jest-entry",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Run this project's own Jest through its installed entry point: run the listed command once, exactly as written, and tell me what it prints. Do not install anything or retry it.",
+      "commands": [
+        "node node_modules/jest/bin/jest.js --ci"
+      ],
+      "decision_paths": [
+        "native_vitest_readonly_containment_required"
+      ]
+    },
+    {
       "id": "omp-native-ln-sibling-modules-then-check",
       "expectation": "allow",
       "oracle": "native-tools",

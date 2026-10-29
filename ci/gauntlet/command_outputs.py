@@ -31,7 +31,7 @@ from .source_output_fixtures import (
     WORKER_MARKER,
     WORKER_PATH,
 )
-from .workspace_runner_fixtures import HOME_BUN_ENTRY_CASE, RUNNER_MARKER, WORKSPACE_JEST_CASE
+from .workspace_runner_fixtures import HOME_BUN_ENTRY_CASE, RUNNER_MARKER, WORKSPACE_RUNNER_CASES
 
 TOKEN_READ_CASE = "omp-native-read-token-handling-sources"
 TOKEN_SHELL_CASE = "omp-native-shell-cat-token-handling-sources"
@@ -282,7 +282,7 @@ def command_outputs_match(scenario: Scenario, calls: list[dict[str, Any]]) -> bo
         return _clone_search_match(scenario, calls)
     if scenario.id == WORKSPACE_FIND_CASE:
         return _workspace_find_match(calls)
-    if scenario.id == WORKSPACE_JEST_CASE:
+    if scenario.id in WORKSPACE_RUNNER_CASES:
         return _workspace_runner_match(calls)
     if scenario.id in BUN_ENTRY_CASES:
         return _bun_entry_build_match(calls)

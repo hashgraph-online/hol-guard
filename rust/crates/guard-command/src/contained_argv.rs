@@ -461,9 +461,9 @@ pub fn contained_runner_invocation(
                 .first()
                 .map(|value| value.replace('\\', "/"))
                 .unwrap_or_default();
-            let tool = if entry.ends_with("/node_modules/vitest/vitest.mjs") {
+            let tool = if local_package_entry(&entry, "vitest/vitest.mjs") {
                 "vitest"
-            } else if entry.ends_with("/node_modules/jest/bin/jest.js") {
+            } else if local_package_entry(&entry, "jest/bin/jest.js") {
                 "jest"
             } else {
                 return invalid_vitest();
@@ -584,9 +584,9 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
             || tsx_test_invocation(command)?.is_some()
             || (matches!(name, "node" | "nodejs")
                 && entries.clone().any(|v| {
-                    v.ends_with("/node_modules/vitest/vitest.mjs")
-                        || v.replace('\\', "/")
-                            .ends_with("/node_modules/jest/bin/jest.js")
+                    let entry = v.replace('\\', "/");
+                    local_package_entry(&entry, "vitest/vitest.mjs")
+                        || local_package_entry(&entry, "jest/bin/jest.js")
                 })));
     let node_tool = bun.is_none()
         && manager_exec_runner(command).is_none()
