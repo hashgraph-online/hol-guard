@@ -14,6 +14,35 @@ from codex_plugin_scanner.guard.store import GuardStore
 
 
 @contextmanager
+def keyed_guard_home(guard_home: Path) -> Iterator[Path]:
+    """Seed the policy verifier key a resident needs before it will serve.
+
+    The managed resident refuses to answer a hook until the policy verifier
+    key exists in the Guard home it serves, and only the runtime can write
+    it. A test that installs into a fresh home therefore reaches a resident
+    that is live but will not answer, and the bridge fails the hook closed
+    rather than reporting the decision the harness really makes. Provision
+    the key the way the session-scoped native fixtures do, and close the
+    residents this home spawned on the way out so none outlives the test.
+    """
+
+    from codex_plugin_scanner.guard.native_policy_snapshot import provision_native_policy_verifier_key
+    from codex_plugin_scanner.guard.native_resident_client import close_native_residents
+
+    from .mcp_policy_native_fixture import _FIXTURE_KEYS
+
+    key = b"\x07" * 32
+    (guard_home / "native-runtime").mkdir(mode=0o700, parents=True, exist_ok=True)
+    provision_native_policy_verifier_key(guard_home, key)
+    _FIXTURE_KEYS[guard_home] = key
+    try:
+        yield guard_home
+    finally:
+        _FIXTURE_KEYS.pop(guard_home, None)
+        close_native_residents(guard_home)
+
+
+@contextmanager
 def live_cursor_daemon(guard_home: Path) -> Iterator[None]:
     """Serve the loopback daemon the bridge asks when no resident answers."""
 

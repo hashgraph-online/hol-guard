@@ -25,7 +25,7 @@ from codex_plugin_scanner.guard.config import resolve_guard_home
 from codex_plugin_scanner.guard.launcher import merge_guard_launcher_env
 from codex_plugin_scanner.guard.models import HarnessDetection
 from codex_plugin_scanner.guard.store import GuardStore
-from tests.cursor_bridge_support import live_cursor_daemon, run_cursor_hook
+from tests.cursor_bridge_support import keyed_guard_home, live_cursor_daemon, run_cursor_hook
 
 PREVIOUS_OMP_BASE_SOURCE_SHA256 = "778b4830857695f9c9d1c5682f77e71c2d86baf3e0b2fb814ae7589f9f600eb2"
 
@@ -428,24 +428,31 @@ def test_install_cursor_hook_script_allows_benign_shell_command(
     # answers another worker's hook.
     monkeypatch.setenv("HOME", str(home_dir))
 
-    rc = main(
-        [
-            "guard",
-            "install",
-            "cursor",
-            "--home",
-            str(home_dir),
-            "--json",
-        ]
-    )
-    assert rc == 0
-    hook_script = home_dir / ".cursor" / "hooks" / "hol-guard-cursor-hook.py"
-    assert hook_script.is_file()
-    payload = {"hook_event_name": "beforeShellExecution", "command": "echo guard-e2e"}
-    env = os.environ.copy()
-    env.pop("PYTHONPATH", None)
-    with live_cursor_daemon(resolve_guard_home(None)):
-        completed = run_cursor_hook(native_hook_force, hook_script, payload, env=env, cwd=repo)
+    # Cursor runs the client behind the native bridge, which answers from a
+    # live resident when one is serving and from the daemon when none is. A
+    # resident serves only a Guard home whose policy verifier key exists, so
+    # key this one before anything can spawn a resident against it; without
+    # the key the resident comes up, refuses the hook, and the bridge fails
+    # closed on a command the harness really allows.
+    with keyed_guard_home(resolve_guard_home(None)) as guard_home:
+        rc = main(
+            [
+                "guard",
+                "install",
+                "cursor",
+                "--home",
+                str(home_dir),
+                "--json",
+            ]
+        )
+        assert rc == 0
+        hook_script = home_dir / ".cursor" / "hooks" / "hol-guard-cursor-hook.py"
+        assert hook_script.is_file()
+        payload = {"hook_event_name": "beforeShellExecution", "command": "echo guard-e2e"}
+        env = os.environ.copy()
+        env.pop("PYTHONPATH", None)
+        with live_cursor_daemon(guard_home):
+            completed = run_cursor_hook(native_hook_force, hook_script, payload, env=env, cwd=repo)
     assert completed.returncode == 0, completed.stderr
     response = json.loads(completed.stdout)
     assert response.get("permission") == "allow"
