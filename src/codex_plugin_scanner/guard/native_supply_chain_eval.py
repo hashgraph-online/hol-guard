@@ -36,6 +36,7 @@ from .native_runtime import native_runtime_status
 from .native_runtime_resilience import native_record_resident_failure
 from .native_supply_chain_archive import ArchiveFulfilment
 from .native_supply_chain_egress import EGRESS_REQUIRED_CODE, EgressExchanger, EgressProtocolError, private_spool_dir
+from .native_workspace_inventory import check_audit_deadline
 from .runtime.package_request_evaluation import _persist_evidence
 from .runtime.restricted_archive_contract import RestrictedArchiveDownload
 
@@ -165,6 +166,8 @@ def _record_unbound_answer(guard_home: Path) -> None:
 
 
 def _send_eval_request(request: dict[str, object], guard_home: Path) -> dict[str, Any]:
+    # One evaluation can take several rounds; an audit past its deadline sends none of them.
+    check_audit_deadline()
     try:
         request_sha256 = "sha256:" + _canonical_request_sha256(request)
     except (TypeError, ValueError) as error:

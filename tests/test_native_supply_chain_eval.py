@@ -14,6 +14,7 @@ import pytest
 
 from codex_plugin_scanner.guard import native_package_authority as authority
 from codex_plugin_scanner.guard import native_supply_chain_eval as transport
+from codex_plugin_scanner.guard import native_workspace_inventory as inventory
 from codex_plugin_scanner.guard.native_context import _canonical_request_sha256
 from codex_plugin_scanner.guard.native_package_authority import _RESULT_SCHEMA
 
@@ -253,6 +254,35 @@ def test_probe_request_is_not_repeated(monkeypatch, tmp_path: Path) -> None:
         _payload_for(tmp_path, lambda _cached: None)
 
     assert len(sent) == 2
+
+
+def test_an_audit_deadline_stops_an_evaluation_between_its_rounds(monkeypatch, tmp_path: Path) -> None:
+    # A slow first round must not let the evaluation start its follow-up after the deadline.
+    sent = _probe_resident(monkeypatch, ["probe", "ok"])
+    clock = [0.0]
+    resident = transport._resident_request
+
+    def slow_resident(**kwargs: object) -> object:
+        clock[0] += 4.0
+        return resident(**kwargs)
+
+    monkeypatch.setattr(transport, "_resident_request", slow_resident)
+    monkeypatch.setattr(inventory.time, "monotonic", lambda: clock[0])
+
+    with inventory.audit_deadline(3), pytest.raises(inventory.AuditDeadlineError):
+        _payload_for(tmp_path, lambda _cached: None)
+
+    assert len(sent) == 1
+
+
+def test_an_audit_deadline_is_not_turned_into_a_blocked_evaluation(monkeypatch, tmp_path: Path) -> None:
+    captured = _bind(monkeypatch)
+    monkeypatch.setattr(inventory.time, "monotonic", lambda: 10.0)
+
+    with inventory.audit_deadline(0), pytest.raises(inventory.AuditDeadlineError):
+        _evaluate(tmp_path)
+
+    assert captured == {}
 
 
 def test_probe_request_without_a_lookup_blocks(monkeypatch, tmp_path: Path) -> None:
