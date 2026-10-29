@@ -285,3 +285,46 @@ def test_every_mutation_target_path_still_exists() -> None:
         f"The mutation gate names paths this tree no longer has: {missing}. "
         "Point the gate at what replaced them, or drop the entry."
     )
+
+
+def _module_level_names(tree: ast.Module) -> set[str]:
+    """Every name this module binds at its top level.
+
+    An entry point may be defined here, assigned here or re-exported from
+    another module, and all three are importable as `module:attribute`.
+    """
+    names: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+            names.add(node.name)
+        elif isinstance(node, ast.Assign):
+            names.update(target.id for target in node.targets if isinstance(target, ast.Name))
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            names.add(node.target.id)
+        elif isinstance(node, ast.Import | ast.ImportFrom):
+            names.update(alias.asname or alias.name.split(".", 1)[0] for alias in node.names)
+    return names
+
+
+def test_every_console_script_names_an_entry_point_the_package_still_has() -> None:
+    """Verify each installed command resolves to a module and attribute that exist.
+
+    A console script is written into every install's `bin/`. When the module it
+    names is renamed or its entry function is retired, nothing fails until a
+    user runs the command, so the break reaches the install rather than the
+    build. Read the target here instead.
+    """
+    broken: list[str] = []
+    for command, target in _metadata()["project"]["scripts"].items():
+        module, _, attribute = target.partition(":")
+        source = _source_for(module)
+        if source is None:
+            broken.append(f"{command} = {target}: no module")
+            continue
+        tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
+        if attribute not in _module_level_names(tree):
+            broken.append(f"{command} = {target}: {source.relative_to(ROOT)} defines no {attribute}")
+    assert not broken, (
+        f"These installed commands name an entry point the package no longer has: {broken}. "
+        "Point the script at what replaced it, or remove the command with the code behind it."
+    )
