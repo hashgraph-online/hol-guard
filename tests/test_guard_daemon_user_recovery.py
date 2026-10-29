@@ -2905,7 +2905,9 @@ def test_same_home_barrier_requests_register_one_mutation(tmp_path: Path) -> Non
         with state_lock:
             starts += 1
         first_started.set()
-        second_answered.wait(timeout=10.0)
+        # The handshake below releases this hook; the bound is only a backstop
+        # so a test that never reaches the release cannot wedge the suite.
+        second_answered.wait(timeout=60.0)
         return StartResult(True, identity)
 
     coordinator = _coordinator(
@@ -2922,14 +2924,24 @@ def test_same_home_barrier_requests_register_one_mutation(tmp_path: Path) -> Non
 
     first = threading.Thread(target=run, args=("51515151-5151-4515-8515-515151515151",))
     second = threading.Thread(target=run, args=("52525252-5252-4525-8525-525252525252",))
-    first.start()
-    assert first_started.wait(timeout=10.0)
-    second.start()
-    second.join(timeout=10.0)
-    second_answered.set()
-    first.join(timeout=10.0)
+    started: list[threading.Thread] = []
+    try:
+        first.start()
+        started.append(first)
+        assert first_started.wait(timeout=10.0)
+        second.start()
+        started.append(second)
+        second.join(timeout=10.0)
+        assert not second.is_alive()
+    finally:
+        # The start hook holds the home until this is set, so every way out of
+        # the block above has to release it. A readiness timeout or a failed
+        # assertion would otherwise leave a worker thread of this test running
+        # past the end of it, holding a home the next test may ask for.
+        second_answered.set()
+        for worker in started:
+            worker.join(timeout=10.0)
 
-    assert not second.is_alive()
     assert not first.is_alive()
     assert errors == []
     assert len(results) == 2
