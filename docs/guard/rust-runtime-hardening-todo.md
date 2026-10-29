@@ -162,7 +162,7 @@ surface. Every module it recorded as a deletion candidate is gone:
 list, an empty `package_excluded_candidates` list and `retained_source: false`,
 so no replaced Python implementation is held back as dormant rollback. T113
 closed with the PostToolUse traversal, scanning, secure-read, hashing and
-path-validation modules. T109, T114, T115, T117, and T118 remain open until a
+path-validation modules. T109, T114, and T118 remain open until a
 separate authorized deletion wave removes the remaining replaced source and any
 newly proven-dead implementation dependencies.
 
