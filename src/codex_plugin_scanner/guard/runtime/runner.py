@@ -1838,6 +1838,12 @@ def _local_guard_runtime_session(
     device_id: str = "local-machine",
     workspace_id: str | None = None,
 ) -> dict[str, object]:
+    capabilities = [
+        "approval-center",
+        "guard-cloud-sync",
+        "local-daemon",
+        FLEET_POSTURE_CAPABILITY,
+    ]
     session: dict[str, object] = {
         "harness": "hol-guard",
         "surface": "cli",
@@ -1846,13 +1852,7 @@ def _local_guard_runtime_session(
         "client_title": "HOL Guard CLI",
         "client_version": __version__,
         "workspace": "local-machine",
-        "capabilities": [
-            "approval-center",
-            "guard-cloud-sync",
-            "local-daemon",
-            FLEET_POSTURE_CAPABILITY,
-            POLICY_EXACT_COMMAND_RULES_CAPABILITY,
-        ],
+        "capabilities": capabilities,
         "policy_document_versions": list(_POLICY_DOCUMENT_VERSIONS),
         "policy_bundle_versions": list(_POLICY_BUNDLE_VERSIONS),
         "policy_contracts": list(_POLICY_CONTRACTS),
@@ -1863,6 +1863,9 @@ def _local_guard_runtime_session(
         workspace_id=workspace_id,
     ):
         session["canonical_policy_enforcement"] = True
+        # Exact command rules reach the hook only through canonical decisions,
+        # so only a device that activates them can claim to enforce them.
+        capabilities.append(POLICY_EXACT_COMMAND_RULES_CAPABILITY)
     return session
 
 

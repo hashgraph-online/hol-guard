@@ -4377,7 +4377,6 @@ clearer UX and an implementation plan with technical references.
                     "guard-cloud-sync",
                     "local-daemon",
                     "fleet-posture/v1",
-                    "policy-document-exact-commands.v1",
                 ],
                 "policy_bundle_versions": [
                     "guard-policy-bundle.v1",
