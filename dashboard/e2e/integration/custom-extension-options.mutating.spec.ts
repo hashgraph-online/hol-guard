@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 
-import { daemonApi, expect, expectNoErrorBoundary, test, type IntegrationState } from "./fixtures";
+import { daemonApi, expect, expectNoErrorBoundary, readIntegrationState, test, type IntegrationState } from "./fixtures";
 
 type SeededScript = { script: string; name: string; options: string[] };
 type Hook = { permission_decision: string | null; decision: string | null; reason_code: string | null };
@@ -26,21 +26,33 @@ function hook(state: IntegrationState, command: string): Hook {
   return JSON.parse(output) as Hook;
 }
 
-// Claude Code runs a call Guard answers with no permission decision, so that
-// counts as allowed unless the hook blocked it outright.
-function outcome(result: Hook): string {
-  if (result.permission_decision) return result.permission_decision;
-  return result.decision === "block" ? "deny" : "allow";
+// A call Guard wants a person to look at is refused with the review reason
+// and queued in the Inbox; any other refusal is a block. Claude Code runs a
+// call Guard answers with no permission decision.
+function outcome(result: Hook): "allow" | "review" | "deny" {
+  if (result.reason_code === "native_command_review_required" || result.permission_decision === "ask") return "review";
+  if (result.permission_decision === "deny" || result.decision === "block") return "deny";
+  return "allow";
 }
+
+// The calls that needed review sit in the Inbox. Clear them so the Inbox
+// specs see only their own seeded requests, which all come from Codex.
+test.afterAll(async () => {
+  const state = await readIntegrationState();
+  await daemonApi(state, "/v1/requests/clear", {
+    method: "POST",
+    body: JSON.stringify({ status: "pending", harness: "claude-code", approval_password: state.approvalPassword }),
+  });
+});
 
 test("a script's options load as separate commands, and Allow and Block are what the hook enforces", async ({ page, state }) => {
   test.setTimeout(240_000);
   const { script, name, options } = seeded(state);
 
-  // Guard has not been told about the script, so it asks before running it.
-  // The call also records the script as a detected custom extension.
+  // Guard has not been told about the script, so it wants a review before
+  // running it. The call also records the script as a detected custom extension.
   const before = hook(state, `${script} 1.0.0 --dry-run`);
-  expect(outcome(before), JSON.stringify(before)).toBe("ask");
+  expect(outcome(before), JSON.stringify(before)).toBe("review");
 
   let cliId = "";
   await expect
@@ -77,12 +89,12 @@ test("a script's options load as separate commands, and Allow and Block are what
   await expect(dialog).toBeHidden({ timeout: SAVE_TIMEOUT_MS });
 
   // What was saved is what the hook enforces: the allowed option runs, the
-  // blocked one is denied, and an option left on Recommended still asks.
+  // blocked one is denied, and an option left on Recommended is still reviewed.
   await expect.poll(() => outcome(hook(state, `${script} 1.0.0 --dry-run`)), { timeout: SAVE_TIMEOUT_MS }).toBe("allow");
   const blocked = hook(state, `${script} 1.0.0 --skip-billing`);
   expect(outcome(blocked), JSON.stringify(blocked)).toBe("deny");
   const unset = hook(state, `${script} 1.0.0 --repo acme/site`);
-  expect(outcome(unset), JSON.stringify(unset)).toBe("ask");
+  expect(outcome(unset), JSON.stringify(unset)).toBe("review");
 
   // The saved choices survive a reload.
   await page.reload();
