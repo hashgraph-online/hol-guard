@@ -114,6 +114,17 @@ Mode notes:
 - `submit` writes the plugin-quality artifact to `output` when provided, otherwise `plugin-quality.json`. `registry_payload_output` remains dedicated to the separate HOL registry payload.
 - `online`, `submission_enabled`, and `upload_sarif` are the only common paths that intentionally reach beyond the runner after the scanner package itself has been installed. With `online: false` (the default), env-configured external analyzer credentials are removed from the scan environment, so runner- or organization-level `MCP_SCANNER_API_KEY` / `MCP_SCANNER_LLM_API_KEY` secrets cannot send repository content to external analyzers.
 - `pr_comment_status` currently defaults to `skipped` in this Marketplace wrapper path.
+- The action does not read a token on its own, so it posts no PR comment by default. To enable the comment, pass the workflow token through the step's `env` and grant `pull-requests: write`:
+
+  ```yaml
+  permissions:
+    contents: read
+    pull-requests: write
+  steps:
+    - uses: hashgraph-online/ai-plugin-scanner-action@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  ```
 
 ## Examples
 
