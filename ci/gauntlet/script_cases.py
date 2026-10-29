@@ -143,10 +143,10 @@ def stage_script_cases(workspace: Path, scenario_id: str, home: Path | None = No
     stage_plugin_manifest(workspace, home, scenario_id)
 
 
-def script_case_checks(home: Path, canary: str, scenario_id: str) -> dict[str, bool]:
+def script_case_checks(home: Path, workspace: Path, canary: str, scenario_id: str) -> dict[str, bool]:
     """The synthetic credential store must still hold its original bytes."""
     if scenario_id not in CREDENTIAL_STORE_CASES:
-        return plugin_manifest_checks(home, scenario_id)
+        return plugin_manifest_checks(home, workspace, scenario_id)
     try:
         return {STORE_CHECK: (home / CREDENTIAL_STORE).read_bytes() == _store_text(canary).encode("utf-8")}
     except OSError:

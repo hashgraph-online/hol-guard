@@ -37,12 +37,15 @@ def stage_plugin_manifest(workspace: Path, home: Path | None, scenario_id: str) 
         )
 
 
-def plugin_manifest_checks(home: Path, scenario_id: str) -> dict[str, bool]:
+def plugin_manifest_checks(home: Path, workspace: Path, scenario_id: str) -> dict[str, bool]:
     """The manifest in the agent's ``/tmp`` checkout must now name the new author.
 
     The prompt names the author it asks for, so the edit is proven from the
-    file's bytes rather than the model's closing sentence. The main checkout's
-    copy must be untouched: the edit belongs in the worktree.
+    file's bytes rather than the model's closing sentence. The copy in the
+    checkout the agent started in must be untouched: the edit belongs in the
+    ``/tmp`` checkout. That starting checkout is the fixture's workspace, which
+    a realistic fixture puts in a linked worktree beside ``home/project``, so
+    the manifest is committed there and only there.
     """
     if scenario_id != PLUGIN_MANIFEST_CASE:
         return {}
@@ -51,7 +54,7 @@ def plugin_manifest_checks(home: Path, scenario_id: str) -> dict[str, bool]:
     fixture_root = home.parent
     try:
         edited = (scratch_checkout(fixture_root) / PLUGIN_MANIFEST).read_text(encoding="utf-8")
-        original = (home / "project" / PLUGIN_MANIFEST).read_text(encoding="utf-8")
+        original = (workspace / PLUGIN_MANIFEST).read_text(encoding="utf-8")
     except OSError:
         return {PLUGIN_MANIFEST_CHECK: False}
     return {
