@@ -446,6 +446,8 @@ def test_the_contract_covers_every_muse_event() -> None:
     assert muse["config"] == ".config/muse/settings.json"
     assert set(muse["required_events"]) == set(_MUSE_EVENTS)
     assert muse["replay"] is True
+    assert muse["replay_event"] == "PreToolUse"
+    assert muse["replay_events"] == ["UserPromptSubmit"]
     assert contract["harnesses"]["omp"]["replay"] is False
     assert contract["harnesses"]["omp"]["replay_gap"]
     expectations = [case["expect"] for case in contract["replay_cases"]]
