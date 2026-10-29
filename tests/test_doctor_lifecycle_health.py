@@ -147,6 +147,11 @@ def test_a_failed_read_leaves_the_report_without_a_journal(
         json.dumps({"health": _snapshot(last_event="x" * 65)}),
         json.dumps({"health": _snapshot(last_event="your_runtime_is_infected")}),
         json.dumps({"health": _snapshot(last_event="EXITED_FAILED")}),
+        # A code that is not text at all: the vocabulary is a set, so this
+        # has to be refused rather than hashed.
+        json.dumps({"health": _snapshot(last_event=[])}),
+        json.dumps({"health": _snapshot(last_event={})}),
+        json.dumps({"health": _snapshot(last_event=3)}),
         # Counts and ages outside what the runtime can produce.
         json.dumps({"health": _snapshot(starts=-1)}),
         json.dumps({"health": _snapshot(starts=2**32)}),

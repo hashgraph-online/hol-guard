@@ -368,7 +368,10 @@ def _validated_lifecycle(value: object) -> NativeResidentLifecycle | None:
         return None
     if value["state"] not in _LIFECYCLE_STATES:
         return None
-    if value["last_event"] not in _LIFECYCLE_EVENTS:
+    last_event = value["last_event"]
+    # The set lookup hashes what it is given, so an answer that put a list or
+    # a mapping here would raise rather than be refused.
+    if not isinstance(last_event, str) or last_event not in _LIFECYCLE_EVENTS:
         return None
     bounds: dict[str, int] = dict.fromkeys(_LIFECYCLE_COUNTS, _MAX_U32)
     bounds.update(dict.fromkeys(_LIFECYCLE_AGES, _MAX_LIFECYCLE_AGE_SECONDS))
