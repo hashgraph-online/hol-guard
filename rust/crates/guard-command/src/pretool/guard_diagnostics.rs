@@ -151,16 +151,26 @@ fn cwd_shadows_launcher(cwd: &Path) -> bool {
 /// spellings. That is the same bound the bare name has always rested on, and
 /// it stops at the same place: a write Guard never reviews is outside it.
 ///
-/// Two spellings sit outside that bound, so they are refused before the
-/// location screen reads them. A relative path resolves against the working
-/// directory, which the agent fills with writes that name no Guard location
-/// at all -- a clone, an unpacked archive, a generated `bin`. An absolute
-/// path inside the working directory is the same file reached the long way
-/// round. `bin/hol-guard status` and `<workspace>/bin/hol-guard status` would
-/// otherwise both run repository content with no review, which is why the
-/// bare-name proof already refuses a launcher it can see in the working
-/// directory ([`cwd_shadows_launcher`]). A `..` component is refused with
-/// them: an install is never spelled by walking back out of somewhere.
+/// That bound only holds where a Guard install actually lives, so the
+/// spelling has to name one of those places. `names_guard_location` answers
+/// yes for any Guard program directly under an install-shaped component --
+/// `bin`, `scripts`, `tools`, `lib`, `opt` -- wherever that component sits,
+/// and a checkout carries such components of its own. A repository with its
+/// own `bin/hol-guard` is read by the location screen exactly like the
+/// desktop bundle, and nothing reviews the write that put it there, because
+/// a clone names no Guard location. The spelling is therefore anchored at an
+/// [install root](INSTALL_ROOTS): the desktop bundle, Guard's own home, the
+/// system and package-manager prefixes an install is written to. A path
+/// below the working directory is refused inside that, since an agent
+/// working in a subdirectory of its own checkout would otherwise reach the
+/// checkout's `bin` through a root that happens to contain it.
+///
+/// A relative path is refused before any of this: it resolves against the
+/// working directory, which the agent fills with writes that name no Guard
+/// location at all -- a clone, an unpacked archive, a generated `bin`. That
+/// is why the bare-name proof already refuses a launcher it can see in the
+/// working directory ([`cwd_shadows_launcher`]). A `..` component is refused
+/// with it: an install is never spelled by walking back out of somewhere.
 ///
 /// [`safe_hol_guard_arguments`] still decides which subcommands the
 /// admission covers, so the control surface keeps its review.
@@ -173,18 +183,49 @@ pub(super) fn guard_install_executable(executable: &str, context: super::PathCon
         .or_else(|| basename.strip_suffix(".cmd"))
         .unwrap_or(&basename);
     name == "hol-guard"
-        && anchored_outside_workspace(executable, context)
+        && anchored_at_install_root(executable, context)
         && super::guard_names::names_guard_location(
             executable,
             &super::guard_names::Moved::default(),
         )
 }
 
+/// Places a Guard install is written to, as prefixes of the spelled path.
+/// An entry starting with `~/` is read against the home directory; the rest
+/// are read against the filesystem root, with a Windows drive letter already
+/// stripped, so `C:/Program Files/...` is matched by `/program files/`.
+///
+/// Every one of these is writable by the account the agent runs as, which is
+/// what the location screen's floor is for. What they rule out is the far
+/// larger set of directories that merely look like an install: a checkout's
+/// own `bin`, an unpacked archive's `tools`, a clone target under `/tmp`.
+const INSTALL_ROOTS: &[&str] = &[
+    "~/.hol-guard/",
+    "~/.local/bin/",
+    "~/.local/pipx/",
+    "~/.local/share/hol-guard/",
+    "~/.local/share/uv/",
+    "~/applications/",
+    "~/appdata/local/",
+    "~/appdata/roaming/",
+    "~/library/application support/",
+    "/applications/",
+    "/etc/hol-guard/",
+    "/library/",
+    "/opt/",
+    "/program files (x86)/",
+    "/program files/",
+    "/programdata/",
+    "/snap/",
+    "/usr/",
+    "/var/lib/hol-guard/",
+];
+
 /// Whether `executable` names a fixed place on the host rather than one the
 /// working directory supplies. `~` is expanded, because the shell expands it
 /// before the lookup; every other spelling is read as written, since this
 /// screen proves where the word points, not what is on disk there.
-fn anchored_outside_workspace(executable: &str, context: super::PathContext<'_>) -> bool {
+fn anchored_at_install_root(executable: &str, context: super::PathContext<'_>) -> bool {
     let spelled = executable.replace('\\', "/");
     let Some(cwd) = context.cwd.filter(|cwd| Path::new(cwd).is_absolute()) else {
         return false;
@@ -209,7 +250,25 @@ fn anchored_outside_workspace(executable: &str, context: super::PathContext<'_>)
         .replace('\\', "/")
         .trim_end_matches('/')
         .to_ascii_lowercase();
-    !lowered.starts_with(&format!("{workspace}/"))
+    if lowered.starts_with(&format!("{workspace}/")) {
+        return false;
+    }
+    let home = context.home_dir.map(|home| {
+        home.replace('\\', "/")
+            .trim_end_matches('/')
+            .to_ascii_lowercase()
+    });
+    // A drive letter is dropped so the Windows roots are written once.
+    let rooted = match lowered.as_bytes() {
+        [drive, b':', b'/', ..] if drive.is_ascii_alphabetic() => &lowered[2..],
+        _ => lowered.as_str(),
+    };
+    INSTALL_ROOTS.iter().any(|root| match root.strip_prefix('~') {
+        Some(rest) => home
+            .as_deref()
+            .is_some_and(|home| lowered.starts_with(&format!("{home}{rest}"))),
+        None => rooted.starts_with(*root),
+    })
 }
 
 pub(super) fn safe_hol_guard_arguments(arguments: &[String]) -> bool {

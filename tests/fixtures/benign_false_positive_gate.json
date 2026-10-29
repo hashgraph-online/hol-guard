@@ -35915,6 +35915,40 @@
       "expect": "not_allow"
     },
     {
+      "id": "neg-guard-workspace-bin-launcher-from-subdir",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "${WORKTREE}/bin/hol-guard status --json"
+      },
+      "cwd": "worktree_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-guard-sibling-checkout-bin-launcher",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "${ORG}/bin/hol-guard approvals wait req-1 --json"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "guard-approvals-approve-desktop-launcher",
       "fix_area": "shell",
       "harnesses": [

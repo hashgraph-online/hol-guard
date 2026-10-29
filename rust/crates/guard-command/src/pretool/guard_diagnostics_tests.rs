@@ -518,9 +518,13 @@ fn an_installed_guard_program_names_the_launcher_and_a_stray_file_does_not() {
         "/Applications/HOL Guard.app/Contents/MacOS/hol-guard",
         "/Users/u/.hol-guard/bin/hol-guard",
         "~/.hol-guard/bin/hol-guard",
-        "/Users/u/work/venv/bin/hol-guard",
+        "/Users/u/.local/bin/hol-guard",
+        "/Users/u/.local/pipx/venvs/hol-guard/bin/hol-guard",
+        "/Users/u/.local/share/uv/tools/hol-guard/bin/hol-guard",
         "/opt/homebrew/bin/hol-guard",
+        "/usr/local/bin/hol-guard",
         "C:\\Program Files\\HOL Guard\\hol-guard.exe",
+        "C:\\ProgramData\\hol-guard\\bin\\hol-guard.exe",
     ] {
         assert!(
             super::guard_install_executable(executable, context),
@@ -545,6 +549,18 @@ fn an_installed_guard_program_names_the_launcher_and_a_stray_file_does_not() {
         "/Users/u/projects/app/vendor/opt/hol-guard",
         "/Users/u/projects/app/../app/bin/hol-guard",
         "~/projects/app/bin/hol-guard",
+        // An install root is a place an install is written to, not any
+        // directory that happens to carry an install-shaped component. A
+        // checkout's own `bin` is reached from a subdirectory of that
+        // checkout, or from a sibling one, without ever leaving the trees
+        // the agent writes, and the write that put the file there named no
+        // Guard location, so nothing reviewed it.
+        "/Users/u/projects/bin/hol-guard",
+        "/Users/u/projects/other/bin/hol-guard",
+        "/Users/u/work/venv/bin/hol-guard",
+        "/Users/u/Downloads/release/bin/hol-guard",
+        "/srv/build/tools/hol-guard",
+        "C:\\Users\\u\\projects\\other\\bin\\hol-guard.exe",
         // The desktop application itself is not the read-only CLI.
         "/Applications/HOL Guard.app/Contents/MacOS/hol-guard-desktop",
         // The bare name reaches the admission arm without this screen.
