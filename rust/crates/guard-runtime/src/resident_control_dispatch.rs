@@ -1,5 +1,5 @@
 //! Bounded metadata work, reserved from the existing evaluation pool budget.
-use super::{handle_pending_request, spawn_workers, write_overload, PendingRequest};
+use super::{handle_pending_request, spawn_workers, write_overload, PendingRequest, QueueCharge};
 use crate::policy_store::PolicySnapshotStore;
 use crate::resident_diagnostics::{self, Phase, Status};
 use crate::resident_health_counters::QueueLane;
@@ -48,10 +48,15 @@ pub(super) fn is_request(bytes: &[u8]) -> bool {
 }
 
 pub(super) fn enqueue(sender: &SyncSender<PendingRequest>, pending: PendingRequest) {
+    let charge = QueueCharge::take(QueueLane::Control);
     match sender.try_send(pending) {
-        Ok(()) => crate::resident_health_counters::enter_queue(QueueLane::Control),
-        Err(TrySendError::Full(mut pending)) => write_overload(&mut pending),
+        Ok(()) => charge.queued(),
+        Err(TrySendError::Full(mut pending)) => {
+            drop(charge);
+            write_overload(&mut pending);
+        }
         Err(TrySendError::Disconnected(pending)) => {
+            drop(charge);
             resident_diagnostics::finish_since(
                 Phase::ResidentDispatchWait,
                 Status::Error,

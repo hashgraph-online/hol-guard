@@ -85,6 +85,18 @@ fn a_total_stops_at_its_bound_instead_of_wrapping() {
 }
 
 #[test]
+fn an_event_count_stops_at_the_bound_instead_of_wrapping() {
+    // Every event counter adds one through `add`. A wrapped total would read as
+    // a resident that had suddenly served nothing at all, which is the one
+    // reading a health check must never produce from a long uptime.
+    let total = AtomicU64::new(u64::MAX);
+
+    add(&total, 1);
+
+    assert_eq!(total.load(Ordering::Relaxed), u64::MAX);
+}
+
+#[test]
 fn the_two_lanes_keep_their_own_gauges() {
     let (evaluation_before, _) = lane_depth(QueueLane::Evaluation);
     let (control_before, _) = lane_depth(QueueLane::Control);

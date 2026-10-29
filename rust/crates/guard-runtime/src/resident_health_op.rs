@@ -40,7 +40,7 @@ pub(crate) fn mark_serving() {
 
 /// Charge one refusal to the overload counter.
 pub(crate) fn record_overload() {
-    OVERLOADED_REQUESTS.fetch_add(1, Ordering::Relaxed);
+    crate::resident_health_counters::add(&OVERLOADED_REQUESTS, 1);
 }
 
 /// Milliseconds since the worker pools started, saturating rather than

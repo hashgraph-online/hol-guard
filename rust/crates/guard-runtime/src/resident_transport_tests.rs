@@ -164,6 +164,9 @@ fn regression_auth_worker_hands_a_fully_buffered_request_to_the_evaluation_pool(
     let queued = evaluation_rx
         .try_recv()
         .expect("a complete request must queue for an evaluation worker");
+    // Receiving is what an evaluation worker does, and the worker releases the
+    // charge the admission took.
+    crate::resident_health_counters::leave_queue(QueueLane::Evaluation);
     assert_eq!(queued.payload_prefix, body.to_vec());
     assert!(control_rx.try_recv().is_err());
     assert!(
@@ -238,5 +241,63 @@ fn auth_worker_routes_a_complete_control_request_to_the_control_lane() {
         None,
     );
     assert!(control_rx.try_recv().is_ok());
+    crate::resident_health_counters::leave_queue(QueueLane::Control);
     assert!(evaluation_rx.try_recv().is_err());
+}
+
+#[test]
+fn a_reply_counts_a_served_request_only_once_it_reached_the_caller() {
+    // Counting a failed write as served would hide a resident that had stopped
+    // answering behind a healthy served total, and the caller it never answered
+    // would be counted twice over: once as served, once as the frame error it
+    // really was.
+    assert_eq!(reply_accounting(&Ok(()), false), ReplyAccounting::Served);
+    assert_eq!(
+        reply_accounting(&Err("native_frame_write_failed".to_owned()), false),
+        ReplyAccounting::FrameError
+    );
+}
+
+#[test]
+fn a_request_that_already_broke_is_not_counted_as_a_second_broken_frame() {
+    // A client that hangs up mid-payload fails the payload read, and the error
+    // reply then fails to write to the same dead socket. That is one broken
+    // frame, not two, and double counting it would make every disconnect look
+    // like twice the transport trouble it was.
+    assert_eq!(
+        reply_accounting(&Err("native_frame_write_failed".to_owned()), true),
+        ReplyAccounting::AlreadyCounted
+    );
+    // A successful reply still counts as served even on a request whose
+    // payload read failed: the caller did get its error answer.
+    assert_eq!(reply_accounting(&Ok(()), true), ReplyAccounting::Served);
+}
+
+#[test]
+fn a_charge_that_never_reaches_the_channel_is_released() {
+    // The charge is taken before the send, so every path that does not leave
+    // the request in the channel has to give it back. Dropping is what gives
+    // it back, which is why no failure branch can forget to.
+    let (before, _) = crate::resident_health_counters::lane_depth(QueueLane::Evaluation);
+
+    drop(QueueCharge::take(QueueLane::Evaluation));
+
+    let (after, _) = crate::resident_health_counters::lane_depth(QueueLane::Evaluation);
+    assert_eq!(after, before);
+}
+
+#[test]
+fn a_charge_the_channel_accepted_is_left_for_its_worker() {
+    // The worker that receives the request releases the charge. An admission
+    // that released it too would let the gauge fall below the work the lane is
+    // actually holding.
+    let (before, _) = crate::resident_health_counters::lane_depth(QueueLane::Evaluation);
+
+    QueueCharge::take(QueueLane::Evaluation).queued();
+    let (queued, _) = crate::resident_health_counters::lane_depth(QueueLane::Evaluation);
+    crate::resident_health_counters::leave_queue(QueueLane::Evaluation);
+
+    let (released, _) = crate::resident_health_counters::lane_depth(QueueLane::Evaluation);
+    assert_eq!(queued, before + 1);
+    assert_eq!(released, before);
 }

@@ -53,7 +53,7 @@ impl QueueLane {
 
 /// Add to a running total without wrapping. A total that wrapped would read as
 /// a resident that had suddenly done less work than it had an hour ago.
-fn add(counter: &AtomicU64, value: u64) {
+pub(crate) fn add(counter: &AtomicU64, value: u64) {
     let _ = counter.fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
         Some(current.saturating_add(value))
     });
@@ -66,7 +66,7 @@ fn add(counter: &AtomicU64, value: u64) {
 /// covers the queue wait as well as the evaluation: a caller waiting on a
 /// loaded resident is waiting for all of it.
 pub(crate) fn record_served(accepted_at: Instant, request_bytes: usize) {
-    SERVED_REQUESTS.fetch_add(1, Ordering::Relaxed);
+    add(&SERVED_REQUESTS, 1);
     let micros = u64::try_from(accepted_at.elapsed().as_micros()).unwrap_or(u64::MAX);
     add(&SERVICE_MICROS_TOTAL, micros);
     SERVICE_MICROS_MAX.fetch_max(micros, Ordering::Relaxed);
@@ -77,27 +77,27 @@ pub(crate) fn record_served(accepted_at: Instant, request_bytes: usize) {
 
 /// Count one connection that never got past the shared-secret handshake.
 pub(crate) fn record_auth_failure() {
-    AUTH_FAILURES.fetch_add(1, Ordering::Relaxed);
+    add(&AUTH_FAILURES, 1);
 }
 
 /// Count one frame whose header, payload or reply could not be moved.
 pub(crate) fn record_frame_error() {
-    FRAME_ERRORS.fetch_add(1, Ordering::Relaxed);
+    add(&FRAME_ERRORS, 1);
 }
 
 /// Count one request whose total budget ran out before a worker reached it.
 pub(crate) fn record_deadline_exceeded() {
-    DEADLINE_EXCEEDED.fetch_add(1, Ordering::Relaxed);
+    add(&DEADLINE_EXCEEDED, 1);
 }
 
 /// Count one payload that did not match the digest in its own header.
 pub(crate) fn record_digest_mismatch() {
-    DIGEST_MISMATCHES.fetch_add(1, Ordering::Relaxed);
+    add(&DIGEST_MISMATCHES, 1);
 }
 
 /// Count one evaluation that panicked and was answered rather than lost.
 pub(crate) fn record_panic() {
-    PANICS.fetch_add(1, Ordering::Relaxed);
+    add(&PANICS, 1);
 }
 
 /// Add one to a queue's depth and raise its peak to match.

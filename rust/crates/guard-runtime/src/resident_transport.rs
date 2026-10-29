@@ -135,13 +135,48 @@ fn write_bound_response(
     request_id: &[u8; crate::FRAME_REQUEST_ID_BYTES],
     response: &[u8],
 ) -> Result<(), String> {
-    let written = observe(Phase::ResidentResponseWrite, || {
+    observe(Phase::ResidentResponseWrite, || {
         write_bound_response_inner(stream, request_id, response)
-    });
-    if written.is_err() {
-        counters::record_frame_error();
+    })
+}
+
+/// What a finished reply charges to the counters.
+#[derive(Debug, PartialEq, Eq)]
+enum ReplyAccounting {
+    /// The caller got its answer.
+    Served,
+    /// The reply never reached the caller: one more frame this resident could
+    /// not move.
+    FrameError,
+    /// The reply failed on a request that already recorded a broken frame. A
+    /// client that hangs up mid-payload fails the payload read and then the
+    /// reply, and that is one broken frame, not two.
+    AlreadyCounted,
+}
+
+fn reply_accounting(written: &Result<(), String>, frame_error_recorded: bool) -> ReplyAccounting {
+    match (written, frame_error_recorded) {
+        (Ok(()), _) => ReplyAccounting::Served,
+        (Err(_), false) => ReplyAccounting::FrameError,
+        (Err(_), true) => ReplyAccounting::AlreadyCounted,
     }
-    written
+}
+
+/// Reply to one request and account for it.
+///
+/// A request counts as served only once its reply reached the caller: a write
+/// that failed served nobody, and counting it would hide a resident that had
+/// stopped answering behind a healthy served total. A failed write is one more
+/// frame this resident could not move, except when the same request already
+/// recorded a frame error - a client that hung up mid-payload fails the read
+/// and then the reply, and that is one broken frame, not two.
+fn finish_request(pending: &mut PendingRequest, response: &[u8], frame_error_recorded: bool) {
+    let written = write_bound_response(&mut *pending.stream, &pending.request_id, response);
+    match reply_accounting(&written, frame_error_recorded) {
+        ReplyAccounting::Served => counters::record_served(pending.accepted_at, pending.length),
+        ReplyAccounting::FrameError => counters::record_frame_error(),
+        ReplyAccounting::AlreadyCounted => {}
+    }
 }
 
 fn write_bound_response_inner(
@@ -180,8 +215,7 @@ fn write_overload(pending: &mut PendingRequest) {
     );
     crate::resident_health_op::record_overload();
     let response = crate::resident_protocol::error_response("native_overloaded", true);
-    let _ = write_bound_response(&mut *pending.stream, &pending.request_id, &response);
-    counters::record_served(pending.accepted_at, pending.length);
+    finish_request(pending, &response, false);
 }
 
 /// Continuation I/O can run for the caller's whole minute. Keep it off the
@@ -255,8 +289,7 @@ fn spawn_codex_resume_retry(
             // receipt never sees this finished continuation as in flight.
             drop(slot);
             let mut pending = pending;
-            let _ = write_bound_response(&mut *pending.stream, &pending.request_id, &response);
-            counters::record_served(pending.accepted_at, pending.length);
+            finish_request(&mut pending, &response, false);
         })
         .is_err()
     {
@@ -279,8 +312,7 @@ fn handle_pending_request(
         counters::record_deadline_exceeded();
         let response =
             crate::resident_protocol::error_response("native_request_deadline_exceeded", true);
-        let _ = write_bound_response(&mut *pending.stream, &pending.request_id, &response);
-        counters::record_served(pending.accepted_at, pending.length);
+        finish_request(&mut pending, &response, false);
         return;
     }
     let _ = pending
@@ -292,6 +324,7 @@ fn handle_pending_request(
     // an evaluation worker past the budget it was admitted under.
     let payload_deadline = (Instant::now() + crate::PAYLOAD_TIMEOUT)
         .min(pending.accepted_at + crate::hardening::TOTAL_REQUEST_BUDGET);
+    let mut frame_error_recorded = false;
     let mut request = std::mem::take(&mut pending.payload_prefix);
     let prefix_length = request.len();
     request.resize(pending.length, 0);
@@ -305,6 +338,7 @@ fn handle_pending_request(
     .is_err()
     {
         counters::record_frame_error();
+        frame_error_recorded = true;
         crate::resident_protocol::error_response("native_frame_read_failed", false)
     } else {
         let digest = Sha256::digest(&request);
@@ -342,8 +376,7 @@ fn handle_pending_request(
     let is_shutdown_request = crate::strict_json_value(&request).is_ok_and(|value| {
         value.get("operation").and_then(serde_json::Value::as_str) == Some("shutdown")
     });
-    let _ = write_bound_response(&mut *pending.stream, &pending.request_id, &response);
-    counters::record_served(pending.accepted_at, pending.length);
+    finish_request(&mut pending, &response, frame_error_recorded);
     if is_shutdown_request {
         crate::managed_resident::shutdown_response_sent();
     }
@@ -392,6 +425,38 @@ fn retry_overflow_admissions(
     }
 }
 
+/// One lane's queue charge, held from before the send until the request is
+/// either in the channel or definitively not going into it.
+///
+/// The charge is taken before `try_send` because a worker can receive the
+/// request and release its charge before `try_send` returns to this thread. A
+/// release that ran ahead of its own charge saturates at zero, so the charge
+/// that followed it would never be released and the lane would read one
+/// request too deep for the rest of the process. Releasing on drop also means
+/// a new failure branch cannot forget the release.
+pub(super) struct QueueCharge(Option<QueueLane>);
+
+impl QueueCharge {
+    pub(super) fn take(lane: QueueLane) -> Self {
+        counters::enter_queue(lane);
+        Self(Some(lane))
+    }
+
+    /// The request reached the channel, so the worker that receives it owns
+    /// the release from here.
+    pub(super) fn queued(mut self) {
+        self.0 = None;
+    }
+}
+
+impl Drop for QueueCharge {
+    fn drop(&mut self) {
+        if let Some(lane) = self.0 {
+            counters::leave_queue(lane);
+        }
+    }
+}
+
 /// Auth workers only authenticate and read the frame header. Evaluation runs
 /// on the evaluation pool even when the whole payload arrived with the header:
 /// an auth worker held by a slow evaluation cannot answer the next caller's
@@ -414,17 +479,23 @@ fn dispatch_authenticated(
         control::enqueue(control_sender, pending);
         return;
     }
+    let charge = QueueCharge::take(QueueLane::Evaluation);
     match evaluation_sender.try_send(pending) {
-        Ok(()) => counters::enter_queue(QueueLane::Evaluation),
+        Ok(()) => charge.queued(),
         // A fully buffered request needs no further reads, so the auth worker
         // evaluates it as it did before the hand-off existed. A fragmented one
         // would hold the auth worker in a payload read, so it is answered with
         // retryable overload instead.
         Err(TrySendError::Full(returned)) if returned.payload_prefix.len() == returned.length => {
+            drop(charge);
             handle_pending_request(returned, policy_store.cloned(), Some(control_sender));
         }
-        Err(TrySendError::Full(mut returned)) => write_overload(&mut returned),
+        Err(TrySendError::Full(mut returned)) => {
+            drop(charge);
+            write_overload(&mut returned);
+        }
         Err(TrySendError::Disconnected(returned)) => {
+            drop(charge);
             resident_diagnostics::finish_since(
                 Phase::ResidentDispatchWait,
                 Status::Error,
@@ -502,7 +573,10 @@ pub(crate) fn start_resident_workers(
                 .try_read_available(&mut pending.payload_prefix)
             {
                 Ok(value) => value,
-                Err(_) => return,
+                Err(_) => {
+                    counters::record_frame_error();
+                    return;
+                }
             };
             pending.payload_prefix.truncate(available);
             dispatch_authenticated(
