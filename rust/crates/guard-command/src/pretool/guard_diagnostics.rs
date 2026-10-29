@@ -118,39 +118,38 @@ fn cwd_shadows_launcher(cwd: &Path) -> bool {
         })
 }
 
-/// A path spelling of the very Guard binary that is running this review.
+/// A path spelling of an installed Guard program.
 ///
-/// An agent waiting on an approval raised by the desktop application spells
-/// the launcher inside the installed bundle, and a path spelling drops the
-/// read-only admission the bare name gets, so every `approvals wait` on a
-/// Desktop install raised a second approval row for the row it was already
-/// waiting on.
+/// An agent waiting on an approval spells the program it was told to run:
+/// the launcher inside the desktop bundle, the one in Guard's own home, the
+/// one in the virtual environment Guard was installed into. A path spelling
+/// drops the read-only admission the bare name gets, so every such wait
+/// raised a second approval row for the row it was already waiting on.
 ///
-/// The installed location proves nothing on its own: `/Applications` is
-/// writable by the account the agent runs as, so a session can create a
-/// bundle at any path and fill it with a program of its own. What it cannot
-/// do is make this process run from the file it planted, so the running
-/// executable is the bound. [`safe_hol_guard_arguments`] still decides which
-/// subcommands the admission covers.
-pub(super) fn this_runtime_executable(executable: &str) -> bool {
-    running_executable(executable, std::env::current_exe().ok().as_deref())
-}
-
-fn running_executable(executable: &str, running: Option<&Path>) -> bool {
-    let (path, Some(running)) = (Path::new(executable), running) else {
-        return false;
-    };
-    // A relative spelling resolves against this process's working directory,
-    // not the one the reviewed command would run in. The name screen is the
-    // one the admission arm dispatches on, so a path that could not reach
-    // that arm never pays for the two lookups below.
-    if !path.is_absolute() || super::executable_basename(executable) != "hol-guard" {
-        return false;
-    }
-    let (Ok(spelled), Ok(running)) = (path.canonicalize(), running.canonicalize()) else {
-        return false;
-    };
-    spelled == running && spelled.is_file()
+/// Neither the install path nor its permissions prove what the file is —
+/// every one of those directories is writable by the account the agent runs
+/// as. What bounds them is Guard's own floor: a command that writes a path
+/// [`names_guard_location`](super::guard_names::names_guard_location)
+/// recognises names Guard's installation, which no extension Allow settles,
+/// so a session cannot quietly leave a program of its own at one of these
+/// spellings. That is the same bound the bare name has always rested on, and
+/// it stops at the same place: a write Guard never reviews is outside it.
+///
+/// [`safe_hol_guard_arguments`] still decides which subcommands the
+/// admission covers, so the control surface keeps its review.
+pub(super) fn guard_install_executable(executable: &str) -> bool {
+    // The same spelling the admission arm dispatches on, so a name that could
+    // not reach that arm never pays for the walk below.
+    let basename = super::executable_basename(executable).to_ascii_lowercase();
+    let name = basename
+        .strip_suffix(".exe")
+        .or_else(|| basename.strip_suffix(".cmd"))
+        .unwrap_or(&basename);
+    name == "hol-guard"
+        && super::guard_names::names_guard_location(
+            executable,
+            &super::guard_names::Moved::default(),
+        )
 }
 
 pub(super) fn safe_hol_guard_arguments(arguments: &[String]) -> bool {

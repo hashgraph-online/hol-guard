@@ -458,40 +458,28 @@ fn working_directory_launcher_or_unknown_cwd_keeps_review() {
 }
 
 #[test]
-fn only_the_running_guard_binary_names_the_launcher() {
-    let running = std::env::current_exe().unwrap();
-    let root = running.parent().unwrap().join("guard-launcher-proof");
-    let _ = std::fs::remove_dir_all(&root);
-    std::fs::create_dir_all(root.join("installed")).unwrap();
-    std::fs::create_dir_all(root.join("planted")).unwrap();
-    let launcher = root.join("installed/hol-guard");
-    let planted = root.join("planted/hol-guard");
-    #[cfg(unix)]
-    {
-        // The installed bundle's launcher: a spelling of the running binary.
-        std::os::unix::fs::symlink(&running, &launcher).unwrap();
-        // A bundle a session writes reaches the same shape and is still a
-        // program of its own.
-        std::fs::write(&planted, "#!/bin/sh\nexit 0\n").unwrap();
-        assert!(super::running_executable(
-            launcher.to_str().unwrap(),
-            Some(&running)
-        ));
-        assert!(!super::running_executable(
-            planted.to_str().unwrap(),
-            Some(&running)
-        ));
-        assert!(!super::running_executable(launcher.to_str().unwrap(), None));
-    }
+fn an_installed_guard_program_names_the_launcher_and_a_stray_file_does_not() {
+    // The spellings real waits arrive with: the desktop bundle, Guard's own
+    // home, and the virtual environment Guard was installed into.
     for executable in [
         "/Applications/HOL Guard.app/Contents/MacOS/hol-guard",
-        root.join("installed/hol-guard-desktop").to_str().unwrap(),
+        "/Users/u/.hol-guard/bin/hol-guard",
+        "/Users/u/work/venv/bin/hol-guard",
+        "/opt/homebrew/bin/hol-guard",
+        "C:\\Program Files\\HOL Guard\\hol-guard.exe",
+    ] {
+        assert!(super::guard_install_executable(executable), "{executable}");
+    }
+    for executable in [
+        // A file a session leaves somewhere of its own is not an install.
+        "/tmp/stage/hol-guard",
+        "/Users/u/projects/hol-guard-pr-12/hol-guard",
+        "./hol-guard",
+        // The desktop application itself is not the read-only CLI.
+        "/Applications/HOL Guard.app/Contents/MacOS/hol-guard-desktop",
+        // The bare name reaches the admission arm without this screen.
         "hol-guard",
     ] {
-        assert!(
-            !super::running_executable(executable, Some(&running)),
-            "{executable}"
-        );
+        assert!(!super::guard_install_executable(executable), "{executable}");
     }
-    std::fs::remove_dir_all(&root).unwrap();
 }
