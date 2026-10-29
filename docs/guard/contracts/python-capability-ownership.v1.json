@@ -1859,6 +1859,23 @@
     "rust/crates/guard-runtime/src/content_sensitivity_op.rs",
     "rust/crates/guard-runtime/src/edge_structured.rs"
    ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/command_action_risk_metadata.py",
+   "module": "codex_plugin_scanner.guard.runtime.command_action_risk_metadata",
+   "source_sha256": "d8c96d66bd936b9db7c431420dc168918aee6d6dad27f96e1f563aef125caf43",
+   "forbidden_symbols": [
+    "risk_classes_for_command_action",
+    "COMMAND_ACTION_RISK_CLASSES",
+    "_BASE_COMMAND_ACTION_RISK_CLASSES",
+    "BLITCP_ACTION_RISK_CLASSES",
+    "GITHUB_ACTION_RISK_CLASSES",
+    "OLLAMA_ACTION_RISK_CLASSES"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/command_action_risk_classes.rs",
+    "rust/crates/guard-runtime/src/hook_artifact_facts_op.rs"
+   ]
   }
  ],
  "retired_test_paths": [
