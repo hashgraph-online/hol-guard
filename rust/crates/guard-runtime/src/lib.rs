@@ -126,6 +126,7 @@ mod cli_copilot_resolution;
 mod cli_runtime_support_op;
 mod cloud_action_envelope;
 mod cloud_action_envelope_fields;
+mod cloud_exception_lift;
 mod cloud_receipt_payload;
 #[cfg(test)]
 mod cloud_receipt_vectors_tests;

@@ -743,7 +743,6 @@
           "src/codex_plugin_scanner/guard/store_approval_projection.py",
           "src/codex_plugin_scanner/guard/inventory_item_description.py",
           "src/codex_plugin_scanner/guard/local_cli_hook.py",
-          "src/codex_plugin_scanner/guard/connector_setup_context.py",
           "src/codex_plugin_scanner/guard/local_cli_trust.py",
           "src/codex_plugin_scanner/guard/product_model.py",
           "src/codex_plugin_scanner/guard/runtime_transition_hook_probe.py",

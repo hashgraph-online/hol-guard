@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import asdict
 from datetime import datetime, timezone
-from typing import TypeGuard
+from typing import Any, TypeGuard
 
 from .models import (
     CloudException,
@@ -206,7 +207,128 @@ def list_active_cloud_exceptions(
     active = [item for item in items if _cloud_exception_is_active(item, now=now)]
     if harness is None:
         return active
-    return [item for item in active if item.harness in {harness, "*"}]
+    # An exception that names no harness applies to every harness.
+    return [item for item in active if item.harness in {None, harness, "*"}]
+
+
+_SCOPE_TARGET_KEYS: dict[str, tuple[str, ...]] = {
+    "artifact": ("artifactId",),
+    "publisher": ("publisher",),
+    "workspace": ("workingDirectory", "workspaceId"),
+}
+# Position of the action in a policy-bundle decision identity
+# (``_cached_policy_bundle_decision_identities``, ``store_policy.py``).
+_IDENTITY_ACTION_INDEX = 6
+
+
+def _cloud_exception_matches(
+    item: CloudException,
+    raw_item: Mapping[str, object],
+    *,
+    harness: str,
+    artifact_id: str | None,
+    publisher: str | None,
+    workspace: str | None,
+    bundle_workspace_id: str | None,
+) -> bool:
+    if item.harness not in {None, "*", harness}:
+        return False
+    legacy = _cloud_exception_legacy_scope_field(item)
+    targets = {
+        "artifactId": _non_empty_string(raw_item.get("artifactId")),
+        "publisher": _non_empty_string(raw_item.get("publisher")),
+        "workingDirectory": _non_empty_string(raw_item.get("workingDirectory")),
+        "workspaceId": _non_empty_string(raw_item.get("workspaceId")),
+    }
+    if legacy is not None:
+        legacy_key = "artifactId" if legacy[0] == "artifact_id" else "publisher"
+        targets[legacy_key] = targets[legacy_key] or legacy[1]
+    # The scope's own target must be named; an exception that names no
+    # artifact cannot stand in for an artifact exception.
+    required = _SCOPE_TARGET_KEYS.get(item.scope, ())
+    if required and all(targets[key] is None for key in required):
+        return False
+    # A Cloud workspace id must be the workspace that signed the bundle.
+    if targets["workspaceId"] is not None and targets["workspaceId"] != bundle_workspace_id:
+        return False
+    # Every device-side target the exception names narrows it.
+    observed = {"artifactId": artifact_id, "publisher": publisher, "workingDirectory": workspace}
+    return all(targets[key] is None or targets[key] == value for key, value in observed.items())
+
+
+def cloud_exception_lifting_policy_bundle(
+    policy_bundle: Mapping[str, object],
+    *,
+    harness: str,
+    artifact_id: str | None,
+    publisher: str | None,
+    workspace: str | None,
+    now: str | None,
+) -> str | None:
+    """Return the approved Cloud exception that lifts the bundle's rules for this target.
+
+    An exception approved in Guard Cloud is an allow for the policy that Cloud
+    published, so it lifts only rules from that same verified bundle. When an
+    id repeats, the last entry wins, as in ``dedupe_cloud_exceptions``.
+    """
+
+    raw_items = policy_bundle.get("cloudExceptions")
+    if not isinstance(raw_items, list):
+        return None
+    latest: dict[str, tuple[CloudException, Mapping[str, object]]] = {}
+    for raw_item in raw_items:
+        if not isinstance(raw_item, dict):
+            continue
+        item = cloud_exception_from_mapping(raw_item, provenance="policy-bundle")
+        if item is not None:
+            latest[item.id] = (item, raw_item)
+    bundle_workspace_id = _non_empty_string(policy_bundle.get("workspaceId"))
+    for item, raw_item in latest.values():
+        if item.effect != "allow" or not _cloud_exception_is_active(item, now=now):
+            continue
+        if _cloud_exception_matches(
+            item,
+            raw_item,
+            harness=harness,
+            artifact_id=artifact_id,
+            publisher=publisher,
+            workspace=workspace,
+            bundle_workspace_id=bundle_workspace_id,
+        ):
+            return item.id
+    return None
+
+
+def lift_cloud_excepted_policy_bundle_identities(
+    identities: list[list[Any]] | None,
+    policy_bundle: Mapping[str, object] | None,
+    *,
+    harness: str,
+    artifact_id: str | None,
+    publisher: str | None,
+    workspace: str | None,
+    now: str,
+) -> list[list[Any]] | None:
+    """Drop the bundle's non-allow rule identities when an approved exception covers this target.
+
+    The native lookup honors a saved ``policy-bundle`` row only while its
+    identity is listed, so a lifted Cloud rule no longer applies to this one
+    lookup and the lookup ranks the remaining local rows as it would without it.
+    """
+
+    if not identities or policy_bundle is None:
+        return identities
+    exception_id = cloud_exception_lifting_policy_bundle(
+        policy_bundle,
+        harness=harness,
+        artifact_id=artifact_id,
+        publisher=publisher,
+        workspace=workspace,
+        now=now,
+    )
+    if exception_id is None:
+        return identities
+    return [identity for identity in identities if identity[_IDENTITY_ACTION_INDEX] == "allow"]
 
 
 def _cloud_exception_legacy_scope_field(item: CloudException) -> tuple[str, str] | None:

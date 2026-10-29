@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shlex
 from collections.abc import Sequence
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +33,15 @@ from .runtime.package_intent_common import (
 from .runtime.package_protect_projection import (
     LOCAL_SUPPLY_CHAIN_HARNESS as _LOCAL_SUPPLY_CHAIN_HARNESS,
 )
+
+# The resident's artifact reply carries the intent's targets in its metadata,
+# so a workspace with a few thousand packages outgrows the reply limit and the
+# whole audit fails. Targets beyond this many serialized bytes are evaluated
+# in further intents that each fit.
+_TARGET_CHUNK_BYTES = 512 * 1024
+# The resident's own ranking (``decision_rank``); an unknown decision ranks as
+# ``monitor`` there too.
+_DECISION_RANK = {"allow": 0, "monitor": 1, "warn": 2, "ask": 3, "block": 4}
 
 
 def resolve_supply_chain_audit_workspace_dir(
@@ -311,29 +322,89 @@ def _workspace_local_evaluation(
     )
     if scanned.inventory_digest != inventory_digest:
         raise NativeWorkspaceInventoryError("Native workspace_inventory snapshot changed during audit")
-    targets = scanned.scan_targets
-    intent = _workspace_scan_intent(
-        command_name=command_name,
-        targets=targets,
-        manifest_paths=manifest_paths,
-        lockfile_paths=lockfile_paths,
-    )
-    assert intent is not None
-    artifact = build_package_request_artifact(
-        _LOCAL_SUPPLY_CHAIN_HARNESS,
-        intent,
-        config_path="hol-guard.toml",
-        source_scope="project",
-        guard_home=store.guard_home,
-    )
-    evaluation = _lsc.evaluate_package_request_artifact(
-        artifact=artifact,
-        store=store,
-        workspace_dir=workspace_dir,
-        now=now,
-        record_evidence=record_evidence,
-    )
-    return evaluation.to_dict()
+    evaluations: list[dict[str, object]] = []
+    for targets in _target_chunks(scanned.scan_targets):
+        intent = _workspace_scan_intent(
+            command_name=command_name,
+            targets=targets,
+            manifest_paths=manifest_paths,
+            lockfile_paths=lockfile_paths,
+        )
+        assert intent is not None
+        artifact = build_package_request_artifact(
+            _LOCAL_SUPPLY_CHAIN_HARNESS,
+            intent,
+            config_path="hol-guard.toml",
+            source_scope="project",
+            guard_home=store.guard_home,
+        )
+        evaluation = _lsc.evaluate_package_request_artifact(
+            artifact=artifact,
+            store=store,
+            workspace_dir=workspace_dir,
+            now=now,
+            record_evidence=record_evidence,
+        )
+        evaluations.append(evaluation.to_dict())
+    return evaluations[0] if len(evaluations) == 1 else _merged_evaluation(evaluations)
+
+
+def _target_chunks(targets: tuple[PackageIntentTarget, ...]) -> list[tuple[PackageIntentTarget, ...]]:
+    """``targets`` in order, split so each part stays within ``_TARGET_CHUNK_BYTES``.
+
+    A workspace under the bound keeps its single intent, and with it the
+    artifact id any saved decision for it was recorded under.
+    """
+
+    chunks: list[tuple[PackageIntentTarget, ...]] = []
+    current: list[PackageIntentTarget] = []
+    used = 0
+    for target in targets:
+        size = len(json.dumps(asdict(target), default=str, separators=(",", ":")).encode("utf-8"))
+        if size > _TARGET_CHUNK_BYTES:
+            # No chunk can carry it, and sending it alone would outgrow the
+            # resident's reply; the audit fails closed instead.
+            raise NativeWorkspaceInventoryError("Native workspace_inventory target exceeds the request bound")
+        if current and used + size > _TARGET_CHUNK_BYTES:
+            chunks.append(tuple(current))
+            current, used = [], 0
+        current.append(target)
+        used += size
+    chunks.append(tuple(current))
+    return chunks
+
+
+def _merged_evaluation(evaluations: list[dict[str, object]]) -> dict[str, object]:
+    """One audit evaluation from the evaluations of its target chunks.
+
+    The strictest chunk supplies the verdict and its explanation; every chunk's
+    packages are kept, list fields are joined without repeats, and a flag set
+    by any chunk stays set.
+    """
+
+    merged = dict(max(evaluations, key=lambda item: _DECISION_RANK.get(str(item.get("decision")), 1)))
+    for key, value in merged.items():
+        if isinstance(value, bool):
+            merged[key] = any(item.get(key) is True for item in evaluations)
+        elif isinstance(value, list):
+            joined = [entry for item in evaluations for entry in _list(item.get(key))]
+            merged[key] = joined if key == "packages" else _without_repeats(joined)
+    return merged
+
+
+def _list(value: object) -> list[object]:
+    return value if isinstance(value, list) else []
+
+
+def _without_repeats(items: list[object]) -> list[object]:
+    seen: set[str] = set()
+    kept: list[object] = []
+    for item in items:
+        key = json.dumps(item, sort_keys=True, default=str)
+        if key not in seen:
+            seen.add(key)
+            kept.append(item)
+    return kept
 
 
 def build_supply_chain_explain_payload(

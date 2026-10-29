@@ -6,11 +6,10 @@ import json
 import urllib.request
 from collections.abc import Iterable
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer, native_review_allow_hint
+from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import approval_connector_recommendation as recommendation
 from codex_plugin_scanner.guard.daemon.approval_connector_recommendation import (
     CONNECTOR_RECOMMENDATION_SCHEMA,
@@ -172,57 +171,6 @@ def test_malformed_hints_are_dropped(override: dict[str, object]) -> None:
     assert validated_connector_setup_hint(_hint(**override)) is None
 
 
-def test_queue_time_hint_asks_the_resident_for_the_connector(monkeypatch: pytest.MonkeyPatch) -> None:
-    asked: list[dict[str, object]] = []
-
-    def ask(payload: object, **kwargs: object) -> dict[str, object]:
-        asked.append({"payload": payload, **kwargs})
-        return _hint()
-
-    monkeypatch.setattr(native_review_allow_hint, "_ask_review_hint", ask)
-    store = SimpleNamespace(guard_home=Path("guard-home"))
-    paused = {"reason_code": "native_command_review_required"}
-
-    hint = native_review_allow_hint.native_review_hint(store, {}, paused, None, None, None, _CONNECTOR)
-
-    assert hint == _hint()
-    # A setup review carries no extension evidence, yet still asks: the
-    # connector hint names only the connector and what the evidence observed.
-    assert asked[0]["connector"] is _CONNECTOR
-    assert asked[0]["paused"] == paused
-
-
-def test_the_connector_rides_in_the_query_and_its_answer_is_shape_checked(monkeypatch: pytest.MonkeyPatch) -> None:
-    sent: list[dict[str, object]] = []
-
-    def decide(query: dict[str, object], _home: object, _fields: object, validate, **_kwargs: object) -> None:
-        sent.append(query)
-        validate({"hint": _hint()})
-
-    monkeypatch.setattr(native_review_allow_hint, "_decide", decide)
-    store = SimpleNamespace(guard_home=Path("guard-home"))
-
-    hint = native_review_allow_hint.native_review_hint(store, {}, {}, None, None, None, _CONNECTOR)
-
-    assert hint == _hint()
-    assert sent[0]["connector"] == {
-        "cli_id": _CLI_ID,
-        "identity_hash": _HASH,
-        "name": "lanectl",
-        "surface": "cli",
-        "queue_group_id": _GROUP,
-    }
-    assert sent[0]["paused"] == {}
-
-    # An extension hint is not a connector hint, so the answer means none.
-    monkeypatch.setattr(
-        native_review_allow_hint,
-        "_decide",
-        lambda _q, _h, _f, validate, **_k: validate({"hint": {"schema": "guard.extension-allow-hint.v1"}}),
-    )
-    assert native_review_allow_hint.native_review_hint(store, {}, {}, None, None, None, _CONNECTOR) is None
-
-
 def test_a_pending_delete_keeps_caution_through_the_full_path(monkeypatch: pytest.MonkeyPatch) -> None:
     _items(monkeypatch)
     # The resident records ``destructive`` for a destructive shell rule it observed.
@@ -232,17 +180,6 @@ def test_a_pending_delete_keeps_caution_through_the_full_path(monkeypatch: pytes
 
     assert result is not None
     assert result["caution"] is True
-
-
-def test_queue_time_hint_without_a_connector_is_the_extension_hint(monkeypatch: pytest.MonkeyPatch) -> None:
-    sentinel = {"schema": "guard.extension-allow-hint.v1"}
-    monkeypatch.setattr(native_review_allow_hint, "_ask_review_hint", lambda *_a, **_k: sentinel)
-    store = SimpleNamespace(guard_home=Path("guard-home"))
-
-    assert (
-        native_review_allow_hint.native_review_hint(store, {}, {"command_extensions": {}}, None, None, None, None)
-        is sentinel
-    )
 
 
 def test_available_while_the_connector_is_unset(monkeypatch: pytest.MonkeyPatch) -> None:

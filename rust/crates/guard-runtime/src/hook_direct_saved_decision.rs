@@ -36,11 +36,12 @@
 
 use super::local_cli::block::ReviewVerdict;
 use super::{reviewed_edge, HookDirectDefer, PRE_TOOL_USE};
+use crate::cloud_exception_lift::{lift_cloud_excepted_identities, LiftTarget};
 use crate::connector_setup::grant_lifts;
 use crate::local_store_read::{
     open_read_only, schema_version, table_exists, STORE_FILE_NAME, SUPPORTED_SCHEMA_VERSION,
 };
-use crate::policy_bundle_store_identities::cached_bundle_identities;
+use crate::policy_bundle_store_identities::{cached_bundle_authority, BundleAuthority};
 use crate::policy_store::policy_store_direct_lane::DirectLaneBinding;
 use crate::policy_store::PolicySnapshotStore;
 use base64ct::{Base64UrlUnpadded, Encoding};
@@ -281,7 +282,20 @@ fn saved_response(
         return Err(HookDirectDefer::SavedDecision);
     };
     let now = super::lifecycle::utc_now_isoformat().ok_or(HookDirectDefer::SavedDecision)?;
-    let bundle_identities = store.bundle_identities(&now)?;
+    let (bundle_identities, bundle) = store.bundle_authority(&now)?;
+    // Lifted once against the evaluated working directory and shared by the
+    // local and portable probes, as `policy_decision_lookup_request` does.
+    let bundle_identities = lift_cloud_excepted_identities(
+        &bundle_identities,
+        bundle.as_ref(),
+        &LiftTarget {
+            harness: context.harness,
+            artifact_id: Some(store.artifact_id),
+            publisher: None,
+            workspace: Some(context.workspace),
+            now: &now,
+        },
+    );
     let composition = portable::composition(context.workspace)?;
     let key_b64 = Zeroizing::new(Base64UrlUnpadded::encode_string(&key.key));
     let store_path = Path::new(context.guard_home).join(STORE_FILE_NAME);
@@ -521,16 +535,21 @@ impl StoreShape<'_> {
     }
 
     /// The decision identities the cached signed bundle authorizes at `now`,
-    /// which keep or drop a policy-bundle row; empty when the store holds no
-    /// such row. A bundle the resident cannot judge as the daemon would defers.
-    fn bundle_identities(&self, now: &str) -> Result<Vec<Vec<Value>>, HookDirectDefer> {
+    /// which keep or drop a policy-bundle row, and the bundle they came from;
+    /// empty when the store holds no such row. A bundle the resident cannot
+    /// judge as the daemon would defers.
+    fn bundle_authority(&self, now: &str) -> Result<BundleAuthority, HookDirectDefer> {
         if !self.any(
             "select 1 from policy_decisions where source = 'policy-bundle' limit 1",
             &[],
         )? {
-            return Ok(Vec::new());
+            return Ok((Vec::new(), None));
         }
-        cached_bundle_identities(self.connection, now).ok_or(HookDirectDefer::SavedDecision)
+        #[cfg(test)]
+        if let Some(authority) = tests::VALIDATED_BUNDLE.with(|bundle| bundle.borrow().clone()) {
+            return Ok(authority);
+        }
+        cached_bundle_authority(self.connection, now).ok_or(HookDirectDefer::SavedDecision)
     }
 
     fn any(&self, query: &str, values: &[&str]) -> Result<bool, HookDirectDefer> {

@@ -154,80 +154,47 @@ def test_a_never_enrolled_device_still_asks(monkeypatch, tmp_path: Path) -> None
     assert asked[0]["payload"] == {"tool_input": {"command": "git fetch origin main"}, "cwd": str(tmp_path.resolve())}
 
 
-def test_queue_time_hints_hand_the_resident_the_paused_result(monkeypatch, tmp_path: Path) -> None:
-    asked = _record_asks(monkeypatch, answer=dict(_STORED_COVERAGE))
-    payload = {"tool_name": "Bash", "tool_input": {"command": "git fetch origin main"}}
-    paused = {"decision": "review", "reason_code": "native_extension_review", "command_extensions": {}}
-    store = SimpleNamespace(guard_home=tmp_path)
-
-    hint = module.native_review_hint(store, payload, paused, tmp_path, tmp_path, None, None)
-
-    assert hint == _STORED_COVERAGE
-    assert asked[0]["payload"] == payload
-    assert asked[0]["paused"] == paused
-    assert asked[0]["workspace"] == tmp_path
-    assert asked[0]["home_dir"] == tmp_path
-    assert asked[0]["budget_seconds"] == 5.0
+def test_the_queue_time_ask_carries_only_a_budget_without_a_deadline() -> None:
+    assert module.native_review_hint_ask(None, None) == {"budget_ms": 5000}
 
 
-def test_queue_time_hints_leave_the_hook_time_to_persist_the_review(monkeypatch, tmp_path: Path) -> None:
-    asked = _record_asks(monkeypatch)
+def test_queue_time_hints_leave_the_hook_time_to_persist_the_review(monkeypatch) -> None:
     monkeypatch.setattr(module.time, "monotonic", lambda: 100.0)
-    store = SimpleNamespace(guard_home=tmp_path)
-    paused = {"command_extensions": {}}
 
-    module.native_review_hint(store, {}, paused, None, None, 100.6, None)
-    assert asked[0]["budget_seconds"] == pytest.approx(0.25)
-
+    assert module.native_review_hint_ask(100.75, None) == {"budget_ms": 400}
     # Too little left after the margin: the review is persisted without hints.
-    assert module.native_review_hint(store, {}, paused, None, None, 100.45, None) is None
-    assert len(asked) == 1
+    assert module.native_review_hint_ask(100.45, None) is None
 
 
-def test_a_short_review_budget_still_asks_for_the_connector_setup_hint(monkeypatch, tmp_path: Path) -> None:
+_CONNECTOR = SetupConnector(
+    cli_id="local-cli.lanectl", identity_hash="a" * 64, name="lanectl", surface="cli", queue_group_id="group"
+)
+
+
+def test_a_short_review_budget_still_asks_for_the_connector_setup_hint(monkeypatch) -> None:
     # The stored connector hint is what resolves the row once setup finishes,
     # so it asks with the time left even below the usual minimum budget.
-    asked = _record_asks(monkeypatch)
     monkeypatch.setattr(module.time, "monotonic", lambda: 100.0)
-    store = SimpleNamespace(guard_home=tmp_path)
-    connector = SetupConnector(
-        cli_id="local-cli.lanectl", identity_hash="a" * 64, name="lanectl", surface="cli", queue_group_id="group"
-    )
     deadline = 100.0 + module._SAFETY_MARGIN_SECONDS + 0.05
 
-    module.native_review_hint(store, {}, {"decision": "review"}, None, None, deadline, connector)
+    ask = module.native_review_hint_ask(deadline, _CONNECTOR)
 
-    assert asked[0]["connector"] == connector
-    assert 0 < asked[0]["budget_seconds"] < module._MIN_BUDGET_SECONDS
+    assert ask is not None
+    assert ask["connector"] == {
+        "cli_id": "local-cli.lanectl",
+        "identity_hash": "a" * 64,
+        "name": "lanectl",
+        "surface": "cli",
+        "queue_group_id": "group",
+    }
+    assert 0 < ask["budget_ms"] < module._MIN_BUDGET_SECONDS * 1000
 
 
-def test_the_connector_ask_never_eats_the_persist_margin(monkeypatch, tmp_path: Path) -> None:
-    asked = _record_asks(monkeypatch)
+def test_the_connector_ask_never_eats_the_persist_margin(monkeypatch) -> None:
     monkeypatch.setattr(module.time, "monotonic", lambda: 100.0)
-    store = SimpleNamespace(guard_home=tmp_path)
-    connector = SetupConnector(
-        cli_id="local-cli.lanectl", identity_hash="a" * 64, name="lanectl", surface="cli", queue_group_id="group"
-    )
 
     for deadline in (99.0, 100.0, 100.0 + module._SAFETY_MARGIN_SECONDS / 2):
-        assert module.native_review_hint(store, {}, {"decision": "review"}, None, None, deadline, connector) is None
-
-    assert asked == []
-
-
-def test_queue_time_hints_need_extension_evidence_to_ask(monkeypatch, tmp_path: Path) -> None:
-    asked = _record_asks(monkeypatch, answer=dict(_STORED_COVERAGE))
-    store = SimpleNamespace(guard_home=tmp_path)
-
-    assert module.native_review_hint(store, {}, {"decision": "review"}, tmp_path, tmp_path, None, None) is None
-    assert asked == []
-
-
-def test_queue_time_hints_need_a_guard_home_to_reach_the_resident(monkeypatch, tmp_path: Path) -> None:
-    asked = _record_asks(monkeypatch, answer=dict(_STORED_COVERAGE))
-
-    assert module.native_review_hint(object(), {}, {"command_extensions": {}}, tmp_path, tmp_path, None, None) is None
-    assert asked == []
+        assert module.native_review_hint_ask(deadline, _CONNECTOR) is None
 
 
 def _answering(monkeypatch, hint: object) -> list[dict[str, Any]]:
@@ -255,10 +222,7 @@ def test_the_query_sends_every_field_the_resident_digests(monkeypatch, tmp_path:
     assert query == {"kind": "review_hint", "payload": payload, "workspace": "", "home_dir": "", "budget_ms": 10_000}
     assert queries[0]["operation"].timeout_seconds == 10.0
 
-    module._ask_review_hint(
-        payload, guard_home=tmp_path, workspace=tmp_path, home_dir=tmp_path, budget_seconds=0.5, paused={"a": 1}
-    )
-    assert queries[1]["query"]["paused"] == {"a": 1}
+    module._ask_review_hint(payload, guard_home=tmp_path, workspace=tmp_path, home_dir=tmp_path, budget_seconds=0.5)
     assert queries[1]["query"]["workspace"] == str(tmp_path)
     assert queries[1]["query"]["budget_ms"] == 500
 

@@ -59,21 +59,26 @@ const DEVICE_NAME_CHARS: usize = 120;
 /// workspace, publisher, action, reason, owner, source and expiry.
 pub(crate) type Identity = Vec<Value>;
 
-/// The identities the cached bundle authorizes at `now`, or `None` when the
-/// resident cannot derive them the way the Python store would and the caller
-/// must defer. A missing, rejected, inactive or downgraded bundle authorizes
-/// nothing (`Some` of an empty list).
-pub(crate) fn cached_bundle_identities(
+/// The identities the cached bundle authorizes at `now`, with the validated
+/// bundle they came from so a lookup lifts Cloud rules only against that same
+/// bundle's exceptions (`_cached_policy_bundle_authority`, `store_policy.py`).
+pub(crate) type BundleAuthority = (Vec<Identity>, Option<Map<String, Value>>);
+
+/// The cached bundle's authority at `now`, or `None` when the resident cannot
+/// derive it the way the Python store would and the caller must defer. A
+/// missing, rejected, inactive or downgraded bundle authorizes nothing (`Some`
+/// of an empty list).
+pub(crate) fn cached_bundle_authority(
     connection: &Connection,
     now: &str,
-) -> Option<Vec<Identity>> {
+) -> Option<BundleAuthority> {
     let bundle = match sync_payload(connection, "policy_bundle")? {
         Some(Value::Object(bundle)) if !bundle.is_empty() => bundle,
-        _ => return Some(Vec::new()),
+        _ => return Some((Vec::new(), None)),
     };
     let now_epoch = utc_timestamp_micros(now)? as f64 / 1_000_000.0;
     let Some(validated) = validated(connection, &bundle, now_epoch)? else {
-        return Some(Vec::new());
+        return Some((Vec::new(), None));
     };
     let (device_id, device_label) = local_device(connection).ok()??;
     let device_name = device_display_name(connection, &device_label)?;
@@ -85,7 +90,7 @@ pub(crate) fn cached_bundle_identities(
             identities.push(identity);
         }
     }
-    Some(identities)
+    Some((identities, Some(validated)))
 }
 
 /// `cached_policy_bundle_validation`: the payload rules are read from, or

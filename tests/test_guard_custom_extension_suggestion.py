@@ -115,7 +115,10 @@ def test_screenshot_junk_is_not_observed_or_suggested(tmp_path: Path) -> None:
     assert suggestable == {"internal-deploy"}
     assert "vitest.mjs" not in suggestable
     deploy = next(item for item in items if item["name"] == "internal-deploy")
-    assert deploy["source_path"] == "user-tool"
+    # The hook keeps the launched file, so Load commands never asks for it;
+    # ranking still reads it as a user tool.
+    assert deploy["source_path"] == str(tool.resolve())
+    assert observation_path_class(str(deploy["source_path"])) == "user-tool"
     assert isinstance(deploy["suggestion_score"], int)
     assert int(deploy["suggestion_score"]) >= 15
 

@@ -64,10 +64,8 @@ class _RowStore(StoreApprovalsMixin):
 def test_a_claude_review_queues_with_its_notice_in_one_store_write() -> None:
     store = _RowStore({"request_id": "req-1", "row": {"request_id": "req-1"}})
     key = {"integrity_key_b64": "a2V5", "integrity_key_id": "kid"}
-    hint = {"kind": "extension"}
-    assert store.queue_native_review(_QUERY, "now", extension_allow_hint=hint, claude_key=key) == {
-        "request_id": "req-1"
-    }
+    hint = {"budget_ms": 500}
+    assert store.queue_native_review(_QUERY, "now", hint=hint, claude_key=key) == {"request_id": "req-1"}
     # The key rides in the top-level args the request digest leaves out; the
     # resident builds the notice's facts from the query itself.
     ((method, args),) = store.calls
@@ -75,7 +73,7 @@ def test_a_claude_review_queues_with_its_notice_in_one_store_write() -> None:
     args.pop("cwd")
     assert args == {
         "review": _QUERY,
-        "extension_allow_hint": hint,
+        "hint": hint,
         "now": "now",
         "silent": False,
         "claude_notice": True,
@@ -132,6 +130,24 @@ def test_a_silent_review_reads_back_in_its_daemon_write() -> None:
     assert method == "queue_native_review"
     assert (args["silent"], args["return_row"]) == (True, True)
     assert store.reads == []
+
+
+def test_the_hook_response_rendered_with_the_row_rides_on_it() -> None:
+    respond = {"paused_review": {"reason": None}}
+    store = _RowStore({"request_id": "req-1", "row": {"request_id": "req-1"}, "response": {"decision": "ask"}})
+    assert store.queue_native_review(_QUERY, "now", respond=respond) == {
+        "request_id": "req-1",
+        "hook_response": {"decision": "ask"},
+    }
+    ((_method, args),) = store.calls
+    assert args["respond"] == respond
+
+
+def test_a_call_that_asks_for_no_response_sends_no_respond() -> None:
+    store = _RowStore({"request_id": "req-1", "row": {"request_id": "req-1"}})
+    assert store.queue_native_review(_QUERY, "now") == {"request_id": "req-1"}
+    ((_method, args),) = store.calls
+    assert "respond" not in args
 
 
 def test_a_row_the_write_did_not_read_back_is_read_separately() -> None:
@@ -193,7 +209,6 @@ class _RefusingStore:
 def test_a_refused_queue_is_logged_by_its_reason_code_only(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
-    monkeypatch.setattr(hook_native_review_approval, "native_review_hint", lambda *_a, **_k: None)
     with caplog.at_level(logging.WARNING, logger=hook_native_review_approval.__name__):
         queued = hook_native_review_approval.queue_native_pre_tool_review(
             _RefusingStore(),
@@ -225,3 +240,16 @@ def test_a_review_query_leaves_room_for_the_store_call_around_it(tmp_path: Path)
         home_dir=tmp_path,
     )
     assert len(json.dumps(query).encode("utf-8")) < GUARD_STORE_MAX_REQUEST_BYTES - 32 * 1024
+
+
+def test_a_connector_context_the_store_refused_is_logged(caplog: pytest.LogCaptureFixture) -> None:
+    store = _RowStore(
+        {
+            "request_id": "req-1",
+            "row": {"request_id": "req-1"},
+            "connector_context_error": "native_guard_store_value_error",
+        }
+    )
+    with caplog.at_level(logging.WARNING):
+        assert store.queue_native_review(_QUERY, "now") == {"request_id": "req-1"}
+    assert "Connector setup context not recorded (native_guard_store_value_error)" in caplog.text

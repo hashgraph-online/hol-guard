@@ -26,17 +26,17 @@ fn sync_state(connection: &Connection, key: &str, payload: &str) {
         .unwrap();
 }
 
+fn identities(connection: &Connection, now: &str) -> Option<Vec<Identity>> {
+    cached_bundle_authority(connection, now).map(|(identities, _bundle)| identities)
+}
+
 #[test]
 fn a_missing_or_empty_bundle_authorizes_nothing() {
     let connection = store();
-    assert_eq!(cached_bundle_identities(&connection, NOW), Some(Vec::new()));
+    assert_eq!(identities(&connection, NOW), Some(Vec::new()));
     for payload in ["{}", "[1]", "\"text\"", "null"] {
         sync_state(&connection, "policy_bundle", payload);
-        assert_eq!(
-            cached_bundle_identities(&connection, NOW),
-            Some(Vec::new()),
-            "{payload}"
-        );
+        assert_eq!(identities(&connection, NOW), Some(Vec::new()), "{payload}");
     }
 }
 
@@ -44,14 +44,11 @@ fn a_missing_or_empty_bundle_authorizes_nothing() {
 fn a_bundle_the_store_cannot_parse_defers() {
     let connection = store();
     sync_state(&connection, "policy_bundle", "not json");
-    assert_eq!(cached_bundle_identities(&connection, NOW), None);
+    assert_eq!(identities(&connection, NOW), None);
     sync_state(&connection, "policy_bundle", "{}");
-    assert_eq!(
-        cached_bundle_identities(&connection, "not a time"),
-        Some(Vec::new())
-    );
+    assert_eq!(identities(&connection, "not a time"), Some(Vec::new()));
     sync_state(&connection, "policy_bundle", r#"{"bundleVersion": 1}"#);
-    assert_eq!(cached_bundle_identities(&connection, "not a time"), None);
+    assert_eq!(identities(&connection, "not a time"), None);
 }
 
 #[cfg(unix)]
@@ -63,7 +60,7 @@ fn an_unsigned_bundle_authorizes_nothing() {
         "policy_bundle",
         r#"{"bundleVersion": 1, "decisions": [{"harness": "codex"}]}"#,
     );
-    assert_eq!(cached_bundle_identities(&connection, NOW), Some(Vec::new()));
+    assert_eq!(identities(&connection, NOW), Some(Vec::new()));
 }
 
 #[test]

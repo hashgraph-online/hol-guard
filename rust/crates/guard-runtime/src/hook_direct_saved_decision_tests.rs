@@ -7,7 +7,15 @@ use crate::policy_store::policy_store_direct_lane::DirectLaneIntegrityKey;
 use guard_contracts::NativeExactActionQueryV1;
 use guard_policy_snapshot::{DirectLaneEnvironmentV1, DirectLanePolicyIntegrityStateV1};
 use rusqlite::params;
+use std::cell::RefCell;
 use std::collections::BTreeMap;
+
+thread_local! {
+    /// The validated bundle authority a test reads in place of the cached
+    /// bundle, whose RSA signature these tests have no key to make.
+    pub(crate) static VALIDATED_BUNDLE: RefCell<Option<BundleAuthority>> =
+        const { RefCell::new(None) };
+}
 
 const VECTORS: &str = include_str!("../tests/fixtures/hook_direct_saved_decision_vectors.json");
 pub(crate) const KEY: [u8; 32] = [7u8; 32];
@@ -253,8 +261,8 @@ fn a_local_store_with_the_decision_is_read() {
         Some(true)
     );
     assert_eq!(
-        shape(&connection).bundle_identities(SIGNED_AT),
-        Ok(Vec::new())
+        shape(&connection).bundle_authority(SIGNED_AT),
+        Ok((Vec::new(), None))
     );
     // An empty bundle authorizes none of the rows saved from it.
     connection
@@ -264,8 +272,8 @@ fn a_local_store_with_the_decision_is_read() {
         )
         .unwrap();
     assert_eq!(
-        shape(&connection).bundle_identities(SIGNED_AT),
-        Ok(Vec::new())
+        shape(&connection).bundle_authority(SIGNED_AT),
+        Ok((Vec::new(), None))
     );
 }
 
@@ -305,7 +313,7 @@ fn a_store_the_lookup_reads_differently_defers() {
             !(store.supported().unwrap()
                 && !store.grants().unwrap()
                 && store.readable(&published()).unwrap().is_some()
-                && store.bundle_identities(SIGNED_AT).is_ok()),
+                && store.bundle_authority(SIGNED_AT).is_ok()),
             "{tag}"
         );
     }

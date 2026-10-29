@@ -75,7 +75,7 @@ from ..runtime.local_skill_index import (
     public_skill_page,
 )
 from ..runtime.mcp_protection import build_mcp_server_identity
-from ..runtime.observed_local_clis import backfill_observed_local_clis
+from ..runtime.observed_local_clis import backfill_observed_local_clis, paused_launch_paths
 from ..runtime.observed_mcp_tools import discover_observed_mcp_tools
 from ..runtime.package_json_script_memory import (
     operator_working_directory,
@@ -466,7 +466,12 @@ class LocalCliApiService:
 
     def _start_cli_reload(self, item: dict[str, object], payload: dict[str, object]) -> dict[str, object]:
         home_dir = Path.home()
-        target = verified_cli_for_reload(item, home_dir=home_dir, path=payload.get("path"))
+        target = verified_cli_for_reload(
+            item,
+            home_dir=home_dir,
+            path=payload.get("path"),
+            launched_paths=lambda: paused_launch_paths(self._store, item, home_dir=home_dir),
+        )
 
         def reload(cancel: threading.Event) -> None:
             load_cli_commands(

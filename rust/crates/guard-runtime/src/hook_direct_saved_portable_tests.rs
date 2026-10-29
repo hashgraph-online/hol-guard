@@ -1,4 +1,6 @@
-use super::super::tests::{binding, local_store, sign_decision, ARTIFACT, SIGNED_AT, TOKEN};
+use super::super::tests::{
+    binding, local_store, sign_decision, ARTIFACT, SIGNED_AT, TOKEN, VALIDATED_BUNDLE,
+};
 use super::super::{saved_response, Context, HookDirectDefer, StoreShape};
 use crate::project_identity::{resolve, PortableIdentity, PORTABLE_PROJECT_IDENTITY_PREFIX};
 use rusqlite::{params, Connection, OpenFlags};
@@ -190,4 +192,75 @@ fn an_identity_the_resident_does_not_resolve_exactly_defers() {
         resolve(&format!("{checkout}/not-here")),
         PortableIdentity::Identity(_)
     ));
+}
+
+/// The daemon's saved response in `workspace` while the validated bundle
+/// carries the Cloud rule that blocks the artifact and `exceptions`.
+fn status_under_bundle(
+    connection: &Connection,
+    guard_home: &str,
+    workspace: &str,
+    exceptions: Value,
+) -> Result<Option<Value>, HookDirectDefer> {
+    let rule = json!([
+        "claude-code",
+        "artifact",
+        ARTIFACT,
+        null,
+        null,
+        null,
+        "block",
+        "managed",
+        "pkg-block",
+        "policy-bundle",
+        null
+    ]);
+    let bundle = json!({ "workspaceId": "workspace-1", "cloudExceptions": exceptions });
+    let authority = (
+        vec![rule.as_array().unwrap().clone()],
+        bundle.as_object().cloned(),
+    );
+    VALIDATED_BUNDLE.with(|cell| *cell.borrow_mut() = Some(authority));
+    let answered = status(connection, guard_home, workspace);
+    VALIDATED_BUNDLE.with(|cell| *cell.borrow_mut() = None);
+    answered
+}
+
+#[test]
+fn a_cloud_exception_for_the_checkout_lifts_the_cloud_block_from_its_portable_lookup_too() {
+    let (home, connection) = store("portable-exception");
+    let checkout = directory("exception", Some(REMOTE));
+    connection
+        .execute(
+            "insert into policy_decisions (harness, scope, artifact_id, action, reason, owner,
+               source, created_at, updated_at)
+             values ('claude-code', 'artifact', ?1, 'block', 'managed', 'pkg-block',
+               'policy-bundle', ?2, ?2)",
+            params![ARTIFACT, SIGNED_AT],
+        )
+        .unwrap();
+    sign_decision(&connection, connection.last_insert_rowid());
+    // The Cloud block outranks the saved allow, so the review stands.
+    assert_eq!(
+        status_under_bundle(&connection, &home, &checkout, json!([])),
+        Ok(None)
+    );
+    // An exception approved for this checkout's working directory lifts the
+    // Cloud block from both the local lookup and the lookup under the
+    // checkout's portable identity, so the saved allow answers. Lifting the
+    // portable lookup against the identity instead would keep the block
+    // there, and the composition would keep the review standing.
+    let exception = json!([{
+        "exceptionId": "exception-checkout",
+        "scope": "artifact",
+        "harness": "claude-code",
+        "artifactId": ARTIFACT,
+        "workingDirectory": checkout,
+        "owner": "owner@example.test",
+        "expiresAt": "2099-01-01T00:00:00+00:00",
+    }]);
+    assert_eq!(
+        status_under_bundle(&connection, &home, &checkout, exception),
+        Ok(Some(json!("accepted")))
+    );
 }

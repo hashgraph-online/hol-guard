@@ -201,6 +201,7 @@ fn observe(request: &LocalCliHookRequestV1, package: &Package) -> Result<(), &'s
             .path_class
             .clone()
             .filter(|class| !class.is_empty())
+            .or_else(|| launched_file(record_item.source_path.as_deref()))
             .unwrap_or_else(|| {
                 crate::custom_extension_suggestion::path_class(record_item.source_path.as_deref())
             });
@@ -219,6 +220,15 @@ fn observe(request: &LocalCliHookRequestV1, package: &Package) -> Result<(), &'s
         )?;
     }
     Ok(())
+}
+
+/// The resolved file the agent launched, kept so Load commands can read its
+/// help without asking the operator where it is. The store stays on this
+/// machine; anything that ranks or groups tools still derives a path class.
+fn launched_file(source_path: Option<&str>) -> Option<String> {
+    source_path
+        .filter(|path| std::path::Path::new(path).is_absolute())
+        .map(str::to_owned)
 }
 
 /// `record_local_cli_observation` with the Python store's defaults.
