@@ -26456,7 +26456,8 @@ const CONNECTABLE_HARNESS_ALIASES = /* @__PURE__ */ new Set([
   "zai-zcode",
   "devin",
   "devin-cli",
-  "cognition-devin"
+  "cognition-devin",
+  "muse"
 ]);
 const PACKAGE_FIREWALL_SOURCES = /* @__PURE__ */ new Set([
   "package-firewall",
