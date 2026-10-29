@@ -215,15 +215,19 @@ pub(super) fn settle(
     if extensions.evaluation_error.is_some() || extensions.binding.uncertainty_count != 0 {
         return;
     }
-    if !extensions.permission_observations.iter().all(|observation| {
-        observation.uncertainty_reasons.is_empty()
-            && controls.is_some_and(|controls| {
-                controls.permission_settles_at_allow(
-                    &observation.extension_id,
-                    &observation.permission_id,
-                )
-            })
-    }) {
+    if !extensions
+        .permission_observations
+        .iter()
+        .all(|observation| {
+            observation.uncertainty_reasons.is_empty()
+                && controls.is_some_and(|controls| {
+                    controls.permission_settles_at_allow(
+                        &observation.extension_id,
+                        &observation.permission_id,
+                    )
+                })
+        })
+    {
         return;
     }
     let mut listing_seen = false;
