@@ -283,6 +283,19 @@ fn saved_response(
     };
     let now = super::lifecycle::utc_now_isoformat().ok_or(HookDirectDefer::SavedDecision)?;
     let (bundle_identities, bundle) = store.bundle_authority(&now)?;
+    // Lifted once against the evaluated working directory and shared by the
+    // local and portable probes, as `policy_decision_lookup_request` does.
+    let bundle_identities = lift_cloud_excepted_identities(
+        &bundle_identities,
+        bundle.as_ref(),
+        &LiftTarget {
+            harness: context.harness,
+            artifact_id: Some(store.artifact_id),
+            publisher: None,
+            workspace: Some(context.workspace),
+            now: &now,
+        },
+    );
     let composition = portable::composition(context.workspace)?;
     let key_b64 = Zeroizing::new(Base64UrlUnpadded::encode_string(&key.key));
     let store_path = Path::new(context.guard_home).join(STORE_FILE_NAME);
@@ -309,26 +322,15 @@ fn saved_response(
         integrity_key_id: has_local_policy.then(|| key.key_id.clone()),
         local_once_integrity_key_b64: Some(key_b64.to_string()),
         local_once_integrity_key_id: Some(key.key_id.clone()),
-        policy_bundle_decision_identities: None,
+        policy_bundle_decision_identities: (!bundle_identities.is_empty())
+            .then_some(bundle_identities),
         probe_groups: None,
         portable_workspace: None,
         evidence_binding: None,
     };
     let lookup = |workspace: &str| {
-        let identities = lift_cloud_excepted_identities(
-            &bundle_identities,
-            bundle.as_ref(),
-            &LiftTarget {
-                harness: context.harness,
-                artifact_id: Some(store.artifact_id),
-                publisher: None,
-                workspace: Some(workspace),
-                now: &request.now,
-            },
-        );
         let request = PolicyDecisionLookupRequestV1 {
             workspace: Some(workspace.to_owned()),
-            policy_bundle_decision_identities: (!identities.is_empty()).then_some(identities),
             ..request.clone()
         };
         crate::policy_decision_lookup_op::evaluate_non_consuming(&request, store.connection)
@@ -542,6 +544,10 @@ impl StoreShape<'_> {
             &[],
         )? {
             return Ok((Vec::new(), None));
+        }
+        #[cfg(test)]
+        if let Some(authority) = tests::VALIDATED_BUNDLE.with(|bundle| bundle.borrow().clone()) {
+            return Ok(authority);
         }
         cached_bundle_authority(self.connection, now).ok_or(HookDirectDefer::SavedDecision)
     }
