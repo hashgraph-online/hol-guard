@@ -536,6 +536,7 @@ pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
             | "launcher_program"
             | "transparent_prefix"
             | "command_prefix_split"
+            | "run_prefix_peel"
     ) {
         return None;
     }
@@ -564,6 +565,10 @@ pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
         "transparent_prefix" => {
             let prefix = crate::parser_wrappers::transparent_prefix(&command, 0);
             Ok(json!(prefix.map(|(index, _)| index)))
+        }
+        "run_prefix_peel" => {
+            let (core, seconds) = crate::contained_run_prefix::run_prefix_peel(&command);
+            Ok(json!({ "core": core, "seconds": seconds }))
         }
         "command_prefix_split" => {
             let drop_data = input

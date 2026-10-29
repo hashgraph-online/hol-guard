@@ -3,11 +3,14 @@
 //! starts. Bun reads a file operand as the script to run, so a path through
 //! `node_modules` is never a package script name, an install verb or `bun x`.
 //! The contained routes read it as the `node` spelling, and the contained-test
-//! sink does the same (`bun_package_entry_as_node` in
-//! `contained_command_prefix.py`), so it runs the entrypoint on the project's
-//! Node image exactly as it runs `bun x vite build`.
+//! sink's own peel does the same (`crate::contained_run_prefix`), so it runs
+//! the entrypoint on the project's Node image exactly as it runs
+//! `bun x vite build`.
 
 use crate::CanonicalCommandV1;
+// A local file path with a `node_modules` component, as the contained-test
+// sink's own peel reads it, so one shape decides both.
+use crate::contained_run_prefix::installed_entry;
 
 /// The command with each `bun <installed entrypoint>` segment spelled with
 /// `node`, or `None` when no segment has that shape.
@@ -32,16 +35,6 @@ pub(super) fn node_spelling(model: &CanonicalCommandV1) -> Option<CanonicalComma
         }
     }
     Some(spelled)
-}
-
-/// A local file path with a `node_modules` component. An option, a remote
-/// URL and the directory itself are not an entrypoint.
-fn installed_entry(entry: &str) -> bool {
-    let entry = entry.replace('\\', "/");
-    !entry.starts_with('-')
-        && !entry.contains("://")
-        && !entry.ends_with('/')
-        && entry.split('/').any(|part| part == "node_modules")
 }
 
 #[cfg(test)]
