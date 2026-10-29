@@ -273,7 +273,12 @@ pub(super) fn settle(
 /// A `doctl` segment that is a cluster listing of named inventory columns and
 /// nothing else: no wrapper, no leading environment assignment and no `PATH`
 /// of its own, since each of those decides which program actually runs.
+///
+/// A trailing `2>&1` only joins the listing's own stderr to its stdout, so the
+/// proof reads the segment without it, the way the exact-safe pass does.
 fn cluster_listing(segment: &crate::CommandSegmentV1) -> bool {
+    let stripped = super::without_stderr_merge(segment);
+    let segment = stripped.as_ref().unwrap_or(segment);
     matches!(segment.executable.as_deref(), Some("doctl" | "doctl.exe"))
         && segment.environment_names.is_empty()
         && !segment.path_overridden
