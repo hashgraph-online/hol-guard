@@ -1779,6 +1779,11 @@
         "git grep -n password -- src",
         "git log --oneline -S api_key -- src",
         "ls -R src | grep -i secret"
+      ],
+      "benign_exit_commands": [
+        "git diff -- src | rg -n password",
+        "git grep -n password -- src",
+        "ls -R src | grep -i secret"
       ]
     },
     {
