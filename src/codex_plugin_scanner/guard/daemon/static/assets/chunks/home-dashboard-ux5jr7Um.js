@@ -1,10 +1,10 @@
 import { j as jsxRuntimeExports, S as SectionLabel, H as HiMiniChevronRight, f as formatRelativeTime, h as harnessDisplayName, a as formatNumber, n as normalizeHarnessSlug, r as reactExports, b as HiMiniChevronUp, c as HiMiniChevronDown, A as ActionButton, d as HiMiniArrowPath, e as HiMiniCheck, g as HiMiniNoSymbol, i as HiMiniHandRaised, k as HiMiniArrowUpTray, l as HiMiniCube, m as HiMiniPencilSquare, o as HiMiniCommandLine, p as HiMiniMagnifyingGlass, q as HiMiniDocumentText, s as HiMiniCheckCircle, T as Tag, t as HiMiniArrowRight, u as isConnectableAppHarness, v as HiMiniLockClosed, w as getHeatmapLevel, E as EvidenceInsightsShareButton, G as GuardStatMetric, x as HomeInsightsMetrics, y as EvidenceActivityHeatmapMini, z as homeCommandActivityModel, B as createCommandActivityClient, C as fetchCommandActivityApi, D as getRecoveryCapabilities, F as resolveRecoveryInstructions, I as HiMiniShieldExclamation, J as HiMiniClipboardDocument, K as openRecoveryView, L as useReceiptAnalytics, M as updateSettings, N as turnProtectionOnUpdate, O as useProtectionPresentationState, P as protectionHealthFor, Q as unavailableProtectionHealth, R as buildHomeRuntimeErrorCopy, U as RuntimeErrorState, V as watchBannerModel, W as WatchProtectionBanner, X as EvidenceInsightsShareModal, Y as OperatorHealthCard, Z as HiMiniShieldCheck, _ as DeviceProofCard, $ as guardActionDisposition, a0 as approvalLeftActionStopped, a1 as guardActionActivityCopy, a2 as HiMiniSparkles, a3 as HiMiniXMark, a4 as EmptyState, a5 as resolveCloudIntelCopy, a6 as HiMiniCloud, a7 as HiMiniQuestionMarkCircle, a8 as useFocusTrap, a9 as approvalProofRequiresPassword, aa as HiMiniExclamationTriangle, ab as HiMiniBolt, ac as Badge, ad as HiMiniMinusCircle } from "../guard-dashboard.js";
 import { ae } from "../guard-dashboard.js";
-import { H as HomeProtectionModule } from "./home-protection-module-DE9huJNv.js";
+import { H as HomeProtectionModule } from "./home-protection-module-5eEYbzcV.js";
 import { B as BrandHero, a as BrandHeroFacts, b as BrandHeroBadge, u as useReducedMotion, c as brandMarkSvg } from "./brand-hero-COty1p6U.js";
 import { A as ABOUT_LOCAL_SECTION_TITLE, a as ABOUT_LOCAL_SECTION_BODY } from "./about-content-Dr9zFg1V.js";
 import { S as SUPPORTED_APPS_FULL } from "./app-catalog-M_B-xLuc.js";
-import "./supply-chain-protection-stats-DTNRjqLm.js";
+import "./supply-chain-protection-stats-CjJITDuI.js";
 function redactQueueArtifactName(value) {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();

@@ -515,6 +515,18 @@ answer to the same question. Python now only probes - it runs the CLI, collects
 the help text each subcommand prints, and sends the text; the resident returns
 the commands it names and their descriptions.
 
+The options a CLI takes are read there too (`local-cli-help-variations-v1`, in
+`local_cli_help_options.rs`): the option rows and usage line of a help that
+names no subcommands, and, for a script whose `--help` names nothing, the
+script's own source. A source is read only from its comments and heredoc text,
+plus the `case` arms, parser calls and `getopts` strings that compare its own
+arguments, so an option the script passes to another program never becomes
+one of its own. Python reads the verified script file, bounded, and sends it
+with `script_source`; it never runs anything to get it. The grant answer
+(`local_cli_grant_op.rs`) then decides a call by the options it passes: a
+blocked option blocks the call, and a call with options and no subcommand is
+allowed only when every option it passes is allowed.
+
 Two consequences are worth naming. Discovery fails closed: a resident that
 cannot answer leaves the CLI with no commands found, and the grant falls back
 to its "other" bucket rather than to a Python parse. And the port keeps a

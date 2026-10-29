@@ -103,16 +103,21 @@ struct Launched<'a> {
 }
 
 impl Launched<'_> {
-    /// `command_tokens_for_invocation` past the package script branch: the
-    /// first segment's arguments after the runner or the script's own path.
-    fn invocation_tokens(&self, home_dir: &str) -> Vec<String> {
-        crate::local_cli_hook_op::invocation_command_tokens(
+    /// `command_tokens_for_invocation` past the package script branch, and
+    /// the arguments it reads them from: the first segment's arguments after
+    /// the runner or the script's own path.
+    fn invocation(&self, home_dir: &str) -> (Vec<String>, Vec<String>) {
+        let arguments = crate::local_cli_hook_op::invocation_command_arguments(
             self.command,
             &self.cwd,
             Some(home_dir),
             &self.launch.name,
             &self.launch.kind,
             self.launch.runner.as_deref(),
+        );
+        (
+            crate::local_cli_hook_op::leading_command_tokens(&arguments),
+            arguments,
         )
     }
 }
@@ -182,20 +187,26 @@ fn grant_answer(
     let launch = &launched.launch;
     let catalog =
         crate::local_cli_grant_op::command_catalog(guard_home, &launch.cli_id).map_err(|_| ())?;
-    let command_id = if catalog.is_empty() {
-        None
+    let (command_id, options) = if catalog.is_empty() {
+        (None, Vec::new())
     } else {
-        let tokens = match launch.tokens.clone() {
-            Some(tokens) => tokens,
-            None => launched.invocation_tokens(home_dir),
-        };
-        block::command_selector(&catalog, &tokens)
+        // A package script's tokens name the script. What the call passes
+        // after them, the manager's own options included, still reads as the
+        // script's options and commands.
+        let (invoked, arguments) = launched.invocation(home_dir);
+        let tokens = launch.tokens.clone().unwrap_or(invoked);
+        let command_id = block::command_selector(&catalog, &tokens);
+        let entries = command_id.as_deref().map_or_else(Vec::new, |id| {
+            crate::local_cli_grant_op::invocation_entries(&arguments, id, &catalog)
+        });
+        (command_id, entries)
     };
     Ok(crate::local_cli_grant_op::decide_launch(
         guard_home,
         current_action,
         &launch.source,
         command_id.as_deref(),
+        &options,
     )
     .ok())
 }

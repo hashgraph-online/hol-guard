@@ -96,6 +96,13 @@ fn decide(request: &LocalCliGrantRequestV1) -> Result<Value, &'static str> {
             return Err("native_local_cli_grant_command_invalid");
         }
     }
+    if request.options.len() > MAX_OPTIONS
+        || request.options.iter().any(|option| {
+            option.is_empty() || option.len() > MAX_COMMAND_ID_BYTES || !option.is_ascii()
+        })
+    {
+        return Err("native_local_cli_grant_command_invalid");
+    }
     let Some(identity) = crate::context_digest_local_cli::local_cli_identity(&request.source)
         .map_err(|_| "native_local_cli_grant_identity_invalid")?
     else {
@@ -129,6 +136,7 @@ fn decide(request: &LocalCliGrantRequestV1) -> Result<Value, &'static str> {
         &identity.identity_hash,
         registry_package,
         request.command_id.as_deref().unwrap_or(OTHER_COMMAND_ID),
+        &request.options,
     )?;
     let capabilities = if state == GrantState::Allowed {
         enabled_capabilities(&connection, &identity.cli_id)?
@@ -144,8 +152,9 @@ pub(crate) fn decide_allowed_launch(
     guard_home: &str,
     source: &LocalCliIdentitySourceV1,
     command_id: Option<&str>,
+    options: &[String],
 ) -> Result<Value, &'static str> {
-    decide_launch(guard_home, "allow", source, command_id)
+    decide_launch(guard_home, "allow", source, command_id, options)
 }
 
 /// `decide_allowed_launch` for the action the daemon holds the request at:
@@ -156,6 +165,7 @@ pub(crate) fn decide_launch(
     current_action: &str,
     source: &LocalCliIdentitySourceV1,
     command_id: Option<&str>,
+    options: &[String],
 ) -> Result<Value, &'static str> {
     decide(&LocalCliGrantRequestV1 {
         schema: LOCAL_CLI_GRANT_REQUEST_SCHEMA.to_owned(),
@@ -165,6 +175,7 @@ pub(crate) fn decide_launch(
         current_action: current_action.to_owned(),
         source: source.clone(),
         command_id: command_id.map(str::to_owned),
+        options: options.to_vec(),
     })
 }
 
@@ -297,6 +308,7 @@ fn grant_decision(
     identity_hash: &str,
     registry_package: bool,
     command_id: &str,
+    options: &[String],
 ) -> Result<GrantState, &'static str> {
     require_supported_schema(connection)?;
     if !table_exists(connection, "local_cli_grant")? {
@@ -325,7 +337,7 @@ fn grant_decision(
         return Ok(GrantState::Blocked);
     }
     let command_state = if catalog_present(connection, cli_id)? {
-        command_state(connection, cli_id, command_id)?
+        invocation_state(connection, cli_id, command_id, options)?
     } else {
         // Nothing to scope: the CLI-level allow covers every invocation.
         CommandState::Allow
@@ -342,6 +354,7 @@ fn grant_decision(
     }
     if command_id != ROOT_COMMAND_ID
         && command_id != OTHER_COMMAND_ID
+        && !options_decide(connection, cli_id, options)?
         && observation_surface(connection, cli_id)? == PACKAGE_SCRIPT_SURFACE
     {
         return Ok(GrantState::Allowed);
@@ -448,6 +461,11 @@ fn observation_surface(connection: &Connection, cli_id: &str) -> Result<String, 
         .map_err(|_| STORE_UNAVAILABLE)?;
     Ok(surface.unwrap_or_else(|| "cli".to_owned()))
 }
+
+#[path = "local_cli_grant_options.rs"]
+mod options;
+pub(crate) use options::invocation_entries;
+use options::{invocation_state, options_decide, MAX_OPTIONS};
 
 #[cfg(test)]
 #[path = "local_cli_grant_op_tests.rs"]

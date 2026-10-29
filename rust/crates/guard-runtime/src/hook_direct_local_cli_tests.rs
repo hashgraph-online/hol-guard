@@ -214,7 +214,8 @@ fn an_invocation_without_package_tokens_reads_the_daemon_shell_model() {
             command,
             cwd: workspace.clone(),
         }
-        .invocation_tokens(&workspace)
+        .invocation(&workspace)
+        .0
     };
     assert_eq!(
         launched("./bin/demo db migrate", "demo", "executable", None),

@@ -8972,6 +8972,11 @@ input:focus-visible, button:focus-visible, a:focus-visible {
   box-shadow: 0 1px 2px #3f41740f;
 }
 
+.guard-extension-mark[data-kind="guard"] {
+  border-color: var(--brand-dark);
+  background: var(--brand-dark);
+}
+
 .guard-extension-mark[data-size="sm"] {
   border-radius: .375rem;
   block-size: 1.25rem;
