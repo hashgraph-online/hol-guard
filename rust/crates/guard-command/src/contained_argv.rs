@@ -560,29 +560,7 @@ pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
             let prefix = crate::parser_wrappers::transparent_prefix(&command, 0);
             Ok(json!(prefix.map(|(index, _)| index)))
         }
-        "node_tool_route" => {
-            let windows = input
-                .get("windows")
-                .and_then(Value::as_bool)
-                .unwrap_or(cfg!(windows));
-            let body = input.get("script_body").cloned().unwrap_or(Value::Null);
-            let script_body = if body.is_null() {
-                None
-            } else {
-                match serde_json::from_value::<Vec<String>>(body) {
-                    Ok(body) => Some(body),
-                    Err(_) => {
-                        return Some(crate::restricted_command::error_reply(
-                            RestrictedPytestError::new(
-                                "pytest_restricted_invalid_command",
-                                "Invalid restricted execution request.",
-                            ),
-                        ))
-                    }
-                }
-            };
-            crate::contained_node_tool::route_reply(&command, script_body.as_deref(), windows)
-        }
+        "node_tool_route" => crate::contained_node_tool::route_request(input, &command),
         "run_prefix_peel" => {
             let (core, seconds) = crate::contained_run_prefix::run_prefix_peel(&command);
             Ok(json!({ "core": core, "seconds": seconds }))

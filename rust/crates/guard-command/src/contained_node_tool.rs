@@ -129,14 +129,14 @@ pub(crate) fn prettier_checks(arguments: &[String]) -> bool {
     })
 }
 
-/// The supported tool a name stands for, the entrypoints it publishes and
-/// the mode it runs in, or `None` when the tool or its mode is not one of the
-/// supported runs.
 /// The admitted tool of this name and the entrypoints it publishes.
 pub(crate) fn tool_entries(name: &str) -> Option<(&'static str, &'static [&'static str])> {
     TOOL_ENTRIES.iter().copied().find(|(tool, _)| *tool == name)
 }
 
+/// The supported tool a name stands for, the entrypoints it publishes and
+/// the mode it runs in, or `None` when the tool or its mode is not one of the
+/// supported runs.
 pub(crate) fn supported_tool(
     name: &str,
     arguments: &[String],
@@ -317,6 +317,32 @@ pub(crate) fn node_tool_route(
         expected_entry = Some(entry);
     }
     gate(&name, arguments, runtime_arguments, expected_entry)
+}
+
+/// The routing request as the caller spells it: the platform the command was
+/// read on and the manifest script body the caller already resolved, both
+/// optional. A body that is present but not a list of words is a malformed
+/// request, not an empty one, so it is refused rather than routed.
+pub(crate) fn route_request(
+    input: &Value,
+    command: &[String],
+) -> Result<Value, RestrictedPytestError> {
+    let windows = input
+        .get("windows")
+        .and_then(Value::as_bool)
+        .unwrap_or(cfg!(windows));
+    let body = input.get("script_body").cloned().unwrap_or(Value::Null);
+    let script_body = if body.is_null() {
+        None
+    } else {
+        Some(serde_json::from_value::<Vec<String>>(body).map_err(|_| {
+            RestrictedPytestError::new(
+                "pytest_restricted_invalid_command",
+                "Invalid restricted execution request.",
+            )
+        })?)
+    };
+    route_reply(command, script_body.as_deref(), windows)
 }
 
 /// The route as the sink reads it: one reading of the spelling, the tool it
