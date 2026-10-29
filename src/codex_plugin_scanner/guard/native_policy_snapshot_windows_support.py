@@ -34,14 +34,17 @@ def _windows_write_chunks_and_flush(kernel32: Any, handle: Any, payload: bytes) 
         ctypes.c_void_p,
     ]
     write_file.restype = wintypes.BOOL
-    buffer = (ctypes.c_ubyte * len(payload)).from_buffer_copy(payload)
+    # Address the immutable payload directly: `c_ubyte * len(payload)` would
+    # mint, and ctypes would keep forever, one array type per payload length.
+    payload = bytes(payload)
+    base_address = ctypes.cast(ctypes.c_char_p(payload), ctypes.c_void_p).value or 0
     written = 0
     while written < len(payload):
         request_size = min(64 * 1024, len(payload) - written)
         count = wintypes.DWORD()
         if not write_file(
             handle,
-            ctypes.byref(buffer, written),
+            ctypes.c_void_p(base_address + written),
             request_size,
             ctypes.byref(count),
             None,

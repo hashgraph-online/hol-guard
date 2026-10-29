@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 import codex_plugin_scanner.guard.native_policy_snapshot as snapshot_module
+from codex_plugin_scanner.guard import native_policy_snapshot_windows_support as windows_support
 
 SOURCE_ROOT = Path(__file__).resolve().parents[1] / "src" / "codex_plugin_scanner"
 DERIVING_CALLS = frozenset({"POINTER", "pointer"})
@@ -82,6 +83,27 @@ def test_repeated_snapshot_opens_reuse_one_ctypes_type(
     assert len(pointer_types) == 1
     if pointer_cache is not None:
         assert len(pointer_cache) == cached_before
+
+
+def test_chunked_private_writes_do_not_mint_an_array_type_per_payload_length() -> None:
+    written = bytearray()
+
+    def write_file(_handle: object, address: object, size: int, count: object, _overlapped: object) -> int:
+        written.extend(ctypes.string_at(address, size))
+        count._obj.value = size  # type: ignore[attr-defined]
+        return 1
+
+    kernel32 = types.SimpleNamespace(WriteFile=write_file, FlushFileBuffers=lambda _handle: 1)
+    payloads = [bytes([index % 251]) * (13_337 + index * 7) for index in range(48)]
+    payloads.append(b"chunked" * 21_429)
+    array_types_before = len(ctypes.Array.__subclasses__())
+
+    for payload in payloads:
+        written.clear()
+        windows_support._windows_write_chunks_and_flush(kernel32, object(), payload)
+        assert bytes(written) == payload
+
+    assert len(ctypes.Array.__subclasses__()) == array_types_before
 
 
 def _decorator_names(function: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
