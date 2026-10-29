@@ -105,3 +105,15 @@ def test_a_workspace_with_no_targets_still_asks_once(tmp_path: Path, monkeypatch
     evaluation, intents = _evaluate(monkeypatch, tmp_path, (), {})
     assert intents == [()]
     assert evaluation["packages"] == []
+
+
+def test_a_target_no_chunk_can_carry_fails_the_audit_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    oversized = PackageIntentTarget(
+        ecosystem="npm",
+        package_name="package-huge",
+        raw_spec="package-huge@" + "1" * audit._TARGET_CHUNK_BYTES,
+        requested_specifier="1.0.0",
+    )
+    targets = (_target(0), oversized, _target(1))
+    with pytest.raises(audit.NativeWorkspaceInventoryError, match="exceeds the request bound"):
+        _evaluate(monkeypatch, tmp_path, targets, {})

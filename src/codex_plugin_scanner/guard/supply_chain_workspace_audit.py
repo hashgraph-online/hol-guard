@@ -361,6 +361,10 @@ def _target_chunks(targets: tuple[PackageIntentTarget, ...]) -> list[tuple[Packa
     used = 0
     for target in targets:
         size = len(json.dumps(asdict(target), default=str, separators=(",", ":")).encode("utf-8"))
+        if size > _TARGET_CHUNK_BYTES:
+            # No chunk can carry it, and sending it alone would outgrow the
+            # resident's reply; the audit fails closed instead.
+            raise NativeWorkspaceInventoryError("Native workspace_inventory target exceeds the request bound")
         if current and used + size > _TARGET_CHUNK_BYTES:
             chunks.append(tuple(current))
             current, used = [], 0
