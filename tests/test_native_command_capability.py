@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +19,17 @@ from codex_plugin_scanner.guard.native_context import _canonical_request_sha256
 _CONTRACT = Path(__file__).resolve().parents[1] / "rust/crates/guard-contracts/src/command_capability.rs"
 
 
+def _declared(source: str, constant: str) -> str | None:
+    """The string a `pub const` declares, however rustfmt wrapped the declaration.
+
+    A long name and value together exceed the line width, so rustfmt puts the
+    value on its own line. Reading one line at a time would make the contract
+    depend on how the declaration happens to be formatted.
+    """
+    match = re.search(rf'pub const {re.escape(constant)}: &str =\s*"([^"]*)";', source)
+    return match.group(1) if match else None
+
+
 def test_rust_schemas_mirror_the_python_client() -> None:
     source = _CONTRACT.read_text(encoding="utf-8")
     for constant, expected in (
@@ -28,7 +40,7 @@ def test_rust_schemas_mirror_the_python_client() -> None:
         ("COMMAND_CAPABILITY_ISSUE_RESULT_SCHEMA", module._ISSUE_RESULT_SCHEMA),
         ("COMMAND_CAPABILITY_ISSUE_FEATURE", module.COMMAND_CAPABILITY_ISSUE_FEATURE),
     ):
-        assert f'pub const {constant}: &str = "{expected}";' in source
+        assert _declared(source, constant) == expected
 
 
 def _capture(monkeypatch: pytest.MonkeyPatch, payload: object) -> dict[str, Any]:
