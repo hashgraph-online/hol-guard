@@ -373,12 +373,19 @@ def _live_hook_recorded_offer(
         or snapshot["correlationId"] != offer.correlation_id
     ):
         return None
+    # Rebuild the deadline exactly as frozen, offset included, so the hash can match.
+    try:
+        wait_deadline = datetime.fromisoformat(cast(str, snapshot["waitDeadline"]))
+    except ValueError:
+        return None
+    if wait_deadline.utcoffset() is None:
+        return None
     frozen = ContinuationOffer(
         correlation_id=offer.correlation_id,
         harness=offer.harness,
         capability="suspended-response",
         original_hook_attached=True,
-        wait_deadline=_parse_aware_timestamp(cast(str, snapshot["waitDeadline"])),
+        wait_deadline=wait_deadline,
     )
     frozen_hash = _offer_hash(frozen)
     if existing.get("continuation_offer_hash") != frozen_hash:

@@ -20,6 +20,9 @@ from codex_plugin_scanner.guard.codex_live_decision import (
     resolve_codex_live_allow_authority,
 )
 from codex_plugin_scanner.guard.codex_live_decision_revalidation import revalidate_codex_live_allow
+from codex_plugin_scanner.guard.continuation_contract import ContinuationOffer
+from codex_plugin_scanner.guard.continuation_payload import offer_hash
+from codex_plugin_scanner.guard.continuation_runtime import _live_hook_recorded_offer
 from codex_plugin_scanner.guard.continuation_snapshot import validated_continuation_snapshot
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.daemon.local_approval_continuation import apply_local_approval_continuation
@@ -473,6 +476,59 @@ def test_a_block_the_waiting_hook_already_completed_is_not_recorded_again_after_
             "select count(*) from guard_events where event_name = 'review.continuation.terminal'"
         ).fetchone()[0]
     assert terminals == 1
+
+
+_FROZEN_CORRELATION = "gcr_00000000-0000-4000-8000-000000000001"
+
+
+def _frozen_block(wait_deadline: str) -> tuple[dict[str, object], dict[str, object], ContinuationOffer]:
+    retry_only = ContinuationOffer(
+        correlation_id=_FROZEN_CORRELATION,
+        harness="codex",
+        capability="retry-only",
+        original_hook_attached=False,
+    )
+    snapshot = {
+        "capability": "suspended-response",
+        "correlationId": _FROZEN_CORRELATION,
+        "hookAttached": True,
+        "opaqueTargetId": None,
+        "waitDeadline": wait_deadline,
+    }
+    resume: dict[str, object] = {
+        "continuation_capability": "suspended-response",
+        "continuation_action": "block",
+        "continuation_status": "blocked_not_resumed",
+    }
+    return {"continuation_snapshot": snapshot}, resume, retry_only
+
+
+def test_a_frozen_deadline_keeps_its_offset_when_the_block_is_replayed(native_context_digest: Path) -> None:
+    deadline = "2026-10-29T03:15:00+02:00"
+    request_row, resume, retry_only = _frozen_block(deadline)
+    recorded = ContinuationOffer(
+        correlation_id=_FROZEN_CORRELATION,
+        harness="codex",
+        capability="suspended-response",
+        original_hook_attached=True,
+        wait_deadline=datetime.fromisoformat(deadline),
+    )
+    resume["continuation_offer_hash"] = offer_hash(recorded)
+
+    replay = _live_hook_recorded_offer(request_row, resume, offer=retry_only, action="block")
+
+    assert replay is not None
+    frozen, frozen_hash = replay
+    assert frozen.capability == "suspended-response"
+    assert frozen_hash == resume["continuation_offer_hash"]
+
+
+@pytest.mark.parametrize("deadline", ["not-a-time", "2026-10-29T03:15:00"])
+def test_a_frozen_deadline_that_cannot_be_read_declines_the_replay(native_context_digest: Path, deadline: str) -> None:
+    request_row, resume, retry_only = _frozen_block(deadline)
+    resume["continuation_offer_hash"] = "sha256:" + "0" * 64
+
+    assert _live_hook_recorded_offer(request_row, resume, offer=retry_only, action="block") is None
 
 
 def test_a_retry_folded_into_the_pending_row_releases_the_retrying_hook(
