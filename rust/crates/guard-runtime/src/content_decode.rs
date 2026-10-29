@@ -133,7 +133,7 @@ fn validated_caps(request: &ContentDecodeRequestV1) -> Option<ContentCodingCaps>
         && caps.max_layers <= CONTENT_CAP_LAYERS
         && caps.max_memory_bytes > 0
         && caps.max_memory_bytes <= CONTENT_CAP_MEMORY_BYTES;
-    valid.then(|| ContentCodingCaps {
+    valid.then_some(ContentCodingCaps {
         max_input_bytes: caps.max_input_bytes,
         max_output_bytes: caps.max_output_bytes,
         max_ratio: caps.max_ratio,
