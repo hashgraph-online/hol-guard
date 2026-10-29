@@ -28,7 +28,27 @@ _RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
 _RESIDENT_PROTOCOL_VERSION = 2
 _REQUEST_SCHEMA = "guard-resident-health-request.v1"
 _RESULT_SCHEMA = "guard-resident-health-result.v1"
+# Python and the native runtime are installed as separate artifacts, and a
+# desktop bundle can carry either one ahead of the other, so this module reads
+# the reply by the fields it needs rather than by an exact field list. A reply
+# that has grown a field stays readable to an older Python, and a runtime that
+# predates a field this one knows about still answers. Every field named below
+# is required and type-checked; every other entry must still be a count.
 _LANE_FIELDS = frozenset({"workers", "queue_capacity"})
+_COUNTER_FIELDS = frozenset(
+    {
+        "served_requests",
+        "service_micros_total",
+        "service_micros_max",
+        "request_bytes_total",
+        "request_bytes_max",
+        "auth_failures",
+        "frame_errors",
+        "deadline_exceeded",
+        "digest_mismatches",
+        "panics",
+    }
+)
 _RESULT_FIELDS = frozenset(
     {
         "schema",
@@ -56,18 +76,29 @@ def _supports_resident_health(status: NativeRuntimeStatus) -> bool:
     return _RESIDENT_PROTOCOL_FEATURE in features and RESIDENT_HEALTH_FEATURE in features
 
 
-def _validated_lane(value: Any) -> dict[str, int] | None:
-    if not isinstance(value, dict) or set(value) != _LANE_FIELDS:
+def _counts(value: Any, required: frozenset[str]) -> dict[str, Any] | None:
+    """``value`` when it is an object whose every entry is a count.
+
+    ``required`` must all be present. Anything else the runtime reports is
+    carried through unchanged, because it is a count too and the caller only
+    prints it.
+    """
+
+    if not isinstance(value, dict) or not set(value) >= required:
         return None
-    if any(not isinstance(value[field], int) or isinstance(value[field], bool) for field in _LANE_FIELDS):
-        return None
-    if any(value[field] < 0 for field in _LANE_FIELDS):
-        return None
-    return {field: value[field] for field in _LANE_FIELDS}
+    for field in value:  # type: ignore[union-attr]
+        count = value[field]
+        if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+            return None
+    return dict(value)  # type: ignore[arg-type]
+
+
+def _validated_lane(value: Any) -> dict[str, Any] | None:
+    return _counts(value, _LANE_FIELDS)
 
 
 def _validated_result(decoded: Any, request: dict[str, str]) -> dict[str, Any] | None:
-    if not isinstance(decoded, dict) or set(decoded) != _RESULT_FIELDS:
+    if not isinstance(decoded, dict) or not set(decoded) >= _RESULT_FIELDS:
         return None
     if decoded["schema"] != _RESULT_SCHEMA or decoded["request_id"] != request["request_id"]:
         return None
@@ -87,10 +118,16 @@ def _validated_result(decoded: Any, request: dict[str, str]) -> dict[str, Any] |
             return None
     if decoded["protocol_version"] != _RESIDENT_PROTOCOL_VERSION:
         return None
-    lanes = {lane: _validated_lane(decoded[lane]) for lane in ("evaluation", "control")}
-    if any(lane is None for lane in lanes.values()):
+    blocks: dict[str, dict[str, Any] | None] = {
+        lane: _validated_lane(decoded[lane]) for lane in ("evaluation", "control")
+    }
+    # A resident built before the aggregate counters existed reports no
+    # `counters` block at all; one that reports it must report all of it.
+    if "counters" in decoded:
+        blocks["counters"] = _counts(decoded["counters"], _COUNTER_FIELDS)
+    if any(block is None for block in blocks.values()):
         return None
-    return {**decoded, **lanes}
+    return {**decoded, **blocks}
 
 
 def native_resident_health(

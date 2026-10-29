@@ -19,6 +19,23 @@ from codex_plugin_scanner.guard.adapters.diagnostic_probes import without_comman
 from codex_plugin_scanner.guard.cli import doctor_native_runtime as doctor
 
 
+def _counters(**overrides: Any) -> dict[str, Any]:
+    counters: dict[str, Any] = {
+        "served_requests": 42,
+        "service_micros_total": 1_000_000,
+        "service_micros_max": 90_000,
+        "request_bytes_total": 8192,
+        "request_bytes_max": 512,
+        "auth_failures": 0,
+        "frame_errors": 1,
+        "deadline_exceeded": 0,
+        "digest_mismatches": 0,
+        "panics": 0,
+    }
+    counters.update(overrides)
+    return counters
+
+
 def _reply(**overrides: Any) -> dict[str, Any]:
     reply: dict[str, Any] = {
         "schema": "guard-resident-health-result.v1",
@@ -30,9 +47,10 @@ def _reply(**overrides: Any) -> dict[str, Any]:
         "build_sha": "unknown",
         "target": "aarch64-macos",
         "uptime_ms": 1234,
-        "evaluation": {"workers": 15, "queue_capacity": 24},
-        "control": {"workers": 1, "queue_capacity": 8},
+        "evaluation": {"workers": 15, "queue_capacity": 24, "queued": 2, "queued_max": 24},
+        "control": {"workers": 1, "queue_capacity": 8, "queued": 0, "queued_max": 3},
         "overloaded_requests": 3,
+        "counters": _counters(),
     }
     reply.update(overrides)
     return reply
@@ -94,8 +112,13 @@ def test_forwards_the_operation_on_the_control_lane_and_returns_the_resident_ans
 
     assert result is not None
     assert result["status"] == "serving"
-    assert result["control"] == {"workers": 1, "queue_capacity": 8}
+    assert result["control"] == {"workers": 1, "queue_capacity": 8, "queued": 0, "queued_max": 3}
     assert result["overloaded_requests"] == 3
+    # A lane that has drained still says how deep it has been, so a caller
+    # reading a quiet resident can tell it from one that was never loaded.
+    assert result["evaluation"]["queued_max"] == 24
+    assert result["counters"]["served_requests"] == 42
+    assert result["counters"]["frame_errors"] == 1
     envelope = resident.envelopes[0]
     assert envelope["operation"] == "resident_health"
     assert envelope["request"]["schema"] == "guard-resident-health-request.v1"
@@ -131,6 +154,13 @@ def test_a_resident_that_does_not_answer_reads_as_unanswered(monkeypatch: pytest
         {"control": {"workers": 1, "queue_capacity": -1, "extra": 0}},
         {"build_sha": ""},
         {"request_sha256": ""},
+        # A counters block that is there must be whole: a missing total would
+        # read as a resident that has never failed that way.
+        {"counters": {name: 0 for name in list(_counters())[:-1]}},
+        {"counters": _counters(panics=-1)},
+        {"counters": _counters(served_requests=True)},
+        {"counters": _counters(service_micros_total="1000")},
+        {"counters": []},
     ],
 )
 def test_a_reply_that_is_not_the_contract_is_refused(
@@ -139,6 +169,45 @@ def test_a_reply_that_is_not_the_contract_is_refused(
     _answering(monkeypatch, _reply(**overrides))
 
     assert transport.native_resident_health(guard_home=tmp_path) is None
+
+
+def test_a_runtime_without_the_counters_still_answers(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Python and the runtime ship as separate artifacts and skew either way.
+
+    A resident built before the aggregate counters existed reports the lanes
+    and nothing else. Refusing that reply would report a serving resident as
+    unreachable, which is the one answer this transport must never invent.
+    """
+    reply = _reply()
+    del reply["counters"]
+    reply["evaluation"] = {"workers": 15, "queue_capacity": 24}
+    _answering(monkeypatch, reply)
+
+    result = transport.native_resident_health(guard_home=tmp_path)
+
+    assert result is not None
+    assert "counters" not in result
+    assert result["evaluation"] == {"workers": 15, "queue_capacity": 24}
+
+
+def test_a_newer_runtime_that_reports_more_is_still_read(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # The other direction of the same skew: a field this Python does not know
+    # about is carried through rather than taken as a malformed reply.
+    _answering(
+        monkeypatch,
+        _reply(
+            restarts=7,
+            counters=_counters(circuit_opened=2),
+            control={"workers": 1, "queue_capacity": 8, "queued": 0, "queued_max": 3, "rejected": 4},
+        ),
+    )
+
+    result = transport.native_resident_health(guard_home=tmp_path)
+
+    assert result is not None
+    assert result["restarts"] == 7
+    assert result["counters"]["circuit_opened"] == 2
+    assert result["control"]["rejected"] == 4
 
 
 def test_a_reply_for_someone_elses_request_is_refused(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

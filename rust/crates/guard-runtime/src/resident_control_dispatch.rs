@@ -2,6 +2,7 @@
 use super::{handle_pending_request, spawn_workers, write_overload, PendingRequest};
 use crate::policy_store::PolicySnapshotStore;
 use crate::resident_diagnostics::{self, Phase, Status};
+use crate::resident_health_counters::QueueLane;
 use serde::Deserialize;
 use std::sync::mpsc::{sync_channel, SyncSender, TrySendError};
 use std::sync::Arc;
@@ -18,6 +19,7 @@ pub(super) fn start(
 ) -> (SyncSender<PendingRequest>, Vec<JoinHandle<()>>) {
     let (sender, receiver) = sync_channel(capacity());
     let workers = spawn_workers(WORKERS, receiver, move |pending| {
+        crate::resident_health_counters::leave_queue(QueueLane::Control);
         handle_pending_request(pending, policy_store.clone(), None);
     });
     (sender, workers)
@@ -47,7 +49,7 @@ pub(super) fn is_request(bytes: &[u8]) -> bool {
 
 pub(super) fn enqueue(sender: &SyncSender<PendingRequest>, pending: PendingRequest) {
     match sender.try_send(pending) {
-        Ok(()) => {}
+        Ok(()) => crate::resident_health_counters::enter_queue(QueueLane::Control),
         Err(TrySendError::Full(mut pending)) => write_overload(&mut pending),
         Err(TrySendError::Disconnected(pending)) => {
             resident_diagnostics::finish_since(

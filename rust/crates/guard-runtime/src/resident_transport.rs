@@ -10,6 +10,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::resident_diagnostics::{self, observe, Phase, Status};
+use crate::resident_health_counters::{self as counters, QueueLane};
 use sha2::{Digest, Sha256};
 #[path = "resident_control_dispatch.rs"]
 mod control;
@@ -134,9 +135,13 @@ fn write_bound_response(
     request_id: &[u8; crate::FRAME_REQUEST_ID_BYTES],
     response: &[u8],
 ) -> Result<(), String> {
-    observe(Phase::ResidentResponseWrite, || {
+    let written = observe(Phase::ResidentResponseWrite, || {
         write_bound_response_inner(stream, request_id, response)
-    })
+    });
+    if written.is_err() {
+        counters::record_frame_error();
+    }
+    written
 }
 
 fn write_bound_response_inner(
@@ -176,6 +181,7 @@ fn write_overload(pending: &mut PendingRequest) {
     crate::resident_health_op::record_overload();
     let response = crate::resident_protocol::error_response("native_overloaded", true);
     let _ = write_bound_response(&mut *pending.stream, &pending.request_id, &response);
+    counters::record_served(pending.accepted_at, pending.length);
 }
 
 /// Continuation I/O can run for the caller's whole minute. Keep it off the
@@ -241,6 +247,7 @@ fn spawn_codex_resume_retry(
                 Ok(Ok(response)) => response,
                 Ok(Err(reason)) => crate::resident_protocol::safe_error_response(&reason, false),
                 Err(_panic) => {
+                    counters::record_panic();
                     crate::resident_protocol::error_response("native_runtime_panicked", false)
                 }
             };
@@ -249,6 +256,7 @@ fn spawn_codex_resume_retry(
             drop(slot);
             let mut pending = pending;
             let _ = write_bound_response(&mut *pending.stream, &pending.request_id, &response);
+            counters::record_served(pending.accepted_at, pending.length);
         })
         .is_err()
     {
@@ -268,9 +276,11 @@ fn handle_pending_request(
         pending.accepted_at,
     );
     if expired {
+        counters::record_deadline_exceeded();
         let response =
             crate::resident_protocol::error_response("native_request_deadline_exceeded", true);
         let _ = write_bound_response(&mut *pending.stream, &pending.request_id, &response);
+        counters::record_served(pending.accepted_at, pending.length);
         return;
     }
     let _ = pending
@@ -294,10 +304,12 @@ fn handle_pending_request(
     })
     .is_err()
     {
+        counters::record_frame_error();
         crate::resident_protocol::error_response("native_frame_read_failed", false)
     } else {
         let digest = Sha256::digest(&request);
         if !constant_time_eq(&digest, &pending.request_digest) {
+            counters::record_digest_mismatch();
             crate::resident_protocol::error_response("native_request_digest_mismatch", false)
         } else if let Some(sender) = control_dispatch.filter(|_| control::is_request(&request)) {
             // A fragmented request is routed only after its complete frame is
@@ -321,6 +333,7 @@ fn handle_pending_request(
                 Ok(Ok(response)) => response,
                 Ok(Err(reason)) => crate::resident_protocol::safe_error_response(&reason, false),
                 Err(_panic) => {
+                    counters::record_panic();
                     crate::resident_protocol::error_response("native_runtime_panicked", false)
                 }
             }
@@ -330,6 +343,7 @@ fn handle_pending_request(
         value.get("operation").and_then(serde_json::Value::as_str) == Some("shutdown")
     });
     let _ = write_bound_response(&mut *pending.stream, &pending.request_id, &response);
+    counters::record_served(pending.accepted_at, pending.length);
     if is_shutdown_request {
         crate::managed_resident::shutdown_response_sent();
     }
@@ -401,7 +415,7 @@ fn dispatch_authenticated(
         return;
     }
     match evaluation_sender.try_send(pending) {
-        Ok(()) => {}
+        Ok(()) => counters::enter_queue(QueueLane::Evaluation),
         // A fully buffered request needs no further reads, so the auth worker
         // evaluates it as it did before the hand-off existed. A fragmented one
         // would hold the auth worker in a payload read, so it is answered with
@@ -450,6 +464,7 @@ pub(crate) fn start_resident_workers(
         crate::evaluation_workers() - control::WORKERS,
         evaluation_receiver,
         move |pending| {
+            counters::leave_queue(QueueLane::Evaluation);
             handle_pending_request(
                 pending,
                 evaluation_policy_store.clone(),
@@ -469,11 +484,15 @@ pub(crate) fn start_resident_workers(
             })
             .is_err()
             {
+                counters::record_auth_failure();
                 return;
             }
             let mut pending = match read_request_header(stream) {
                 Ok(value) => value,
-                Err(_) => return,
+                Err(_) => {
+                    counters::record_frame_error();
+                    return;
+                }
             };
             pending
                 .payload_prefix

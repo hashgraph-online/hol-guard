@@ -45,6 +45,10 @@ fn answers_serving_with_the_lane_shape_the_transport_uses() {
         )
     );
     assert!(result.control.workers >= 1 && result.control.queue_capacity >= 1);
+    // A depth is only readable against the capacity beside it, so both lanes
+    // report theirs, and neither claims to have held more than it ever did.
+    assert!(result.evaluation.queued <= result.evaluation.queued_max);
+    assert!(result.control.queued <= result.control.queued_max);
 }
 
 #[test]
@@ -58,6 +62,21 @@ fn separates_a_loaded_resident_from_a_dead_one() {
     // is process-wide, so another test's refusal may lift it further.
     assert!(after.overloaded_requests > before);
     assert_eq!(after.status, "serving");
+}
+
+#[test]
+fn carries_the_aggregate_counters_a_loaded_resident_is_read_by() {
+    // `serving` alone cannot tell a resident that is answering quickly from
+    // one that is answering every request late, or one that is refusing frames
+    // it cannot read. These counters are that difference.
+    let before = decode(&request("req-counters-before")).counters;
+    crate::resident_health_counters::record_frame_error();
+    let after = decode(&request("req-counters-after")).counters;
+
+    assert!(after.frame_errors > before.frame_errors);
+    // Counters only rise, so the reply a caller reads never shows the resident
+    // having done less work than the one before it did.
+    assert!(after.served_requests >= before.served_requests);
 }
 
 #[test]
@@ -123,6 +142,7 @@ fn says_nothing_about_the_work_the_resident_is_doing() {
         vec![
             "build_sha",
             "control",
+            "counters",
             "evaluation",
             "overloaded_requests",
             "protocol_version",
@@ -143,7 +163,10 @@ fn says_nothing_about_the_work_the_resident_is_doing() {
             .map(String::as_str)
             .collect();
         keys.sort_unstable();
-        assert_eq!(keys, vec!["queue_capacity", "workers"]);
+        assert_eq!(
+            keys,
+            vec!["queue_capacity", "queued", "queued_max", "workers"]
+        );
     }
 }
 

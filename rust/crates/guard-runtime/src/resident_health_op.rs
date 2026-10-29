@@ -9,9 +9,11 @@
 //! it. The answer itself is the liveness proof; the figures in it say how much
 //! room is left.
 //!
-//! The reply carries counts, a duration and the build identifiers the runtime
+//! The reply carries counts, durations and the build identifiers the runtime
 //! already publishes in `capabilities`. It never carries a path, a command, a
-//! request payload or anything about a caller.
+//! request payload or anything about a caller. The aggregate counters beside
+//! the lane shapes come from [`crate::resident_health_counters`], which keeps
+//! a fixed table of totals rather than anything keyed by the work served.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
@@ -22,6 +24,8 @@ use guard_contracts::{
     RESIDENT_HEALTH_MAX_REQUEST_BYTES, RESIDENT_HEALTH_REQUEST_SCHEMA,
     RESIDENT_HEALTH_RESULT_SCHEMA,
 };
+
+use crate::resident_health_counters::{lane_depth, snapshot, QueueLane};
 
 use crate::package_authority_op::request_digest_with_limit;
 
@@ -47,10 +51,13 @@ fn uptime_ms() -> u64 {
     })
 }
 
-fn lane(workers: usize, queue_capacity: usize) -> ResidentLaneV1 {
+fn lane(which: QueueLane, workers: usize, queue_capacity: usize) -> ResidentLaneV1 {
+    let (queued, queued_max) = lane_depth(which);
     ResidentLaneV1 {
         workers: u32::try_from(workers).unwrap_or(u32::MAX),
         queue_capacity: u32::try_from(queue_capacity).unwrap_or(u32::MAX),
+        queued,
+        queued_max,
     }
 }
 
@@ -75,9 +82,10 @@ pub(crate) fn evaluate_resident_health(
         build_sha: crate::BUILD_SHA.to_owned(),
         target: format!("{}-{}", std::env::consts::ARCH, std::env::consts::OS),
         uptime_ms: uptime_ms(),
-        evaluation: lane(evaluation.0, evaluation.1),
-        control: lane(control.0, control.1),
+        evaluation: lane(QueueLane::Evaluation, evaluation.0, evaluation.1),
+        control: lane(QueueLane::Control, control.0, control.1),
         overloaded_requests: OVERLOADED_REQUESTS.load(Ordering::Relaxed),
+        counters: snapshot(),
     })
 }
 
