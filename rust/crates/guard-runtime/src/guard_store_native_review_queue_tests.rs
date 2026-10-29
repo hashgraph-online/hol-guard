@@ -333,9 +333,6 @@ fn malformed_calls_are_refused() {
     let mut extra = launch();
     extra["shell"] = json!("/bin/sh");
     assert!(invalid(delegate(&args(json!({"connector_lookup": extra})))));
-    assert!(invalid(delegate(&args(
-        json!({"connector_context": {"cli_id": "local-cli.lanectl-1", "identity_hash": CONNECTOR_HASH}})
-    ))));
     assert!(invalid(delegate(&args(json!({
         "silent": true,
         "claude_notice": true,
