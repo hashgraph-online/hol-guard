@@ -24,20 +24,20 @@
     "test:service-recovery": "tsx src/service-recovery.test.ts"
   },
   "dependencies": {
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "react-qr-code": "^2.0.16",
-    "react-icons": "^5.6.0"
+    "react-icons": "^5.7.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.50.0",
-    "@tailwindcss/vite": "^4.1.4",
-    "@types/node": "^26.6.1",
-    "@types/react": "^19.2.2",
-    "@types/react-dom": "^19.2.2",
+    "@playwright/test": "^1.64.1",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^5.0.4",
     "tailwindcss": "^4.1.4",
-    "tsx": "^4.8.1",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vite": "^7.3.7"
   }
