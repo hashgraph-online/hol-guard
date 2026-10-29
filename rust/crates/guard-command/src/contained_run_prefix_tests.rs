@@ -206,14 +206,11 @@ fn every_other_bun_command_keeps_its_spelling() {
 }
 
 #[test]
-fn the_entrypoint_behind_a_prefix_is_spelled_the_same_way() {
+fn the_entrypoint_behind_a_clock_is_spelled_the_same_way() {
     assert_eq!(
         peel(&[
             "timeout",
             "30",
-            "nice",
-            "-n",
-            "10",
             "bun",
             "node_modules/vite/bin/vite.js",
             "build"
@@ -226,19 +223,60 @@ fn the_entrypoint_behind_a_prefix_is_spelled_the_same_way() {
 }
 
 #[test]
-fn the_peel_stops_at_the_prefix_it_cannot_read() {
-    // `env REPORT_DIR=/tmp/r` carries a setting no inert filter exports, so
-    // the prefix stays in place and the planners refuse the command.
-    assert_eq!(
-        core(&[
+fn a_launcher_keeps_a_program_this_text_never_names() {
+    // A launcher hands its run to the program behind it, so the peel takes it
+    // off only when that program is one the text names. An installed
+    // entrypoint is the file `bun` opens, and `env REPORT_DIR=/tmp/r` writes a
+    // name no inert filter exports, so in both the launcher stays and the
+    // command keeps the reading it arrived with.
+    for command in [
+        [
+            "nice",
+            "-n",
+            "10",
+            "bun",
+            "node_modules/vite/bin/vite.js",
+            "build",
+        ]
+        .as_slice(),
+        [
             "nice",
             "-n",
             "10",
             "env",
             "REPORT_DIR=/tmp/r",
             "pytest",
-            "-q"
+            "-q",
+        ]
+        .as_slice(),
+    ] {
+        assert_eq!(core(command), words(command), "{command:?}");
+    }
+}
+
+#[test]
+fn a_clock_in_front_of_that_launcher_is_still_read() {
+    assert_eq!(
+        peel(&[
+            "timeout",
+            "30",
+            "nice",
+            "-n",
+            "10",
+            "bun",
+            "node_modules/vite/bin/vite.js",
+            "build"
         ]),
-        words(&["env", "REPORT_DIR=/tmp/r", "pytest", "-q"]),
+        (
+            words(&[
+                "nice",
+                "-n",
+                "10",
+                "bun",
+                "node_modules/vite/bin/vite.js",
+                "build"
+            ]),
+            Some(30)
+        ),
     );
 }
