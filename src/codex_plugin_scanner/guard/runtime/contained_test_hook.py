@@ -407,7 +407,7 @@ def run_authorized_contained_test(
     # failure or a resident too old to know the operation raises here, before
     # any receipt is drawn. Nothing is peeled then, and the command goes on to
     # the guarded planner block, which already answers a native failure the
-    # same way it does for `launcher_program`.
+    # same way it does for `run_prefix_peel`.
     except (ValueError, RestrictedPytestError):
         core, assignments, dropped = [], {}, False
     if assignments or dropped:

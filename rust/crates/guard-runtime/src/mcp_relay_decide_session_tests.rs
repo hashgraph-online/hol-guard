@@ -114,7 +114,7 @@ fn an_asking_session_is_decidable_for_every_relay_harness() {
 }
 
 #[test]
-fn an_asking_session_hands_off_what_the_resident_cannot_queue() {
+fn an_asking_session_the_resident_cannot_queue_is_not_decidable() {
     let home = no_store_home("ask-off");
     // The center the request links and the source its row is written with.
     let mut no_center = asking("enforce");

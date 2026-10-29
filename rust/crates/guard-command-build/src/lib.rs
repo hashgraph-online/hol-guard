@@ -77,6 +77,8 @@ mod command_tokens;
 pub mod contained_argv;
 #[path = "../../guard-command/src/contained_prefix.rs"]
 mod contained_prefix;
+#[path = "../../guard-command/src/contained_run_prefix.rs"]
+mod contained_run_prefix;
 #[cfg(unix)]
 #[path = "../../guard-command/src/contained_runner/mod.rs"]
 pub mod contained_runner;

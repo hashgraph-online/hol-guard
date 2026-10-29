@@ -448,6 +448,10 @@ def test_pull_request_alpha_is_an_admin_dispatch_from_main() -> None:
     assert 'BASE_VERSION="$RESOLVED_ALPHA_BASE_VERSION"' in compute
     assert "Checked-out pull request alpha source does not match expected_sha" in compute
     assert 'RELEASE_PYTHON_ROOT=".trusted-release"' in compute
+    version_check = (
+        'BASE_VERSION=$(uv run --no-sync python "${RELEASE_PYTHON_ROOT}/scripts/sync_repo_version.py" --check)'
+    )
+    assert compute.index('BASE_VERSION="$RESOLVED_ALPHA_BASE_VERSION"') < compute.index(version_check)
     assert 'if [[ -z "${PULL_REQUEST:-}" && "$GITHUB_ACTOR_ID" != "6068672"' in compute
     trusted_scripts = next(
         step for step in jobs["build"]["steps"] if step.get("name") == "Check out trusted release scripts"

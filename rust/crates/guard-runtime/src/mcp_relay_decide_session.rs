@@ -7,18 +7,22 @@
 //! hands such a session to the Python proxy, which decides those calls as it
 //! does without the relay:
 //!
-//! - an unparsable view, an unbound harness or unverified extension layers;
-//! - a blocked-request mode the bound configs do not resolve to one the queue
-//!   route answers natively, or a receipt redaction level the configs do not
-//!   agree on. The route is native under `safe-alternative`, and under `ask`
-//!   (`mcp_relay_decide_ask.rs`), which also needs the approval center and the
-//!   review OAuth source the daemon binds with it;
+//! - unverified extension layers;
 //! - a store holding a policy bundle the resident cannot judge the way the
 //!   daemon would, with a row this harness's lookups reach, remote policy
 //!   rows, or saved rows whose
 //!   integrity state is not the protected one the daemon published. A bundle
 //!   whose rows are all bound to other harnesses hands nothing off: no lookup
 //!   here reads one.
+//!
+//! A blocked-request mode the bound configs do not resolve to one the queue
+//! route answers natively, or a receipt redaction level the configs do not
+//! agree on, keeps the session native (`mcp_relay_lane::hands_off`): the
+//! calls the resident decides without the queue route still run, and each
+//! call it would queue is refused. The route is native under
+//! `safe-alternative`, and under `ask` (`mcp_relay_decide_ask.rs`), which
+//! also needs the approval center and the review OAuth source the daemon
+//! binds with it.
 //!
 //! `mode = "observe"` alone hands nothing off: the resident takes its
 //! observe-forward route and its downgrade of a pending saved approval

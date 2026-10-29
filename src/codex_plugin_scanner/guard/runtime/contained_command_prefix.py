@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import math
 import os
-import re
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 
@@ -93,143 +91,34 @@ def _assignments_applied(assignments: Mapping[str, str]) -> Iterator[None]:
                 os.environ[name] = value
 
 
-# The shell resolves a bare `timeout` on `PATH`, and the two system paths name
-# that same program. `./timeout` or `bin/timeout` is whatever that file holds,
-# so native authority leaves it wrapped and this peel does not read it either.
-_SYSTEM_TIMEOUT = frozenset({"timeout", "/usr/bin/timeout", "/bin/timeout"})
-_CLOCK_UNITS = {"s": 1, "m": 60, "h": 3600, "d": 86400}
+def peel_run_prefixes(command: list[str]) -> tuple[list[str], int | None]:
+    """Ask native authority for the program a contained run stands behind.
 
+    `nice -n 10 timeout 20 pytest -q` runs `pytest -q` for twenty seconds. A
+    system `timeout` bounds how long the work may take and not what it may
+    do, and the launchers the parser reads set scheduling, buffering or the
+    shell's own `exec`, so the program behind them is the program native
+    authority judged. The whole reading — which names launch a program, which
+    durations `timeout` accepts, and the inert prefix split between them —
+    belongs to that authority, which answers it in one call, so the sink
+    neither keeps a second copy of the grammar nor pays a round trip per
+    prefix on the hook's path.
 
-def _clock_seconds(value: str) -> int | None:
-    """Seconds in a duration `timeout` reads, mirroring the native reader.
+    The seconds are returned with the core so the run the clock was peeled
+    from is still bounded. `None` means nothing bounds it.
 
-    A number of seconds, or one carrying an `s`, `m`, `h` or `d` unit, with an
-    optional fraction. Anything else is not a duration, so the word after it is
-    not the program and the command is not peeled. A duration of zero turns
-    `timeout` off, and this answers `0` for it: the prefix is still peeled, and
-    the run it names is left unbounded rather than cut to a second.
+    An unreadable answer peels nothing, so the command reaches the planners
+    as it was written and they refuse what native authority has not read.
     """
-    number = value[:-1] if value[-1:] in _CLOCK_UNITS else value
-    whole, _, fraction = number.partition(".")
-    digits = set("0123456789")
-    if not number or len(number) > 10 or not whole or not set(whole) <= digits:
-        return None
-    if fraction and not set(fraction) <= digits:
-        return None
-    unit = _CLOCK_UNITS.get(value[-1:], 1) if value[-1:] in _CLOCK_UNITS else 1
-    duration = float(number) * unit
-    # Seconds are whole here, so a fractional duration rounds up: cutting
-    # `timeout 2.1` to two would end the run before the clock it was given.
-    # Only an exact zero means no bound at all.
-    return 0 if duration == 0 else math.ceil(duration)
-
-
-def peel_timeout_clock(command: list[str]) -> tuple[list[str], int | None]:
-    """Peel a system `timeout <duration>` prefix and report its seconds.
-
-    The seconds are ``None`` when nothing bounds the run: either no prefix was
-    peeled, or every peeled clock was the zero that turns `timeout` off.
-
-    Native authority reads that clock through to the program it bounds, because
-    it limits how long the work may take and not what it may do. The contained
-    planners are handed the program the text already names, so `timeout 20
-    pytest -q` reaches the same read-only profile as `pytest -q`, and the clock
-    still bounds the run it is peeled from.
-    """
-    seconds: int | None = None
-    for _ in range(4):
-        if len(command) < 3 or command[0] not in _SYSTEM_TIMEOUT:
-            break
-        rest = command[1:]
-        if rest[0] == "--":
-            rest = rest[1:]
-        if len(rest) < 2:
-            break
-        clock = _clock_seconds(rest[0])
-        program = rest[1]
-        if clock is None or not program or program.startswith("-") or _assignment_word(program):
-            break
-        if clock:
-            seconds = clock if seconds is None else min(seconds, clock)
-        command = rest[1:]
-    return command, seconds
-
-
-def _assignment_word(word: str) -> bool:
-    name, separator, _ = word.partition("=")
-    return bool(separator and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name))
-
-
-def _peel_launcher(command: list[str]) -> list[str]:
-    """The program a system launcher runs, as the native parser reads it.
-
-    Native authority owns that grammar — which names are launchers, and where
-    each one's options end — so the sink asks it for the program's position and
-    keeps no list of the names itself. A second copy of that list is what drift
-    looks like: the parser learned to read the shell's `exec` as a launcher
-    while the copy here still held `nice` and `stdbuf`, so `exec pytest -q`
-    reached the planners with `exec` as its program and was refused, though
-    native authority had already read it as the `pytest -q` it runs.
-
-    A launcher stands as a bare name in front of a program, so a command too
-    short to hold both, or one whose first word is spelled as a path, is not
-    one and is not asked about. Every other command is, and the parser answers
-    for the names it reads. A launcher it leaves in place stays in place, and
-    the planners refuse it.
-    """
-    if len(command) < 2 or not command[0] or "/" in command[0] or "\\" in command[0]:
-        return command
     from ..native_restricted_pytest import restricted_native
 
-    index = restricted_native("launcher_program", {"command": command}, (int, type(None)))
-    return command[index:] if type(index) is int and 0 < index < len(command) else command
-
-
-def peel_run_prefixes(command: list[str]) -> tuple[list[str], int | None]:
-    """Peel the prefixes native authority reads through, and the tightest clock.
-
-    A system `timeout`, and every launcher the native parser reads, run the
-    program they name unchanged, so the planners are handed that program, as
-    native authority is. Each peel is followed by the inert `command`/`env`
-    prefix and assignment split the planners already receive. `nice` and
-    `stdbuf` set only scheduling priority and stdio buffering, and the shell's
-    `exec` replaces the shell process rather than forking one; the contained
-    runner applies its own process limits and returns the output when the run
-    ends, so none of them changes what the caller reads.
-    """
-    seconds: int | None = None
-    for _ in range(4):
-        timed, clock = peel_timeout_clock(command)
-        if clock is not None:
-            seconds = clock if seconds is None else min(seconds, clock)
-        peeled = _peel_launcher(timed)
-        if peeled == command:
-            break
-        command, _ = _split_command_prefix(peeled)
-    return bun_package_entry_as_node(command), seconds
-
-
-def bun_package_entry_as_node(command: list[str]) -> list[str]:
-    """`bun <dir>/node_modules/<package>/<entry>` spelled as the run `node` names.
-
-    Bun reads a file operand as the script to run, so an installed package's
-    entrypoint is the program Node starts on the same file. Native authority
-    reads it the same way (`bun_package_entry.rs`), and the planners run it on
-    the project's Node image, as they run `bun x vite build`. An option, a
-    remote URL or any other operand keeps the command as written.
-    """
-    if len(command) < 2:
-        return command
-    name = re.split(r"[\\/]", command[0])[-1]
-    if os.name == "nt" and len(name) > 4 and name[-4:].lower() == ".exe":
-        name = name[:-4]
-    entry = command[1].replace("\\", "/")
+    reply = restricted_native("run_prefix_peel", {"command": command}, (dict,))
+    core = reply.get("core")
+    seconds = reply.get("seconds")
     if (
-        name != "bun"
-        or entry.startswith("-")
-        or "://" in entry
-        or entry.endswith("/")
-        or "node_modules" not in entry.split("/")
+        type(core) is not list
+        or not all(type(word) is str for word in core)
+        or (seconds is not None and type(seconds) is not int)
     ):
-        return command
-    return ["node", *command[1:]]
+        return command, None
+    return core, seconds

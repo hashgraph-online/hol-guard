@@ -693,9 +693,17 @@ jobs:
           RELEASE_PYTHON_ROOT="."
           if [[ -n "${PULL_REQUEST:-}" ]]; then
             # Version selection runs the workflow's scripts, not the pull request's.
+            # That checkout contains scripts only, so the base version is the one
+            # the resolver already checked on main.
             RELEASE_PYTHON_ROOT=".trusted-release"
+            if [[ -z "${RESOLVED_ALPHA_BASE_VERSION:-}" ]]; then
+              echo "Pull request alpha did not resolve the main base version" >&2
+              exit 1
+            fi
+            BASE_VERSION="$RESOLVED_ALPHA_BASE_VERSION"
+          else
+            BASE_VERSION=$(uv run --no-sync python "${RELEASE_PYTHON_ROOT}/scripts/sync_repo_version.py" --check)
           fi
-          BASE_VERSION=$(uv run --no-sync python "${RELEASE_PYTHON_ROOT}/scripts/sync_repo_version.py" --check)
           VERSION="$BASE_VERSION"
           CHANNEL="integration"
           TRAIN=""
