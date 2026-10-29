@@ -86,7 +86,7 @@ def test_native_review_queues_and_reads_its_row_in_one_resident_call(
     assert response["policy_action"] == "review"
     queued = [method for method, return_row in calls if return_row is True]
     assert len(queued) == 1
-    assert queued[0] in {"add_approval_request", "add_claude_approval_request"}
+    assert queued[0] == "queue_native_review"
     assert "get_approval_request" not in [method for method, _ in calls]
     stored = store.get_approval_request(str(response["approval_request_id"]))
     assert stored is not None

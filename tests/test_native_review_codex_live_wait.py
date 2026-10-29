@@ -390,9 +390,9 @@ def test_the_request_its_waiting_operation_and_resume_record_are_one_store_call(
     writes: list[str] = []
 
     def record(method: str, args: dict[str, object]) -> object:
-        if method in {"add_approval_request", "link_codex_live_wait", "upsert_guard_session", "upsert_guard_operation"}:
+        if method in {"queue_native_review", "link_codex_live_wait", "upsert_guard_session", "upsert_guard_operation"}:
             writes.append(method)
-            if method == "add_approval_request":
+            if method == "queue_native_review":
                 # The hook sends the bridge's facts; the resident builds the wait.
                 assert set(cast("dict[str, object]", args["codex_live_wait_facts"])) == {
                     "process",
@@ -407,7 +407,7 @@ def test_the_request_its_waiting_operation_and_resume_record_are_one_store_call(
     assert isinstance(request_id, str)
     # The operation is written before the request in the same transaction,
     # so the request is never approvable without it.
-    assert writes == ["add_approval_request"]
+    assert writes == ["queue_native_review"]
     session = store.get_guard_session(f"codex-hook-{request_id}")
     assert session is not None
     assert (session["harness"], session["status"], session["capabilities"]) == (
@@ -434,7 +434,7 @@ def test_a_wait_that_cannot_be_linked_is_queued_as_a_manual_retry(
     native_store_call = store._native_store_call
 
     def unlinkable(method: str, args: dict[str, object]) -> object:
-        if method == "add_approval_request":
+        if method == "queue_native_review":
             # An older hook's prebuilt wait the resident refuses to link; the
             # queue write still runs.
             args = {key: value for key, value in args.items() if key != "codex_live_wait_facts"}
