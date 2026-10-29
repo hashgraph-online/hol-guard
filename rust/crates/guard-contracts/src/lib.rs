@@ -75,6 +75,8 @@ mod workspace_review_contracts;
 pub use workspace_review_contracts::*;
 mod archive_inspection;
 pub use archive_inspection::*;
+mod content_decode;
+pub use content_decode::*;
 
 mod archive_acquisition;
 pub use archive_acquisition::*;

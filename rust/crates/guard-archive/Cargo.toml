@@ -8,6 +8,8 @@ publish = false
 
 [dependencies]
 guard-secure-fs = { path = "../guard-secure-fs" }
+# Safe-Rust Brotli (forbid(unsafe_code) without its `unsafe`/`ffi-api` features).
+brotli-decompressor = { version = "5.0.3", default-features = false, features = ["std"] }
 caseless = "0.2.2"
 flate2 = { version = "1.1.9", default-features = false, features = ["rust_backend"] }
 hex.workspace = true

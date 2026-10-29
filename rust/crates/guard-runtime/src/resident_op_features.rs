@@ -6,6 +6,7 @@
 pub(crate) const RESIDENT_OP_FEATURES: &[&str] = &[
     guard_contracts::ARCHIVE_INSPECTION_FEATURE,
     guard_contracts::ARCHIVE_ACQUISITION_FEATURE,
+    guard_contracts::MANAGED_CONTENT_FETCH_FEATURE,
     guard_contracts::CONTEXT_DIGEST_FEATURE,
     guard_contracts::NATIVE_BASH_REPLY_VALIDATION_FEATURE,
     guard_contracts::COMMAND_EFFECT_FEATURE,
@@ -202,4 +203,5 @@ pub(crate) const RESIDENT_OP_FEATURES: &[&str] = &[
     guard_contracts::EDGE_CONTAINMENT_REWRITE_FEATURE,
     guard_contracts::EDGE_CURSOR_PROBE_FEATURE,
     guard_contracts::RESIDENT_HEALTH_FEATURE,
+    guard_contracts::CONTENT_DECODE_FEATURE,
 ];

@@ -201,6 +201,7 @@ mod contained_workspace_grant_plan;
 #[cfg(unix)]
 mod contained_workspace_sink;
 mod contained_wrapper_plan_op;
+mod content_decode;
 mod content_sensitivity_op;
 mod context_digest;
 mod context_digest_json;
