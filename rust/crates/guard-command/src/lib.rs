@@ -204,6 +204,8 @@ pub mod protection_health;
 #[cfg(test)]
 mod protection_health_tests;
 pub mod pytest_argv;
+#[cfg(test)]
+mod pytest_argv_tests;
 mod read_only_fanout;
 pub mod reviewed_invocation_bindings;
 pub mod rich_command_model_api;

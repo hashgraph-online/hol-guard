@@ -171,6 +171,7 @@ def test_unavailable_wording_never_leaks_into_independent_rejections() -> None:
         ("python3 scripts/report.py", "contained_run_authorization_failed"),
         ("pytest -q", PYTEST_INVALID_COMMAND_REASON_CODE),
         ("python3 -m pytest -q", PYTEST_INVALID_COMMAND_REASON_CODE),
+        ("python3 -Im pytest -q", PYTEST_INVALID_COMMAND_REASON_CODE),
     ],
 )
 def test_only_a_command_that_never_named_pytest_loses_the_planner_error(
@@ -179,8 +180,11 @@ def test_only_a_command_that_never_named_pytest_loses_the_planner_error(
     """The pytest planner is the last shape tried, and it uses one reason code.
 
     A script that never named pytest must not be told to fix a pytest
-    invocation. A real pytest command, including `python -m pytest`, keeps
-    the planner's own refusal.
+    invocation. A real pytest command keeps the planner's own refusal, and
+    which commands those are is the native argv reader's answer: `python3 -Im
+    pytest -q` is one, though the Python copy this replaced read the `-Im`
+    cluster as something other than a module option and reported the
+    authorization failure in its place.
     """
     scripts = tmp_path / "scripts"
     scripts.mkdir()
@@ -193,18 +197,29 @@ def test_only_a_command_that_never_named_pytest_loses_the_planner_error(
     from codex_plugin_scanner.guard import native_restricted_pytest
     from codex_plugin_scanner.guard.runtime import contained_authority
 
-    monkeypatch.setattr(contained_authority.time, "sleep", lambda _seconds: None)
-    monkeypatch.setattr(
-        native_restricted_pytest,
-        "restricted_native",
-        lambda *_args, **_kwargs: {
+    def native(operation: str, fields: dict[str, object], _expected: object) -> object:
+        # Which commands name pytest is the native argv reader's answer, and the
+        # wording of this refusal is the only thing that turns on it. The whole
+        # grammar lives in `pytest_argv.rs`; the commands named here are a bare
+        # `pytest` or an interpreter whose module option carries `pytest`,
+        # whether that option stands alone or inside a cluster.
+        if operation == "pytest_command":
+            words: list[str] = fields["command"]  # type: ignore[assignment]
+            if words[:1] == ["pytest"]:
+                return True
+            return words[:1] in (["python"], ["python3"]) and any(
+                word.startswith("-") and word.endswith("m") for word in words[1:2]
+            )
+        return {
             "inline_eval": False,
             "node_test": False,
             "vitest": False,
             "git": False,
             "node_tool": False,
-        },
-    )
+        }
+
+    monkeypatch.setattr(contained_authority.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(native_restricted_pytest, "restricted_native", native)
     monkeypatch.setattr(sink, "prepare_restricted_pytest", not_a_pytest)
     with pytest.raises(RestrictedPytestError) as failure:
         _ = sink.run_authorized_contained_test(

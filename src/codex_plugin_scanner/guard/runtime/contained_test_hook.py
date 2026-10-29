@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import re
 import shlex
 import stat
 import sys
@@ -46,8 +45,6 @@ from .restricted_workspace import receipt_matches, run_workspace_contained
 
 _MAX_REQUEST_BYTES = 1_048_576
 _FAILURE = "contained_run_authorization_failed"
-_PYTEST_EXECUTABLE_NAMES = frozenset({"pytest", "py.test", "pytest.exe", "py.test.exe"})
-_PYTHON_EXECUTABLE = re.compile(r"(?i)^(?:python|pythonw)(?:\d+(?:\.\d+)*)?(?:\.exe)?$")
 
 
 def _reject(response: object = None) -> RestrictedPytestError:
@@ -67,42 +64,27 @@ def _reject(response: object = None) -> RestrictedPytestError:
     return RestrictedPytestError(_FAILURE, "Guard could not authorize this contained run.")
 
 
-def _command_names_pytest(command: list[str]) -> bool:
-    """Whether `command` is a pytest executable or a `python -m pytest` form."""
+def _names_pytest(command: list[str] | None) -> bool:
+    """Whether native authority reads `command` as a pytest run.
+
+    Only the wording of a refusal turns on this, and the planners' own reading
+    is what chose that wording, so the question goes back to them rather than to
+    a second copy of their grammar here. The copy that stood here read `python
+    -Im pytest -q` as something other than pytest, because it looked for `-m` as
+    a whole word while the planners read the `m` inside the cluster.
+
+    A command the planners never reached, or an answer native authority cannot
+    give, reports the authorization that failed, exactly as an unrecognized
+    command does.
+    """
     if not command:
         return False
-    name = command[0].replace("\\", "/").rsplit("/", 1)[-1].lower()
-    if name in _PYTEST_EXECUTABLE_NAMES:
-        return True
-    if _PYTHON_EXECUTABLE.fullmatch(name) is None:
+    from ..native_restricted_pytest import restricted_native
+
+    try:
+        return restricted_native("pytest_command", {"command": command}, bool) is True
+    except RestrictedPytestError:
         return False
-    return _python_args_name_pytest(command[1:])
-
-
-def _python_args_name_pytest(args: list[str]) -> bool:
-    """Match the native planner's `python -m pytest` recognition, flags included."""
-    index = 0
-    while index < len(args):
-        item = args[index]
-        if item == "--":
-            return False
-        if item in {"-c", "--command"} or item.startswith("-c") or item.startswith("--command="):
-            return False
-        if item == "-m":
-            module = args[index + 1] if index + 1 < len(args) else ""
-            return module.split(".", 1)[0] == "pytest"
-        if item.startswith("-m") and len(item) > 2:
-            return item[2:].split(".", 1)[0] == "pytest"
-        if item in {"-W", "-X", "--check-hash-based-pycs"}:
-            index += 2
-            continue
-        if item.startswith(("-W", "-X")) or item.startswith("--check-hash-based-pycs="):
-            index += 1
-            continue
-        if not item.startswith("-"):
-            return False
-        index += 1
-    return False
 
 
 def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
@@ -431,7 +413,7 @@ def run_authorized_contained_test(
                 merge_stderr=merge_stderr,
             )
 
-    names_pytest = False
+    planned_command: list[str] | None = None
     try:
         try:
             command, _ = _split_command_prefix(shlex.split(tool_input["command"], posix=True))
@@ -447,7 +429,7 @@ def run_authorized_contained_test(
         package_test = is_package_test(command)
         if package_test:
             command = list(resolve_package_test(command, workspace=workspace, cwd=cwd))
-        names_pytest = _command_names_pytest(command)
+        planned_command = command
         from ..native_restricted_pytest import restricted_native
 
         kinds = restricted_native("contained_kind", {"command": command}, dict)
@@ -495,7 +477,7 @@ def run_authorized_contained_test(
             # in the command, so a command that did not name pytest reports
             # the authorization that failed. A command that did name pytest
             # keeps the planner error, including a refused flag or argument.
-            if error.reason_code == PYTEST_INVALID_COMMAND_REASON_CODE and not names_pytest:
+            if error.reason_code == PYTEST_INVALID_COMMAND_REASON_CODE and not _names_pytest(planned_command):
                 raise _reject(receipt) from error
             raise
         return exit_code

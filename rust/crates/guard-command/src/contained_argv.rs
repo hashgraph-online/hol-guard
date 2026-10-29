@@ -537,6 +537,7 @@ pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
             | "transparent_prefix"
             | "command_prefix_split"
             | "run_prefix_peel"
+            | "pytest_command"
     ) {
         return None;
     }
@@ -566,6 +567,7 @@ pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
             let prefix = crate::parser_wrappers::transparent_prefix(&command, 0);
             Ok(json!(prefix.map(|(index, _)| index)))
         }
+        "pytest_command" => Ok(json!(crate::pytest_argv::command_targets_pytest(&command))),
         "run_prefix_peel" => {
             let (core, seconds) = crate::contained_run_prefix::run_prefix_peel(&command);
             Ok(json!({ "core": core, "seconds": seconds }))
