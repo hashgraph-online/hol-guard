@@ -13,7 +13,8 @@ type LocalCliList = {
 // default wait.
 const SAVE_TIMEOUT_MS = 60_000;
 const repoRoot = resolve(import.meta.dirname, "../../..");
-const python = process.env.DASHBOARD_E2E_PYTHON ?? "python3";
+// The setting may name a command with arguments, such as `uv run --no-sync python`.
+const [python, ...pythonArgs] = (process.env.DASHBOARD_E2E_PYTHON ?? "python3").trim().split(/\s+/);
 
 const seeded = (state: IntegrationState) => state.seeded.custom_cli_options as unknown as SeededScript;
 
@@ -22,7 +23,7 @@ const seeded = (state: IntegrationState) => state.seeded.custom_cli_options as u
 function hook(state: IntegrationState, command: string): Hook {
   const output = execFileSync(
     python,
-    [resolve(repoRoot, "scripts/ci/dashboard_integration_hook.py"), state.guardHome, state.workspace, command],
+    [...pythonArgs, resolve(repoRoot, "scripts/ci/dashboard_integration_hook.py"), state.guardHome, state.workspace, command],
     { cwd: repoRoot, encoding: "utf8", timeout: 45_000 },
   );
   return JSON.parse(output) as Hook;

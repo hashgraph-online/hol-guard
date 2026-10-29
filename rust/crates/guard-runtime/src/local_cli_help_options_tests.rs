@@ -183,6 +183,60 @@ fn a_case_on_the_first_argument_names_subcommands_before_options() {
 }
 
 #[test]
+fn option_arms_count_only_in_a_case_over_the_arguments() {
+    let script = concat!(
+        "case \"$format\" in\n",
+        "  --json) emit_json ;;\n",
+        "esac\n",
+        "for arg in \"$@\"; do\n",
+        "  case \"$arg\" in\n",
+        "    --force) FORCE=1 ;;\n",
+        "  esac\n",
+        "done\n",
+        "key=\"${2:-}\"\n",
+        "case $key in\n",
+        "  --yes|-y) YES=1 ;;\n",
+        "esac\n",
+        "for arg\n",
+        "do\n",
+        "  case \"$arg\" in --all) ALL=1 ;; esac\n",
+        "done\n",
+        "arg=\"$(pwd)\"\n",
+        "case \"$arg\" in\n",
+        "  --cwd) : ;;\n",
+        "esac\n",
+        "command=\"$1\"\n",
+        "case \"$command\" in\n",
+        "  build) build ;;\n",
+        "esac\n",
+    );
+    assert_eq!(
+        ids(script, true),
+        vec!["build", "--force", "--yes", "-y", "--all"]
+    );
+}
+
+#[test]
+fn a_case_on_one_line_names_its_arms() {
+    let script = concat!(
+        "case \"$1\" in --force) F=1 ;; --dry-run) D=1 ;; esac\n",
+        "case \"$fmt\" in --json) J=1 ;; esac\n",
+        "while [ $# -gt 0 ]; do case $1 in -q) Q=1 ;; esac; shift; done\n",
+    );
+    assert_eq!(ids(script, true), vec!["--force", "--dry-run", "-q"]);
+}
+
+#[test]
+fn a_parser_call_inside_a_quoted_string_is_not_read() {
+    let script = concat!(
+        "printf '%s\\n' \"parser.add_argument('--fake')\"\n",
+        "echo 'program.option(\"--also-fake\")'\n",
+        "parser.add_argument(\"--real\", action=\"store_true\")\n",
+    );
+    assert_eq!(ids(script, true), vec!["--real"]);
+}
+
+#[test]
 fn argparse_click_and_commander_calls_name_their_options() {
     let script = concat!(
         "parser.add_argument(\"-r\", \"--repo\", help=\"Repository\")\n",

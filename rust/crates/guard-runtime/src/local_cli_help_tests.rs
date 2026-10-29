@@ -198,9 +198,23 @@ fn a_script_brace_expansion_is_not_a_choice_set() {
 }
 
 #[test]
-fn a_script_comment_commands_section_names_subcommands() {
+fn a_script_comment_commands_section_names_subcommands_beside_its_options() {
     let script = "#!/bin/sh\n# Commands:\n#   build  Build it\n#   ship   Ship it\n#\n# Options:\n#   --force  Skip\n";
-    assert_eq!(ids(script, None, true), vec!["build", "ship"]);
+    assert_eq!(ids(script, None, true), vec!["build", "ship", "--force"]);
+}
+
+#[test]
+fn a_script_whose_comments_name_commands_still_reports_its_code_options() {
+    let script = concat!(
+        "#!/bin/sh\n",
+        "# Commands:\n",
+        "#   build  Build it\n",
+        "case \"$1\" in\n",
+        "  build) build ;;\n",
+        "  --force) FORCE=1 ;;\n",
+        "esac\n",
+    );
+    assert_eq!(ids(script, None, true), vec!["build", "--force"]);
 }
 
 #[test]

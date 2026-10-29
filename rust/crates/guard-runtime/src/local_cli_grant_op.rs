@@ -354,6 +354,7 @@ fn grant_decision(
     }
     if command_id != ROOT_COMMAND_ID
         && command_id != OTHER_COMMAND_ID
+        && !options_decide(connection, cli_id, options)?
         && observation_surface(connection, cli_id)? == PACKAGE_SCRIPT_SURFACE
     {
         return Ok(GrantState::Allowed);
@@ -463,8 +464,8 @@ fn observation_surface(connection: &Connection, cli_id: &str) -> Result<String, 
 
 #[path = "local_cli_grant_options.rs"]
 mod options;
-pub(crate) use options::invocation_options;
-use options::{invocation_state, MAX_OPTIONS};
+pub(crate) use options::invocation_entries;
+use options::{invocation_state, options_decide, MAX_OPTIONS};
 
 #[cfg(test)]
 #[path = "local_cli_grant_op_tests.rs"]

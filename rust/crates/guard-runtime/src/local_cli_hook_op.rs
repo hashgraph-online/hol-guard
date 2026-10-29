@@ -364,19 +364,18 @@ fn grant(request: &LocalCliHookRequestV1, package: &Package) -> contained::Answe
     let (command_id, options) = if catalog.is_empty() {
         (None, Vec::new())
     } else {
-        // A package script's tokens name the script; the script itself takes
-        // no options of its own.
-        let (tokens, options) = match package {
-            Some(found) => (found.command_tokens.clone(), Vec::new()),
-            None => {
-                let arguments = invocation_arguments(request, &launch)?;
-                (
-                    leading_command_tokens(&arguments),
-                    crate::local_cli_grant_op::invocation_options(&arguments),
-                )
-            }
+        // A package script's tokens name the script. What the call passes
+        // after them, the manager's own options included, still reads as the
+        // script's options and commands.
+        let arguments = invocation_arguments(request, &launch)?;
+        let tokens = match package {
+            Some(found) => found.command_tokens.clone(),
+            None => leading_command_tokens(&arguments),
         };
-        (Some(match_command_id(&tokens, &catalog)), options)
+        let command_id = match_command_id(&tokens, &catalog);
+        let entries =
+            crate::local_cli_grant_op::invocation_entries(&arguments, &command_id, &catalog);
+        (Some(command_id), entries)
     };
     let answer = crate::local_cli_grant_op::decide_allowed_launch(
         &request.guard_home,

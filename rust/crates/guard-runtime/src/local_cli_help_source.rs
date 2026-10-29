@@ -3,6 +3,7 @@
 //! against an option, and `getopts` letters. Like the rest of the source read,
 //! nothing here runs the script.
 
+use std::collections::HashMap;
 use std::sync::LazyLock;
 
 use regex::Regex;
@@ -24,13 +25,32 @@ static CASE_WORD_ARM: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(&format!(r"^\(?\s*({arm}(?:\s*\|\s*{arm})*)\s*\)(.*)$")).unwrap()
 });
 
-/// `case "$1" in`, `case $1 in` or `case "${1:-}" in`: the first argument
-/// picks a branch, so its plain-word arms are subcommands.
-static CASE_FIRST_ARGUMENT: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r#"^case\s+"?\$\{?1(?::-[^}]*)?\}?"?\s+in\b"#).unwrap());
+/// `case WORD in`, where a line starts or after `;`, `do`, `then` or `else`,
+/// as in `while [ $# -gt 0 ]; do case "$1" in`.
+static CASE_START: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?:^|;\s*|\b(?:do|then|else)\s+)case\s+(.+?)\s+in(?:\s|$)").unwrap()
+});
 
-static CASE_START: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^case\s+\S+\s+in(?:\s|$)").unwrap());
+/// A positional parameter or a variable, bare or braced: `$1`, `"$@"`,
+/// `${1:-}`, `$arg`.
+static EXPANSION: LazyLock<Regex> = LazyLock::new(|| {
+    let name = r"[1-9@*]|[A-Za-z_][A-Za-z0-9_]*";
+    Regex::new(&format!(
+        r"^\$(?:({name})|\{{({name})(?:[^A-Za-z0-9_}}][^}}]*)?\}})$"
+    ))
+    .unwrap()
+});
+
+/// `arg="$1"` or `local key=$1`: the value a shell variable is given.
+static ASSIGNMENT: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^(?:(?:local|declare|typeset|readonly|export)(?:\s+-[A-Za-z]+)*\s+)?([A-Za-z_][A-Za-z0-9_]*)=(\S*)")
+        .unwrap()
+});
+
+/// `for arg in "$@"; do`, or `for arg; do`, which loops over the arguments.
+static FOR_LOOP: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^for\s+([A-Za-z_][A-Za-z0-9_]*)(?:\s+in\s+(.+?))?\s*(?:;?\s*do\b.*)?$").unwrap()
+});
 
 /// An option a script compares an argument against: `case "--force":` in
 /// JavaScript, `"--force" in sys.argv`, `argv.includes("--force")`, or a shell
@@ -69,35 +89,138 @@ static FLAG_ACTION: LazyLock<Regex> = LazyLock::new(|| {
 static GETOPTS: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"\bgetopts\s+["']?:?([A-Za-z0-9:]+)["']?"#).unwrap());
 
-/// What one line of a script's code adds: `case` arms, parser calls and
-/// `getopts` letters. `rest` starts at this line, for calls that wrap.
-pub(super) fn source_line(
-    line: &str,
-    rest: &[&str],
-    case_depth: &mut Vec<bool>,
-    found: &mut Found,
-) {
-    if CASE_START.is_match(line) {
-        case_depth.push(CASE_FIRST_ARGUMENT.is_match(line));
-        return;
-    }
-    if line == "esac" || line.starts_with("esac ") || line.starts_with("esac;") {
-        case_depth.pop();
-        return;
-    }
-    if !case_depth.is_empty() {
-        if let Some(captures) = CASE_OPTION_ARM.captures(line) {
-            case_option_arm(&captures[1], &captures[2], found);
-            return;
+/// What a `case` switches on, as far as the script's arguments go.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Subject {
+    /// The first argument: its plain-word arms are subcommands, and its
+    /// option arms are options.
+    First,
+    /// Another argument, or each in turn: its option arms are options.
+    Argument,
+    /// A value the script works out itself, such as `$format`: its arms say
+    /// nothing about the arguments.
+    Other,
+}
+
+/// What the shell code read so far says about the line being read: the
+/// `case` statements open around it, and the variables holding an argument.
+#[derive(Default)]
+pub(super) struct ShellState {
+    cases: Vec<Subject>,
+    arguments: HashMap<String, Subject>,
+}
+
+impl ShellState {
+    /// What a `case` word or an assigned value reads: `$1`, `"${1:-}"`, `$@`,
+    /// another positional parameter, or a variable holding one of them.
+    fn subject(&self, word: &str) -> Subject {
+        let word = word.trim().trim_matches(|c: char| c == '"' || c == '\'');
+        let Some(captures) = EXPANSION.captures(word) else {
+            return Subject::Other;
+        };
+        let name = captures
+            .get(1)
+            .or_else(|| captures.get(2))
+            .map_or("", |name| name.as_str());
+        match name.as_bytes().first() {
+            Some(b'1') => Subject::First,
+            Some(b'2'..=b'9' | b'@' | b'*') => Subject::Argument,
+            _ => self.arguments.get(name).copied().unwrap_or(Subject::Other),
         }
-        if case_depth.last() == Some(&true) {
-            if let Some(captures) = CASE_WORD_ARM.captures(line) {
-                case_word_arm(&captures[1], &captures[2], found);
-                return;
+    }
+
+    /// Notes a variable a line sets: one given an argument is remembered, and
+    /// one given anything else is forgotten.
+    fn track(&mut self, line: &str) {
+        let (name, subject) = if let Some(captures) = FOR_LOOP.captures(line) {
+            let subject = match captures.get(2) {
+                None => Subject::Argument,
+                Some(list) if self.subject(list.as_str()) == Subject::Other => Subject::Other,
+                Some(_) => Subject::Argument,
+            };
+            (captures[1].to_owned(), subject)
+        } else if let Some(captures) = ASSIGNMENT.captures(line) {
+            let value = captures[2].trim_end_matches(';');
+            (captures[1].to_owned(), self.subject(value))
+        } else {
+            return;
+        };
+        if subject == Subject::Other {
+            self.arguments.remove(&name);
+        } else {
+            self.arguments.insert(name, subject);
+        }
+    }
+
+    /// Reads the `case` arms and `esac`s in text inside a `case`, split on
+    /// `;;` so a compact `--force) F=1 ;; esac` is read too. Returns whether
+    /// the text held any.
+    fn arms(&mut self, text: &str, found: &mut Found) -> bool {
+        let pieces: Vec<&str> = text
+            .split(";;")
+            .map(|piece| py_strip(piece.trim_start_matches('&')))
+            .collect();
+        let mut read = false;
+        for (index, piece) in pieces.iter().enumerate() {
+            if is_esac(piece) {
+                self.cases.pop();
+                read = true;
+                continue;
+            }
+            let Some(&subject) = self.cases.last() else {
+                continue;
+            };
+            if piece.is_empty() || subject == Subject::Other {
+                continue;
+            }
+            // `build) ... ;; # Build the site` keeps its comment past the `;;`.
+            let comment = pieces
+                .get(index + 1)
+                .filter(|next| next.starts_with('#'))
+                .map_or(String::new(), |next| format!(" {next}"));
+            if let Some(captures) = CASE_OPTION_ARM.captures(piece) {
+                case_option_arm(&captures[1], &format!("{}{comment}", &captures[2]), found);
+                read = true;
+            } else if subject == Subject::First {
+                if let Some(captures) = CASE_WORD_ARM.captures(piece) {
+                    case_word_arm(&captures[1], &format!("{}{comment}", &captures[2]), found);
+                    read = true;
+                }
             }
         }
+        read
     }
-    if let Some(matched) = PARSER_CALL.find(line) {
+}
+
+fn is_esac(text: &str) -> bool {
+    text == "esac" || text.starts_with("esac ") || text.starts_with("esac;")
+}
+
+/// What one line of a script's code adds: `case` arms, parser calls and
+/// `getopts` letters. `rest` starts at this line, for calls that wrap.
+pub(super) fn source_line(line: &str, rest: &[&str], shell: &mut ShellState, found: &mut Found) {
+    shell.track(line);
+    if let Some(start) = CASE_START.captures(line) {
+        let subject = shell.subject(&start[1]);
+        shell.cases.push(subject);
+        let after = start.get(0).map_or(line.len(), |matched| matched.end());
+        shell.arms(&line[after..], found);
+        return;
+    }
+    if shell.cases.is_empty() {
+        if is_esac(line) {
+            return;
+        }
+    } else if shell.arms(line, found) {
+        return;
+    }
+    // A parser call inside a quoted string, as in
+    // `printf '%s\n' "parser.add_argument('--x')"`, is text another command
+    // prints, not a call.
+    let call = PARSER_CALL
+        .find_iter(line)
+        .find(|matched| !inside_quotes(&line[..matched.start()]));
+    if let Some(matched) = call {
         let commander_or_click = matched.as_str().starts_with('.');
         parser_call(
             &call_text(&line[matched.end()..], &rest[1..]),
@@ -113,6 +236,25 @@ pub(super) fn source_line(
     if let Some(captures) = GETOPTS.captures(line) {
         getopts_letters(&captures[1], found);
     }
+}
+
+/// Whether text ending here leaves a quoted string open, so what follows it
+/// on the line is part of that string.
+fn inside_quotes(before: &str) -> bool {
+    let mut open: Option<char> = None;
+    let mut escaped = false;
+    for c in before.chars() {
+        if escaped {
+            escaped = false;
+        } else if c == '\\' {
+            escaped = true;
+        } else if open == Some(c) {
+            open = None;
+        } else if open.is_none() && matches!(c, '"' | '\'' | '`') {
+            open = Some(c);
+        }
+    }
+    open.is_some()
 }
 
 /// `--repo|-r)` with what the arm does: an arm that reads `$2` or shifts

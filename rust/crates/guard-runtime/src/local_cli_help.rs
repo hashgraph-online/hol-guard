@@ -69,9 +69,10 @@ pub(crate) fn evaluate_local_cli_help_parse_request(
     })
 }
 
-/// The subcommands a help text or script source names, or, when it names
-/// none, the options that make its calls different. Options are read only at
-/// the top level: a nested command's help is read for its subcommands alone.
+/// The subcommands a help text names, or, when it names none, the options
+/// that make its calls different; a script source reports both. Options are
+/// read only at the top level: a nested command's help is read for its
+/// subcommands alone.
 fn commands_and_variations(
     text: &str,
     parent_id: Option<&str>,
@@ -81,12 +82,18 @@ fn commands_and_variations(
     if script_source {
         // A script's code is full of `{a,b}` brace expansions that are not
         // choice sets, so only its comment text is read as help, and without
-        // the whole-text choice-set fallback.
-        let commands = parse_help(&options::comment_lines(text), None, invocation, false);
-        if !commands.is_empty() {
-            return commands;
+        // the whole-text choice-set fallback. Its code names options whether
+        // or not its comments name commands, so both are kept.
+        let mut commands = parse_help(&options::comment_lines(text), None, invocation, false);
+        for row in options::variations(text, invocation, true) {
+            if !commands
+                .iter()
+                .any(|known| known.command_id == row.command_id)
+            {
+                commands.push(row);
+            }
         }
-        return options::variations(text, invocation, true);
+        return commands;
     }
     let commands = parse_cli_help_text(text, parent_id, invocation);
     if commands.is_empty() && parent_id.is_none() {

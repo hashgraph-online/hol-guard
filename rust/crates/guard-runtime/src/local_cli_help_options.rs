@@ -21,7 +21,7 @@ use crate::daemon_lifecycle_text::{py_splitlines, py_strip};
 
 #[path = "local_cli_help_source.rs"]
 mod source;
-use source::source_line;
+use source::{source_line, ShellState};
 
 /// Most option variations one read reports. The catalog keeps room for its
 /// root and other rows and for subcommands a source read finds.
@@ -151,16 +151,11 @@ pub(super) fn variations(
         raw.iter().map(|line| Some((*line).to_owned())).collect()
     };
     let mut found = Found::default();
-    let mut case_depth: Vec<bool> = Vec::new();
+    let mut shell = ShellState::default();
     let mut index = 0;
     while index < lines.len() {
         let Some(text_line) = &lines[index] else {
-            source_line(
-                py_strip(raw[index]),
-                &raw[index..],
-                &mut case_depth,
-                &mut found,
-            );
+            source_line(py_strip(raw[index]), &raw[index..], &mut shell, &mut found);
             index += 1;
             continue;
         };
