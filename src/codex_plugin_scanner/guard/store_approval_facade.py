@@ -137,6 +137,8 @@ class StoreApprovalsMixin:
             raise NativeSignalProjectionUnavailableError("native_guard_store_approval_request_invalid")
         if queued.get("event_error") is not None:
             _LOGGER.warning("Silent review inbox row saved without approval.created (%s)", queued["event_error"])
+        if queued.get("connector_context_error") is not None:
+            _LOGGER.warning("Connector setup context not recorded (%s)", queued["connector_context_error"])
         if codex_live_wait is not None and queued.get("live_wait") not in {"seeded", "not_live"}:
             _LOGGER.warning("Codex live wait not resumable for %s (%s)", queued["request_id"], queued.get("live_wait"))
         if "row" not in queued:

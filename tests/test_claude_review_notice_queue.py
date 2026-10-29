@@ -240,3 +240,16 @@ def test_a_review_query_leaves_room_for_the_store_call_around_it(tmp_path: Path)
         home_dir=tmp_path,
     )
     assert len(json.dumps(query).encode("utf-8")) < GUARD_STORE_MAX_REQUEST_BYTES - 32 * 1024
+
+
+def test_a_connector_context_the_store_refused_is_logged(caplog: pytest.LogCaptureFixture) -> None:
+    store = _RowStore(
+        {
+            "request_id": "req-1",
+            "row": {"request_id": "req-1"},
+            "connector_context_error": "native_guard_store_value_error",
+        }
+    )
+    with caplog.at_level(logging.WARNING):
+        assert store.queue_native_review(_QUERY, "now") == {"request_id": "req-1"}
+    assert "Connector setup context not recorded (native_guard_store_value_error)" in caplog.text

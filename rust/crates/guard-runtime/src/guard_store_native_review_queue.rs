@@ -30,7 +30,10 @@
 
 use std::path::Path;
 
-use guard_contracts::{PausedReviewInputsV1, ReviewRequestQueryV1, SilentReviewBlockInputsV1};
+use guard_contracts::{
+    PausedReviewInputsV1, ReviewRequestQueryV1, SilentReviewBlockInputsV1,
+    MAX_NATIVE_RESPONSE_BYTES,
+};
 use rusqlite::Connection;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
@@ -57,6 +60,9 @@ const NOTICE_PAYLOAD_FIELDS: [&str; 4] = ["session_id", "tool_name", "toolName",
 /// What the call keeps after the hint for the queue write and its reply, as
 /// the daemon kept when it asked for the hint itself.
 const WRITE_RESERVE_MS: u64 = 350;
+/// The most a stored-row reply carrying its rendered response may encode to,
+/// leaving room for the resident's reply envelope.
+const REPLY_BUDGET_BYTES: usize = MAX_NATIVE_RESPONSE_BYTES - 128 * 1024;
 
 /// The hint a call asks for: how long the daemon can wait for it, and the
 /// local CLI a connector-setup review waits on.
@@ -239,13 +245,14 @@ impl Delegated {
     /// queue write's own connection. Best effort, as the daemon's separate
     /// call was: the review is queued whether or not this keeps anything. The
     /// row's wording is kept only when it repeats no argument of the command.
-    pub(crate) fn record_connector_context(&self, connection: &Connection, reply: &Value) {
-        let Some(context) = &self.context else {
-            return;
-        };
-        let Some(row) = reply.get("row").and_then(Value::as_object) else {
-            return;
-        };
+    /// A context the store refuses answers its failure code for the daemon's log.
+    pub(crate) fn record_connector_context(
+        &self,
+        connection: &Connection,
+        reply: &Value,
+    ) -> Option<&'static str> {
+        let context = self.context.as_ref()?;
+        let row = reply.get("row").and_then(Value::as_object)?;
         let command = row.get("raw_command_text").and_then(Value::as_str);
         let mut args = context.clone();
         for key in ["trigger_summary", "why_now"] {
@@ -254,20 +261,20 @@ impl Delegated {
                 .and_then(|text| scrub_context_text(text, MAX_SUMMARY_CHARS));
             args.insert(key.to_owned(), json!(kept));
         }
-        let _ = record_context(connection, &Args(&args));
+        record_context(connection, &Args(&args))
+            .err()
+            .map(|error| error.code())
     }
 
     /// `reply` with the hook response rendered from the row it stored, under
-    /// `response`. A reply without its row, or a block the resident cannot
-    /// compose, is answered unchanged and the hook renders separately.
+    /// `response`. A reply without its row, a block the resident cannot
+    /// compose, or a response that would not fit the reply frame is answered
+    /// unchanged and the hook renders separately.
     pub(crate) fn with_response(&self, mut reply: Value, guard_home: &str) -> Value {
         let Some(respond) = &self.respond else {
             return reply;
         };
-        let Some(object) = reply.as_object_mut() else {
-            return reply;
-        };
-        let Some(row) = object.get("row").and_then(Value::as_object) else {
+        let Some(row) = reply.get("row").and_then(Value::as_object) else {
             return reply;
         };
         let text = |key: &str| row.get(key).and_then(Value::as_str).map(str::to_owned);
@@ -312,9 +319,19 @@ impl Delegated {
                 }
             }
         };
-        object.insert("response".to_owned(), Value::Object(response));
+        let response = Value::Object(response);
+        if encoded_len(&response) + encoded_len(&reply) > REPLY_BUDGET_BYTES {
+            return reply;
+        }
+        if let Some(object) = reply.as_object_mut() {
+            object.insert("response".to_owned(), response);
+        }
         reply
     }
+}
+
+fn encoded_len(value: &Value) -> usize {
+    serde_json::to_vec(value).map_or(usize::MAX, |bytes| bytes.len())
 }
 
 /// `text` unless it repeats an argument of `command` (`_without_operands`).
@@ -367,3 +384,7 @@ fn notice_review(
 #[cfg(test)]
 #[path = "guard_store_native_review_queue_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "guard_store_native_review_queue_context_tests.rs"]
+mod context_tests;

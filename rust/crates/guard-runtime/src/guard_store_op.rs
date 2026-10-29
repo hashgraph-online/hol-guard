@@ -246,7 +246,7 @@ fn evaluate_tracked(
         &args,
         owner,
     );
-    let payload = match outcome {
+    let mut payload = match outcome {
         Ok(payload) => payload,
         Err(error) => {
             if kind != Kind::Read {
@@ -258,7 +258,11 @@ fn evaluate_tracked(
     };
     // A connector-setup review's context is kept in the write that stored it.
     if let (Some(delegated), Kind::Write) = (&delegated, kind) {
-        delegated.record_connector_context(&connection, &payload);
+        if let Some(code) = delegated.record_connector_context(&connection, &payload) {
+            if let Some(reply) = payload.as_object_mut() {
+                reply.insert("connector_context_error".to_owned(), Value::from(code));
+            }
+        }
     }
     if kind == Kind::Snapshot {
         connection.execute_batch("ROLLBACK")?;
