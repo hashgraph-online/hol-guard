@@ -53,33 +53,6 @@ pub(super) fn segment_sensitive(
     sensitive_beyond_patterns(&text, rest)
 }
 
-/// [`sensitive_beyond_patterns`] for the whole command, reading `text` and
-/// its pattern-free rest without heredoc data bodies and without the words
-/// that name tracked documents.
-pub(super) fn command_sensitive(model: &CanonicalCommandV1, text: &str, cwd: Option<&str>) -> bool {
-    let rest = command_without_patterns(model)
-        .map(|rest| names::screened(model, rest, names::command_words(model), cwd));
-    sensitive_beyond_patterns(&names::command_screen_text(model, text, cwd), rest)
-}
-
-/// The command's text with each Git search pattern left out, or `None` when
-/// no segment holds one.
-pub(super) fn command_without_patterns(model: &CanonicalCommandV1) -> Option<String> {
-    let mut masked = false;
-    let parts = model
-        .segments
-        .iter()
-        .map(|segment| match segment_without_patterns(segment) {
-            Some(text) => {
-                masked = true;
-                text
-            }
-            None => segment.text.clone(),
-        })
-        .collect::<Vec<_>>();
-    masked.then(|| parts.join(" ; "))
-}
-
 /// One segment's tokens with its Git search patterns left out, or `None`
 /// when it is not a plain `git` search holding a pattern.
 pub(super) fn segment_without_patterns(segment: &CommandSegmentV1) -> Option<String> {

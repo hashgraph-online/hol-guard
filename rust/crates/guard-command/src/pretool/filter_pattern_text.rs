@@ -8,33 +8,7 @@
 //! before it already wrote, so `git diff | rg -n password` discloses less
 //! than the `git diff` the screens already allowed on its own.
 
-use crate::{CanonicalCommandV1, CommandSegmentV1};
-
-/// Whether the command trips the sensitive-text floor once its filter
-/// patterns are left out. `without_patterns` is the command's text with the
-/// arguments of each stdin-only matcher removed; nothing that was masked is
-/// read again, because a pattern selects lines rather than naming a target.
-pub(super) fn sensitive_beyond_filters(without_patterns: &str) -> bool {
-    super::sensitive_command(without_patterns)
-}
-
-/// The command's text with each stdin-only matcher's arguments left out, or
-/// `None` when no segment is one.
-pub(super) fn command_without_patterns(model: &CanonicalCommandV1) -> Option<String> {
-    let mut masked = false;
-    let parts = model
-        .segments
-        .iter()
-        .map(|segment| match segment_without_patterns(segment) {
-            Some(text) => {
-                masked = true;
-                text
-            }
-            None => segment.text.clone(),
-        })
-        .collect::<Vec<_>>();
-    masked.then(|| parts.join(" ; "))
-}
+use crate::CommandSegmentV1;
 
 /// Shell text that makes a word do more than match the lines it is handed: a
 /// redirect opens a file, a glob or a brace expansion splits into further
@@ -66,7 +40,7 @@ pub(super) fn maskable_filter_segment(segment: &CommandSegmentV1) -> bool {
 /// arguments are switches, counts and patterns; the proof refuses a file
 /// operand, a pattern file and a recursive walk, so none of them is a path
 /// the stage opens.
-fn segment_without_patterns(segment: &CommandSegmentV1) -> Option<String> {
+pub(super) fn segment_without_patterns(segment: &CommandSegmentV1) -> Option<String> {
     let executable = segment.executable.as_deref()?;
     if !maskable_filter_segment(segment) {
         return None;

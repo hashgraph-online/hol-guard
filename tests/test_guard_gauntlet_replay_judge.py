@@ -182,6 +182,14 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # command line as the files beside it, so the second one becomes the file the
         # filter opens; a contained run has no home access and reads none of them.
         "neg-grep-credential-bare-wildcard-pattern",
+        # The pattern exemption's own negatives: the producer opens a dotenv
+        # file, dumps the environment, or names one as a pathspec, so the
+        # credential word is never the only signal. A contained run has no home
+        # access and no session environment, so it reads an empty workspace copy
+        # and prints nothing the host keeps.
+        "neg-dotenv-piped-into-credential-grep",
+        "neg-printenv-piped-into-grep",
+        "neg-git-grep-pattern-with-dotenv-path",
         "neg-ls-home-missing-key-in-hidden-directory",
         # A file listing of a home service lane or credential store: a contained run has no
         # home access, so it prints no name the home keeps there.
