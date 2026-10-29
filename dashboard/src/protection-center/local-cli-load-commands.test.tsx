@@ -10,7 +10,7 @@ import {
   PATH_ENTRY_CODES,
   enteredToolPath,
   loadCommandsFailureMessage,
-  loadCommandsNeedsPath,
+  loadsAsScript,
   recordedToolPath,
 } from "./local-cli-load-commands";
 import { DISCOVERY_WAIT_MS, discoveryPollDelay } from "../discovery-job-wait";
@@ -56,38 +56,37 @@ assert.match(synthetic, />Load commands</);
 // The action follows the panel's busy state.
 assert.match(render(raw, true), /<button[^>]*disabled=""/);
 
-// A script loads from the full path the operator enters, on the extension page itself.
+// A script loads from the file Guard saw it run: the daemon finds it, so the
+// page never asks for a path up front.
 for (const scriptLike of [{ ...raw, kind: "script" }, { ...raw, name: "approve-merge.sh" }, { ...raw, name: "release.PY" }]) {
   const script = render(scriptLike);
-  assert.match(script, /Guard does not record where/);
-  assert.match(script, />Full path to /);
-  assert.match(script, /<input[^>]*placeholder="\/path\/to\//);
-  assert.match(script, /only if it is the one Guard recorded/);
+  assert.doesNotMatch(script, /does not record where/);
+  assert.doesNotMatch(script, /Full path to /);
+  assert.doesNotMatch(script, /<input/);
   assert.match(script, /load commands only for scripts you trust/);
-  // With no path entered yet the action stays available: a greyed-out button
-  // with a wait cursor read as Guard still loading. Choosing it asks for the path.
-  assert.doesNotMatch(script, /<button[^>]*disabled=""[^>]*>Load commands</);
   assert.match(script, /<button[^>]*>Load commands</);
+  assert.doesNotMatch(script, /<button[^>]*disabled=""[^>]*>Load commands</);
   assert.doesNotMatch(script, /disabled:cursor-wait/);
   assert.doesNotMatch(script, /Add custom extension/);
 }
-assert.equal(loadCommandsNeedsPath({ kind: "executable", name: "lanectl" }), false);
-assert.equal(loadCommandsNeedsPath({ kind: "executable", name: "pr-approve-merge.sh" }), true);
-assert.equal(loadCommandsNeedsPath({ kind: "executable", name: "-lanectl" }), true);
-assert.equal(loadCommandsNeedsPath({ kind: "script", name: "lanectl" }), true);
+assert.equal(loadsAsScript({ kind: "executable", name: "lanectl" }), false);
+assert.equal(loadsAsScript({ kind: "executable", name: "pr-approve-merge.sh" }), true);
+assert.equal(loadsAsScript({ kind: "executable", name: "-lanectl" }), true);
+assert.equal(loadsAsScript({ kind: "script", name: "lanectl" }), true);
 assert.doesNotMatch(empty, /Full path to/);
 
-// A tool added from its file starts from that file's path; one first seen in
-// an agent's command records only a class such as "user-tool", which names no file.
-const added = render({ ...raw, name: "approve-merge.sh", source_path: "/opt/tools/approve-merge.sh" });
-assert.match(added, /<input[^>]*value="\/opt\/tools\/approve-merge.sh"/);
+// The file the hook recorded is what Guard runs, and the page says so.
+const launched = render({ ...raw, name: "pr-approve-merge.sh", source_path: "/opt/tools/pr-approve-merge.sh" });
+assert.match(launched, /\/opt\/tools\/pr-approve-merge.sh --help/);
+assert.doesNotMatch(launched, /<input/);
 assert.equal(recordedToolPath({ source_path: "/opt/tools/approve-merge.sh" }), "/opt/tools/approve-merge.sh");
 assert.equal(recordedToolPath({ source_path: "~/bin/approve-merge.sh" }), "~/bin/approve-merge.sh");
 assert.equal(recordedToolPath({ source_path: "C:\\tools\\approve-merge.ps1" }), "C:\\tools\\approve-merge.ps1");
+// An older record holds only a class, which names no file.
 for (const recorded of ["user-tool", "approve-merge.sh", "", null]) {
   assert.equal(recordedToolPath({ source_path: recorded }), "", String(recorded));
 }
-assert.match(render({ ...raw, name: "approve-merge.sh", source_path: "user-tool" }), /<input[^>]*value=""/);
+assert.match(render({ ...raw, name: "approve-merge.sh", source_path: "user-tool" }), /approve-merge.sh --help/);
 
 // A path copied from a shell keeps its quotes; Guard sends the path alone.
 assert.equal(enteredToolPath("  '/opt/my tools/approve-merge.sh' "), "/opt/my tools/approve-merge.sh");

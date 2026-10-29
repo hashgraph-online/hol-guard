@@ -24,11 +24,11 @@ const SCRIPT_SUFFIXES = new Set([
 ]);
 
 /**
- * Whether the daemon needs the tool's full path to read its help. It looks
- * up only a program named on PATH by itself; a script, or a file named like
- * one, is never looked up, since Guard records no location for it.
+ * Whether the tool is a script, or a file named like one. Its --help is read
+ * from the file an agent ran, never from a PATH lookup, and a script is more
+ * likely than a program to ignore --help and do its normal work.
  */
-export function loadCommandsNeedsPath(item: Pick<LocalCliItem, "kind" | "name">): boolean {
+export function loadsAsScript(item: Pick<LocalCliItem, "kind" | "name">): boolean {
   const dot = item.name.lastIndexOf(".");
   const suffix = dot > 0 ? item.name.slice(dot).toLowerCase() : "";
   return item.kind !== "executable" || !BARE_PROGRAM_NAME.test(item.name) || SCRIPT_SUFFIXES.has(suffix);
@@ -37,9 +37,9 @@ export function loadCommandsNeedsPath(item: Pick<LocalCliItem, "kind" | "name">)
 const ABSOLUTE_PATH = /^(?:\/|~\/|[A-Za-z]:[\\/])/;
 
 /**
- * The path to start from. A tool added from its file keeps that file's full
- * path; one first seen in an agent's command keeps only a class such as
- * "user-tool", which names no file, so the field starts empty.
+ * The file Guard saw the tool run from. The hook records the file an agent
+ * launched, and a tool added from its file keeps that path. Older records hold
+ * only a class such as "user-tool", which names no file.
  */
 export function recordedToolPath(item: Pick<LocalCliItem, "source_path">): string {
   const recorded = item.source_path ?? "";
@@ -55,9 +55,10 @@ export function enteredToolPath(raw: string): string {
 
 /**
  * Reads a recorded tool's --help on request, so its commands can be set to
- * Allow or Block one by one. A program on PATH is found by name. A script is
- * found by the full path the operator enters here; either way the daemon runs
- * only the file it recorded.
+ * Allow or Block one by one. The daemon finds the file itself: where an agent
+ * ran it, a paused command that names it, or PATH for a program. Only a tool
+ * it has never seen run asks for a path, and either way the daemon runs only
+ * the file it recorded.
  */
 export function LocalCliLoadCommands(props: {
   item: LocalCliItem;
@@ -71,7 +72,9 @@ export function LocalCliLoadCommands(props: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
-  const [askPath, setAskPath] = useState(() => loadCommandsNeedsPath(item));
+  // The path field appears only after the daemon says it could not find the
+  // file; asking up front would make the operator type what Guard already saw.
+  const [askPath, setAskPath] = useState(false);
   const [path, setPath] = useState(() => recordedToolPath(item));
   const [pathMissing, setPathMissing] = useState(false);
   const pathRef = useRef<HTMLInputElement | null>(null);
@@ -87,7 +90,7 @@ export function LocalCliLoadCommands(props: {
     if (askPath && entered === "") {
       setPathMissing(true);
       setLoaded(false);
-      setError(`Enter the full path to ${item.name} first.`);
+      setError(`Enter where ${item.name} is saved to load its commands.`);
       pathRef.current?.focus();
       return;
     }
@@ -107,9 +110,9 @@ export function LocalCliLoadCommands(props: {
       setLoaded(refreshed);
     } catch (caught) {
       if (controller.signal.aborted) return;
-      // Guard's PATH can differ from the agent's, so the name it looks up can
-      // miss the tool or find another program of that name; the full path
-      // still works, and the daemon re-checks the identity before any probe.
+      // The daemon found no file it could verify: the tool was never seen
+      // running, moved, or Guard's PATH finds another program of that name.
+      // A full path still works, and the daemon re-checks the identity first.
       if (caught instanceof LocalCliApiError && PATH_ENTRY_CODES.has(caught.code)) setAskPath(true);
       setError(loadCommandsFailureMessage(caught));
     } finally {
@@ -121,24 +124,16 @@ export function LocalCliLoadCommands(props: {
   // Root and other are Guard's own entries for every tool, not listed commands.
   const listedCount = item.commands.filter((command) => command.command_id !== "root" && command.command_id !== "other").length;
   const hasCommands = listedCount > 0;
+  const script = loadsAsScript(item);
+  const helpTarget = recordedToolPath(item) || item.name;
   return (
     <div className="mt-3 max-w-2xl" aria-busy={busy}>
       <p className="text-sm leading-6 text-brand-dark/75">
-        {askPath ? (
-          <>
-            Guard does not record where {item.name} is saved. Enter its full path, and Guard runs it with{" "}
-            <code className="whitespace-nowrap rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-xs font-semibold text-brand-dark">--help</code>{" "}
-            from an empty temporary folder, then the same for each command it lists. It runs the file only if it is
-            the one Guard recorded. A script that ignores --help may do its normal work instead, so load commands
-            only for scripts you trust.
-          </>
-        ) : (
-          <>
-            Guard runs <code className="whitespace-nowrap rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-xs font-semibold text-brand-dark">{item.name} --help</code> from an empty temporary
-            folder, then the same for each command it lists. A program that ignores --help may do its normal work
-            instead, so load commands only for tools you trust.
-          </>
-        )}{" "}
+        Guard runs <code className="break-all rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-xs font-semibold text-brand-dark">{helpTarget} --help</code>{" "}
+        from an empty temporary folder, then the same for each command it lists.{" "}
+        {script
+          ? "A script that ignores --help may do its normal work instead, so load commands only for scripts you trust."
+          : "A program that ignores --help may do its normal work instead, so load commands only for tools you trust."}{" "}
         Loading adds commands and never changes a choice you already made.
       </p>
       {askPath ? (
@@ -146,6 +141,10 @@ export function LocalCliLoadCommands(props: {
           <label htmlFor={pathId} className="mt-3 block text-sm font-semibold text-brand-dark">
             Full path to {item.name}
           </label>
+          <p className="mt-1 text-sm leading-6 text-brand-dark/75">
+            Guard runs the file only if it is the one Guard recorded. Next time an agent runs {item.name}, Guard keeps
+            its path and this step goes away.
+          </p>
           <input
             id={pathId}
             ref={pathRef}

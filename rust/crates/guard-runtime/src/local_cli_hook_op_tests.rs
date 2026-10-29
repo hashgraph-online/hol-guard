@@ -475,6 +475,28 @@ fn observe_only_records_without_reading_a_grant() {
         .any(|(id, _)| id == "build"));
 }
 
+#[cfg(unix)]
+#[test]
+fn a_launched_script_keeps_the_file_the_agent_ran() {
+    // Load commands reads a script's help at this file, so the operator is
+    // never asked for a path the hook already resolved.
+    use std::os::unix::fs::PermissionsExt;
+    let fixture = Fixture::new("observe-script");
+    let script = std::path::Path::new(&fixture.workspace).join("approve-merge.sh");
+    fs::write(&script, "#!/bin/sh\necho ready\n").unwrap();
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+    let script = fs::canonicalize(&script).unwrap();
+    let mut request = fixture.request(&format!("{} status", script.display()), "allow", false);
+    request
+        .env
+        .insert("PATH".to_owned(), "/usr/bin:/bin".to_owned());
+    assert_eq!(observe_only(&request), Ok(()));
+    let observations = fixture.observations();
+    assert_eq!(observations.len(), 1, "{observations:?}");
+    assert_eq!(observations[0].1, "cli");
+    assert_eq!(observations[0].2, script.to_string_lossy().into_owned());
+}
+
 #[test]
 fn observe_only_refuses_a_store_outside_the_guard_home() {
     let fixture = Fixture::new("observe-only-path");

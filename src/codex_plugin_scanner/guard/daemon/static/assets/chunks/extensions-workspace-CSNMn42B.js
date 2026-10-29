@@ -3423,7 +3423,7 @@ const SCRIPT_SUFFIXES = /* @__PURE__ */ new Set([
   ".sh",
   ".zsh"
 ]);
-function loadCommandsNeedsPath(item) {
+function loadsAsScript(item) {
   const dot = item.name.lastIndexOf(".");
   const suffix = dot > 0 ? item.name.slice(dot).toLowerCase() : "";
   return item.kind !== "executable" || !BARE_PROGRAM_NAME.test(item.name) || SCRIPT_SUFFIXES.has(suffix);
@@ -3445,7 +3445,7 @@ function LocalCliLoadCommands(props) {
   const [busy, setBusy] = reactExports.useState(false);
   const [error, setError] = reactExports.useState(null);
   const [loaded, setLoaded] = reactExports.useState(false);
-  const [askPath, setAskPath] = reactExports.useState(() => loadCommandsNeedsPath(item));
+  const [askPath, setAskPath] = reactExports.useState(false);
   const [path, setPath] = reactExports.useState(() => recordedToolPath(item));
   const [pathMissing, setPathMissing] = reactExports.useState(false);
   const pathRef = reactExports.useRef(null);
@@ -3456,7 +3456,7 @@ function LocalCliLoadCommands(props) {
     if (askPath && entered === "") {
       setPathMissing(true);
       setLoaded(false);
-      setError(`Enter the full path to ${item.name} first.`);
+      setError(`Enter where ${item.name} is saved to load its commands.`);
       pathRef.current?.focus();
       return;
     }
@@ -3483,24 +3483,19 @@ function LocalCliLoadCommands(props) {
   }, [askPath, item.cli_id, item.name, onLoaded, path]);
   const listedCount = item.commands.filter((command) => command.command_id !== "root" && command.command_id !== "other").length;
   const hasCommands = listedCount > 0;
+  const script = loadsAsScript(item);
+  const helpTarget = recordedToolPath(item) || item.name;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 max-w-2xl", "aria-busy": busy, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm leading-6 text-brand-dark/75", children: [
-      askPath ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-        "Guard does not record where ",
-        item.name,
-        " is saved. Enter its full path, and Guard runs it with",
-        " ",
-        /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "whitespace-nowrap rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-xs font-semibold text-brand-dark", children: "--help" }),
-        " ",
-        "from an empty temporary folder, then the same for each command it lists. It runs the file only if it is the one Guard recorded. A script that ignores --help may do its normal work instead, so load commands only for scripts you trust."
-      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-        "Guard runs ",
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("code", { className: "whitespace-nowrap rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-xs font-semibold text-brand-dark", children: [
-          item.name,
-          " --help"
-        ] }),
-        " from an empty temporary folder, then the same for each command it lists. A program that ignores --help may do its normal work instead, so load commands only for tools you trust."
+      "Guard runs ",
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("code", { className: "break-all rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-xs font-semibold text-brand-dark", children: [
+        helpTarget,
+        " --help"
       ] }),
+      " ",
+      "from an empty temporary folder, then the same for each command it lists.",
+      " ",
+      script ? "A script that ignores --help may do its normal work instead, so load commands only for scripts you trust." : "A program that ignores --help may do its normal work instead, so load commands only for tools you trust.",
       " ",
       "Loading adds commands and never changes a choice you already made."
     ] }),
@@ -3508,6 +3503,11 @@ function LocalCliLoadCommands(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { htmlFor: pathId, className: "mt-3 block text-sm font-semibold text-brand-dark", children: [
         "Full path to ",
         item.name
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-sm leading-6 text-brand-dark/75", children: [
+        "Guard runs the file only if it is the one Guard recorded. Next time an agent runs ",
+        item.name,
+        ", Guard keeps its path and this step goes away."
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(
         "input",

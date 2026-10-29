@@ -62,9 +62,11 @@ def probes(monkeypatch: pytest.MonkeyPatch) -> Probes:
     return recorded
 
 
-def _service(tmp_path: Path, identity: UnlistedCliIdentity) -> tuple[GuardStore, LocalCliApiService]:
+def _service(
+    tmp_path: Path, identity: UnlistedCliIdentity, *, source_path: str = "user-tool"
+) -> tuple[GuardStore, LocalCliApiService]:
     store = GuardStore(tmp_path / "guard")
-    store.record_local_cli_observation(identity, seen_at=SEEN_AT, source_path="user-tool", surface="cli")
+    store.record_local_cli_observation(identity, seen_at=SEEN_AT, source_path=source_path, surface="cli")
     return store, LocalCliApiService(store=store)
 
 
@@ -307,15 +309,64 @@ def test_a_script_loads_its_commands_from_the_full_path_the_operator_gives(tmp_p
         with pytest.raises(LocalCliApiError) as raised:
             service.refresh_job({"cli_id": identity.cli_id, "confirm_process_start": True})
         assert (raised.value.status, raised.value.code) == (400, "cli_reload_needs_path")
-        assert "Enter its full path" in str(raised.value)
+        assert "enter its full path now" in str(raised.value)
         job = service.refresh_job({"cli_id": identity.cli_id, "confirm_process_start": True, "path": str(program)})
         assert _finished(service, job)["state"] == "complete"
     finally:
         assert service.close_discovery()
     assert probes.calls == [str(program)]
     assert "deploy" in {command.command_id for command in store.read_local_cli_command_catalog(identity.cli_id)}
-    # The path is used for this load only; Guard still records no location.
-    assert _item(store, identity.cli_id)["source_path"] == "user-tool"
+    # The file whose help was read is kept, so the next load asks for nothing.
+    assert _item(store, identity.cli_id)["source_path"] == str(program)
+
+
+def test_a_script_an_agent_launched_loads_from_the_file_the_hook_recorded(tmp_path, script, probes):
+    identity, program = script
+    store, service = _service(tmp_path, identity, source_path=str(program))
+    try:
+        job = service.refresh_job({"cli_id": identity.cli_id, "confirm_process_start": True})
+        assert _finished(service, job)["state"] == "complete"
+    finally:
+        assert service.close_discovery()
+    assert probes.calls == [str(program)]
+    assert "deploy" in {command.command_id for command in store.read_local_cli_command_catalog(identity.cli_id)}
+
+
+def test_a_script_listed_from_a_paused_command_loads_from_the_file_it_named(tmp_path, script, probes, monkeypatch):
+    # Listed before the hook kept the launched file: only a path class is stored,
+    # but the command Guard paused still names the script.
+    identity, program = script
+    store, service = _service(tmp_path, identity)
+    home = Path(os.environ["HOME"])
+    paused = [
+        {"raw_command_text": "git status", "workspace": str(home)},
+        {"raw_command_text": f"{program} status", "workspace": str(home)},
+    ]
+    monkeypatch.setattr(store, "list_approval_requests", lambda *, status, limit: paused[:limit])
+    try:
+        job = service.refresh_job({"cli_id": identity.cli_id, "confirm_process_start": True})
+        assert _finished(service, job)["state"] == "complete"
+    finally:
+        assert service.close_discovery()
+    assert probes.calls == [str(program)]
+    assert _item(store, identity.cli_id)["source_path"] == str(program)
+
+
+def test_a_recorded_script_that_changed_or_moved_is_not_run(tmp_path, script, probes):
+    identity, program = script
+    _, service = _service(tmp_path, identity, source_path=str(program))
+    try:
+        program.write_text("#!/usr/bin/env bash\necho edited\n", encoding="utf-8")
+        with pytest.raises(LocalCliApiError) as raised:
+            service.refresh_job({"cli_id": identity.cli_id, "confirm_process_start": True})
+        assert (raised.value.status, raised.value.code) == (409, "cli_identity_changed")
+        program.unlink()
+        with pytest.raises(LocalCliApiError) as raised:
+            service.refresh_job({"cli_id": identity.cli_id, "confirm_process_start": True})
+        assert (raised.value.status, raised.value.code) == (400, "cli_reload_needs_path")
+    finally:
+        assert service.close_discovery()
+    assert probes.calls == []
 
 
 def test_a_home_relative_script_path_is_expanded_before_it_is_quoted(tmp_path, script, probes):

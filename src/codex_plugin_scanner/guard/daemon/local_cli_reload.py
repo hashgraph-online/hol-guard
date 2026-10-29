@@ -6,10 +6,10 @@ allow or block. This module reads that help on the operator's request, with
 the same probe the Add custom extension flow uses, under tighter conditions:
 
 * a program is found on ``PATH`` by its bare name. A script, or a file named
-  like one (``deploy.sh``), is never looked up on its own: Guard records no
-  path for it, and a script is the likeliest thing to ignore ``--help`` and do
-  its real work. The operator gives its full path instead, as Add custom
-  extension asks;
+  like one (``deploy.sh``), is never looked up by name: it is read at the file
+  an agent launched, which the hook records, or at the file a paused command
+  of Guard's still names. Only a tool Guard never saw launched asks the
+  operator for its full path, as Add custom extension does;
 * either way, only when the file found today is the same one Guard recorded:
   the same id and identity hash. A replaced or edited file is not probed;
 * new commands are merged onto the stored ones, so a probe can never remove a
@@ -25,7 +25,7 @@ from __future__ import annotations
 import re
 import shlex
 import threading
-from collections.abc import Mapping
+from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple, Protocol
 
@@ -76,10 +76,11 @@ _SCRIPT_SUFFIXES = frozenset(
 
 
 class ReloadTarget(NamedTuple):
-    """A recorded tool and the command Guard reads its --help through."""
+    """A recorded tool, the command Guard reads its --help through, and the file it runs."""
 
     identity: UnlistedCliIdentity
     command: str
+    path: str | None = None
 
 
 _MAX_PATH_LENGTH = 4096
@@ -90,9 +91,13 @@ def verified_cli_for_reload(
     *,
     home_dir: Path,
     path: object = None,
+    launched_paths: Callable[[], Iterable[str]] = tuple,
 ) -> ReloadTarget:
-    """Return the stored tool's identity, re-derived from ``PATH`` or ``path``, or refuse.
+    """Return the stored tool's identity, re-derived from where it runs, or refuse.
 
+    ``path`` is the operator's. Without it Guard tries the file it recorded an
+    agent launching, then ``launched_paths`` (files its paused commands name,
+    read only when needed), and finds a plain program by name on ``PATH``.
     No process starts here. Refusals carry a message the dashboard shows as is.
     """
 
@@ -106,11 +111,62 @@ def verified_cli_for_reload(
         or _BARE_PROGRAM_NAME.fullmatch(name) is None
         or Path(name).suffix.lower() in _SCRIPT_SUFFIXES
     ):
-        raise LocalCliApiError(
-            400,
-            "cli_reload_needs_path",
-            f"Guard does not record where {label} is saved. Enter its full path to load its commands.",
-        )
+        launched = _verified_at_launch(item, label, launched_paths, home_dir=home_dir)
+        if launched is None:
+            raise LocalCliApiError(
+                400,
+                "cli_reload_needs_path",
+                f"Guard has not seen where {label} is saved yet. It learns the path the next time an agent "
+                "runs it, or enter its full path now.",
+            )
+        return launched
+    try:
+        return _verified_on_path(item, name, label, home_dir=home_dir)
+    except LocalCliApiError:
+        launched = _verified_at_launch(item, label, launched_paths, home_dir=home_dir)
+        if launched is None:
+            raise
+        return launched
+
+
+def _verified_at_launch(
+    item: Mapping[str, object],
+    label: str,
+    launched_paths: Callable[[], Iterable[str]],
+    *,
+    home_dir: Path,
+) -> ReloadTarget | None:
+    """The first file Guard saw launched that is still the recorded tool, or ``None``.
+
+    A file that is there but changed refuses, so the operator learns why
+    instead of being asked for a path Guard already knows.
+    """
+
+    changed: LocalCliApiError | None = None
+    for candidate in _launch_candidates(item, launched_paths):
+        try:
+            return _verified_at_path(item, label, candidate, home_dir=home_dir)
+        except LocalCliApiError as refused:
+            if refused.code == "cli_identity_changed" and changed is None:
+                changed = refused
+    if changed is not None:
+        raise changed
+    return None
+
+
+def _launch_candidates(item: Mapping[str, object], launched_paths: Callable[[], Iterable[str]]) -> Iterable[str]:
+    recorded = item.get("source_path")
+    tried: set[str] = set()
+    if isinstance(recorded, str) and Path(recorded).is_absolute():
+        tried.add(recorded)
+        yield recorded
+    for candidate in launched_paths():
+        if candidate not in tried:
+            tried.add(candidate)
+            yield candidate
+
+
+def _verified_on_path(item: Mapping[str, object], name: str, label: str, *, home_dir: Path) -> ReloadTarget:
     identity, _, _ = recognize_operator_cli(name, cwd=home_dir, home_dir=home_dir)
     if identity is None:
         # Guard's PATH can differ from the agent shell's, so a missing tool is
@@ -157,7 +213,7 @@ def _verified_at_path(item: Mapping[str, object], label: str, path: object, *, h
             f"Guard cannot find a program it can run at {location}. Check the path and try again.",
         )
     _require_recorded(item, identity, label, found_on="at this path")
-    return ReloadTarget(identity, command)
+    return ReloadTarget(identity, command, resolved)
 
 
 def _require_recorded(item: Mapping[str, object], identity: UnlistedCliIdentity, label: str, *, found_on: str) -> None:
@@ -214,7 +270,8 @@ def load_cli_commands(
     store.record_local_cli_observation(
         identity,
         seen_at=utc_now(),
-        # The stored location class stays; a resolved path is not recorded.
+        # The file whose help was read, so the next load needs no path either.
+        source_path=target.path,
         help_status=help_status,
         surface="cli",
     )
