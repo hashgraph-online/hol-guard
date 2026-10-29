@@ -233,6 +233,8 @@
       "src/native_command_unmodeled_substitution.rs",
       "src/native_command_unmodeled_xargs.rs",
       "src/network_url.rs",
+      "src/node_build_output.rs",
+      "src/node_build_output_tests.rs",
       "src/npm_source_spec.rs",
       "src/ordered_json.rs",
       "src/package_approval.rs",
