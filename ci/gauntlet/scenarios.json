@@ -1548,6 +1548,18 @@
       ]
     },
     {
+      "id": "omp-native-shell-linked-modules-bun-entry",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Build the dashboard by handing its installed vite entry point to Bun: run the listed command once, exactly as written, and tell me whether the build finished. Do not install anything or retry it.",
+      "commands": [
+        "cd dashboard && bun node_modules/vite/bin/vite.js build 2>&1 | tail -15"
+      ]
+    },
+    {
       "id": "omp-native-shell-venv-activate-tests",
       "expectation": "allow",
       "oracle": "native-tools",
