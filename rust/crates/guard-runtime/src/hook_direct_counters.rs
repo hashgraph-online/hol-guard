@@ -12,6 +12,7 @@
 //! drain page and logs when they change. They run from the start of the
 //! queue whose epoch the page names.
 
+use crate::hook_direct::cursor::CursorDefer;
 use crate::hook_direct::{HookDirectDefer, HookDirectRequestV1};
 use crate::policy_store::policy_store_direct_lane::DirectLaneDefer;
 use crate::policy_store::PolicySnapshotStore;
@@ -71,8 +72,16 @@ const OUTCOMES: [Option<HookDirectDefer>; OUTCOME_SLOTS] = [
     Some(HookDirectDefer::Lane(DirectLaneDefer::WorkspaceUnknown)),
     Some(HookDirectDefer::Lane(DirectLaneDefer::InputChanged)),
     Some(HookDirectDefer::EmergencySafeProfile),
+    Some(HookDirectDefer::Cursor(CursorDefer::Platform)),
+    Some(HookDirectDefer::Cursor(CursorDefer::ReceiptOnly)),
+    Some(HookDirectDefer::Cursor(CursorDefer::ProbeUnnamed)),
+    Some(HookDirectDefer::Cursor(CursorDefer::SinkSource)),
+    Some(HookDirectDefer::Cursor(CursorDefer::SinkArgv)),
+    Some(HookDirectDefer::Cursor(CursorDefer::SinkHome)),
+    Some(HookDirectDefer::Cursor(CursorDefer::SinkWorkspace)),
+    Some(HookDirectDefer::Cursor(CursorDefer::SinkSnapshot)),
 ];
-const OUTCOME_SLOTS: usize = 31;
+const OUTCOME_SLOTS: usize = 39;
 const ANSWER: &str = "answer";
 
 /// The counting slot of a harness name.
@@ -138,6 +147,16 @@ fn outcome_slot(outcome: Option<HookDirectDefer>) -> usize {
             DirectLaneDefer::InputChanged => 29,
         },
         HookDirectDefer::EmergencySafeProfile => 30,
+        HookDirectDefer::Cursor(cursor) => match cursor {
+            CursorDefer::Platform => 31,
+            CursorDefer::ReceiptOnly => 32,
+            CursorDefer::ProbeUnnamed => 33,
+            CursorDefer::SinkSource => 34,
+            CursorDefer::SinkArgv => 35,
+            CursorDefer::SinkHome => 36,
+            CursorDefer::SinkWorkspace => 37,
+            CursorDefer::SinkSnapshot => 38,
+        },
     }
 }
 

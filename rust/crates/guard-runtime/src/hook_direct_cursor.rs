@@ -59,6 +59,46 @@ pub(super) enum Route {
     Sink,
 }
 
+/// Why the resident hands a Cursor route probe or sink command to the
+/// daemon. Each reason counts under its own code, so the diagnostics show
+/// which check a deferred probe or sink failed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CursorDefer {
+    /// Windows, where the daemon reviews every probe and sink.
+    Platform,
+    /// A call that carries `guard_containment_receipt_only`.
+    ReceiptOnly,
+    /// A `Shell` call Guard's hook did not name as its route probe.
+    ProbeUnnamed,
+    /// A command naming the sink outside `beforeShellExecution`.
+    SinkSource,
+    /// A sink command that is not the argv a probe writes for this Guard
+    /// home, or whose digest is not one.
+    SinkArgv,
+    /// A sink command naming another home than the hook's.
+    SinkHome,
+    /// A sink command naming another workspace than the hook's.
+    SinkWorkspace,
+    /// A sink command whose request is not a snapshot under the temporary
+    /// directory.
+    SinkSnapshot,
+}
+
+impl CursorDefer {
+    pub(crate) fn code(self) -> &'static str {
+        match self {
+            Self::Platform => "direct_hook_cursor_platform",
+            Self::ReceiptOnly => "direct_hook_cursor_receipt_only",
+            Self::ProbeUnnamed => "direct_hook_cursor_probe_unnamed",
+            Self::SinkSource => "direct_hook_cursor_sink_source",
+            Self::SinkArgv => "direct_hook_cursor_sink_argv",
+            Self::SinkHome => "direct_hook_cursor_sink_home",
+            Self::SinkWorkspace => "direct_hook_cursor_sink_workspace",
+            Self::SinkSnapshot => "direct_hook_cursor_sink_snapshot",
+        }
+    }
+}
+
 /// Where the probe's sink command runs, as the binding names it.
 pub(super) struct Scope {
     workspace: String,
@@ -99,16 +139,21 @@ pub(super) fn route(payload: &Map<String, Value>) -> Result<Route, HookDirectDef
     let receipt_only = payload
         .get(RECEIPT_ONLY_FIELD)
         .is_some_and(|value| !value.is_null());
-    let route = if cfg!(windows) || receipt_only {
-        None
+    let route = if cfg!(windows) {
+        Err(CursorDefer::Platform)
+    } else if receipt_only {
+        Err(CursorDefer::ReceiptOnly)
     } else if probe {
         (text("hook_event_name") == Some(PRE_TOOL_USE)
             && payload.get(PROBE_FIELD) == Some(&Value::Bool(true)))
         .then_some(Route::Probe)
+        .ok_or(CursorDefer::ProbeUnnamed)
     } else {
-        (text(SOURCE_HOOK_FIELD) == Some(BEFORE_SHELL)).then_some(Route::Sink)
+        (text(SOURCE_HOOK_FIELD) == Some(BEFORE_SHELL))
+            .then_some(Route::Sink)
+            .ok_or(CursorDefer::SinkSource)
     };
-    route.ok_or(HookDirectDefer::PayloadUnsupported)
+    route.map_err(HookDirectDefer::Cursor)
 }
 
 /// The probe's plain allow when the sink cannot take the call, before the
@@ -193,9 +238,7 @@ pub(super) fn admit_sink(
     payload: &Map<String, Value>,
     scope: &Scope,
 ) -> Result<Value, HookDirectDefer> {
-    if !admitted(payload, scope) {
-        return Err(HookDirectDefer::PayloadUnsupported);
-    }
+    admitted(payload, scope).map_err(HookDirectDefer::Cursor)?;
     Ok(json!({
         "harness_response": { "policy_action": "allow", "reason_code": ROUTED_REASON },
     }))
@@ -331,11 +374,11 @@ fn same_directory(value: &str, scope: &Scope) -> bool {
     }
 }
 
-fn admitted(payload: &Map<String, Value>, scope: &Scope) -> bool {
+fn admitted(payload: &Map<String, Value>, scope: &Scope) -> Result<(), CursorDefer> {
     let Some(argv) =
         command(payload).and_then(|text| crate::mcp_proxy_shlex::split_with(text, "", ""))
     else {
-        return false;
+        return Err(CursorDefer::SinkArgv);
     };
     let head: Vec<&str> = scope
         .sink_command
@@ -350,7 +393,7 @@ fn admitted(payload: &Map<String, Value>, scope: &Scope) -> bool {
             .zip(&head)
             .any(|(argument, expected)| argument != expected)
     {
-        return false;
+        return Err(CursorDefer::SinkArgv);
     }
     let tail = &argv[head.len()..];
     if tail
@@ -359,16 +402,26 @@ fn admitted(payload: &Map<String, Value>, scope: &Scope) -> bool {
         .zip(SINK_FLAGS)
         .any(|(flag, expected)| flag != expected)
     {
-        return false;
+        return Err(CursorDefer::SinkArgv);
     }
     let [workspace, request, digest, home] = [&tail[1], &tail[3], &tail[5], &tail[7]];
-    digest.len() == 64
-        && digest
+    if digest.len() != 64
+        || !digest
             .bytes()
             .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
-        && *home == scope.home_dir
-        && same_directory(workspace, scope)
-        && snapshot_under_temp(Path::new(request))
+    {
+        return Err(CursorDefer::SinkArgv);
+    }
+    if *home != scope.home_dir {
+        return Err(CursorDefer::SinkHome);
+    }
+    if !same_directory(workspace, scope) {
+        return Err(CursorDefer::SinkWorkspace);
+    }
+    if !snapshot_under_temp(Path::new(request)) {
+        return Err(CursorDefer::SinkSnapshot);
+    }
+    Ok(())
 }
 
 /// Whether `request` is a snapshot the rewrite writes: a file in its own

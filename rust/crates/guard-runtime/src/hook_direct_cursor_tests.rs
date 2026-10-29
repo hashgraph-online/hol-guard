@@ -115,5 +115,5 @@ fn a_route_probe_without_its_sink_or_its_name_keeps_the_daemon() {
         .unwrap()
         .remove("cursor_route_probe");
     let result = run_as(&unbound, "cursor", Some(HOME), unnamed);
-    assert_eq!(deferred(&result), "direct_hook_payload_unsupported");
+    assert_eq!(deferred(&result), "direct_hook_cursor_probe_unnamed");
 }
