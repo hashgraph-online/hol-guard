@@ -32,6 +32,11 @@ on:
         required: false
         type: boolean
         default: false
+      allow_cache_write:
+        description: Trusted main and release-train builds may populate release caches. Pull request alphas must not.
+        required: false
+        type: boolean
+        default: true
 permissions:
   contents: read
   actions: read
@@ -178,9 +183,9 @@ jobs:
           # always stale; content-addressed sccache below covers them instead.
           cache-workspace-crates: false
           cache-bin: false
-          # Fast-profile dependencies have their own cache key, which only authorized
-          # main alpha dispatches (never pull requests) may populate.
-          save-if: ${{ (github.event_name == 'push' || inputs.fast_codegen == true) && github.ref == 'refs/heads/main' }}
+          # Fast-profile dependencies have their own cache key. Authorized main
+          # alphas may populate it. A pull request alpha sets allow_cache_write false.
+          save-if: ${{ inputs.allow_cache_write && (github.event_name == 'push' || inputs.fast_codegen == true) && github.ref == 'refs/heads/main' }}
       - name: Install content-addressed compiler cache
         if: env.UNSHIPPED_TARGET != 'true' && steps.native-cache.outputs.cache-hit != 'true' && steps.native-artifact.outputs.accepted != 'true'
         uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
@@ -195,9 +200,9 @@ jobs:
           SCCACHE_GHA_ENABLED: 'on'
           # Fast alpha objects differ from fat-LTO ones, so they keep a separate namespace.
           SCCACHE_GHA_VERSION: ${{ inputs.fast_codegen == true && 'release-native-fast-v1' || 'release-native-v1' }}
-          # Only trusted main pushes and authorized main alpha dispatches may write;
-          # every other run is read-only.
-          SCCACHE_GHA_RW_MODE: ${{ ((github.event_name == 'push' || inputs.fast_codegen == true) && github.ref == 'refs/heads/main') && 'READ_WRITE' || 'READ_ONLY' }}
+          # Only trusted main pushes and authorized main alpha dispatches may write.
+          # Pull request alphas stay read-only even though the dispatch ref is main.
+          SCCACHE_GHA_RW_MODE: ${{ (inputs.allow_cache_write && (github.event_name == 'push' || inputs.fast_codegen == true) && github.ref == 'refs/heads/main') && 'READ_WRITE' || 'READ_ONLY' }}
           SCCACHE_IGNORE_SERVER_IO_ERROR: '1'
         run: |
           set -euo pipefail
@@ -224,6 +229,7 @@ jobs:
         if: >-
           env.UNSHIPPED_TARGET != 'true' &&
           steps.native-cache.outputs.cache-hit != 'true' &&
+          inputs.allow_cache_write &&
           (github.event_name == 'push' || inputs.fast_codegen == true) &&
           github.ref == 'refs/heads/main'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830

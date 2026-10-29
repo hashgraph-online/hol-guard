@@ -187,7 +187,8 @@ def test_manual_release_and_pr_version_stamping_contracts() -> None:
     assert 'if [[ "$CHANNEL" == "alpha" && "$TRAIN" == "3.0" ]]' in compute_run
     assert 'elif [[ "$CHANNEL" == "stable" && "$TRAIN" == "main" ]]' in compute_run
     assert "Unsupported release channel and train" in compute_run
-    assert "VERSION=$(uv run --no-sync python scripts/validate_alpha_release.py" in compute_run
+    validate = 'VERSION=$(uv run --no-sync python "${RELEASE_PYTHON_ROOT}/scripts/validate_alpha_release.py"'
+    assert validate in compute_run
     assert 'VERSION="$RESOLVED_CANARY_VERSION"' in compute_run
     canary_steps = workflow["jobs"]["resolve-canary-version"]["steps"]
     canary_run = next(step["run"] for step in canary_steps if step.get("name") == "Compute PR canary version")
@@ -416,7 +417,29 @@ def test_pull_request_alpha_is_an_admin_dispatch_from_main() -> None:
     assert build_checkout == source
     assert "needs.authorize-pull-request-alpha.result == 'success'" in jobs["build"]["if"]
     assert "needs.authorize-pull-request-alpha.result == 'success'" in jobs["precompile-native-linux-x64"]["if"]
+    assert "needs.authorize-release.result == 'success'" in jobs["resolve-alpha-version"]["if"]
     assert "inputs.pull_request == ''" in jobs["wake-alpha-core-feed"]["if"]
+    assert "inputs.pull_request == ''" in jobs["publish-container"]["if"]
+    trusted_ref = (
+        "${{ (github.event_name == 'workflow_dispatch' && inputs.pull_request != '') && "
+        "github.sha || needs.build.outputs.source_sha }}"
+    )
+    cache_write = "${{ github.event_name != 'workflow_dispatch' || inputs.pull_request == '' }}"
+    assert jobs["precompile-native-linux-x64"]["with"]["allow_cache_write"] == cache_write
+    assert jobs["build-native-guard-wheel-linux-x64"]["with"]["allow_cache_write"] == cache_write
+    for job_name in (
+        "publish-installed-bundle-assets",
+        "reserve-alpha-tag",
+        "publish-alpha-testpypi",
+        "publish-alpha-pypi",
+        "release-alpha",
+    ):
+        checkout_ref = next(
+            step["with"]["ref"]
+            for step in jobs[job_name]["steps"]
+            if str(step.get("uses", "")).startswith("actions/checkout@")
+        )
+        assert checkout_ref == trusted_ref
     for job_name in ("publish-alpha-testpypi", "publish-alpha-pypi"):
         step = next(step for step in jobs[job_name]["steps"] if "Revalidate alpha" in step.get("name", ""))
         assert "Pull request alpha source does not match the authorized commit" in step["run"]
@@ -424,3 +447,11 @@ def test_pull_request_alpha_is_an_admin_dispatch_from_main() -> None:
     compute = next(step["run"] for step in jobs["build"]["steps"] if step.get("name") == "Compute publish version")
     assert 'BASE_VERSION="$RESOLVED_ALPHA_BASE_VERSION"' in compute
     assert "Checked-out pull request alpha source does not match expected_sha" in compute
+    assert 'RELEASE_PYTHON_ROOT=".trusted-release"' in compute
+    assert 'if [[ -z "${PULL_REQUEST:-}" && "$GITHUB_ACTOR_ID" != "6068672"' in compute
+    trusted_scripts = next(
+        step for step in jobs["build"]["steps"] if step.get("name") == "Check out trusted release scripts"
+    )
+    assert trusted_scripts["if"] == "github.event_name == 'workflow_dispatch' && inputs.pull_request != ''"
+    assert trusted_scripts["with"]["ref"] == "${{ github.sha }}"
+    assert trusted_scripts["with"]["path"] == ".trusted-release"

@@ -93,6 +93,7 @@ def _assert_graph(jobs: dict) -> None:
             "channel": "${{ needs.build.outputs.channel }}",
             "precompiled": f"${{{{ needs.{prepare_id}.result == 'success' }}}}",
             "release_repair": "${{ needs.build.outputs.release_repair == 'true' }}",
+            "allow_cache_write": "${{ github.event_name != 'workflow_dispatch' || inputs.pull_request == '' }}",
         }
         assert prepare["permissions"] == {"contents": "read", "actions": "read"}
         assert wheel["permissions"] == {"contents": "read"}
@@ -124,6 +125,7 @@ def _assert_graph(jobs: dict) -> None:
             "channel": "${{ needs.build.outputs.channel }}",
             "precompiled": False,
             "release_repair": "${{ needs.build.outputs.release_repair == 'true' }}",
+            "allow_cache_write": "${{ github.event_name != 'workflow_dispatch' || inputs.pull_request == '' }}",
         }
         assert wheel["permissions"] == {"contents": "read"}
         assert "secrets" not in wheel
@@ -226,6 +228,7 @@ def test_single_wheel_callee_retains_all_fixed_native_hardware_tuples() -> None:
         "channel": "string",
         "precompiled": "boolean",
         "release_repair": "boolean",
+        "allow_cache_write": "boolean",
     }
     assert "secrets" not in workflow[True]["workflow_call"]
     table = native_target_matrix(native_wheel_job())

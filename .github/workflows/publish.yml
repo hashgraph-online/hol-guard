@@ -231,6 +231,7 @@ jobs:
     # adopts this exact version and revalidates it, so both jobs always agree.
     if: >-
       always() && !cancelled() &&
+      needs.authorize-release.result == 'success' &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
       github.event_name == 'workflow_dispatch' && github.run_attempt == 1 &&
       github.ref == 'refs/heads/main' &&
@@ -400,6 +401,7 @@ jobs:
       # Alpha native wheels ship only on the GitHub prerelease, never on PyPI, so they
       # use fast per-crate codegen. Stable keeps whole-program fat LTO.
       fast_codegen: ${{ inputs.release_channel == 'alpha' }}
+      allow_cache_write: ${{ github.event_name != 'workflow_dispatch' || inputs.pull_request == '' }}
     permissions:
       contents: read
       actions: read
@@ -448,6 +450,7 @@ jobs:
       # Alpha native wheels ship only on the GitHub prerelease, never on PyPI, so they
       # use fast per-crate codegen. Stable keeps whole-program fat LTO.
       fast_codegen: ${{ inputs.release_channel == 'alpha' }}
+      allow_cache_write: ${{ github.event_name != 'workflow_dispatch' || inputs.pull_request == '' }}
     permissions:
       contents: read
       actions: read
@@ -496,6 +499,7 @@ jobs:
       # Alpha native wheels ship only on the GitHub prerelease, never on PyPI, so they
       # use fast per-crate codegen. Stable keeps whole-program fat LTO.
       fast_codegen: ${{ inputs.release_channel == 'alpha' }}
+      allow_cache_write: ${{ github.event_name != 'workflow_dispatch' || inputs.pull_request == '' }}
     permissions:
       contents: read
       actions: read
@@ -544,6 +548,7 @@ jobs:
       # Alpha native wheels ship only on the GitHub prerelease, never on PyPI, so they
       # use fast per-crate codegen. Stable keeps whole-program fat LTO.
       fast_codegen: ${{ inputs.release_channel == 'alpha' }}
+      allow_cache_write: ${{ github.event_name != 'workflow_dispatch' || inputs.pull_request == '' }}
     permissions:
       contents: read
       actions: read
@@ -592,6 +597,7 @@ jobs:
       # Alpha native wheels ship only on the GitHub prerelease, never on PyPI, so they
       # use fast per-crate codegen. Stable keeps whole-program fat LTO.
       fast_codegen: ${{ inputs.release_channel == 'alpha' }}
+      allow_cache_write: ${{ github.event_name != 'workflow_dispatch' || inputs.pull_request == '' }}
     permissions:
       contents: read
       actions: read
@@ -639,6 +645,7 @@ jobs:
         with:
           version: "0.9.26"
           enable-cache: true
+          save-cache: ${{ github.event_name != 'workflow_dispatch' || inputs.pull_request == '' }}
       - name: Verify release uv before dependency install
         env:
           EXPECTED_UV_VERSION: "0.9.26"
@@ -651,6 +658,15 @@ jobs:
             --setup-action-ref "$SETUP_UV_ACTION_REF"
       - name: Install dependencies
         run: uv sync --frozen --extra dev --extra publish --extra cisco
+      - name: Check out trusted release scripts
+        if: github.event_name == 'workflow_dispatch' && inputs.pull_request != ''
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+          path: .trusted-release
+          sparse-checkout: scripts
+          sparse-checkout-cone-mode: true
       - name: Compute publish version
         id: version
         env:
@@ -674,7 +690,12 @@ jobs:
           PULL_REQUEST: ${{ github.event.inputs.pull_request }}
           RELEASE_PUBLISHING_ENABLED: ${{ vars.RELEASE_PUBLISHING_ENABLED }}
         run: |
-          BASE_VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          RELEASE_PYTHON_ROOT="."
+          if [[ -n "${PULL_REQUEST:-}" ]]; then
+            # Version selection runs the workflow's scripts, not the pull request's.
+            RELEASE_PYTHON_ROOT=".trusted-release"
+          fi
+          BASE_VERSION=$(uv run --no-sync python "${RELEASE_PYTHON_ROOT}/scripts/sync_repo_version.py" --check)
           VERSION="$BASE_VERSION"
           CHANNEL="integration"
           TRAIN=""
@@ -714,9 +735,9 @@ jobs:
               fi
 
               EXISTING_VERSION_FILE=$(mktemp)
-              uv run --no-sync python scripts/verify_release_registry.py \
+              uv run --no-sync python "${RELEASE_PYTHON_ROOT}/scripts/verify_release_registry.py" \
                 list-versions --registry pypi | jq -r '.[]' > "$EXISTING_VERSION_FILE"
-              uv run --no-sync python scripts/verify_release_registry.py \
+              uv run --no-sync python "${RELEASE_PYTHON_ROOT}/scripts/verify_release_registry.py" \
                 list-versions --registry testpypi | jq -r '.[]' >> "$EXISTING_VERSION_FILE"
               git tag --list 'alpha/v*' | sed 's#^alpha/v##' >> "$EXISTING_VERSION_FILE"
               mapfile -t EXISTING_VERSIONS < <(
@@ -733,9 +754,10 @@ jobs:
               for existing_version in "${EXISTING_VERSIONS[@]}"; do
                 VALIDATOR_ARGS+=(--existing-version "$existing_version")
               done
-              VERSION=$(uv run --no-sync python scripts/validate_alpha_release.py "${VALIDATOR_ARGS[@]}")
+              VERSION=$(uv run --no-sync python "${RELEASE_PYTHON_ROOT}/scripts/validate_alpha_release.py" "${VALIDATOR_ARGS[@]}")
             elif [[ "$CHANNEL" == "alpha" && "$TRAIN" == "main" ]]; then
-              if [[ "$GITHUB_ACTOR_ID" != "6068672" && "$GITHUB_ACTOR_ID" != "301892678" && "$GITHUB_ACTOR_ID" != "41898282" ]]; then
+              # A pull request alpha already passed the repository-admin check.
+              if [[ -z "${PULL_REQUEST:-}" && "$GITHUB_ACTOR_ID" != "6068672" && "$GITHUB_ACTOR_ID" != "301892678" && "$GITHUB_ACTOR_ID" != "41898282" ]]; then
                 echo "Release dispatch actor is not an authorized maintainer" >&2
                 exit 1
               fi
@@ -744,9 +766,9 @@ jobs:
                 exit 1
               fi
               # Optional test builds for the next minor; they never move the stable line.
-              PYPI_VERSIONS=$(uv run --no-sync python scripts/verify_release_registry.py \
+              PYPI_VERSIONS=$(uv run --no-sync python "${RELEASE_PYTHON_ROOT}/scripts/verify_release_registry.py" \
                 list-versions --registry pypi)
-              TESTPYPI_VERSIONS=$(uv run --no-sync python scripts/verify_release_registry.py \
+              TESTPYPI_VERSIONS=$(uv run --no-sync python "${RELEASE_PYTHON_ROOT}/scripts/verify_release_registry.py" \
                 list-versions --registry testpypi)
               TAG_VERSIONS=$(git tag --list 'alpha/v*' | sed 's#^alpha/v##' | jq -R -s \
                 'split("\n") | map(select(length > 0))')
@@ -761,7 +783,7 @@ jobs:
                 # below still reject it if it is now published or reserved.
                 RELEASE_VERSION="$RESOLVED_ALPHA_VERSION"
               elif [[ "$RELEASE_VERSION" == "next" ]]; then
-                RELEASE_VERSION=$(uv run --no-sync python scripts/compute_alpha_release_version.py \
+                RELEASE_VERSION=$(uv run --no-sync python "${RELEASE_PYTHON_ROOT}/scripts/compute_alpha_release_version.py" \
                   --release-train main --base-version "$BASE_VERSION" <<< "$EXISTING_VERSIONS")
               fi
               mapfile -t EXISTING_VERSIONS_ARRAY < <(
@@ -783,7 +805,7 @@ jobs:
               for existing_version in "${EXISTING_VERSIONS_ARRAY[@]}"; do
                 VALIDATOR_ARGS+=(--existing-version "$existing_version")
               done
-              VERSION=$(uv run --no-sync python scripts/validate_alpha_release.py "${VALIDATOR_ARGS[@]}")
+              VERSION=$(uv run --no-sync python "${RELEASE_PYTHON_ROOT}/scripts/validate_alpha_release.py" "${VALIDATOR_ARGS[@]}")
             elif [[ "$CHANNEL" == "stable" && "$TRAIN" == "main" ]]; then
               if [[ "$GITHUB_ACTOR_ID" != "6068672" && "$GITHUB_ACTOR_ID" != "301892678" && "$GITHUB_ACTOR_ID" != "41898282" ]]; then
                 echo "Release dispatch actor is not an authorized maintainer" >&2
@@ -793,9 +815,9 @@ jobs:
                 echo "Stable releases must run from refs/heads/main" >&2
                 exit 1
               fi
-              PYPI_VERSIONS=$(uv run --no-sync python scripts/verify_release_registry.py \
+              PYPI_VERSIONS=$(uv run --no-sync python "${RELEASE_PYTHON_ROOT}/scripts/verify_release_registry.py" \
                 list-versions --registry pypi)
-              TESTPYPI_VERSIONS=$(uv run --no-sync python scripts/verify_release_registry.py \
+              TESTPYPI_VERSIONS=$(uv run --no-sync python "${RELEASE_PYTHON_ROOT}/scripts/verify_release_registry.py" \
                 list-versions --registry testpypi)
               TAG_VERSIONS=$(git tag --list 'v*' | sed 's/^v//' | jq -R -s \
                 'split("\n") | map(select(length > 0))')
@@ -805,11 +827,11 @@ jobs:
                 --argjson tags "$TAG_VERSIONS" \
                 --arg candidate "$RELEASE_VERSION" \
                 '$pypi + $testpypi + ($tags | map(select(. != $candidate))) | unique')
-              EXPECTED_VERSION=$(uv run --no-sync python scripts/compute_main_release_version.py \
+              EXPECTED_VERSION=$(uv run --no-sync python "${RELEASE_PYTHON_ROOT}/scripts/compute_main_release_version.py" \
                 --base-version "$BASE_VERSION" <<< "$VERSIONS")
               REPAIRING=false
               if [[ "$RELEASE_VERSION" != "$EXPECTED_VERSION" ]]; then
-                LATEST_PYPI=$(uv run --no-sync python scripts/compute_main_release_version.py \
+                LATEST_PYPI=$(uv run --no-sync python "${RELEASE_PYTHON_ROOT}/scripts/compute_main_release_version.py" \
                   --base-version "$BASE_VERSION" --latest-existing <<< "$PYPI_VERSIONS")
                 ASSET_NAMES_FILE=$(mktemp)
                 RELEASE_VIEW_ERROR=$(mktemp)
@@ -835,7 +857,7 @@ jobs:
                     REPAIR_ARGS+=(--publication-unrecorded)
                   fi
                 fi
-                if ! uv run --no-sync python scripts/stable_release_asset_repair.py \
+                if ! uv run --no-sync python "${RELEASE_PYTHON_ROOT}/scripts/stable_release_asset_repair.py" \
                   --requested "$RELEASE_VERSION" \
                   --expected-next "$EXPECTED_VERSION" \
                   --latest-pypi "$LATEST_PYPI" \
@@ -889,9 +911,9 @@ jobs:
               exit 1
             fi
             CHANNEL="alpha"
-            PYPI_VERSIONS=$(uv run --no-sync python scripts/verify_release_registry.py \
+            PYPI_VERSIONS=$(uv run --no-sync python "${RELEASE_PYTHON_ROOT}/scripts/verify_release_registry.py" \
               list-versions --registry pypi)
-            TESTPYPI_VERSIONS=$(uv run --no-sync python scripts/verify_release_registry.py \
+            TESTPYPI_VERSIONS=$(uv run --no-sync python "${RELEASE_PYTHON_ROOT}/scripts/verify_release_registry.py" \
               list-versions --registry testpypi)
             TAG_VERSIONS=$(git tag --list 'alpha/v*' | sed 's#^alpha/v##' | jq -R -s 'split("\n") | map(select(length > 0))')
             EXISTING_VERSIONS=$(jq -n \
@@ -909,10 +931,10 @@ jobs:
             if [[ "${#SOURCE_ALPHA_TAGS[@]}" -eq 1 ]]; then
               RELEASE_VERSION="${SOURCE_ALPHA_TAGS[0]}"
               REUSING_RESERVED_ALPHA=true
-              uv run --no-sync python scripts/compute_alpha_release_version.py \
+              uv run --no-sync python "${RELEASE_PYTHON_ROOT}/scripts/compute_alpha_release_version.py" \
                 --release-train "$TRAIN" --validate-phase-only <<< "$EXISTING_VERSIONS"
             else
-              RELEASE_VERSION=$(uv run --no-sync python scripts/compute_alpha_release_version.py \
+              RELEASE_VERSION=$(uv run --no-sync python "${RELEASE_PYTHON_ROOT}/scripts/compute_alpha_release_version.py" \
                 --release-train "$TRAIN" <<< "$EXISTING_VERSIONS")
               REUSING_RESERVED_ALPHA=false
             fi
@@ -931,7 +953,7 @@ jobs:
             for existing_version in "${EXISTING_VERSIONS_ARRAY[@]}"; do
               VALIDATOR_ARGS+=(--existing-version "$existing_version")
             done
-            VERSION=$(uv run --no-sync python scripts/validate_alpha_release.py "${VALIDATOR_ARGS[@]}")
+            VERSION=$(uv run --no-sync python "${RELEASE_PYTHON_ROOT}/scripts/validate_alpha_release.py" "${VALIDATOR_ARGS[@]}")
           elif [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
             CHANNEL="canary"
             # Adopt the version the native compile embeds; never recompute it here.
@@ -1250,6 +1272,7 @@ jobs:
       channel: ${{ needs.build.outputs.channel }}
       precompiled: ${{ needs.precompile-native-linux-x64.result == 'success' }}
       release_repair: ${{ needs.build.outputs.release_repair == 'true' }}
+      allow_cache_write: ${{ github.event_name != 'workflow_dispatch' || inputs.pull_request == '' }}
     permissions:
       contents: read
 
@@ -1294,6 +1317,7 @@ jobs:
       channel: ${{ needs.build.outputs.channel }}
       precompiled: ${{ needs.precompile-native-macos-x64.result == 'success' }}
       release_repair: ${{ needs.build.outputs.release_repair == 'true' }}
+      allow_cache_write: ${{ github.event_name != 'workflow_dispatch' || inputs.pull_request == '' }}
     permissions:
       contents: read
 
@@ -1338,6 +1362,7 @@ jobs:
       channel: ${{ needs.build.outputs.channel }}
       precompiled: ${{ needs.precompile-native-macos-arm64.result == 'success' }}
       release_repair: ${{ needs.build.outputs.release_repair == 'true' }}
+      allow_cache_write: ${{ github.event_name != 'workflow_dispatch' || inputs.pull_request == '' }}
     permissions:
       contents: read
 
@@ -1382,6 +1407,7 @@ jobs:
       channel: ${{ needs.build.outputs.channel }}
       precompiled: ${{ needs.precompile-native-windows-x64.result == 'success' }}
       release_repair: ${{ needs.build.outputs.release_repair == 'true' }}
+      allow_cache_write: ${{ github.event_name != 'workflow_dispatch' || inputs.pull_request == '' }}
     permissions:
       contents: read
 
@@ -1426,6 +1452,7 @@ jobs:
       channel: ${{ needs.build.outputs.channel }}
       precompiled: ${{ needs.precompile-native-windows-arm64.result == 'success' }}
       release_repair: ${{ needs.build.outputs.release_repair == 'true' }}
+      allow_cache_write: ${{ github.event_name != 'workflow_dispatch' || inputs.pull_request == '' }}
     permissions:
       contents: read
 
@@ -1470,6 +1497,7 @@ jobs:
       channel: ${{ needs.build.outputs.channel }}
       precompiled: false
       release_repair: ${{ needs.build.outputs.release_repair == 'true' }}
+      allow_cache_write: ${{ github.event_name != 'workflow_dispatch' || inputs.pull_request == '' }}
     permissions:
       contents: read
 
@@ -1516,7 +1544,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
-          ref: ${{ needs.build.outputs.source_sha }}
+          ref: ${{ (github.event_name == 'workflow_dispatch' && inputs.pull_request != '') && github.sha || needs.build.outputs.source_sha }}
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
@@ -1651,6 +1679,7 @@ jobs:
         with:
           version: "0.9.26"
           enable-cache: true
+          save-cache: ${{ github.event_name != 'workflow_dispatch' || inputs.pull_request == '' }}
       - run: uv sync --frozen --extra dev --extra publish --python 3.12
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
@@ -2045,7 +2074,7 @@ jobs:
         with:
           fetch-depth: 0
           filter: blob:none
-          ref: ${{ needs.build.outputs.source_sha }}
+          ref: ${{ (github.event_name == 'workflow_dispatch' && inputs.pull_request != '') && github.sha || needs.build.outputs.source_sha }}
       - name: Check out release API token tooling
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -2093,7 +2122,7 @@ jobs:
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
-          ref: ${{ needs.build.outputs.source_sha }}
+          ref: ${{ (github.event_name == 'workflow_dispatch' && inputs.pull_request != '') && github.sha || needs.build.outputs.source_sha }}
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           version: "0.9.26"
@@ -2229,7 +2258,7 @@ jobs:
         with:
           fetch-depth: 0
           filter: blob:none
-          ref: ${{ needs.build.outputs.source_sha }}
+          ref: ${{ (github.event_name == 'workflow_dispatch' && inputs.pull_request != '') && github.sha || needs.build.outputs.source_sha }}
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           version: "0.9.26"
@@ -3319,7 +3348,7 @@ jobs:
         with:
           fetch-depth: 0
           filter: blob:none
-          ref: ${{ needs.build.outputs.source_sha }}
+          ref: ${{ (github.event_name == 'workflow_dispatch' && inputs.pull_request != '') && github.sha || needs.build.outputs.source_sha }}
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: distributions-native
@@ -3489,6 +3518,7 @@ jobs:
     name: Publish container image
     if: >-
       always() &&
+      (github.event_name != 'workflow_dispatch' || inputs.pull_request == '') &&
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
       needs.build.result == 'success' &&
       (
