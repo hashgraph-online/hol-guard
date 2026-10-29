@@ -199,6 +199,34 @@ def test_an_invalid_receipt_is_not_submitted(
     assert host.activity_writer.activity[0]["receipt_id"] is None
 
 
+def _no_validation_request(receipt: object, **_: object) -> None:
+    raise AssertionError("a receipt the resident checked needs no validation request")
+
+
+@pytest.mark.parametrize("valid", [True, False])
+def test_a_receipt_the_resident_checked_is_not_validated_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, valid: bool
+) -> None:
+    monkeypatch.setattr(native_decision_receipt, "validate_native_decision_receipt", _no_validation_request)
+    host = _host(tmp_path)
+    assert record_direct_hook_evidence(host, _record(receipt_valid=valid))
+    assert host.activity_writer.receipts == ([RECEIPT] if valid else [])
+    assert (host.activity_writer.activity[0]["receipt_id"] is not None) is valid
+
+
+def test_an_older_residents_receipt_is_still_validated(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, accepted_receipts: None
+) -> None:
+    seen: list[object] = []
+    monkeypatch.setattr(
+        native_decision_receipt, "validate_native_decision_receipt", lambda receipt, **_: seen.append(receipt)
+    )
+    host = _host(tmp_path)
+    assert record_direct_hook_evidence(host, _record())
+    assert seen == [RECEIPT]
+    assert host.activity_writer.receipts == []
+
+
 def _page(records: list[object], remaining: int, through: int | None = None, epoch: object = "e1") -> bytes:
     body: dict[str, object] = {
         "schema": "guard-hook-direct-evidence.v1",
