@@ -2881,34 +2881,36 @@ def test_unverified_default_start_retains_owner_and_blocks_duplicate_start(tmp_p
 
 
 def test_same_home_barrier_requests_register_one_mutation(tmp_path: Path) -> None:
+    """A second request for a home that already has one in flight starts nothing.
+
+    The two requests have to overlap for that question to be asked at all, and
+    arriving together is not the same as overlapping: the first can finish and
+    release the home before the second registers, after which the second is a
+    new operation and starts its own process, which is correct and says nothing
+    about the barrier. Hold the first inside its start hook until the second has
+    been answered, so the overlap the assertions read is the one that happened.
+    """
+
     guard_home = tmp_path / "guard-home"
     identity = _identity(guard_home)
-    registration_barrier = threading.Barrier(2)
+    first_started = threading.Event()
+    second_answered = threading.Event()
     state_lock = threading.Lock()
-    clock_calls = 0
     starts = 0
     results: list[dict[str, object]] = []
     errors: list[BaseException] = []
-
-    def clock() -> float:
-        nonlocal clock_calls
-        with state_lock:
-            clock_calls += 1
-            call_number = clock_calls
-        if call_number <= 2:
-            registration_barrier.wait(timeout=5.0)
-        return 100.0 + call_number
 
     def start(_home: Path, _remaining: float) -> StartResult:
         nonlocal starts
         with state_lock:
             starts += 1
+        first_started.set()
+        second_answered.wait(timeout=10.0)
         return StartResult(True, identity)
 
     coordinator = _coordinator(
         tmp_path,
         ServiceInspection("unavailable", "service_missing"),
-        clock=clock,
         start_process=start,
     )
 
@@ -2918,21 +2920,22 @@ def test_same_home_barrier_requests_register_one_mutation(tmp_path: Path) -> Non
         except BaseException as exc:  # pragma: no cover - assertion below reports the error
             errors.append(exc)
 
-    threads = [
-        threading.Thread(target=run, args=(request_id,))
-        for request_id in (
-            "51515151-5151-4515-8515-515151515151",
-            "52525252-5252-4525-8525-525252525252",
-        )
-    ]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join(timeout=10.0)
+    first = threading.Thread(target=run, args=("51515151-5151-4515-8515-515151515151",))
+    second = threading.Thread(target=run, args=("52525252-5252-4525-8525-525252525252",))
+    first.start()
+    assert first_started.wait(timeout=10.0)
+    second.start()
+    second.join(timeout=10.0)
+    second_answered.set()
+    first.join(timeout=10.0)
 
-    assert all(not thread.is_alive() for thread in threads)
+    assert not second.is_alive()
+    assert not first.is_alive()
     assert errors == []
     assert len(results) == 2
+    # One operation answered both requests, so the second really did arrive
+    # while the first held the home rather than after it had let go.
+    assert len({result["operationId"] for result in results}) == 1
     assert starts == 1
 
 
