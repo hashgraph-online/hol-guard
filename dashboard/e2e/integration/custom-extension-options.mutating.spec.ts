@@ -29,9 +29,11 @@ function hook(state: IntegrationState, command: string): Hook {
 }
 
 // A call Guard wants a person to look at is refused with the review reason
-// and queued in the Inbox; any other refusal is a block. Claude Code runs a
-// call Guard answers with no permission decision.
+// and queued in the Inbox; any other refusal is a block. A saved allow lifts
+// the review but keeps its reason code, so the permission decision comes
+// first. Claude Code runs a call Guard answers with no permission decision.
 function outcome(result: Hook): "allow" | "review" | "deny" {
+  if (result.permission_decision === "allow") return "allow";
   if (result.reason_code === "native_command_review_required" || result.permission_decision === "ask") return "review";
   if (result.permission_decision === "deny" || result.decision === "block") return "deny";
   return "allow";
