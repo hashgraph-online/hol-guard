@@ -216,6 +216,7 @@ pub use git_push::{
     install_git_push_verdict, push_environment_git, GitPushRequest, GitPushVerdict,
 };
 pub(crate) use git_read_after_allow::git_reads_after_allowed_steps;
+pub use read_paths::proven_repository_hidden_document;
 pub use safe_scalar::PsqlEnvironment;
 #[cfg_attr(not(unix), allow(unused_imports))]
 pub(crate) use script_content::launch_loopback_ports;

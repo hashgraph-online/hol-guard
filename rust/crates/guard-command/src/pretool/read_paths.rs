@@ -357,6 +357,21 @@ pub(super) fn resolved_path_allowed_in_scope(
     resolved_path_allowed_for_operation(canonical, home_dir, cwd, verified_temporary, false)
 }
 
+/// Whether `canonical`, a resolved file, is a document the repository the
+/// session works in keeps below a hidden directory, such as
+/// `.claude-plugin/plugin.json`, read from that checkout or from a linked
+/// worktree of it. PreToolUse admits the read with this proof; the output
+/// review repeats it, or the file is read and its content withheld.
+pub fn proven_repository_hidden_document(
+    canonical: &std::path::Path,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    let temporary = private_temporary::inside_private_temporary_directory(canonical, home_dir);
+    location_allowed(canonical, home_dir, cwd, temporary, true)
+        && hidden_listing::repository_hidden_source_document(canonical, home_dir, cwd)
+}
+
 pub(super) fn resolved_path_allowed_for_operation(
     canonical: &std::path::Path,
     home_dir: Option<&str>,
