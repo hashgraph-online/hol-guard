@@ -413,6 +413,7 @@ fn evaluate_validated_envelope(
     };
     if let Some(store) = origin_store {
         crate::policy_store::native_review_origin::authenticate(store, &mut receipt)?;
+        crate::context_assistance_notifications::notify_hook(&envelope, &receipt, &result);
     }
     if event_name == "PreToolUse" {
         crate::command_policy_repair::apply_at_edge(&mut result, policy_snapshot, &envelope.source);

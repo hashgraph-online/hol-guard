@@ -1,6 +1,6 @@
 import { strict as assert } from "node:assert";
-import type { GuardSettings } from "./guard-types";
-import { isPresentationOnlyChange, presentationOnlySavePayload } from "./settings-presentation";
+import type { GuardContextAssistanceConfig, GuardSettings } from "./guard-types";
+import { buildSettingsUpdatePayload, isPresentationOnlyChange, presentationOnlySavePayload } from "./settings-presentation";
 
 function baseSettings(overrides: Partial<GuardSettings> = {}): GuardSettings {
   return {
@@ -97,4 +97,23 @@ assert.equal(
   false,
 );
 assert.equal(isPresentationOnlyChange(presentationOnlyDraft, null), false);
+assert.equal("context_assistance_diagnostic" in buildSettingsUpdatePayload(
+  baseSettings({ context_assistance_diagnostic: "runtime_not_verified" }), saved,
+), false, "read-only context diagnostics must never be written back as settings");
+const assistance: GuardContextAssistanceConfig = {
+  schema_version: 1, enabled: true, runtime_id: "selected", resource_profile: "balanced",
+  features: { review_briefs: true, agent_context: false, shared_agents: false },
+  sources: { native_policy_facts: true, sanitized_receipt_facts: true, workspace_documents: false, source_set_id: "" },
+  storage: { mode: "memory", retention_hours: 24 },
+  limits: { context_tokens: 2048, reserve_tokens: 256, max_active_workspaces: 2, idle_shutdown_seconds: 600 },
+};
+const withIntent = baseSettings({ context_assistance: assistance, context_assistance_requested: assistance });
+const unrelated = buildSettingsUpdatePayload({ ...withIntent, telemetry: true }, withIntent);
+assert.equal("context_assistance" in unrelated, false, "an unrelated save cannot replace saved local consent");
+assert.equal("context_assistance_requested" in unrelated, false, "read-only local intent never enters a write");
+const offChoice = buildSettingsUpdatePayload({ ...withIntent, context_assistance: { ...assistance, enabled: false } }, withIntent);
+assert.equal(offChoice.context_assistance?.enabled, false, "explicit choice changes remain writable");
+const legacy = baseSettings({ context_assistance: assistance });
+assert.equal("context_assistance" in buildSettingsUpdatePayload({ ...legacy, telemetry: true }, legacy), false,
+  "an older native core's restricted projection is never copied back into local intent");
 console.log("settings-presentation tests passed");

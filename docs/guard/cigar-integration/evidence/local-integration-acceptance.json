@@ -1,0 +1,288 @@
+{
+  "schema": "guard-cigar-local-integration-acceptance.v1",
+  "accepted": true,
+  "scope": "Authorized local macOS arm64 CIGAR0.14.1 integration; source, installed candidate, actual SDKs/MCP/browser/frozen, unchanged performance gates.",
+  "product_source_commit": "ed5011acbba43cb19c093064b34ffe47bf3f2616",
+  "audit_base_documentation_commit": "dd43300630ada8f746e59f576b89795f6bedf36d",
+  "branch": "feature/integrate-cigar-0.14.1",
+  "base_release_commit": "35180b995cb27fdc9f92e1f68307a756c785f154",
+  "SDK": {
+    "revision": "b47380e5a5cbeaaad5a61cab3372e9e67368732f",
+    "source_clean": true,
+    "worker": {
+      "path": "/private/tmp/hol-guard-cigar-sdk-target/debug/cigar-context-worker",
+      "bytes": 22708072,
+      "sha256": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112"
+    },
+    "selected_final_CPython": [
+      3,
+      14,
+      7
+    ]
+  },
+  "evidence": {
+    "configuration-verification.json": {
+      "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/docs/guard/cigar-integration/evidence/configuration-verification.json",
+      "bytes": 1111,
+      "sha256": "bc2f64c1f7bfeb8434780e0e881f62762ab03d6a84a3d9694b8ccb35617d5593"
+    },
+    "runtime-development-verification.json": {
+      "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/docs/guard/cigar-integration/evidence/runtime-development-verification.json",
+      "bytes": 4416,
+      "sha256": "ff6261d310b6c8249d18eb0c1d4111547c064c5a3a88a007296ccb5d5f158bda"
+    },
+    "broker-native-verification.json": {
+      "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/docs/guard/cigar-integration/evidence/broker-native-verification.json",
+      "bytes": 11713,
+      "sha256": "d9ff98a5692820747681ce36b72f7f6b6c4b3bda6384c6b2aafd1733a16070ec"
+    },
+    "private-persistence-product-verification.json": {
+      "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/docs/guard/cigar-integration/evidence/private-persistence-product-verification.json",
+      "bytes": 24887,
+      "sha256": "1f8a920137e3e0542d2283a610a77462a6c55469862b1526d820d0f7fd5a0c4e"
+    },
+    "headless-retention-installed-verification.json": {
+      "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/docs/guard/cigar-integration/evidence/headless-retention-installed-verification.json",
+      "bytes": 17251,
+      "sha256": "f38aa50fcba91f0f6be53665e40cbb4c7c2c3ad414d9dc8b0843d951e4196992"
+    },
+    "source-churn-installed-verification.json": {
+      "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/docs/guard/cigar-integration/evidence/source-churn-installed-verification.json",
+      "bytes": 90221,
+      "sha256": "60bd65b9474e66785adda071ac2bbcac2ef3dff8630c9ab4c84cbb2aa70e9ebb"
+    },
+    "process-failure-eviction-installed-verification.json": {
+      "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/docs/guard/cigar-integration/evidence/process-failure-eviction-installed-verification.json",
+      "bytes": 24005,
+      "sha256": "456795ff72b02a5728b238095ba41e3c5c4b06b6951aef594993220d96b6c275"
+    },
+    "native-owner-loss-installed-verification.json": {
+      "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/docs/guard/cigar-integration/evidence/native-owner-loss-installed-verification.json",
+      "bytes": 23174,
+      "sha256": "dcb2ad03b7a199e7287c629ec4aca194e4c38640b0ff1c924da1113f705e8294"
+    },
+    "context-worker-reuse-source-verification.json": {
+      "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/docs/guard/cigar-integration/evidence/context-worker-reuse-source-verification.json",
+      "bytes": 313456,
+      "sha256": "b8f68231fe90007daba426b5d9601ad105ffeb5264b3d8fa56cb996e7afd22f9"
+    },
+    "shared-preferred-source-verification.json": {
+      "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/docs/guard/cigar-integration/evidence/shared-preferred-source-verification.json",
+      "bytes": 430337,
+      "sha256": "c878b5eeb15e733f9d1812f4e2a2a0a30edb2ef38ec1882f868551d2b709cc45"
+    },
+    "shared-preferred-onefile-context-verification.json": {
+      "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/docs/guard/cigar-integration/evidence/shared-preferred-onefile-context-verification.json",
+      "bytes": 245626,
+      "sha256": "5a701736d5459a269c5797390090994083fb2f880c3050a47c8ef7e6b731a97f"
+    },
+    "shared-preferred-installed-functional-verification.json": {
+      "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/docs/guard/cigar-integration/evidence/shared-preferred-installed-functional-verification.json",
+      "bytes": 67395,
+      "sha256": "ff9b9ac231c43162eb06f912684be0c110a7034bf6f4b7be8bacb48b1936dafe"
+    },
+    "shared-preferred-installed-performance-verification.json": {
+      "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/docs/guard/cigar-integration/evidence/shared-preferred-installed-performance-verification.json",
+      "bytes": 201663,
+      "sha256": "6596bea5cb32592528e08459346ad408628691a4f6764dc26f09bc07e7d30fa2"
+    }
+  },
+  "current_acceptance": {
+    "source_cases": 144,
+    "native_worker_cases_at_recorded_unchanged_source": 81,
+    "source_gates": 5,
+    "installed_backend_cases": 13,
+    "installed_browser_flows": 3,
+    "frozen_cases": 4,
+    "complete_slo_gates_per_mode": 22,
+    "fixed_cohort_runs": 10,
+    "individual_gates_per_cohort_run": 13,
+    "relative_comparison": {
+      "direct": {
+        "per_run_p95_ms": {
+          "off": [
+            1.946,
+            1.806,
+            1.872,
+            1.586,
+            1.706
+          ],
+          "on": [
+            1.754,
+            1.584,
+            1.415,
+            1.82,
+            1.82
+          ]
+        },
+        "off_median_p95_ms": 1.806,
+        "on_median_p95_ms": 1.754,
+        "median_delta_ms": -0.052,
+        "allowance_ms": 1.0,
+        "relative_gate": true,
+        "paired_deltas": [
+          {
+            "pair": 1,
+            "delta_ms": -0.192,
+            "allowance_ms": 1.0
+          },
+          {
+            "pair": 2,
+            "delta_ms": -0.222,
+            "allowance_ms": 1.0
+          },
+          {
+            "pair": 3,
+            "delta_ms": -0.457,
+            "allowance_ms": 1.0
+          },
+          {
+            "pair": 4,
+            "delta_ms": 0.234,
+            "allowance_ms": 1.0
+          },
+          {
+            "pair": 5,
+            "delta_ms": 0.114,
+            "allowance_ms": 1.0
+          }
+        ]
+      },
+      "installed_http": {
+        "per_run_p95_ms": {
+          "off": [
+            8.812,
+            8.809,
+            8.821,
+            8.678,
+            8.738
+          ],
+          "on": [
+            9.394,
+            9.415,
+            9.065,
+            9.318,
+            10.182
+          ]
+        },
+        "off_median_p95_ms": 8.809,
+        "on_median_p95_ms": 9.394,
+        "median_delta_ms": 0.585,
+        "allowance_ms": 1.0,
+        "relative_gate": true,
+        "paired_deltas": [
+          {
+            "pair": 1,
+            "delta_ms": 0.582,
+            "allowance_ms": 1.0
+          },
+          {
+            "pair": 2,
+            "delta_ms": 0.606,
+            "allowance_ms": 1.0
+          },
+          {
+            "pair": 3,
+            "delta_ms": 0.244,
+            "allowance_ms": 1.0
+          },
+          {
+            "pair": 4,
+            "delta_ms": 0.64,
+            "allowance_ms": 1.0
+          },
+          {
+            "pair": 5,
+            "delta_ms": 1.444,
+            "allowance_ms": 1.0
+          }
+        ]
+      },
+      "all_relative_gates": true
+    }
+  },
+  "source_equivalence": {
+    "runtime_product_unchanged_after_commit": true,
+    "native_owner_reference": "4c4db2d99f8e500c477704e33f79f8bc56fc4871",
+    "changed_Rust_files": [
+      "rust/crates/guard-runtime/src/context_assistance_notifications_tests.rs",
+      "rust/crates/guard-runtime/src/resident_context_dispatch.rs",
+      "rust/crates/guard-runtime/src/resident_context_dispatch_reuse_tests.rs",
+      "rust/crates/guard-runtime/src/resident_context_dispatch_tests.rs"
+    ],
+    "all_changed_Rust_files_match_81_case_source_proof": true,
+    "unchanged_remaining_Rust_includes_P0_to_P5_runtime_and_policy_components": true,
+    "Python_changes_since_native_owner_reference": [
+      "src/codex_plugin_scanner/guard/daemon/server.py",
+      "src/codex_plugin_scanner/guard/daemon/service_lifecycle.py",
+      "src/codex_plugin_scanner/guard/native_context_assistance.py",
+      "src/codex_plugin_scanner/guard/native_daemon_route.py",
+      "src/codex_plugin_scanner/guard/native_runtime.py",
+      "src/codex_plugin_scanner/guard/native_runtime_request_scope.py",
+      "src/codex_plugin_scanner/guard/native_runtime_status_share.py"
+    ],
+    "all_changed_Python_in_ten_file_frozen_installed_source_binding": true,
+    "dashboard_reference": "95657b30f277604bcd12582e9bbf5d6602c4c433",
+    "dashboard_product_sources_unchanged": true,
+    "dashboard_33_asset_hashes_equal_qualified_pairing_build": true
+  },
+  "artifact": {
+    "source_commit": "ed5011acbba43cb19c093064b34ffe47bf3f2616",
+    "layout": "PyInstaller 6.21.0 onefile development bundle",
+    "python": "3.12.13",
+    "binary": "/private/tmp/hol-guard-cigar-shared-status-20261025/onefile/dist/hol-guard",
+    "binary_sha256": "a7e82b664d47b33c481f8ec8241385fca4e7d59671063702cc4249201cc1ea66",
+    "binary_bytes": 55753088,
+    "operator_native": "/private/tmp/hol-guard-cigar-shared-status-20261025/onefile/operator-runtime/codex_plugin_scanner/_native/hol-guard-runtime",
+    "native_sha256": "49512f591802fd7c284d622b8dedba0083c789752e448796368da28ce0f3852e",
+    "native_bytes": 36786288,
+    "archive_declared_python": "libpython3.12.dylib",
+    "verified_static_files": 33,
+    "operator_files": 80,
+    "strict_outer_and_native_signature_verified": true,
+    "runtime_and_compiler_manifest_verified": true,
+    "signing": "local ad-hoc; no Developer ID/notarization qualification",
+    "functional_context_qualification": "pending"
+  },
+  "installed_artifact": {
+    "mode": "auto",
+    "target": "aarch64-macos",
+    "runtime_version": "3.55.1",
+    "protocol_version": 1,
+    "package_origin": "installed",
+    "artifact_sha256": "57305baefafd1869ffc6e210ac8db1f36205a86ea97a5071f9ea5088c7a9cf2a",
+    "artifact_size": 36983184,
+    "build_sha": "ed5011acbba43cb19c093064b34ffe47bf3f2616",
+    "rule_digest": "54e38cc15fe1e4bb231214e15876422e5c0f872d2d3d5bae85b6c02e43ac7111",
+    "platform_tag": "macosx_11_0_arm64",
+    "host_platform": "darwin",
+    "host_arch": "arm64",
+    "python_version": "3.12.13",
+    "CIGAR_imported": false,
+    "path_override": false,
+    "installed_prefix_selected_by_bootstrap": true,
+    "platform_tag_target_verified": true,
+    "static_files_verified": 33,
+    "compiler_manifest_verified": true,
+    "production_source_files_verified": 10,
+    "strict_installed_signature_verified": true,
+    "wheel_bytes": 24051843,
+    "wheel_sha256": "bb5dfd23afc3cb4cd22f246b185092ab776d7a9623bfa1d0b317781108ee92f5"
+  },
+  "artifact_manifest_checks": {
+    "compiler_projection_outputs": 139,
+    "explicit_runtime_file_bindings": 10,
+    "static_assets": 33,
+    "operator_files": 80
+  },
+  "limits": [
+    "Earlier component/fault/churn/retention receipts retain their original artifact scope. Source equivalence and matching current end-to-end checks support the integration boundary; those earlier cases are not counted as current reruns.",
+    "The original fixed synthetic cohort explicitly selects force-mode native bytes. Automatic discovery and actual frozen application are separately functionally qualified; an automatic-mode production latency cohort is not established.",
+    "The final HTTP median difference is+0.585ms within the original1ms allowance; pair5 has+1.444ms and remains retained. One fixed cohort is not general reliability or a causal speedup.",
+    "Graph reuse and ten cited fixed facts across three questions are verified; no provider/model-token, internal tokenizer, human-time, memory reduction, arbitrary task accuracy or exponential benefit is claimed.",
+    "Full Desktop outer application, interactive external accounts/models, other platforms/architectures, public CIGAR artifact/platform attestation, DeveloperID/notarization and release publication remain unqualified. Unsupported targets stay unavailable.",
+    "The previously recorded18 non-context production TypeScript diagnostics and hardened-helper baseline failures remain unqualified. No complete repository-wide green build/test claim is made; dashboard product source is unchanged from its recorded qualification.",
+    "Private POSIX persistence is not encryption/physical secure erase/hostile-same-user isolation. Additional executor timings and send-boundary atomicity are not established.",
+    "Only local authorized work was performed; no push/publication/deployment, real credentials/environment files, live Guard or SDK source mutation. Detached build trees and task evidence are retained for review."
+  ]
+}

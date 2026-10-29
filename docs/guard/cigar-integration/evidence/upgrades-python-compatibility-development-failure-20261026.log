@@ -1,0 +1,142 @@
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> crates/guard-scanner/src/secret_detection.rs:648:9
+    |
+648 |         &self,
+    |         ^^^^^ the lifetime is elided here
+649 |         fingerprint_key: Option<&[u8]>,
+650 |     ) -> Result<PublicFinding, EmptyFingerprintKeyError> {
+    |                 ^^^^^^^^^^^^^ the same lifetime is hidden here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+    = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+    |
+650 |     ) -> Result<PublicFinding<'_>, EmptyFingerprintKeyError> {
+    |                              ++++
+
+warning: `guard-scanner` (lib) generated 1 warning (run `cargo fix --lib -p guard-scanner` to apply 1 suggestion)
+warning: `guard-scanner` (lib) generated 1 warning (1 duplicate)
+   Compiling guard-cigar-release v0.1.0 (/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/rust/crates/guard-cigar-release)
+warning: use of deprecated method `std::sync::atomic::Atomic::<usize>::fetch_update`: renamed to `try_update` for consistency
+  --> crates/guard-command/src/restricted_archive_write.rs:21:14
+   |
+21 |             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+   |              ^^^^^^^^^^^^
+   |
+   = note: `#[warn(deprecated)]` on by default
+help: replace the use of the deprecated method
+   |
+21 -             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+21 +             .try_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+   |
+
+warning: `guard-command` (lib) generated 1 warning (run `cargo fix --lib -p guard-command` to apply 1 suggestion)
+   Compiling guard-cigar-install v0.1.0 (/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/rust/crates/guard-cigar-install)
+   Compiling guard-context-assistance v0.1.0 (/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/rust/crates/guard-context-assistance)
+warning: use of deprecated method `std::sync::atomic::Atomic::<u64>::fetch_update`: renamed to `try_update` for consistency
+  --> crates/guard-context-assistance/src/freshness.rs:28:14
+   |
+28 |             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |v| {
+   |              ^^^^^^^^^^^^
+   |
+   = note: `#[warn(deprecated)]` on by default
+help: replace the use of the deprecated method
+   |
+28 -             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |v| {
+28 +             .try_update(Ordering::AcqRel, Ordering::Acquire, |v| {
+   |
+
+warning: `guard-context-assistance` (lib) generated 1 warning (run `cargo fix --lib -p guard-context-assistance` to apply 1 suggestion)
+   Compiling hol-guard-runtime v3.16.3 (/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/rust/crates/guard-runtime)
+warning: use of deprecated method `std::sync::atomic::Atomic::<usize>::fetch_update`: renamed to `try_update` for consistency
+  --> crates/guard-runtime/src/archive_acquisition_op.rs:22:14
+   |
+22 |             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+   |              ^^^^^^^^^^^^
+   |
+   = note: `#[warn(deprecated)]` on by default
+help: replace the use of the deprecated method
+   |
+22 -             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+22 +             .try_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+   |
+
+warning: use of deprecated method `std::sync::atomic::Atomic::<i64>::fetch_update`: renamed to `try_update` for consistency
+   --> crates/guard-runtime/src/native_runtime_resilience.rs:472:25
+    |
+472 |         let prev = held.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |h| {
+    |                         ^^^^^^^^^^^^
+    |
+help: replace the use of the deprecated method
+    |
+472 -         let prev = held.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |h| {
+472 +         let prev = held.try_update(Ordering::SeqCst, Ordering::SeqCst, |h| {
+    |
+
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `hol-guard-runtime` (lib test) generated 3 warnings (run `cargo fix --lib -p hol-guard-runtime --tests` to apply 2 suggestions)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 27.41s
+     Running unittests src/lib.rs (/private/tmp/hol-guard-cigar-upgrades-target/debug/deps/hol_guard_runtime-374a3b2ab3c35ea7)
+
+running 33 tests
+test policy_store::context_assistance_registry::preparation::acquisition::policy::tests::configured_proxy_or_custom_ca_is_never_silently_bypassed ... ok
+test policy_store::context_assistance_registry::preparation::acquisition::tests::actual_published_0141_wheels_acquire_without_python_or_activation ... 
+thread 'policy_store::context_assistance_registry::preparation::acquisition::tests::actual_published_0141_wheels_acquire_without_python_or_activation' (922827) panicked at crates/guard-runtime/src/context_assistance_acquisition_tests.rs:260:80:
+called `Result::unwrap()` on an `Err` value: WheelUnsupported
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+test policy_store::context_assistance_registry::preparation::acquisition::tests::exact_download_is_cached_and_wrong_hash_length_or_changed_file_is_refused ... ok
+test policy_store::context_assistance_registry::preparation::acquisition::tests::over_limit_or_cancelled_body_never_publishes_and_staged_bytes_are_cleaned ... ok
+test policy_store::context_assistance_registry::preparation::acquisition::tests::untrusted_redirect_is_refused_before_destination_dns_or_request ... ok
+test policy_store::context_assistance_registry::preparation::acquisition::transport::tests::dependency_url_must_match_exactly_and_honor_registry_policy ... ok
+test policy_store::context_assistance_registry::preparation::acquisition::transport::tests::redirects_cannot_change_repository_or_escape_named_cdn ... ok
+test policy_store::context_assistance_registry::preparation::tests::actual::actual_managed_install_is_inactive_idempotent_and_reconciles_lost_publication_reply ... 
+thread 'policy_store::context_assistance_registry::preparation::tests::actual::actual_managed_install_is_inactive_idempotent_and_reconciles_lost_publication_reply' (922919) panicked at crates/guard-runtime/src/context_assistance_install_jobs_actual_tests.rs:94:5:
+assertion `left == right` failed: {"activation_granted":false,"build_id":"cigar-0_14_1-10dd521dec82","cancel_requested":false,"code":"native_context_assistance_cigar_install_wheel_unsupported","core_version":"0.14.1","created_at_ms":1793067745302,"deadline_at_ms":1793067865302,"interpreter_id":"python:d5cfd7d0292cb9fbb987dfaff390fd1536b47211dd5819719e2eb5465eacc189","job_id":"real-final-install","operation":"install","phase":"failed","recovery_available":false,"runtime_id":"cigar:ed72ab6c1258044664cdaf16309675eac63ba5d6dc07be82f28fdf345b1919ef","schema":"guard-cigar-install-job.v1","sdk_version":"0.14.1","updated_at_ms":1793067745784,"worker_live":false}
+  left: String("failed")
+ right: "ready"
+FAILED
+test policy_store::context_assistance_registry::preparation::tests::actual::actual_preparation_cancellation_keeps_current_cigar_running_and_preferences_unchanged ... 
+thread 'policy_store::context_assistance_registry::preparation::tests::actual::actual_preparation_cancellation_keeps_current_cigar_running_and_preferences_unchanged' (922930) panicked at crates/guard-runtime/src/context_assistance_install_jobs_actual_tests.rs:230:9:
+assertion `left != right` failed: replacement failed before the test boundary: {"activation_granted":false,"build_id":"cigar-0_14_1-10dd521dec82","cancel_requested":false,"code":"native_context_assistance_cigar_install_wheel_unsupported","core_version":"0.14.1","created_at_ms":1793067749815,"deadline_at_ms":1793067869815,"interpreter_id":"python:d5cfd7d0292cb9fbb987dfaff390fd1536b47211dd5819719e2eb5465eacc189","job_id":"cancel-while-current-runs","operation":"install","phase":"failed","recovery_available":false,"runtime_id":"cigar:ed72ab6c1258044664cdaf16309675eac63ba5d6dc07be82f28fdf345b1919ef","schema":"guard-cigar-install-job.v1","sdk_version":"0.14.1","updated_at_ms":1793067750299,"worker_live":false}
+  left: Bool(false)
+ right: false
+FAILED
+test policy_store::context_assistance_registry::preparation::tests::cleanup_preserves_every_registered_alias_even_when_it_is_not_selected ... ok
+test policy_store::context_assistance_registry::preparation::tests::cleanup_preserves_external_symlink_targets_and_records_recovery_needed ... ok
+test policy_store::context_assistance_registry::preparation::tests::durable_cancel_intent_is_reconciled_after_the_worker_is_gone ... ok
+test policy_store::context_assistance_registry::preparation::tests::interrupted_preparation_recovers_without_launching_or_selecting_a_runtime ... ok
+test policy_store::context_assistance_registry::preparation::tests::job_record_tampering_and_public_path_injection_are_refused ... ok
+test policy_store::context_assistance_registry::preparation::tests::later_python_patch_requirement_refuses_before_any_job_download_or_sdk ... ok
+test policy_store::context_assistance_registry::preparation::tests::local_setup_requires_operator_consent_and_rejects_supplied_interpreter_facts ... ok
+test policy_store::context_assistance_registry::preparation::tests::metadata_listing_tolerates_its_atomic_writer_and_refuses_malformed_names ... ok
+test policy_store::context_assistance_registry::preparation::tests::passive_job_metadata_never_requires_an_interpreter_or_sdk_tree ... ok
+test policy_store::context_assistance_registry::preparation::tests::recovery_will_not_race_an_existing_preparation_lease ... ok
+test policy_store::context_assistance_registry::preparation::tests::repeated_requests_converge_and_reused_keys_cannot_change_the_target ... ok
+test policy_store::context_assistance_registry::preparation::tests::upstream_only_build_is_refused_before_any_job_or_sdk_preparation ... ok
+test policy_store::context_assistance_registry::tests::enrollment_requires_explicit_local_candidate_approval_before_launch ... ok
+test policy_store::context_assistance_registry::tests::managed_prohibition_refuses_enrollment_before_any_selected_runtime_read_or_launch ... ok
+test policy_store::context_assistance_registry::tests::private_record_is_bound_to_selection_id_and_does_not_grant_readiness ... ok
+test policy_store::context_assistance_registry::tests::registry_rejects_shared_records_hardlinks_and_redirected_directories ... ok
+test policy_store::context_assistance_registry::tests::versioned_tests::a_mixed_legacy_schema_cannot_claim_published_qualification ... ok
+test policy_store::context_assistance_registry::tests::versioned_tests::authenticated_modern_metadata_is_read_without_sdk_paths_or_processes ... ok
+test policy_store::context_assistance_registry::tests::versioned_tests::installation_keys_refuse_shared_permissions_hardlinks_and_other_home_binding ... ok
+test policy_store::context_assistance_registry::tests::versioned_tests::legacy_reads_preserve_record_bytes_and_do_not_provision_a_key ... ok
+test policy_store::context_assistance_registry::tests::versioned_tests::managed_scope_cannot_point_at_an_operator_owned_environment ... ok
+test policy_store::context_assistance_registry::tests::versioned_tests::missing_key_is_unavailable_without_recreating_or_reapproving_anything ... ok
+test policy_store::context_assistance_registry::tests::versioned_tests::modified_installation_context_cannot_reuse_an_authenticated_receipt ... ok
+test policy_store::context_assistance_registry::tests::versioned_tests::requested_feature_qualification_is_checked_before_any_sdk_artifact_access ... ok
+
+failures:
+
+failures:
+    policy_store::context_assistance_registry::preparation::acquisition::tests::actual_published_0141_wheels_acquire_without_python_or_activation
+    policy_store::context_assistance_registry::preparation::tests::actual::actual_managed_install_is_inactive_idempotent_and_reconciles_lost_publication_reply
+    policy_store::context_assistance_registry::preparation::tests::actual::actual_preparation_cancellation_keeps_current_cigar_running_and_preferences_unchanged
+
+test result: FAILED. 30 passed; 3 failed; 0 ignored; 0 measured; 3995 filtered out; finished in 7.97s
+
+error: test failed, to rerun pass `-p hol-guard-runtime --lib`

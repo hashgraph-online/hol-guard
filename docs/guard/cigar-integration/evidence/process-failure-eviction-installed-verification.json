@@ -1,0 +1,586 @@
+{
+  "schema": "guard-cigar-process-failure-eviction-installed-verification.v1",
+  "status": "Local installed fault containment, native approval fallback and bounded selection/source/graph/idle lifecycle qualified; full integration goal remains active.",
+  "product_evidence": "stop-generation-installed-verification.json",
+  "product": {
+    "mode": "auto",
+    "target": "aarch64-macos",
+    "runtime_version": "3.55.1",
+    "protocol_version": 1,
+    "package_origin": "installed",
+    "artifact_sha256": "ed67f14f60235aace5de42f7a0aded074d9c0979f576ce43deb2eb22b62594b6",
+    "artifact_size": 113583104,
+    "build_sha": "6c4c8468867a90c22c8a5cc382e615ef6386d67b",
+    "rule_digest": "54e38cc15fe1e4bb231214e15876422e5c0f872d2d3d5bae85b6c02e43ac7111",
+    "platform_tag": "macosx_11_0_arm64",
+    "platform_tag_target_verified": true,
+    "host_platform": "darwin",
+    "host_arch": "arm64",
+    "python_version": "3.12.13",
+    "CIGAR_imported": false,
+    "path_override": false,
+    "static_files_verified": 33,
+    "compiler_manifest_verified": true,
+    "wheel_bytes": 41332164,
+    "wheel_sha256": "70812685d71bf31e5d38bd9ce39eb8b0903f1413f912b64069cd6e2937aa5517"
+  },
+  "source_parent": "4c4d43f2",
+  "product_runtime_changed": false,
+  "inputs": [
+    {
+      "artifact_source": "6c4c8468867a90c22c8a5cc382e615ef6386d67b",
+      "artifact_sha256": "ed67f14f60235aace5de42f7a0aded074d9c0979f576ce43deb2eb22b62594b6",
+      "source_sha256": {
+        "tests/context_process_fault.py": "6ebc9eefb60c29f459c4b00b1484cc071590a6031d2e53a5abcbc399023bdc8a",
+        "tests/test_context_process_fault.py": "cf29fb8cb3fb83dcc2d8f1592866d08cd3ecf192cb35724778bab9c99852f1da",
+        "tests/test_context_process_failure_installed.py": "7b81f7f7ef9170b7619aba34ef813d0e3fe5063047ccb70e21fde55612034822",
+        "tests/test_context_execution_sink_installed.py": "54651743149971da5e5866d20de215ad00c2e4eed315f8e184a4492f051d1131",
+        "scripts/cigar_benchmark_processes.py": "e6d76990b4b9cd57c46fa6ca0de8d7f07952327f53a59894adff374c5f785258",
+        "tests/native_runtime_fixtures.py": "f01580d01ffb6a9c9346d62d76a120396dd2c1eedd1a0a999e57d0143c3cce30"
+      }
+    },
+    {
+      "artifact_source": "6c4c8468867a90c22c8a5cc382e615ef6386d67b",
+      "source_sha256": {
+        "tests/test_context_eviction_installed.py": "4009e6893c913aeef44052e4eccdcf56ee57ae48efb92ec2859ec05455a3328b",
+        "scripts/cigar_benchmark_processes.py": "e6d76990b4b9cd57c46fa6ca0de8d7f07952327f53a59894adff374c5f785258",
+        "tests/context_persistence_installed_support.py": "2b7134960c401080c2a453daec4cf3d0ddb63c8de2b016076cdcc036065628db",
+        "tests/native_runtime_fixtures.py": "f01580d01ffb6a9c9346d62d76a120396dd2c1eedd1a0a999e57d0143c3cce30"
+      }
+    }
+  ],
+  "sources_unchanged_during_each_qualification": true,
+  "process_faults": {
+    "junit": {
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-process-failure-20261024/installed-final-results.xml",
+        "bytes": 1741,
+        "sha256": "50ce7342fe9e78badcb7026d88656fd2934815a2bbf1c712a2e54e8585bf19e6"
+      },
+      "tests": 8,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 419.76
+    },
+    "ownership_unit": {
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-process-failure-20261024/unit-results.xml",
+        "bytes": 1626,
+        "sha256": "92ae0b8c55bcb38c466d6c9c4ee8b68c17a98e9d9fa56e1ca702f29f2b44e1ac"
+      },
+      "tests": 9,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 0.686
+    },
+    "cases": [
+      {
+        "receipt": {
+          "path": "/private/tmp/hol-guard-cigar-process-failure-20261024/installed-final-scratch/test_actual_optional_process_f0/fault-report.json",
+          "bytes": 533,
+          "sha256": "912eaa6c7414350fbca29a8673d0879ced5ecae1ca131ba9e38b6f2e8d3a5726"
+        },
+        "report": {
+          "captured_sdk_workers": 2,
+          "ancestry_verified": true,
+          "kernel_images_and_artifacts_verified": true,
+          "separate_process_group": true,
+          "signals_sent": 1,
+          "fallback_signals": 0,
+          "contained": true,
+          "approval": "once",
+          "ready_before_fault": true,
+          "fault": "bridge-crash",
+          "approved_effect_ms": 319.953,
+          "approved_native_effect_completed": true,
+          "prior_non_dispatch_observations_before_retirement": 1,
+          "effect_start_to_optional_retirement_ms": 1263.871,
+          "native_parent_survived": true,
+          "completed": true
+        }
+      },
+      {
+        "receipt": {
+          "path": "/private/tmp/hol-guard-cigar-process-failure-20261024/installed-final-scratch/test_actual_optional_process_f1/fault-report.json",
+          "bytes": 529,
+          "sha256": "c754bdd2d74992600bab7bf8873b04b034272339de7917bac19d91778059697c"
+        },
+        "report": {
+          "captured_sdk_workers": 2,
+          "ancestry_verified": true,
+          "kernel_images_and_artifacts_verified": true,
+          "separate_process_group": true,
+          "signals_sent": 2,
+          "fallback_signals": 0,
+          "contained": true,
+          "approval": "once",
+          "ready_before_fault": true,
+          "fault": "sdk-crash",
+          "approved_effect_ms": 317.76,
+          "approved_native_effect_completed": true,
+          "prior_non_dispatch_observations_before_retirement": 1,
+          "effect_start_to_optional_retirement_ms": 1315.608,
+          "native_parent_survived": true,
+          "completed": true
+        }
+      },
+      {
+        "receipt": {
+          "path": "/private/tmp/hol-guard-cigar-process-failure-20261024/installed-final-scratch/test_actual_optional_process_f2/fault-report.json",
+          "bytes": 532,
+          "sha256": "3870d2b9df60fc0fd0af576af4c4e4b8397633b161b4d05e98e9dff0273d74b9"
+        },
+        "report": {
+          "captured_sdk_workers": 2,
+          "ancestry_verified": true,
+          "kernel_images_and_artifacts_verified": true,
+          "separate_process_group": true,
+          "signals_sent": 1,
+          "fallback_signals": 0,
+          "contained": true,
+          "approval": "once",
+          "ready_before_fault": true,
+          "fault": "bridge-stall",
+          "approved_effect_ms": 434.004,
+          "approved_native_effect_completed": true,
+          "prior_non_dispatch_observations_before_retirement": 1,
+          "effect_start_to_optional_retirement_ms": 1251.43,
+          "native_parent_survived": true,
+          "completed": true
+        }
+      },
+      {
+        "receipt": {
+          "path": "/private/tmp/hol-guard-cigar-process-failure-20261024/installed-final-scratch/test_actual_optional_process_f3/fault-report.json",
+          "bytes": 535,
+          "sha256": "1a7b1b519a44bbca19db55cdb4ad0c3d29481eb999a42f071d81882820dc6f86"
+        },
+        "report": {
+          "captured_sdk_workers": 2,
+          "ancestry_verified": true,
+          "kernel_images_and_artifacts_verified": true,
+          "separate_process_group": true,
+          "signals_sent": 1,
+          "fallback_signals": 0,
+          "contained": true,
+          "approval": "always",
+          "ready_before_fault": true,
+          "fault": "bridge-crash",
+          "approved_effect_ms": 334.026,
+          "approved_native_effect_completed": true,
+          "prior_non_dispatch_observations_before_retirement": 1,
+          "effect_start_to_optional_retirement_ms": 1205.382,
+          "native_parent_survived": true,
+          "completed": true
+        }
+      },
+      {
+        "receipt": {
+          "path": "/private/tmp/hol-guard-cigar-process-failure-20261024/installed-final-scratch/test_actual_optional_process_f4/fault-report.json",
+          "bytes": 532,
+          "sha256": "346c097fc29b157eec78546ca2a43e9fca2fd0875710cea453d5f2a02ebd5ed6"
+        },
+        "report": {
+          "captured_sdk_workers": 2,
+          "ancestry_verified": true,
+          "kernel_images_and_artifacts_verified": true,
+          "separate_process_group": true,
+          "signals_sent": 2,
+          "fallback_signals": 0,
+          "contained": true,
+          "approval": "always",
+          "ready_before_fault": true,
+          "fault": "sdk-crash",
+          "approved_effect_ms": 325.991,
+          "approved_native_effect_completed": true,
+          "prior_non_dispatch_observations_before_retirement": 1,
+          "effect_start_to_optional_retirement_ms": 1221.254,
+          "native_parent_survived": true,
+          "completed": true
+        }
+      },
+      {
+        "receipt": {
+          "path": "/private/tmp/hol-guard-cigar-process-failure-20261024/installed-final-scratch/test_actual_optional_process_f5/fault-report.json",
+          "bytes": 535,
+          "sha256": "c38f1ff3bc4ef11e4e327bb97e4af632ee08227908e9b277c1c5ed1f2eef7f05"
+        },
+        "report": {
+          "captured_sdk_workers": 2,
+          "ancestry_verified": true,
+          "kernel_images_and_artifacts_verified": true,
+          "separate_process_group": true,
+          "signals_sent": 1,
+          "fallback_signals": 0,
+          "contained": true,
+          "approval": "always",
+          "ready_before_fault": true,
+          "fault": "bridge-stall",
+          "approved_effect_ms": 432.835,
+          "approved_native_effect_completed": true,
+          "prior_non_dispatch_observations_before_retirement": 1,
+          "effect_start_to_optional_retirement_ms": 1215.925,
+          "native_parent_survived": true,
+          "completed": true
+        }
+      }
+    ],
+    "target_ownership": "Current ancestry reaches the disposable pytest process. Native parent, selected CPython kernel image and both actual SDK worker images match approved artifacts. Verify PID/start/parent/group and kernel image again before signalling. PID/start identities remain in memory; persisted observations are aggregates only.",
+    "faults": "SIGKILL the owned bridge; SIGKILL the two owned SDK workers; SIGSTOP the owned bridge. Rust must contain the entire optional group. No extra fallback signal is permitted on a passing case.",
+    "assertions": [
+      "Initial effect requires native consent and offers both choices.",
+      "After explicit approval and actual fault, native effect completes; the native authority process survives.",
+      "Prior not-dispatched history never becomes an applied association or an acknowledged dispatch. Native lifecycle retirement removes the failed runtime and observations, and old context access refuses.",
+      "Completed-operation replay preserves the sentinel; native restart cannot replenish spent once approval and preserves saved Always allow.",
+      "Explicit reactivation starts with no old source scope. Global opt-out preserves native approval semantics."
+    ],
+    "first_failed_attempt": {
+      "junit": {
+        "receipt": {
+          "path": "/private/tmp/hol-guard-cigar-process-failure-20261024/installed-results.xml",
+          "bytes": 11284,
+          "sha256": "b5765553104e40b5735f26603088a851cb1594ed7a128969655d850bfc1d1599"
+        },
+        "tests": 1,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0,
+        "seconds": 30.147
+      },
+      "report": [
+        {
+          "receipt": {
+            "path": "/private/tmp/hol-guard-cigar-process-failure-20261024/installed-scratch/test_actual_optional_process_f0/fault-report.json",
+            "bytes": 345,
+            "sha256": "abe1a0f7e0b8cb82e4cd31fdb024dbd7f1e0d6e3aab644e92d689afeff3d4e88"
+          },
+          "report": {
+            "captured_sdk_workers": 2,
+            "ancestry_verified": true,
+            "kernel_images_and_artifacts_verified": true,
+            "separate_process_group": true,
+            "signals_sent": 1,
+            "fallback_signals": 0,
+            "contained": false,
+            "approval": "once",
+            "ready_before_fault": true,
+            "fault": "bridge-crash",
+            "approved_effect_ms": 325.328,
+            "completed": false
+          }
+        }
+      ],
+      "reason": "The first test incorrectly expected empty history immediately when the actor became inactive. The pre-approval consent refusal had legitimately recorded not_dispatched without association or dispatch. The native effect had completed. Source review confirmed watcher-driven retirement.",
+      "correction": "Require retained observations to be prior not_dispatched entries with no applied association or acknowledged dispatch, then require actual bounded retirement and empty runtime/history. No product code or production deadline changes."
+    }
+  },
+  "eviction": {
+    "junit": {
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-eviction-20261024/installed-results.xml",
+        "bytes": 607,
+        "sha256": "78ccac9dfe60bee0e53c23e49ceb8cf1ccaefdddbad35d5dc72b4c9b0072943a"
+      },
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 135.435
+    },
+    "cases": [
+      {
+        "receipt": {
+          "path": "/private/tmp/hol-guard-cigar-eviction-20261024/installed-scratch/test_installed_retention_withd0/lifecycle-report.json",
+          "bytes": 2252,
+          "sha256": "dd20424c51d38eef33dd785cb708b0162e185925d219eb17defb12039ba72734"
+        },
+        "report": {
+          "schema": "guard-cigar-eviction-installed.v1",
+          "shared_broker": false,
+          "completed": true,
+          "before": {
+            "rss_bytes": 228933632,
+            "counts": {
+              "benchmark_daemon_host": 1,
+              "native_runtime": 3
+            },
+            "rss_by_kind": {
+              "benchmark_daemon_host": 145047552,
+              "native_runtime": 83886080
+            }
+          },
+          "unique_snapshots": 9,
+          "retained_context_counts": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            1
+          ],
+          "old_selection_evicted": true,
+          "source_withdrawn": true,
+          "graph_slot_reused": true,
+          "active": {
+            "rss_bytes": 439500800,
+            "counts": {
+              "benchmark_daemon_host": 1,
+              "native_runtime": 6,
+              "python_bridge": 1,
+              "sdk_worker": 1
+            },
+            "rss_by_kind": {
+              "benchmark_daemon_host": 150552576,
+              "native_runtime": 201375744,
+              "python_bridge": 27607040,
+              "sdk_worker": 59965440
+            }
+          },
+          "idle_retirement_seconds": 30.365,
+          "retired": {
+            "rss_bytes": 351158272,
+            "counts": {
+              "benchmark_daemon_host": 1,
+              "native_runtime": 6
+            },
+            "rss_by_kind": {
+              "benchmark_daemon_host": 149635072,
+              "native_runtime": 201523200
+            }
+          },
+          "fresh_authority_required": true,
+          "after": {
+            "rss_bytes": 233750528,
+            "counts": {
+              "benchmark_daemon_host": 1,
+              "native_runtime": 3
+            },
+            "rss_by_kind": {
+              "benchmark_daemon_host": 149684224,
+              "native_runtime": 84066304
+            }
+          },
+          "new_processes_remaining": 0,
+          "resources": {
+            "samples": 602,
+            "sampling_errors": 0,
+            "median_rss_bytes": 438550528,
+            "peak_rss_bytes": 439713792,
+            "at_peak_counts": {
+              "benchmark_daemon_host": 1,
+              "native_runtime": 6,
+              "python_bridge": 1,
+              "sdk_worker": 1
+            },
+            "at_peak_rss_by_kind": {
+              "benchmark_daemon_host": 150749184,
+              "native_runtime": 201392128,
+              "python_bridge": 27607040,
+              "sdk_worker": 59965440
+            },
+            "maximum_counts": {
+              "sdk_worker": 1,
+              "other_python_child": 1,
+              "benchmark_daemon_host": 1,
+              "python_bridge": 1,
+              "native_runtime": 6,
+              "terminated_child": 1,
+              "other_descendant": 1
+            },
+            "includes_observed_reparented_children": true,
+            "shared_pages_may_be_counted_in_multiple_processes": true
+          }
+        }
+      },
+      {
+        "receipt": {
+          "path": "/private/tmp/hol-guard-cigar-eviction-20261024/installed-scratch/test_installed_retention_withd1/lifecycle-report.json",
+          "bytes": 2361,
+          "sha256": "6733e3370ce450c2d2ec5a9e6d0c80c7e8682b48ac36e66386dabd6603becaf0"
+        },
+        "report": {
+          "schema": "guard-cigar-eviction-installed.v1",
+          "shared_broker": true,
+          "completed": true,
+          "before": {
+            "rss_bytes": 233750528,
+            "counts": {
+              "benchmark_daemon_host": 1,
+              "native_runtime": 3
+            },
+            "rss_by_kind": {
+              "benchmark_daemon_host": 149684224,
+              "native_runtime": 84066304
+            }
+          },
+          "unique_snapshots": 9,
+          "retained_context_counts": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7,
+            8,
+            1
+          ],
+          "old_selection_evicted": true,
+          "source_withdrawn": true,
+          "graph_slot_reused": true,
+          "active": {
+            "rss_bytes": 467632128,
+            "counts": {
+              "benchmark_daemon_host": 1,
+              "native_runtime": 6,
+              "python_bridge": 1,
+              "other_python_child": 1,
+              "sdk_worker": 1
+            },
+            "rss_by_kind": {
+              "benchmark_daemon_host": 149929984,
+              "native_runtime": 200802304,
+              "python_bridge": 29081600,
+              "other_python_child": 27492352,
+              "sdk_worker": 60325888
+            }
+          },
+          "idle_retirement_seconds": 30.402,
+          "retired": {
+            "rss_bytes": 350978048,
+            "counts": {
+              "benchmark_daemon_host": 1,
+              "native_runtime": 6
+            },
+            "rss_by_kind": {
+              "benchmark_daemon_host": 150061056,
+              "native_runtime": 200916992
+            }
+          },
+          "fresh_authority_required": true,
+          "after": {
+            "rss_bytes": 234291200,
+            "counts": {
+              "benchmark_daemon_host": 1,
+              "native_runtime": 3
+            },
+            "rss_by_kind": {
+              "benchmark_daemon_host": 150224896,
+              "native_runtime": 84066304
+            }
+          },
+          "new_processes_remaining": 0,
+          "resources": {
+            "samples": 1044,
+            "sampling_errors": 0,
+            "median_rss_bytes": 464076800,
+            "peak_rss_bytes": 470368256,
+            "at_peak_counts": {
+              "sdk_worker": 1,
+              "benchmark_daemon_host": 1,
+              "python_bridge": 1,
+              "native_runtime": 6,
+              "other_python_child": 1
+            },
+            "at_peak_rss_by_kind": {
+              "sdk_worker": 60768256,
+              "benchmark_daemon_host": 150290432,
+              "python_bridge": 30130176,
+              "native_runtime": 201998336,
+              "other_python_child": 27181056
+            },
+            "maximum_counts": {
+              "sdk_worker": 1,
+              "other_python_child": 2,
+              "benchmark_daemon_host": 1,
+              "python_bridge": 1,
+              "native_runtime": 6,
+              "other_descendant": 1
+            },
+            "includes_observed_reparented_children": true,
+            "shared_pages_may_be_counted_in_multiple_processes": true
+          }
+        }
+      }
+    ],
+    "assertions": [
+      "The configured single active workspace refuses a second grant without evicting the existing grant.",
+      "Nine distinct snapshot identities at one unchanged graph revision exercise retention counts 1 through 8, then 1. Earlier live explanations refuse while the current snapshot works.",
+      "Explicit source withdrawal invalidates retained handles and removes selected text from new context. Explicit scope revocation frees the graph slot for another workspace.",
+      "Status-only polling cannot renew a graph: real configured 30-second idle retirement removes optional workers in both private-graph and shared-broker modes.",
+      "Old compile/explanation access refuses after idle shutdown. Explicit activation restores no scopes or agent sessions; fresh grant and new context are required.",
+      "Final native/client shutdown leaves no new live process relative to exact observed PID/start baseline; baseline RSS stays included."
+    ]
+  },
+  "checks": [
+    {
+      "name": "semantic",
+      "status": "passed",
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-process-failure-20261024/semantic-precommit.json",
+        "bytes": 99,
+        "sha256": "8e3101056186cd4d641add66f9eed89b0289db4e105bdb5885821ae3f0484e46"
+      }
+    },
+    {
+      "name": "capability",
+      "status": "passed",
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-process-failure-20261024/capability-precommit.json",
+        "bytes": 38592,
+        "sha256": "d975dee5fe67bdb3f901777eaa0e7a95a5e8ce9e5f310467754474d61c80dc74"
+      }
+    },
+    {
+      "name": "authority",
+      "status": "passed",
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-process-failure-20261024/authority-precommit.json",
+        "bytes": 64231,
+        "sha256": "6bc972e9e5eb2316c9653c62e3903f47aea3bfbedad579de0c99ee39a20fd265"
+      }
+    },
+    {
+      "name": "io",
+      "status": "passed",
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-process-failure-20261024/io-precommit.json",
+        "bytes": 78222,
+        "sha256": "bcf901a1c39ebf936483fa5aebdcdb005372d016d67e41b8e46adc6fcbd68472"
+      }
+    },
+    {
+      "name": "privacy",
+      "status": "passed",
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-process-failure-20261024/privacy-precommit.json",
+        "bytes": 620,
+        "sha256": "3f99732114cd01afda57fec9bae91e307310125980da63e8859c1941fbb96b14"
+      }
+    }
+  ],
+  "format_and_whitespace": "Targeted Ruff/check/format and git diff --check passed.",
+  "SDK": {
+    "revision": "b47380e5a5cbeaaad5a61cab3372e9e67368732f",
+    "source_unchanged": true,
+    "worker": {
+      "path": "/private/tmp/hol-guard-cigar-sdk-target/debug/cigar-context-worker",
+      "bytes": 22708072,
+      "sha256": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112"
+    }
+  },
+  "limits": [
+    "Actual installed package and native authority; trusted test consent and fixture seams, not repeated password/browser proof.",
+    "Faults occur after approval and before the native effect call. They do not qualify ambiguous in-flight native effects or atomicity across SDK/native send boundaries.",
+    "The stall exercises optional transport loss/timeout. It does not establish CPU quotas or a public-release platform receipt.",
+    "Selection pressure bounds retained native handles; it does not measure internal SDK tokenization cache eviction, a settled memory plateau or an efficiency gain.",
+    "Graph pressure uses explicit refusal/revocation/slot reuse. Idle retirement closes the optional runtime and its graphs; this is not automatic per-graph LRU eviction.",
+    "Sampling includes all observed descendants/reparenting and original native baseline; shared pages can be counted more than once. Resource values are functional lifecycle diagnostics, not a matched performance comparison.",
+    "Interactive model/application delivery, remaining native uncertainty, complete matched relative-latency/resources and useful-outcome acceptance remain pending. Existing unrelated TypeScript and earlier intermittent failures remain retained."
+  ]
+}

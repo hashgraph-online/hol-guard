@@ -1,0 +1,259 @@
+{
+  "schema": "guard-cigar-history-development-evidence.v1",
+  "qualification": "native_library_with_actual_candidate_worker",
+  "implementation_base": "8d6da893",
+  "workspace_paths_redacted": true,
+  "native_test": {
+    "passed": 1,
+    "failed": 0,
+    "ignored": 0,
+    "seconds": 10.5,
+    "observation": {
+      "checks": [
+        "actual_sdk_brief_retained",
+        "metadata_omits_text_and_query",
+        "historical_not_current_or_execution",
+        "changed_source_marked",
+        "refresh_preserves_historical_snapshot",
+        "unsafe_source_withholds_text",
+        "read_cannot_forget",
+        "forget_preserves_current_context",
+        "withdraw_purges_history",
+        "clear_forgets_grants_and_history",
+        "off_refuses_history"
+      ],
+      "detail_observation": {
+        "brief": {
+          "citations": [
+            {
+              "document_digest": "310d6074f328d0b16f6c6d6d9e0a9b562d05309df3e980d2d4509754f51e24a0",
+              "end_line": 1,
+              "node_id": "guard-policy-facts",
+              "source": "guard:policy",
+              "start_line": 1
+            },
+            {
+              "document_digest": "f2a247da1241d57744387e477ffc142f1e9c1a672658b154c8c5be247d56158a",
+              "end_line": 1,
+              "node_id": "doc:b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5:0",
+              "source": "source:b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5",
+              "start_line": 1
+            }
+          ],
+          "data_role": true,
+          "excerpts": [
+            {
+              "citations": [
+                {
+                  "document_digest": "310d6074f328d0b16f6c6d6d9e0a9b562d05309df3e980d2d4509754f51e24a0",
+                  "end_line": 1,
+                  "node_id": "guard-policy-facts",
+                  "source": "guard:policy",
+                  "start_line": 1
+                }
+              ],
+              "text": "Guard provides Allow once and Always allow for supported executable reviews. Context assistance supplies data and grants no command approval."
+            },
+            {
+              "citations": [
+                {
+                  "document_digest": "f2a247da1241d57744387e477ffc142f1e9c1a672658b154c8c5be247d56158a",
+                  "end_line": 1,
+                  "node_id": "doc:b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5:0",
+                  "source": "source:b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5",
+                  "start_line": 1
+                }
+              ],
+              "text": "Project history uses the original release procedure.\n"
+            }
+          ],
+          "graph_revision": 2,
+          "policy_revision": "38a10e0673fc90d2998bd076f05fd2b783f760b9321366fa33cca672bd6ac4ab",
+          "rendered": "{\"sources\":[[\"guard-policy-facts\",\"guard:policy\",1,1]],\"text\":\"Guard provides Allow once and Always allow for supported executable reviews. Context assistance supplies data and grants no command approval.\"}\n{\"sources\":[[\"doc:b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5:0\",\"source:b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5\",1,1]],\"text\":\"Project history uses the original release procedure.\\n\"}",
+          "rendered_tokens": 138,
+          "schema": "guard-cigar-context-brief.v1",
+          "snapshot_id": "2fbd1a6bb403b15eff50a997ddca7b79c04be11bb9ac014178a41c16c16d83e8"
+        },
+        "current": false,
+        "entry": {
+          "association": null,
+          "citations": [
+            {
+              "document_digest": "310d6074f328d0b16f6c6d6d9e0a9b562d05309df3e980d2d4509754f51e24a0",
+              "end_line": 1,
+              "node_id": "guard-policy-facts",
+              "source": "guard:policy",
+              "start_line": 1
+            },
+            {
+              "document_digest": "f2a247da1241d57744387e477ffc142f1e9c1a672658b154c8c5be247d56158a",
+              "end_line": 1,
+              "node_id": "doc:b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5:0",
+              "source": "source:b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5",
+              "start_line": 1
+            }
+          ],
+          "graph_revision": 2,
+          "historical": true,
+          "history_id": "history:1",
+          "observation": "prepared_not_delivery_or_execution",
+          "policy_revision": "38a10e0673fc90d2998bd076f05fd2b783f760b9321366fa33cca672bd6ac4ab",
+          "prepared_at_ms": "1792801448143",
+          "rendered_tokens": 138,
+          "sdk_version": "0.14.1",
+          "snapshot_id": "2fbd1a6bb403b15eff50a997ddca7b79c04be11bb9ac014178a41c16c16d83e8",
+          "sources": [
+            {
+              "path": "README.md",
+              "sha256": "81135e2c4269cd57e54b335a87e00d4050b6a2259470f093294acae6eefae030",
+              "source_id": "source:b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5"
+            }
+          ],
+          "text_retained": true,
+          "worker_fingerprint": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112"
+        },
+        "historical": true,
+        "history_schema": "guard-cigar-history.v1",
+        "scope": {
+          "app": "dashboard",
+          "native_policy_facts": true,
+          "policy_revision": "38a10e0673fc90d2998bd076f05fd2b783f760b9321366fa33cca672bd6ac4ab",
+          "receipt_window": {
+            "coverage": "bounded_recent_native_receipts",
+            "dropped": "0",
+            "enabled": true,
+            "retained": 0
+          },
+          "retained_contexts": 1,
+          "revoked": false,
+          "scope_id": "scope:c901392dc49e5ef036f529c70278564ec9f55e60d69f26f4a0123bc82cd56215",
+          "sources": [
+            {
+              "documents": 1,
+              "path": "README.md",
+              "sha256": "81135e2c4269cd57e54b335a87e00d4050b6a2259470f093294acae6eefae030",
+              "source_id": "source:b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5"
+            }
+          ],
+          "workspace": "/synthetic/history-workspace"
+        },
+        "source_access": "available",
+        "source_states": [
+          {
+            "current_sha256": "81135e2c4269cd57e54b335a87e00d4050b6a2259470f093294acae6eefae030",
+            "recorded_sha256": "81135e2c4269cd57e54b335a87e00d4050b6a2259470f093294acae6eefae030",
+            "source_id": "source:b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5",
+            "state": "unchanged"
+          }
+        ]
+      },
+      "history_observation": {
+        "current": false,
+        "entries": [
+          {
+            "association": null,
+            "citations": [
+              {
+                "document_digest": "310d6074f328d0b16f6c6d6d9e0a9b562d05309df3e980d2d4509754f51e24a0",
+                "end_line": 1,
+                "node_id": "guard-policy-facts",
+                "source": "guard:policy",
+                "start_line": 1
+              },
+              {
+                "document_digest": "f2a247da1241d57744387e477ffc142f1e9c1a672658b154c8c5be247d56158a",
+                "end_line": 1,
+                "node_id": "doc:b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5:0",
+                "source": "source:b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5",
+                "start_line": 1
+              }
+            ],
+            "graph_revision": 2,
+            "historical": true,
+            "history_id": "history:1",
+            "observation": "prepared_not_delivery_or_execution",
+            "policy_revision": "38a10e0673fc90d2998bd076f05fd2b783f760b9321366fa33cca672bd6ac4ab",
+            "prepared_at_ms": "1792801448143",
+            "rendered_tokens": 138,
+            "sdk_version": "0.14.1",
+            "snapshot_id": "2fbd1a6bb403b15eff50a997ddca7b79c04be11bb9ac014178a41c16c16d83e8",
+            "sources": [
+              {
+                "path": "README.md",
+                "sha256": "81135e2c4269cd57e54b335a87e00d4050b6a2259470f093294acae6eefae030",
+                "source_id": "source:b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5"
+              }
+            ],
+            "text_retained": true,
+            "worker_fingerprint": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112"
+          }
+        ],
+        "historical": true,
+        "history_schema": "guard-cigar-history.v1",
+        "scope": {
+          "app": "dashboard",
+          "native_policy_facts": true,
+          "policy_revision": "38a10e0673fc90d2998bd076f05fd2b783f760b9321366fa33cca672bd6ac4ab",
+          "receipt_window": {
+            "coverage": "bounded_recent_native_receipts",
+            "dropped": "0",
+            "enabled": true,
+            "retained": 0
+          },
+          "retained_contexts": 1,
+          "revoked": false,
+          "scope_id": "scope:c901392dc49e5ef036f529c70278564ec9f55e60d69f26f4a0123bc82cd56215",
+          "sources": [
+            {
+              "documents": 1,
+              "path": "README.md",
+              "sha256": "81135e2c4269cd57e54b335a87e00d4050b6a2259470f093294acae6eefae030",
+              "source_id": "source:b335630551682c19a781afebcf4d07bf978fb1f8ac04c6bf87428ed5106870f5"
+            }
+          ],
+          "workspace": "/synthetic/history-workspace"
+        },
+        "summary": {
+          "dropped": "0",
+          "encoded_bytes": 2307,
+          "entries": 1,
+          "max_encoded_bytes": 524288,
+          "max_entries": 8,
+          "storage": "memory"
+        }
+      },
+      "qualification": "native-library-and-actual-sdk-only",
+      "schema": "guard-cigar-history-verification.v1",
+      "status": "passed"
+    }
+  },
+  "limits": {
+    "per_scope_entries": 8,
+    "per_scope_encoded_bytes": 524288,
+    "per_entry_encoded_bytes": 262144
+  },
+  "native_selection": {
+    "passed": 55,
+    "failed": 0,
+    "ignored": 0,
+    "seconds": 80.6
+  },
+  "source_checks": {
+    "clippy": "passed_both_native_crates_library_and_tests_warnings_denied",
+    "ruff": "passed_changed_ci_helper",
+    "native_semantic_callgraph": "passed",
+    "python_capability_cleanup": "passed",
+    "rust_io_ownership": "passed",
+    "rust_io_privacy": "passed",
+    "rust_authority_ownership": "passed_against_requested_release_base",
+    "context_frontend_files": 7,
+    "production_type_diagnostics_baseline": 18,
+    "production_type_diagnostics_current": 18,
+    "full_typecheck": "failed_existing_diagnostics"
+  },
+  "limitations": [
+    "Not a fresh installed-package/browser or public release qualification.",
+    "Prepared history is not a delivery, truth, approval or execution receipt.",
+    "P4 persistence/sharing, qualified execution handoff and system performance acceptance remain open."
+  ]
+}

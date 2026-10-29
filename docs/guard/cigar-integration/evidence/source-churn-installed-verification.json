@@ -1,0 +1,2630 @@
+{
+  "schema": "guard-cigar-source-churn-installed-verification.v1",
+  "status": "source_churn_checkpoint_passed_full_goal_incomplete",
+  "product_source_commit": "95657b30f277604bcd12582e9bbf5d6602c4c433",
+  "product_evidence": "pairing-preparation-installed-verification.json",
+  "qualification": "real independent MCP processes, installed product and approved CIGAR 0.14.1/CPython 3.14.7; fixture-required explicit native pin",
+  "first_attempt": {
+    "inputs": {
+      "schema": "guard-cigar-source-churn-inputs.v1",
+      "product_source_commit": "95657b30f277604bcd12582e9bbf5d6602c4c433",
+      "test_source_sha256": {
+        "tests/test_context_concurrency_installed.py": "ae023cf4b94cc4ae8a0a38d939bfaef9f54e5a46aab2e86dd578dd6d24e19bee",
+        "tests/test_context_source_churn_installed.py": "a5ca0b10e5787d7937524bebde9b94d773729b43857ffa499b94043dbfb587d8",
+        "tests/context_persistence_installed_support.py": "2b7134960c401080c2a453daec4cf3d0ddb63c8de2b016076cdcc036065628db",
+        "scripts/ci/context_persistence_restart_host.py": "d09dbb5f591b2c93be084a2e5e23b4b6ee0ae10652e44f841504c35d4ab1b3bc",
+        "scripts/ci/dashboard_context_agent_probe.py": "16a0e0e6c72aa50d6fe58a0e04da68a5d30f7bb213a576c4098a2df15624b8f4",
+        "scripts/cigar_benchmark_processes.py": "13b981d846ed41f2ab31f9234876a6cbfa1d3d71620a0ee23e1d50c9fac5b72a"
+      },
+      "source_dirty_at_start": true,
+      "qualification": "installed artifact with fixture-required explicit native pin; separate from automatic-discovery SLO"
+    },
+    "test_inputs_unchanged_during_run": true,
+    "junit": {
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-source-churn-20261024/installed-results.xml",
+        "bytes": 1434,
+        "sha256": "568d9136ad6adcc1e3ad9ace6caa7b2587fa63f86a54a902193680530c05161e"
+      },
+      "counts": {
+        "tests": 2,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0
+      },
+      "seconds": 417.049
+    },
+    "reports": [
+      {
+        "fixture": "test_five_paired_clients_follo0",
+        "receipt": {
+          "path": "/private/tmp/hol-guard-cigar-source-churn-20261024/scratch/test_five_paired_clients_follo0/concurrency-metrics.json",
+          "bytes": 22101,
+          "sha256": "bc29c4bbb72547728c0cc5dd5b9800fe01e3d2752396ce46ec01cb5d328a7c4f"
+        },
+        "report": {
+          "schema": "guard-cigar-mcp-concurrency.v1",
+          "read_busy_refusals": {
+            "native_context_assistance_busy": 66
+          },
+          "phases": [
+            {
+              "clients": 5,
+              "current_contexts": 5,
+              "distinct_graph_revisions": 1
+            },
+            {
+              "attempted_connections": 12,
+              "authorized": 6,
+              "capacity_refusals": 6,
+              "native_sessions_after_refusals": 6
+            }
+          ],
+          "waves": [
+            {
+              "wave": 1,
+              "attempted": 5,
+              "busy": 4,
+              "seconds": 0.028,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 4,
+              "busy": 2,
+              "seconds": 0.018,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 2,
+              "busy": 0,
+              "seconds": 0.019,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 5,
+              "busy": 3,
+              "seconds": 0.021,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 3,
+              "busy": 1,
+              "seconds": 0.025,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 1,
+              "busy": 0,
+              "seconds": 0.015,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 5,
+              "busy": 3,
+              "seconds": 0.02,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 3,
+              "busy": 1,
+              "seconds": 0.018,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 1,
+              "busy": 0,
+              "seconds": 0.012,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 5,
+              "busy": 3,
+              "seconds": 0.017,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 3,
+              "busy": 1,
+              "seconds": 0.018,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 1,
+              "busy": 0,
+              "seconds": 0.012,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 5,
+              "busy": 3,
+              "seconds": 0.019,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 3,
+              "busy": 1,
+              "seconds": 0.018,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 1,
+              "busy": 0,
+              "seconds": 0.017,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 5,
+              "busy": 3,
+              "seconds": 0.019,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 3,
+              "busy": 1,
+              "seconds": 0.02,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 1,
+              "busy": 0,
+              "seconds": 0.013,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 5,
+              "busy": 3,
+              "seconds": 0.019,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 3,
+              "busy": 1,
+              "seconds": 0.019,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 1,
+              "busy": 0,
+              "seconds": 0.017,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 5,
+              "busy": 3,
+              "seconds": 0.02,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 3,
+              "busy": 1,
+              "seconds": 0.023,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 1,
+              "busy": 0,
+              "seconds": 0.013,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 5,
+              "busy": 3,
+              "seconds": 0.02,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 3,
+              "busy": 1,
+              "seconds": 0.02,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 1,
+              "busy": 0,
+              "seconds": 0.014,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 5,
+              "busy": 3,
+              "seconds": 0.02,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 3,
+              "busy": 1,
+              "seconds": 0.017,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 1,
+              "busy": 0,
+              "seconds": 0.012,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 5,
+              "busy": 3,
+              "seconds": 0.021,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 3,
+              "busy": 1,
+              "seconds": 0.019,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 1,
+              "busy": 0,
+              "seconds": 0.016,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 5,
+              "busy": 3,
+              "seconds": 0.018,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 3,
+              "busy": 1,
+              "seconds": 0.017,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 1,
+              "busy": 0,
+              "seconds": 0.012,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 5,
+              "busy": 3,
+              "seconds": 0.019,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 3,
+              "busy": 1,
+              "seconds": 0.018,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 1,
+              "busy": 0,
+              "seconds": 0.012,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 6,
+              "busy": 4,
+              "seconds": 0.02,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 4,
+              "busy": 2,
+              "seconds": 0.019,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 2,
+              "busy": 0,
+              "seconds": 0.016,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 6,
+              "busy": 4,
+              "seconds": 0.028,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 4,
+              "busy": 2,
+              "seconds": 0.022,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 2,
+              "busy": 0,
+              "seconds": 0.019,
+              "errors": [],
+              "unexpected_codes": []
+            }
+          ],
+          "source_update_rounds": 12,
+          "source_update_interval_seconds": 15,
+          "source_updates": [
+            {
+              "round": 1,
+              "current_clients": 5,
+              "distinct_graph_revisions": 1,
+              "observed_tree_memory": {
+                "samples": 181,
+                "sampling_errors": 0,
+                "median_rss_bytes": 1514717184,
+                "peak_rss_bytes": 1515782144,
+                "at_peak_counts": {
+                  "guard_python_worker": 6,
+                  "other_python_child": 7,
+                  "sdk_worker": 2,
+                  "native_runtime": 12,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "guard_python_worker": 691568640,
+                  "other_python_child": 192135168,
+                  "sdk_worker": 123142144,
+                  "native_runtime": 323010560,
+                  "python_bridge": 29556736,
+                  "benchmark_daemon_host": 156368896
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "sdk_worker": 2,
+                  "other_python_child": 7,
+                  "native_runtime": 12,
+                  "guard_python_worker": 6,
+                  "python_bridge": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              }
+            },
+            {
+              "round": 2,
+              "current_clients": 5,
+              "distinct_graph_revisions": 1,
+              "observed_tree_memory": {
+                "samples": 180,
+                "sampling_errors": 0,
+                "median_rss_bytes": 1519861760,
+                "peak_rss_bytes": 1520402432,
+                "at_peak_counts": {
+                  "guard_python_worker": 6,
+                  "other_python_child": 7,
+                  "sdk_worker": 2,
+                  "native_runtime": 12,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "guard_python_worker": 695517184,
+                  "other_python_child": 192184320,
+                  "sdk_worker": 123240448,
+                  "native_runtime": 323239936,
+                  "python_bridge": 29556736,
+                  "benchmark_daemon_host": 156663808
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "sdk_worker": 2,
+                  "other_python_child": 7,
+                  "native_runtime": 12,
+                  "guard_python_worker": 6,
+                  "python_bridge": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              }
+            },
+            {
+              "round": 3,
+              "current_clients": 5,
+              "distinct_graph_revisions": 1,
+              "observed_tree_memory": {
+                "samples": 179,
+                "sampling_errors": 0,
+                "median_rss_bytes": 1520517120,
+                "peak_rss_bytes": 1520861184,
+                "at_peak_counts": {
+                  "guard_python_worker": 6,
+                  "other_python_child": 7,
+                  "sdk_worker": 2,
+                  "native_runtime": 12,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "guard_python_worker": 695566336,
+                  "other_python_child": 192184320,
+                  "sdk_worker": 123240448,
+                  "native_runtime": 323502080,
+                  "python_bridge": 29556736,
+                  "benchmark_daemon_host": 156811264
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "sdk_worker": 2,
+                  "other_python_child": 7,
+                  "native_runtime": 12,
+                  "guard_python_worker": 6,
+                  "python_bridge": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              }
+            },
+            {
+              "round": 4,
+              "current_clients": 5,
+              "distinct_graph_revisions": 1,
+              "observed_tree_memory": {
+                "samples": 180,
+                "sampling_errors": 0,
+                "median_rss_bytes": 1520984064,
+                "peak_rss_bytes": 1521352704,
+                "at_peak_counts": {
+                  "guard_python_worker": 6,
+                  "other_python_child": 7,
+                  "sdk_worker": 2,
+                  "native_runtime": 12,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "guard_python_worker": 695631872,
+                  "other_python_child": 192282624,
+                  "sdk_worker": 123273216,
+                  "native_runtime": 323616768,
+                  "python_bridge": 29556736,
+                  "benchmark_daemon_host": 156991488
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "sdk_worker": 2,
+                  "other_python_child": 7,
+                  "native_runtime": 12,
+                  "guard_python_worker": 6,
+                  "python_bridge": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              }
+            },
+            {
+              "round": 5,
+              "current_clients": 5,
+              "distinct_graph_revisions": 1,
+              "observed_tree_memory": {
+                "samples": 179,
+                "sampling_errors": 0,
+                "median_rss_bytes": 1521369088,
+                "peak_rss_bytes": 1521631232,
+                "at_peak_counts": {
+                  "guard_python_worker": 6,
+                  "other_python_child": 7,
+                  "sdk_worker": 2,
+                  "native_runtime": 12,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "guard_python_worker": 695664640,
+                  "other_python_child": 192331776,
+                  "sdk_worker": 123305984,
+                  "native_runtime": 323715072,
+                  "python_bridge": 29556736,
+                  "benchmark_daemon_host": 157057024
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "sdk_worker": 2,
+                  "other_python_child": 7,
+                  "native_runtime": 12,
+                  "guard_python_worker": 6,
+                  "python_bridge": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              }
+            },
+            {
+              "round": 6,
+              "current_clients": 5,
+              "distinct_graph_revisions": 1,
+              "observed_tree_memory": {
+                "samples": 181,
+                "sampling_errors": 0,
+                "median_rss_bytes": 1521631232,
+                "peak_rss_bytes": 1522155520,
+                "at_peak_counts": {
+                  "guard_python_worker": 6,
+                  "other_python_child": 7,
+                  "sdk_worker": 2,
+                  "native_runtime": 12,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "guard_python_worker": 695779328,
+                  "other_python_child": 192380928,
+                  "sdk_worker": 123355136,
+                  "native_runtime": 323993600,
+                  "python_bridge": 29573120,
+                  "benchmark_daemon_host": 157073408
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "sdk_worker": 2,
+                  "other_python_child": 7,
+                  "native_runtime": 12,
+                  "guard_python_worker": 6,
+                  "python_bridge": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              }
+            },
+            {
+              "round": 7,
+              "current_clients": 5,
+              "distinct_graph_revisions": 1,
+              "observed_tree_memory": {
+                "samples": 181,
+                "sampling_errors": 0,
+                "median_rss_bytes": 1521827840,
+                "peak_rss_bytes": 1522040832,
+                "at_peak_counts": {
+                  "guard_python_worker": 6,
+                  "other_python_child": 7,
+                  "sdk_worker": 2,
+                  "native_runtime": 12,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "guard_python_worker": 695861248,
+                  "other_python_child": 192380928,
+                  "sdk_worker": 123355136,
+                  "native_runtime": 323796992,
+                  "python_bridge": 29573120,
+                  "benchmark_daemon_host": 157073408
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "sdk_worker": 2,
+                  "other_python_child": 7,
+                  "native_runtime": 12,
+                  "guard_python_worker": 6,
+                  "python_bridge": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              }
+            },
+            {
+              "round": 8,
+              "current_clients": 5,
+              "distinct_graph_revisions": 1,
+              "observed_tree_memory": {
+                "samples": 181,
+                "sampling_errors": 0,
+                "median_rss_bytes": 1521942528,
+                "peak_rss_bytes": 1522581504,
+                "at_peak_counts": {
+                  "guard_python_worker": 6,
+                  "other_python_child": 7,
+                  "sdk_worker": 2,
+                  "native_runtime": 12,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "guard_python_worker": 696008704,
+                  "other_python_child": 192430080,
+                  "sdk_worker": 123420672,
+                  "native_runtime": 324075520,
+                  "python_bridge": 29573120,
+                  "benchmark_daemon_host": 157073408
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "sdk_worker": 2,
+                  "other_python_child": 7,
+                  "native_runtime": 12,
+                  "guard_python_worker": 6,
+                  "python_bridge": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              }
+            },
+            {
+              "round": 9,
+              "current_clients": 5,
+              "distinct_graph_revisions": 1,
+              "observed_tree_memory": {
+                "samples": 179,
+                "sampling_errors": 0,
+                "median_rss_bytes": 1522253824,
+                "peak_rss_bytes": 1522712576,
+                "at_peak_counts": {
+                  "guard_python_worker": 6,
+                  "other_python_child": 7,
+                  "sdk_worker": 2,
+                  "native_runtime": 12,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "guard_python_worker": 696041472,
+                  "other_python_child": 192446464,
+                  "sdk_worker": 123486208,
+                  "native_runtime": 324091904,
+                  "python_bridge": 29573120,
+                  "benchmark_daemon_host": 157073408
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "sdk_worker": 2,
+                  "other_python_child": 7,
+                  "native_runtime": 12,
+                  "guard_python_worker": 6,
+                  "python_bridge": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              }
+            },
+            {
+              "round": 10,
+              "current_clients": 5,
+              "distinct_graph_revisions": 1,
+              "observed_tree_memory": {
+                "samples": 182,
+                "sampling_errors": 0,
+                "median_rss_bytes": 1522368512,
+                "peak_rss_bytes": 1522565120,
+                "at_peak_counts": {
+                  "guard_python_worker": 6,
+                  "other_python_child": 7,
+                  "sdk_worker": 2,
+                  "native_runtime": 12,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "guard_python_worker": 696025088,
+                  "other_python_child": 192446464,
+                  "sdk_worker": 123502592,
+                  "native_runtime": 323944448,
+                  "python_bridge": 29573120,
+                  "benchmark_daemon_host": 157073408
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "sdk_worker": 2,
+                  "other_python_child": 7,
+                  "native_runtime": 12,
+                  "guard_python_worker": 6,
+                  "python_bridge": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              }
+            },
+            {
+              "round": 11,
+              "current_clients": 5,
+              "distinct_graph_revisions": 1,
+              "observed_tree_memory": {
+                "samples": 182,
+                "sampling_errors": 0,
+                "median_rss_bytes": 1522532352,
+                "peak_rss_bytes": 1522974720,
+                "at_peak_counts": {
+                  "guard_python_worker": 6,
+                  "other_python_child": 7,
+                  "sdk_worker": 2,
+                  "native_runtime": 12,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "guard_python_worker": 696107008,
+                  "other_python_child": 192528384,
+                  "sdk_worker": 123518976,
+                  "native_runtime": 324173824,
+                  "python_bridge": 29573120,
+                  "benchmark_daemon_host": 157073408
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "sdk_worker": 2,
+                  "other_python_child": 7,
+                  "native_runtime": 12,
+                  "guard_python_worker": 6,
+                  "python_bridge": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              }
+            },
+            {
+              "round": 12,
+              "current_clients": 5,
+              "distinct_graph_revisions": 1,
+              "observed_tree_memory": {
+                "samples": 182,
+                "sampling_errors": 0,
+                "median_rss_bytes": 1522614272,
+                "peak_rss_bytes": 1522909184,
+                "at_peak_counts": {
+                  "guard_python_worker": 6,
+                  "other_python_child": 7,
+                  "sdk_worker": 2,
+                  "native_runtime": 12,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "guard_python_worker": 696139776,
+                  "other_python_child": 192528384,
+                  "sdk_worker": 123535360,
+                  "native_runtime": 324026368,
+                  "python_bridge": 29573120,
+                  "benchmark_daemon_host": 157106176
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "sdk_worker": 2,
+                  "other_python_child": 7,
+                  "native_runtime": 12,
+                  "guard_python_worker": 6,
+                  "python_bridge": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              }
+            }
+          ],
+          "completed": false,
+          "source_update_seconds": 183.746,
+          "revoke_reuse_and_global_stop": true,
+          "raw_content_or_credentials_written": false,
+          "all_observed_processes": {
+            "samples": 3592,
+            "sampling_errors": 0,
+            "median_rss_bytes": 1521041408,
+            "peak_rss_bytes": 2565226496,
+            "at_peak_counts": {
+              "guard_python_worker": 14,
+              "other_python_child": 8,
+              "native_runtime": 20,
+              "sdk_worker": 2,
+              "python_bridge": 1,
+              "benchmark_daemon_host": 1
+            },
+            "at_peak_rss_by_kind": {
+              "guard_python_worker": 1558675456,
+              "other_python_child": 219807744,
+              "native_runtime": 476233728,
+              "sdk_worker": 123535360,
+              "python_bridge": 29573120,
+              "benchmark_daemon_host": 157401088
+            },
+            "maximum_counts": {
+              "terminated_child": 1,
+              "benchmark_daemon_host": 1,
+              "sdk_worker": 2,
+              "other_descendant": 2,
+              "exiting_host_python_child": 1,
+              "other_python_child": 8,
+              "native_runtime": 20,
+              "guard_python_worker": 14,
+              "python_bridge": 1
+            },
+            "includes_observed_reparented_children": true,
+            "shared_pages_may_be_counted_in_multiple_processes": true
+          },
+          "observed_processes_at_end": {
+            "rss_bytes": 257769472,
+            "counts": {
+              "benchmark_daemon_host": 1,
+              "native_runtime": 4
+            },
+            "rss_by_kind": {
+              "benchmark_daemon_host": 157007872,
+              "native_runtime": 100761600
+            }
+          },
+          "seconds": 301.704
+        }
+      },
+      {
+        "fixture": "test_five_shared_clients_sourc0",
+        "receipt": {
+          "path": "/private/tmp/hol-guard-cigar-source-churn-20261024/scratch/test_five_shared_clients_sourc0/concurrency-metrics.json",
+          "bytes": 2452,
+          "sha256": "2ea1b7b31f1a6061d787d9f730cd3030ad9b40c6d33a3f2121e759dfc63e9765"
+        },
+        "report": {
+          "schema": "guard-cigar-mcp-concurrency.v1",
+          "read_busy_refusals": {
+            "native_context_assistance_busy": 22
+          },
+          "phases": [
+            {
+              "clients": 5,
+              "current_contexts": 5,
+              "distinct_graph_revisions": 1
+            },
+            {
+              "attempted_connections": 12,
+              "authorized": 6,
+              "capacity_refusals": 6,
+              "native_sessions_after_refusals": 6
+            }
+          ],
+          "waves": [
+            {
+              "wave": 1,
+              "attempted": 5,
+              "busy": 4,
+              "seconds": 0.023,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 4,
+              "busy": 2,
+              "seconds": 0.018,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 2,
+              "busy": 0,
+              "seconds": 0.016,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 5,
+              "busy": 3,
+              "seconds": 0.02,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 3,
+              "busy": 1,
+              "seconds": 0.02,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 1,
+              "busy": 0,
+              "seconds": 0.012,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 6,
+              "busy": 4,
+              "seconds": 0.018,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 4,
+              "busy": 2,
+              "seconds": 0.019,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 2,
+              "busy": 0,
+              "seconds": 0.018,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 6,
+              "busy": 4,
+              "seconds": 0.027,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 4,
+              "busy": 2,
+              "seconds": 0.021,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 2,
+              "busy": 0,
+              "seconds": 0.021,
+              "errors": [],
+              "unexpected_codes": []
+            }
+          ],
+          "source_update_rounds": 1,
+          "source_update_interval_seconds": 0,
+          "source_updates": [
+            {
+              "round": 1,
+              "current_clients": 5,
+              "distinct_graph_revisions": 1
+            }
+          ],
+          "completed": true,
+          "source_update_seconds": 0.272,
+          "revoke_reuse_and_global_stop": true,
+          "raw_content_or_credentials_written": false,
+          "seconds": 113.238
+        }
+      }
+    ],
+    "failure": "The long case completes all twelve updates (183.746 seconds), capacity/revoke/reuse/global Stop and acknowledged Rust resident Stop, then fails its end-of-run process assertion before pytest fixture teardown. Four native processes remain observed; SDK/bridge workers are absent. The test omitted explicit client-pool closure at this boundary.",
+    "post_pytest_inspection": "No process using the exact private installed native image remains after pytest exit; this does not qualify the failed in-test end check."
+  },
+  "fixture_correction": "Explicitly close private-home clients after Rust Stop; compare live PID/start identities against the pre-fixture baseline. Reject any new live descendant; preserve every process in all RSS totals. Reject optional workers in the initial baseline.",
+  "final_attempt": {
+    "status": "passed",
+    "inputs": {
+      "schema": "guard-cigar-source-churn-inputs.v1",
+      "product_source_commit": "95657b30f277604bcd12582e9bbf5d6602c4c433",
+      "test_source_sha256": {
+        "tests/test_context_concurrency_installed.py": "26ddfe910f2703da1be7b0900ac0a2cada38cef64430e5b5896f88dc302117c2",
+        "tests/test_context_source_churn_installed.py": "a5ca0b10e5787d7937524bebde9b94d773729b43857ffa499b94043dbfb587d8",
+        "tests/context_persistence_installed_support.py": "2b7134960c401080c2a453daec4cf3d0ddb63c8de2b016076cdcc036065628db",
+        "scripts/ci/context_persistence_restart_host.py": "d09dbb5f591b2c93be084a2e5e23b4b6ee0ae10652e44f841504c35d4ab1b3bc",
+        "scripts/ci/dashboard_context_agent_probe.py": "16a0e0e6c72aa50d6fe58a0e04da68a5d30f7bb213a576c4098a2df15624b8f4",
+        "scripts/cigar_benchmark_processes.py": "e6d76990b4b9cd57c46fa6ca0de8d7f07952327f53a59894adff374c5f785258",
+        "tests/test_context_fixture_resources_installed.py": "12b5a93b2c267e22873c97cc470c0a84ab738d5a1f91f0f2b0ec4652d8d2812b"
+      },
+      "source_dirty_at_start": true,
+      "qualification": "installed artifact with fixture-required explicit native pin; separate from automatic-discovery SLO",
+      "fixture_change": "Close private Guard home clients after acknowledged Rust Stop. Verify no new live descendant identities relative to the exact pre-fixture baseline. Include all baseline RSS and retain all earlier failures.",
+      "private_home_base": "/private/tmp/hol-guard-cigar-source-churn-20261024/identity-home"
+    },
+    "test_inputs_unchanged_during_run": true,
+    "junit": {
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-source-churn-20261024/identity-installed-results.xml",
+        "bytes": 590,
+        "sha256": "9cb6c36dbb6830b37807fdcd0f9f48e8dc5766faff24d48ec87be5aad4293a8e"
+      },
+      "tests": 2,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 407.368
+    },
+    "reports": [
+      {
+        "fixture": "test_five_paired_clients_follo0",
+        "receipt": {
+          "path": "/private/tmp/hol-guard-cigar-source-churn-20261024/identity-scratch/test_five_paired_clients_follo0/concurrency-metrics.json",
+          "bytes": 22562,
+          "sha256": "adaca03c933a1df50ac52567fa191340e0288f7c3986a42031a91e06124f373f"
+        },
+        "report": {
+          "schema": "guard-cigar-mcp-concurrency.v1",
+          "read_busy_refusals": {
+            "native_context_assistance_busy": 64
+          },
+          "phases": [
+            {
+              "clients": 5,
+              "current_contexts": 5,
+              "distinct_graph_revisions": 1
+            },
+            {
+              "attempted_connections": 12,
+              "authorized": 6,
+              "capacity_refusals": 6,
+              "native_sessions_after_refusals": 6
+            }
+          ],
+          "waves": [
+            {
+              "wave": 1,
+              "attempted": 5,
+              "busy": 3,
+              "seconds": 0.018,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 3,
+              "busy": 1,
+              "seconds": 0.032,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 1,
+              "busy": 0,
+              "seconds": 0.012,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 5,
+              "busy": 3,
+              "seconds": 0.017,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 3,
+              "busy": 1,
+              "seconds": 0.016,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 1,
+              "busy": 0,
+              "seconds": 0.011,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 5,
+              "busy": 3,
+              "seconds": 0.016,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 3,
+              "busy": 1,
+              "seconds": 0.017,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 1,
+              "busy": 0,
+              "seconds": 0.01,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 5,
+              "busy": 3,
+              "seconds": 0.016,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 3,
+              "busy": 1,
+              "seconds": 0.017,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 1,
+              "busy": 0,
+              "seconds": 0.012,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 5,
+              "busy": 3,
+              "seconds": 0.019,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 3,
+              "busy": 1,
+              "seconds": 0.015,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 1,
+              "busy": 0,
+              "seconds": 0.013,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 5,
+              "busy": 3,
+              "seconds": 0.016,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 3,
+              "busy": 1,
+              "seconds": 0.015,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 1,
+              "busy": 0,
+              "seconds": 0.012,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 5,
+              "busy": 3,
+              "seconds": 0.016,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 3,
+              "busy": 1,
+              "seconds": 0.016,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 1,
+              "busy": 0,
+              "seconds": 0.011,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 5,
+              "busy": 3,
+              "seconds": 0.022,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 3,
+              "busy": 1,
+              "seconds": 0.017,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 1,
+              "busy": 0,
+              "seconds": 0.011,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 5,
+              "busy": 3,
+              "seconds": 0.018,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 3,
+              "busy": 1,
+              "seconds": 0.017,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 1,
+              "busy": 0,
+              "seconds": 0.014,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 5,
+              "busy": 3,
+              "seconds": 0.017,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 3,
+              "busy": 1,
+              "seconds": 0.02,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 1,
+              "busy": 0,
+              "seconds": 0.014,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 5,
+              "busy": 3,
+              "seconds": 0.017,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 3,
+              "busy": 1,
+              "seconds": 0.018,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 1,
+              "busy": 0,
+              "seconds": 0.019,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 5,
+              "busy": 3,
+              "seconds": 0.021,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 3,
+              "busy": 1,
+              "seconds": 0.016,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 1,
+              "busy": 0,
+              "seconds": 0.014,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 5,
+              "busy": 3,
+              "seconds": 0.018,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 3,
+              "busy": 1,
+              "seconds": 0.017,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 1,
+              "busy": 0,
+              "seconds": 0.015,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 6,
+              "busy": 4,
+              "seconds": 0.018,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 4,
+              "busy": 2,
+              "seconds": 0.018,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 2,
+              "busy": 0,
+              "seconds": 0.018,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 6,
+              "busy": 4,
+              "seconds": 0.023,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 4,
+              "busy": 2,
+              "seconds": 0.016,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 2,
+              "busy": 0,
+              "seconds": 0.017,
+              "errors": [],
+              "unexpected_codes": []
+            }
+          ],
+          "source_update_rounds": 12,
+          "source_update_interval_seconds": 15,
+          "source_updates": [
+            {
+              "round": 1,
+              "current_clients": 5,
+              "distinct_graph_revisions": 1,
+              "observed_tree_memory": {
+                "samples": 183,
+                "sampling_errors": 0,
+                "median_rss_bytes": 1499365376,
+                "peak_rss_bytes": 1500250112,
+                "at_peak_counts": {
+                  "native_runtime": 12,
+                  "guard_python_worker": 6,
+                  "other_python_child": 7,
+                  "python_bridge": 1,
+                  "sdk_worker": 2,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 323354624,
+                  "guard_python_worker": 677101568,
+                  "other_python_child": 191053824,
+                  "python_bridge": 29671424,
+                  "sdk_worker": 122355712,
+                  "benchmark_daemon_host": 156712960
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 12,
+                  "other_python_child": 7,
+                  "sdk_worker": 2,
+                  "guard_python_worker": 6,
+                  "python_bridge": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              }
+            },
+            {
+              "round": 2,
+              "current_clients": 5,
+              "distinct_graph_revisions": 1,
+              "observed_tree_memory": {
+                "samples": 184,
+                "sampling_errors": 0,
+                "median_rss_bytes": 1500200960,
+                "peak_rss_bytes": 1504509952,
+                "at_peak_counts": {
+                  "native_runtime": 12,
+                  "guard_python_worker": 6,
+                  "other_python_child": 7,
+                  "python_bridge": 1,
+                  "sdk_worker": 2,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 323403776,
+                  "guard_python_worker": 681033728,
+                  "other_python_child": 191184896,
+                  "python_bridge": 29671424,
+                  "sdk_worker": 122503168,
+                  "benchmark_daemon_host": 156712960
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 12,
+                  "other_python_child": 7,
+                  "sdk_worker": 2,
+                  "guard_python_worker": 6,
+                  "python_bridge": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              }
+            },
+            {
+              "round": 3,
+              "current_clients": 5,
+              "distinct_graph_revisions": 1,
+              "observed_tree_memory": {
+                "samples": 184,
+                "sampling_errors": 0,
+                "median_rss_bytes": 1504542720,
+                "peak_rss_bytes": 1504542720,
+                "at_peak_counts": {
+                  "native_runtime": 12,
+                  "guard_python_worker": 6,
+                  "other_python_child": 7,
+                  "python_bridge": 1,
+                  "sdk_worker": 2,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 323403776,
+                  "guard_python_worker": 681066496,
+                  "other_python_child": 191184896,
+                  "python_bridge": 29671424,
+                  "sdk_worker": 122503168,
+                  "benchmark_daemon_host": 156712960
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 12,
+                  "other_python_child": 7,
+                  "sdk_worker": 2,
+                  "guard_python_worker": 6,
+                  "python_bridge": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              }
+            },
+            {
+              "round": 4,
+              "current_clients": 5,
+              "distinct_graph_revisions": 1,
+              "observed_tree_memory": {
+                "samples": 184,
+                "sampling_errors": 0,
+                "median_rss_bytes": 1501069312,
+                "peak_rss_bytes": 1501282304,
+                "at_peak_counts": {
+                  "native_runtime": 12,
+                  "guard_python_worker": 6,
+                  "other_python_child": 7,
+                  "python_bridge": 1,
+                  "sdk_worker": 2,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 323649536,
+                  "guard_python_worker": 681181184,
+                  "other_python_child": 191348736,
+                  "python_bridge": 29671424,
+                  "sdk_worker": 122568704,
+                  "benchmark_daemon_host": 152862720
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 12,
+                  "other_python_child": 7,
+                  "sdk_worker": 2,
+                  "guard_python_worker": 6,
+                  "python_bridge": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              }
+            },
+            {
+              "round": 5,
+              "current_clients": 5,
+              "distinct_graph_revisions": 1,
+              "observed_tree_memory": {
+                "samples": 184,
+                "sampling_errors": 0,
+                "median_rss_bytes": 1505132544,
+                "peak_rss_bytes": 1505214464,
+                "at_peak_counts": {
+                  "native_runtime": 12,
+                  "guard_python_worker": 6,
+                  "other_python_child": 7,
+                  "python_bridge": 1,
+                  "sdk_worker": 2,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 323649536,
+                  "guard_python_worker": 681213952,
+                  "other_python_child": 191381504,
+                  "python_bridge": 29671424,
+                  "sdk_worker": 122568704,
+                  "benchmark_daemon_host": 156729344
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 12,
+                  "other_python_child": 7,
+                  "sdk_worker": 2,
+                  "guard_python_worker": 6,
+                  "python_bridge": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              }
+            },
+            {
+              "round": 6,
+              "current_clients": 5,
+              "distinct_graph_revisions": 1,
+              "observed_tree_memory": {
+                "samples": 184,
+                "sampling_errors": 0,
+                "median_rss_bytes": 1505230848,
+                "peak_rss_bytes": 1505378304,
+                "at_peak_counts": {
+                  "native_runtime": 12,
+                  "guard_python_worker": 6,
+                  "other_python_child": 7,
+                  "python_bridge": 1,
+                  "sdk_worker": 2,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 323649536,
+                  "guard_python_worker": 681377792,
+                  "other_python_child": 191381504,
+                  "python_bridge": 29671424,
+                  "sdk_worker": 122568704,
+                  "benchmark_daemon_host": 156729344
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 12,
+                  "other_python_child": 7,
+                  "sdk_worker": 2,
+                  "guard_python_worker": 6,
+                  "python_bridge": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              }
+            },
+            {
+              "round": 7,
+              "current_clients": 5,
+              "distinct_graph_revisions": 1,
+              "observed_tree_memory": {
+                "samples": 183,
+                "sampling_errors": 0,
+                "median_rss_bytes": 1505296384,
+                "peak_rss_bytes": 1505705984,
+                "at_peak_counts": {
+                  "native_runtime": 12,
+                  "guard_python_worker": 6,
+                  "other_python_child": 7,
+                  "python_bridge": 1,
+                  "sdk_worker": 2,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 323715072,
+                  "guard_python_worker": 681525248,
+                  "other_python_child": 191397888,
+                  "python_bridge": 29671424,
+                  "sdk_worker": 122667008,
+                  "benchmark_daemon_host": 156729344
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 12,
+                  "other_python_child": 7,
+                  "sdk_worker": 2,
+                  "guard_python_worker": 6,
+                  "python_bridge": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              }
+            },
+            {
+              "round": 8,
+              "current_clients": 5,
+              "distinct_graph_revisions": 1,
+              "observed_tree_memory": {
+                "samples": 183,
+                "sampling_errors": 0,
+                "median_rss_bytes": 1505722368,
+                "peak_rss_bytes": 1505918976,
+                "at_peak_counts": {
+                  "native_runtime": 12,
+                  "guard_python_worker": 6,
+                  "other_python_child": 7,
+                  "python_bridge": 1,
+                  "sdk_worker": 2,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 323715072,
+                  "guard_python_worker": 681738240,
+                  "other_python_child": 191397888,
+                  "python_bridge": 29671424,
+                  "sdk_worker": 122667008,
+                  "benchmark_daemon_host": 156729344
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 12,
+                  "other_python_child": 7,
+                  "sdk_worker": 2,
+                  "guard_python_worker": 6,
+                  "python_bridge": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              }
+            },
+            {
+              "round": 9,
+              "current_clients": 5,
+              "distinct_graph_revisions": 1,
+              "observed_tree_memory": {
+                "samples": 183,
+                "sampling_errors": 0,
+                "median_rss_bytes": 1505837056,
+                "peak_rss_bytes": 1506017280,
+                "at_peak_counts": {
+                  "native_runtime": 12,
+                  "guard_python_worker": 6,
+                  "other_python_child": 7,
+                  "python_bridge": 1,
+                  "sdk_worker": 2,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 323764224,
+                  "guard_python_worker": 681771008,
+                  "other_python_child": 191397888,
+                  "python_bridge": 29671424,
+                  "sdk_worker": 122683392,
+                  "benchmark_daemon_host": 156729344
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 12,
+                  "other_python_child": 7,
+                  "sdk_worker": 2,
+                  "guard_python_worker": 6,
+                  "python_bridge": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              }
+            },
+            {
+              "round": 10,
+              "current_clients": 5,
+              "distinct_graph_revisions": 1,
+              "observed_tree_memory": {
+                "samples": 184,
+                "sampling_errors": 0,
+                "median_rss_bytes": 1506033664,
+                "peak_rss_bytes": 1506213888,
+                "at_peak_counts": {
+                  "native_runtime": 12,
+                  "guard_python_worker": 6,
+                  "other_python_child": 7,
+                  "python_bridge": 1,
+                  "sdk_worker": 2,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 323813376,
+                  "guard_python_worker": 681754624,
+                  "other_python_child": 191479808,
+                  "python_bridge": 29671424,
+                  "sdk_worker": 122748928,
+                  "benchmark_daemon_host": 156745728
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 12,
+                  "other_python_child": 7,
+                  "sdk_worker": 2,
+                  "guard_python_worker": 6,
+                  "python_bridge": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              }
+            },
+            {
+              "round": 11,
+              "current_clients": 5,
+              "distinct_graph_revisions": 1,
+              "observed_tree_memory": {
+                "samples": 184,
+                "sampling_errors": 0,
+                "median_rss_bytes": 1506213888,
+                "peak_rss_bytes": 1506689024,
+                "at_peak_counts": {
+                  "native_runtime": 12,
+                  "guard_python_worker": 6,
+                  "other_python_child": 7,
+                  "python_bridge": 1,
+                  "sdk_worker": 2,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 324222976,
+                  "guard_python_worker": 681803776,
+                  "other_python_child": 191479808,
+                  "python_bridge": 29671424,
+                  "sdk_worker": 122765312,
+                  "benchmark_daemon_host": 156745728
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 12,
+                  "other_python_child": 7,
+                  "sdk_worker": 2,
+                  "guard_python_worker": 6,
+                  "python_bridge": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              }
+            },
+            {
+              "round": 12,
+              "current_clients": 5,
+              "distinct_graph_revisions": 1,
+              "observed_tree_memory": {
+                "samples": 184,
+                "sampling_errors": 0,
+                "median_rss_bytes": 1506312192,
+                "peak_rss_bytes": 1506344960,
+                "at_peak_counts": {
+                  "native_runtime": 12,
+                  "guard_python_worker": 6,
+                  "other_python_child": 7,
+                  "python_bridge": 1,
+                  "sdk_worker": 2,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 323862528,
+                  "guard_python_worker": 681820160,
+                  "other_python_child": 191479808,
+                  "python_bridge": 29671424,
+                  "sdk_worker": 122765312,
+                  "benchmark_daemon_host": 156745728
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 12,
+                  "other_python_child": 7,
+                  "sdk_worker": 2,
+                  "guard_python_worker": 6,
+                  "python_bridge": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              }
+            }
+          ],
+          "completed": true,
+          "observed_processes_before_fixture": {
+            "rss_bytes": 238911488,
+            "counts": {
+              "native_runtime": 3,
+              "benchmark_daemon_host": 1
+            },
+            "rss_by_kind": {
+              "native_runtime": 82509824,
+              "benchmark_daemon_host": 156401664
+            }
+          },
+          "process_containment_boundary": "no new live descendant identities; baseline remains in all RSS",
+          "source_update_seconds": 183.691,
+          "revoke_reuse_and_global_stop": true,
+          "raw_content_or_credentials_written": false,
+          "all_observed_processes": {
+            "samples": 3533,
+            "sampling_errors": 0,
+            "median_rss_bytes": 1505132544,
+            "peak_rss_bytes": 2542632960,
+            "at_peak_counts": {
+              "native_runtime": 20,
+              "guard_python_worker": 14,
+              "other_python_child": 8,
+              "sdk_worker": 1,
+              "other_descendant": 1,
+              "python_bridge": 1,
+              "benchmark_daemon_host": 1
+            },
+            "at_peak_rss_by_kind": {
+              "native_runtime": 475578368,
+              "guard_python_worker": 1538834432,
+              "other_python_child": 218742784,
+              "sdk_worker": 59850752,
+              "other_descendant": 62914560,
+              "python_bridge": 29687808,
+              "benchmark_daemon_host": 157024256
+            },
+            "maximum_counts": {
+              "other_descendant": 1,
+              "terminated_child": 1,
+              "benchmark_daemon_host": 1,
+              "native_runtime": 20,
+              "other_python_child": 8,
+              "exiting_host_python_child": 1,
+              "sdk_worker": 2,
+              "guard_python_worker": 14,
+              "python_bridge": 1
+            },
+            "includes_observed_reparented_children": true,
+            "shared_pages_may_be_counted_in_multiple_processes": true
+          },
+          "observed_processes_at_end": {
+            "rss_bytes": 239075328,
+            "counts": {
+              "native_runtime": 3,
+              "benchmark_daemon_host": 1
+            },
+            "rss_by_kind": {
+              "native_runtime": 82509824,
+              "benchmark_daemon_host": 156565504
+            }
+          },
+          "new_process_counts_at_end": {},
+          "seconds": 294.192
+        }
+      },
+      {
+        "fixture": "test_five_shared_clients_sourc0",
+        "receipt": {
+          "path": "/private/tmp/hol-guard-cigar-source-churn-20261024/identity-scratch/test_five_shared_clients_sourc0/concurrency-metrics.json",
+          "bytes": 5176,
+          "sha256": "b70d30306b2551f54f4d1184de2f0c55330414f0e32531f744ddf0364b2a1824"
+        },
+        "report": {
+          "schema": "guard-cigar-mcp-concurrency.v1",
+          "read_busy_refusals": {
+            "native_context_assistance_busy": 20
+          },
+          "phases": [
+            {
+              "clients": 5,
+              "current_contexts": 5,
+              "distinct_graph_revisions": 1
+            },
+            {
+              "attempted_connections": 12,
+              "authorized": 6,
+              "capacity_refusals": 6,
+              "native_sessions_after_refusals": 6
+            }
+          ],
+          "waves": [
+            {
+              "wave": 1,
+              "attempted": 5,
+              "busy": 3,
+              "seconds": 0.019,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 3,
+              "busy": 1,
+              "seconds": 0.02,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 1,
+              "busy": 0,
+              "seconds": 0.012,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 5,
+              "busy": 3,
+              "seconds": 0.017,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 3,
+              "busy": 1,
+              "seconds": 0.015,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 1,
+              "busy": 0,
+              "seconds": 0.011,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 6,
+              "busy": 4,
+              "seconds": 0.017,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 4,
+              "busy": 2,
+              "seconds": 0.017,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 2,
+              "busy": 0,
+              "seconds": 0.016,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 6,
+              "busy": 4,
+              "seconds": 0.025,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 4,
+              "busy": 2,
+              "seconds": 0.015,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 2,
+              "busy": 0,
+              "seconds": 0.016,
+              "errors": [],
+              "unexpected_codes": []
+            }
+          ],
+          "source_update_rounds": 1,
+          "source_update_interval_seconds": 0,
+          "source_updates": [
+            {
+              "round": 1,
+              "current_clients": 5,
+              "distinct_graph_revisions": 1,
+              "observed_tree_memory": {
+                "samples": 5,
+                "sampling_errors": 0,
+                "median_rss_bytes": 1499103232,
+                "peak_rss_bytes": 1499283456,
+                "at_peak_counts": {
+                  "native_runtime": 12,
+                  "guard_python_worker": 6,
+                  "other_python_child": 7,
+                  "benchmark_daemon_host": 1,
+                  "sdk_worker": 2,
+                  "python_bridge": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 323141632,
+                  "guard_python_worker": 681607168,
+                  "other_python_child": 190971904,
+                  "benchmark_daemon_host": 151617536,
+                  "sdk_worker": 121651200,
+                  "python_bridge": 30294016
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 12,
+                  "other_python_child": 7,
+                  "sdk_worker": 2,
+                  "guard_python_worker": 6,
+                  "python_bridge": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              }
+            }
+          ],
+          "completed": true,
+          "observed_processes_before_fixture": {
+            "rss_bytes": 228687872,
+            "counts": {
+              "native_runtime": 3,
+              "benchmark_daemon_host": 1
+            },
+            "rss_by_kind": {
+              "native_runtime": 82362368,
+              "benchmark_daemon_host": 146325504
+            }
+          },
+          "process_containment_boundary": "no new live descendant identities; baseline remains in all RSS",
+          "source_update_seconds": 0.289,
+          "revoke_reuse_and_global_stop": true,
+          "raw_content_or_credentials_written": false,
+          "all_observed_processes": {
+            "samples": 1344,
+            "sampling_errors": 0,
+            "median_rss_bytes": 1157398528,
+            "peak_rss_bytes": 2551103488,
+            "at_peak_counts": {
+              "guard_python_worker": 14,
+              "other_python_child": 8,
+              "native_runtime": 20,
+              "benchmark_daemon_host": 1,
+              "sdk_worker": 2,
+              "python_bridge": 1
+            },
+            "at_peak_rss_by_kind": {
+              "guard_python_worker": 1549123584,
+              "other_python_child": 218562560,
+              "native_runtime": 474595328,
+              "benchmark_daemon_host": 156794880,
+              "sdk_worker": 121733120,
+              "python_bridge": 30294016
+            },
+            "maximum_counts": {
+              "other_descendant": 1,
+              "terminated_child": 1,
+              "benchmark_daemon_host": 1,
+              "native_runtime": 20,
+              "other_python_child": 8,
+              "exiting_host_python_child": 1,
+              "sdk_worker": 2,
+              "guard_python_worker": 14,
+              "python_bridge": 1
+            },
+            "includes_observed_reparented_children": true,
+            "shared_pages_may_be_counted_in_multiple_processes": true
+          },
+          "observed_processes_at_end": {
+            "rss_bytes": 238895104,
+            "counts": {
+              "native_runtime": 3,
+              "benchmark_daemon_host": 1
+            },
+            "rss_by_kind": {
+              "native_runtime": 82509824,
+              "benchmark_daemon_host": 156385280
+            }
+          },
+          "new_process_counts_at_end": {},
+          "seconds": 111.088
+        }
+      }
+    ],
+    "process_boundary": "No new live PID/start identities remain. Three pre-existing pytest native authority processes retain their identities and remain included in every RSS total. Optional SDK/bridge workers are absent at the end."
+  },
+  "boundaries": [
+    "One initial scope and selected document; five authorized clients observe twelve actual edits and explicit protected refreshes, with fifteen real seconds before each edit.",
+    "Only explicit non-dispatch busy reads may be retried after all other reads in that wave complete. Unknown outcomes, source mutations and pairing are not retried.",
+    "Twelve attempted connections later produce six authorized clients because private executor and operator views occupy two of eight SDK slots; this is not twelve authorized clients.",
+    "The process sampler includes every observed descendant/reparented identity; shared pages may be counted more than once; interval sampling is not a complete spawn trace.",
+    "Resource windows are diagnostic. No relative latency, comparable plateau, tokenization, model-token or useful-task efficiency gain is established.",
+    "This does not qualify source/graph eviction, worker crash, ambiguous executor effects or an interactive model application.",
+    "The complete installed SLO strict Stop timeouts and earlier off RSS failure remain separate unresolved qualification failures."
+  ],
+  "second_attempt": {
+    "status": "failed_short_fixture_resource_boundary_long_case_not_run",
+    "inputs": {
+      "schema": "guard-cigar-source-churn-inputs.v1",
+      "product_source_commit": "95657b30f277604bcd12582e9bbf5d6602c4c433",
+      "test_source_sha256": {
+        "tests/test_context_concurrency_installed.py": "d92e0877e78c7149589616e76a94d71a06f910dfb2823d89ca484811d8a5f100",
+        "tests/test_context_source_churn_installed.py": "a5ca0b10e5787d7937524bebde9b94d773729b43857ffa499b94043dbfb587d8",
+        "tests/context_persistence_installed_support.py": "2b7134960c401080c2a453daec4cf3d0ddb63c8de2b016076cdcc036065628db",
+        "scripts/ci/context_persistence_restart_host.py": "d09dbb5f591b2c93be084a2e5e23b4b6ee0ae10652e44f841504c35d4ab1b3bc",
+        "scripts/ci/dashboard_context_agent_probe.py": "16a0e0e6c72aa50d6fe58a0e04da68a5d30f7bb213a576c4098a2df15624b8f4",
+        "scripts/cigar_benchmark_processes.py": "13b981d846ed41f2ab31f9234876a6cbfa1d3d71620a0ee23e1d50c9fac5b72a"
+      },
+      "source_dirty_at_start": true,
+      "qualification": "installed artifact with fixture-required explicit native pin; separate from automatic-discovery SLO",
+      "fixture_change": "Explicitly close the private Guard home client pool after acknowledged Rust Stop; observe resources in both short and long profiles."
+    },
+    "test_inputs_unchanged_during_run": true,
+    "junit": {
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-source-churn-20261024/final-installed-results.xml",
+        "bytes": 1053,
+        "sha256": "def4f54717b7ba8901880414d270ddb9f06ab02664e39517641fbf6464478a0b"
+      },
+      "tests": 1,
+      "failures": 1,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 118.369
+    },
+    "reports": [
+      {
+        "fixture": "test_five_shared_clients_sourc0",
+        "receipt": {
+          "path": "/private/tmp/hol-guard-cigar-source-churn-20261024/final-scratch/test_five_shared_clients_sourc0/concurrency-metrics.json",
+          "bytes": 4783,
+          "sha256": "d8752b4a858f65dfe27c9f6c7e6e995495414e0fb757624a567cdd9c16106c84"
+        },
+        "report": {
+          "schema": "guard-cigar-mcp-concurrency.v1",
+          "read_busy_refusals": {
+            "native_context_assistance_busy": 22
+          },
+          "phases": [
+            {
+              "clients": 5,
+              "current_contexts": 5,
+              "distinct_graph_revisions": 1
+            },
+            {
+              "attempted_connections": 12,
+              "authorized": 6,
+              "capacity_refusals": 6,
+              "native_sessions_after_refusals": 6
+            }
+          ],
+          "waves": [
+            {
+              "wave": 1,
+              "attempted": 5,
+              "busy": 4,
+              "seconds": 0.025,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 4,
+              "busy": 2,
+              "seconds": 0.017,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 2,
+              "busy": 0,
+              "seconds": 0.015,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 5,
+              "busy": 3,
+              "seconds": 0.019,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 3,
+              "busy": 1,
+              "seconds": 0.017,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 1,
+              "busy": 0,
+              "seconds": 0.011,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 6,
+              "busy": 4,
+              "seconds": 0.03,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 4,
+              "busy": 2,
+              "seconds": 0.019,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 2,
+              "busy": 0,
+              "seconds": 0.019,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 1,
+              "attempted": 6,
+              "busy": 4,
+              "seconds": 0.023,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 2,
+              "attempted": 4,
+              "busy": 2,
+              "seconds": 0.018,
+              "errors": [],
+              "unexpected_codes": []
+            },
+            {
+              "wave": 3,
+              "attempted": 2,
+              "busy": 0,
+              "seconds": 0.017,
+              "errors": [],
+              "unexpected_codes": []
+            }
+          ],
+          "source_update_rounds": 1,
+          "source_update_interval_seconds": 0,
+          "source_updates": [
+            {
+              "round": 1,
+              "current_clients": 5,
+              "distinct_graph_revisions": 1,
+              "observed_tree_memory": {
+                "samples": 4,
+                "sampling_errors": 0,
+                "median_rss_bytes": 1504272384,
+                "peak_rss_bytes": 1504509952,
+                "at_peak_counts": {
+                  "native_runtime": 12,
+                  "guard_python_worker": 6,
+                  "python_bridge": 1,
+                  "sdk_worker": 2,
+                  "other_python_child": 7,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 324091904,
+                  "guard_python_worker": 683425792,
+                  "python_bridge": 30375936,
+                  "sdk_worker": 122961920,
+                  "other_python_child": 190922752,
+                  "benchmark_daemon_host": 152731648
+                },
+                "maximum_counts": {
+                  "sdk_worker": 2,
+                  "benchmark_daemon_host": 1,
+                  "guard_python_worker": 6,
+                  "other_python_child": 7,
+                  "python_bridge": 1,
+                  "native_runtime": 12
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              }
+            }
+          ],
+          "completed": false,
+          "source_update_seconds": 0.284,
+          "revoke_reuse_and_global_stop": true,
+          "raw_content_or_credentials_written": false,
+          "all_observed_processes": {
+            "samples": 1432,
+            "sampling_errors": 0,
+            "median_rss_bytes": 1059069952,
+            "peak_rss_bytes": 2545860608,
+            "at_peak_counts": {
+              "guard_python_worker": 14,
+              "native_runtime": 20,
+              "python_bridge": 1,
+              "sdk_worker": 2,
+              "other_python_child": 8,
+              "benchmark_daemon_host": 1
+            },
+            "at_peak_rss_by_kind": {
+              "guard_python_worker": 1539686400,
+              "native_runtime": 475987968,
+              "python_bridge": 30375936,
+              "sdk_worker": 123027456,
+              "other_python_child": 218791936,
+              "benchmark_daemon_host": 157990912
+            },
+            "maximum_counts": {
+              "terminated_child": 1,
+              "sdk_worker": 2,
+              "benchmark_daemon_host": 1,
+              "other_descendant": 2,
+              "other_python_child": 8,
+              "guard_python_worker": 14,
+              "python_bridge": 1,
+              "exiting_host_python_child": 1,
+              "native_runtime": 20
+            },
+            "includes_observed_reparented_children": true,
+            "shared_pages_may_be_counted_in_multiple_processes": true
+          },
+          "observed_processes_at_end": {
+            "rss_bytes": 240107520,
+            "counts": {
+              "benchmark_daemon_host": 1,
+              "native_runtime": 3
+            },
+            "rss_by_kind": {
+              "benchmark_daemon_host": 157564928,
+              "native_runtime": 82542592
+            }
+          },
+          "seconds": 116.789
+        }
+      }
+    ],
+    "finding": "Explicit private-pool closure reduces end native count from four to three, but the absolute-zero assertion still fails. The test had not separated pre-existing pytest native authority from new fixture workers."
+  },
+  "identity_baseline_preflight": {
+    "junit": {
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-source-churn-20261024/resource-preflight-results.xml",
+        "bytes": 434,
+        "sha256": "193d611cb16595af3f766ded607de1cf551415421c067793a517b93b525603d5"
+      },
+      "tests": 1,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 1.382
+    },
+    "reports": [
+      {
+        "before": {
+          "rss_bytes": 226148352,
+          "counts": {
+            "native_runtime": 3,
+            "benchmark_daemon_host": 1
+          },
+          "rss_by_kind": {
+            "native_runtime": 81575936,
+            "benchmark_daemon_host": 144572416
+          }
+        },
+        "after": {
+          "rss_bytes": 231571456,
+          "counts": {
+            "native_runtime": 3,
+            "benchmark_daemon_host": 1
+          },
+          "rss_by_kind": {
+            "native_runtime": 81707008,
+            "benchmark_daemon_host": 149864448
+          }
+        },
+        "new_processes_remaining": 0
+      }
+    ],
+    "unit": {
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-source-churn-20261024/process-identity-unit-results.xml",
+        "bytes": 1366,
+        "sha256": "5c62c98fd3fde0b25ccf16c945305c4924dd4b0f8fd7fe8b63109a04a8684993"
+      },
+      "tests": 7,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 0.193
+    },
+    "result": "Three native authority processes pre-exist the fixture and retain their same observed PID/start identities afterward. The private fixture leaves no new process; baseline bytes remain included in RSS. A reused PID with a new start is detected as new."
+  },
+  "development_checks": {
+    "junit": {
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-source-churn-20261024/final-unit-results.xml",
+        "bytes": 5869,
+        "sha256": "ce62d55abffbc8f5aacd0d2a07c53815378b40b19d96ada6c2cc29d50df29e63"
+      },
+      "tests": 37,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 0.891
+    },
+    "gates": [
+      {
+        "name": "semantic",
+        "status": "passed",
+        "receipt": {
+          "path": "/private/tmp/hol-guard-cigar-source-churn-20261024/semantic-precommit.json",
+          "bytes": 99,
+          "sha256": "8e3101056186cd4d641add66f9eed89b0289db4e105bdb5885821ae3f0484e46"
+        }
+      },
+      {
+        "name": "capability",
+        "status": "passed",
+        "receipt": {
+          "path": "/private/tmp/hol-guard-cigar-source-churn-20261024/capability-precommit.json",
+          "bytes": 38592,
+          "sha256": "d975dee5fe67bdb3f901777eaa0e7a95a5e8ce9e5f310467754474d61c80dc74"
+        }
+      },
+      {
+        "name": "authority",
+        "status": "passed",
+        "receipt": {
+          "path": "/private/tmp/hol-guard-cigar-source-churn-20261024/authority-precommit.json",
+          "bytes": 63523,
+          "sha256": "356147e54700460e8e7eef3f761613b9ceb78983cc9a1d6fc69eb5ffe5b750dd"
+        }
+      },
+      {
+        "name": "io",
+        "status": "passed",
+        "receipt": {
+          "path": "/private/tmp/hol-guard-cigar-source-churn-20261024/io-precommit.json",
+          "bytes": 78222,
+          "sha256": "bcf901a1c39ebf936483fa5aebdcdb005372d016d67e41b8e46adc6fcbd68472"
+        }
+      },
+      {
+        "name": "privacy",
+        "status": "passed",
+        "receipt": {
+          "path": "/private/tmp/hol-guard-cigar-source-churn-20261024/privacy-precommit.json",
+          "bytes": 620,
+          "sha256": "3f99732114cd01afda57fec9bae91e307310125980da63e8859c1941fbb96b14"
+        }
+      }
+    ]
+  },
+  "long_case_observations": {
+    "seconds": 294.192,
+    "source_update_seconds": 183.691,
+    "source_updates": 12,
+    "clients_per_update": 5,
+    "accepted_wave_reads": 77,
+    "explicit_busy_refusals": {
+      "native_context_assistance_busy": 64
+    },
+    "unexpected_wave_errors": 0,
+    "source_window_median_rss_min_bytes": 1499365376,
+    "source_window_median_rss_max_bytes": 1506312192,
+    "source_window_peak_rss_bytes": 1506689024,
+    "whole_scenario_observed_peak_rss_bytes": 2542632960,
+    "qualification": "functional source-change and scoped-client acceptance only; resource observations include driver, baseline native authority, daemon, every observed MCP/SDK/bridge/native child and observed reparenting"
+  }
+}

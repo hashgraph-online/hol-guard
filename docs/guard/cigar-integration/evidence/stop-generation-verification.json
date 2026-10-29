@@ -1,0 +1,4856 @@
+{
+  "schema": "guard-cigar-stop-generation-verification.v1",
+  "source_parent": "f21dd1c5",
+  "installed_product_before_fix": "95657b30f277604bcd12582e9bbf5d6602c4c433",
+  "scope": "Local native lifecycle correction and opt-in diagnostic tooling; installed correction not yet qualified.",
+  "cause": "After a valid shutdown response, the ordinary Unix Stop waited for every discovered generation, including a later generation started by a live caller after owner-lock release.",
+  "correction": "Capture signed generation/PID/start identities before requesting shutdown, then use existing identity-bound containment for only that set. Preserve retire-clients and non-Unix wait behavior. Clear restart budget under startup lock only when no generation remains.",
+  "invariants": {
+    "production_stop_deadline_seconds": 2,
+    "original_slo_gates_unchanged": true,
+    "strict_final_containment_still_required": true,
+    "CIGAR_optional_native_approval_authority_unchanged": true,
+    "SDK_unchanged": true
+  },
+  "tooling": {
+    "diagnostic_default": false,
+    "scope": "Only matching Stop helper subprocesses receive diagnostic logging; no resident/SDK setting changes. Preserve helper arguments, timeouts, results and exception identity.",
+    "retention": "Four finite client phase labels, finite error codes, numeric timing and aggregate process transitions only; no raw stderr, tokens or PID/start identities are saved.",
+    "stop_error_parser": "Match native_resident_stop_ prefix so preceding phase/note lines cannot suppress an actual Stop error."
+  },
+  "source_sha256": {
+    "rust/crates/guard-runtime/src/managed_resident.rs": "d5d56eba5199827520bc9117cd7b26b44b5a80917b6bdcf728e777f711ff5286",
+    "rust/crates/guard-runtime/src/managed_resident_stop_snapshot.rs": "dc839ddd8789903ee8bb7e0eceb5f82236643a8ccaed860c7ded2f5e2a1396e3",
+    "rust/crates/guard-runtime/src/managed_resident_stop_snapshot_tests.rs": "101ef59c9a96da83ff001efd089c5871a22400dd8bdd6b18b48c04fc2404633f",
+    "scripts/bench_guard_cigar_full_slo.py": "0804cc883214b9db1663ca67d385cd8267ef8fa3513b39c792f33bb76044df62",
+    "scripts/native_slo_stop_diagnostics.py": "b361fd56c9ad359624a4c9ce8f804cfc651d38d7e87d9344320a2cbbdb47e367",
+    "scripts/bench_guard_cigar_readiness_stop_trace.py": "9dabb01eea1926a09d6da6311d027ad8ed5f35acf828d296e50076266cc252e2",
+    "scripts/native_slo_stop_trace.py": "fa090c91156ec6e8ce2e4ae136d58c3cc0e4ba18b693b321489466f464da2cc0",
+    "tests/test_native_slo_stop_trace.py": "4a7d2f3975cf86cfdffda73a64decc03c22d353f9239f7e85ac51ef633d38140"
+  },
+  "installed_diagnostics_before_fix": [
+    {
+      "mode": "off",
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-readiness-stop-20261024/off/result.json",
+        "bytes": 25857,
+        "sha256": "afbc91d4ad28eadbcd493ed3973d8f35ff45ad58a2d75fc6f1d1a479946f499e"
+      },
+      "result": {
+        "schema": "guard-cigar-readiness-stop-trace.v1",
+        "qualification": "fixed diagnostic cohort; helper phase logging; not an SLO or relative benchmark",
+        "mode": "off",
+        "planned_cases": 4,
+        "runtime": {
+          "mode": "auto",
+          "target": "aarch64-macos",
+          "runtime_version": "3.55.1",
+          "protocol_version": 1,
+          "package_origin": "installed",
+          "artifact_sha256": "3600a23709bc01f4a25b6d60a4e5f4126e5af97a634bcfd85691318eb7d51c0a",
+          "artifact_size": 113264512,
+          "build_sha": "95657b30f277604bcd12582e9bbf5d6602c4c433",
+          "rule_digest": "54e38cc15fe1e4bb231214e15876422e5c0f872d2d3d5bae85b6c02e43ac7111",
+          "platform_tag": "macosx_11_0_arm64",
+          "platform_tag_target_verified": true,
+          "host_platform": "darwin",
+          "host_arch": "arm64",
+          "python_version": "3.12.13"
+        },
+        "source_sha256": {
+          "scripts/bench_guard_cigar_readiness_stop_trace.py": "9dabb01eea1926a09d6da6311d027ad8ed5f35acf828d296e50076266cc252e2",
+          "scripts/bench_guard_native_installed_slo_runtime.py": "0e6c5fb1c0ec1f3eaf6ee5e16e355521ec5d5984ea82767385470d8225e8001c",
+          "scripts/cigar_benchmark_processes.py": "e6d76990b4b9cd57c46fa6ca0de8d7f07952327f53a59894adff374c5f785258",
+          "scripts/cigar_benchmark_workload.py": "6f3b86e52ccec7108f2af8e5fa34a238d72261ec4250543cbebcb363f54fc2cd",
+          "scripts/cigar_slo_activity.py": "2f5d94533f18516abd0258925d37e97534d72192a09f2af395f74a933bb56101",
+          "scripts/native_slo_activity.py": "50e30dffc7831273787f1388a265b52eb29d205de3d2f2a839bd0c09a5fcae13",
+          "scripts/native_slo_adapter.py": "ad4e3013eb1e6eafde9da829f08787d85ff38748d708e9963526e57ad4053bbc",
+          "scripts/native_slo_baseline.py": "606fa4739ca517dd2d230261a3967a49854bce20a5ed48d4a388ee3a366c1513",
+          "scripts/native_slo_benchmark_stages.py": "ebc898d1cea59e22513a292913f6e4e6a66648ff1063aecb047d1b714ed14c78",
+          "scripts/native_slo_capacity.py": "0c6dfcecb24d72a03c56f2107e0e8d2323606ed2220c7e80f2d55a289f576779",
+          "scripts/native_slo_capacity_support.py": "bb8f9177f2f12bafa010957cbe40178fdb16d14cb131aa9479c17e92d4ed708d",
+          "scripts/native_slo_contract.py": "ff1b1cc2c35fe6a532b7a62bddeb595ac6e3fec9438b3af970b5a79a9095d101",
+          "scripts/native_slo_diagnostics.py": "c29435bd270cff224c20f80b9c12c4aae1d5d310d35d74e13c0b12c1d119a32f",
+          "scripts/native_slo_failure_details.py": "e022fd74c54ea7d6aa580ee581793f647e53aa7a9988ab666c1269b975237c13",
+          "scripts/native_slo_failure_reason.py": "82da8b3871f52d25f4b7d1cf0e26e3514c629716bf14676b59bf5e04972a7b1d",
+          "scripts/native_slo_preflight.py": "56a01dab72bb8ed0d1bcb87d0bd3032b9d3e61f185feb535c2d477597b972b97",
+          "scripts/native_slo_process_tree.py": "d2412bdf0d2e48f2f2d2cf297790142a8b3c316631007bf585f101fcf52a57e1",
+          "scripts/native_slo_progress.py": "7b369f9294a728270f4a4f0878e78420f00d562ee35e1ea23e20f8d7ca847ca5",
+          "scripts/native_slo_recovery_cleanup.py": "f4c26b33456e2c16980bd34763decef975468be7fecfc02428cf77a51300405c",
+          "scripts/native_slo_reporting.py": "a5c328a12ee4eb3660e4894eaefa238897b5f435ca5f8eaa2eabd2ac62857987",
+          "scripts/native_slo_route_provenance.py": "583e738e7db12e0b31d92b997f1949daafe2af250b44508bfeb91274fd52aa08",
+          "scripts/native_slo_session.py": "374da2b09f48cb35808eb71ab940a92885e31e43cb09eaab565d1b21604292e5",
+          "scripts/native_slo_stop_diagnostics.py": "b361fd56c9ad359624a4c9ce8f804cfc651d38d7e87d9344320a2cbbdb47e367",
+          "scripts/native_slo_stop_trace.py": "813a4032bef4298fad150dfd410487f17b1107c291545277ca96dafb54579ed1"
+        },
+        "completed": true,
+        "cases": [
+          {
+            "case": "off_1",
+            "native_readiness_ms": 0.767749734222889,
+            "before": {
+              "rss_bytes": 99778560,
+              "counts": {
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "benchmark_daemon_host": 99778560
+              }
+            },
+            "after": {
+              "rss_bytes": 1140375552,
+              "counts": {
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "benchmark_daemon_host": 1140375552
+              }
+            },
+            "new_counts": {}
+          },
+          {
+            "case": "off_2",
+            "native_readiness_ms": 1.255124807357788,
+            "before": {
+              "rss_bytes": 1140375552,
+              "counts": {
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "benchmark_daemon_host": 1140375552
+              }
+            },
+            "after": {
+              "rss_bytes": 1142702080,
+              "counts": {
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "benchmark_daemon_host": 1142702080
+              }
+            },
+            "new_counts": {}
+          },
+          {
+            "case": "off_3",
+            "native_readiness_ms": 0.3570001572370529,
+            "before": {
+              "rss_bytes": 1142702080,
+              "counts": {
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "benchmark_daemon_host": 1142702080
+              }
+            },
+            "after": {
+              "rss_bytes": 1143275520,
+              "counts": {
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "benchmark_daemon_host": 1143275520
+              }
+            },
+            "new_counts": {}
+          },
+          {
+            "case": "off_4",
+            "native_readiness_ms": 0.8827503770589828,
+            "before": {
+              "rss_bytes": 1143275520,
+              "counts": {
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "benchmark_daemon_host": 1143275520
+              }
+            },
+            "after": {
+              "rss_bytes": 690618368,
+              "counts": {
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "benchmark_daemon_host": 690618368
+              }
+            },
+            "new_counts": {}
+          }
+        ],
+        "stop_events": [
+          {
+            "case": "off_1",
+            "declared_timeout_seconds": 2,
+            "before": {
+              "rss_bytes": 1239220224,
+              "counts": {
+                "terminated_child": 1,
+                "native_runtime": 3,
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "terminated_child": 0,
+                "native_runtime": 96878592,
+                "benchmark_daemon_host": 1142341632
+              }
+            },
+            "process_outcome": "exited",
+            "returncode": 0,
+            "elapsed_ms": 173.528,
+            "after": {
+              "rss_bytes": 1163051008,
+              "counts": {
+                "native_runtime": 1,
+                "benchmark_daemon_host": 1,
+                "terminated_child": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 20725760,
+                "benchmark_daemon_host": 1142325248,
+                "terminated_child": 0
+              }
+            },
+            "new_counts": {},
+            "gone_counts": {
+              "native_runtime": 2
+            },
+            "stderr_within_bound": true,
+            "phases": [
+              {
+                "phase": "client_connect",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_connect",
+                "status": "ok",
+                "elapsed_ms": 46
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "ok",
+                "elapsed_ms": 0
+              }
+            ],
+            "finite_errors": []
+          },
+          {
+            "case": "off_1",
+            "declared_timeout_seconds": 2,
+            "before": {
+              "rss_bytes": 1242152960,
+              "counts": {
+                "native_runtime": 4,
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 101728256,
+                "benchmark_daemon_host": 1140424704
+              }
+            },
+            "process_outcome": "exited",
+            "returncode": 0,
+            "elapsed_ms": 171.866,
+            "after": {
+              "rss_bytes": 1192509440,
+              "counts": {
+                "benchmark_daemon_host": 1,
+                "native_runtime": 2,
+                "other_descendant": 1
+              },
+              "rss_by_kind": {
+                "benchmark_daemon_host": 1140424704,
+                "native_runtime": 38322176,
+                "other_descendant": 13762560
+              }
+            },
+            "new_counts": {},
+            "gone_counts": {
+              "native_runtime": 1
+            },
+            "stderr_within_bound": true,
+            "phases": [
+              {
+                "phase": "client_connect",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_connect",
+                "status": "ok",
+                "elapsed_ms": 47
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "ok",
+                "elapsed_ms": 0
+              }
+            ],
+            "finite_errors": []
+          },
+          {
+            "case": "off_2",
+            "declared_timeout_seconds": 2,
+            "before": {
+              "rss_bytes": 1247641600,
+              "counts": {
+                "native_runtime": 3,
+                "benchmark_daemon_host": 1,
+                "other_descendant": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 95633408,
+                "benchmark_daemon_host": 1144717312,
+                "other_descendant": 7290880
+              }
+            },
+            "process_outcome": "exited",
+            "returncode": 0,
+            "elapsed_ms": 170.031,
+            "after": {
+              "rss_bytes": 1165328384,
+              "counts": {
+                "benchmark_daemon_host": 1,
+                "terminated_child": 1,
+                "native_runtime": 1
+              },
+              "rss_by_kind": {
+                "benchmark_daemon_host": 1144651776,
+                "terminated_child": 0,
+                "native_runtime": 20676608
+              }
+            },
+            "new_counts": {},
+            "gone_counts": {
+              "other_descendant": 1,
+              "native_runtime": 2
+            },
+            "stderr_within_bound": true,
+            "phases": [
+              {
+                "phase": "client_connect",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_connect",
+                "status": "ok",
+                "elapsed_ms": 46
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "ok",
+                "elapsed_ms": 0
+              }
+            ],
+            "finite_errors": []
+          },
+          {
+            "case": "off_2",
+            "declared_timeout_seconds": 2,
+            "before": {
+              "rss_bytes": 1244086272,
+              "counts": {
+                "native_runtime": 4,
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 101302272,
+                "benchmark_daemon_host": 1142784000
+              }
+            },
+            "process_outcome": "exited",
+            "returncode": 0,
+            "elapsed_ms": 170.153,
+            "after": {
+              "rss_bytes": 1180991488,
+              "counts": {
+                "native_runtime": 2,
+                "terminated_child": 1,
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 38191104,
+                "terminated_child": 0,
+                "benchmark_daemon_host": 1142800384
+              }
+            },
+            "new_counts": {},
+            "gone_counts": {
+              "native_runtime": 2
+            },
+            "stderr_within_bound": true,
+            "phases": [
+              {
+                "phase": "client_connect",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_connect",
+                "status": "ok",
+                "elapsed_ms": 46
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "ok",
+                "elapsed_ms": 0
+              }
+            ],
+            "finite_errors": []
+          },
+          {
+            "case": "off_3",
+            "declared_timeout_seconds": 2,
+            "before": {
+              "rss_bytes": 1241333760,
+              "counts": {
+                "native_runtime": 3,
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 96092160,
+                "benchmark_daemon_host": 1145241600
+              }
+            },
+            "process_outcome": "exited",
+            "returncode": 0,
+            "elapsed_ms": 171.802,
+            "after": {
+              "rss_bytes": 1166147584,
+              "counts": {
+                "native_runtime": 1,
+                "terminated_child": 2,
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 20905984,
+                "terminated_child": 0,
+                "benchmark_daemon_host": 1145241600
+              }
+            },
+            "new_counts": {},
+            "gone_counts": {
+              "native_runtime": 2
+            },
+            "stderr_within_bound": true,
+            "phases": [
+              {
+                "phase": "client_connect",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_connect",
+                "status": "ok",
+                "elapsed_ms": 46
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "ok",
+                "elapsed_ms": 0
+              }
+            ],
+            "finite_errors": []
+          },
+          {
+            "case": "off_3",
+            "declared_timeout_seconds": 2,
+            "before": {
+              "rss_bytes": 1244692480,
+              "counts": {
+                "native_runtime": 4,
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 101318656,
+                "benchmark_daemon_host": 1143373824
+              }
+            },
+            "process_outcome": "exited",
+            "returncode": 0,
+            "elapsed_ms": 171.701,
+            "after": {
+              "rss_bytes": 1195360256,
+              "counts": {
+                "native_runtime": 2,
+                "other_descendant": 1,
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 38240256,
+                "other_descendant": 13746176,
+                "benchmark_daemon_host": 1143373824
+              }
+            },
+            "new_counts": {},
+            "gone_counts": {
+              "native_runtime": 1
+            },
+            "stderr_within_bound": true,
+            "phases": [
+              {
+                "phase": "client_connect",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_connect",
+                "status": "ok",
+                "elapsed_ms": 46
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "ok",
+                "elapsed_ms": 0
+              }
+            ],
+            "finite_errors": []
+          },
+          {
+            "case": "off_4",
+            "declared_timeout_seconds": 2,
+            "before": {
+              "rss_bytes": 1259732992,
+              "counts": {
+                "native_runtime": 4,
+                "benchmark_daemon_host": 1,
+                "terminated_child": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 113967104,
+                "benchmark_daemon_host": 1145765888,
+                "terminated_child": 0
+              }
+            },
+            "process_outcome": "exited",
+            "returncode": 0,
+            "elapsed_ms": 168.177,
+            "after": {
+              "rss_bytes": 1185087488,
+              "counts": {
+                "terminated_child": 1,
+                "native_runtime": 2,
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "terminated_child": 0,
+                "native_runtime": 39157760,
+                "benchmark_daemon_host": 1145929728
+              }
+            },
+            "new_counts": {},
+            "gone_counts": {
+              "native_runtime": 2
+            },
+            "stderr_within_bound": true,
+            "phases": [
+              {
+                "phase": "client_connect",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_connect",
+                "status": "ok",
+                "elapsed_ms": 44
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "ok",
+                "elapsed_ms": 0
+              }
+            ],
+            "finite_errors": []
+          },
+          {
+            "case": "off_4",
+            "declared_timeout_seconds": 2,
+            "before": {
+              "rss_bytes": 1245396992,
+              "counts": {
+                "native_runtime": 4,
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 101564416,
+                "benchmark_daemon_host": 1143832576
+              }
+            },
+            "process_outcome": "exited",
+            "returncode": 0,
+            "elapsed_ms": 171.652,
+            "after": {
+              "rss_bytes": 728956928,
+              "counts": {
+                "native_runtime": 2,
+                "terminated_child": 1,
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 38240256,
+                "terminated_child": 0,
+                "benchmark_daemon_host": 690716672
+              }
+            },
+            "new_counts": {},
+            "gone_counts": {
+              "native_runtime": 2
+            },
+            "stderr_within_bound": true,
+            "phases": [
+              {
+                "phase": "client_connect",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_connect",
+                "status": "ok",
+                "elapsed_ms": 44
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "ok",
+                "elapsed_ms": 0
+              }
+            ],
+            "finite_errors": []
+          }
+        ],
+        "fixture_containment": [
+          {
+            "fixture": "session_1",
+            "final_contained": true
+          },
+          {
+            "fixture": "session_2",
+            "final_contained": true
+          },
+          {
+            "fixture": "session_3",
+            "final_contained": true
+          },
+          {
+            "fixture": "session_4",
+            "final_contained": true
+          }
+        ],
+        "activation_ms": [],
+        "activity_phases": [
+          {
+            "phase": "readiness",
+            "completed": true,
+            "hook_interval_completed": true,
+            "measured_interval_ms": 0.002,
+            "successful_overlapping_compiles": 0,
+            "observed_tree_memory": {
+              "samples": 2,
+              "sampling_errors": 0,
+              "median_rss_bytes": 1238736896,
+              "peak_rss_bytes": 1239220224,
+              "at_peak_counts": {
+                "native_runtime": 3,
+                "benchmark_daemon_host": 1
+              },
+              "at_peak_rss_by_kind": {
+                "native_runtime": 96845824,
+                "benchmark_daemon_host": 1142374400
+              },
+              "maximum_counts": {
+                "native_runtime": 3,
+                "terminated_child": 3,
+                "benchmark_daemon_host": 1
+              },
+              "includes_observed_reparented_children": true,
+              "shared_pages_may_be_counted_in_multiple_processes": true
+            },
+            "effective_at_end": false
+          },
+          {
+            "phase": "readiness",
+            "completed": true,
+            "hook_interval_completed": true,
+            "measured_interval_ms": 0.002,
+            "successful_overlapping_compiles": 0,
+            "observed_tree_memory": {
+              "samples": 2,
+              "sampling_errors": 0,
+              "median_rss_bytes": 1246117888,
+              "peak_rss_bytes": 1252818944,
+              "at_peak_counts": {
+                "native_runtime": 3,
+                "other_descendant": 1,
+                "benchmark_daemon_host": 1
+              },
+              "at_peak_rss_by_kind": {
+                "native_runtime": 94863360,
+                "other_descendant": 13238272,
+                "benchmark_daemon_host": 1144717312
+              },
+              "maximum_counts": {
+                "native_runtime": 3,
+                "benchmark_daemon_host": 1,
+                "other_descendant": 1
+              },
+              "includes_observed_reparented_children": true,
+              "shared_pages_may_be_counted_in_multiple_processes": true
+            },
+            "effective_at_end": false
+          },
+          {
+            "phase": "readiness",
+            "completed": true,
+            "hook_interval_completed": true,
+            "measured_interval_ms": 0.003,
+            "successful_overlapping_compiles": 0,
+            "observed_tree_memory": {
+              "samples": 3,
+              "sampling_errors": 0,
+              "median_rss_bytes": 1240449024,
+              "peak_rss_bytes": 1241317376,
+              "at_peak_counts": {
+                "native_runtime": 3,
+                "benchmark_daemon_host": 1
+              },
+              "at_peak_rss_by_kind": {
+                "native_runtime": 96075776,
+                "benchmark_daemon_host": 1145241600
+              },
+              "maximum_counts": {
+                "native_runtime": 3,
+                "terminated_child": 1,
+                "benchmark_daemon_host": 1
+              },
+              "includes_observed_reparented_children": true,
+              "shared_pages_may_be_counted_in_multiple_processes": true
+            },
+            "effective_at_end": false
+          },
+          {
+            "phase": "readiness",
+            "completed": true,
+            "hook_interval_completed": true,
+            "measured_interval_ms": 0.002,
+            "successful_overlapping_compiles": 0,
+            "observed_tree_memory": {
+              "samples": 2,
+              "sampling_errors": 0,
+              "median_rss_bytes": 1258790912,
+              "peak_rss_bytes": 1258979328,
+              "at_peak_counts": {
+                "native_runtime": 4,
+                "benchmark_daemon_host": 1
+              },
+              "at_peak_rss_by_kind": {
+                "native_runtime": 113213440,
+                "benchmark_daemon_host": 1145765888
+              },
+              "maximum_counts": {
+                "native_runtime": 4,
+                "benchmark_daemon_host": 1,
+                "other_descendant": 1
+              },
+              "includes_observed_reparented_children": true,
+              "shared_pages_may_be_counted_in_multiple_processes": true
+            },
+            "effective_at_end": false
+          }
+        ],
+        "observed_at_end": {
+          "rss_bytes": 690618368,
+          "counts": {
+            "benchmark_daemon_host": 1
+          },
+          "rss_by_kind": {
+            "benchmark_daemon_host": 690618368
+          }
+        },
+        "all_observed_processes": {
+          "samples": 272,
+          "sampling_errors": 0,
+          "median_rss_bytes": 1254449152,
+          "peak_rss_bytes": 1357201408,
+          "at_peak_counts": {
+            "native_runtime": 4,
+            "benchmark_daemon_host": 1
+          },
+          "at_peak_rss_by_kind": {
+            "native_runtime": 213467136,
+            "benchmark_daemon_host": 1143734272
+          },
+          "maximum_counts": {
+            "terminated_child": 3,
+            "exiting_host_python_child": 1,
+            "native_runtime": 5,
+            "benchmark_daemon_host": 1,
+            "other_descendant": 2
+          },
+          "includes_observed_reparented_children": true,
+          "shared_pages_may_be_counted_in_multiple_processes": true
+        },
+        "seconds": 19.473,
+        "source_unchanged": true,
+        "strict_stops_all_succeeded": true,
+        "trace_complete": true
+      }
+    },
+    {
+      "mode": "on",
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-readiness-stop-20261024/on/result.json",
+        "bytes": 29738,
+        "sha256": "6d97b4c1f64db6f9d27ecf12197a0a90b9ef59032e5183f5bf8993659f81d15b"
+      },
+      "result": {
+        "schema": "guard-cigar-readiness-stop-trace.v1",
+        "qualification": "fixed diagnostic cohort; helper phase logging; not an SLO or relative benchmark",
+        "mode": "on",
+        "planned_cases": 4,
+        "runtime": {
+          "mode": "auto",
+          "target": "aarch64-macos",
+          "runtime_version": "3.55.1",
+          "protocol_version": 1,
+          "package_origin": "installed",
+          "artifact_sha256": "3600a23709bc01f4a25b6d60a4e5f4126e5af97a634bcfd85691318eb7d51c0a",
+          "artifact_size": 113264512,
+          "build_sha": "95657b30f277604bcd12582e9bbf5d6602c4c433",
+          "rule_digest": "54e38cc15fe1e4bb231214e15876422e5c0f872d2d3d5bae85b6c02e43ac7111",
+          "platform_tag": "macosx_11_0_arm64",
+          "platform_tag_target_verified": true,
+          "host_platform": "darwin",
+          "host_arch": "arm64",
+          "python_version": "3.12.13"
+        },
+        "source_sha256": {
+          "scripts/bench_guard_cigar_readiness_stop_trace.py": "9dabb01eea1926a09d6da6311d027ad8ed5f35acf828d296e50076266cc252e2",
+          "scripts/bench_guard_native_installed_slo_runtime.py": "0e6c5fb1c0ec1f3eaf6ee5e16e355521ec5d5984ea82767385470d8225e8001c",
+          "scripts/cigar_benchmark_processes.py": "e6d76990b4b9cd57c46fa6ca0de8d7f07952327f53a59894adff374c5f785258",
+          "scripts/cigar_benchmark_workload.py": "6f3b86e52ccec7108f2af8e5fa34a238d72261ec4250543cbebcb363f54fc2cd",
+          "scripts/cigar_slo_activity.py": "2f5d94533f18516abd0258925d37e97534d72192a09f2af395f74a933bb56101",
+          "scripts/native_slo_activity.py": "50e30dffc7831273787f1388a265b52eb29d205de3d2f2a839bd0c09a5fcae13",
+          "scripts/native_slo_adapter.py": "ad4e3013eb1e6eafde9da829f08787d85ff38748d708e9963526e57ad4053bbc",
+          "scripts/native_slo_baseline.py": "606fa4739ca517dd2d230261a3967a49854bce20a5ed48d4a388ee3a366c1513",
+          "scripts/native_slo_benchmark_stages.py": "ebc898d1cea59e22513a292913f6e4e6a66648ff1063aecb047d1b714ed14c78",
+          "scripts/native_slo_capacity.py": "0c6dfcecb24d72a03c56f2107e0e8d2323606ed2220c7e80f2d55a289f576779",
+          "scripts/native_slo_capacity_support.py": "bb8f9177f2f12bafa010957cbe40178fdb16d14cb131aa9479c17e92d4ed708d",
+          "scripts/native_slo_contract.py": "ff1b1cc2c35fe6a532b7a62bddeb595ac6e3fec9438b3af970b5a79a9095d101",
+          "scripts/native_slo_diagnostics.py": "c29435bd270cff224c20f80b9c12c4aae1d5d310d35d74e13c0b12c1d119a32f",
+          "scripts/native_slo_failure_details.py": "e022fd74c54ea7d6aa580ee581793f647e53aa7a9988ab666c1269b975237c13",
+          "scripts/native_slo_failure_reason.py": "82da8b3871f52d25f4b7d1cf0e26e3514c629716bf14676b59bf5e04972a7b1d",
+          "scripts/native_slo_preflight.py": "56a01dab72bb8ed0d1bcb87d0bd3032b9d3e61f185feb535c2d477597b972b97",
+          "scripts/native_slo_process_tree.py": "d2412bdf0d2e48f2f2d2cf297790142a8b3c316631007bf585f101fcf52a57e1",
+          "scripts/native_slo_progress.py": "7b369f9294a728270f4a4f0878e78420f00d562ee35e1ea23e20f8d7ca847ca5",
+          "scripts/native_slo_recovery_cleanup.py": "f4c26b33456e2c16980bd34763decef975468be7fecfc02428cf77a51300405c",
+          "scripts/native_slo_reporting.py": "a5c328a12ee4eb3660e4894eaefa238897b5f435ca5f8eaa2eabd2ac62857987",
+          "scripts/native_slo_route_provenance.py": "583e738e7db12e0b31d92b997f1949daafe2af250b44508bfeb91274fd52aa08",
+          "scripts/native_slo_session.py": "374da2b09f48cb35808eb71ab940a92885e31e43cb09eaab565d1b21604292e5",
+          "scripts/native_slo_stop_diagnostics.py": "b361fd56c9ad359624a4c9ce8f804cfc651d38d7e87d9344320a2cbbdb47e367",
+          "scripts/native_slo_stop_trace.py": "813a4032bef4298fad150dfd410487f17b1107c291545277ca96dafb54579ed1"
+        },
+        "completed": true,
+        "cases": [
+          {
+            "case": "on_1",
+            "native_readiness_ms": 3.3277086913585663,
+            "before": {
+              "rss_bytes": 97746944,
+              "counts": {
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "benchmark_daemon_host": 97746944
+              }
+            },
+            "after": {
+              "rss_bytes": 145309696,
+              "counts": {
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "benchmark_daemon_host": 145309696
+              }
+            },
+            "new_counts": {}
+          },
+          {
+            "case": "on_2",
+            "native_readiness_ms": 0.569791067391634,
+            "before": {
+              "rss_bytes": 145309696,
+              "counts": {
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "benchmark_daemon_host": 145309696
+              }
+            },
+            "after": {
+              "rss_bytes": 152289280,
+              "counts": {
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "benchmark_daemon_host": 152289280
+              }
+            },
+            "new_counts": {}
+          },
+          {
+            "case": "on_3",
+            "native_readiness_ms": 1.0855421423912048,
+            "before": {
+              "rss_bytes": 152289280,
+              "counts": {
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "benchmark_daemon_host": 152289280
+              }
+            },
+            "after": {
+              "rss_bytes": 153370624,
+              "counts": {
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "benchmark_daemon_host": 153370624
+              }
+            },
+            "new_counts": {}
+          },
+          {
+            "case": "on_4",
+            "native_readiness_ms": 0.6709168665111065,
+            "before": {
+              "rss_bytes": 153370624,
+              "counts": {
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "benchmark_daemon_host": 153370624
+              }
+            },
+            "after": {
+              "rss_bytes": 154861568,
+              "counts": {
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "benchmark_daemon_host": 154861568
+              }
+            },
+            "new_counts": {}
+          }
+        ],
+        "stop_events": [
+          {
+            "case": "on_1",
+            "declared_timeout_seconds": 2,
+            "before": {
+              "rss_bytes": 466927616,
+              "counts": {
+                "python_bridge": 1,
+                "native_runtime": 4,
+                "benchmark_daemon_host": 1,
+                "other_python_child": 1,
+                "sdk_worker": 2
+              },
+              "rss_by_kind": {
+                "python_bridge": 29310976,
+                "native_runtime": 143523840,
+                "benchmark_daemon_host": 147308544,
+                "other_python_child": 27377664,
+                "sdk_worker": 119406592
+              }
+            },
+            "process_outcome": "exited",
+            "returncode": 0,
+            "elapsed_ms": 229.78,
+            "after": {
+              "rss_bytes": 186744832,
+              "counts": {
+                "native_runtime": 2,
+                "benchmark_daemon_host": 1,
+                "terminated_child": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 39403520,
+                "benchmark_daemon_host": 147341312,
+                "terminated_child": 0
+              }
+            },
+            "new_counts": {},
+            "gone_counts": {
+              "python_bridge": 1,
+              "native_runtime": 2,
+              "other_python_child": 1,
+              "sdk_worker": 2
+            },
+            "stderr_within_bound": true,
+            "phases": [
+              {
+                "phase": "client_connect",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_connect",
+                "status": "ok",
+                "elapsed_ms": 46
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "ok",
+                "elapsed_ms": 0
+              }
+            ],
+            "finite_errors": []
+          },
+          {
+            "case": "on_1",
+            "declared_timeout_seconds": 2,
+            "before": {
+              "rss_bytes": 246693888,
+              "counts": {
+                "native_runtime": 4,
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 101335040,
+                "benchmark_daemon_host": 145358848
+              }
+            },
+            "process_outcome": "exited",
+            "returncode": 0,
+            "elapsed_ms": 172.979,
+            "after": {
+              "rss_bytes": 199753728,
+              "counts": {
+                "native_runtime": 2,
+                "other_descendant": 1,
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 38223872,
+                "other_descendant": 16171008,
+                "benchmark_daemon_host": 145358848
+              }
+            },
+            "new_counts": {},
+            "gone_counts": {
+              "native_runtime": 1
+            },
+            "stderr_within_bound": true,
+            "phases": [
+              {
+                "phase": "client_connect",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_connect",
+                "status": "ok",
+                "elapsed_ms": 49
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "ok",
+                "elapsed_ms": 0
+              }
+            ],
+            "finite_errors": []
+          },
+          {
+            "case": "on_2",
+            "declared_timeout_seconds": 2,
+            "before": {
+              "rss_bytes": 472498176,
+              "counts": {
+                "sdk_worker": 2,
+                "native_runtime": 4,
+                "other_python_child": 1,
+                "python_bridge": 1,
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "sdk_worker": 119570432,
+                "native_runtime": 142114816,
+                "other_python_child": 27181056,
+                "python_bridge": 29310976,
+                "benchmark_daemon_host": 154320896
+              }
+            },
+            "process_outcome": "exited",
+            "returncode": 0,
+            "elapsed_ms": 223.778,
+            "after": {
+              "rss_bytes": 207323136,
+              "counts": {
+                "benchmark_daemon_host": 1,
+                "native_runtime": 3
+              },
+              "rss_by_kind": {
+                "benchmark_daemon_host": 154337280,
+                "native_runtime": 52985856
+              }
+            },
+            "new_counts": {},
+            "gone_counts": {
+              "sdk_worker": 2,
+              "native_runtime": 1,
+              "other_python_child": 1,
+              "python_bridge": 1
+            },
+            "stderr_within_bound": true,
+            "phases": [
+              {
+                "phase": "client_connect",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_connect",
+                "status": "ok",
+                "elapsed_ms": 46
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "ok",
+                "elapsed_ms": 0
+              }
+            ],
+            "finite_errors": []
+          },
+          {
+            "case": "on_2",
+            "declared_timeout_seconds": 2,
+            "before": {
+              "rss_bytes": 254214144,
+              "counts": {
+                "native_runtime": 4,
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 101826560,
+                "benchmark_daemon_host": 152387584
+              }
+            },
+            "process_outcome": "exited",
+            "returncode": 0,
+            "elapsed_ms": 171.394,
+            "after": {
+              "rss_bytes": 206749696,
+              "counts": {
+                "native_runtime": 2,
+                "other_descendant": 1,
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 38223872,
+                "other_descendant": 16138240,
+                "benchmark_daemon_host": 152387584
+              }
+            },
+            "new_counts": {},
+            "gone_counts": {
+              "native_runtime": 1
+            },
+            "stderr_within_bound": true,
+            "phases": [
+              {
+                "phase": "client_connect",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_connect",
+                "status": "ok",
+                "elapsed_ms": 47
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "ok",
+                "elapsed_ms": 0
+              }
+            ],
+            "finite_errors": []
+          },
+          {
+            "case": "on_3",
+            "declared_timeout_seconds": 2,
+            "before": {
+              "rss_bytes": 455442432,
+              "counts": {
+                "native_runtime": 3,
+                "sdk_worker": 2,
+                "benchmark_daemon_host": 1,
+                "other_python_child": 1,
+                "python_bridge": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 124076032,
+                "sdk_worker": 119668736,
+                "benchmark_daemon_host": 155336704,
+                "other_python_child": 27082752,
+                "python_bridge": 29278208
+              }
+            },
+            "process_outcome": "exited",
+            "returncode": 0,
+            "elapsed_ms": 225.159,
+            "after": {
+              "rss_bytes": 176193536,
+              "counts": {
+                "benchmark_daemon_host": 1,
+                "native_runtime": 1,
+                "terminated_child": 1
+              },
+              "rss_by_kind": {
+                "benchmark_daemon_host": 155336704,
+                "native_runtime": 20856832,
+                "terminated_child": 0
+              }
+            },
+            "new_counts": {},
+            "gone_counts": {
+              "native_runtime": 2,
+              "sdk_worker": 2,
+              "other_python_child": 1,
+              "python_bridge": 1
+            },
+            "stderr_within_bound": true,
+            "phases": [
+              {
+                "phase": "client_connect",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_connect",
+                "status": "ok",
+                "elapsed_ms": 46
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "ok",
+                "elapsed_ms": 0
+              }
+            ],
+            "finite_errors": []
+          },
+          {
+            "case": "on_3",
+            "declared_timeout_seconds": 2,
+            "before": {
+              "rss_bytes": 254771200,
+              "counts": {
+                "benchmark_daemon_host": 1,
+                "native_runtime": 4
+              },
+              "rss_by_kind": {
+                "benchmark_daemon_host": 153468928,
+                "native_runtime": 101302272
+              }
+            },
+            "process_outcome": "exited",
+            "returncode": 0,
+            "elapsed_ms": 205.518,
+            "after": {
+              "rss_bytes": 191660032,
+              "counts": {
+                "benchmark_daemon_host": 1,
+                "native_runtime": 2,
+                "terminated_child": 1
+              },
+              "rss_by_kind": {
+                "benchmark_daemon_host": 153468928,
+                "native_runtime": 38191104,
+                "terminated_child": 0
+              }
+            },
+            "new_counts": {},
+            "gone_counts": {
+              "native_runtime": 2
+            },
+            "stderr_within_bound": true,
+            "phases": [
+              {
+                "phase": "client_connect",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_connect",
+                "status": "ok",
+                "elapsed_ms": 47
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "ok",
+                "elapsed_ms": 0
+              }
+            ],
+            "finite_errors": []
+          },
+          {
+            "case": "on_4",
+            "declared_timeout_seconds": 2,
+            "before": {
+              "rss_bytes": 494387200,
+              "counts": {
+                "sdk_worker": 2,
+                "python_bridge": 1,
+                "benchmark_daemon_host": 1,
+                "native_runtime": 5,
+                "other_python_child": 1
+              },
+              "rss_by_kind": {
+                "sdk_worker": 119914496,
+                "python_bridge": 29622272,
+                "benchmark_daemon_host": 156925952,
+                "native_runtime": 160825344,
+                "other_python_child": 27099136
+              }
+            },
+            "process_outcome": "exited",
+            "returncode": 0,
+            "elapsed_ms": 259.348,
+            "after": {
+              "rss_bytes": 224657408,
+              "counts": {
+                "native_runtime": 3,
+                "benchmark_daemon_host": 1,
+                "terminated_child": 1,
+                "other_descendant": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 57819136,
+                "benchmark_daemon_host": 156991488,
+                "terminated_child": 0,
+                "other_descendant": 9846784
+              }
+            },
+            "new_counts": {
+              "other_descendant": 1
+            },
+            "gone_counts": {
+              "sdk_worker": 2,
+              "python_bridge": 1,
+              "native_runtime": 2,
+              "other_python_child": 1
+            },
+            "stderr_within_bound": true,
+            "phases": [
+              {
+                "phase": "client_connect",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_connect",
+                "status": "ok",
+                "elapsed_ms": 47
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "ok",
+                "elapsed_ms": 0
+              }
+            ],
+            "finite_errors": []
+          },
+          {
+            "case": "on_4",
+            "declared_timeout_seconds": 2,
+            "before": {
+              "rss_bytes": 258129920,
+              "counts": {
+                "native_runtime": 4,
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 103170048,
+                "benchmark_daemon_host": 154959872
+              }
+            },
+            "process_outcome": "exited",
+            "returncode": 0,
+            "elapsed_ms": 205.269,
+            "after": {
+              "rss_bytes": 193396736,
+              "counts": {
+                "benchmark_daemon_host": 1,
+                "native_runtime": 2,
+                "terminated_child": 1
+              },
+              "rss_by_kind": {
+                "benchmark_daemon_host": 154959872,
+                "native_runtime": 38436864,
+                "terminated_child": 0
+              }
+            },
+            "new_counts": {},
+            "gone_counts": {
+              "native_runtime": 2
+            },
+            "stderr_within_bound": true,
+            "phases": [
+              {
+                "phase": "client_connect",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_connect",
+                "status": "ok",
+                "elapsed_ms": 46
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "ok",
+                "elapsed_ms": 0
+              }
+            ],
+            "finite_errors": []
+          }
+        ],
+        "fixture_containment": [
+          {
+            "fixture": "session_1",
+            "final_contained": true
+          },
+          {
+            "fixture": "session_2",
+            "final_contained": true
+          },
+          {
+            "fixture": "session_3",
+            "final_contained": true
+          },
+          {
+            "fixture": "session_4",
+            "final_contained": true
+          }
+        ],
+        "activation_ms": [
+          20801.626458298415,
+          20656.49816673249,
+          20786.78495809436,
+          20727.397332899272
+        ],
+        "activity_phases": [
+          {
+            "phase": "readiness",
+            "completed": true,
+            "hook_interval_completed": true,
+            "measured_interval_ms": 0.005,
+            "successful_overlapping_compiles": 0,
+            "observed_tree_memory": {
+              "samples": 2,
+              "sampling_errors": 0,
+              "median_rss_bytes": 466944000,
+              "peak_rss_bytes": 466944000,
+              "at_peak_counts": {
+                "python_bridge": 1,
+                "native_runtime": 4,
+                "benchmark_daemon_host": 1,
+                "other_python_child": 1,
+                "sdk_worker": 2
+              },
+              "at_peak_rss_by_kind": {
+                "python_bridge": 29212672,
+                "native_runtime": 143671296,
+                "benchmark_daemon_host": 147341312,
+                "other_python_child": 27377664,
+                "sdk_worker": 119341056
+              },
+              "maximum_counts": {
+                "other_python_child": 1,
+                "python_bridge": 1,
+                "benchmark_daemon_host": 1,
+                "sdk_worker": 2,
+                "native_runtime": 4
+              },
+              "includes_observed_reparented_children": true,
+              "shared_pages_may_be_counted_in_multiple_processes": true
+            },
+            "context_workload": {
+              "successful_compiles": 4,
+              "latency": {
+                "count": 1,
+                "p50_ms": 9.767,
+                "p95_ms": 9.767,
+                "p99_ms": 9.767,
+                "max_ms": 9.767
+              },
+              "latency_sample_every": 8,
+              "refusals": {},
+              "distinct_graph_revisions": 1,
+              "unchanged_graph_revision_reused": true,
+              "internal_tokenization_work_measured": false
+            },
+            "effective_at_end": true
+          },
+          {
+            "phase": "readiness",
+            "completed": true,
+            "hook_interval_completed": true,
+            "measured_interval_ms": 0.003,
+            "successful_overlapping_compiles": 0,
+            "observed_tree_memory": {
+              "samples": 3,
+              "sampling_errors": 0,
+              "median_rss_bytes": 472481792,
+              "peak_rss_bytes": 472563712,
+              "at_peak_counts": {
+                "sdk_worker": 2,
+                "native_runtime": 4,
+                "other_python_child": 1,
+                "python_bridge": 1,
+                "benchmark_daemon_host": 1
+              },
+              "at_peak_rss_by_kind": {
+                "sdk_worker": 119521280,
+                "native_runtime": 142262272,
+                "other_python_child": 27181056,
+                "python_bridge": 29245440,
+                "benchmark_daemon_host": 154353664
+              },
+              "maximum_counts": {
+                "other_python_child": 1,
+                "python_bridge": 1,
+                "sdk_worker": 2,
+                "benchmark_daemon_host": 1,
+                "native_runtime": 4
+              },
+              "includes_observed_reparented_children": true,
+              "shared_pages_may_be_counted_in_multiple_processes": true
+            },
+            "context_workload": {
+              "successful_compiles": 5,
+              "latency": {
+                "count": 1,
+                "p50_ms": 10.169,
+                "p95_ms": 10.169,
+                "p99_ms": 10.169,
+                "max_ms": 10.169
+              },
+              "latency_sample_every": 8,
+              "refusals": {},
+              "distinct_graph_revisions": 1,
+              "unchanged_graph_revision_reused": true,
+              "internal_tokenization_work_measured": false
+            },
+            "effective_at_end": true
+          },
+          {
+            "phase": "readiness",
+            "completed": true,
+            "hook_interval_completed": true,
+            "measured_interval_ms": 0.003,
+            "successful_overlapping_compiles": 0,
+            "observed_tree_memory": {
+              "samples": 2,
+              "sampling_errors": 0,
+              "median_rss_bytes": 455467008,
+              "peak_rss_bytes": 455491584,
+              "at_peak_counts": {
+                "native_runtime": 3,
+                "sdk_worker": 2,
+                "benchmark_daemon_host": 1,
+                "other_python_child": 1,
+                "python_bridge": 1
+              },
+              "at_peak_rss_by_kind": {
+                "native_runtime": 124239872,
+                "sdk_worker": 119586816,
+                "benchmark_daemon_host": 155369472,
+                "other_python_child": 27082752,
+                "python_bridge": 29212672
+              },
+              "maximum_counts": {
+                "other_python_child": 1,
+                "python_bridge": 1,
+                "sdk_worker": 2,
+                "benchmark_daemon_host": 1,
+                "native_runtime": 3
+              },
+              "includes_observed_reparented_children": true,
+              "shared_pages_may_be_counted_in_multiple_processes": true
+            },
+            "context_workload": {
+              "successful_compiles": 4,
+              "latency": {
+                "count": 1,
+                "p50_ms": 9.268,
+                "p95_ms": 9.268,
+                "p99_ms": 9.268,
+                "max_ms": 9.268
+              },
+              "latency_sample_every": 8,
+              "refusals": {},
+              "distinct_graph_revisions": 1,
+              "unchanged_graph_revision_reused": true,
+              "internal_tokenization_work_measured": false
+            },
+            "effective_at_end": true
+          },
+          {
+            "phase": "readiness",
+            "completed": true,
+            "hook_interval_completed": true,
+            "measured_interval_ms": 0.003,
+            "successful_overlapping_compiles": 0,
+            "observed_tree_memory": {
+              "samples": 2,
+              "sampling_errors": 0,
+              "median_rss_bytes": 494452736,
+              "peak_rss_bytes": 494501888,
+              "at_peak_counts": {
+                "sdk_worker": 2,
+                "python_bridge": 1,
+                "benchmark_daemon_host": 1,
+                "native_runtime": 5,
+                "other_python_child": 1
+              },
+              "at_peak_rss_by_kind": {
+                "sdk_worker": 119898112,
+                "python_bridge": 29556736,
+                "benchmark_daemon_host": 156958720,
+                "native_runtime": 160989184,
+                "other_python_child": 27099136
+              },
+              "maximum_counts": {
+                "other_python_child": 1,
+                "python_bridge": 1,
+                "sdk_worker": 2,
+                "benchmark_daemon_host": 1,
+                "native_runtime": 5
+              },
+              "includes_observed_reparented_children": true,
+              "shared_pages_may_be_counted_in_multiple_processes": true
+            },
+            "context_workload": {
+              "successful_compiles": 4,
+              "latency": {
+                "count": 1,
+                "p50_ms": 9.536,
+                "p95_ms": 9.536,
+                "p99_ms": 9.536,
+                "max_ms": 9.536
+              },
+              "latency_sample_every": 8,
+              "refusals": {},
+              "distinct_graph_revisions": 1,
+              "unchanged_graph_revision_reused": true,
+              "internal_tokenization_work_measured": false
+            },
+            "effective_at_end": true
+          }
+        ],
+        "observed_at_end": {
+          "rss_bytes": 154861568,
+          "counts": {
+            "benchmark_daemon_host": 1
+          },
+          "rss_by_kind": {
+            "benchmark_daemon_host": 154861568
+          }
+        },
+        "all_observed_processes": {
+          "samples": 1680,
+          "sampling_errors": 0,
+          "median_rss_bytes": 383229952,
+          "peak_rss_bytes": 1379074048,
+          "at_peak_counts": {
+            "python_bridge": 1,
+            "native_runtime": 4,
+            "benchmark_daemon_host": 1,
+            "sdk_worker": 1
+          },
+          "at_peak_rss_by_kind": {
+            "python_bridge": 29048832,
+            "native_runtime": 142655488,
+            "benchmark_daemon_host": 1147912192,
+            "sdk_worker": 59457536
+          },
+          "maximum_counts": {
+            "other_descendant": 2,
+            "terminated_child": 1,
+            "other_python_child": 2,
+            "python_bridge": 1,
+            "benchmark_daemon_host": 1,
+            "sdk_worker": 2,
+            "native_runtime": 6
+          },
+          "includes_observed_reparented_children": true,
+          "shared_pages_may_be_counted_in_multiple_processes": true
+        },
+        "seconds": 130.455,
+        "source_unchanged": true,
+        "strict_stops_all_succeeded": true,
+        "trace_complete": true
+      }
+    },
+    {
+      "mode": "on-full",
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-readiness-stop-20261024/on-full/result.json",
+        "bytes": 72689,
+        "sha256": "cdd1af89d265424b5366455f6c63723d064ef68ff0fc77f96c0c16f56a48cbbd"
+      },
+      "result": {
+        "schema": "guard-cigar-full-installed-slo.v1",
+        "completed": true,
+        "mode": "on",
+        "runtime": {
+          "mode": "auto",
+          "target": "aarch64-macos",
+          "runtime_version": "3.55.1",
+          "protocol_version": 1,
+          "package_origin": "installed",
+          "artifact_sha256": "3600a23709bc01f4a25b6d60a4e5f4126e5af97a634bcfd85691318eb7d51c0a",
+          "artifact_size": 113264512,
+          "build_sha": "95657b30f277604bcd12582e9bbf5d6602c4c433",
+          "rule_digest": "54e38cc15fe1e4bb231214e15876422e5c0f872d2d3d5bae85b6c02e43ac7111",
+          "platform_tag": "macosx_11_0_arm64",
+          "platform_tag_target_verified": true,
+          "host_platform": "darwin",
+          "host_arch": "arm64",
+          "python_version": "3.12.13"
+        },
+        "qualification": "local installed fixture; platform bound to runtime identity",
+        "client_topology": "driver, authenticated hook clients and daemon share one Python process",
+        "stop_helper_diagnostic": true,
+        "tooling_source_sha256": {
+          "ci/native_runtime/installed_hook_client.py": "384efc4b4830b5c49c1d1177a76944378514e8d00d47fded1ca35dc0bdb665fd",
+          "ci/native_runtime/probe_native_default_auto.py": "0f9fb592f05e275eba9928ced3a70787a3c6a52eb5a56925a212cd6bf153d6ef",
+          "scripts/bench_guard_cigar_full_slo.py": "0804cc883214b9db1663ca67d385cd8267ef8fa3513b39c792f33bb76044df62",
+          "scripts/bench_guard_native_installed_slo.py": "81e47599eb05d3582430deeae2ca385c4ad63f4ee599c7daf507a223ad6c45bb",
+          "scripts/bench_guard_native_installed_slo_runtime.py": "0e6c5fb1c0ec1f3eaf6ee5e16e355521ec5d5984ea82767385470d8225e8001c",
+          "scripts/cigar_benchmark_processes.py": "e6d76990b4b9cd57c46fa6ca0de8d7f07952327f53a59894adff374c5f785258",
+          "scripts/cigar_benchmark_workload.py": "6f3b86e52ccec7108f2af8e5fa34a238d72261ec4250543cbebcb363f54fc2cd",
+          "scripts/cigar_slo_activity.py": "2f5d94533f18516abd0258925d37e97534d72192a09f2af395f74a933bb56101",
+          "scripts/native_installed_hook_corpus.py": "6402731f18b55b596b9e999658a45ea752f0be22b222181f801f31419bf30bfb",
+          "scripts/native_probe_receipts.py": "deef72aee9b5171d9898d04fc6a8ed393a142464b1a333383511e4c0c4169562",
+          "scripts/native_slo_activity.py": "50e30dffc7831273787f1388a265b52eb29d205de3d2f2a839bd0c09a5fcae13",
+          "scripts/native_slo_adapter.py": "ad4e3013eb1e6eafde9da829f08787d85ff38748d708e9963526e57ad4053bbc",
+          "scripts/native_slo_baseline.py": "606fa4739ca517dd2d230261a3967a49854bce20a5ed48d4a388ee3a366c1513",
+          "scripts/native_slo_benchmark_stages.py": "ebc898d1cea59e22513a292913f6e4e6a66648ff1063aecb047d1b714ed14c78",
+          "scripts/native_slo_capacity.py": "0c6dfcecb24d72a03c56f2107e0e8d2323606ed2220c7e80f2d55a289f576779",
+          "scripts/native_slo_capacity_support.py": "bb8f9177f2f12bafa010957cbe40178fdb16d14cb131aa9479c17e92d4ed708d",
+          "scripts/native_slo_contract.py": "ff1b1cc2c35fe6a532b7a62bddeb595ac6e3fec9438b3af970b5a79a9095d101",
+          "scripts/native_slo_diagnostics.py": "c29435bd270cff224c20f80b9c12c4aae1d5d310d35d74e13c0b12c1d119a32f",
+          "scripts/native_slo_failure_details.py": "e022fd74c54ea7d6aa580ee581793f647e53aa7a9988ab666c1269b975237c13",
+          "scripts/native_slo_failure_reason.py": "82da8b3871f52d25f4b7d1cf0e26e3514c629716bf14676b59bf5e04972a7b1d",
+          "scripts/native_slo_preflight.py": "56a01dab72bb8ed0d1bcb87d0bd3032b9d3e61f185feb535c2d477597b972b97",
+          "scripts/native_slo_process_tree.py": "d2412bdf0d2e48f2f2d2cf297790142a8b3c316631007bf585f101fcf52a57e1",
+          "scripts/native_slo_progress.py": "7b369f9294a728270f4a4f0878e78420f00d562ee35e1ea23e20f8d7ca847ca5",
+          "scripts/native_slo_recovery_cleanup.py": "f4c26b33456e2c16980bd34763decef975468be7fecfc02428cf77a51300405c",
+          "scripts/native_slo_reporting.py": "a5c328a12ee4eb3660e4894eaefa238897b5f435ca5f8eaa2eabd2ac62857987",
+          "scripts/native_slo_route_provenance.py": "583e738e7db12e0b31d92b997f1949daafe2af250b44508bfeb91274fd52aa08",
+          "scripts/native_slo_session.py": "374da2b09f48cb35808eb71ab940a92885e31e43cb09eaab565d1b21604292e5",
+          "scripts/native_slo_stop_diagnostics.py": "b361fd56c9ad359624a4c9ce8f804cfc651d38d7e87d9344320a2cbbdb47e367",
+          "scripts/native_slo_stop_trace.py": "fa090c91156ec6e8ce2e4ae136d58c3cc0e4ba18b693b321489466f464da2cc0"
+        },
+        "installed_slo": {
+          "schema": "hol-guard.native-installed-slo.v1",
+          "scope": "installed_adapter_to_decision",
+          "runtime": {
+            "mode": "auto",
+            "target": "aarch64-macos",
+            "runtime_version": "3.55.1",
+            "protocol_version": 1,
+            "package_origin": "installed",
+            "artifact_sha256": "3600a23709bc01f4a25b6d60a4e5f4126e5af97a634bcfd85691318eb7d51c0a",
+            "artifact_size": 113264512,
+            "build_sha": "95657b30f277604bcd12582e9bbf5d6602c4c433",
+            "rule_digest": "54e38cc15fe1e4bb231214e15876422e5c0f872d2d3d5bae85b6c02e43ac7111",
+            "platform_tag": "macosx_11_0_arm64",
+            "platform_tag_target_verified": true,
+            "host_platform": "darwin",
+            "host_arch": "arm64",
+            "python_version": "3.12.13"
+          },
+          "corpus": {
+            "harnesses": 14,
+            "routes": 23,
+            "observations": 153,
+            "corpus_origin": "installed_wheel_ownership_contract",
+            "route_corpus": "installed_routes",
+            "warm_failures": 0,
+            "safe_failures": 0,
+            "security_denials": 21,
+            "safe_failure_rate": 0.0,
+            "fail_safe_decisions": 0,
+            "fail_safe_rate": 0.0,
+            "resident_share": 1.0,
+            "python_fallback_decisions": 0,
+            "python_semantic_decisions": 0,
+            "oneshot_decisions": 0,
+            "safe_failures_by_size": {},
+            "security_denials_by_size": {
+              "1m": 7,
+              "250k": 7,
+              "5m": 7
+            },
+            "rss_baseline_bytes": 643088384,
+            "rss_peak_bytes": 643088384,
+            "rss_growth": 0.0,
+            "installed": {
+              "routes": 23,
+              "resident": 23,
+              "oneshot": 0,
+              "fail_safe": 0,
+              "python_semantic": 0,
+              "python_semantic_decisions": 0
+            },
+            "planned": 153,
+            "submitted": 153,
+            "started": 153,
+            "attempted": 153,
+            "completed": 153,
+            "failed": 0,
+            "cancelled": 0,
+            "missing": 0,
+            "denominators": {
+              "capacity_prewarm": {
+                "planned": 16,
+                "submitted": 16,
+                "started": 16,
+                "attempted": 16,
+                "completed": 16,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "capacity_prewarm_ready": {
+                "planned": 1,
+                "submitted": 1,
+                "started": 1,
+                "attempted": 1,
+                "completed": 1,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "capacity_stabilization": {
+                "planned": 1,
+                "submitted": 1,
+                "started": 1,
+                "attempted": 1,
+                "completed": 1,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "cleanup": {
+                "planned": 1,
+                "submitted": 1,
+                "started": 1,
+                "attempted": 1,
+                "completed": 1,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "cold": {
+                "planned": 3,
+                "submitted": 3,
+                "started": 3,
+                "attempted": 3,
+                "completed": 3,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "concurrent_16": {
+                "planned": 16,
+                "submitted": 16,
+                "started": 16,
+                "attempted": 16,
+                "completed": 16,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "concurrent_64": {
+                "planned": 64,
+                "submitted": 64,
+                "started": 64,
+                "attempted": 64,
+                "completed": 64,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "installed_corpus": {
+                "planned": 1,
+                "submitted": 1,
+                "started": 1,
+                "attempted": 1,
+                "completed": 1,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "installed_corpus_routes": {
+                "planned": 23,
+                "submitted": 23,
+                "started": 23,
+                "attempted": 23,
+                "completed": 23,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "readiness": {
+                "planned": 3,
+                "submitted": 3,
+                "started": 3,
+                "attempted": 3,
+                "completed": 3,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "recovery": {
+                "planned": 3,
+                "submitted": 3,
+                "started": 3,
+                "attempted": 3,
+                "completed": 3,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "recovery_precondition": {
+                "planned": 3,
+                "submitted": 3,
+                "started": 3,
+                "attempted": 3,
+                "completed": 3,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "recovery_stop": {
+                "planned": 3,
+                "submitted": 3,
+                "started": 3,
+                "attempted": 3,
+                "completed": 3,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "routes": {
+                "planned": 1,
+                "submitted": 1,
+                "started": 1,
+                "attempted": 1,
+                "completed": 1,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "rss_baseline": {
+                "planned": 1,
+                "submitted": 1,
+                "started": 1,
+                "attempted": 1,
+                "completed": 1,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "rss_baseline_requests": {
+                "planned": null,
+                "submitted": 112,
+                "started": 112,
+                "attempted": 112,
+                "completed": 112,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": null,
+                "skipped": false
+              },
+              "runtime": {
+                "planned": 1,
+                "submitted": 1,
+                "started": 1,
+                "attempted": 1,
+                "completed": 1,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "serialized_warmup": {
+                "planned": 1,
+                "submitted": 1,
+                "started": 1,
+                "attempted": 1,
+                "completed": 1,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "size_1m": {
+                "planned": 9,
+                "submitted": 9,
+                "started": 9,
+                "attempted": 9,
+                "completed": 9,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "size_250k": {
+                "planned": 9,
+                "submitted": 9,
+                "started": 9,
+                "attempted": 9,
+                "completed": 9,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "size_5m": {
+                "planned": 9,
+                "submitted": 9,
+                "started": 9,
+                "attempted": 9,
+                "completed": 9,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "warm": {
+                "planned": 46,
+                "submitted": 46,
+                "started": 46,
+                "attempted": 46,
+                "completed": 46,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "warm_precondition": {
+                "planned": 23,
+                "submitted": 23,
+                "started": 23,
+                "attempted": 23,
+                "completed": 23,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              }
+            }
+          },
+          "routes": {
+            "native_resident": 153
+          },
+          "python_semantic_decisions": 0,
+          "errors_16": 0,
+          "errors_64": 0,
+          "latency": {
+            "warm_all_harnesses": {
+              "count": 46,
+              "p50_ms": 6.548,
+              "p95_ms": 12.486,
+              "p99_ms": 18.195,
+              "max_ms": 18.195
+            },
+            "warm_by_event": {
+              "PreToolUse": {
+                "count": 28,
+                "p50_ms": 6.493,
+                "p95_ms": 12.486,
+                "p99_ms": 15.161,
+                "max_ms": 15.161
+              },
+              "PostToolUse": {
+                "count": 18,
+                "p50_ms": 6.814,
+                "p95_ms": 18.195,
+                "p99_ms": 18.195,
+                "max_ms": 18.195
+              }
+            },
+            "size_classes": {
+              "1k": {
+                "count": 126,
+                "p50_ms": 41.118,
+                "p95_ms": 159.55,
+                "p99_ms": 164.576,
+                "max_ms": 167.535
+              },
+              "250k": {
+                "count": 9,
+                "p50_ms": 12.532,
+                "p95_ms": 47.21,
+                "p99_ms": 47.21,
+                "max_ms": 47.21
+              },
+              "1m": {
+                "count": 9,
+                "p50_ms": 5.831,
+                "p95_ms": 152.972,
+                "p99_ms": 152.972,
+                "max_ms": 152.972
+              },
+              "5m": {
+                "count": 9,
+                "p50_ms": 6.285,
+                "p95_ms": 692.536,
+                "p99_ms": 692.536,
+                "max_ms": 692.536
+              }
+            },
+            "cold_native_oneshot": {
+              "count": 3,
+              "p50_ms": 20.424,
+              "p95_ms": 20.555,
+              "p99_ms": 20.555,
+              "max_ms": 20.555
+            },
+            "resident_recovery": {
+              "count": 3,
+              "p50_ms": 170.099,
+              "p95_ms": 175.104,
+              "p99_ms": 175.104,
+              "max_ms": 175.104
+            },
+            "readiness": {
+              "count": 3,
+              "p50_ms": 0.635,
+              "p95_ms": 0.835,
+              "p99_ms": 0.835,
+              "max_ms": 0.835
+            }
+          },
+          "timing": {
+            "adapter": {
+              "count": 153,
+              "p50_ms": 33.963,
+              "p95_ms": 160.989,
+              "p99_ms": 685.038,
+              "max_ms": 692.536
+            },
+            "enclosing": {
+              "count": 153,
+              "p50_ms": 33.98,
+              "p95_ms": 161.002,
+              "p99_ms": 685.05,
+              "max_ms": 692.553
+            },
+            "recovery_adapter": {
+              "count": 3,
+              "p50_ms": 170.028,
+              "p95_ms": 174.957,
+              "p99_ms": 174.957,
+              "max_ms": 174.957
+            },
+            "recovery_enclosing": {
+              "count": 3,
+              "p50_ms": 170.099,
+              "p95_ms": 175.104,
+              "p99_ms": 175.104,
+              "max_ms": 175.104
+            }
+          },
+          "thresholds": {
+            "installed_adapter_p95_ms": 1000.0,
+            "installed_adapter_concurrent_p99_ms": 1000.0,
+            "direct_cold_p95_ms": 150.0,
+            "readiness_p95_ms": 400.0
+          },
+          "concurrency": {
+            "sixteen": {
+              "latency": {
+                "count": 16,
+                "p50_ms": 37.806,
+                "p95_ms": 49.743,
+                "p99_ms": 49.743,
+                "max_ms": 49.743
+              },
+              "errors": 0,
+              "overloaded": 0,
+              "deadline_ms": 1000.0,
+              "denominators": {
+                "planned": 16,
+                "submitted": 16,
+                "started": 16,
+                "attempted": 16,
+                "completed": 16,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              }
+            },
+            "sixty_four": {
+              "latency": {
+                "count": 64,
+                "p50_ms": 108.886,
+                "p95_ms": 162.252,
+                "p99_ms": 167.535,
+                "max_ms": 167.535
+              },
+              "errors": 0,
+              "overloaded": 0,
+              "fail_safe": 0,
+              "latency_ceiling_ms": null,
+              "bounded": true,
+              "denominators": {
+                "planned": 64,
+                "submitted": 64,
+                "started": 64,
+                "attempted": 64,
+                "completed": 64,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              }
+            }
+          },
+          "gates": {
+            "resident_share": true,
+            "safe_corpus": true,
+            "warm_latency": true,
+            "250k_latency": true,
+            "1m_latency": true,
+            "5m_latency": true,
+            "cold_latency": true,
+            "readiness": true,
+            "concurrency": true,
+            "rss": true,
+            "python_fallback": true,
+            "recovery_latency": true,
+            "concurrency_64_bounded": true,
+            "installed_corpus": true
+          },
+          "passed": true
+        },
+        "strict_stop_trace": [
+          {
+            "case": "session_0:installed_corpus",
+            "declared_timeout_seconds": 2,
+            "before": {
+              "rss_bytes": 513818624,
+              "counts": {
+                "sdk_worker": 2,
+                "native_runtime": 6,
+                "benchmark_daemon_host": 1,
+                "other_python_child": 1,
+                "python_bridge": 1
+              },
+              "rss_by_kind": {
+                "sdk_worker": 119439360,
+                "native_runtime": 192724992,
+                "benchmark_daemon_host": 145031168,
+                "other_python_child": 27410432,
+                "python_bridge": 29212672
+              }
+            },
+            "process_outcome": "exited",
+            "returncode": 0,
+            "elapsed_ms": 175.734,
+            "after": {
+              "rss_bytes": 235618304,
+              "counts": {
+                "benchmark_daemon_host": 1,
+                "native_runtime": 4,
+                "other_descendant": 1
+              },
+              "rss_by_kind": {
+                "benchmark_daemon_host": 145031168,
+                "native_runtime": 76824576,
+                "other_descendant": 13762560
+              }
+            },
+            "new_counts": {},
+            "gone_counts": {
+              "sdk_worker": 2,
+              "other_python_child": 1,
+              "python_bridge": 1,
+              "native_runtime": 1
+            },
+            "stderr_within_bound": true,
+            "phases": [
+              {
+                "phase": "client_connect",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_connect",
+                "status": "ok",
+                "elapsed_ms": 46
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "ok",
+                "elapsed_ms": 0
+              }
+            ],
+            "finite_errors": []
+          },
+          {
+            "case": "session_1:cold_precondition",
+            "declared_timeout_seconds": 2,
+            "before": {
+              "rss_bytes": 471662592,
+              "counts": {
+                "native_runtime": 4,
+                "python_bridge": 1,
+                "benchmark_daemon_host": 1,
+                "sdk_worker": 2,
+                "other_python_child": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 142147584,
+                "python_bridge": 30261248,
+                "benchmark_daemon_host": 152485888,
+                "sdk_worker": 119521280,
+                "other_python_child": 27246592
+              }
+            },
+            "process_outcome": "exited",
+            "returncode": 0,
+            "elapsed_ms": 223.395,
+            "after": {
+              "rss_bytes": 208011264,
+              "counts": {
+                "native_runtime": 3,
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 55525376,
+                "benchmark_daemon_host": 152485888
+              }
+            },
+            "new_counts": {},
+            "gone_counts": {
+              "native_runtime": 1,
+              "python_bridge": 1,
+              "sdk_worker": 2,
+              "other_python_child": 1
+            },
+            "stderr_within_bound": true,
+            "phases": [
+              {
+                "phase": "client_connect",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_connect",
+                "status": "ok",
+                "elapsed_ms": 46
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "ok",
+                "elapsed_ms": 0
+              }
+            ],
+            "finite_errors": []
+          },
+          {
+            "case": "session_1:cold_precondition",
+            "declared_timeout_seconds": 2,
+            "before": {
+              "rss_bytes": 191676416,
+              "counts": {
+                "terminated_child": 1,
+                "benchmark_daemon_host": 1,
+                "native_runtime": 2
+              },
+              "rss_by_kind": {
+                "terminated_child": 0,
+                "benchmark_daemon_host": 152977408,
+                "native_runtime": 38699008
+              }
+            },
+            "process_outcome": "exited",
+            "returncode": 0,
+            "elapsed_ms": 208.039,
+            "after": {
+              "rss_bytes": 192249856,
+              "counts": {
+                "terminated_child": 1,
+                "native_runtime": 3,
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "terminated_child": 0,
+                "native_runtime": 39272448,
+                "benchmark_daemon_host": 152977408
+              }
+            },
+            "new_counts": {
+              "native_runtime": 1
+            },
+            "gone_counts": {},
+            "stderr_within_bound": true,
+            "phases": [
+              {
+                "phase": "client_connect",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_connect",
+                "status": "ok",
+                "elapsed_ms": 47
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "ok",
+                "elapsed_ms": 0
+              }
+            ],
+            "finite_errors": []
+          },
+          {
+            "case": "session_1:cold_precondition",
+            "declared_timeout_seconds": 2,
+            "before": {
+              "rss_bytes": 469090304,
+              "counts": {
+                "native_runtime": 4,
+                "sdk_worker": 2,
+                "other_python_child": 1,
+                "benchmark_daemon_host": 1,
+                "python_bridge": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 138756096,
+                "sdk_worker": 119373824,
+                "other_python_child": 27181056,
+                "benchmark_daemon_host": 153436160,
+                "python_bridge": 30343168
+              }
+            },
+            "process_outcome": "exited",
+            "returncode": 0,
+            "elapsed_ms": 232.5,
+            "after": {
+              "rss_bytes": 190840832,
+              "counts": {
+                "native_runtime": 2,
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 37404672,
+                "benchmark_daemon_host": 153436160
+              }
+            },
+            "new_counts": {},
+            "gone_counts": {
+              "native_runtime": 2,
+              "sdk_worker": 2,
+              "other_python_child": 1,
+              "python_bridge": 1
+            },
+            "stderr_within_bound": true,
+            "phases": [
+              {
+                "phase": "client_connect",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_connect",
+                "status": "ok",
+                "elapsed_ms": 46
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "ok",
+                "elapsed_ms": 0
+              }
+            ],
+            "finite_errors": []
+          },
+          {
+            "case": "session_1:cold_precondition",
+            "declared_timeout_seconds": 2,
+            "before": {
+              "rss_bytes": 257146880,
+              "counts": {
+                "benchmark_daemon_host": 1,
+                "native_runtime": 4
+              },
+              "rss_by_kind": {
+                "benchmark_daemon_host": 153436160,
+                "native_runtime": 103710720
+              }
+            },
+            "process_outcome": "exited",
+            "returncode": 0,
+            "elapsed_ms": 175.608,
+            "after": {
+              "rss_bytes": 191889408,
+              "counts": {
+                "benchmark_daemon_host": 1,
+                "native_runtime": 2,
+                "terminated_child": 1
+              },
+              "rss_by_kind": {
+                "benchmark_daemon_host": 153436160,
+                "native_runtime": 38453248,
+                "terminated_child": 0
+              }
+            },
+            "new_counts": {},
+            "gone_counts": {
+              "native_runtime": 2
+            },
+            "stderr_within_bound": true,
+            "phases": [
+              {
+                "phase": "client_connect",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_connect",
+                "status": "ok",
+                "elapsed_ms": 46
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "ok",
+                "elapsed_ms": 0
+              }
+            ],
+            "finite_errors": []
+          },
+          {
+            "case": "session_1:cold_precondition",
+            "declared_timeout_seconds": 2,
+            "before": {
+              "rss_bytes": 252985344,
+              "counts": {
+                "native_runtime": 4,
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 101531648,
+                "benchmark_daemon_host": 151453696
+              }
+            },
+            "process_outcome": "exited",
+            "returncode": 0,
+            "elapsed_ms": 174.333,
+            "after": {
+              "rss_bytes": 189759488,
+              "counts": {
+                "native_runtime": 2,
+                "benchmark_daemon_host": 1,
+                "terminated_child": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 38305792,
+                "benchmark_daemon_host": 151453696,
+                "terminated_child": 0
+              }
+            },
+            "new_counts": {},
+            "gone_counts": {
+              "native_runtime": 2
+            },
+            "stderr_within_bound": true,
+            "phases": [
+              {
+                "phase": "client_connect",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_connect",
+                "status": "ok",
+                "elapsed_ms": 47
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "ok",
+                "elapsed_ms": 0
+              }
+            ],
+            "finite_errors": []
+          },
+          {
+            "case": "session_2:recovery_precondition",
+            "declared_timeout_seconds": 2,
+            "before": {
+              "rss_bytes": 526811136,
+              "counts": {
+                "native_runtime": 6,
+                "other_python_child": 1,
+                "sdk_worker": 2,
+                "python_bridge": 1,
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 183861248,
+                "other_python_child": 27148288,
+                "sdk_worker": 120061952,
+                "python_bridge": 29196288,
+                "benchmark_daemon_host": 166543360
+              }
+            },
+            "process_outcome": "exited",
+            "returncode": 0,
+            "elapsed_ms": 223.462,
+            "after": {
+              "rss_bytes": 257818624,
+              "counts": {
+                "native_runtime": 4,
+                "other_descendant": 1,
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 77119488,
+                "other_descendant": 14139392,
+                "benchmark_daemon_host": 166559744
+              }
+            },
+            "new_counts": {},
+            "gone_counts": {
+              "native_runtime": 1,
+              "other_python_child": 1,
+              "sdk_worker": 2,
+              "python_bridge": 1
+            },
+            "stderr_within_bound": true,
+            "phases": [
+              {
+                "phase": "client_connect",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_connect",
+                "status": "ok",
+                "elapsed_ms": 47
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "ok",
+                "elapsed_ms": 0
+              }
+            ],
+            "finite_errors": []
+          },
+          {
+            "case": "session_2:recovery_precondition",
+            "declared_timeout_seconds": 2,
+            "before": {
+              "rss_bytes": 522993664,
+              "counts": {
+                "native_runtime": 6,
+                "terminated_child": 1,
+                "sdk_worker": 2,
+                "python_bridge": 1,
+                "benchmark_daemon_host": 1,
+                "other_python_child": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 179863552,
+                "terminated_child": 0,
+                "sdk_worker": 119832576,
+                "python_bridge": 29360128,
+                "benchmark_daemon_host": 166821888,
+                "other_python_child": 27115520
+              }
+            },
+            "process_outcome": "exited",
+            "returncode": 0,
+            "elapsed_ms": 236.126,
+            "after": {
+              "rss_bytes": 244416512,
+              "counts": {
+                "native_runtime": 4,
+                "terminated_child": 2,
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 77594624,
+                "terminated_child": 0,
+                "benchmark_daemon_host": 166821888
+              }
+            },
+            "new_counts": {},
+            "gone_counts": {
+              "sdk_worker": 2,
+              "python_bridge": 1,
+              "native_runtime": 2,
+              "other_python_child": 1
+            },
+            "stderr_within_bound": true,
+            "phases": [
+              {
+                "phase": "client_connect",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_connect",
+                "status": "ok",
+                "elapsed_ms": 46
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "ok",
+                "elapsed_ms": 0
+              }
+            ],
+            "finite_errors": []
+          },
+          {
+            "case": "session_2:recovery_precondition",
+            "declared_timeout_seconds": 2,
+            "before": {
+              "rss_bytes": 487342080,
+              "counts": {
+                "native_runtime": 4,
+                "terminated_child": 2,
+                "other_python_child": 1,
+                "benchmark_daemon_host": 1,
+                "sdk_worker": 2,
+                "python_bridge": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 144605184,
+                "terminated_child": 0,
+                "other_python_child": 27131904,
+                "benchmark_daemon_host": 167067648,
+                "sdk_worker": 119308288,
+                "python_bridge": 29229056
+              }
+            },
+            "process_outcome": "exited",
+            "returncode": 0,
+            "elapsed_ms": 223.092,
+            "after": {
+              "rss_bytes": 208732160,
+              "counts": {
+                "native_runtime": 2,
+                "terminated_child": 3,
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 41664512,
+                "terminated_child": 0,
+                "benchmark_daemon_host": 167067648
+              }
+            },
+            "new_counts": {},
+            "gone_counts": {
+              "other_python_child": 1,
+              "sdk_worker": 2,
+              "python_bridge": 1,
+              "native_runtime": 2
+            },
+            "stderr_within_bound": true,
+            "phases": [
+              {
+                "phase": "client_connect",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_connect",
+                "status": "ok",
+                "elapsed_ms": 46
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "ok",
+                "elapsed_ms": 0
+              }
+            ],
+            "finite_errors": []
+          },
+          {
+            "case": "session_2:capacity",
+            "declared_timeout_seconds": 2,
+            "before": {
+              "rss_bytes": 635830272,
+              "counts": {
+                "other_python_child": 1,
+                "sdk_worker": 2,
+                "native_runtime": 11,
+                "terminated_child": 3,
+                "python_bridge": 1,
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "other_python_child": 27574272,
+                "sdk_worker": 119685120,
+                "native_runtime": 284950528,
+                "terminated_child": 0,
+                "python_bridge": 31473664,
+                "benchmark_daemon_host": 172146688
+              }
+            },
+            "process_outcome": "exited",
+            "returncode": 0,
+            "elapsed_ms": 253.824,
+            "after": {
+              "rss_bytes": 354975744,
+              "counts": {
+                "native_runtime": 10,
+                "terminated_child": 4,
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 182829056,
+                "terminated_child": 0,
+                "benchmark_daemon_host": 172146688
+              }
+            },
+            "new_counts": {
+              "native_runtime": 1
+            },
+            "gone_counts": {
+              "other_python_child": 1,
+              "sdk_worker": 2,
+              "native_runtime": 2,
+              "python_bridge": 1
+            },
+            "stderr_within_bound": true,
+            "phases": [
+              {
+                "phase": "client_connect",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_connect",
+                "status": "ok",
+                "elapsed_ms": 45
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "ok",
+                "elapsed_ms": 0
+              }
+            ],
+            "finite_errors": []
+          },
+          {
+            "case": "session_2:capacity",
+            "declared_timeout_seconds": 2,
+            "before": {
+              "rss_bytes": 282345472,
+              "counts": {
+                "native_runtime": 4,
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 113131520,
+                "benchmark_daemon_host": 169213952
+              }
+            },
+            "process_outcome": "exited",
+            "returncode": 0,
+            "elapsed_ms": 169.791,
+            "after": {
+              "rss_bytes": 205750272,
+              "counts": {
+                "native_runtime": 2,
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 36503552,
+                "benchmark_daemon_host": 169246720
+              }
+            },
+            "new_counts": {},
+            "gone_counts": {
+              "native_runtime": 2
+            },
+            "stderr_within_bound": true,
+            "phases": [
+              {
+                "phase": "client_connect",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_connect",
+                "status": "ok",
+                "elapsed_ms": 46
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "ok",
+                "elapsed_ms": 0
+              }
+            ],
+            "finite_errors": []
+          },
+          {
+            "case": "session_3:readiness",
+            "declared_timeout_seconds": 2,
+            "before": {
+              "rss_bytes": 468140032,
+              "counts": {
+                "sdk_worker": 2,
+                "other_python_child": 1,
+                "benchmark_daemon_host": 1,
+                "native_runtime": 4,
+                "python_bridge": 1
+              },
+              "rss_by_kind": {
+                "sdk_worker": 119586816,
+                "other_python_child": 27082752,
+                "benchmark_daemon_host": 171393024,
+                "native_runtime": 120913920,
+                "python_bridge": 29163520
+              }
+            },
+            "process_outcome": "exited",
+            "returncode": 0,
+            "elapsed_ms": 212.846,
+            "after": {
+              "rss_bytes": 238501888,
+              "counts": {
+                "benchmark_daemon_host": 1,
+                "native_runtime": 3,
+                "other_descendant": 1
+              },
+              "rss_by_kind": {
+                "benchmark_daemon_host": 171393024,
+                "native_runtime": 50200576,
+                "other_descendant": 16908288
+              }
+            },
+            "new_counts": {
+              "native_runtime": 1
+            },
+            "gone_counts": {
+              "sdk_worker": 2,
+              "other_python_child": 1,
+              "python_bridge": 1,
+              "native_runtime": 1
+            },
+            "stderr_within_bound": true,
+            "phases": [
+              {
+                "phase": "client_connect",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_connect",
+                "status": "ok",
+                "elapsed_ms": 46
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "ok",
+                "elapsed_ms": 0
+              }
+            ],
+            "finite_errors": []
+          },
+          {
+            "case": "session_3:readiness",
+            "declared_timeout_seconds": 2,
+            "before": {
+              "rss_bytes": 270319616,
+              "counts": {
+                "native_runtime": 4,
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 100876288,
+                "benchmark_daemon_host": 169443328
+              }
+            },
+            "process_outcome": "exited",
+            "returncode": 0,
+            "elapsed_ms": 179.616,
+            "after": {
+              "rss_bytes": 222773248,
+              "counts": {
+                "native_runtime": 2,
+                "benchmark_daemon_host": 1,
+                "other_descendant": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 35897344,
+                "benchmark_daemon_host": 169443328,
+                "other_descendant": 17432576
+              }
+            },
+            "new_counts": {},
+            "gone_counts": {
+              "native_runtime": 1
+            },
+            "stderr_within_bound": true,
+            "phases": [
+              {
+                "phase": "client_connect",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_connect",
+                "status": "ok",
+                "elapsed_ms": 46
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "ok",
+                "elapsed_ms": 0
+              }
+            ],
+            "finite_errors": []
+          },
+          {
+            "case": "session_4:readiness",
+            "declared_timeout_seconds": 2,
+            "before": {
+              "rss_bytes": 490291200,
+              "counts": {
+                "native_runtime": 4,
+                "python_bridge": 1,
+                "sdk_worker": 2,
+                "benchmark_daemon_host": 1,
+                "other_python_child": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 142786560,
+                "python_bridge": 29343744,
+                "sdk_worker": 119455744,
+                "benchmark_daemon_host": 171573248,
+                "other_python_child": 27131904
+              }
+            },
+            "process_outcome": "exited",
+            "returncode": 0,
+            "elapsed_ms": 227.661,
+            "after": {
+              "rss_bytes": 224641024,
+              "counts": {
+                "native_runtime": 3,
+                "benchmark_daemon_host": 1
+              },
+              "rss_by_kind": {
+                "native_runtime": 53067776,
+                "benchmark_daemon_host": 171573248
+              }
+            },
+            "new_counts": {},
+            "gone_counts": {
+              "native_runtime": 1,
+              "python_bridge": 1,
+              "sdk_worker": 2,
+              "other_python_child": 1
+            },
+            "stderr_within_bound": true,
+            "phases": [
+              {
+                "phase": "client_connect",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_connect",
+                "status": "ok",
+                "elapsed_ms": 46
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "ok",
+                "elapsed_ms": 0
+              }
+            ],
+            "finite_errors": []
+          },
+          {
+            "case": "session_4:readiness",
+            "declared_timeout_seconds": 2,
+            "before": {
+              "rss_bytes": 283541504,
+              "counts": {
+                "benchmark_daemon_host": 1,
+                "native_runtime": 5
+              },
+              "rss_by_kind": {
+                "benchmark_daemon_host": 169623552,
+                "native_runtime": 113917952
+              }
+            },
+            "process_outcome": "timed_out",
+            "elapsed_ms": 2005.107,
+            "after": {
+              "rss_bytes": 268894208,
+              "counts": {
+                "benchmark_daemon_host": 1,
+                "native_runtime": 4
+              },
+              "rss_by_kind": {
+                "benchmark_daemon_host": 169623552,
+                "native_runtime": 99270656
+              }
+            },
+            "new_counts": {
+              "native_runtime": 1
+            },
+            "gone_counts": {
+              "native_runtime": 2
+            },
+            "stderr_within_bound": true,
+            "phases": [
+              {
+                "phase": "client_connect",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_connect",
+                "status": "ok",
+                "elapsed_ms": 46
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_authenticate",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_request_write",
+                "status": "ok",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "start",
+                "elapsed_ms": 0
+              },
+              {
+                "phase": "client_response_read",
+                "status": "ok",
+                "elapsed_ms": 0
+              }
+            ],
+            "finite_errors": []
+          }
+        ],
+        "strict_stop_trace_complete": true,
+        "context_activity": {
+          "mode": "on",
+          "settle_seconds_per_load_phase": 5,
+          "cold_and_recovery": "real opt-in active before containment; native timed recovery restores no CIGAR authority",
+          "native_readiness": "measured before explicit SDK activation; SDK activation is separately reported",
+          "activation_ms": [
+            20750.697707757354,
+            20793.93770825118,
+            20602.004624903202,
+            20704.18508304283,
+            20769.25625000149,
+            20599.781250115484,
+            20768.61570822075,
+            20712.544415611774,
+            20790.62500037253,
+            20725.788582582027
+          ],
+          "phases": [
+            {
+              "phase": "installed_corpus",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 849.83,
+              "successful_overlapping_compiles": 38,
+              "observed_tree_memory": {
+                "samples": 13,
+                "sampling_errors": 0,
+                "median_rss_bytes": 515850240,
+                "peak_rss_bytes": 522256384,
+                "at_peak_counts": {
+                  "sdk_worker": 2,
+                  "native_runtime": 6,
+                  "other_descendant": 1,
+                  "benchmark_daemon_host": 1,
+                  "other_python_child": 1,
+                  "python_bridge": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "sdk_worker": 119439360,
+                  "native_runtime": 191627264,
+                  "other_descendant": 7290880,
+                  "benchmark_daemon_host": 147275776,
+                  "other_python_child": 27410432,
+                  "python_bridge": 29212672
+                },
+                "maximum_counts": {
+                  "sdk_worker": 2,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "other_python_child": 1,
+                  "native_runtime": 6,
+                  "other_descendant": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "context_workload": {
+                "successful_compiles": 296,
+                "latency": {
+                  "count": 37,
+                  "p50_ms": 6.952,
+                  "p95_ms": 8.752,
+                  "p99_ms": 9.074,
+                  "max_ms": 9.074
+                },
+                "latency_sample_every": 8,
+                "refusals": {},
+                "distinct_graph_revisions": 1,
+                "unchanged_graph_revision_reused": true,
+                "internal_tokenization_work_measured": false
+              },
+              "effective_at_end": true
+            },
+            {
+              "phase": "cold_precondition",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 0.004,
+              "successful_overlapping_compiles": 0,
+              "observed_tree_memory": {
+                "samples": 3,
+                "sampling_errors": 0,
+                "median_rss_bytes": 471662592,
+                "peak_rss_bytes": 471678976,
+                "at_peak_counts": {
+                  "native_runtime": 4,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "sdk_worker": 2,
+                  "other_python_child": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 142311424,
+                  "python_bridge": 30212096,
+                  "benchmark_daemon_host": 152518656,
+                  "sdk_worker": 119390208,
+                  "other_python_child": 27246592
+                },
+                "maximum_counts": {
+                  "sdk_worker": 2,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "other_python_child": 1,
+                  "native_runtime": 4
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "context_workload": {
+                "successful_compiles": 5,
+                "latency": {
+                  "count": 1,
+                  "p50_ms": 9.236,
+                  "p95_ms": 9.236,
+                  "p99_ms": 9.236,
+                  "max_ms": 9.236
+                },
+                "latency_sample_every": 8,
+                "refusals": {},
+                "distinct_graph_revisions": 1,
+                "unchanged_graph_revision_reused": true,
+                "internal_tokenization_work_measured": false
+              },
+              "effective_at_end": true
+            },
+            {
+              "phase": "cold_precondition",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 0.005,
+              "successful_overlapping_compiles": 0,
+              "observed_tree_memory": {
+                "samples": 2,
+                "sampling_errors": 0,
+                "median_rss_bytes": 191692800,
+                "peak_rss_bytes": 191692800,
+                "at_peak_counts": {
+                  "terminated_child": 1,
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 2
+                },
+                "at_peak_rss_by_kind": {
+                  "terminated_child": 0,
+                  "benchmark_daemon_host": 153010176,
+                  "native_runtime": 38682624
+                },
+                "maximum_counts": {
+                  "native_runtime": 2,
+                  "terminated_child": 1,
+                  "benchmark_daemon_host": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "context_workload": {
+                "successful_compiles": 5,
+                "latency": {
+                  "count": 1,
+                  "p50_ms": 9.71,
+                  "p95_ms": 9.71,
+                  "p99_ms": 9.71,
+                  "max_ms": 9.71
+                },
+                "latency_sample_every": 8,
+                "refusals": {},
+                "distinct_graph_revisions": 1,
+                "unchanged_graph_revision_reused": true,
+                "internal_tokenization_work_measured": false
+              },
+              "effective_at_end": true
+            },
+            {
+              "phase": "cold_precondition",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 0.005,
+              "successful_overlapping_compiles": 0,
+              "observed_tree_memory": {
+                "samples": 3,
+                "sampling_errors": 0,
+                "median_rss_bytes": 469073920,
+                "peak_rss_bytes": 469106688,
+                "at_peak_counts": {
+                  "native_runtime": 4,
+                  "sdk_worker": 2,
+                  "other_python_child": 1,
+                  "benchmark_daemon_host": 1,
+                  "python_bridge": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 138919936,
+                  "sdk_worker": 119259136,
+                  "other_python_child": 27181056,
+                  "benchmark_daemon_host": 153468928,
+                  "python_bridge": 30277632
+                },
+                "maximum_counts": {
+                  "sdk_worker": 2,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "other_python_child": 1,
+                  "native_runtime": 4
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "context_workload": {
+                "successful_compiles": 6,
+                "latency": {
+                  "count": 1,
+                  "p50_ms": 8.631,
+                  "p95_ms": 8.631,
+                  "p99_ms": 8.631,
+                  "max_ms": 8.631
+                },
+                "latency_sample_every": 8,
+                "refusals": {},
+                "distinct_graph_revisions": 1,
+                "unchanged_graph_revision_reused": true,
+                "internal_tokenization_work_measured": false
+              },
+              "effective_at_end": true
+            },
+            {
+              "phase": "warm",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 744.126,
+              "successful_overlapping_compiles": 36,
+              "observed_tree_memory": {
+                "samples": 11,
+                "sampling_errors": 0,
+                "median_rss_bytes": 501858304,
+                "peak_rss_bytes": 504266752,
+                "at_peak_counts": {
+                  "native_runtime": 6,
+                  "other_python_child": 1,
+                  "sdk_worker": 2,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 171163648,
+                  "other_python_child": 27148288,
+                  "sdk_worker": 120045568,
+                  "python_bridge": 29196288,
+                  "benchmark_daemon_host": 156712960
+                },
+                "maximum_counts": {
+                  "sdk_worker": 2,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "other_python_child": 1,
+                  "native_runtime": 6
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "context_workload": {
+                "successful_compiles": 293,
+                "latency": {
+                  "count": 37,
+                  "p50_ms": 6.978,
+                  "p95_ms": 9.528,
+                  "p99_ms": 9.677,
+                  "max_ms": 9.677
+                },
+                "latency_sample_every": 8,
+                "refusals": {},
+                "distinct_graph_revisions": 1,
+                "unchanged_graph_revision_reused": true,
+                "internal_tokenization_work_measured": false
+              },
+              "effective_at_end": true
+            },
+            {
+              "phase": "sizes",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 1935.372,
+              "successful_overlapping_compiles": 96,
+              "observed_tree_memory": {
+                "samples": 26,
+                "sampling_errors": 0,
+                "median_rss_bytes": 526778368,
+                "peak_rss_bytes": 527040512,
+                "at_peak_counts": {
+                  "native_runtime": 6,
+                  "other_python_child": 1,
+                  "sdk_worker": 2,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 184057856,
+                  "other_python_child": 27148288,
+                  "sdk_worker": 120061952,
+                  "python_bridge": 29196288,
+                  "benchmark_daemon_host": 166576128
+                },
+                "maximum_counts": {
+                  "sdk_worker": 2,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "other_python_child": 1,
+                  "native_runtime": 6
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "context_workload": {
+                "successful_compiles": 353,
+                "latency": {
+                  "count": 45,
+                  "p50_ms": 6.976,
+                  "p95_ms": 8.696,
+                  "p99_ms": 9.216,
+                  "max_ms": 9.216
+                },
+                "latency_sample_every": 8,
+                "refusals": {},
+                "distinct_graph_revisions": 1,
+                "unchanged_graph_revision_reused": true,
+                "internal_tokenization_work_measured": false
+              },
+              "effective_at_end": true
+            },
+            {
+              "phase": "recovery_precondition",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 17.857,
+              "successful_overlapping_compiles": 1,
+              "observed_tree_memory": {
+                "samples": 3,
+                "sampling_errors": 0,
+                "median_rss_bytes": 527040512,
+                "peak_rss_bytes": 527040512,
+                "at_peak_counts": {
+                  "native_runtime": 6,
+                  "other_python_child": 1,
+                  "sdk_worker": 2,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 184057856,
+                  "other_python_child": 27148288,
+                  "sdk_worker": 120061952,
+                  "python_bridge": 29196288,
+                  "benchmark_daemon_host": 166576128
+                },
+                "maximum_counts": {
+                  "sdk_worker": 2,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "other_python_child": 1,
+                  "native_runtime": 6
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "context_workload": {
+                "successful_compiles": 5,
+                "latency": {
+                  "count": 1,
+                  "p50_ms": 6.195,
+                  "p95_ms": 6.195,
+                  "p99_ms": 6.195,
+                  "max_ms": 6.195
+                },
+                "latency_sample_every": 8,
+                "refusals": {},
+                "distinct_graph_revisions": 1,
+                "unchanged_graph_revision_reused": true,
+                "internal_tokenization_work_measured": false
+              },
+              "effective_at_end": true
+            },
+            {
+              "phase": "recovery_precondition",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 9.452,
+              "successful_overlapping_compiles": 0,
+              "observed_tree_memory": {
+                "samples": 2,
+                "sampling_errors": 0,
+                "median_rss_bytes": 522895360,
+                "peak_rss_bytes": 523042816,
+                "at_peak_counts": {
+                  "native_runtime": 6,
+                  "terminated_child": 1,
+                  "sdk_worker": 2,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "other_python_child": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 179912704,
+                  "terminated_child": 0,
+                  "sdk_worker": 119799808,
+                  "python_bridge": 29360128,
+                  "benchmark_daemon_host": 166854656,
+                  "other_python_child": 27115520
+                },
+                "maximum_counts": {
+                  "sdk_worker": 2,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "terminated_child": 1,
+                  "other_python_child": 1,
+                  "native_runtime": 6
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "context_workload": {
+                "successful_compiles": 6,
+                "latency": {
+                  "count": 1,
+                  "p50_ms": 9.717,
+                  "p95_ms": 9.717,
+                  "p99_ms": 9.717,
+                  "max_ms": 9.717
+                },
+                "latency_sample_every": 8,
+                "refusals": {},
+                "distinct_graph_revisions": 1,
+                "unchanged_graph_revision_reused": true,
+                "internal_tokenization_work_measured": false
+              },
+              "effective_at_end": true
+            },
+            {
+              "phase": "recovery_precondition",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 9.789,
+              "successful_overlapping_compiles": 1,
+              "observed_tree_memory": {
+                "samples": 2,
+                "sampling_errors": 0,
+                "median_rss_bytes": 487211008,
+                "peak_rss_bytes": 487227392,
+                "at_peak_counts": {
+                  "native_runtime": 4,
+                  "terminated_child": 2,
+                  "other_python_child": 1,
+                  "benchmark_daemon_host": 1,
+                  "sdk_worker": 2,
+                  "python_bridge": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 144523264,
+                  "terminated_child": 0,
+                  "other_python_child": 27131904,
+                  "benchmark_daemon_host": 167100416,
+                  "sdk_worker": 119291904,
+                  "python_bridge": 29179904
+                },
+                "maximum_counts": {
+                  "sdk_worker": 2,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "terminated_child": 2,
+                  "other_python_child": 1,
+                  "native_runtime": 4
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "context_workload": {
+                "successful_compiles": 4,
+                "latency": {
+                  "count": 1,
+                  "p50_ms": 8.919,
+                  "p95_ms": 8.919,
+                  "p99_ms": 8.919,
+                  "max_ms": 8.919
+                },
+                "latency_sample_every": 8,
+                "refusals": {},
+                "distinct_graph_revisions": 1,
+                "unchanged_graph_revision_reused": true,
+                "internal_tokenization_work_measured": false
+              },
+              "effective_at_end": true
+            },
+            {
+              "phase": "capacity",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 2094.257,
+              "successful_overlapping_compiles": 95,
+              "observed_tree_memory": {
+                "samples": 27,
+                "sampling_errors": 0,
+                "median_rss_bytes": 637829120,
+                "peak_rss_bytes": 640761856,
+                "at_peak_counts": {
+                  "other_python_child": 1,
+                  "sdk_worker": 2,
+                  "native_runtime": 11,
+                  "terminated_child": 3,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "other_descendant": 2
+                },
+                "at_peak_rss_by_kind": {
+                  "other_python_child": 27574272,
+                  "sdk_worker": 119685120,
+                  "native_runtime": 284672000,
+                  "terminated_child": 0,
+                  "python_bridge": 31473664,
+                  "benchmark_daemon_host": 173916160,
+                  "other_descendant": 3440640
+                },
+                "maximum_counts": {
+                  "sdk_worker": 2,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "terminated_child": 3,
+                  "other_python_child": 1,
+                  "native_runtime": 11,
+                  "other_descendant": 2
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "context_workload": {
+                "successful_compiles": 351,
+                "latency": {
+                  "count": 44,
+                  "p50_ms": 7.189,
+                  "p95_ms": 10.447,
+                  "p99_ms": 19.806,
+                  "max_ms": 19.806
+                },
+                "latency_sample_every": 8,
+                "refusals": {},
+                "distinct_graph_revisions": 1,
+                "unchanged_graph_revision_reused": true,
+                "internal_tokenization_work_measured": false
+              },
+              "effective_at_end": true
+            },
+            {
+              "phase": "readiness",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 0.003,
+              "successful_overlapping_compiles": 0,
+              "observed_tree_memory": {
+                "samples": 2,
+                "sampling_errors": 0,
+                "median_rss_bytes": 468205568,
+                "peak_rss_bytes": 468254720,
+                "at_peak_counts": {
+                  "sdk_worker": 2,
+                  "other_python_child": 1,
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 4,
+                  "python_bridge": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "sdk_worker": 119554048,
+                  "other_python_child": 27082752,
+                  "benchmark_daemon_host": 171425792,
+                  "native_runtime": 121077760,
+                  "python_bridge": 29114368
+                },
+                "maximum_counts": {
+                  "sdk_worker": 2,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "other_python_child": 1,
+                  "native_runtime": 4
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "context_workload": {
+                "successful_compiles": 4,
+                "latency": {
+                  "count": 1,
+                  "p50_ms": 8.898,
+                  "p95_ms": 8.898,
+                  "p99_ms": 8.898,
+                  "max_ms": 8.898
+                },
+                "latency_sample_every": 8,
+                "refusals": {},
+                "distinct_graph_revisions": 1,
+                "unchanged_graph_revision_reused": true,
+                "internal_tokenization_work_measured": false
+              },
+              "effective_at_end": true
+            },
+            {
+              "phase": "readiness",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 0.005,
+              "successful_overlapping_compiles": 0,
+              "observed_tree_memory": {
+                "samples": 3,
+                "sampling_errors": 0,
+                "median_rss_bytes": 490307584,
+                "peak_rss_bytes": 490356736,
+                "at_peak_counts": {
+                  "native_runtime": 4,
+                  "python_bridge": 1,
+                  "sdk_worker": 2,
+                  "benchmark_daemon_host": 1,
+                  "other_python_child": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 142966784,
+                  "python_bridge": 29294592,
+                  "sdk_worker": 119373824,
+                  "benchmark_daemon_host": 171589632,
+                  "other_python_child": 27131904
+                },
+                "maximum_counts": {
+                  "sdk_worker": 2,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "other_python_child": 1,
+                  "native_runtime": 4
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "context_workload": {
+                "successful_compiles": 5,
+                "latency": {
+                  "count": 1,
+                  "p50_ms": 10.431,
+                  "p95_ms": 10.431,
+                  "p99_ms": 10.431,
+                  "max_ms": 10.431
+                },
+                "latency_sample_every": 8,
+                "refusals": {},
+                "distinct_graph_revisions": 1,
+                "unchanged_graph_revision_reused": true,
+                "internal_tokenization_work_measured": false
+              },
+              "effective_at_end": true
+            }
+          ],
+          "restarts": [
+            {
+              "phase": "cold",
+              "runtime_absent": true,
+              "old_scope_refused": true
+            },
+            {
+              "phase": "cold",
+              "runtime_absent": true,
+              "old_scope_refused": true
+            },
+            {
+              "phase": "cold",
+              "runtime_absent": true,
+              "old_scope_refused": true
+            },
+            {
+              "phase": "recovery",
+              "runtime_absent": true,
+              "old_scope_refused": true
+            },
+            {
+              "phase": "recovery",
+              "runtime_absent": true,
+              "old_scope_refused": true
+            },
+            {
+              "phase": "recovery",
+              "runtime_absent": true,
+              "old_scope_refused": true
+            }
+          ],
+          "fixture_containment": [
+            {
+              "fixture": "installed_corpus",
+              "final_contained": true
+            },
+            {
+              "fixture": "session_1",
+              "final_contained": true
+            },
+            {
+              "fixture": "session_2",
+              "final_contained": true
+            },
+            {
+              "fixture": "session_3",
+              "final_contained": true
+            },
+            {
+              "fixture": "session_4",
+              "final_contained": false,
+              "earlier_stop_failed": true,
+              "earlier_process_outcome": "timed_out",
+              "recovery_cleanup": {
+                "attempted": true,
+                "contained": true,
+                "seconds": 0.18
+              }
+            }
+          ],
+          "canonical_rss_reads": [
+            {
+              "phase": "capacity",
+              "rss_bytes": 638582784,
+              "root_rss_bytes": 173850624,
+              "descendant_rss_bytes": 464732160,
+              "processes": 20
+            },
+            {
+              "phase": "capacity",
+              "rss_bytes": 643088384,
+              "root_rss_bytes": 174260224,
+              "descendant_rss_bytes": 468828160,
+              "processes": 21
+            },
+            {
+              "phase": "capacity",
+              "rss_bytes": 639795200,
+              "root_rss_bytes": 174260224,
+              "descendant_rss_bytes": 465534976,
+              "processes": 20
+            },
+            {
+              "phase": "capacity",
+              "rss_bytes": 640090112,
+              "root_rss_bytes": 174456832,
+              "descendant_rss_bytes": 465633280,
+              "processes": 20
+            },
+            {
+              "phase": "readiness",
+              "rss_bytes": 175226880,
+              "root_rss_bytes": 169525248,
+              "descendant_rss_bytes": 5701632,
+              "processes": 3
+            }
+          ],
+          "gates": {
+            "complete_declared_activity_phases": true,
+            "all_activity_intervals_completed": true,
+            "all_six_restarts_restore_no_optional_authority": true,
+            "process_sampling_complete": true,
+            "canonical_rss_observed_without_root_fallback": true,
+            "optional_worker_coverage": true,
+            "all_five_private_fixtures_finally_contained": false,
+            "observed_workers_contained_at_end": true
+          }
+        },
+        "observed_processes_at_end": {
+          "rss_bytes": 169574400,
+          "counts": {
+            "benchmark_daemon_host": 1
+          },
+          "rss_by_kind": {
+            "benchmark_daemon_host": 169574400
+          }
+        },
+        "all_observed_processes": {
+          "samples": 3780,
+          "sampling_errors": 0,
+          "median_rss_bytes": 400957440,
+          "peak_rss_bytes": 1375125504,
+          "at_peak_counts": {
+            "sdk_worker": 1,
+            "benchmark_daemon_host": 1,
+            "native_runtime": 4,
+            "python_bridge": 1
+          },
+          "at_peak_rss_by_kind": {
+            "sdk_worker": 58556416,
+            "benchmark_daemon_host": 1144864768,
+            "native_runtime": 142671872,
+            "python_bridge": 29032448
+          },
+          "maximum_counts": {
+            "sdk_worker": 2,
+            "python_bridge": 1,
+            "benchmark_daemon_host": 1,
+            "exiting_host_python_child": 1,
+            "terminated_child": 4,
+            "other_python_child": 2,
+            "native_runtime": 12,
+            "other_descendant": 8
+          },
+          "includes_observed_reparented_children": true,
+          "shared_pages_may_be_counted_in_multiple_processes": true
+        },
+        "seconds": 306.785,
+        "tooling_unchanged_during_run": true
+      }
+    }
+  ],
+  "native_regression": {
+    "name": "managed_resident::stop_snapshot::tests::stop_leaves_a_later_signed_generation_alive",
+    "method": "Real owned native child processes publish their own valid signed generation state. The stopped generation is killed/reaped and retired before a later signed generation appears; the earlier wait must finish without killing the later process. A subsequent explicit capture must still contain that process. Fixture cleanup kills/reaps only its own children.",
+    "red": {
+      "status": "failed_as_expected",
+      "error": "native_resident_stop_timeout",
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-stop-snapshot-20261024/red-test-native.stdout.log",
+        "bytes": 329,
+        "sha256": "6c617fe896ca74a1a0e77e600442c38bdd89454c607680ecb7047ad4bd660117"
+      }
+    },
+    "green": {
+      "tests": 1,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 0.99,
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-stop-snapshot-20261024/green-test.stdout.log",
+        "bytes": 211,
+        "sha256": "ea5a05f2c8dae61e6fdd83c4ccbc5b6f598a3d2610fa035f4cf72db35e07140a"
+      }
+    },
+    "managed_resident_suite": {
+      "tests": 98,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 2.57,
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-stop-snapshot-20261024/managed-regressions.stdout.log",
+        "bytes": 16025,
+        "sha256": "1d84561ee8e93090c7966ea51ab861f522a46a0f92e766c10bd614fbe9edb9c9"
+      }
+    },
+    "toolchain": "rustc 1.88.0 (6b00bc388 2025-06-23)",
+    "boundary": "Regression isolates post-acknowledgment containment; it is not a transport, installed, performance or non-Unix qualification."
+  },
+  "development_checks": {
+    "python": {
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-stop-snapshot-20261024/python-trace-regressions.xml",
+        "bytes": 10642,
+        "sha256": "4178e52f446223008bcbe0f2e42d6237aa95b529b7aa7cc86a1bbfe26cab4849"
+      },
+      "tests": 67,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 1.391
+    },
+    "clippy": {
+      "status": "passed",
+      "warnings_denied": true,
+      "package": "hol-guard-runtime",
+      "targets": [
+        "lib",
+        "tests"
+      ],
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-stop-snapshot-20261024/clippy.stderr.log",
+        "bytes": 9303,
+        "sha256": "300354984bbd3c24517ea23e4c199914050a7b777de59a421d40038b5e0d8dc3"
+      }
+    },
+    "gates": [
+      {
+        "name": "semantic",
+        "status": "passed",
+        "receipt": {
+          "path": "/private/tmp/hol-guard-cigar-stop-snapshot-20261024/semantic-precommit.json",
+          "bytes": 99,
+          "sha256": "8e3101056186cd4d641add66f9eed89b0289db4e105bdb5885821ae3f0484e46"
+        }
+      },
+      {
+        "name": "capability",
+        "status": "passed",
+        "receipt": {
+          "path": "/private/tmp/hol-guard-cigar-stop-snapshot-20261024/capability-precommit.json",
+          "bytes": 38592,
+          "sha256": "d975dee5fe67bdb3f901777eaa0e7a95a5e8ce9e5f310467754474d61c80dc74"
+        }
+      },
+      {
+        "name": "authority",
+        "status": "passed",
+        "receipt": {
+          "path": "/private/tmp/hol-guard-cigar-stop-snapshot-20261024/authority-precommit.json",
+          "bytes": 63718,
+          "sha256": "24f39bfd71c8c0f418de4f2f346f432869369503f62022bdee96d333ce270963"
+        }
+      },
+      {
+        "name": "io",
+        "status": "passed",
+        "receipt": {
+          "path": "/private/tmp/hol-guard-cigar-stop-snapshot-20261024/io-precommit.json",
+          "bytes": 78222,
+          "sha256": "bcf901a1c39ebf936483fa5aebdcdb005372d016d67e41b8e46adc6fcbd68472"
+        }
+      },
+      {
+        "name": "privacy",
+        "status": "passed",
+        "receipt": {
+          "path": "/private/tmp/hol-guard-cigar-stop-snapshot-20261024/privacy-precommit.json",
+          "bytes": 620,
+          "sha256": "3f99732114cd01afda57fec9bae91e307310125980da63e8859c1941fbb96b14"
+        }
+      }
+    ],
+    "format_whitespace": "Rustfmt, targeted Ruff/check/format and git diff --check passed."
+  },
+  "remaining": [
+    "Build a native wheel from the committed corrected source and verify provenance, signature, byte cap and installed automatic discovery.",
+    "Rerun unchanged complete installed off/on SLO, strict Stop and approval/execution recovery against the corrected artifact.",
+    "Earlier off RSS, HTTP contention, hardened-helper, TypeScript, external delivery/platform and useful-outcome limits remain unqualified; no speedup or full integration completion is claimed."
+  ]
+}

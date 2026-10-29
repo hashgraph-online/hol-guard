@@ -1,0 +1,962 @@
+===== versions-routing-checks-v1 =====
+===== versions-routing.test.tsx =====
+Runtime selection stays outside ordinary drafts; update walkthroughs preserve prior progress and never grant or infer native readiness.
+===== settings-controls.test.tsx =====
+Context assistance settings rendering and unavailable/managed/cancellation controls passed.
+===== workspace.test.tsx =====
+CIGAR setup state, runtime registration, live readiness, guide, version display and tab contracts passed.
+===== tutorials.test.tsx =====
+CIGAR tutorial identity, resumable progress, native-status separation and qualification guidance passed.
+
+===== versions-routing-typecheck-v1 =====
+src/approval-center-primitives.tsx(461,5): error TS2339: Property 'type' does not exist on type 'Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children" | "className" | "onClick" | "type">'.
+src/approval-center-primitives.tsx(464,3): error TS2322: Type '{ dangerouslySetInnerHTML?: { __html: string | TrustedHTML; } | undefined; onCopy?: ClipboardEventHandler<HTMLButtonElement> | undefined; ... 272 more ...; part?: string | undefined; }' is not assignable to type 'AnchorHTMLAttributes<HTMLAnchorElement>'.
+  Types of property 'onCopy' are incompatible.
+    Type 'ClipboardEventHandler<HTMLButtonElement> | undefined' is not assignable to type 'ClipboardEventHandler<HTMLAnchorElement> | undefined'.
+      Type 'ClipboardEventHandler<HTMLButtonElement>' is not assignable to type 'ClipboardEventHandler<HTMLAnchorElement>'.
+        Type 'HTMLButtonElement' is missing the following properties from type 'HTMLAnchorElement': charset, coords, download, hreflang, and 19 more.
+src/cloud-user-menu.tsx(63,31): error TS2769: No overload matches this call.
+  The last overload gave the following error.
+    Argument of type 'Timeout | null' is not assignable to parameter of type 'number | undefined'.
+      Type 'null' is not assignable to type 'number | undefined'.
+src/cloud-user-menu.tsx(71,20): error TS2769: No overload matches this call.
+  The last overload gave the following error.
+    Argument of type 'Timeout | null' is not assignable to parameter of type 'number | undefined'.
+      Type 'null' is not assignable to type 'number | undefined'.
+src/guard-api.ts(4434,3): error TS2322: Type 'false' is not assignable to type 'true'.
+src/guard-types.ts(714,59): error TS2339: Property 'signal_id' does not exist on type 'GuardScannerEvidence'.
+  Property 'signal_id' does not exist on type 'GuardSupplyChainScannerEvidence'.
+src/guard-types.ts(720,57): error TS2339: Property 'operation' does not exist on type 'GuardScannerEvidence'.
+  Property 'operation' does not exist on type 'GuardWatchOnlyScannerEvidence'.
+src/guard-types.ts(734,11): error TS2339: Property 'kind' does not exist on type 'GuardScannerEvidence'.
+  Property 'kind' does not exist on type 'GuardSupplyChainScannerEvidence'.
+src/guard-types.ts(735,11): error TS2339: Property 'schema_version' does not exist on type 'GuardScannerEvidence'.
+  Property 'schema_version' does not exist on type 'GuardSupplyChainScannerEvidence'.
+src/guard-types.ts(736,18): error TS2339: Property 'portable' does not exist on type 'GuardScannerEvidence'.
+  Property 'portable' does not exist on type 'GuardSupplyChainScannerEvidence'.
+src/guard-types.ts(737,18): error TS2339: Property 'context_digest' does not exist on type 'GuardScannerEvidence'.
+  Property 'context_digest' does not exist on type 'GuardSupplyChainScannerEvidence'.
+src/runtime-overview.tsx(300,7): error TS18048: 'capability' is possibly 'undefined'.
+src/use-focus-trap.ts(35,46): error TS2345: Argument of type 'HTMLElement | null' is not assignable to parameter of type 'HTMLElement'.
+  Type 'null' is not assignable to type 'HTMLElement'.
+
+===== versions-routing-order-checks-v2 =====
+===== selection-settings.test.ts =====
+CIGAR selection updates preserve unrelated settings, dirty preferences, explicit opt-out and newer saved state.
+===== versions-routing.test.tsx =====
+Runtime selection stays outside ordinary drafts; update walkthroughs preserve prior progress and never grant or infer native readiness.
+
+===== versions-routing-typecheck-v2 =====
+src/approval-center-primitives.tsx(461,5): error TS2339: Property 'type' does not exist on type 'Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children" | "className" | "onClick" | "type">'.
+src/approval-center-primitives.tsx(464,3): error TS2322: Type '{ dangerouslySetInnerHTML?: { __html: string | TrustedHTML; } | undefined; onCopy?: ClipboardEventHandler<HTMLButtonElement> | undefined; ... 272 more ...; part?: string | undefined; }' is not assignable to type 'AnchorHTMLAttributes<HTMLAnchorElement>'.
+  Types of property 'onCopy' are incompatible.
+    Type 'ClipboardEventHandler<HTMLButtonElement> | undefined' is not assignable to type 'ClipboardEventHandler<HTMLAnchorElement> | undefined'.
+      Type 'ClipboardEventHandler<HTMLButtonElement>' is not assignable to type 'ClipboardEventHandler<HTMLAnchorElement>'.
+        Type 'HTMLButtonElement' is missing the following properties from type 'HTMLAnchorElement': charset, coords, download, hreflang, and 19 more.
+src/cloud-user-menu.tsx(63,31): error TS2769: No overload matches this call.
+  The last overload gave the following error.
+    Argument of type 'Timeout | null' is not assignable to parameter of type 'number | undefined'.
+      Type 'null' is not assignable to type 'number | undefined'.
+src/cloud-user-menu.tsx(71,20): error TS2769: No overload matches this call.
+  The last overload gave the following error.
+    Argument of type 'Timeout | null' is not assignable to parameter of type 'number | undefined'.
+      Type 'null' is not assignable to type 'number | undefined'.
+src/guard-api.ts(4434,3): error TS2322: Type 'false' is not assignable to type 'true'.
+src/guard-types.ts(714,59): error TS2339: Property 'signal_id' does not exist on type 'GuardScannerEvidence'.
+  Property 'signal_id' does not exist on type 'GuardSupplyChainScannerEvidence'.
+src/guard-types.ts(720,57): error TS2339: Property 'operation' does not exist on type 'GuardScannerEvidence'.
+  Property 'operation' does not exist on type 'GuardWatchOnlyScannerEvidence'.
+src/guard-types.ts(734,11): error TS2339: Property 'kind' does not exist on type 'GuardScannerEvidence'.
+  Property 'kind' does not exist on type 'GuardSupplyChainScannerEvidence'.
+src/guard-types.ts(735,11): error TS2339: Property 'schema_version' does not exist on type 'GuardScannerEvidence'.
+  Property 'schema_version' does not exist on type 'GuardSupplyChainScannerEvidence'.
+src/guard-types.ts(736,18): error TS2339: Property 'portable' does not exist on type 'GuardScannerEvidence'.
+  Property 'portable' does not exist on type 'GuardSupplyChainScannerEvidence'.
+src/guard-types.ts(737,18): error TS2339: Property 'context_digest' does not exist on type 'GuardScannerEvidence'.
+  Property 'context_digest' does not exist on type 'GuardSupplyChainScannerEvidence'.
+src/runtime-overview.tsx(300,7): error TS18048: 'capability' is possibly 'undefined'.
+src/use-focus-trap.ts(35,46): error TS2345: Argument of type 'HTMLElement | null' is not assignable to parameter of type 'HTMLElement'.
+  Type 'null' is not assignable to type 'HTMLElement'.
+
+===== final isolated browser receipt =====
+{
+  "schema": "guard-cigar-versions-browser.v1",
+  "scope": "Isolated browser with HTTP fixtures only; no live Guard, native process, SDK or installed/frozen workflow qualification.",
+  "calls": [
+    {
+      "path": "/v1/context-assistance/installations",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/interpreters",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/jobs",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "POST",
+      "action": "preferences",
+      "input": {
+        "action": "preferences"
+      },
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/installations",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "POST",
+      "action": "commit",
+      "input": {
+        "action": "commit",
+        "job_id": "fixture:switch",
+        "expected_generation": "9007199254740993",
+        "reconnect": true
+      },
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/interpreters",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/jobs",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "POST",
+      "action": "preferences",
+      "input": {
+        "action": "preferences"
+      },
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/installations",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/installations",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/installations",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/interpreters",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/jobs",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "POST",
+      "action": "preferences",
+      "input": {
+        "action": "preferences"
+      },
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/installations",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "POST",
+      "action": "commit",
+      "input": {
+        "action": "commit",
+        "job_id": "fixture:switch",
+        "expected_generation": "9007199254740993",
+        "reconnect": true
+      },
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/stop",
+      "method": "POST",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/interpreters",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/jobs",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "POST",
+      "action": "preferences",
+      "input": {
+        "action": "preferences"
+      },
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/installations",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/installations",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/installations",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/interpreters",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/jobs",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "POST",
+      "action": "preferences",
+      "input": {
+        "action": "preferences"
+      },
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/installations",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "POST",
+      "action": "commit",
+      "input": {
+        "action": "commit",
+        "job_id": "fixture:switch",
+        "expected_generation": "9007199254740993",
+        "reconnect": true
+      },
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/installations",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/interpreters",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/jobs",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "POST",
+      "action": "preferences",
+      "input": {
+        "action": "preferences"
+      },
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/installations",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "POST",
+      "action": "commit",
+      "input": {
+        "action": "commit",
+        "job_id": "fixture:initial",
+        "expected_generation": "9007199254740993",
+        "reconnect": false
+      },
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/interpreters",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/jobs",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "POST",
+      "action": "preferences",
+      "input": {
+        "action": "preferences"
+      },
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/installations",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/installations",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/installations",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/interpreters",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/jobs",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "POST",
+      "action": "preferences",
+      "input": {
+        "action": "preferences"
+      },
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/installations",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "POST",
+      "action": "commit",
+      "input": {
+        "action": "commit",
+        "job_id": "fixture:switch",
+        "expected_generation": "9007199254740993",
+        "reconnect": true
+      },
+      "proof_present": true
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/interpreters",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/jobs",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "POST",
+      "action": "preferences",
+      "input": {
+        "action": "preferences"
+      },
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/installations",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/installations",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/installations",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/interpreters",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/jobs",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "POST",
+      "action": "preferences",
+      "input": {
+        "action": "preferences"
+      },
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/installations",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "POST",
+      "action": "cancel",
+      "input": {
+        "action": "cancel",
+        "job_id": "fixture:switch"
+      },
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/interpreters",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/jobs",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "POST",
+      "action": "preferences",
+      "input": {
+        "action": "preferences"
+      },
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/installations",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/installations",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/interpreters",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/jobs",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "POST",
+      "action": "preferences",
+      "input": {
+        "action": "preferences"
+      },
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/installations",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/installations",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/interpreters",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/jobs",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "POST",
+      "action": "preferences",
+      "input": {
+        "action": "preferences"
+      },
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/installations",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "POST",
+      "action": "recover",
+      "input": {
+        "action": "recover",
+        "job_id": "fixture:switch",
+        "expected_generation": "9007199254740993"
+      },
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/interpreters",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/jobs",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "POST",
+      "action": "preferences",
+      "input": {
+        "action": "preferences"
+      },
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/installations",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/interpreters",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/jobs",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "POST",
+      "action": "preferences",
+      "input": {
+        "action": "preferences"
+      },
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/installations",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/interpreters",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/jobs",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "POST",
+      "action": "preferences",
+      "input": {
+        "action": "preferences"
+      },
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/installations",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/interpreters",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/jobs",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "POST",
+      "action": "preferences",
+      "input": {
+        "action": "preferences"
+      },
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/installations",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/installations",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/interpreters",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/jobs",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/versions",
+      "method": "POST",
+      "action": "preferences",
+      "input": {
+        "action": "preferences"
+      },
+      "proof_present": false
+    },
+    {
+      "path": "/v1/context-assistance/installations",
+      "method": "GET",
+      "action": null,
+      "input": null,
+      "proof_present": false
+    }
+  ],
+  "executable": "/Users/construct/Library/Caches/ms-playwright/chromium_headless_shell-1248/chrome-headless-shell-mac-arm64/chrome-headless-shell",
+  "executable_sha256": "77d8278b1ac9d0687fad4e817ea83023ede09b1deef36e1864b49ba194ac9634",
+  "checks": [
+    "Workspace opening reads registered metadata without SDK effects",
+    "Runtime preferences route selection to Versions without drafting or starting a replacement",
+    "Keyboard tab navigation opens Versions; metadata never submits preparation or commit",
+    "Live switch requires reconnect consent, preserves full generation precision and unrelated draft state",
+    "Delayed selection reply cannot undo a later successful Stop",
+    "Unknown transport outcome is not retried; stable native job ID remains visible",
+    "Initial selection commits with reconnect false and keeps saved and draft CIGAR preferences off",
+    "Existing settings proof modal gates the explicit action and keeps proof outside SDK input",
+    "Explicit cancellation remains available without settings proof and never commits a selection",
+    "A stale job generation cannot enable a browser switch",
+    "Interrupted work exposes one explicit recovery request bound to the current native generation",
+    "Update walkthrough resumes its step, navigates Versions and never performs a native effect",
+    "Metadata key order cannot overwrite a pending CIGAR opt-in or create a false preference change",
+    "Versions controls remain navigable at a 390px mobile viewport"
+  ],
+  "browser_errors": [],
+  "browser_version": "156.0.8078.4",
+  "utility_styles": {
+    "padding": "16px",
+    "radius": "12px"
+  },
+  "mobile_layout": {
+    "viewport": 390,
+    "content": 390
+  },
+  "passed": true,
+  "completed_at_utc": "2026-10-28T18:32:38.113Z"
+}

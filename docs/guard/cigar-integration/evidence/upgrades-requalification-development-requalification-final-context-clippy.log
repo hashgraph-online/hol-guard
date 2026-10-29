@@ -1,0 +1,60 @@
+    Checking guard-cigar-release v0.1.0 (/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/rust/crates/guard-cigar-release)
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> crates/guard-scanner/src/secret_detection.rs:648:9
+    |
+648 |         &self,
+    |         ^^^^^ the lifetime is elided here
+649 |         fingerprint_key: Option<&[u8]>,
+650 |     ) -> Result<PublicFinding, EmptyFingerprintKeyError> {
+    |                 ^^^^^^^^^^^^^ the same lifetime is hidden here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+    = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+    |
+650 |     ) -> Result<PublicFinding<'_>, EmptyFingerprintKeyError> {
+    |                              ++++
+
+warning: `guard-scanner` (lib) generated 1 warning (run `cargo clippy --fix --lib -p guard-scanner -- ` to apply 1 suggestion)
+    Checking guard-cigar-artifacts v0.1.0 (/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/rust/crates/guard-cigar-artifacts)
+    Checking guard-context-assistance v0.1.0 (/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/rust/crates/guard-context-assistance)
+warning: use of deprecated method `std::sync::atomic::Atomic::<u64>::fetch_update`: renamed to `try_update` for consistency
+  --> crates/guard-context-assistance/src/freshness.rs:28:14
+   |
+28 |             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |v| {
+   |              ^^^^^^^^^^^^
+   |
+   = note: `#[warn(deprecated)]` on by default
+help: replace the use of the deprecated method
+   |
+28 -             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |v| {
+28 +             .try_update(Ordering::AcqRel, Ordering::Acquire, |v| {
+   |
+
+error: this `if` has identical blocks
+   --> crates/guard-context-assistance/src/evidence_upgrade_plan.rs:113:9
+    |
+113 | /         {
+114 | |             Some((
+115 | |                 DataCompatibility::Unknown,
+116 | |                 "cigar_storage_schema_unsupported",
+117 | |             ))
+118 | |         } else if self
+    | |_________^
+    |
+note: same as this
+   --> crates/guard-context-assistance/src/evidence_upgrade_plan.rs:122:9
+    |
+122 | /         {
+123 | |             Some((
+124 | |                 DataCompatibility::Unknown,
+125 | |                 "cigar_storage_schema_unsupported",
+126 | |             ))
+127 | |         } else if self.slots.iter().any(|s| s.state == RecordState::Invalid) {
+    | |_________^
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#if_same_then_else
+    = note: `-D clippy::if-same-then-else` implied by `-D clippy::all`
+    = help: to override `-D clippy::all` add `#[allow(clippy::if_same_then_else)]`
+
+warning: `guard-context-assistance` (lib) generated 1 warning
+error: could not compile `guard-context-assistance` (lib) due to 1 previous error; 1 warning emitted

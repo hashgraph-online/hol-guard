@@ -1,0 +1,35 @@
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> crates/guard-scanner/src/secret_detection.rs:648:9
+    |
+648 |         &self,
+    |         ^^^^^ the lifetime is elided here
+649 |         fingerprint_key: Option<&[u8]>,
+650 |     ) -> Result<PublicFinding, EmptyFingerprintKeyError> {
+    |                 ^^^^^^^^^^^^^ the same lifetime is hidden here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+    = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+    |
+650 |     ) -> Result<PublicFinding<'_>, EmptyFingerprintKeyError> {
+    |                              ++++
+
+warning: `guard-scanner` (lib) generated 1 warning (run `cargo fix --lib -p guard-scanner` to apply 1 suggestion)
+   Compiling guard-cigar-install v0.1.0 (/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/rust/crates/guard-cigar-install)
+warning: use of deprecated method `std::sync::atomic::Atomic::<u64>::fetch_update`: renamed to `try_update` for consistency
+  --> crates/guard-context-assistance/src/freshness.rs:28:14
+   |
+28 |             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |v| {
+   |              ^^^^^^^^^^^^
+   |
+   = note: `#[warn(deprecated)]` on by default
+help: replace the use of the deprecated method
+   |
+28 -             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |v| {
+28 +             .try_update(Ordering::AcqRel, Ordering::Acquire, |v| {
+   |
+
+warning: `guard-context-assistance` (lib) generated 1 warning (run `cargo fix --lib -p guard-context-assistance` to apply 1 suggestion)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.56s
+     Running `/private/tmp/hol-guard-cigar-upgrades-target/debug/examples/qualify_python cpython-3_14_10-20261026-darwin-arm64 cigar-0_14_1-10dd521dec82 /private/tmp/hol-guard-cigar-private-python-qualification-v3 /private/tmp/hol-guard-cigar-upgrades-artifacts/cpython-3.14.10+20261026-aarch64-apple-darwin-install_only_stripped.tar.gz /Users/construct/Documents/projects/cigar-project/CIGAR/releases/cigar-0.14.1-publication/signed-v0.14.1/hol_cigar-0.14.1-py3-none-macosx_11_0_arm64.whl /private/tmp/hol-guard-cigar-upgrades-artifacts/protobuf-7.36.2-cp310-abi3-macosx_10_9_universal2.whl`
+{"elapsed_ms":64711,"interpreter":{"abi":"cpython-314-darwin","debug_build":false,"free_threaded":false,"implementation":"cpython","platform":"darwin-arm64","release_level":"final","schema":"guard-cigar-interpreter.v1","version":[3,14,10]},"python_tree":"1e446c992cf2c8b93f33925a422e5f7f5f7af770536589ec4c065a567bb88375","qualification_promoted":false,"receipt":"/private/tmp/hol-guard-cigar-private-python-qualification-v3/qualification.json","registered":false,"status":{"active":false,"adapter_id":"guard-cigar-python-sdk-v1","adapter_revision":1,"compile_verified":true,"core_version":"0.14.1","execution_handoff_verified":true,"features":["answer_review.v1","context_graph.v1","context_views.v1","document_boundaries.v1","selection_explanation.v1","snapshot_integrity.v1","source_replace.v1"],"interpreter":{"abi":"cpython-314-darwin","debug_build":false,"free_threaded":false,"implementation":"cpython","platform":"darwin-arm64","release_level":"final","schema":"guard-cigar-interpreter.v1","version":[3,14,10]},"package_fingerprint":"5ebfc715f581c40c9fce73209271479a1926d5044543a46c720ba0049c35e1f4","package_version":"0.14.1","persistence_compile_verified":true,"protocol":"cigar.context-worker.v1","release":{"adapter_id":"guard-cigar-python-sdk-v1","adapter_revision":1,"identity":{"build_id":"cigar-0_14_1-10dd521dec82","core_version":"0.14.1","manifest_sha256":"472b722b5029f8dd3c7051c7d7d17a5909d251cf2ba3e0ae20ed9d7cf5b0b7f2","sdk_version":"0.14.1","source_revision":"10dd521dec8224d0957365a90111158e43c9d87f"},"platform":"darwin-arm64","profile_id":"cigar-sdk-v1","profile_sha256":"edb324ac3629b25d638fe97af6c9798fe2cda13d95f9391674c3f7a88bad08aa"},"schema":"guard-cigar-runtime-status.v1","shared_compile_verified":true,"worker_fingerprint":"4650473529f0dc14e596b5cd0ca9d66e2d3bcd8ae11418b87ad971ac51ca78b8"}}

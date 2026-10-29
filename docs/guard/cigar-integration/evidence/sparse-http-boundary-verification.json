@@ -1,0 +1,489 @@
+{
+  "schema": "guard-cigar-sparse-http-boundary-verification.v1",
+  "diagnostic_only": true,
+  "product_source_commit": "6f821077fad88d83ce4f3c85f3f9c2281142fa4f",
+  "boundaries": {
+    "schema": "guard-cigar-sparse-context-boundary.v1",
+    "diagnostic_only": true,
+    "plan": {
+      "schema": "guard-cigar-sparse-context-boundary-plan.v1",
+      "diagnostic_only": true,
+      "profile_or_trace_hook_installed": false,
+      "original_counts_limits_deadlines_and_GC_settings_changed": false,
+      "collection": "Aggregate function boundary wall/thread CPU and generation-only GC counts; no objects/frames/arguments",
+      "fingerprinted_files": 1639,
+      "full_failed_relative_result_remains_unqualified": true
+    },
+    "benchmark_returncode": 0,
+    "stats": {
+      "native_status": {
+        "calls": 297,
+        "wall_ns": 477250870,
+        "thread_cpu_ns": 86424455,
+        "maximum_wall_ns": 25644791,
+        "maximum_thread_cpu_ns": 987000
+      },
+      "isolated_environment": {
+        "calls": 297,
+        "wall_ns": 3654450,
+        "thread_cpu_ns": 3558046,
+        "maximum_wall_ns": 38250,
+        "maximum_thread_cpu_ns": 37875
+      },
+      "state_dir_pin": {
+        "calls": 297,
+        "wall_ns": 288749956,
+        "thread_cpu_ns": 36642175,
+        "maximum_wall_ns": 6045209,
+        "maximum_thread_cpu_ns": 586000
+      },
+      "gc_other_generation_0": {
+        "calls": 149,
+        "wall_ns": 21046918,
+        "thread_cpu_ns": 20893793,
+        "maximum_wall_ns": 358458,
+        "maximum_thread_cpu_ns": 346625
+      },
+      "resident_client": {
+        "calls": 297,
+        "wall_ns": 1558845924,
+        "thread_cpu_ns": 75300251,
+        "maximum_wall_ns": 41976375,
+        "maximum_thread_cpu_ns": 2261041
+      },
+      "resident_decide": {
+        "calls": 297,
+        "wall_ns": 2362220541,
+        "thread_cpu_ns": 238700083,
+        "maximum_wall_ns": 47109792,
+        "maximum_thread_cpu_ns": 2886917
+      },
+      "decide_total": {
+        "calls": 297,
+        "wall_ns": 2364037956,
+        "thread_cpu_ns": 240550667,
+        "maximum_wall_ns": 47113959,
+        "maximum_thread_cpu_ns": 2891250
+      },
+      "compile_total": {
+        "calls": 297,
+        "wall_ns": 2368662694,
+        "thread_cpu_ns": 244967254,
+        "maximum_wall_ns": 47133041,
+        "maximum_thread_cpu_ns": 2909166
+      },
+      "gc_context_generation_0": {
+        "calls": 10,
+        "wall_ns": 1511750,
+        "thread_cpu_ns": 1506624,
+        "maximum_wall_ns": 287667,
+        "maximum_thread_cpu_ns": 287167
+      },
+      "gc_other_generation_1": {
+        "calls": 14,
+        "wall_ns": 7781624,
+        "thread_cpu_ns": 7765417,
+        "maximum_wall_ns": 1134667,
+        "maximum_thread_cpu_ns": 1134000
+      },
+      "gc_other_generation_2": {
+        "calls": 2,
+        "wall_ns": 44787084,
+        "thread_cpu_ns": 44561458,
+        "maximum_wall_ns": 24774834,
+        "maximum_thread_cpu_ns": 24660250
+      }
+    },
+    "observer_errors": [],
+    "unfinished_gc_intervals": 0,
+    "GC_thresholds_unchanged": true,
+    "profile_and_trace_hooks_absent": true,
+    "inputs_unchanged": true,
+    "limitations": [
+      "Boundary wrappers add overhead and nested totals overlap.",
+      "GC callbacks observe ordinary collection; they never trigger collection or alter thresholds.",
+      "This is an on-only attribution diagnostic, not relative performance qualification."
+    ]
+  },
+  "original_boundaries": {
+    "path": "/private/tmp/hol-guard-cigar-distribution-20261024/sparse-http-diagnostic-20261025/boundaries.json",
+    "bytes": 3068,
+    "sha256": "48d022ca333599bd05056db72925d738d3823cd29dacaa9c608d53823c377af0"
+  },
+  "benchmark": {
+    "schema": "guard-cigar-installed-contention.v1",
+    "mode": "on",
+    "build_sha": "6f821077fad88d83ce4f3c85f3f9c2281142fa4f",
+    "full_installed_SLO": false,
+    "diagnostic_transport_observer": false,
+    "client_topology": "driver, authenticated hook clients and daemon share one Python process",
+    "root_python": [
+      3,
+      12,
+      13
+    ],
+    "completed": true,
+    "active_stage": "completed",
+    "stages": {
+      "1": {
+        "latency": {
+          "count": 200,
+          "p50_ms": 6.221,
+          "p95_ms": 11.615,
+          "p99_ms": 15.939,
+          "max_ms": 18.513
+        },
+        "routes": {
+          "native_resident": 200
+        },
+        "errors": 0,
+        "allowed": 200,
+        "explicit_capacity": 0,
+        "unclassified_refusals": 0,
+        "successful_overlapping_compiles": 81,
+        "memory": {
+          "samples": 17,
+          "sampling_errors": 0,
+          "median_rss_bytes": 840925184,
+          "peak_rss_bytes": 844939264,
+          "at_peak_counts": {
+            "native_runtime": 10,
+            "sdk_worker": 2,
+            "python_bridge": 1,
+            "other_python_child": 1,
+            "benchmark_daemon_host": 1
+          },
+          "at_peak_rss_by_kind": {
+            "native_runtime": 156794880,
+            "sdk_worker": 122077184,
+            "python_bridge": 30523392,
+            "other_python_child": 27262976,
+            "benchmark_daemon_host": 508280832
+          },
+          "maximum_counts": {
+            "native_runtime": 10,
+            "python_bridge": 1,
+            "other_python_child": 1,
+            "benchmark_daemon_host": 1,
+            "sdk_worker": 2
+          },
+          "includes_observed_reparented_children": true,
+          "shared_pages_may_be_counted_in_multiple_processes": true
+        }
+      },
+      "16": {
+        "latency": {
+          "count": 80,
+          "p50_ms": 72.151,
+          "p95_ms": 122.627,
+          "p99_ms": 131.931,
+          "max_ms": 131.931
+        },
+        "routes": {
+          "native_resident": 80
+        },
+        "errors": 0,
+        "allowed": 80,
+        "explicit_capacity": 0,
+        "unclassified_refusals": 0,
+        "successful_overlapping_compiles": 23,
+        "memory": {
+          "samples": 7,
+          "sampling_errors": 0,
+          "median_rss_bytes": 845004800,
+          "peak_rss_bytes": 846872576,
+          "at_peak_counts": {
+            "native_runtime": 10,
+            "sdk_worker": 2,
+            "python_bridge": 1,
+            "other_python_child": 1,
+            "benchmark_daemon_host": 1
+          },
+          "at_peak_rss_by_kind": {
+            "native_runtime": 156909568,
+            "sdk_worker": 122077184,
+            "python_bridge": 30523392,
+            "other_python_child": 27262976,
+            "benchmark_daemon_host": 510099456
+          },
+          "maximum_counts": {
+            "native_runtime": 10,
+            "python_bridge": 1,
+            "other_python_child": 1,
+            "benchmark_daemon_host": 1,
+            "sdk_worker": 2
+          },
+          "includes_observed_reparented_children": true,
+          "shared_pages_may_be_counted_in_multiple_processes": true
+        }
+      },
+      "64": {
+        "latency": {
+          "count": 320,
+          "p50_ms": 219.032,
+          "p95_ms": 367.605,
+          "p99_ms": 393.015,
+          "max_ms": 395.229
+        },
+        "routes": {
+          "native_resident": 320
+        },
+        "errors": 0,
+        "allowed": 320,
+        "explicit_capacity": 0,
+        "unclassified_refusals": 0,
+        "successful_overlapping_compiles": 78,
+        "memory": {
+          "samples": 21,
+          "sampling_errors": 0,
+          "median_rss_bytes": 861765632,
+          "peak_rss_bytes": 863158272,
+          "at_peak_counts": {
+            "native_runtime": 10,
+            "sdk_worker": 2,
+            "python_bridge": 1,
+            "other_python_child": 1,
+            "benchmark_daemon_host": 1
+          },
+          "at_peak_rss_by_kind": {
+            "native_runtime": 157466624,
+            "sdk_worker": 122077184,
+            "python_bridge": 30523392,
+            "other_python_child": 27262976,
+            "benchmark_daemon_host": 525828096
+          },
+          "maximum_counts": {
+            "native_runtime": 10,
+            "python_bridge": 1,
+            "other_python_child": 1,
+            "benchmark_daemon_host": 1,
+            "sdk_worker": 2
+          },
+          "includes_observed_reparented_children": true,
+          "shared_pages_may_be_counted_in_multiple_processes": true
+        }
+      }
+    },
+    "native_readiness_ms": 0.5461657419800758,
+    "candidate_activation_ms": 7224.049416836351,
+    "rss_baseline": {
+      "samples": 12,
+      "sampling_errors": 0,
+      "median_rss_bytes": 840777728,
+      "peak_rss_bytes": 840859648,
+      "at_peak_counts": {
+        "native_runtime": 10,
+        "sdk_worker": 2,
+        "python_bridge": 1,
+        "other_python_child": 1,
+        "benchmark_daemon_host": 1
+      },
+      "at_peak_rss_by_kind": {
+        "native_runtime": 156696576,
+        "sdk_worker": 122077184,
+        "python_bridge": 30523392,
+        "other_python_child": 27262976,
+        "benchmark_daemon_host": 504299520
+      },
+      "maximum_counts": {
+        "native_runtime": 10,
+        "python_bridge": 1,
+        "other_python_child": 1,
+        "benchmark_daemon_host": 1,
+        "sdk_worker": 2
+      },
+      "includes_observed_reparented_children": true,
+      "shared_pages_may_be_counted_in_multiple_processes": true
+    },
+    "direct_adapter_warm": {
+      "p50_ms": 1.339,
+      "p95_ms": 2.704,
+      "p99_ms": 7.676,
+      "max_ms": 27.302
+    },
+    "successful_direct_overlapping_compiles": 17,
+    "context_workload": {
+      "successful_compiles": 298,
+      "latency": {
+        "count": 298,
+        "p50_ms": 6.252,
+        "p95_ms": 16.045,
+        "p99_ms": 30.821,
+        "max_ms": 47.128
+      },
+      "latency_sample_every": 1,
+      "refusals": {},
+      "distinct_graph_revisions": 1,
+      "unchanged_graph_revision_reused": true,
+      "internal_tokenization_work_measured": false
+    },
+    "all_observed_processes": {
+      "samples": 230,
+      "sampling_errors": 0,
+      "median_rss_bytes": 669237248,
+      "peak_rss_bytes": 863404032,
+      "at_peak_counts": {
+        "native_runtime": 10,
+        "sdk_worker": 2,
+        "python_bridge": 1,
+        "other_python_child": 1,
+        "benchmark_daemon_host": 1
+      },
+      "at_peak_rss_by_kind": {
+        "native_runtime": 157515776,
+        "sdk_worker": 122077184,
+        "python_bridge": 30523392,
+        "other_python_child": 27262976,
+        "benchmark_daemon_host": 526024704
+      },
+      "maximum_counts": {
+        "other_descendant": 5,
+        "terminated_child": 1,
+        "native_runtime": 11,
+        "python_bridge": 1,
+        "other_python_child": 1,
+        "benchmark_daemon_host": 1,
+        "sdk_worker": 2
+      },
+      "includes_observed_reparented_children": true,
+      "shared_pages_may_be_counted_in_multiple_processes": true
+    },
+    "steady_rss_growth": 0.0266188592474228,
+    "gates": {
+      "direct_warm_p95_20ms": true,
+      "installed_warm_p95_1000ms": true,
+      "installed_c16_p99_1000ms": true,
+      "no_request_errors_or_unclassified_refusals": true,
+      "complete_observed_tree_rss_growth_12_percent": true,
+      "process_sampling_complete": true,
+      "optional_worker_coverage": true,
+      "real_compile_overlap": true,
+      "no_unexpected_context_refusals": true,
+      "unchanged_graph_revision_reused": true,
+      "strict_final_stop": true,
+      "all_observed_live_descendants_contained": true,
+      "daemon_shutdown_contained": true
+    },
+    "cleanup": {
+      "final_stop_status": "already-stopped",
+      "retained_stop_status": "already-stopped",
+      "recovery_used": false,
+      "daemon_stop_contained": true,
+      "observed_at_end": {
+        "rss_bytes": 338706432,
+        "counts": {
+          "benchmark_daemon_host": 1
+        },
+        "rss_by_kind": {
+          "benchmark_daemon_host": 338706432
+        }
+      },
+      "live_descendants_remaining": 0
+    }
+  },
+  "original_benchmark": {
+    "path": "/private/tmp/hol-guard-cigar-distribution-20261024/sparse-http-diagnostic-20261025/run/result.json",
+    "bytes": 7647,
+    "sha256": "4e805c777e351981bfb146c5b6bfc3634f1c23455aa6a323a5be8d220c8e9769"
+  },
+  "input_manifest": {
+    "path": "/private/tmp/hol-guard-cigar-distribution-20261024/sparse-http-diagnostic-20261025/inputs.json",
+    "bytes": 325487,
+    "sha256": "1437bde195ac8a48b2d270b7ba34d748fa05e8cd3ab2c9cbb60646e1abc9e3d3"
+  },
+  "observer_source": {
+    "path": "/private/tmp/hol-guard-cigar-distribution-20261024/sparse_boundary_driver.py",
+    "bytes": 7631,
+    "sha256": "4686474dd185a8e2578fa851b6a8763c3d61b80cb3e96099b1d150d99c5e83f9"
+  },
+  "means": {
+    "native_status": {
+      "calls": 297,
+      "mean_wall_ms": 1.6069052861952862,
+      "mean_thread_cpu_ms": 0.290991430976431,
+      "maximum_thread_cpu_ms": 0.987
+    },
+    "isolated_environment": {
+      "calls": 297,
+      "mean_wall_ms": 0.012304545454545453,
+      "mean_thread_cpu_ms": 0.011979952861952864,
+      "maximum_thread_cpu_ms": 0.037875
+    },
+    "state_dir_pin": {
+      "calls": 297,
+      "mean_wall_ms": 0.972222074074074,
+      "mean_thread_cpu_ms": 0.1233743265993266,
+      "maximum_thread_cpu_ms": 0.586
+    },
+    "gc_other_generation_0": {
+      "calls": 149,
+      "mean_wall_ms": 0.14125448322147652,
+      "mean_thread_cpu_ms": 0.14022679865771812,
+      "maximum_thread_cpu_ms": 0.346625
+    },
+    "resident_client": {
+      "calls": 297,
+      "mean_wall_ms": 5.248639474747474,
+      "mean_thread_cpu_ms": 0.25353619865319865,
+      "maximum_thread_cpu_ms": 2.261041
+    },
+    "resident_decide": {
+      "calls": 297,
+      "mean_wall_ms": 7.953604515151516,
+      "mean_thread_cpu_ms": 0.8037039831649833,
+      "maximum_thread_cpu_ms": 2.886917
+    },
+    "decide_total": {
+      "calls": 297,
+      "mean_wall_ms": 7.959723757575758,
+      "mean_thread_cpu_ms": 0.8099349057239058,
+      "maximum_thread_cpu_ms": 2.89125
+    },
+    "compile_total": {
+      "calls": 297,
+      "mean_wall_ms": 7.9752952659932665,
+      "mean_thread_cpu_ms": 0.824805569023569,
+      "maximum_thread_cpu_ms": 2.909166
+    },
+    "gc_context_generation_0": {
+      "calls": 10,
+      "mean_wall_ms": 0.151175,
+      "mean_thread_cpu_ms": 0.1506624,
+      "maximum_thread_cpu_ms": 0.287167
+    },
+    "gc_other_generation_1": {
+      "calls": 14,
+      "mean_wall_ms": 0.5558302857142857,
+      "mean_thread_cpu_ms": 0.5546726428571428,
+      "maximum_thread_cpu_ms": 1.134
+    },
+    "gc_other_generation_2": {
+      "calls": 2,
+      "mean_wall_ms": 22.393542,
+      "mean_thread_cpu_ms": 22.280729,
+      "maximum_thread_cpu_ms": 24.66025
+    }
+  },
+  "prior_diagnostics": {
+    "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/docs/guard/cigar-integration/evidence/distribution-http-diagnostics.json",
+    "bytes": 130664,
+    "sha256": "99f25284ef0bad408465e0e33ad50113d342fde9e78d3b296b99bae8904946f6"
+  },
+  "failed_cohort": {
+    "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/docs/guard/cigar-integration/evidence/distribution-installed-performance-verification.json",
+    "bytes": 198451,
+    "sha256": "7b544eb0e8bc951ed7935faf93bf1fa257df010f5de1346715fea8bd1a021f75"
+  },
+  "interpretation": [
+    "The unchanged on-only 200-request/five-wave workload passes all thirteen diagnostic gates, with zero remaining descendants and unchanged complete input fingerprints. No profile/trace hook is installed; wrappers retain signatures and forward the original arguments/results.",
+    "All 297 background compiles cross the observed native-status, decide and client boundaries. Mean measured compile wall/thread CPU is about 7.975/0.825 ms. Nested boundary totals overlap; wrappers add overhead.",
+    "Decide total versus resident-decide mean thread CPU differs by about 0.006 ms. The earlier full-profile large self attribution does not recur under this measurement, so it supplies no basis for rewriting that closure or altering its deadline.",
+    "Native status averages about 0.291 ms thread CPU and 1.607 ms wall under load; state-directory pinning about 0.123/0.972 ms. Environment projection averages only about 0.012 ms CPU. These are potential contributor measurements, not proof that their removal would repair the HTTP p95 difference.",
+    "The native-client boundary averages about 5.249 ms wall versus 0.254 ms thread CPU, including its nested directory pin. Waiting/scheduling/native work dominate that elapsed boundary and are not assigned to one cause by these clocks.",
+    "Ordinary observed GC includes ten context-thread generation-zero collections and two other-thread generation-two collections averaging about 22 ms CPU. Observations span workload activity through cleanup; they are not correlated to particular HTTP samples. No collection is triggered, disabled or retuned.",
+    "Source, SDK, native policy/approvals, caches, deadlines, priority, workload counts and qualification estimators remain unchanged. The original +1.366 ms relative HTTP result remains failed.",
+    "Next evaluate whether already validated first-choice native status can bypass unused lower-priority force-mode distribution discovery while preserving every identity/manifest/deadline invalidation. Any change requires targeted negative regressions and a new matching artifact; directory identity checks must not be dropped based on these timings."
+  ],
+  "performance_qualified": false,
+  "full_goal_remains_active": true
+}

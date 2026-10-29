@@ -1,0 +1,36 @@
+    Blocking waiting for file lock on build directory
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> crates/guard-scanner/src/secret_detection.rs:648:9
+    |
+648 |         &self,
+    |         ^^^^^ the lifetime is elided here
+649 |         fingerprint_key: Option<&[u8]>,
+650 |     ) -> Result<PublicFinding, EmptyFingerprintKeyError> {
+    |                 ^^^^^^^^^^^^^ the same lifetime is hidden here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+    = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+    |
+650 |     ) -> Result<PublicFinding<'_>, EmptyFingerprintKeyError> {
+    |                              ++++
+
+warning: `guard-scanner` (lib) generated 1 warning (run `cargo fix --lib -p guard-scanner` to apply 1 suggestion)
+   Compiling guard-cigar-install v0.1.0 (/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/rust/crates/guard-cigar-install)
+warning: use of deprecated method `std::sync::atomic::Atomic::<u64>::fetch_update`: renamed to `try_update` for consistency
+  --> crates/guard-context-assistance/src/freshness.rs:28:14
+   |
+28 |             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |v| {
+   |              ^^^^^^^^^^^^
+   |
+   = note: `#[warn(deprecated)]` on by default
+help: replace the use of the deprecated method
+   |
+28 -             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |v| {
+28 +             .try_update(Ordering::AcqRel, Ordering::Acquire, |v| {
+   |
+
+warning: `guard-context-assistance` (lib) generated 1 warning (run `cargo fix --lib -p guard-context-assistance` to apply 1 suggestion)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.77s
+     Running `/private/tmp/hol-guard-cigar-upgrades-target/debug/examples/check_python cpython-3_14_10-20261026-darwin-arm64 darwin-arm64 /private/tmp/hol-guard-cigar-private-python-qualification-v3/python`
+{"build_id":"cpython-3_14_10-20261026-darwin-arm64","bytes":106491517,"cached_checks_us":[2602,2652,3438,2310,2237],"files":1701,"full_verification_us":4034018,"metadata_cache_supported":true,"schema":"guard-cigar-python-tree-check-timing.v1","scope":"local-source-protected-tree-check-only","tree_sha256":"1e446c992cf2c8b93f33925a422e5f7f5f7af770536589ec4c065a567bb88375"}

@@ -230,15 +230,17 @@ class DirectHookEvidenceDrain:
         self._thread = threading.Thread(target=self._run, name="hol-guard-direct-evidence", daemon=True)
         self._thread.start()
 
-    def stop(self, *, timeout_seconds: float = 1.0) -> None:
+    def stop(self, *, timeout_seconds: float = 1.0) -> bool:
         """Stop polling, then collect whatever the resident still holds."""
 
         self._stop.set()
         thread = self._thread
-        if thread is not None:
+        if thread is not None and thread is not threading.current_thread():
             thread.join(timeout=max(0.0, timeout_seconds))
-        if thread is None or not thread.is_alive():
-            self.drain_once()
+        if thread is not None and thread.is_alive():
+            return False
+        self.drain_once()
+        return True
 
     def drain_once(self) -> bool:
         """Drain up to a few pages; return whether more records remain."""

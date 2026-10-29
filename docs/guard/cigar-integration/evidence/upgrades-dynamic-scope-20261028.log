@@ -1,0 +1,149 @@
+===== version literal source audit =====
+[
+  {
+    "path": "dashboard/scripts/cigar-versions-browser.mjs",
+    "line": 23,
+    "text": "const installed = (runtime_id, build_id) => ({ runtime_id, build_id, qualification: \"guard_qualified\", sdk_version: \"0.14.1\", core_version: \"0.14.1\",",
+    "classification": "isolated browser fixture; not shipped application logic"
+  },
+  {
+    "path": "rust/crates/guard-runtime/src/context_assistance_service_upgrade_erasure_actual.rs",
+    "line": 8,
+    "text": "#[ignore = \"requires explicit final0.14.1 SDK/dependency wheels and CPython3.14.7/3.14.10 task-private inputs\"]",
+    "classification": "test fixture under the cfg(all(test, macos)) SDK acceptance module"
+  },
+  {
+    "path": "rust/crates/guard-runtime/src/context_assistance_service_upgrade_generation_actual.rs",
+    "line": 21,
+    "text": "#[ignore = \"requires explicit final0.14.1 SDK/dependency wheels and CPython3.14.7/3.14.10 task-private inputs\"]",
+    "classification": "test fixture under the cfg(all(test, macos)) SDK acceptance module"
+  },
+  {
+    "path": "rust/crates/guard-context-assistance/src/artifacts.rs",
+    "line": 4,
+    "text": "use crate::{CIGAR_PROTOCOL, CIGAR_VERSION};",
+    "classification": "cfg(test) fixture constant/import; absent from production compilation"
+  },
+  {
+    "path": "rust/crates/guard-context-assistance/src/lib.rs",
+    "line": 64,
+    "text": "pub(crate) const CIGAR_VERSION: &str = \"0.14.1\";",
+    "classification": "cfg(test) fixture constant/import; absent from production compilation"
+  },
+  {
+    "path": "rust/crates/guard-context-assistance/src/broker_execution_doctor.rs",
+    "line": 100,
+    "text": "    #[ignore = \"requires the explicitly approved actual CPython 3.14/CIGAR 0.14.1 candidate\"]",
+    "classification": "inline cfg(test) module"
+  },
+  {
+    "path": "rust/crates/guard-context-assistance/src/runtime.rs",
+    "line": 7,
+    "text": "use crate::{CIGAR_PROTOCOL, CIGAR_VERSION};",
+    "classification": "cfg(test) fixture constant/import; absent from production compilation"
+  },
+  {
+    "path": "rust/crates/guard-runtime/src/context_assistance_acquisition_transport.rs",
+    "line": 105,
+    "text": "            \"https://github.com/hashgraph-online/hol-cigar/releases/download/v0.14.1/pinned.whl\";",
+    "classification": "inline cfg(test) module"
+  },
+  {
+    "path": "rust/crates/guard-runtime/src/context_assistance_catalog_actual_fixture.rs",
+    "line": 1,
+    "text": "//! Test-only explicit root enrollment for the same exact final0.14.1 bytes.",
+    "classification": "test fixture under the cfg(all(test, macos)) SDK acceptance module"
+  },
+  {
+    "path": "rust/crates/guard-runtime/src/context_assistance_service_versions_actual.rs",
+    "line": 2,
+    "text": "//! Final0.14.1 on two external Python builds; no newer-SDK/platform claim.",
+    "classification": "test fixture under the cfg(all(test, macos)) SDK acceptance module"
+  },
+  {
+    "path": "rust/crates/guard-runtime/src/context_assistance_service_versions_actual.rs",
+    "line": 85,
+    "text": "#[ignore = \"requires explicit final0.14.1 SDK/dependency wheels and CPython3.14.7/3.14.10 task-private inputs\"]",
+    "classification": "test fixture under the cfg(all(test, macos)) SDK acceptance module"
+  },
+  {
+    "path": "rust/crates/guard-runtime/src/context_assistance_service_versions_actual.rs",
+    "line": 90,
+    "text": "#[ignore = \"requires explicit final0.14.1 SDK/dependency wheels and CPython3.14.7/3.14.10 task-private inputs\"]",
+    "classification": "test fixture under the cfg(all(test, macos)) SDK acceptance module"
+  },
+  {
+    "path": "rust/crates/guard-runtime/src/context_assistance_service_versions_actual.rs",
+    "line": 305,
+    "text": "        \"CIGAR_VERSION_CONTROLS_PROOF={}\",",
+    "classification": "test fixture under the cfg(all(test, macos)) SDK acceptance module"
+  },
+  {
+    "path": "rust/crates/guard-runtime/src/context_assistance_service_upgrade_cleanup_actual.rs",
+    "line": 43,
+    "text": "#[ignore = \"requires explicit final0.14.1 SDK/dependency wheels and CPython3.14.7/3.14.10 task-private inputs\"]",
+    "classification": "test fixture under the cfg(all(test, macos)) SDK acceptance module"
+  },
+  {
+    "path": "rust/crates/guard-runtime/src/context_assistance_service_upgrade_cleanup_actual.rs",
+    "line": 173,
+    "text": "#[ignore = \"requires explicit final0.14.1 SDK/dependency wheels and CPython3.14.7/3.14.10 task-private inputs\"]",
+    "classification": "test fixture under the cfg(all(test, macos)) SDK acceptance module"
+  },
+  {
+    "path": "rust/crates/guard-runtime/src/context_assistance_service_upgrade_restore_actual.rs",
+    "line": 2,
+    "text": "//! filesystem faults. The source and target are final 0.14.1 on two interpreters.",
+    "classification": "test fixture under the cfg(all(test, macos)) SDK acceptance module"
+  },
+  {
+    "path": "rust/crates/guard-runtime/src/context_assistance_service_upgrade_restore_actual.rs",
+    "line": 8,
+    "text": "#[ignore = \"requires explicit final0.14.1 SDK/dependency wheels and CPython3.14.7/3.14.10 task-private inputs\"]",
+    "classification": "test fixture under the cfg(all(test, macos)) SDK acceptance module"
+  },
+  {
+    "path": "rust/crates/guard-runtime/src/context_assistance_service_upgrade_restore_actual.rs",
+    "line": 13,
+    "text": "#[ignore = \"requires explicit final0.14.1 SDK/dependency wheels and CPython3.14.7/3.14.10 task-private inputs\"]",
+    "classification": "test fixture under the cfg(all(test, macos)) SDK acceptance module"
+  },
+  {
+    "path": "rust/crates/guard-runtime/src/context_assistance_settings_opt_in_actual.rs",
+    "line": 5,
+    "text": "#[ignore = \"requires task-private exact final0.14.1 wheel/dependency and external CPython3.14.10 inputs\"]",
+    "classification": "test fixture under the cfg(all(test, macos)) SDK acceptance module"
+  },
+  {
+    "path": "rust/crates/guard-runtime/src/context_assistance_service_upgrade_scope_actual.rs",
+    "line": 51,
+    "text": "#[ignore = \"requires explicit final0.14.1 SDK/dependency wheels and CPython3.14.7/3.14.10 task-private inputs\"]",
+    "classification": "test fixture under the cfg(all(test, macos)) SDK acceptance module"
+  },
+  {
+    "path": "rust/crates/guard-runtime/src/context_assistance_service_upgrade_scope_actual.rs",
+    "line": 56,
+    "text": "#[ignore = \"requires explicit final0.14.1 SDK/dependency wheels and CPython3.14.7/3.14.10 task-private inputs\"]",
+    "classification": "test fixture under the cfg(all(test, macos)) SDK acceptance module"
+  }
+]
+
+===== release-version.test.ts =====
+Cross-version history, qualified installations, exact release projections and native feature bounds passed.
+
+===== versions-models.test.ts =====
+CIGAR catalog identities, same-version builds, host metadata, qualification labels and managed preference contracts passed.
+
+===== clarified acceptance =====
+
+## 2026-10-28 UTC — User-clarified dynamic infrastructure target and version-pin audit
+
+The user confirmed 0.14.1 is the newest available CIGAR and is satisfied with 80–90% infrastructure readiness as long as SDK versions are not hardcoded in application logic. This narrows current acceptance to the reusable core; the extended P0–P10 release/hardening checklist remains unfinished backlog. No newer SDK bytes, publication, installed/platform certification or full crash/load acceptance is invented to close that earlier roadmap.
+
+Audited Rust crates, Python/tooling, dashboard and adapter integration source. All 21 release-literal/constant matches are test-only/gated fixtures. The CIGAR_VERSION 0.14.1 constant/imports are cfg(test); production runtime SDK/core identity comes from resolved catalog or historical legacy metadata, and artifact/handshake checks bind that exact identity. Two focused client modules pass with future/same-version-rebuild/independent-core identities. Existing 65/20 native release/installer and 41 Python generator tests cover generic future routing, exact locks and three deterministic unqualified synthetic drafts. The maintenance runbook now explicitly preserves historical legacy metadata when adding releases.
+
+All six SDK workflows subsequently pass on current image b6486445abe6e50955556388accf6c6de51752106cde9b698bbc5563f0f12322, with 16 intercepted browser cases,148/22/59/3/10 native checks and Rust 1.88/format/ownership/privacy checks recorded in the preceding checkpoint. Broad Clippy/TypeScript retain 36/13 baseline errors in unchanged files, zero new. Earlier masked configuration and workspace/broker/transport observations remain tracked; the successful reruns are not their general root-cause/load remediation proof. A read-only process-name observation was unavailable under the sandbox; no claim of a complete process-loss/descendant cleanup matrix is made.
+
+[Readiness](CIGAR_DYNAMIC_INFRASTRUCTURE.md) records an approximately 85% qualitative engineering estimate for the core target. [Audit receipt](evidence/upgrades-dynamic-scope-20261028.json) binds source classifications, future client checks, exact prior checkpoint, current source inventory and original preservation; all seven approved inputs are rehashed. No runtime source changed after the six passing current-image SDK workflows. Source/lock/qualification data is the compatible-build change boundary; breaking contracts still require a reviewed adapter/Guard update.
+
+The core target requested in the user's clarification is met. Production trust/feed, installed/frozen/other platforms, remaining reset/data-choice/removal/notification/accessibility/crash/approval/load/performance and real newer-release qualification stay explicit release backlog. Original 84 dirty paths retain 75 byte-identical and seven exact inverse-patch-preserved workspace/tutorial files plus the two earlier intentional changes. Original acceptance, locks, Git, live Guard/hooks/preview/system Python/upstream SDK and publication remain preserved.

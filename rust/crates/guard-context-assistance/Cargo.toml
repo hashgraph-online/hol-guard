@@ -1,0 +1,26 @@
+[package]
+name = "guard-context-assistance"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+guard-cigar-artifacts = { path = "../guard-cigar-artifacts" }
+serde.workspace = true
+serde_json.workspace = true
+guard-secure-fs = { path = "../guard-secure-fs" }
+guard-scanner = { path = "../guard-scanner" }
+guard-cigar-release = { path = "../guard-cigar-release" }
+sha2.workspace = true
+ring.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true, features = ["user"] }
+
+[dev-dependencies]
+ring.workspace = true
+
+[lints]
+workspace = true

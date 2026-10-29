@@ -1,0 +1,111 @@
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> crates/guard-scanner/src/secret_detection.rs:648:9
+    |
+648 |         &self,
+    |         ^^^^^ the lifetime is elided here
+649 |         fingerprint_key: Option<&[u8]>,
+650 |     ) -> Result<PublicFinding, EmptyFingerprintKeyError> {
+    |                 ^^^^^^^^^^^^^ the same lifetime is hidden here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+    = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+    |
+650 |     ) -> Result<PublicFinding<'_>, EmptyFingerprintKeyError> {
+    |                              ++++
+
+warning: `guard-scanner` (lib) generated 1 warning (run `cargo fix --lib -p guard-scanner` to apply 1 suggestion)
+warning: `guard-scanner` (lib) generated 1 warning (1 duplicate)
+warning: use of deprecated method `std::sync::atomic::Atomic::<u64>::fetch_update`: renamed to `try_update` for consistency
+  --> crates/guard-context-assistance/src/freshness.rs:28:14
+   |
+28 |             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |v| {
+   |              ^^^^^^^^^^^^
+   |
+   = note: `#[warn(deprecated)]` on by default
+help: replace the use of the deprecated method
+   |
+28 -             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |v| {
+28 +             .try_update(Ordering::AcqRel, Ordering::Acquire, |v| {
+   |
+
+warning: `guard-context-assistance` (lib) generated 1 warning (run `cargo fix --lib -p guard-context-assistance` to apply 1 suggestion)
+warning: use of deprecated method `std::sync::atomic::Atomic::<usize>::fetch_update`: renamed to `try_update` for consistency
+  --> crates/guard-command/src/restricted_archive_write.rs:21:14
+   |
+21 |             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+   |              ^^^^^^^^^^^^
+   |
+   = note: `#[warn(deprecated)]` on by default
+help: replace the use of the deprecated method
+   |
+21 -             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+21 +             .try_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+   |
+
+warning: `guard-command` (lib) generated 1 warning (run `cargo fix --lib -p guard-command` to apply 1 suggestion)
+   Compiling hol-guard-runtime v3.16.3 (/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/rust/crates/guard-runtime)
+warning: use of deprecated method `std::sync::atomic::Atomic::<usize>::fetch_update`: renamed to `try_update` for consistency
+  --> crates/guard-runtime/src/archive_acquisition_op.rs:22:14
+   |
+22 |             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+   |              ^^^^^^^^^^^^
+   |
+   = note: `#[warn(deprecated)]` on by default
+help: replace the use of the deprecated method
+   |
+22 -             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+22 +             .try_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+   |
+
+warning: use of deprecated method `std::sync::atomic::Atomic::<i64>::fetch_update`: renamed to `try_update` for consistency
+   --> crates/guard-runtime/src/native_runtime_resilience.rs:472:25
+    |
+472 |         let prev = held.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |h| {
+    |                         ^^^^^^^^^^^^
+    |
+help: replace the use of the deprecated method
+    |
+472 -         let prev = held.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |h| {
+472 +         let prev = held.try_update(Ordering::SeqCst, Ordering::SeqCst, |h| {
+    |
+
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `hol-guard-runtime` (lib test) generated 3 warnings (run `cargo fix --lib -p hol-guard-runtime --tests` to apply 2 suggestions)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 17.90s
+     Running unittests src/lib.rs (/private/tmp/hol-guard-cigar-upgrades-target/debug/deps/hol_guard_runtime-374a3b2ab3c35ea7)
+
+running 25 tests
+test policy_store::context_assistance_registry::preparation::tests::actual::actual_managed_install_is_inactive_idempotent_and_reconciles_lost_publication_reply ... GUARD_CIGAR_MANAGED_INSTALL_VERIFIED {"build_id":"cigar-0_14_1-10dd521dec82","elapsed_ms":22579,"guard_binary_sha256":"a3d734c9923567ec6a79b84581d3561a696eda395de3391dd2868903171a7b70","idempotent":true,"lost_reply_reconciled":true,"off_preserved":true,"python":[3,14,7],"selection_unchanged":true,"tree":"5ebfc715f581c40c9fce73209271479a1926d5044543a46c720ba0049c35e1f4","worker":"4650473529f0dc14e596b5cd0ca9d66e2d3bcd8ae11418b87ad971ac51ca78b8"}
+ok
+test policy_store::context_assistance_registry::preparation::tests::actual::actual_preparation_cancellation_keeps_current_cigar_running_and_preferences_unchanged ... GUARD_CIGAR_ACTIVE_INSTALL_CONTINUITY_VERIFIED {"cancelled_before_publication":true,"elapsed_ms":20234,"generation_unchanged":true,"guard_binary_sha256":"a3d734c9923567ec6a79b84581d3561a696eda395de3391dd2868903171a7b70","max_status_us":83,"old_runtime_stayed_ready":true,"partial_slot_removed":true,"preferences_byte_identical":true,"replacement_verified_before_cancel":true}
+ok
+test policy_store::context_assistance_registry::preparation::tests::cleanup_preserves_every_registered_alias_even_when_it_is_not_selected ... ok
+test policy_store::context_assistance_registry::preparation::tests::cleanup_preserves_external_symlink_targets_and_records_recovery_needed ... ok
+test policy_store::context_assistance_registry::preparation::tests::durable_cancel_intent_is_reconciled_after_the_worker_is_gone ... ok
+test policy_store::context_assistance_registry::preparation::tests::interrupted_preparation_recovers_without_launching_or_selecting_a_runtime ... ok
+test policy_store::context_assistance_registry::preparation::tests::job_record_tampering_and_public_path_injection_are_refused ... ok
+test policy_store::context_assistance_registry::preparation::tests::local_setup_requires_operator_consent_and_rejects_supplied_interpreter_facts ... ok
+test policy_store::context_assistance_registry::preparation::tests::metadata_listing_tolerates_its_atomic_writer_and_refuses_malformed_names ... ok
+test policy_store::context_assistance_registry::preparation::tests::passive_job_metadata_never_requires_an_interpreter_or_sdk_tree ... ok
+test policy_store::context_assistance_registry::preparation::tests::recovery_will_not_race_an_existing_preparation_lease ... ok
+test policy_store::context_assistance_registry::preparation::tests::repeated_requests_converge_and_reused_keys_cannot_change_the_target ... ok
+test policy_store::context_assistance_registry::preparation::tests::upstream_only_build_is_refused_before_any_job_or_sdk_preparation ... ok
+test policy_store::context_assistance_registry::tests::enrollment_requires_explicit_local_candidate_approval_before_launch ... ok
+test policy_store::context_assistance_registry::tests::managed_prohibition_refuses_enrollment_before_any_selected_runtime_read_or_launch ... ok
+test policy_store::context_assistance_registry::tests::private_record_is_bound_to_selection_id_and_does_not_grant_readiness ... ok
+test policy_store::context_assistance_registry::tests::registry_rejects_shared_records_hardlinks_and_redirected_directories ... ok
+test policy_store::context_assistance_registry::tests::versioned_tests::a_mixed_legacy_schema_cannot_claim_published_qualification ... ok
+test policy_store::context_assistance_registry::tests::versioned_tests::authenticated_modern_metadata_is_read_without_sdk_paths_or_processes ... ok
+test policy_store::context_assistance_registry::tests::versioned_tests::installation_keys_refuse_shared_permissions_hardlinks_and_other_home_binding ... ok
+test policy_store::context_assistance_registry::tests::versioned_tests::legacy_reads_preserve_record_bytes_and_do_not_provision_a_key ... ok
+test policy_store::context_assistance_registry::tests::versioned_tests::managed_scope_cannot_point_at_an_operator_owned_environment ... ok
+test policy_store::context_assistance_registry::tests::versioned_tests::missing_key_is_unavailable_without_recreating_or_reapproving_anything ... ok
+test policy_store::context_assistance_registry::tests::versioned_tests::modified_installation_context_cannot_reuse_an_authenticated_receipt ... ok
+test policy_store::context_assistance_registry::tests::versioned_tests::requested_feature_qualification_is_checked_before_any_sdk_artifact_access ... ok
+
+test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 3995 filtered out; finished in 47.64s
+

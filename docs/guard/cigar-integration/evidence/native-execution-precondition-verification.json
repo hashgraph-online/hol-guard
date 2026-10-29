@@ -1,0 +1,197 @@
+{
+  "schema": "guard-cigar-native-execution-precondition-evidence.v1",
+  "status": "passed",
+  "qualification": "native_library_and_actual_SDK_precondition_only",
+  "source_sha": "e4a27a411f1cea88b25c02b838726ae41d447635",
+  "SDK_version": "0.14.1",
+  "SDK_python": [
+    3,
+    14,
+    7
+  ],
+  "older_python_negative": [
+    3,
+    12,
+    13
+  ],
+  "SDK_source_sha": "b47380e5a5cbeaaad5a61cab3372e9e67368732f",
+  "SDK_source_clean": true,
+  "SDK_rebuilt": false,
+  "worker_sha256": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112",
+  "package_tree_sha256": "bd4d27349f01c4403a3e469e29d3785c4c8073e12c32744dfaa2304dcaf78a95",
+  "tests": {
+    "targeted_precondition": {
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/native-execution-precondition-third.log",
+      "sha256": "d9d5f70e632093fffa89782d7938cab68b0e0cf4b556ce39a95b60c231efbfc7",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 11.27
+    },
+    "full_assistance_library": {
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/native-execution-core-final.log",
+      "sha256": "77becf7aba0343f4b9f61325943accaf091d63283cb3912d219cf0dc4e20e194",
+      "passed": 47,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 42.76
+    },
+    "native_sharing_regression": {
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/native-execution-sharing-final.log",
+      "sha256": "8a638cb2eedf9db9ec5c42990fe4883f723fbd37b35b37a4e5c5f932824da114",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 59.34
+    },
+    "native_persistence_regression": {
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/native-execution-persistence-final.log",
+      "sha256": "e6bdd61d6b2953a6c4beb209644daf506db557823e4b8d173d9b9f68c5e3f36b",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 63.76
+    },
+    "runner": {
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/native-execution-final-checks.json",
+      "sha256": "98fa6486d4db4261b3b5a57ef879e23ab2bf3b39974d207b6e822eb23c9a8e6c"
+    },
+    "clippy": {
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/clippy-execution-final.log",
+      "sha256": "067f7b4a60992cb768764ea566df3e61025ed67605870419446e4d6f454b0027",
+      "status": "passed",
+      "elapsed_seconds": 30.349,
+      "scope": "both_native_crates_lib_and_tests_warnings_denied"
+    }
+  },
+  "checks": [
+    "actual_execution_handoff_v1_capability_required_before_submission",
+    "selected_citation_membership_and_bounded_draft_validation",
+    "exact_stored_submission_verified_before_host_review",
+    "host_review_has_no_agent_deserialization_path",
+    "unreviewed_data_cannot_bind",
+    "known_refusal_does_not_poison_runtime",
+    "SDK_submission_nonce_distinct_from_content_draft_digest",
+    "context_epoch_client_retention_snapshot_submission_effect_intent_binding_validation",
+    "one_binding_per_submission",
+    "one_successful_take",
+    "no_public_binding_export_clone_debug_or_deserialization",
+    "native_handle_consumed_for_one_take_attempt_including_error",
+    "private_metadata_excludes_ticket_submission_secret_intent",
+    "changed_reviewer_revision_refused",
+    "changed_host_policy_refused",
+    "changed_submission_refused_even_with_same_draft_content",
+    "changed_source_refused",
+    "revoked_client_refused",
+    "actual_take_reply_discarded_at_named_boundary_then_second_attempt_conflicts",
+    "unknown_broker_outcomes_close_optional_generation_without_automatic_retry"
+  ],
+  "limits": {
+    "draft_claims": 16,
+    "draft_total_text_bytes": 16384,
+    "claim_text_bytes": 4096,
+    "citations_per_claim": 64,
+    "confidence_bps": [
+      0,
+      10000
+    ],
+    "host_reviews": 16,
+    "counterevidence_nodes_per_review": 64,
+    "existing_RPC_request_bytes": 1048576,
+    "existing_RPC_response_bytes": 4194304
+  },
+  "source_gates": [
+    {
+      "name": "python_hook_semantic_callgraph_gate",
+      "status": "passed",
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/python_hook_semantic_callgraph_gate-execution.log",
+      "sha256": "8e3101056186cd4d641add66f9eed89b0289db4e105bdb5885821ae3f0484e46"
+    },
+    {
+      "name": "python_capability_cleanup_gate",
+      "status": "passed",
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/python_capability_cleanup_gate-execution.log",
+      "sha256": "d975dee5fe67bdb3f901777eaa0e7a95a5e8ce9e5f310467754474d61c80dc74"
+    },
+    {
+      "name": "rust_io_ownership_gate",
+      "status": "passed",
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/rust_io_ownership_gate-execution.log",
+      "sha256": "bcf901a1c39ebf936483fa5aebdcdb005372d016d67e41b8e46adc6fcbd68472"
+    },
+    {
+      "name": "rust_io_privacy_gate",
+      "status": "passed",
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/rust_io_privacy_gate-execution.log",
+      "sha256": "3f99732114cd01afda57fec9bae91e307310125980da63e8859c1941fbb96b14"
+    },
+    {
+      "name": "authority_after_source_commit",
+      "status": "passed",
+      "changed_files_checked": 280,
+      "base_ref": "35180b995cb27fdc9f92e1f68307a756c785f154",
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/authority-execution-after-commit.log",
+      "sha256": "a4ceffce08ac5a2e6e73777e21a80292d1d15261b5b8c2d001bbb7f81c4c58d1"
+    }
+  ],
+  "formatting": {
+    "rustfmt": "passed",
+    "ruff": "passed",
+    "whitespace": "passed",
+    "documentation_links": "passed",
+    "source_files_below_500_lines": true
+  },
+  "source_hashes": {
+    "docs/guard/cigar-integration/EXECUTION_LOG.md": "8e4b8a8272df3788f55b16733e2c056678dc0bd4abbd9e26f5e5b4eb7a70ad4d",
+    "docs/guard/cigar-integration/execution-handoff-design.md": "1cb2ad0525c3234ef4330146b2c552ebb20c0ec032b08bed75731d8f41efdc82",
+    "integrations/cigar/bridge.py": "513c038e71856bffe7929f40d7318eeee3f34e440abed12dc3fdf940ca2070ef",
+    "integrations/cigar/broker_client.py": "6caf354756cb8b2f0fabbadaf92bd289c166ab817b40db8cb18bb899357fef87",
+    "rust/crates/guard-context-assistance/src/broker.rs": "8d5c6f81e24ba7f577027c9528ae1dd86cd33ebeee599e6bb8b07119be9b330b",
+    "rust/crates/guard-context-assistance/src/broker_clients.rs": "9746c2c2c78c61452bf71c793ca43bf63409eb7f205329e5a5be04efd1017371",
+    "rust/crates/guard-context-assistance/src/broker_execution.rs": "b33ac63bc1c46d52be561093c46d5f83bef8bfc07e829323930b3ca9c8b3fbb3",
+    "rust/crates/guard-context-assistance/src/broker_execution_tests.rs": "8758dfb79e68edebc2cd8496f02d4502ed75920eab77aed2705a53f2e8cb46c4",
+    "rust/crates/guard-context-assistance/src/broker_execution_types.rs": "76bd7d86f1cfad4889ec1fb64ac4243495ba972406b4dcea94052fedb6e230dd",
+    "rust/crates/guard-context-assistance/src/broker_revision.rs": "db7163aead6314b42afac099144b3bb3a2cbcc4b3cee450e9765c081d474af92",
+    "rust/crates/guard-context-assistance/src/broker_tests.rs": "4c85326ab76cd6d01e9743b7d5cceca3e52c8454c31af1e0e7f8be11e0444a83",
+    "rust/crates/guard-context-assistance/src/lib.rs": "10a6684e12ec232b448ae617f5b0ccb681246aff3e95bc6518feaff505c33bd4"
+  },
+  "prior_attempts": {
+    "compile_fixture_visibility": {
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/native-execution-precondition-first.log",
+      "sha256": "76e86d832f9f6f5243ea518b059964f81ce95cd536356963db5577603f56e788",
+      "classification": "compile_failure"
+    },
+    "incorrect_draft_identity_check": {
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/native-execution-precondition-second.log",
+      "sha256": "5a21d8c3433b6ffdf44c04fc53a7411263b52ada8b03345039802cad052ec327",
+      "passed": 1,
+      "failed": 1,
+      "ignored": 0,
+      "seconds": 11.5
+    },
+    "missing_older_interpreter_test_input": {
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/native-execution-core-full.log",
+      "sha256": "88bc3b8cbd40e0ec919b8343de05a0bdcbd9e3ac3a917f4f190c119d527cbaae",
+      "passed": 46,
+      "failed": 1,
+      "ignored": 0,
+      "seconds": 178.16
+    }
+  },
+  "product_state": {
+    "actual_Guard_executor_qualified": false,
+    "new_HTTP_or_MCP_execution_route": false,
+    "new_product_opt_in_or_feature_capability": false,
+    "new_installed_wheel_qualified": false,
+    "latest_qualified_installed_source": "8fccb14115c61793584bce069b2a325a92e05f79",
+    "approval_semantics_changed": false,
+    "synchronous_hook_SDK_dependency_added": false
+  },
+  "limitations": [
+    "The actual SDK fixture uses trusted synthetic native observations; it does not capture or execute a real Guard command.",
+    "Reply loss is modeled by discarding a successful actual SDK take reply at a named boundary; this is not a real send, machine failure or atomicity claim.",
+    "A real native prepared-execution reference, exact captured artifact/intent association, private memory mode, launch freshness witness and independent product controls remain to implement.",
+    "Native journal effect reconciliation and both approval choices need actual executor and installed acceptance.",
+    "Actual external harness/Desktop/setup/platform, capacity and feature-on SLO/all-worker RSS/useful reuse/release checks remain in the active goal."
+  ]
+}

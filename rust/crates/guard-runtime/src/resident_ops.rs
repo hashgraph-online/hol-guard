@@ -103,6 +103,14 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             answer
         }
         ResidentRequestV1::Operation(request) => match *request {
+            ResidentOperationV1::ContextAssistance(request) => {
+                let policy_store = policy_store.ok_or_else(|| "native_context_assistance_resident_required".to_owned())?;
+                crate::context_assistance_op::evaluate(&request, policy_store)
+            }
+            ResidentOperationV1::ContextAgent(request) => {
+                let store = policy_store.ok_or_else(|| "native_context_assistance_resident_required".to_owned())?;
+                crate::context_assistance_agent_op::evaluate(&request, store)
+            }
             ResidentOperationV1::ArchiveAcquisition(request) => {
                 crate::archive_acquisition_op::evaluate_archive_acquisition_request(&request)
             }
@@ -834,6 +842,8 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
 /// The Guard home an operation acts on, for operations that open per-home state.
 fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
     match operation {
+        ResidentOperationV1::ContextAssistance(request) => Some(&request.query.guard_home),
+        ResidentOperationV1::ContextAgent(request) => Some(&request.query.guard_home),
         ResidentOperationV1::CloudCatalog(request) => {
             if request["action"] == "begin" || request["action"] == "reuse" {
                 request["observation"]["guard_home"].as_str()

@@ -1,0 +1,91 @@
+{
+  "schema": "guard-cigar-context-isolation-verification.v1",
+  "status": "passed",
+  "observed_at": "2026-10-23T22:21:48Z",
+  "qualification": "native-source-and-transport-contracts-only",
+  "source_parent_commit": "904e3818dc365efe563f8977de5c3c840ac3ea8d",
+  "implementation_commit": "0ee90934c438ef596f48973b75109488aa544791",
+  "source_files": [
+    {"path": "rust/crates/guard-runtime/src/resident_context_dispatch.rs", "sha256": "aeb74f7b5a65ca8daccc3db3710ef09e519e0654004070ceb120b7faa229f2b5"},
+    {"path": "rust/crates/guard-runtime/src/resident_transport.rs", "sha256": "2dc39278d974449ee34eed51623eec43fb9183cc571893f5340fd696b66a3416"},
+    {"path": "rust/crates/guard-runtime/src/context_assistance_service_lifecycle.rs", "sha256": "2fb98e1ec47f4d16665c363e983f9137c9674e81f622d10dfdca492526e69f45"},
+    {"path": "rust/crates/guard-runtime/src/context_assistance_op.rs", "sha256": "fdfaa4053739c30efb1e17f7b0d9aaad5a32c5bd98ac39529291d77810c4b20e"},
+    {"path": "rust/crates/guard-runtime/src/context_assistance_agent_op.rs", "sha256": "93531cfbeefbf8db157a9ee58c81b85635b16d0bce48cf54e59e400c95712296"},
+    {"path": "src/codex_plugin_scanner/guard/native_resident_decision.py", "sha256": "8fa5967b1b3f55181efa9cb52a338e5acfc19dfe63fbd3afc5cd7d499e73993d"},
+    {"path": "src/codex_plugin_scanner/guard/native_context_assistance.py", "sha256": "339fae1308a8bb546133d452189ef4aad6a07f28e06dc7423cd38309d111e18d"},
+    {"path": "src/codex_plugin_scanner/guard/native_context_agent.py", "sha256": "63ebd56bc7b8f816192f9a1192a62d8e1746b57e53b250d81b31c5cff8a1850e"}
+  ],
+  "native_transport": {
+    "command_filter": "cargo test -p hol-guard-runtime --lib resident_transport --locked --offline -- --test-threads=1 --nocapture",
+    "passed": 22,
+    "failed": 0,
+    "ignored": 0,
+    "duration_seconds": 1.16,
+    "checks": [
+      "two_context_jobs_at_most_per_resident",
+      "response_delivery_holds_the_context_slot",
+      "bound_busy_response_with_canonical_request_digest",
+      "busy_session_begin_does_not_issue_a_credential",
+      "ordinary_health_and_real_stop_remain_available",
+      "frame_digest_checked_before_context_scheduling",
+      "escaped_tags_route_without_bypassing_the_lane",
+      "slots_release_and_closed_lane_cannot_accept_work",
+      "existing_continuation_and_catalog_lane_behavior",
+      "existing_kernel_peer_identity_and_disconnect_monitor"
+    ],
+    "sdk_mocked": false,
+    "qualification_note": "The deterministic contention test blocks native response delivery after a real disabled-service operation. It does not enroll an SDK or measure production hook latency."
+  },
+  "actual_sdk_native_selection": {
+    "command_filter": "cargo test -p hol-guard-runtime --lib context_assistance --locked --offline -- --include-ignored --test-threads=1 --nocapture",
+    "passed": 46,
+    "failed": 0,
+    "ignored": 0,
+    "duration_seconds": 84.51,
+    "sdk_python": "3.14.7",
+    "sdk_version": "0.14.1",
+    "worker_sha256": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112",
+    "checks": [
+      "actual_runtime_retired_on_resident_shutdown",
+      "shutdown_preserves_persisted_opt_in",
+      "old_service_cannot_reconfigure_or_activate",
+      "pending_verification_cancelled",
+      "replacement_has_no_verified_runtime_or_source_session_authority",
+      "existing_actual_agent_source_receipt_scope_and_opt_out_checks"
+    ]
+  },
+  "python_transport_selection": {
+    "files": ["tests/test_context_agent_mcp.py", "tests/test_native_context_assistance.py", "tests/test_native_daemon_route.py", "tests/test_guard_protect_resident_failure.py", "tests/test_native_runtime_resilience.py"],
+    "passed": 60,
+    "failed": 0,
+    "duration_seconds": 13.68,
+    "native_binding": "previous qualified 904e3818 package where needed",
+    "checks": [
+      "both_optional_transports_exclude_shared_health_accounting",
+      "repeated_missing_unbound_and_busy_replies_still_refuse_context",
+      "lower_transport_and_bound_reply_failures_do_not_open_or_reset_shared_circuit",
+      "default_native_transports_retain_existing_health_behavior"
+    ],
+    "qualification_note": "Transport-health cases substitute native client replies to verify framing and accounting; actual SDK behavior is verified separately in Rust and installed browser evidence."
+  },
+  "static_checks": {
+    "rust_1_88_clippy_both_crates_library_and_tests_warnings_denied": "passed",
+    "changed_python_ruff": "passed",
+    "python_hook_semantic_callgraph": "passed",
+    "python_capability_cleanup": "passed",
+    "rust_io_ownership": "passed",
+    "rust_io_privacy": "passed",
+    "native_authority_ownership": "passed",
+    "native_authority_base_ref": "35180b995cb27fdc9f92e1f68307a756c785f154",
+    "native_authority_changed_files_checked": 178,
+    "new_source_files_under_500_lines": true
+  },
+  "limitations": [
+    "A provenance-bound package and browser run containing this scheduling change remain pending.",
+    "Production SLOs feature-off cost contention and all worker RSS remain unmeasured by this receipt.",
+    "Actual app executable and execution-harness qualification remain pending.",
+    "Current-action association review history sharing persistence Desktop other platforms and handoff remain required.",
+    "Four baseline-reproduced hardened-helper launch failures remain unresolved.",
+    "This is not completion of the full P0 through P5 goal."
+  ]
+}

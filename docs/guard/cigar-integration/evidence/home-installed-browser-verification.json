@@ -1,0 +1,104 @@
+{
+  "schema": "guard-cigar-home-installed-browser-verification.v1",
+  "status": "passed",
+  "qualification": "local-development-darwin-arm64-only",
+  "implementation_commit": "74b169ca93a82472a8772b00684dec5875ac5a58",
+  "native_artifact": {
+    "path": "/private/tmp/hol-guard-cigar-package-build/receipt-checkpoint/hol-guard-runtime",
+    "sha256": "c08b2c11ccd64ce193fc4b6da714fb0ec0b6eed1e36bfad05d7144f5cd9b019a",
+    "bytes": 110367952,
+    "package_version": "3.55.1",
+    "build_sha": "74b169ca93a82472a8772b00684dec5875ac5a58",
+    "rule_digest": "623ead303f4fc53ed83b38d5104366d1c786728fdec50c8693beae6c6367fac9",
+    "engine": "131c80bccfe3719e535fa6bf780eca46ddef008a8d63c8f1afae36d21d083035",
+    "base_program_digest": "489b75f13ee16cef56cb12ccd0716bb1af7ff8b437a3403b3cffc51cfa1cafd7",
+    "codesign_verify": "passed: codesign --verify --strict",
+    "runtime_file_size_cap_bytes": 134217728
+  },
+  "native_wheel": {
+    "wheel": "/private/tmp/hol-guard-cigar-package-build/receipt-checkpoint/native-wheels/hol_guard-3.55.1-py3-none-macosx_11_0_arm64.whl",
+    "wheel_sha256": "70cd4e736c72e9f1d9bdcf0bd8066a76167aea0c5405fbe9cd67623b37d773bc",
+    "wheel_bytes": 40153689,
+    "installed_binary_sha256": "c08b2c11ccd64ce193fc4b6da714fb0ec0b6eed1e36bfad05d7144f5cd9b019a",
+    "installed_binary_bytes": 110367952
+  },
+  "automatic_bundled_discovery": {
+    "mode": "auto",
+    "available": true,
+    "compatible": true,
+    "reason": "native_ready",
+    "host_python": "3.12.13",
+    "identity_sha256": "c08b2c11ccd64ce193fc4b6da714fb0ec0b6eed1e36bfad05d7144f5cd9b019a",
+    "manifest": {
+      "schema": "hol-guard-native-runtime.v1",
+      "protocol_version": 1,
+      "package_version": "3.55.1",
+      "target": "aarch64-apple-darwin",
+      "platform_tag": "macosx_11_0_arm64",
+      "source_sha": "74b169ca93a82472a8772b00684dec5875ac5a58",
+      "rule_digest": "623ead303f4fc53ed83b38d5104366d1c786728fdec50c8693beae6c6367fac9",
+      "runtime_sha256": "c08b2c11ccd64ce193fc4b6da714fb0ec0b6eed1e36bfad05d7144f5cd9b019a",
+      "runtime_size": 110367952
+    }
+  },
+  "selected_cigar_runtime": {
+    "implementation": "cpython",
+    "version": [
+      3,
+      14,
+      7
+    ],
+    "release_level": "final",
+    "sdk_version": "0.14.1",
+    "sdk_source_revision": "b47380e5a5cbeaaad5a61cab3372e9e67368732f",
+    "package_fingerprint": "bd4d27349f01c4403a3e469e29d3785c4c8073e12c32744dfaa2304dcaf78a95",
+    "worker_fingerprint": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112"
+  },
+  "browser": {
+    "runner": "Locked @playwright/test with Chromium headless shell 1223",
+    "test": "dashboard/e2e/integration/context-assistance.mutating.spec.ts",
+    "project": "mutating",
+    "result": "1 passed",
+    "test_seconds": 23.6,
+    "total_seconds": 44,
+    "server_python": "3.12.13",
+    "sdk_or_daemon_mocked": false,
+    "checks": [
+      "keyboard_opt_in",
+      "native_settings_proof",
+      "real_cpython_314_worker_activation",
+      "separate_source_grant_proof",
+      "bounded_receipt_window_metadata",
+      "native_document_citations",
+      "changed_source_stale_refusal",
+      "explicit_refresh_and_historical_comparison",
+      "source_withdrawal",
+      "workspace_revocation",
+      "unrelated_settings_save_preserves_consent",
+      "home_ready_status",
+      "home_immediate_persisted_opt_out",
+      "home_settings_navigation",
+      "explicit_runtime_reselection_after_remount",
+      "actual_worker_restart",
+      "mobile_protection_opt_out",
+      "reload_preserves_off",
+      "forged_runtime_facts_refused"
+    ],
+    "prior_attempt": {
+      "result": "failed",
+      "test_timeout_seconds": 90,
+      "failure": "After successful Home opt-out, the test attempted to re-enable the switch without explicitly listing verified runtimes after the settings remount. The switch correctly remained disabled.",
+      "correction": "Test now explicitly opens the metadata-only verified-runtime list and checks the selected entry before enabling. Product/runtime eligibility gates were unchanged."
+    }
+  },
+  "source_gate": {
+    "native_authority_ownership": "passed",
+    "base_ref": "35180b995cb27fdc9f92e1f68307a756c785f154"
+  },
+  "limits": [
+    "The native receipt ingestion proof is the separate real native evaluator/store/SDK library receipt; this browser test observes bounded receipt metadata and selected-document citations.",
+    "The same four hardened-helper launch failures remain baseline-reproduced and unresolved; this is not complete executor qualification.",
+    "MCP caller authorization, pending-action/history screens, broker sharing, persistence, CIGAR execution handoff and performance/RSS remain pending.",
+    "Frozen Desktop, Windows, other platforms, public signing/publication and release SLOs are not qualified by this local development package."
+  ]
+}

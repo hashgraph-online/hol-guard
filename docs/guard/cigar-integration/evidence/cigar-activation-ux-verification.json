@@ -1,0 +1,101 @@
+{
+  "schema": "guard-cigar-activation-ux-verification.v1",
+  "recorded_at": "2026-10-25T21:41:38.373808+00:00",
+  "root_cause": {
+    "diagnostic": "runtime_not_verified",
+    "saved_enabled": true,
+    "runtime_selected": true,
+    "pending_job": false,
+    "verification_permitted": true,
+    "problem": "explicit activation was pending; the action was below the preference form and the UI called this Unavailable"
+  },
+  "ui_fix": {
+    "pending_activation_label": "Not started",
+    "idle_label": "Paused",
+    "primary_start": "Start CIGAR on every CIGAR section",
+    "after_verified_activation": "Use CIGAR opens Sources & AI apps",
+    "activation_constraints": [
+      "saved enabled preference",
+      "selected runtime",
+      "effective policy permits activation",
+      "no unsaved changes",
+      "no concurrent job",
+      "actual native verification still required"
+    ],
+    "automatic_activation_on_navigation": false,
+    "automatic_source_or_app_access": false
+  },
+  "checks": {
+    "production_build": "passed",
+    "context_components": "passed",
+    "workspace_navigation_routing": "passed",
+    "ui_browser_cases_passed": 7,
+    "native_browser": {
+      "returncode": 0,
+      "seconds": 50.35,
+      "stats": {
+        "startTime": "2026-10-25T21:34:13.692Z",
+        "duration": 48769.971,
+        "expected": 1,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "remaining_optional_processes": 0,
+      "native_core_unchanged": true,
+      "user_preview_profile_used": false
+    },
+    "static_files_matching_source": 33
+  },
+  "live_preview": {
+    "root": "/private/tmp/hol-guard-cigar-start-ui-xq84f18j",
+    "url": "http://127.0.0.1:5041/cigar?section=access",
+    "native_discovery": "automatic with unchanged qualified native core",
+    "runtime": {
+      "availability": "ready",
+      "requested_enabled": true,
+      "effective_enabled": true,
+      "runtime_id": "cigar-0_14_1-python-3_14_7",
+      "python_version": [
+        3,
+        14,
+        7
+      ],
+      "package_version": "0.14.1",
+      "compile_verified": true,
+      "active": true,
+      "features": {
+        "agent_context": false,
+        "execution_context": false,
+        "review_briefs": true,
+        "shared_agents": false
+      },
+      "job": null
+    },
+    "served_build_verification": [
+      {
+        "path": "/healthz",
+        "http_status": 200,
+        "bytes": 40
+      },
+      {
+        "path": "/cigar?section=access",
+        "http_status": 200,
+        "bytes": 1581
+      },
+      {
+        "path": "/assets/guard-dashboard.js",
+        "http_status": 200,
+        "bytes": 1928373,
+        "matches_updated_build": true,
+        "clear_start_state_present": true
+      }
+    ]
+  },
+  "limits": [
+    "No native runtime or SDK changes",
+    "Existing broader TypeScript/Bun and public/frozen release qualification limits unchanged",
+    "Workspace sources and AI app access still require user authorization",
+    "No new performance or provider/model/human benefit qualification"
+  ]
+}

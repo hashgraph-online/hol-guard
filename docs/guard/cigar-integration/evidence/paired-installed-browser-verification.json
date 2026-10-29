@@ -1,0 +1,90 @@
+{
+  "schema": "guard-cigar-paired-installed-browser-verification.v1",
+  "status": "passed",
+  "observed_at": "2026-10-23T22:01:38Z",
+  "qualification": "private-development-package-darwin-arm64-only",
+  "source_commit": "904e3818dc365efe563f8977de5c3c840ac3ea8d",
+  "package_version": "3.55.1",
+  "host_python": "3.12.13",
+  "mcp_version": "1.28.1",
+  "declared_mcp_floor_satisfied": false,
+  "dependency_qualification": "development host only; later isolated-installed-browser-verification.json qualifies locked MCP 1.30.0",
+  "sdk_python": "3.14.7",
+  "sdk_version": "0.14.1",
+  "sdk_source_commit": "b47380e5a5cbeaaad5a61cab3372e9e67368732f",
+  "native_runtime": {
+    "bytes": 110772208,
+    "sha256": "278c525f74178111dc54cd3af8584316615a151e63c920b90d4dc2b78b98b270",
+    "build_sha": "904e3818dc365efe563f8977de5c3c840ac3ea8d",
+    "rule_digest": "623ead303f4fc53ed83b38d5104366d1c786728fdec50c8693beae6c6367fac9",
+    "implementation_digest": "131c80bccfe3719e535fa6bf780eca46ddef008a8d63c8f1afae36d21d083035",
+    "base_program_digest": "489b75f13ee16cef56cb12ccd0716bb1af7ff8b437a3403b3cffc51cfa1cafd7",
+    "strict_macos_signature_verification": "passed",
+    "unchanged_128_mib_size_cap": "passed",
+    "automatic_installed_discovery": "native_ready"
+  },
+  "native_wheel": {
+    "filename": "hol_guard-3.55.1-py3-none-macosx_11_0_arm64.whl",
+    "bytes": 40247702,
+    "sha256": "f719efb8fb06de1a0d30676257953afd1c0beec62b16741386267a29785f5269",
+    "build": "maintained Hatchling projection and native wheel assembly",
+    "dependencies_installed": false,
+    "publicly_published": false
+  },
+  "browser": {
+    "spec": "dashboard/e2e/integration/context-assistance.mutating.spec.ts",
+    "sdk_or_daemon_mocked": false,
+    "agent_transport": "actual MCP stdio ClientSession and installed GuardMCPServer",
+    "expected": 1,
+    "unexpected": 0,
+    "skipped": 0,
+    "test_duration_ms": 43151,
+    "total_duration_ms": 73888.605,
+    "private_report": "/private/tmp/hol-guard-cigar-agent-browser-proof-v3/results.json",
+    "private_report_sha256": "126fba0cb894da4ffa07c0da2980dc934a1483f998cadeed06067e4a772f615d",
+    "checks": [
+      "keyboard_opt_in_with_native_save_proof",
+      "actual_runtime_activation_on_separate_final_cpython_314",
+      "source_grant_refused_without_proof",
+      "actual_selected_document_citations_and_digests",
+      "changed_document_stale_refusal_and_explicit_refresh",
+      "historical_comparison_withdrawal_and_workspace_revocation",
+      "restricted_mcp_discovery_before_human_pairing",
+      "pending_status_exposes_public_code_without_credential",
+      "pending_mcp_compile_refused",
+      "app_specific_source_grant_with_separate_native_proof",
+      "connection_authorization_refused_without_proof",
+      "proof_dialog_names_exact_connection_app_and_workspace",
+      "proof_backed_browser_pairing_authenticates_mcp_process",
+      "harness_attestation_truthfully_not_established",
+      "actual_cited_agent_context_and_selection_explanation",
+      "forged_app_and_scope_arguments_refused",
+      "browser_revocation_refuses_cached_mcp_call",
+      "unrelated_save_and_reload_preserve_consent_and_readiness",
+      "home_opt_out_withdraws_tool_and_refuses_cached_call",
+      "explicit_runtime_reselection_and_actual_restart",
+      "mobile_protection_opt_out_and_persisted_off_state",
+      "forged_browser_runtime_assertions_refused"
+    ]
+  },
+  "previous_attempts": [
+    {
+      "report_sha256": "d2b641ce3fa281bea45db4ebb41468d9fb79abf6b17dc24b94a169c0b5b55a47",
+      "result": "test_selector_timeout_after_actual_pending_mcp_status",
+      "correction": "use the actual named combobox instead of exact label text containing options"
+    },
+    {
+      "report_sha256": "4c8d2563ed4818b56c91266deed2f04f1c90efd3f65b733176a12839a344ffd2",
+      "result": "test_expected_incorrect_refusal_code_after_successful_pairing_context_and_revocation",
+      "correction": "assert the existing canonical native_context_assistance_context_scope_denied code"
+    }
+  ],
+  "limitations": [
+    "This package precedes the subsequent native context scheduling-lane implementation.",
+    "The paired MCP principal is not app executable attestation or actual Codex Claude Code or Cursor harness qualification.",
+    "Selection explanation is not current-action explanation or execution handoff.",
+    "Sharing persistence frozen Desktop other platforms and release SLO RSS gates remain unqualified.",
+    "Four baseline-reproduced hardened-helper failures remain unresolved.",
+    "No exponential efficiency or full P0 through P5 completion is claimed."
+  ]
+}

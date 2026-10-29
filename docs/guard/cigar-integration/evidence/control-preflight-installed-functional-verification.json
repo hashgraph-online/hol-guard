@@ -1,0 +1,694 @@
+{
+  "schema": "guard-cigar-control-preflight-installed-functional-verification.v1",
+  "source_commit": "1e341429b8006beec74c31cf8c0d230793c0be7f",
+  "planned_backend_cases": 13,
+  "planned_browser_cases": 3,
+  "backend_qualified": true,
+  "browser_qualified": true,
+  "qualified": true,
+  "checks": {
+    "core": {
+      "qualified": true,
+      "controller": {
+        "schema": "guard-cigar-worker-reuse-functional-controller.v1",
+        "job": "core",
+        "planned_cases": 8,
+        "observed_new_descendants_remaining": 0,
+        "resources": {
+          "samples": 1569,
+          "sampling_errors": 0,
+          "median_rss_bytes": 455983104,
+          "peak_rss_bytes": 1025490944,
+          "at_peak_counts": {
+            "other_python_child": 2,
+            "python_bridge": 1,
+            "native_runtime": 10,
+            "guard_python_worker": 4,
+            "benchmark_daemon_host": 1,
+            "sdk_worker": 1
+          },
+          "at_peak_rss_by_kind": {
+            "other_python_child": 54722560,
+            "python_bridge": 29147136,
+            "native_runtime": 172523520,
+            "guard_python_worker": 614105088,
+            "benchmark_daemon_host": 93356032,
+            "sdk_worker": 61636608
+          },
+          "maximum_counts": {
+            "native_runtime": 11,
+            "sdk_worker": 2,
+            "exiting_host_python_child": 1,
+            "benchmark_daemon_host": 1,
+            "terminated_child": 2,
+            "other_descendant": 4,
+            "other_python_child": 3,
+            "python_bridge": 1,
+            "guard_python_worker": 4
+          },
+          "includes_observed_reparented_children": true,
+          "shared_pages_may_be_counted_in_multiple_processes": true
+        },
+        "source_commit": "1e341429b8006beec74c31cf8c0d230793c0be7f",
+        "command": [
+          "/private/tmp/hol-guard-cigar-locked-runtime/bin/python",
+          "-m",
+          "pytest",
+          "-x",
+          "-q",
+          "-o",
+          "addopts=",
+          "--basetemp",
+          "/private/tmp/hol-guard-cigar-control-preflight-20261025/acceptance-core/test-state",
+          "--junitxml",
+          "/private/tmp/hol-guard-cigar-control-preflight-20261025/acceptance-core/results.xml",
+          "tests/test_context_assistance_cli_installed.py",
+          "tests/test_context_agent_installed.py",
+          "tests/test_context_persistence_restart_installed.py",
+          "tests/test_context_execution_sink_installed.py",
+          "tests/test_context_useful_docs_installed.py",
+          "tests/test_context_native_authority_loss_installed.py"
+        ],
+        "returncode": 0,
+        "seconds": 130.161,
+        "installed_package_with_explicit_test_native_and_compiler_selection": true,
+        "tests": 8,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "inputs_unchanged": true,
+        "fingerprinted_files": 3879
+      },
+      "inputs": {
+        "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/acceptance-core/inputs.json",
+        "bytes": 779197,
+        "sha256": "6b6ca21bd315e4339500d5023e6248f11ca6645c285e4cd6e2aeff7e3468973b"
+      },
+      "junit": {
+        "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/acceptance-core/results.xml",
+        "bytes": 1633,
+        "sha256": "5252d404875806a16ffc67d432e8c4e3e032791642111af5caf29b0f7817c396"
+      },
+      "stdout": {
+        "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/acceptance-core/stdout.log",
+        "bytes": 110,
+        "sha256": "50ca70fc351dbca654e0a410d252ff8524988d81445c195ced50f78cfc78c20b"
+      },
+      "stderr": {
+        "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/acceptance-core/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    "sdk": {
+      "qualified": true,
+      "controller": {
+        "schema": "guard-cigar-worker-reuse-functional-controller.v1",
+        "job": "sdk",
+        "planned_cases": 4,
+        "observed_new_descendants_remaining": 0,
+        "resources": {
+          "samples": 1311,
+          "sampling_errors": 0,
+          "median_rss_bytes": 703905792,
+          "peak_rss_bytes": 997113856,
+          "at_peak_counts": {
+            "sdk_worker": 2,
+            "native_runtime": 9,
+            "benchmark_daemon_host": 1,
+            "guard_python_worker": 2,
+            "python_bridge": 1,
+            "other_python_child": 1,
+            "other_descendant": 1
+          },
+          "at_peak_rss_by_kind": {
+            "sdk_worker": 119521280,
+            "native_runtime": 168558592,
+            "benchmark_daemon_host": 31604736,
+            "guard_python_worker": 261881856,
+            "python_bridge": 29245440,
+            "other_python_child": 27148288,
+            "other_descendant": 359153664
+          },
+          "maximum_counts": {
+            "other_descendant": 7,
+            "terminated_child": 1,
+            "benchmark_daemon_host": 1,
+            "exiting_host_python_child": 1,
+            "guard_python_worker": 2,
+            "other_python_child": 2,
+            "sdk_worker": 2,
+            "native_runtime": 10,
+            "python_bridge": 1
+          },
+          "includes_observed_reparented_children": true,
+          "shared_pages_may_be_counted_in_multiple_processes": true
+        },
+        "source_commit": "1e341429b8006beec74c31cf8c0d230793c0be7f",
+        "command": [
+          "/private/tmp/hol-guard-cigar-locked-runtime/bin/python",
+          "-m",
+          "pytest",
+          "-x",
+          "-q",
+          "-o",
+          "addopts=",
+          "--basetemp",
+          "/private/tmp/hol-guard-cigar-control-preflight-20261025/acceptance-sdk/test-state",
+          "--junitxml",
+          "/private/tmp/hol-guard-cigar-control-preflight-20261025/acceptance-sdk/results.xml",
+          "tests/test_context_pi_sdk_installed.py"
+        ],
+        "returncode": 0,
+        "seconds": 109.325,
+        "installed_package_with_explicit_test_native_and_compiler_selection": true,
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "inputs_unchanged": true,
+        "fingerprinted_files": 3879
+      },
+      "inputs": {
+        "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/acceptance-sdk/inputs.json",
+        "bytes": 779197,
+        "sha256": "200ba902e80d3d195f1c311edc2b6148a3278a4b98a0f8f7e4f4f14049f3d41b"
+      },
+      "junit": {
+        "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/acceptance-sdk/results.xml",
+        "bytes": 955,
+        "sha256": "d498d1271661c1f5efb8f5e5f5505933919b72dd13eac66d7a152f661038169e"
+      },
+      "stdout": {
+        "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/acceptance-sdk/stdout.log",
+        "bytes": 110,
+        "sha256": "4ff586f561d6fd0512138b0a89bfb2f51c08c58fd6ca37c59f6110293771cea4"
+      },
+      "stderr": {
+        "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/acceptance-sdk/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    "clients": {
+      "qualified": true,
+      "controller": {
+        "schema": "guard-cigar-worker-reuse-functional-controller.v1",
+        "job": "clients",
+        "planned_cases": 1,
+        "observed_new_descendants_remaining": 0,
+        "resources": {
+          "samples": 509,
+          "sampling_errors": 0,
+          "median_rss_bytes": 794968064,
+          "peak_rss_bytes": 2348515328,
+          "at_peak_counts": {
+            "native_runtime": 21,
+            "other_python_child": 8,
+            "guard_python_worker": 15,
+            "sdk_worker": 2,
+            "other_descendant": 1,
+            "python_bridge": 1,
+            "benchmark_daemon_host": 1
+          },
+          "at_peak_rss_by_kind": {
+            "native_runtime": 284246016,
+            "other_python_child": 218857472,
+            "guard_python_worker": 1657503744,
+            "sdk_worker": 123076608,
+            "other_descendant": 2490368,
+            "python_bridge": 30375936,
+            "benchmark_daemon_host": 31965184
+          },
+          "maximum_counts": {
+            "guard_python_worker": 15,
+            "sdk_worker": 2,
+            "other_python_child": 8,
+            "native_runtime": 21,
+            "terminated_child": 1,
+            "exiting_host_python_child": 1,
+            "python_bridge": 1,
+            "other_descendant": 2,
+            "benchmark_daemon_host": 1
+          },
+          "includes_observed_reparented_children": true,
+          "shared_pages_may_be_counted_in_multiple_processes": true
+        },
+        "source_commit": "1e341429b8006beec74c31cf8c0d230793c0be7f",
+        "command": [
+          "/private/tmp/hol-guard-cigar-locked-runtime/bin/python",
+          "-m",
+          "pytest",
+          "-x",
+          "-q",
+          "-o",
+          "addopts=",
+          "--basetemp",
+          "/private/tmp/hol-guard-cigar-control-preflight-20261025/acceptance-clients/test-state",
+          "--junitxml",
+          "/private/tmp/hol-guard-cigar-control-preflight-20261025/acceptance-clients/results.xml",
+          "tests/test_context_concurrency_installed.py"
+        ],
+        "returncode": 0,
+        "seconds": 42.799,
+        "installed_package_with_explicit_test_native_and_compiler_selection": true,
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "inputs_unchanged": true,
+        "fingerprinted_files": 3879
+      },
+      "inputs": {
+        "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/acceptance-clients/inputs.json",
+        "bytes": 779197,
+        "sha256": "a2ca8bf9e49a51eee4a7d3fa91d60ee469db6b58ec116c757095fc3fd8182d5d"
+      },
+      "junit": {
+        "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/acceptance-clients/results.xml",
+        "bytes": 427,
+        "sha256": "e7d5823937a1f29c45307f5cd815e6df234fac6b744c65e55e916c46241927ea"
+      },
+      "stdout": {
+        "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/acceptance-clients/stdout.log",
+        "bytes": 99,
+        "sha256": "e1795227a4714290c475855db55bb350735f6e1cda1dc1fecdf9b2a4235e113d"
+      },
+      "stderr": {
+        "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/acceptance-clients/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    "browser": {
+      "qualified": true,
+      "controller": {
+        "schema": "guard-cigar-worker-reuse-browser-controller.v1",
+        "command": [
+          "/usr/local/bin/node",
+          "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/dashboard/node_modules/@playwright/test/cli.js",
+          "test",
+          "--config",
+          "/private/tmp/hol-guard-cigar-control-preflight-20261025/browser.config.mts",
+          "--project=mutating",
+          "--no-deps",
+          "--max-failures=1",
+          "context-assistance.mutating.spec.ts",
+          "context-execution.mutating.spec.ts",
+          "context-persistence.mutating.spec.ts"
+        ],
+        "returncode": 0,
+        "seconds": 106.582,
+        "source_commit": "1e341429b8006beec74c31cf8c0d230793c0be7f",
+        "planned_cases": 3,
+        "stats": {
+          "startTime": "2026-10-25T10:55:36.801Z",
+          "duration": 105086.00099999999,
+          "expected": 3,
+          "skipped": 0,
+          "unexpected": 0,
+          "flaky": 0
+        },
+        "inputs_unchanged": true,
+        "fingerprinted_files": 1830,
+        "observed_new_descendants_remaining": 0,
+        "resources": {
+          "samples": 1300,
+          "sampling_errors": 0,
+          "median_rss_bytes": 1560363008,
+          "peak_rss_bytes": 2381676544,
+          "at_peak_counts": {
+            "native_runtime": 7,
+            "benchmark_daemon_host": 1,
+            "sdk_worker": 1,
+            "other_descendant": 6,
+            "guard_python_worker": 3,
+            "python_bridge": 1
+          },
+          "at_peak_rss_by_kind": {
+            "native_runtime": 131629056,
+            "benchmark_daemon_host": 469942272,
+            "sdk_worker": 59375616,
+            "other_descendant": 1034469376,
+            "guard_python_worker": 659914752,
+            "python_bridge": 26345472
+          },
+          "maximum_counts": {
+            "benchmark_daemon_host": 1,
+            "other_descendant": 9,
+            "other_python_child": 2,
+            "exiting_host_python_child": 2,
+            "python_bridge": 1,
+            "native_runtime": 11,
+            "guard_python_worker": 9,
+            "terminated_child": 2,
+            "sdk_worker": 2
+          },
+          "includes_observed_reparented_children": true,
+          "shared_pages_may_be_counted_in_multiple_processes": true
+        },
+        "installed_static_assets": 33,
+        "static_override": false,
+        "traces_and_screenshots": "off",
+        "fixture_only_password_and_session_proofs": true,
+        "real_credentials_or_live_Guard_accessed": false,
+        "scope": "Three existing React/HTTP/installed-native flows with explicit test-native selection; local Chromium headless shell1223/Playwright1.60.0; no Desktop release qualification"
+      },
+      "inputs": {
+        "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/browser-acceptance/inputs.json",
+        "bytes": 374122,
+        "sha256": "afb89afe6bbf741430b16334043f5b0a20679a038cdd0f8d4c95470b22712c6e"
+      },
+      "playwright_report": {
+        "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/browser-acceptance/report.json",
+        "bytes": 6893,
+        "sha256": "7ca3c988c0d29f30698a6bbf2ab051d96a521f38cf7fff5651287703b0727b51"
+      },
+      "stdout": {
+        "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/browser-acceptance/stdout.log",
+        "bytes": 575,
+        "sha256": "00c2799d7b5f2a5fcc24fd083a77c210f3e86cb4b0a04994128243edbc06f478"
+      },
+      "stderr": {
+        "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/browser-acceptance/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    }
+  },
+  "plan": {
+    "schema": "guard-cigar-control-preflight-functional-plan.v1",
+    "source_commit": "1e341429b8006beec74c31cf8c0d230793c0be7f",
+    "declared_before_matching_artifact_execution": true,
+    "backend_jobs": {
+      "core": 8,
+      "sdk": 4,
+      "clients": 1
+    },
+    "browser_cases": 3,
+    "onefile_cases": 4,
+    "requires": [
+      "Exact verified installed candidate and approved final CPython 3.14.7/CIGAR 0.14.1",
+      "No skipped, failed or missing case; stable input fingerprints",
+      "Both native approval choices, replay uncertainty, opt-out and fresh authority after restart",
+      "Actual Pi/OMP locked SDKs, MCP sharing/source scopes and installed dashboard assets",
+      "Complete process sampling and no observed new descendant after each functional job"
+    ],
+    "limits": [
+      "Functional qualification does not replace original off/on SLO or fixed five-pair relative gates",
+      "No interactive model/account or other platform/public release acceptance follows"
+    ]
+  },
+  "installed_artifact": {
+    "mode": "auto",
+    "target": "aarch64-macos",
+    "runtime_version": "3.55.1",
+    "protocol_version": 1,
+    "package_origin": "installed",
+    "artifact_sha256": "a142f4673c66b8d64963f6314549db5f9e093f265d585696b47ab38d8a78c4f6",
+    "artifact_size": 36983184,
+    "build_sha": "1e341429b8006beec74c31cf8c0d230793c0be7f",
+    "rule_digest": "54e38cc15fe1e4bb231214e15876422e5c0f872d2d3d5bae85b6c02e43ac7111",
+    "platform_tag": "macosx_11_0_arm64",
+    "host_platform": "darwin",
+    "host_arch": "arm64",
+    "python_version": "3.12.13",
+    "CIGAR_imported": false,
+    "path_override": false,
+    "installed_prefix_selected_by_bootstrap": true,
+    "platform_tag_target_verified": true,
+    "static_files_verified": 33,
+    "compiler_manifest_verified": true,
+    "production_source_files_verified": 9,
+    "strict_installed_signature_verified": true,
+    "wheel_bytes": 24051085,
+    "wheel_sha256": "3e1bb3287f3973f6f48b70b6accd191c3719a17286406a2192c1745ee730160f"
+  },
+  "controllers": {
+    "run_functional_acceptance.py": {
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/run_functional_acceptance.py",
+        "bytes": 6298,
+        "sha256": "ef2aee4bc56a4f7ed266d691a37e4466f474b136b6e1d1cc5e7bcb2659a6982a"
+      },
+      "text": "\"\"\"One private installed approval/agent/SDK/native-owner acceptance invocation.\"\"\"\nfrom pathlib import Path\nimport hashlib\nimport argparse\nimport json\nimport os\nimport subprocess\nimport sys\nimport time\nfrom xml.etree import ElementTree\n\nROOT = Path('/private/tmp/hol-guard-cigar-control-preflight-20261025')\nREPO = Path('/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration')\nINSTALLED = ROOT/'package/installed'\nRUNTIME = INSTALLED/'codex_plugin_scanner/_native/hol-guard-runtime'\nBUN = Path('/private/tmp/hol-guard-cigar-pi-sdk/bun-runtime/node_modules/@oven/bun-darwin-aarch64/bin/bun')\nassert hashlib.sha256(BUN.read_bytes()).hexdigest() == 'e0c90ec15d33363e6b70713d56bc3b2c7585c17f40a0fe0f8fd9305901d4e233'\nartifact=json.loads((ROOT/'package/installed-artifact-verification.json').read_text())\nassert artifact['build_sha']=='1e341429b8006beec74c31cf8c0d230793c0be7f'\nassert hashlib.sha256(RUNTIME.read_bytes()).hexdigest()==artifact['artifact_sha256']\nparser=argparse.ArgumentParser()\nparser.add_argument('job',choices=['core','sdk','clients'])\nargs=parser.parse_args()\nsuites={\n 'core':(['tests/test_context_assistance_cli_installed.py','tests/test_context_agent_installed.py',\n          'tests/test_context_persistence_restart_installed.py','tests/test_context_execution_sink_installed.py',\n          'tests/test_context_useful_docs_installed.py','tests/test_context_native_authority_loss_installed.py'],8),\n 'sdk':(['tests/test_context_pi_sdk_installed.py'],4),\n 'clients':(['tests/test_context_concurrency_installed.py'],1),\n}\nselected,planned_cases=suites[args.job]\nroot=ROOT/('acceptance-'+args.job)\nroot.mkdir(mode=0o700)\n(root/'profile').mkdir(mode=0o700)\nsys.path.insert(0, str(REPO))\nfrom scripts.bench_guard_cigar_cohort import fingerprints\nfrom scripts.native_slo_contract import clear_proof_environment\nfrom scripts.cigar_benchmark_processes import ProcessSampler\nos.environ['GUARD_CIGAR_TEST_SELECTION'] = '/private/tmp/hol-guard-cigar-runtime-validation/selection.json'\nos.environ['GUARD_CIGAR_TEST_APPROVAL'] = '/private/tmp/hol-guard-cigar-runtime-validation/approval.json'\nenvironment = {'PATH':'/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin','LANG':'en_US.UTF-8','PYTHONNOUSERSITE':'1'}\nclear_proof_environment(environment)\nfor key in ['HOL_GUARD_HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOME', 'XDG_CACHE_HOME', 'CODEX_HOME']:\n    environment.pop(key, None)\nenvironment.update(HOME=str(root/'profile'), PYTHONPATH=os.pathsep.join((str(INSTALLED), str(REPO))),\n    HOL_GUARD_TEST_USE_INSTALLED='1', HOL_GUARD_NATIVE='force', HOL_GUARD_NATIVE_BINARY=str(RUNTIME),\n    HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER=str(RUNTIME), HOL_GUARD_NATIVE_REGRESSION='1',\n    HOL_GUARD_TEST_DISABLE_BROWSER_OPEN='1', HOL_GUARD_TEST_SDK_ROOT='/private/tmp/hol-guard-cigar-pi-sdk',\n    PATH=str(BUN.parent)+os.pathsep+environment.get('PATH',''))\npaths = set(REPO/path for path in selected)\npaths.update((REPO/'tests').rglob('*.py'))\npaths.add(REPO/'tests/fixtures/script_approvals/pi_family_bound_bash_sdk.ts')\npaths.add(ROOT/'functional-acceptance-plan.json')\npaths.update(REPO/path for path in ['tests/conftest.py','tests/native_runtime_fixtures.py','tests/test_omp_bound_bash_sdk.py'])\npaths.update([BUN, Path('/private/tmp/hol-guard-cigar-pi-sdk/package.json'),\n              Path('/private/tmp/hol-guard-cigar-pi-sdk/package-lock.json'), Path(__file__)])\nfrozen = fingerprints(RUNTIME, INSTALLED)\nfor path in paths:\n    frozen[str(path)] = hashlib.sha256(path.read_bytes()).hexdigest()\nwith (root/'inputs.json').open('x') as output:\n    json.dump(frozen, output, indent=2)\ncommand = [sys.executable, '-m', 'pytest', '-x', '-q', '-o', 'addopts=',\n           '--basetemp', str(root/'test-state'), '--junitxml', str(root/'results.xml'), *selected]\nselected_python=Path(json.loads(Path(environment['GUARD_CIGAR_TEST_SELECTION']).read_text())['python']) if 'GUARD_CIGAR_TEST_SELECTION' in environment else Path(json.loads(Path(os.environ['GUARD_CIGAR_TEST_SELECTION']).read_text())['python'])\nenvironment['GUARD_CIGAR_TEST_SELECTION']=os.environ['GUARD_CIGAR_TEST_SELECTION']\nenvironment['GUARD_CIGAR_TEST_APPROVAL']=os.environ['GUARD_CIGAR_TEST_APPROVAL']\nstarted=time.monotonic()\nwith ProcessSampler(selected_python) as sampler:\n    before,baseline=sampler.sample_with_identities()\n    with (root/'stdout.log').open('x') as out, (root/'stderr.log').open('x') as err:\n        result=subprocess.run(command,cwd=REPO,env=environment,stdout=out,stderr=err,timeout=600)\n    deadline=time.monotonic()+5\n    after,remaining=sampler.sample_with_identities()\n    while remaining.keys()-baseline.keys() and time.monotonic()<deadline:\n        time.sleep(.05)\n        after,remaining=sampler.sample_with_identities()\n    new_descendants=len(remaining.keys()-baseline.keys())\n    resources=sampler.summary()\ncases = list(ElementTree.parse(root/'results.xml').getroot().iter('testcase')) if (root/'results.xml').exists() else []\nreceipt = {'schema':'guard-cigar-worker-reuse-functional-controller.v1','job':args.job,'planned_cases':planned_cases,'observed_new_descendants_remaining':new_descendants,'resources':resources,'source_commit':artifact['build_sha'], 'command': command,\n           'returncode': result.returncode, 'seconds': round(time.monotonic()-started,3),\n           'installed_package_with_explicit_test_native_and_compiler_selection': True,\n           'tests': len(cases), 'failures': sum(case.find('failure') is not None for case in cases),\n           'errors': sum(case.find('error') is not None for case in cases),\n           'skipped': sum(case.find('skipped') is not None for case in cases),\n           'inputs_unchanged': all(hashlib.sha256(Path(p).read_bytes()).hexdigest()==h for p,h in frozen.items()),\n           'fingerprinted_files': len(frozen)}\nwith (root/'controller.json').open('x') as output:\n    json.dump(receipt, output, indent=2)\n    output.write('\\n')\nprint(json.dumps(receipt))\nprint((root/'stdout.log').read_text()[-7000:])\nif result.returncode: print((root/'stderr.log').read_text()[-3000:])\nraise SystemExit(result.returncode or int(not receipt['inputs_unchanged']) or int(receipt['skipped'] > 0) or int(receipt['tests']!=planned_cases) or int(new_descendants!=0) or int(resources['sampling_errors']!=0))\n"
+    },
+    "run_browser_acceptance.py": {
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/run_browser_acceptance.py",
+        "bytes": 6595,
+        "sha256": "ffc1e59573a8d24ef5075d0cb1d1aa7fb5eebc756903e5a244a588bfabebb0ce"
+      },
+      "text": "\"\"\"Three existing real installed-browser flows with private fixture authority.\"\"\"\nfrom pathlib import Path\nimport hashlib\nimport json\nimport os\nimport socket\nimport subprocess\nimport sys\nimport time\n\nROOT=Path('/private/tmp/hol-guard-cigar-control-preflight-20261025')\nREPO=Path('/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration')\nINSTALLED=ROOT/'package/installed'\nRUNTIME=INSTALLED/'codex_plugin_scanner/_native/hol-guard-runtime'\nartifact=json.loads((ROOT/'package/installed-artifact-verification.json').read_text())\nassert artifact['build_sha']=='1e341429b8006beec74c31cf8c0d230793c0be7f'\nassert hashlib.sha256(RUNTIME.read_bytes()).hexdigest()==artifact['artifact_sha256']\njob=ROOT/'browser-acceptance'\njob.mkdir(mode=0o700)\n(job/'profile').mkdir(mode=0o700)\nsys.path.insert(0,str(REPO))\nfrom scripts.bench_guard_cigar_cohort import fingerprints\nfrom scripts.cigar_benchmark_processes import ProcessSampler\nselection=Path('/private/tmp/hol-guard-cigar-runtime-validation/selection.json')\napproval=Path('/private/tmp/hol-guard-cigar-runtime-validation/approval.json')\nos.environ['GUARD_CIGAR_TEST_SELECTION']=str(selection)\nos.environ['GUARD_CIGAR_TEST_APPROVAL']=str(approval)\nselected_python=Path(json.loads(selection.read_text())['python'])\nnode=Path('/usr/local/bin/node')\nmodules=REPO/'dashboard/node_modules'\ncli=modules/'@playwright/test/cli.js'\nassert json.loads((modules/'@playwright/test/package.json').read_text())['version']=='1.60.0'\nbrowsers=json.loads((modules/'playwright-core/browsers.json').read_text())['browsers']\nassert any(value['name']=='chromium-headless-shell' and value['revision']=='1223' for value in browsers)\nwith socket.socket() as listener:\n    listener.bind(('127.0.0.1',0))\n    port=listener.getsockname()[1]\nenvironment={'HOME':str(job/'profile'),'PATH':'/private/tmp/hol-guard-cigar-locked-runtime/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin',\n             'LANG':'en_US.UTF-8','PYTHONNOUSERSITE':'1','PYTHONPATH':os.pathsep.join((str(INSTALLED),str(REPO))),\n             'HOL_GUARD_TEST_USE_INSTALLED':'1','HOL_GUARD_NATIVE':'force','HOL_GUARD_NATIVE_BINARY':str(RUNTIME),\n             'HOL_GUARD_NATIVE_REGRESSION':'1',\n             'HOL_GUARD_TEST_DISABLE_BROWSER_OPEN':'1','GUARD_CIGAR_TEST_SELECTION':str(selection),\n             'GUARD_CIGAR_TEST_APPROVAL':str(approval),'DASHBOARD_E2E_ROOT':str(job/'fixture'),\n             'DASHBOARD_E2E_PORT':str(port),'DASHBOARD_E2E_PYTHON':sys.executable,\n             'SCRG_PROOF_DIR':str(job/'proof'),'PLAYWRIGHT_BROWSERS_PATH':'/private/tmp/hol-guard-cigar-browser-cache'}\npaths=set((REPO/'tests').glob('context*.py'))\npaths.update((REPO/'dashboard/e2e').rglob('*.ts'))\npaths.update((REPO/'scripts/ci/dashboard_integration_seeds').rglob('*.py'))\npaths.update([REPO/'scripts/ci/dashboard_integration_server.py',REPO/'scripts/ci/installed_extension_authority_fixture.py',\n              REPO/'dashboard/playwright.integration.config.ts',REPO/'dashboard/package.json',REPO/'dashboard/package-lock.json',\n              ROOT/'browser.config.mts',ROOT/'functional-acceptance-plan.json',ROOT/'package/installed-artifact-verification.json',\n              Path(__file__),node.resolve(),Path('/private/tmp/hol-guard-cigar-sdk-target/debug/cigar-context-worker')])\nfor package in ['@playwright/test','playwright','playwright-core']:\n    paths.update(path for path in (modules/package).rglob('*') if path.is_file() and path.suffix in {'.js','.cjs','.mjs','.json'})\npaths.update(Path('/private/tmp/hol-guard-cigar-browser-cache').rglob('chrome-headless-shell'))\nassets=json.loads((ROOT/'static-staging.json').read_text())['verified_asset_sha256']\nfor name,value in assets.items():\n    path=INSTALLED/Path(name).relative_to('src')\n    assert hashlib.sha256(path.read_bytes()).hexdigest()==value\n    paths.add(path)\nfrozen=fingerprints(RUNTIME,INSTALLED)\nfor path in paths:frozen[str(path)]=hashlib.sha256(path.read_bytes()).hexdigest()\nwith (job/'inputs.json').open('x') as out:json.dump(frozen,out,indent=2)\nspecs=['context-assistance.mutating.spec.ts','context-execution.mutating.spec.ts','context-persistence.mutating.spec.ts']\ncommand=[str(node),str(cli),'test','--config',str(ROOT/'browser.config.mts'),'--project=mutating','--no-deps',\n         '--max-failures=1',*specs]\nstarted=time.monotonic()\nwith ProcessSampler(selected_python) as sampler:\n    before,baseline=sampler.sample_with_identities()\n    with (job/'stdout.log').open('x') as out,(job/'stderr.log').open('x') as err:\n        result=subprocess.run(command,cwd=REPO/'dashboard',env=environment,stdout=out,stderr=err,timeout=600)\n    deadline=time.monotonic()+5\n    after,remaining=sampler.sample_with_identities()\n    while remaining.keys()-baseline.keys() and time.monotonic()<deadline:\n        time.sleep(.05)\n        after,remaining=sampler.sample_with_identities()\n    new_descendants=len(remaining.keys()-baseline.keys())\n    resources=sampler.summary()\nreport=json.loads((job/'report.json').read_text()) if (job/'report.json').exists() else {}\nstats=report.get('stats',{})\nreceipt={'schema':'guard-cigar-worker-reuse-browser-controller.v1','command':command,'returncode':result.returncode,\n         'seconds':round(time.monotonic()-started,3),'source_commit':artifact['build_sha'],'planned_cases':3,'stats':stats,\n         'inputs_unchanged':all(hashlib.sha256(Path(path).read_bytes()).hexdigest()==value for path,value in frozen.items()),\n         'fingerprinted_files':len(frozen),'observed_new_descendants_remaining':new_descendants,'resources':resources,\n         'installed_static_assets':len(assets),'static_override':False,'traces_and_screenshots':'off',\n         'fixture_only_password_and_session_proofs':True,'real_credentials_or_live_Guard_accessed':False,\n         'scope':'Three existing React/HTTP/installed-native flows with explicit test-native selection; local Chromium headless shell1223/Playwright1.60.0; no Desktop release qualification'}\nwith (job/'controller.json').open('x') as out:json.dump(receipt,out,indent=2);out.write('\\n')\nprint(json.dumps({key:receipt[key] for key in ['returncode','seconds','planned_cases','stats','inputs_unchanged','fingerprinted_files','observed_new_descendants_remaining']}))\nif result.returncode:\n    print((job/'stderr.log').read_text()[-4000:])\nraise SystemExit(result.returncode or int(not receipt['inputs_unchanged']) or int(stats.get('expected')!=3)\n                 or int(any(stats.get(name,1)!=0 for name in ['skipped','unexpected','flaky']))\n                 or int(new_descendants!=0) or int(resources['sampling_errors']!=0))\n"
+    },
+    "browser.config.mts": {
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/browser.config.mts",
+        "bytes": 661,
+        "sha256": "373ce363674a95c1ebd986dd86f9ee5d49a7f21147a4ba42ff4c117d25459179"
+      },
+      "text": "import base from \"/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/dashboard/playwright.integration.config.ts\";\nexport default {\n  ...base,\n  testDir: \"/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/dashboard/e2e/integration\",\n  globalSetup: \"/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/dashboard/e2e/integration/global-setup.ts\",\n  workers: 1,\n  retries: 0,\n  reporter: [[\"json\", { outputFile: \"/private/tmp/hol-guard-cigar-control-preflight-20261025/browser-acceptance/report.json\" }]],\n  use: { ...base.use, trace: \"off\", screenshot: \"off\" },\n};\n"
+    }
+  },
+  "source_qualification": {
+    "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/docs/guard/cigar-integration/evidence/control-preflight-source-verification.json",
+    "bytes": 277089,
+    "sha256": "73b96277dfa34e7b0815164ce196240b057d86a49846c2479e0ca9af03f33778"
+  },
+  "browser_diagnostics": {
+    "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/docs/guard/cigar-integration/evidence/browser-stop-ordering-diagnostics.json",
+    "bytes": 67603,
+    "sha256": "0bce4c7f9ce4312e92c0a02e251098e64002f606e0cf312622840302d5555c07"
+  },
+  "browser_acknowledgement_fixture_sources": {
+    "dashboard/e2e/integration/context-stop.ts": {
+      "receipt": {
+        "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/dashboard/e2e/integration/context-stop.ts",
+        "bytes": 728,
+        "sha256": "fd51eb0ef2766f7c5f1f349d646777f9a5464871cc2f10afed39b478e18a94cf"
+      },
+      "text": "import { expect, type Locator, type Page } from \"@playwright/test\";\n\n/** Check persisted opt-out only after Stop acknowledges cleanup and its write. */\nexport async function stopContextAssistance(\n  page: Page,\n  button: Locator = page.getByRole(\"button\", { name: \"Turn off now\", exact: true }),\n) {\n  const [response] = await Promise.all([\n    page.waitForResponse((reply) => new URL(reply.url()).pathname === \"/v1/context-assistance/stop\"\n      && reply.request().method() === \"POST\"),\n    button.click(),\n  ]);\n  expect(response.status()).toBe(200);\n  const status = await response.json();\n  expect(status.requested_enabled).toBe(false);\n  expect(status.effective_enabled).toBe(false);\n  expect(status.runtime).toBeNull();\n}\n"
+    },
+    "dashboard/e2e/integration/context-assistance.mutating.spec.ts": {
+      "receipt": {
+        "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/dashboard/e2e/integration/context-assistance.mutating.spec.ts",
+        "bytes": 16427,
+        "sha256": "bb2f9e600a0d78aeb6b12fbff57a720277876ef5cf1621cda682558ea82cdd5f"
+      },
+      "text": "import { daemonApi, expect, expectNoErrorBoundary, test, type IntegrationState } from \"./fixtures\";\nimport { contextStatus } from \"./context-status\";\nimport { stopContextAssistance } from \"./context-stop\";\nimport { writeFileSync } from \"node:fs\";\nimport { resolve } from \"node:path\";\nimport { ContextAgentProbe } from \"./context-agent-probe\";\nimport { execFileSync } from \"node:child_process\";\nimport { contextHistoryAndRepairFlow, clearContextFromRepair } from \"./context-history-flow\";\nimport { contextSharingFlow } from \"./context-sharing-flow\";\n\nasync function saveWithProof(page: import(\"@playwright/test\").Page, state: IntegrationState) {\n  await page.getByRole(\"region\", { name: \"Save settings\" }).getByRole(\"button\", { name: \"Save settings\" }).click();\n  const proof = page.getByRole(\"dialog\");\n  await proof.getByLabel(\"Approval password\").fill(state.approvalPassword);\n  await proof.getByRole(\"button\", { name: \"Save settings\" }).click();\n  await expect(proof).toHaveCount(0);\n  await expect(page.getByText(\"Settings saved successfully.\")).toBeVisible();\n}\n\ntest(\"real candidate sources, proof-backed MCP pairing and opt-out survive reload\", async ({ page, state }) => {\n  test.setTimeout(240_000);\n  const seed = state.seeded.context_assistance;\n  test.skip(seed?.candidateEnrolled !== true, \"requires an explicitly selected and approved installed candidate\");\n  const status = () => contextStatus(state);\n  await page.goto(\"/settings?section=protection\");\n  const toggle = page.getByRole(\"switch\", { name: \"Use CIGAR on this machine\" });\n  await expect(toggle).toHaveAttribute(\"aria-checked\", \"false\");\n  await page.getByRole(\"button\", { name: \"Choose a verified runtime\" }).click();\n  await expect(page.getByLabel(\"Local runtime\", { exact: true })).toHaveValue(String(seed.runtimeId));\n  await expect(toggle).toBeEnabled();\n  await toggle.focus();\n  await page.keyboard.press(\"Space\");\n  await expect(toggle).toHaveAttribute(\"aria-checked\", \"true\");\n  await page.getByRole(\"switch\", { name: \"Context for AI apps\", exact: true }).click();\n  await page.getByText(\"Sources, limits and runtime details\", { exact: true }).click();\n  await page.getByRole(\"switch\", { name: \"Allow selected workspace documents\" }).click();\n  await saveWithProof(page, state);\n  expect((await status()).effective_enabled).toBe(false);\n  let probe: ContextAgentProbe | undefined;\n  try {\n    await page.getByRole(\"button\", { name: \"Start context assistance\" }).click();\n    await expect.poll(async () => (await status()).effective_enabled, { timeout: 30_000 }).toBe(true);\n    const ready = await status();\n    expect(ready.runtime?.interpreter.version.slice(0, 2)).toEqual([3, 14]);\n    expect(ready.runtime?.worker_fingerprint).toBe(seed.workerFingerprint);\n    // Source permission requires a separate native proof, even after global opt-in.\n    const unproved = await page.request.post(`${state.origin}/v1/context-assistance/workspace-grant`, {\n      headers: { \"x-guard-token\": state.daemonToken }, data: { input: { action: \"grant\", workspace: state.workspace, app: \"dashboard\", sources: [\"README.md\"] } },\n    });\n    expect([401, 403, 423]).toContain(unproved.status());\n    await page.getByLabel(\"Workspace folder\", { exact: true }).fill(state.workspace);\n    await page.getByLabel(\"Files relative to the workspace, one per line\").fill(\"README.md\");\n    await page.getByRole(\"button\", { name: \"Grant review source access\" }).click();\n    const sourceProof = page.getByRole(\"dialog\");\n    await sourceProof.getByLabel(\"Approval password\").fill(state.approvalPassword);\n    await sourceProof.getByRole(\"button\", { name: \"Grant source access\", exact: true }).click();\n    await expect(sourceProof).toHaveCount(0);\n    await expect(page.getByText(/Recent native receipt facts: 0 of at most 16 retained/)).toBeVisible();\n    await page.getByLabel(\"What would you like context about?\").fill(\"reviewed release process\");\n    await page.getByRole(\"button\", { name: \"Prepare cited context\" }).click();\n    const prepared = page.getByRole(\"region\", { name: \"Prepared context\", exact: true });\n    await expect(prepared.getByText(\"Integration workspace uses a reviewed release process.\", { exact: true })).toBeVisible();\n    await prepared.getByText(\"Sources and revisions\", { exact: true }).click();\n    await expect(prepared.getByText(/README.md, lines/)).toBeVisible();\n    writeFileSync(resolve(state.workspace, \"README.md\"), \"Updated workspace now uses a different release procedure.\\n\");\n    await page.getByRole(\"button\", { name: \"Prepare cited context\" }).click();\n    await expect(page.getByRole(\"alert\").filter({ hasText: \"Sources or access changed\" })).toBeVisible();\n    await expect(prepared).toHaveCount(0);\n    await page.getByRole(\"button\", { name: \"Refresh selected files\" }).click();\n    await expect(page.getByRole(\"button\", { name: \"Prepare cited context\" })).toBeEnabled();\n    await page.getByRole(\"button\", { name: \"Prepare cited context\" }).click();\n    await expect(prepared.getByText(\"Updated workspace now uses a different release procedure.\", { exact: true })).toBeVisible();\n    await prepared.getByText(\"Compare with earlier context\", { exact: true }).click();\n    await expect(prepared.getByText(\"Integration workspace uses a reviewed release process.\", { exact: true })).toBeVisible();\n    await page.getByRole(\"button\", { name: \"Withdraw README.md\" }).click();\n    await expect(prepared).toHaveCount(0);\n    await expect(page.getByRole(\"button\", { name: \"Withdraw README.md\" })).toHaveCount(0);\n    await page.getByRole(\"button\", { name: \"Revoke workspace access\" }).click();\n    await expect(page.getByText(\"No workspace has context access.\", { exact: true })).toBeVisible();\n    // A real MCP client has no operator authority. Its public code is paired\n    // by the browser only after separate native source and connection proofs.\n    probe = new ContextAgentProbe(String(seed.pythonExecutable), state.guardHome);\n    const initialTools = await probe.request(\"list\");\n    expect(initialTools.list_changed).toBe(true);\n    expect(initialTools.tools).toContain(\"get_context_status\");\n    expect(initialTools.tools).not.toContain(\"get_guard_context\");\n    const pending = await probe.request(\"get_context_status\");\n    expect(pending.data.phase).toBe(\"pending\");\n    expect(JSON.stringify(pending)).not.toContain(\"credential\");\n    expect((await probe.request(\"get_guard_context\", { query: \"release procedure\" })).ok).toBe(false);\n    await page.getByRole(\"combobox\", { name: \"Context consumer\", exact: true }).selectOption(\"codex\");\n    await page.getByLabel(\"Files relative to the workspace, one per line\").fill(\"README.md\");\n    await page.getByRole(\"button\", { name: \"Grant review source access\" }).click();\n    const appSourceProof = page.getByRole(\"dialog\");\n    await appSourceProof.getByLabel(\"Approval password\").fill(state.approvalPassword);\n    await appSourceProof.getByRole(\"button\", { name: \"Grant source access\", exact: true }).click();\n    await expect(appSourceProof).toHaveCount(0);\n    await page.getByRole(\"button\", { name: \"Refresh app connections\", exact: true }).click();\n    const connection = page.getByRole(\"region\", { name: `Context connection ${pending.data.session_id}`, exact: true });\n    await expect(connection.getByText(\"Waiting for your permission\", { exact: false })).toBeVisible();\n    await connection.getByRole(\"combobox\", { name: \"Workspace and app grant\", exact: true }).selectOption({ index: 1 });\n    const unprovedPair = await page.request.post(`${state.origin}/v1/context-assistance/workspace-grant`, {\n      headers: { \"x-guard-token\": state.daemonToken }, data: { input: {\n        action: \"authorize_agent\", session_id: pending.data.session_id,\n        scope_id: await connection.getByRole(\"combobox\", { name: \"Workspace and app grant\", exact: true }).inputValue(),\n      } },\n    });\n    expect([401, 403, 423]).toContain(unprovedPair.status());\n    await connection.getByRole(\"button\", { name: \"Authorize context connection\", exact: true }).click();\n    const pairingProof = page.getByRole(\"dialog\");\n    await expect(pairingProof).toContainText(pending.data.session_id);\n    await expect(pairingProof).toContainText(state.workspace);\n    await expect(pairingProof).toContainText(\"Codex\");\n    await pairingProof.getByLabel(\"Approval password\").fill(state.approvalPassword);\n    await pairingProof.getByRole(\"button\", { name: \"Authorize connection\", exact: true }).click();\n    await expect(pairingProof).toHaveCount(0);\n    await expect(connection.getByText(\"Grant assigned\", { exact: false })).toBeVisible();\n    const authorized = await probe.request(\"get_context_status\");\n    expect(authorized.data.app).toBe(\"codex\");\n    expect(authorized.data.harness_route_qualification).toBe(\"not_established\");\n    const agentContext = await probe.request(\"get_guard_context\", { query: \"release procedure\" });\n    expect(agentContext.ok).toBe(true);\n    const agentBrief = agentContext.data.result.brief;\n    expect(agentBrief.rendered).toContain(\"Updated workspace now uses a different release procedure.\");\n    expect(agentBrief.citations.length).toBeGreaterThanOrEqual(2);\n    expect((await probe.request(\"explain_guard_context\", { snapshot_id: agentBrief.snapshot_id })).ok).toBe(true);\n    expect((await probe.request(\"get_guard_context\", { query: \"release procedure\", scope_id: \"foreign\", app: \"cursor\" })).ok).toBe(false);\n    await page.getByRole(\"combobox\", { name: \"Context consumer\", exact: true }).selectOption(\"dashboard\");\n    await page.getByLabel(\"Files relative to the workspace, one per line\").fill(\"README.md\");\n    await page.getByRole(\"button\", { name: \"Grant review source access\" }).click();\n    const reviewSourceProof = page.getByRole(\"dialog\");\n    await reviewSourceProof.getByLabel(\"Approval password\").fill(state.approvalPassword);\n    await reviewSourceProof.getByRole(\"button\", { name: \"Grant source access\", exact: true }).click();\n    await expect(reviewSourceProof).toHaveCount(0);\n    const nativeReview = JSON.parse(execFileSync(String(seed.pythonExecutable), [\"-B\",\n      resolve(import.meta.dirname, \"../../../scripts/ci/dashboard_context_native_review.py\"),\n      \"--guard-home\", state.guardHome, \"--workspace\", state.workspace], { encoding: \"utf8\", timeout: 15_000 }));\n    expect((await probe.request(\"list\")).tools).toContain(\"explain_guard_action\");\n    const nativeAgentContext = await probe.request(\"explain_guard_action\", { decision_id: nativeReview.decision_id });\n    expect(nativeAgentContext.ok).toBe(true);\n    expect(nativeAgentContext.data.result.association.binding).toBe(\"authenticated_native_decision\");\n    expect(nativeAgentContext.data.result.association.execution_binding).toBe(\"unqualified\");\n    expect(nativeAgentContext.data.result.brief.citations.some((citation: { source: string }) => citation.source === \"guard:action\")).toBe(true);\n    expect((await probe.request(\"explain_guard_action\", { decision_id: nativeReview.decision_id,\n      snapshot_id: nativeAgentContext.data.result.brief.snapshot_id })).ok).toBe(true);\n    expect((await probe.request(\"explain_guard_action\", { decision_id: nativeReview.decision_id, app: \"cursor\" })).ok).toBe(false);\n    await page.goto(`/requests/${nativeReview.request_id}`);\n    const optionalContext = page.getByRole(\"region\", { name: \"Optional decision context\", exact: true });\n    await expect(optionalContext).toBeVisible();\n    const allowOnce = page.getByRole(\"button\", { name: \"Allow just this once\", exact: true });\n    const alwaysAllow = page.getByRole(\"radio\", { name: /^Always allow exact action/ });\n    await expect(allowOnce).toBeEnabled();\n    await expect(alwaysAllow).toBeEnabled();\n    await optionalContext.getByRole(\"button\", { name: \"Prepare decision context\", exact: true }).click();\n    await expect(allowOnce).toBeEnabled();\n    const actionContext = optionalContext.getByRole(\"region\", { name: \"Native decision context\", exact: true });\n    await expect(actionContext.getByText(/Authenticated native Guard decision/)).toBeVisible();\n    await actionContext.getByText(\"Sources and revisions\", { exact: true }).click();\n    await expect(actionContext.getByText(/Authenticated native decision facts, lines/)).toBeVisible();\n    await optionalContext.getByRole(\"button\", { name: \"Verify context sources\", exact: true }).click();\n    await expect(optionalContext.getByText(\"The retained selection and its sources were verified again.\", { exact: true })).toBeVisible();\n    await expect(allowOnce).toBeEnabled();\n    await expect(alwaysAllow).toBeEnabled();\n    await contextHistoryAndRepairFlow(page, state, nativeReview, probe);\n    await page.goto(\"/settings?section=protection\");\n    await page.getByRole(\"button\", { name: \"Refresh app connections\", exact: true }).click();\n    await connection.getByRole(\"button\", { name: \"Revoke context connection\", exact: true }).click();\n    await expect(connection).toHaveCount(0);\n    const revoked = await probe.request(\"get_guard_context\", { query: \"release procedure\" });\n    expect(revoked.ok).toBe(false);\n    expect(revoked.error.code).toBe(\"native_context_assistance_context_scope_denied\");\n    await clearContextFromRepair(page);\n    await page.goto(\"/settings?section=protection\");\n    // An unrelated settings save must preserve raw local consent and the verified generation.\n    const timeout = page.getByRole(\"spinbutton\", { name: \"How long to wait for your answer\" });\n    await timeout.fill(String(Number(await timeout.inputValue()) + 30));\n    await saveWithProof(page, state);\n    expect((await status()).requested_enabled).toBe(true);\n    expect((await status()).effective_enabled).toBe(true);\n    await page.reload();\n    await expect(toggle).toHaveAttribute(\"aria-checked\", \"true\");\n    await page.goto(\"/\");\n    const overview = page.getByRole(\"region\", { name: \"Context assistance overview\" });\n    await expect(overview.getByRole(\"status\")).toHaveText(\"Ready\");\n    await overview.getByRole(\"button\", { name: \"Turn off context assistance\", exact: true }).click();\n    await expect(overview.getByRole(\"status\")).toHaveText(\"Off\");\n    expect((await status()).requested_enabled).toBe(false);\n    expect((await status()).runtime).toBeNull();\n    expect((await probe.request(\"list\")).tools).not.toContain(\"get_guard_context\");\n    const disabled = await probe.request(\"get_guard_context\", { query: \"release procedure\" });\n    expect(disabled.error.code).toBe(\"native_context_assistance_disabled\");\n    await overview.getByRole(\"button\", { name: \"Manage context assistance\" }).click();\n    await expect(toggle).toHaveAttribute(\"aria-checked\", \"false\");\n    await page.getByRole(\"button\", { name: \"Choose a verified runtime\" }).click();\n    await expect(page.getByLabel(\"Local runtime\", { exact: true })).toHaveValue(String(seed.runtimeId));\n    await expect(toggle).toBeEnabled();\n    await toggle.click();\n    await saveWithProof(page, state);\n    await page.getByRole(\"button\", { name: \"Start context assistance\" }).click();\n    await expect.poll(async () => (await status()).effective_enabled, { timeout: 30_000 }).toBe(true);\n    await page.setViewportSize({ width: 390, height: 844 });\n    await expect(page.getByText(\"No workspace has context access.\", { exact: true })).toBeVisible();\n    const off = page.getByRole(\"button\", { name: \"Turn off now\" });\n    await off.scrollIntoViewIfNeeded();\n    await expect(off).toBeVisible();\n    await stopContextAssistance(page, off);\n    await expect.poll(async () => (await status()).requested_enabled).toBe(false);\n    expect((await status()).runtime).toBeNull();\n    await page.reload();\n    await expect(toggle).toHaveAttribute(\"aria-checked\", \"false\");\n    await expectNoErrorBoundary(page);\n    // Browser-supplied runtime assertions cannot replace native verification.\n    const forged = await page.request.post(`${state.origin}/v1/context-assistance/activate`, {\n      headers: { \"x-guard-token\": state.daemonToken }, data: { python_version: [3, 14], approved: true },\n    });\n    expect(forged.status()).toBe(400);\n    expect(await forged.json()).toEqual({\n      error: \"context_assistance_unavailable\", code: \"native_context_assistance_control_input_invalid\",\n    });\n    expect((await status()).effective_enabled).toBe(false);\n    await contextSharingFlow(page, state, saveWithProof);\n  } finally {\n    await daemonApi(state, \"/v1/context-assistance/stop\", { method: \"POST\", body: \"{}\" });\n    await probe?.close();\n  }\n});\n"
+    },
+    "dashboard/e2e/integration/context-execution.mutating.spec.ts": {
+      "receipt": {
+        "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/dashboard/e2e/integration/context-execution.mutating.spec.ts",
+        "bytes": 7558,
+        "sha256": "b426e2da3fb477179f42177ef8ce998c37fa7a79f79c24be657e49ad44d83a42"
+      },
+      "text": "import { execFileSync } from \"node:child_process\";\nimport { resolve } from \"node:path\";\nimport type { Page } from \"@playwright/test\";\nimport { contextStatus } from \"./context-status\";\nimport { stopContextAssistance } from \"./context-stop\";\nimport { daemonApi, expect, expectNoErrorBoundary, test, type IntegrationState } from \"./fixtures\";\nimport { decide, requestRecord } from \"./inbox-helpers\";\n\ntest.use({ actionTimeout: 15_000 });\n\nasync function save(page: Page, state: IntegrationState) {\n  await page.getByRole(\"region\", { name: \"Save settings\" }).getByRole(\"button\", { name: \"Save settings\" }).click();\n  const proof = page.getByRole(\"dialog\");\n  await proof.getByLabel(\"Approval password\").fill(state.approvalPassword);\n  await proof.getByRole(\"button\", { name: \"Save settings\" }).click();\n  await expect(proof).toHaveCount(0);\n  await expect(page.getByText(\"Settings saved successfully.\")).toBeVisible();\n}\n\ntest(\"execution opt-in and browser approvals reach the installed native executor\", async ({ page, state }) => {\n  test.setTimeout(240_000);\n  const seed = state.seeded.context_assistance;\n  test.skip(seed?.candidateEnrolled !== true, \"requires the explicitly approved installed candidate\");\n  const status = () => contextStatus(state);\n  type Result = { code: number; request_id?: string; effect_unchanged?: boolean; output_not_retained?: boolean;\n    expected_effect?: boolean; requires_consent?: boolean };\n  const sink = (choice: string, action: string): Result => JSON.parse(execFileSync(String(seed.pythonExecutable), [\n    \"-B\", resolve(import.meta.dirname, \"../../../scripts/ci/dashboard_context_execution.py\"),\n    \"--guard-home\", state.guardHome, \"--workspace\", state.workspace, \"--case\", choice, \"--action\", action,\n  ], { encoding: \"utf8\", timeout: 40_000 }));\n  try {\n    // The fixture explicitly asks before execution of even the captured\n    // builtins. Approvals themselves must come through the browser below.\n    expect(sink(\"allow-once\", \"configure\")).toMatchObject({ code: 0, execution_review_required: true });\n    await page.goto(\"/settings?section=protection\");\n    await page.getByRole(\"button\", { name: \"Choose a verified runtime\", exact: true }).click();\n    const enabled = page.getByRole(\"switch\", { name: \"Use CIGAR on this machine\", exact: true });\n    await expect(enabled).toHaveAttribute(\"aria-checked\", \"false\");\n    await enabled.click();\n    for (const label of [\"Share context between paired AI connections\", \"Context for AI apps\"]) {\n      const toggle = page.getByRole(\"switch\", { name: label, exact: true });\n      if (await toggle.getAttribute(\"aria-checked\") === \"true\") await toggle.click();\n    }\n    await page.getByText(\"Sources, limits and runtime details\", { exact: true }).click();\n    const execution = page.getByRole(\"switch\", { name: \"Associate native context with execution\", exact: true });\n    await expect(execution).toHaveAttribute(\"aria-checked\", \"false\");\n    await execution.focus();\n    await page.keyboard.press(\"Space\");\n    await save(page, state);\n    expect((await status()).effective_enabled).toBe(false);\n    await page.getByRole(\"button\", { name: \"Start context assistance\", exact: true }).click();\n    await expect.poll(async () => (await status()).execution_ready, { timeout: 90_000 }).toBe(true);\n    const ready = await status();\n    expect(ready.runtime?.interpreter.version.slice(0, 2)).toEqual([3, 14]);\n    expect(ready.runtime?.execution_handoff_verified).toBe(true);\n    expect(ready.preferences.features.agent_context).toBe(false);\n    expect(ready.preferences.features.shared_agents).toBe(false);\n    const panel = page.getByRole(\"region\", { name: \"Native execution context observations\", exact: true });\n    await expect(panel.getByText(/Preparation is ready for Pi and Oh My Pi/)).toBeVisible();\n    await expect(panel.getByText(\"No recent execution-context observations.\", { exact: true })).toBeVisible();\n    const consumer = page.getByRole(\"combobox\", { name: \"Context consumer\", exact: true });\n    expect(await consumer.locator(\"option\").evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value)))\n      .toEqual([\"dashboard\", \"pi\", \"omp\"]);\n    await consumer.selectOption(\"omp\");\n    await page.getByLabel(\"Workspace folder\", { exact: true }).fill(state.workspace);\n    await page.getByRole(\"button\", { name: \"Grant review source access\", exact: true }).click();\n    const grantProof = page.getByRole(\"dialog\");\n    await expect(grantProof).toContainText(\"Oh My Pi\");\n    await grantProof.getByLabel(\"Approval password\").fill(state.approvalPassword);\n    await grantProof.getByRole(\"button\", { name: \"Grant source access\", exact: true }).click();\n    await expect(grantProof).toHaveCount(0);\n    for (const choice of [\"allow-once\", \"always-allow\"]) {\n      const queued = sink(choice, \"prepare\");\n      expect(queued.code).toBe(125);\n      expect(queued.request_id).toBeTruthy();\n      await page.goto(`/requests/${queued.request_id}`);\n      const duration = page.getByRole(\"group\", { name: \"How long should Guard allow it?\", exact: true });\n      const once = duration.getByRole(\"radio\", { name: /^Run once/ });\n      const always = duration.getByRole(\"radio\", { name: /^Always allow this version in this project/ });\n      await expect(once).toBeEnabled();\n      await expect(always).toBeEnabled();\n      if (choice === \"always-allow\") {\n        await always.focus();\n        await page.keyboard.press(\"Space\");\n        await expect(always).toBeChecked();\n        await decide(page, state, page.getByRole(\"button\", { name: \"Always allow this version in this project\", exact: true }),\n          queued.request_id!, \"Always allow this version in this project\");\n      } else {\n        await once.focus();\n        await page.keyboard.press(\"Space\");\n        await expect(once).toBeChecked();\n        await decide(page, state, page.getByRole(\"button\", { name: \"Run once\", exact: true }),\n          queued.request_id!, \"Run once\");\n      }\n      expect((await requestRecord(state, queued.request_id!)).resolution_action).toBe(\"allow\");\n      expect(sink(choice, \"execute\")).toMatchObject({ code: 0, expected_effect: true });\n      expect((await status()).execution_observations?.some((event) => event.phase === \"completed\"\n        && event.association_applied && event.native_dispatch_acknowledged && !event.approval_grant\n        && !event.send_boundary_atomicity)).toBe(true);\n      expect(sink(choice, \"replay\")).toEqual({ code: 0, effect_unchanged: true, output_not_retained: true });\n      expect(sink(choice, \"new\")).toMatchObject(choice === \"always-allow\"\n        ? { code: 0, expected_effect: true } : { code: 125, expected_effect: false, requires_consent: true });\n    }\n    await page.goto(\"/settings?section=protection\");\n    await expect(panel.getByText(\"Native execution record completed\", { exact: true }).first()).toBeVisible();\n    await page.setViewportSize({ width: 390, height: 844 });\n    await stopContextAssistance(page);\n    await expect.poll(async () => (await status()).runtime).toBeNull();\n    expect((await status()).execution_observations).toEqual([]);\n    expect(sink(\"always-allow\", \"after-stop\")).toMatchObject({ code: 0, expected_effect: true });\n    expect(sink(\"allow-once\", \"after-stop\")).toMatchObject({ code: 125, requires_consent: true });\n    await page.reload();\n    await expect(enabled).toHaveAttribute(\"aria-checked\", \"false\");\n    await expectNoErrorBoundary(page);\n  } finally {\n    await daemonApi(state, \"/v1/context-assistance/stop\", { method: \"POST\", body: \"{}\" });\n  }\n});\n"
+    },
+    "dashboard/e2e/integration/context-persistence.mutating.spec.ts": {
+      "receipt": {
+        "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/dashboard/e2e/integration/context-persistence.mutating.spec.ts",
+        "bytes": 7171,
+        "sha256": "5b1b44cfbdd0d7c537cb6d02c60ea808deb91dccfb033cd21557322ae96504ed"
+      },
+      "text": "import { daemonApi, expect, expectNoErrorBoundary, test, type IntegrationState } from \"./fixtures\";\nimport type { Page } from \"@playwright/test\";\nimport { contextStatus } from \"./context-status\";\nimport { stopContextAssistance } from \"./context-stop\";\nimport { writeFileSync } from \"node:fs\";\nimport { resolve } from \"node:path\";\n\nasync function save(page: Page, state: IntegrationState) {\n  await page.getByRole(\"region\", { name: \"Save settings\" }).getByRole(\"button\", { name: \"Save settings\" }).click();\n  const proof = page.getByRole(\"dialog\");\n  await proof.getByLabel(\"Approval password\").fill(state.approvalPassword);\n  await proof.getByRole(\"button\", { name: \"Save settings\" }).click();\n  await expect(proof).toHaveCount(0);\n  await expect(page.getByText(\"Settings saved successfully.\")).toBeVisible();\n}\nasync function grant(page: Page, state: IntegrationState) {\n  await page.getByLabel(\"Workspace folder\", { exact: true }).fill(state.workspace);\n  await page.getByLabel(\"Files relative to the workspace, one per line\").fill(\"README.md\");\n  await page.getByRole(\"button\", { name: \"Grant review source access\", exact: true }).click();\n  const proof = page.getByRole(\"dialog\");\n  await proof.getByLabel(\"Approval password\").fill(state.approvalPassword);\n  await proof.getByRole(\"button\", { name: \"Grant source access\", exact: true }).click();\n  await expect(proof).toHaveCount(0);\n}\ntest(\"private saved evidence survives runtime restart with fresh grants and can be removed while off\", async ({ page, state }) => {\n  test.setTimeout(240_000);\n  test.skip(state.seeded.context_assistance?.candidateEnrolled !== true, \"requires the explicitly approved installed candidate\");\n  const status = () => contextStatus(state);\n  const scopes = () => daemonApi<{ result: { scopes: { scope_id: string }[] } }>(state,\n    \"/v1/context-assistance/workspace\", { method: \"POST\", body: JSON.stringify({ input: { action: \"list\" } }) });\n  const text = \"Private durable workspace evidence requires fresh source permission after restart.\";\n  writeFileSync(resolve(state.workspace, \"README.md\"), text + \"\\n\");\n  try {\n    await page.goto(\"/settings?section=protection\");\n    await page.getByRole(\"button\", { name: \"Choose a verified runtime\", exact: true }).click();\n    const enabled = page.getByRole(\"switch\", { name: \"Use CIGAR on this machine\", exact: true });\n    if (await enabled.getAttribute(\"aria-checked\") !== \"true\") await enabled.click();\n    for (const label of [\"Share context between paired AI connections\", \"Context for AI apps\"]) {\n      const toggle = page.getByRole(\"switch\", { name: label, exact: true });\n      if (await toggle.getAttribute(\"aria-checked\") === \"true\") await toggle.click();\n    }\n    await page.getByText(\"Sources, limits and runtime details\", { exact: true }).click();\n    await page.getByRole(\"combobox\", { name: \"Evidence storage\", exact: true }).selectOption(\"sqlite\");\n    await page.getByRole(\"spinbutton\", { name: \"Context history, saved evidence and shared-note retention in hours\", exact: true }).fill(\"1\");\n    const files = page.getByRole(\"switch\", { name: \"Allow selected workspace documents\", exact: true });\n    if (await files.getAttribute(\"aria-checked\") !== \"true\") await files.click();\n    await save(page, state);\n    await page.getByRole(\"button\", { name: \"Start context assistance\", exact: true }).click();\n    await expect.poll(async () => (await status()).runtime?.persistence_compile_verified, { timeout: 60_000 }).toBe(true);\n    const ready = await status();\n    expect(ready.effective_preferences.storage).toEqual({ mode: \"sqlite\", retention_hours: 1 });\n    expect(ready.runtime?.shared_compile_verified).toBe(false);\n    await grant(page, state);\n    const firstScope = (await scopes()).result.scopes[0].scope_id;\n    await page.getByLabel(\"What would you like context about?\").fill(\"durable workspace evidence\");\n    await page.getByRole(\"button\", { name: \"Prepare cited context\", exact: true }).click();\n    await expect(page.getByRole(\"region\", { name: \"Prepared context\", exact: true }).getByText(text, { exact: true })).toBeVisible();\n    await stopContextAssistance(page);\n    await expect.poll(async () => (await status()).requested_enabled).toBe(false);\n    expect((await status()).runtime).toBeNull();\n\n    await page.goto(\"/settings?section=maintenance\");\n    const saved = page.getByRole(\"region\", { name: \"Saved context evidence\", exact: true });\n    await expect(saved).toBeVisible();\n    await expect(saved.getByText(/Saved data does not restore source or app permissions/)).toBeVisible();\n    await expect(saved.locator(\"dt\").filter({ hasText: \"Saved workspace/app stores\" }).locator(\"+ dd\")).toHaveText(\"1\");\n    await expect(page.getByRole(\"button\", { name: \"Remove saved evidence\", exact: true })).toBeEnabled();\n    expect((await status()).runtime).toBeNull();\n\n    await page.goto(\"/settings?section=protection\");\n    await page.getByRole(\"button\", { name: \"Choose a verified runtime\", exact: true }).click();\n    await enabled.click();\n    await save(page, state);\n    await page.getByRole(\"button\", { name: \"Start context assistance\", exact: true }).click();\n    await expect.poll(async () => (await status()).runtime?.persistence_compile_verified, { timeout: 60_000 }).toBe(true);\n    expect((await scopes()).result.scopes).toEqual([]);\n    const old = await page.request.post(`${state.origin}/v1/context-assistance/workspace`, {\n      headers: { \"x-guard-token\": state.daemonToken }, data: { input: { action: \"compile\", scope_id: firstScope, query: \"durable evidence\" } },\n    });\n    expect(old.status()).toBe(403);\n    await grant(page, state);\n    expect((await scopes()).result.scopes[0].scope_id).not.toBe(firstScope);\n    await page.getByLabel(\"What would you like context about?\").fill(\"durable workspace evidence\");\n    await page.getByRole(\"button\", { name: \"Prepare cited context\", exact: true }).click();\n    await expect(page.getByRole(\"region\", { name: \"Prepared context\", exact: true }).getByText(text, { exact: true })).toBeVisible();\n    await stopContextAssistance(page);\n    await expect.poll(async () => (await status()).runtime).toBeNull();\n    await page.goto(\"/settings?section=maintenance\");\n    await expect(saved).toBeVisible();\n    await page.setViewportSize({ width: 390, height: 844 });\n    const remove = page.getByRole(\"button\", { name: \"Remove saved evidence\", exact: true });\n    await remove.focus(); await page.keyboard.press(\"Enter\");\n    const confirmation = page.getByRole(\"dialog\");\n    await expect(confirmation).toContainText(\"including inactive stores\");\n    await confirmation.getByRole(\"button\", { name: \"Remove saved evidence\", exact: true }).click();\n    await expect(confirmation).toHaveCount(0);\n    await expect(saved.getByText(\"No saved evidence remains on this machine.\", { exact: true })).toBeVisible();\n    expect((await status()).runtime).toBeNull();\n    await page.reload();\n    await expect(saved.getByText(\"No saved evidence remains on this machine.\", { exact: true })).toBeVisible();\n    await expectNoErrorBoundary(page);\n  } finally {\n    await daemonApi(state, \"/v1/context-assistance/stop\", { method: \"POST\", body: \"{}\" });\n  }\n});\n"
+    }
+  },
+  "prior_native_worker_backend_qualification": {
+    "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/docs/guard/cigar-integration/evidence/context-worker-reuse-installed-functional-verification.json",
+    "bytes": 19904,
+    "sha256": "3452d61da45e5ea2012d932d7b6bb9e78fad91dd4dffae43ece44ce784b506ef"
+  },
+  "browser_setup_failure": {
+    "controller": {
+      "schema": "guard-cigar-worker-reuse-browser-controller.v1",
+      "command": [
+        "/usr/local/bin/node",
+        "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/dashboard/node_modules/@playwright/test/cli.js",
+        "test",
+        "--config",
+        "/private/tmp/hol-guard-cigar-control-preflight-20261025/browser.config.mts",
+        "--project=mutating",
+        "--no-deps",
+        "--max-failures=1",
+        "context-assistance.mutating.spec.ts",
+        "context-execution.mutating.spec.ts",
+        "context-persistence.mutating.spec.ts"
+      ],
+      "returncode": 1,
+      "seconds": 95.451,
+      "source_commit": "1e341429b8006beec74c31cf8c0d230793c0be7f",
+      "planned_cases": 3,
+      "stats": {
+        "startTime": "2026-10-25T10:39:47.274Z",
+        "duration": 94930.057,
+        "expected": 0,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "inputs_unchanged": true,
+      "fingerprinted_files": 1829,
+      "observed_new_descendants_remaining": 0,
+      "resources": {
+        "samples": 1178,
+        "sampling_errors": 0,
+        "median_rss_bytes": 460980224,
+        "peak_rss_bytes": 1022148608,
+        "at_peak_counts": {
+          "other_descendant": 1,
+          "native_runtime": 4,
+          "guard_python_worker": 1,
+          "benchmark_daemon_host": 1
+        },
+        "at_peak_rss_by_kind": {
+          "other_descendant": 230883328,
+          "native_runtime": 72744960,
+          "guard_python_worker": 245350400,
+          "benchmark_daemon_host": 473169920
+        },
+        "maximum_counts": {
+          "native_runtime": 5,
+          "benchmark_daemon_host": 1,
+          "other_descendant": 2,
+          "guard_python_worker": 1,
+          "other_python_child": 1,
+          "exiting_host_python_child": 1,
+          "terminated_child": 1,
+          "sdk_worker": 1,
+          "python_bridge": 1
+        },
+        "includes_observed_reparented_children": true,
+        "shared_pages_may_be_counted_in_multiple_processes": true
+      },
+      "installed_static_assets": 33,
+      "static_override": false,
+      "traces_and_screenshots": "off",
+      "fixture_only_password_and_session_proofs": true,
+      "real_credentials_or_live_Guard_accessed": false,
+      "scope": "Three existing React/HTTP/installed-native flows with explicit test-native selection; local Chromium headless shell1223/Playwright1.60.0; no Desktop release qualification"
+    },
+    "inputs": {
+      "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/browser-setup-failure/inputs.json",
+      "bytes": 373923,
+      "sha256": "0a4e6e5df29199df618d6d67ad40f850d4a47720669804f2dcf2dd91081ecd60"
+    },
+    "original_driver": {
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/browser-setup-failure/run_browser_acceptance.py",
+        "bytes": 6648,
+        "sha256": "9bbb7b5a661307affb8e5d773b66944a6b8070ebaea0c802d458247e148b1fd3"
+      },
+      "text": "\"\"\"Three existing real installed-browser flows with private fixture authority.\"\"\"\nfrom pathlib import Path\nimport hashlib\nimport json\nimport os\nimport socket\nimport subprocess\nimport sys\nimport time\n\nROOT=Path('/private/tmp/hol-guard-cigar-control-preflight-20261025')\nREPO=Path('/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration')\nINSTALLED=ROOT/'package/installed'\nRUNTIME=INSTALLED/'codex_plugin_scanner/_native/hol-guard-runtime'\nartifact=json.loads((ROOT/'package/installed-artifact-verification.json').read_text())\nassert artifact['build_sha']=='1e341429b8006beec74c31cf8c0d230793c0be7f'\nassert hashlib.sha256(RUNTIME.read_bytes()).hexdigest()==artifact['artifact_sha256']\njob=ROOT/'browser-acceptance'\njob.mkdir(mode=0o700)\n(job/'profile').mkdir(mode=0o700)\nsys.path.insert(0,str(REPO))\nfrom scripts.bench_guard_cigar_cohort import fingerprints\nfrom scripts.cigar_benchmark_processes import ProcessSampler\nselection=Path('/private/tmp/hol-guard-cigar-runtime-validation/selection.json')\napproval=Path('/private/tmp/hol-guard-cigar-runtime-validation/approval.json')\nos.environ['GUARD_CIGAR_TEST_SELECTION']=str(selection)\nos.environ['GUARD_CIGAR_TEST_APPROVAL']=str(approval)\nselected_python=Path(json.loads(selection.read_text())['python'])\nnode=Path('/usr/local/bin/node')\nmodules=REPO/'dashboard/node_modules'\ncli=modules/'@playwright/test/cli.js'\nassert json.loads((modules/'@playwright/test/package.json').read_text())['version']=='1.60.0'\nbrowsers=json.loads((modules/'playwright-core/browsers.json').read_text())['browsers']\nassert any(value['name']=='chromium-headless-shell' and value['revision']=='1223' for value in browsers)\nwith socket.socket() as listener:\n    listener.bind(('127.0.0.1',0))\n    port=listener.getsockname()[1]\nenvironment={'HOME':str(job/'profile'),'PATH':'/private/tmp/hol-guard-cigar-locked-runtime/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin',\n             'LANG':'en_US.UTF-8','PYTHONNOUSERSITE':'1','PYTHONPATH':os.pathsep.join((str(INSTALLED),str(REPO))),\n             'HOL_GUARD_TEST_USE_INSTALLED':'1','HOL_GUARD_NATIVE':'force','HOL_GUARD_NATIVE_BINARY':str(RUNTIME),\n             'HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER':str(RUNTIME),'HOL_GUARD_NATIVE_REGRESSION':'1',\n             'HOL_GUARD_TEST_DISABLE_BROWSER_OPEN':'1','GUARD_CIGAR_TEST_SELECTION':str(selection),\n             'GUARD_CIGAR_TEST_APPROVAL':str(approval),'DASHBOARD_E2E_ROOT':str(job/'fixture'),\n             'DASHBOARD_E2E_PORT':str(port),'DASHBOARD_E2E_PYTHON':sys.executable,\n             'SCRG_PROOF_DIR':str(job/'proof'),'PLAYWRIGHT_BROWSERS_PATH':'/private/tmp/hol-guard-cigar-browser-cache'}\npaths=set((REPO/'tests').glob('context*.py'))\npaths.update((REPO/'dashboard/e2e').rglob('*.ts'))\npaths.update((REPO/'scripts/ci/dashboard_integration_seeds').rglob('*.py'))\npaths.update([REPO/'scripts/ci/dashboard_integration_server.py',REPO/'scripts/ci/installed_extension_authority_fixture.py',\n              REPO/'dashboard/playwright.integration.config.ts',REPO/'dashboard/package.json',REPO/'dashboard/package-lock.json',\n              ROOT/'browser.config.mts',ROOT/'functional-acceptance-plan.json',ROOT/'package/installed-artifact-verification.json',\n              Path(__file__),node.resolve(),Path('/private/tmp/hol-guard-cigar-sdk-target/debug/cigar-context-worker')])\nfor package in ['@playwright/test','playwright','playwright-core']:\n    paths.update(path for path in (modules/package).rglob('*') if path.is_file() and path.suffix in {'.js','.cjs','.mjs','.json'})\npaths.update(Path('/private/tmp/hol-guard-cigar-browser-cache').rglob('chrome-headless-shell'))\nassets=json.loads((ROOT/'static-staging.json').read_text())['verified_asset_sha256']\nfor name,value in assets.items():\n    path=INSTALLED/Path(name).relative_to('src')\n    assert hashlib.sha256(path.read_bytes()).hexdigest()==value\n    paths.add(path)\nfrozen=fingerprints(RUNTIME,INSTALLED)\nfor path in paths:frozen[str(path)]=hashlib.sha256(path.read_bytes()).hexdigest()\nwith (job/'inputs.json').open('x') as out:json.dump(frozen,out,indent=2)\nspecs=['context-assistance.mutating.spec.ts','context-execution.mutating.spec.ts','context-persistence.mutating.spec.ts']\ncommand=[str(node),str(cli),'test','--config',str(ROOT/'browser.config.mts'),'--project=mutating','--no-deps',\n         '--max-failures=1',*specs]\nstarted=time.monotonic()\nwith ProcessSampler(selected_python) as sampler:\n    before,baseline=sampler.sample_with_identities()\n    with (job/'stdout.log').open('x') as out,(job/'stderr.log').open('x') as err:\n        result=subprocess.run(command,cwd=REPO/'dashboard',env=environment,stdout=out,stderr=err,timeout=600)\n    deadline=time.monotonic()+5\n    after,remaining=sampler.sample_with_identities()\n    while remaining.keys()-baseline.keys() and time.monotonic()<deadline:\n        time.sleep(.05)\n        after,remaining=sampler.sample_with_identities()\n    new_descendants=len(remaining.keys()-baseline.keys())\n    resources=sampler.summary()\nreport=json.loads((job/'report.json').read_text()) if (job/'report.json').exists() else {}\nstats=report.get('stats',{})\nreceipt={'schema':'guard-cigar-worker-reuse-browser-controller.v1','command':command,'returncode':result.returncode,\n         'seconds':round(time.monotonic()-started,3),'source_commit':artifact['build_sha'],'planned_cases':3,'stats':stats,\n         'inputs_unchanged':all(hashlib.sha256(Path(path).read_bytes()).hexdigest()==value for path,value in frozen.items()),\n         'fingerprinted_files':len(frozen),'observed_new_descendants_remaining':new_descendants,'resources':resources,\n         'installed_static_assets':len(assets),'static_override':False,'traces_and_screenshots':'off',\n         'fixture_only_password_and_session_proofs':True,'real_credentials_or_live_Guard_accessed':False,\n         'scope':'Three existing React/HTTP/installed-native flows with explicit test-native selection; local Chromium headless shell1223/Playwright1.60.0; no Desktop release qualification'}\nwith (job/'controller.json').open('x') as out:json.dump(receipt,out,indent=2);out.write('\\n')\nprint(json.dumps({key:receipt[key] for key in ['returncode','seconds','planned_cases','stats','inputs_unchanged','fingerprinted_files','observed_new_descendants_remaining']}))\nif result.returncode:\n    print((job/'stderr.log').read_text()[-4000:])\nraise SystemExit(result.returncode or int(not receipt['inputs_unchanged']) or int(stats.get('expected')!=3)\n                 or int(any(stats.get(name,1)!=0 for name in ['skipped','unexpected','flaky']))\n                 or int(new_descendants!=0) or int(resources['sampling_errors']!=0))\n"
+    },
+    "original_config": {
+      "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/browser-setup-failure/browser.config.mts",
+      "bytes": 661,
+      "sha256": "373ce363674a95c1ebd986dd86f9ee5d49a7f21147a4ba42ff4c117d25459179"
+    },
+    "report": {
+      "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/browser-setup-failure/report.json",
+      "bytes": 4058,
+      "sha256": "370940b6be78acd28fc2fd65f74ef2f4d6d79f10cb0f470e487ff5ede19aefbc"
+    },
+    "correction": "Remove only the private runner test compiler override. Packaged compiler protection, product bytes, three specs, assertions, timeout and retries remain unchanged. Fresh isolated profile; no browser case ran in the failed setup."
+  },
+  "browser_stop_reload_failure": {
+    "controller": {
+      "schema": "guard-cigar-worker-reuse-browser-controller.v1",
+      "command": [
+        "/usr/local/bin/node",
+        "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/dashboard/node_modules/@playwright/test/cli.js",
+        "test",
+        "--config",
+        "/private/tmp/hol-guard-cigar-control-preflight-20261025/browser.config.mts",
+        "--project=mutating",
+        "--no-deps",
+        "--max-failures=1",
+        "context-assistance.mutating.spec.ts",
+        "context-execution.mutating.spec.ts",
+        "context-persistence.mutating.spec.ts"
+      ],
+      "returncode": 1,
+      "seconds": 41.057,
+      "source_commit": "1e341429b8006beec74c31cf8c0d230793c0be7f",
+      "planned_cases": 3,
+      "stats": {
+        "startTime": "2026-10-25T10:42:06.220Z",
+        "duration": 39625.707,
+        "expected": 0,
+        "skipped": 2,
+        "unexpected": 1,
+        "flaky": 0
+      },
+      "inputs_unchanged": true,
+      "fingerprinted_files": 1829,
+      "observed_new_descendants_remaining": 0,
+      "resources": {
+        "samples": 512,
+        "sampling_errors": 0,
+        "median_rss_bytes": 1824620544,
+        "peak_rss_bytes": 2433794048,
+        "at_peak_counts": {
+          "benchmark_daemon_host": 1,
+          "other_descendant": 6,
+          "guard_python_worker": 3,
+          "sdk_worker": 2,
+          "native_runtime": 7,
+          "python_bridge": 1
+        },
+        "at_peak_rss_by_kind": {
+          "benchmark_daemon_host": 473022464,
+          "other_descendant": 1050361856,
+          "guard_python_worker": 663044096,
+          "sdk_worker": 88899584,
+          "native_runtime": 130449408,
+          "python_bridge": 28016640
+        },
+        "maximum_counts": {
+          "benchmark_daemon_host": 1,
+          "sdk_worker": 2,
+          "guard_python_worker": 4,
+          "exiting_host_python_child": 1,
+          "terminated_child": 2,
+          "native_runtime": 9,
+          "python_bridge": 1,
+          "other_descendant": 7,
+          "other_python_child": 1
+        },
+        "includes_observed_reparented_children": true,
+        "shared_pages_may_be_counted_in_multiple_processes": true
+      },
+      "installed_static_assets": 33,
+      "static_override": false,
+      "traces_and_screenshots": "off",
+      "fixture_only_password_and_session_proofs": true,
+      "real_credentials_or_live_Guard_accessed": false,
+      "scope": "Three existing React/HTTP/installed-native flows with explicit test-native selection; local Chromium headless shell1223/Playwright1.60.0; no Desktop release qualification"
+    },
+    "inputs": {
+      "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/browser-stop-reload-failure/inputs.json",
+      "bytes": 373923,
+      "sha256": "88deec97b088043590af18dafc9765abb3202d1412ddad9d8bfc2ee73f575339"
+    },
+    "report": {
+      "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/browser-stop-reload-failure/report.json",
+      "bytes": 13038,
+      "sha256": "5141f819019d1ae4bfbc0ce284ee682d8ad854d6d88d60adab66deb4627b2c9a"
+    },
+    "original_spec": {
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/browser-stop-reload-failure/context-assistance.mutating.spec.ts",
+        "bytes": 16350,
+        "sha256": "d51f3fef04ab77b895036ae12545b321c9f730ea868d31f620a0bbd4395f4b89"
+      },
+      "text": "import { daemonApi, expect, expectNoErrorBoundary, test, type IntegrationState } from \"./fixtures\";\nimport { contextStatus } from \"./context-status\";\nimport { writeFileSync } from \"node:fs\";\nimport { resolve } from \"node:path\";\nimport { ContextAgentProbe } from \"./context-agent-probe\";\nimport { execFileSync } from \"node:child_process\";\nimport { contextHistoryAndRepairFlow, clearContextFromRepair } from \"./context-history-flow\";\nimport { contextSharingFlow } from \"./context-sharing-flow\";\n\nasync function saveWithProof(page: import(\"@playwright/test\").Page, state: IntegrationState) {\n  await page.getByRole(\"region\", { name: \"Save settings\" }).getByRole(\"button\", { name: \"Save settings\" }).click();\n  const proof = page.getByRole(\"dialog\");\n  await proof.getByLabel(\"Approval password\").fill(state.approvalPassword);\n  await proof.getByRole(\"button\", { name: \"Save settings\" }).click();\n  await expect(proof).toHaveCount(0);\n  await expect(page.getByText(\"Settings saved successfully.\")).toBeVisible();\n}\n\ntest(\"real candidate sources, proof-backed MCP pairing and opt-out survive reload\", async ({ page, state }) => {\n  test.setTimeout(240_000);\n  const seed = state.seeded.context_assistance;\n  test.skip(seed?.candidateEnrolled !== true, \"requires an explicitly selected and approved installed candidate\");\n  const status = () => contextStatus(state);\n  await page.goto(\"/settings?section=protection\");\n  const toggle = page.getByRole(\"switch\", { name: \"Use CIGAR on this machine\" });\n  await expect(toggle).toHaveAttribute(\"aria-checked\", \"false\");\n  await page.getByRole(\"button\", { name: \"Choose a verified runtime\" }).click();\n  await expect(page.getByLabel(\"Local runtime\", { exact: true })).toHaveValue(String(seed.runtimeId));\n  await expect(toggle).toBeEnabled();\n  await toggle.focus();\n  await page.keyboard.press(\"Space\");\n  await expect(toggle).toHaveAttribute(\"aria-checked\", \"true\");\n  await page.getByRole(\"switch\", { name: \"Context for AI apps\", exact: true }).click();\n  await page.getByText(\"Sources, limits and runtime details\", { exact: true }).click();\n  await page.getByRole(\"switch\", { name: \"Allow selected workspace documents\" }).click();\n  await saveWithProof(page, state);\n  expect((await status()).effective_enabled).toBe(false);\n  let probe: ContextAgentProbe | undefined;\n  try {\n    await page.getByRole(\"button\", { name: \"Start context assistance\" }).click();\n    await expect.poll(async () => (await status()).effective_enabled, { timeout: 30_000 }).toBe(true);\n    const ready = await status();\n    expect(ready.runtime?.interpreter.version.slice(0, 2)).toEqual([3, 14]);\n    expect(ready.runtime?.worker_fingerprint).toBe(seed.workerFingerprint);\n    // Source permission requires a separate native proof, even after global opt-in.\n    const unproved = await page.request.post(`${state.origin}/v1/context-assistance/workspace-grant`, {\n      headers: { \"x-guard-token\": state.daemonToken }, data: { input: { action: \"grant\", workspace: state.workspace, app: \"dashboard\", sources: [\"README.md\"] } },\n    });\n    expect([401, 403, 423]).toContain(unproved.status());\n    await page.getByLabel(\"Workspace folder\", { exact: true }).fill(state.workspace);\n    await page.getByLabel(\"Files relative to the workspace, one per line\").fill(\"README.md\");\n    await page.getByRole(\"button\", { name: \"Grant review source access\" }).click();\n    const sourceProof = page.getByRole(\"dialog\");\n    await sourceProof.getByLabel(\"Approval password\").fill(state.approvalPassword);\n    await sourceProof.getByRole(\"button\", { name: \"Grant source access\", exact: true }).click();\n    await expect(sourceProof).toHaveCount(0);\n    await expect(page.getByText(/Recent native receipt facts: 0 of at most 16 retained/)).toBeVisible();\n    await page.getByLabel(\"What would you like context about?\").fill(\"reviewed release process\");\n    await page.getByRole(\"button\", { name: \"Prepare cited context\" }).click();\n    const prepared = page.getByRole(\"region\", { name: \"Prepared context\", exact: true });\n    await expect(prepared.getByText(\"Integration workspace uses a reviewed release process.\", { exact: true })).toBeVisible();\n    await prepared.getByText(\"Sources and revisions\", { exact: true }).click();\n    await expect(prepared.getByText(/README.md, lines/)).toBeVisible();\n    writeFileSync(resolve(state.workspace, \"README.md\"), \"Updated workspace now uses a different release procedure.\\n\");\n    await page.getByRole(\"button\", { name: \"Prepare cited context\" }).click();\n    await expect(page.getByRole(\"alert\").filter({ hasText: \"Sources or access changed\" })).toBeVisible();\n    await expect(prepared).toHaveCount(0);\n    await page.getByRole(\"button\", { name: \"Refresh selected files\" }).click();\n    await expect(page.getByRole(\"button\", { name: \"Prepare cited context\" })).toBeEnabled();\n    await page.getByRole(\"button\", { name: \"Prepare cited context\" }).click();\n    await expect(prepared.getByText(\"Updated workspace now uses a different release procedure.\", { exact: true })).toBeVisible();\n    await prepared.getByText(\"Compare with earlier context\", { exact: true }).click();\n    await expect(prepared.getByText(\"Integration workspace uses a reviewed release process.\", { exact: true })).toBeVisible();\n    await page.getByRole(\"button\", { name: \"Withdraw README.md\" }).click();\n    await expect(prepared).toHaveCount(0);\n    await expect(page.getByRole(\"button\", { name: \"Withdraw README.md\" })).toHaveCount(0);\n    await page.getByRole(\"button\", { name: \"Revoke workspace access\" }).click();\n    await expect(page.getByText(\"No workspace has context access.\", { exact: true })).toBeVisible();\n    // A real MCP client has no operator authority. Its public code is paired\n    // by the browser only after separate native source and connection proofs.\n    probe = new ContextAgentProbe(String(seed.pythonExecutable), state.guardHome);\n    const initialTools = await probe.request(\"list\");\n    expect(initialTools.list_changed).toBe(true);\n    expect(initialTools.tools).toContain(\"get_context_status\");\n    expect(initialTools.tools).not.toContain(\"get_guard_context\");\n    const pending = await probe.request(\"get_context_status\");\n    expect(pending.data.phase).toBe(\"pending\");\n    expect(JSON.stringify(pending)).not.toContain(\"credential\");\n    expect((await probe.request(\"get_guard_context\", { query: \"release procedure\" })).ok).toBe(false);\n    await page.getByRole(\"combobox\", { name: \"Context consumer\", exact: true }).selectOption(\"codex\");\n    await page.getByLabel(\"Files relative to the workspace, one per line\").fill(\"README.md\");\n    await page.getByRole(\"button\", { name: \"Grant review source access\" }).click();\n    const appSourceProof = page.getByRole(\"dialog\");\n    await appSourceProof.getByLabel(\"Approval password\").fill(state.approvalPassword);\n    await appSourceProof.getByRole(\"button\", { name: \"Grant source access\", exact: true }).click();\n    await expect(appSourceProof).toHaveCount(0);\n    await page.getByRole(\"button\", { name: \"Refresh app connections\", exact: true }).click();\n    const connection = page.getByRole(\"region\", { name: `Context connection ${pending.data.session_id}`, exact: true });\n    await expect(connection.getByText(\"Waiting for your permission\", { exact: false })).toBeVisible();\n    await connection.getByRole(\"combobox\", { name: \"Workspace and app grant\", exact: true }).selectOption({ index: 1 });\n    const unprovedPair = await page.request.post(`${state.origin}/v1/context-assistance/workspace-grant`, {\n      headers: { \"x-guard-token\": state.daemonToken }, data: { input: {\n        action: \"authorize_agent\", session_id: pending.data.session_id,\n        scope_id: await connection.getByRole(\"combobox\", { name: \"Workspace and app grant\", exact: true }).inputValue(),\n      } },\n    });\n    expect([401, 403, 423]).toContain(unprovedPair.status());\n    await connection.getByRole(\"button\", { name: \"Authorize context connection\", exact: true }).click();\n    const pairingProof = page.getByRole(\"dialog\");\n    await expect(pairingProof).toContainText(pending.data.session_id);\n    await expect(pairingProof).toContainText(state.workspace);\n    await expect(pairingProof).toContainText(\"Codex\");\n    await pairingProof.getByLabel(\"Approval password\").fill(state.approvalPassword);\n    await pairingProof.getByRole(\"button\", { name: \"Authorize connection\", exact: true }).click();\n    await expect(pairingProof).toHaveCount(0);\n    await expect(connection.getByText(\"Grant assigned\", { exact: false })).toBeVisible();\n    const authorized = await probe.request(\"get_context_status\");\n    expect(authorized.data.app).toBe(\"codex\");\n    expect(authorized.data.harness_route_qualification).toBe(\"not_established\");\n    const agentContext = await probe.request(\"get_guard_context\", { query: \"release procedure\" });\n    expect(agentContext.ok).toBe(true);\n    const agentBrief = agentContext.data.result.brief;\n    expect(agentBrief.rendered).toContain(\"Updated workspace now uses a different release procedure.\");\n    expect(agentBrief.citations.length).toBeGreaterThanOrEqual(2);\n    expect((await probe.request(\"explain_guard_context\", { snapshot_id: agentBrief.snapshot_id })).ok).toBe(true);\n    expect((await probe.request(\"get_guard_context\", { query: \"release procedure\", scope_id: \"foreign\", app: \"cursor\" })).ok).toBe(false);\n    await page.getByRole(\"combobox\", { name: \"Context consumer\", exact: true }).selectOption(\"dashboard\");\n    await page.getByLabel(\"Files relative to the workspace, one per line\").fill(\"README.md\");\n    await page.getByRole(\"button\", { name: \"Grant review source access\" }).click();\n    const reviewSourceProof = page.getByRole(\"dialog\");\n    await reviewSourceProof.getByLabel(\"Approval password\").fill(state.approvalPassword);\n    await reviewSourceProof.getByRole(\"button\", { name: \"Grant source access\", exact: true }).click();\n    await expect(reviewSourceProof).toHaveCount(0);\n    const nativeReview = JSON.parse(execFileSync(String(seed.pythonExecutable), [\"-B\",\n      resolve(import.meta.dirname, \"../../../scripts/ci/dashboard_context_native_review.py\"),\n      \"--guard-home\", state.guardHome, \"--workspace\", state.workspace], { encoding: \"utf8\", timeout: 15_000 }));\n    expect((await probe.request(\"list\")).tools).toContain(\"explain_guard_action\");\n    const nativeAgentContext = await probe.request(\"explain_guard_action\", { decision_id: nativeReview.decision_id });\n    expect(nativeAgentContext.ok).toBe(true);\n    expect(nativeAgentContext.data.result.association.binding).toBe(\"authenticated_native_decision\");\n    expect(nativeAgentContext.data.result.association.execution_binding).toBe(\"unqualified\");\n    expect(nativeAgentContext.data.result.brief.citations.some((citation: { source: string }) => citation.source === \"guard:action\")).toBe(true);\n    expect((await probe.request(\"explain_guard_action\", { decision_id: nativeReview.decision_id,\n      snapshot_id: nativeAgentContext.data.result.brief.snapshot_id })).ok).toBe(true);\n    expect((await probe.request(\"explain_guard_action\", { decision_id: nativeReview.decision_id, app: \"cursor\" })).ok).toBe(false);\n    await page.goto(`/requests/${nativeReview.request_id}`);\n    const optionalContext = page.getByRole(\"region\", { name: \"Optional decision context\", exact: true });\n    await expect(optionalContext).toBeVisible();\n    const allowOnce = page.getByRole(\"button\", { name: \"Allow just this once\", exact: true });\n    const alwaysAllow = page.getByRole(\"radio\", { name: /^Always allow exact action/ });\n    await expect(allowOnce).toBeEnabled();\n    await expect(alwaysAllow).toBeEnabled();\n    await optionalContext.getByRole(\"button\", { name: \"Prepare decision context\", exact: true }).click();\n    await expect(allowOnce).toBeEnabled();\n    const actionContext = optionalContext.getByRole(\"region\", { name: \"Native decision context\", exact: true });\n    await expect(actionContext.getByText(/Authenticated native Guard decision/)).toBeVisible();\n    await actionContext.getByText(\"Sources and revisions\", { exact: true }).click();\n    await expect(actionContext.getByText(/Authenticated native decision facts, lines/)).toBeVisible();\n    await optionalContext.getByRole(\"button\", { name: \"Verify context sources\", exact: true }).click();\n    await expect(optionalContext.getByText(\"The retained selection and its sources were verified again.\", { exact: true })).toBeVisible();\n    await expect(allowOnce).toBeEnabled();\n    await expect(alwaysAllow).toBeEnabled();\n    await contextHistoryAndRepairFlow(page, state, nativeReview, probe);\n    await page.goto(\"/settings?section=protection\");\n    await page.getByRole(\"button\", { name: \"Refresh app connections\", exact: true }).click();\n    await connection.getByRole(\"button\", { name: \"Revoke context connection\", exact: true }).click();\n    await expect(connection).toHaveCount(0);\n    const revoked = await probe.request(\"get_guard_context\", { query: \"release procedure\" });\n    expect(revoked.ok).toBe(false);\n    expect(revoked.error.code).toBe(\"native_context_assistance_context_scope_denied\");\n    await clearContextFromRepair(page);\n    await page.goto(\"/settings?section=protection\");\n    // An unrelated settings save must preserve raw local consent and the verified generation.\n    const timeout = page.getByRole(\"spinbutton\", { name: \"How long to wait for your answer\" });\n    await timeout.fill(String(Number(await timeout.inputValue()) + 30));\n    await saveWithProof(page, state);\n    expect((await status()).requested_enabled).toBe(true);\n    expect((await status()).effective_enabled).toBe(true);\n    await page.reload();\n    await expect(toggle).toHaveAttribute(\"aria-checked\", \"true\");\n    await page.goto(\"/\");\n    const overview = page.getByRole(\"region\", { name: \"Context assistance overview\" });\n    await expect(overview.getByRole(\"status\")).toHaveText(\"Ready\");\n    await overview.getByRole(\"button\", { name: \"Turn off context assistance\", exact: true }).click();\n    await expect(overview.getByRole(\"status\")).toHaveText(\"Off\");\n    expect((await status()).requested_enabled).toBe(false);\n    expect((await status()).runtime).toBeNull();\n    expect((await probe.request(\"list\")).tools).not.toContain(\"get_guard_context\");\n    const disabled = await probe.request(\"get_guard_context\", { query: \"release procedure\" });\n    expect(disabled.error.code).toBe(\"native_context_assistance_disabled\");\n    await overview.getByRole(\"button\", { name: \"Manage context assistance\" }).click();\n    await expect(toggle).toHaveAttribute(\"aria-checked\", \"false\");\n    await page.getByRole(\"button\", { name: \"Choose a verified runtime\" }).click();\n    await expect(page.getByLabel(\"Local runtime\", { exact: true })).toHaveValue(String(seed.runtimeId));\n    await expect(toggle).toBeEnabled();\n    await toggle.click();\n    await saveWithProof(page, state);\n    await page.getByRole(\"button\", { name: \"Start context assistance\" }).click();\n    await expect.poll(async () => (await status()).effective_enabled, { timeout: 30_000 }).toBe(true);\n    await page.setViewportSize({ width: 390, height: 844 });\n    await expect(page.getByText(\"No workspace has context access.\", { exact: true })).toBeVisible();\n    const off = page.getByRole(\"button\", { name: \"Turn off now\" });\n    await off.scrollIntoViewIfNeeded();\n    await expect(off).toBeVisible();\n    await off.click();\n    await expect.poll(async () => (await status()).requested_enabled).toBe(false);\n    expect((await status()).runtime).toBeNull();\n    await page.reload();\n    await expect(toggle).toHaveAttribute(\"aria-checked\", \"false\");\n    await expectNoErrorBoundary(page);\n    // Browser-supplied runtime assertions cannot replace native verification.\n    const forged = await page.request.post(`${state.origin}/v1/context-assistance/activate`, {\n      headers: { \"x-guard-token\": state.daemonToken }, data: { python_version: [3, 14], approved: true },\n    });\n    expect(forged.status()).toBe(400);\n    expect(await forged.json()).toEqual({\n      error: \"context_assistance_unavailable\", code: \"native_context_assistance_control_input_invalid\",\n    });\n    expect((await status()).effective_enabled).toBe(false);\n    await contextSharingFlow(page, state, saveWithProof);\n  } finally {\n    await daemonApi(state, \"/v1/context-assistance/stop\", { method: \"POST\", body: \"{}\" });\n    await probe?.close();\n  }\n});\n"
+    }
+  },
+  "limits": [
+    "Actual local installed package/native/SDKs and React/HTTP in Chromium; explicit test native/compiler selection.",
+    "No interactive Desktop/external account/model/platform/public release qualification follows.",
+    "Original SLO and five-pair relative gates are separate; no memory, token, user-time or exponential benefit is established.",
+    "Browser authority uses only the private synthetic fixture. No credential/session state, screenshot or trace is copied into this receipt."
+  ]
+}

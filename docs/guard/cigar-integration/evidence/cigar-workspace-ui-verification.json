@@ -1,0 +1,91 @@
+{
+  "schema": "guard-cigar-workspace-ui-verification.v1",
+  "recorded_at": "2026-10-25T21:16:33.681702+00:00",
+  "source": {
+    "branch": "feature/integrate-cigar-0.14.1",
+    "base_commit": "fedfc7a418145ed2f82cb21f9dd38a2dda85e46d",
+    "state": "uncommitted UI working tree; unchanged qualified native core"
+  },
+  "ui": {
+    "route": "/cigar",
+    "sections": [
+      "Overview",
+      "Runtime & preferences",
+      "Sources & AI apps",
+      "Data & privacy",
+      "How it works"
+    ],
+    "version_labels": "native runtime metadata",
+    "automatic_page_actions": "status and registered metadata reads only"
+  },
+  "checks": {
+    "production_vite_build": "passed",
+    "context_component_suite": "passed",
+    "workspace_navigation_routing_suite": "passed",
+    "final_ui_browser_cases": 6,
+    "final_ui_browser_status": "passed",
+    "responsive_widths": [
+      1440,
+      790,
+      390,
+      320
+    ],
+    "installed_native_browser": {
+      "returncode": 0,
+      "seconds": 108.68,
+      "stats": {
+        "startTime": "2026-10-25T21:05:43.290Z",
+        "duration": 107145.787,
+        "expected": 3,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "remaining_optional_processes": 0,
+      "native_core_unchanged": true,
+      "user_preview_profile_used": false
+    },
+    "updated_static_files": 33,
+    "static_source_matches_preview": true,
+    "broader_npm_test": "blocked at pretest: Bun executable absent",
+    "production_typescript_diagnostics": 18,
+    "typescript_scope": "existing non-context diagnostics; no CIGAR production diagnostics"
+  },
+  "preview": {
+    "root": "/private/tmp/hol-guard-cigar-ui-i0e1xy36",
+    "url": "http://127.0.0.1:5041/cigar",
+    "native_sha256": "57305baefafd1869ffc6e210ac8db1f36205a86ea97a5071f9ea5088c7a9cf2a",
+    "native_source_commit": "ed5011acbba43cb19c093064b34ffe47bf3f2616",
+    "native_discovery": "auto; native_ready",
+    "verification": "/private/tmp/hol-guard-cigar-ui-i0e1xy36/running-dashboard-verification.json",
+    "profile_runtime": {
+      "availability": "off",
+      "requested_enabled": false,
+      "effective_enabled": false,
+      "runtime_id": "",
+      "installation_options": [
+        {
+          "platform": "darwin-arm64",
+          "python_version": [
+            3,
+            14,
+            7
+          ],
+          "qualification": "local_candidate",
+          "runtime_id": "cigar-0_14_1-python-3_14_7",
+          "worker_fingerprint": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112"
+        }
+      ]
+    }
+  },
+  "retained_attempts": {
+    "initial_mock_browser": "five passed, one save test failed because fixture omitted context_assistance_requested; fixture corrected, final six passed",
+    "initial_preview_restart": "root Python module had no __main__; exited immediately; canonical Guard dashboard launcher succeeded"
+  },
+  "limits": [
+    "UI-only installed preview, not a new wheel/onefile or full Desktop release qualification",
+    "Original qualified binary artifacts and SDK source unchanged",
+    "No public release, push, merge, live Guard hook changes, system Python changes, or automatic CIGAR enablement",
+    "No new performance, model-token, memory or human-time benefit qualification"
+  ]
+}

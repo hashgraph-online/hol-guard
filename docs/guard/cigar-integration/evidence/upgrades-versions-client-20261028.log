@@ -1,0 +1,383 @@
+===== versions-jobs.test.ts =====
+CIGAR job families, native readiness separation, full generation precision and malformed projection checks passed.
+===== versions-api.test.ts =====
+Authenticated CIGAR versions transport, explicit effects, proof separation and no-retry outcomes passed.
+===== api.test.ts =====
+Authenticated context controls, off-state reads and incompatible native replies passed.
+===== status.test.ts =====
+Context assistance status, scope of readiness, presets and immediate opt-out checks passed.
+===== workspace.test.tsx =====
+CIGAR setup state, runtime registration, live readiness, guide, version display and tab contracts passed.
+===== tutorials.test.tsx =====
+CIGAR tutorial identity, resumable progress, native-status separation and qualification guidance passed.
+===== typecheck =====
+src/about/about-section-shell.test.ts(1,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/about/about-section-shell.test.ts(2,25): error TS2591: Cannot find name 'node:path'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/about/about-section-shell.test.ts(11,23): error TS2339: Property 'dirname' does not exist on type 'ImportMeta'.
+src/action-explanation-normalize.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/app-activity-evidence.test.ts(1,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/app-activity-evidence.test.ts(2,31): error TS2591: Cannot find name 'node:path'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/app-activity-evidence.test.ts(3,31): error TS2591: Cannot find name 'node:url'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/approval-center-layout.test.ts(1,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/approval-center-layout.test.ts(2,31): error TS2591: Cannot find name 'node:url'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/approval-center-primitives.tsx(461,5): error TS2339: Property 'type' does not exist on type 'Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children" | "className" | "onClick" | "type">'.
+src/approval-center-primitives.tsx(464,3): error TS2322: Type '{ dangerouslySetInnerHTML?: { __html: string | TrustedHTML; } | undefined; onCopy?: ClipboardEventHandler<HTMLButtonElement> | undefined; ... 272 more ...; part?: string | undefined; }' is not assignable to type 'AnchorHTMLAttributes<HTMLAnchorElement>'.
+  Types of property 'onCopy' are incompatible.
+    Type 'ClipboardEventHandler<HTMLButtonElement> | undefined' is not assignable to type 'ClipboardEventHandler<HTMLAnchorElement> | undefined'.
+      Type 'ClipboardEventHandler<HTMLButtonElement>' is not assignable to type 'ClipboardEventHandler<HTMLAnchorElement>'.
+        Type 'HTMLButtonElement' is missing the following properties from type 'HTMLAnchorElement': charset, coords, download, hreflang, and 19 more.
+src/approval-extension-recommendation.test.ts(1,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/approval-extension-recommendation.test.ts(279,3): error TS2591: Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/approval-gate-lock.test.ts(1,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/approval-gate.test.ts(1,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/approval-gate.test.ts(19,3): error TS2740: Type '{ mode: "prompt"; security_level: "balanced"; default_action: string; unknown_publisher_action: string; changed_hash_action: string; new_network_domain_action: string; subprocess_action: string; risk_actions: {}; risk_action_overrides: {}; ... 6 more ...; approval_gate?: GuardApprovalGatePublicConfig | undefined; }' is missing the following properties from type 'GuardSettings': presentation_mode, presentation_mode_explicit, presentation_schema_version, presentation_revision, and 3 more.
+src/approval-gate.test.ts(110,9): error TS2740: Type '{ mode: "prompt"; security_level: "balanced"; default_action: string; unknown_publisher_action: string; changed_hash_action: string; new_network_domain_action: string; subprocess_action: string; risk_actions: {}; risk_action_overrides: {}; ... 6 more ...; approval_gate: { ...; }; }' is missing the following properties from type 'GuardSettings': presentation_mode, presentation_mode_explicit, presentation_schema_version, presentation_revision, and 3 more.
+src/approval-gate.test.ts(507,3): error TS2591: Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/approval-scopes.test.ts(154,7): error TS2769: No overload matches this call.
+  The last overload gave the following error.
+    Object literal may only specify known properties, but 'showAllowScopes' does not exist in type 'Attributes & ReviewScopeControlsProps'. Did you mean to write 'allowScope'?
+src/assurance/assurance.test.tsx(10,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/assurance/assurance.test.tsx(11,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/assurance/decision-explanation-panel.test.ts(9,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/assurance/protection-status.test.ts(17,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/assurance/protection-status.test.ts(18,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/authoritative-action-surfaces.test.tsx(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/business-policy-recovery.test.tsx(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/business-review-summary.test.tsx(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/business-review-summary.test.tsx(28,67): error TS2322: Type 'BusinessReviewSummary | null' is not assignable to type 'BusinessReviewSummary'.
+  Type 'null' is not assignable to type 'BusinessReviewSummary'.
+src/cloud-user-menu.tsx(63,31): error TS2345: Argument of type 'number | null' is not assignable to parameter of type 'number | undefined'.
+  Type 'null' is not assignable to type 'number | undefined'.
+src/cloud-user-menu.tsx(71,20): error TS2345: Argument of type 'number | null' is not assignable to parameter of type 'number | undefined'.
+  Type 'null' is not assignable to type 'number | undefined'.
+src/command-activity/command-activity-ui-contract.test.ts(1,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/command-activity/command-activity-ui-contract.test.ts(2,31): error TS2591: Cannot find name 'node:path'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/command-activity/command-activity-ui-contract.test.ts(3,31): error TS2591: Cannot find name 'node:url'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/confirm-dialog.test.tsx(2,53): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/confirm-dialog.test.tsx(3,22): error TS2591: Cannot find name 'node:path'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/confirm-dialog.test.tsx(4,31): error TS2591: Cannot find name 'node:url'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/connector-setup.test.ts(1,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/connector-setup.test.ts(2,31): error TS2591: Cannot find name 'node:url'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/consolidated-evidence-alert.test.ts(1,38): error TS2591: Cannot find name 'node:test'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/consolidated-evidence-alert.test.ts(2,34): error TS2591: Cannot find name 'node:assert'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/context-assistance/action-api.test.tsx(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/context-assistance/action-api.test.tsx(2,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/context-assistance/api.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/context-assistance/api.test.ts(2,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/context-assistance/execution.test.tsx(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/context-assistance/execution.test.tsx(2,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/context-assistance/history.test.tsx(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/context-assistance/history.test.tsx(2,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/context-assistance/home-status.test.tsx(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/context-assistance/home-status.test.tsx(2,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/context-assistance/release-version.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/context-assistance/release-version.test.ts(2,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/context-assistance/settings-controls.test.tsx(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/context-assistance/settings-controls.test.tsx(2,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/context-assistance/settings-controls.test.tsx(19,38): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/context-assistance/settings-controls.test.tsx(62,50): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+src/context-assistance/settings-controls.test.tsx(62,72): error TS18048: 'attributes' is possibly 'undefined'.
+src/context-assistance/status.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/context-assistance/status.test.ts(2,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/context-assistance/tutorials.test.tsx(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/context-assistance/tutorials.test.tsx(2,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/context-assistance/versions-api.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/context-assistance/versions-api.test.ts(2,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/context-assistance/versions-jobs.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/context-assistance/workspace.test.tsx(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/context-assistance/workspace.test.tsx(2,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/context-assistance/workspaces-api.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/context-assistance/workspaces-api.test.ts(2,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/discovery-failure.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/error-boundary.test.ts(1,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/error-boundary.test.ts(2,31): error TS2591: Cannot find name 'node:path'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/error-boundary.test.ts(3,31): error TS2591: Cannot find name 'node:url'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/error-boundary.test.ts(76,5): error TS2769: No overload matches this call.
+  The last overload gave the following error.
+    Argument of type '{ onReset: () => undefined; }' is not assignable to parameter of type 'Attributes & Props'.
+      Property 'children' is missing in type '{ onReset: () => undefined; }' but required in type 'Props'.
+src/evidence/evidence-activity-heatmap.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/evidence/evidence-activity-heatmap.test.ts(2,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/evidence/evidence-activity-heatmap.test.ts(3,31): error TS2591: Cannot find name 'node:path'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/evidence/evidence-activity-heatmap.test.ts(4,31): error TS2591: Cannot find name 'node:url'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/evidence/evidence-copy.test.ts(1,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/evidence/evidence-copy.test.ts(2,31): error TS2591: Cannot find name 'node:url'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/evidence/evidence-copy.test.ts(3,31): error TS2591: Cannot find name 'node:path'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/evidence/evidence-detail.test.ts(1,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/evidence/evidence-detail.test.ts(2,31): error TS2591: Cannot find name 'node:url'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/evidence/evidence-detail.test.ts(3,31): error TS2591: Cannot find name 'node:path'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/evidence/evidence-format.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/evidence/evidence-insights-headline-bento.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/evidence/evidence-insights-home-preview.test.ts(1,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/evidence/evidence-insights-home-preview.test.ts(2,31): error TS2591: Cannot find name 'node:path'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/evidence/evidence-insights-home-preview.test.ts(3,31): error TS2591: Cannot find name 'node:url'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/evidence/evidence-insights-layout.test.ts(1,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/evidence/evidence-insights-layout.test.ts(2,31): error TS2591: Cannot find name 'node:url'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/evidence/evidence-insights-layout.test.ts(3,31): error TS2591: Cannot find name 'node:path'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/evidence/evidence-trend-chart.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/evidence/plain-english.test.ts(10,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/extension-catalog-v2.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/extension-control-center-model.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/extension-control-center-model.test.ts(2,29): error TS2591: Cannot find name 'node:perf_hooks'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/extension-control-preview-normalize.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/extension-control-projection-normalize.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/extension-controls-normalize.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/extension-policy-draft.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/extension-policy-panel.copy.test.tsx(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/extension-policy-panel.copy.test.tsx(2,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/extension-policy-panel.managed-controls.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/extension-policy-rebase.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/extension-policy-self-repair.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/extensions-workspace.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/extensions-workspace.test.ts(2,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/extensions-workspace.test.ts(256,106): error TS2554: Expected 0-1 arguments, but got 2.
+src/fleet-workspace.test.ts(225,3): error TS18047: 'failedCloudProof' is possibly 'null'.
+src/guard-action.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/guard-api.test.ts(1,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/guard-api.test.ts(12,3): error TS2305: Module '"./guard-api"' has no exported member 'GuardSessionUnavailableError'.
+src/guard-api.ts(4434,3): error TS2322: Type 'false' is not assignable to type 'true'.
+src/guard-daemon-origin.test.ts(1,34): error TS2591: Cannot find name 'node:assert'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/guard-repair-control.test.tsx(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/guard-types.ts(714,59): error TS2339: Property 'signal_id' does not exist on type 'GuardScannerEvidence'.
+  Property 'signal_id' does not exist on type 'GuardSupplyChainScannerEvidence'.
+src/guard-types.ts(720,57): error TS2339: Property 'operation' does not exist on type 'GuardScannerEvidence'.
+  Property 'operation' does not exist on type 'GuardWatchOnlyScannerEvidence'.
+src/guard-types.ts(734,11): error TS2339: Property 'kind' does not exist on type 'GuardScannerEvidence'.
+  Property 'kind' does not exist on type 'GuardSupplyChainScannerEvidence'.
+src/guard-types.ts(735,11): error TS2339: Property 'schema_version' does not exist on type 'GuardScannerEvidence'.
+  Property 'schema_version' does not exist on type 'GuardSupplyChainScannerEvidence'.
+src/guard-types.ts(736,18): error TS2339: Property 'portable' does not exist on type 'GuardScannerEvidence'.
+  Property 'portable' does not exist on type 'GuardSupplyChainScannerEvidence'.
+src/guard-types.ts(737,18): error TS2339: Property 'context_digest' does not exist on type 'GuardScannerEvidence'.
+  Property 'context_digest' does not exist on type 'GuardSupplyChainScannerEvidence'.
+src/guard-update-reconnect-security.test.ts(1,28): error TS2591: Cannot find name 'node:crypto'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/guard-update-reconnect-security.test.ts(104,31): error TS2591: Cannot find name 'Buffer'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/guard-update-reconnect-security.test.ts(157,8): error TS2367: This comparison appears to be unintentional because the types '0' and '1' have no overlap.
+src/historical-native-review-envelope.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/local-cli-api.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/managed-controls/custom-extension-continuity.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/managed-controls/extension-managed-controls-panel.test.tsx(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/managed-controls/local-protection-model.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/managed-controls/rules-exceptions-model.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/native-review-contract.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/native-review-contract.test.ts(2,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/native-review-contract.test.ts(15,50): error TS2322: Type 'null' is not assignable to type 'string'.
+src/native-review-contract.test.ts(24,46): error TS2345: Argument of type 'GuardActionEnvelope | null | undefined' is not assignable to parameter of type 'GuardActionEnvelope'.
+  Type 'undefined' is not assignable to type 'GuardActionEnvelope'.
+src/open-guard-cloud-action.test.tsx(112,3): error TS2367: This comparison appears to be unintentional because the types '"https://hol.org/api/guard/oauth/authorize?request_id=test-1"' and '"https://hol.org/guard"' have no overlap.
+src/package-workbench-panel.test.tsx(3,28): error TS2305: Module '"./package-workbench-filter-modal"' has no exported member 'FilterChip'.
+src/policy-cloud-exception-request-draft.test.ts(34,15): error TS2353: Object literal may only specify known properties, and 'device_id' does not exist in type 'GuardRuntimeDevice'.
+src/policy-cloud-exception-request-draft.test.ts(41,7): error TS2353: Object literal may only specify known properties, and 'verified' does not exist in type 'GuardProofStatus'.
+src/policy-cloud-exception-request-draft.test.ts(55,5): error TS2322: Type 'string' is not assignable to type 'GuardCloudPairingState'.
+src/policy-cloud-exception-request-draft.test.ts(56,5): error TS2322: Type 'string' is not assignable to type 'GuardCloudSyncHealth'.
+src/policy-cloud-exception-request-draft.test.ts(63,7): error TS2741: Property 'source_scope' is missing in type '{ receipt_id: string; harness: string; artifact_id: string; artifact_hash: string; policy_decision: "allow"; capabilities_summary: string; changed_capabilities: []; provenance_summary: string; user_override: null; timestamp: string; }' but required in type 'GuardReceipt'.
+src/policy-cloud-exception-request-ia.test.ts(1,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-cloud-exception-request-ia.test.ts(2,31): error TS2591: Cannot find name 'node:path'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-cloud-exception-request-ia.test.ts(3,31): error TS2591: Cannot find name 'node:url'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-cloud-exception-request-steps.tsx(891,69): error TS2322: Type '{ variant: "secondary"; href: string; target: string; rel: string; children: (string | Element)[]; }' is not assignable to type 'IntrinsicAttributes & { children: ReactNode; onClick?: (() => void) | undefined; href?: string | undefined; variant?: "danger" | "ghost" | "outline" | ... 4 more ... | undefined; disabled?: boolean | undefined; className?: string | undefined; type?: "button" | ... 2 more ... | undefined; } & Omit<...> & RefAttribute...'.
+  Property 'target' does not exist on type 'IntrinsicAttributes & { children: ReactNode; onClick?: (() => void) | undefined; href?: string | undefined; variant?: "danger" | "ghost" | "outline" | ... 4 more ... | undefined; disabled?: boolean | undefined; className?: string | undefined; type?: "button" | ... 2 more ... | undefined; } & Omit<...> & RefAttribute...'.
+src/policy-cloud-exceptions-boundary.test.ts(1,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-cloud-exceptions-boundary.test.ts(2,31): error TS2591: Cannot find name 'node:path'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-cloud-exceptions-boundary.test.ts(3,31): error TS2591: Cannot find name 'node:url'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-cloud-exceptions-ia.test.tsx(1,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-cloud-exceptions-ia.test.tsx(2,31): error TS2591: Cannot find name 'node:path'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-cloud-exceptions-ia.test.tsx(3,31): error TS2591: Cannot find name 'node:url'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-data-truth.test.ts(1,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-data-truth.test.ts(2,31): error TS2591: Cannot find name 'node:path'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-data-truth.test.ts(3,31): error TS2591: Cannot find name 'node:url'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-final-release-guard.test.ts(1,42): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-final-release-guard.test.ts(2,31): error TS2591: Cannot find name 'node:path'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-final-release-guard.test.ts(3,31): error TS2591: Cannot find name 'node:url'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-remembered-rules-summary.test.ts(1,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-remembered-rules-summary.test.ts(2,31): error TS2591: Cannot find name 'node:path'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-remembered-rules-summary.test.ts(3,31): error TS2591: Cannot find name 'node:url'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-remembered-rules.test.tsx(1,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-remembered-rules.test.tsx(2,31): error TS2591: Cannot find name 'node:path'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-remembered-rules.test.tsx(3,31): error TS2591: Cannot find name 'node:url'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-review-scope.test.ts(1,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-review-scope.test.ts(2,31): error TS2591: Cannot find name 'node:path'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-review-scope.test.ts(3,31): error TS2591: Cannot find name 'node:url'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-rules-hero-model.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-rules-overview-model.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-rules-ux.test.ts(1,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-rules-ux.test.ts(2,31): error TS2591: Cannot find name 'node:path'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-rules-ux.test.ts(3,31): error TS2591: Cannot find name 'node:url'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-rules-ux.test.ts(4,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-strict-config-ia.test.ts(1,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-strict-config-ia.test.ts(2,31): error TS2591: Cannot find name 'node:path'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-strict-config-ia.test.ts(3,31): error TS2591: Cannot find name 'node:url'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-strict-config-utils.test.ts(16,7): error TS2740: Type '{ mode: "prompt"; security_level: "strict"; default_action: string; unknown_publisher_action: string; changed_hash_action: string; new_network_domain_action: string; subprocess_action: string; risk_actions: { destructive_shell: string; }; ... 6 more ...; billing: false; }' is missing the following properties from type 'GuardSettings': presentation_mode, presentation_mode_explicit, presentation_schema_version, presentation_revision, and 3 more.
+src/policy-ui-hardening.test.ts(1,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-ui-hardening.test.ts(2,31): error TS2591: Cannot find name 'node:path'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/policy-ui-hardening.test.ts(3,31): error TS2591: Cannot find name 'node:url'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/presentation-mode.test.ts(1,34): error TS2591: Cannot find name 'node:assert'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/add-custom-extension-catalog.tsx(31,48): error TS2345: Argument of type '{ value: LocalCliCommandState; label: string; }[]' is not assignable to parameter of type '{ disabled?: boolean | undefined; }[]'.
+  Type '{ value: LocalCliCommandState; label: string; }' has no properties in common with type '{ disabled?: boolean | undefined; }'.
+src/protection-center/add-custom-extension-support.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/codex-host-connectors.test.tsx(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/codex-host-connectors.test.tsx(20,18): error TS18048: 'inventory' is possibly 'undefined'.
+src/protection-center/codex-host-connectors.test.tsx(23,31): error TS18048: 'inventory' is possibly 'undefined'.
+src/protection-center/codex-host-connectors.test.tsx(24,25): error TS18048: 'inventory' is possibly 'undefined'.
+src/protection-center/codex-host-connectors.test.tsx(25,34): error TS18048: 'inventory' is possibly 'undefined'.
+src/protection-center/codex-host-connectors.test.tsx(26,34): error TS18048: 'inventory' is possibly 'undefined'.
+src/protection-center/codex-host-connectors.test.tsx(27,34): error TS18048: 'inventory' is possibly 'undefined'.
+src/protection-center/codex-host-connectors.test.tsx(51,73): error TS2769: No overload matches this call.
+  The last overload gave the following error.
+    Type '{ host?: "Codex" | undefined; connection_id?: string | undefined; catalog_coverage?: "host-summary" | undefined; account_verified?: false | undefined; schemas_available?: false | undefined; ... 4 more ...; apps: never[]; }' is not assignable to type 'CodexHostInventory'.
+      Types of property 'host' are incompatible.
+        Type '"Codex" | undefined' is not assignable to type '"Codex"'.
+          Type 'undefined' is not assignable to type '"Codex"'.
+src/protection-center/codex-host-connectors.test.tsx(54,3): error TS2769: No overload matches this call.
+  The last overload gave the following error.
+    Type '{ host?: "Codex" | undefined; connection_id?: string | undefined; catalog_coverage?: "host-summary" | undefined; account_verified?: false | undefined; schemas_available?: false | undefined; ... 4 more ...; expires_at_ms: number; }' is not assignable to type 'CodexHostInventory'.
+      Types of property 'host' are incompatible.
+        Type '"Codex" | undefined' is not assignable to type '"Codex"'.
+          Type 'undefined' is not assignable to type '"Codex"'.
+src/protection-center/codex-host-connectors.test.tsx(67,6): error TS18048: 'inventory' is possibly 'undefined'.
+src/protection-center/codex-host-connectors.test.tsx(69,77): error TS2769: No overload matches this call.
+  The last overload gave the following error.
+    Type '{ host?: "Codex" | undefined; connection_id?: string | undefined; catalog_coverage?: "host-summary" | undefined; account_verified?: false | undefined; schemas_available?: false | undefined; ... 4 more ...; apps: { ...; }[]; }' is not assignable to type 'CodexHostInventory'.
+      Types of property 'host' are incompatible.
+        Type '"Codex" | undefined' is not assignable to type '"Codex"'.
+          Type 'undefined' is not assignable to type '"Codex"'.
+src/protection-center/components/protection-primitives.tsx(38,7): error TS2322: Type 'string | null' is not assignable to type 'string | undefined'.
+  Type 'null' is not assignable to type 'string | undefined'.
+src/protection-center/connector-setup-banner.test.tsx(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/consistent-protection-load.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/consistent-protection-load.test.ts(154,39): error TS2345: Argument of type '{ catalog_digest: string; protocol: string; degraded: undefined; }' is not assignable to parameter of type '{ catalog_digest: string; protocol: string; degraded: string; }'.
+  Types of property 'degraded' are incompatible.
+    Type 'undefined' is not assignable to type 'string'.
+src/protection-center/consistent-protection-load.test.ts(159,40): error TS2345: Argument of type '{ catalog_digest: string; protocol: string; degraded: string; }' is not assignable to parameter of type '{ catalog_digest: string; protocol: string; degraded: undefined; }'.
+  Types of property 'degraded' are incompatible.
+    Type 'string' is not assignable to type 'undefined'.
+src/protection-center/custom-extension-command-view.test.tsx(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/custom-extension-commands.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/custom-extension-commands.test.ts(112,7): error TS2322: Type '{ cli_id: string; name: string; kind: "executable"; identity_hash: string; example_label: string; interpreter_name: null; observed_count: number; last_seen_at: null; source_path: null; help_status: null; surface: "cli"; server_identity_hash: null; ... 6 more ...; commands: never[]; }' is not assignable to type 'LocalCliItem'.
+  Property 'suggestion_score' is missing in type '{ cli_id: string; name: string; kind: "executable"; identity_hash: string; example_label: string; interpreter_name: null; observed_count: number; last_seen_at: null; source_path: null; help_status: null; surface: "cli"; server_identity_hash: null; ... 6 more ...; commands: never[]; }' but required in type '{ cli_id: string; name: string; kind: LocalCliKind; identity_hash: string; example_label: string; interpreter_name: string | null; observed_count: number; last_seen_at: string | null; ... 22 more ...; installed?: boolean | undefined; }'.
+src/protection-center/custom-extension-profile.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/extension-activity.test.tsx(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/extension-navigation.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/extension-navigation.test.ts(2,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/extensions-discover-model.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/extensions-discover-model.test.ts(5,15): error TS2459: Module '"../extension-controls-normalize"' declares 'ExtensionCatalogSummary' locally, but it is not exported.
+src/protection-center/extensions-discover-model.test.ts(149,16): error TS18047: 'valid' is possibly 'null'.
+src/protection-center/extensions-discover-model.test.ts(150,16): error TS18047: 'valid' is possibly 'null'.
+src/protection-center/extensions-discover-model.test.ts(156,20): error TS18047: 'valid' is possibly 'null'.
+src/protection-center/extensions-discover-model.ts(1,15): error TS2459: Module '"../extension-controls-normalize"' declares 'ExtensionCatalogSummary' locally, but it is not exported.
+src/protection-center/extensions-spotlight-model.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/local-cli-capabilities.test.tsx(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/mcp-server-defaults.test.tsx(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/mcp-setup-receipts.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/model/catalog-filters.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/model/extension-brand.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/model/protection-author-metadata.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/model/protection-performance-budgets.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/protection-center.test.tsx(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/protection-change-error.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/protection-final-a11y.test.tsx(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/protection-final-contract.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/protection-final-contract.test.ts(2,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/protection-history-repair.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/protection-history-repair.test.ts(2,16): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/protection-history-repair.test.ts(3,18): error TS2591: Cannot find name 'node:path'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/protection-history-repair.test.ts(4,43): error TS2591: Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/protection-history-repair.test.ts(5,42): error TS2591: Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/protection-history-repair.test.ts(6,47): error TS2591: Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/protection-history-repair.test.ts(7,42): error TS2591: Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/protection-history-repair.test.ts(8,45): error TS2591: Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/protection-landing.test.tsx(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/protection-module-detail.test.tsx(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/protection-telemetry.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/protection-telemetry.test.ts(55,14): error TS18047: 'observed' is possibly 'null'.
+src/protection-center/protection-telemetry.test.ts(56,18): error TS18047: 'observed' is possibly 'null'.
+src/protection-center/protection-telemetry.test.ts(61,36): error TS18047: 'observed' is possibly 'null'.
+src/protection-center/protection-terminology.test.tsx(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/protection-test-lab.test.tsx(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-center/protection-test-lab.test.tsx(2,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-health.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-health.test.ts(2,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-repair-flow.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-repair-flow.test.ts(2,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-repair-page.test.ts(1,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-repair-reasons.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/protection-repair-reasons.test.ts(2,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/releases/release-markdown.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/releases/release-markdown.test.ts(64,19): error TS18048: 'changelog' is possibly 'undefined'.
+src/releases/releases-api.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/releases/releases-model.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/releases/releases-model.test.ts(370,62): error TS2353: Object literal may only specify known properties, and 'displayName' does not exist in type 'Partial<ReleaseContributor>'.
+src/releases/releases-ui.test.tsx(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/releases/releases-ui.test.tsx(2,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/request-read-state.test.ts(32,3): error TS2591: Cannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/runtime-overview.test.ts(127,3): error TS2741: Property 'plan_id' is missing in type '{ state: "local_only"; label: string; detail: string; sync_configured: false; dashboard_url: string; inbox_url: string; fleet_url: string; connect_url: string; }' but required in type 'GuardCloudPairingState'.
+src/runtime-overview.tsx(300,7): error TS18048: 'capability' is possibly 'undefined'.
+src/scrg159-170.test.ts(64,3): error TS2741: Property 'plan_id' is missing in type '{ state: "local_only"; label: string; detail: string; sync_configured: false; dashboard_url: string; inbox_url: string; fleet_url: string; connect_url: string; }' but required in type 'GuardCloudPairingState'.
+src/scrg171-172.test.ts(83,3): error TS2741: Property 'plan_id' is missing in type '{ state: "local_only"; label: string; detail: string; sync_configured: false; dashboard_url: string; inbox_url: string; fleet_url: string; connect_url: string; }' but required in type 'GuardCloudPairingState'.
+src/scrg171-172.test.ts(117,3): error TS2741: Property 'plan_id' is missing in type '{ state: "paired_active"; label: string; detail: string; sync_configured: true; dashboard_url: string; inbox_url: string; fleet_url: string; connect_url: string; }' but required in type 'GuardCloudPairingState'.
+src/scrg171-172.test.ts(143,3): error TS2741: Property 'plan_id' is missing in type '{ state: "paired_waiting"; label: string; detail: string; sync_configured: true; dashboard_url: string; inbox_url: string; fleet_url: string; connect_url: string; }' but required in type 'GuardCloudPairingState'.
+src/scsr-phase09c-evidence-rail.test.ts(45,3): error TS2741: Property 'plan_id' is missing in type '{ state: "local_only"; label: string; detail: string; sync_configured: false; dashboard_url: string; inbox_url: string; fleet_url: string; connect_url: string; }' but required in type 'GuardCloudPairingState'.
+src/scsr-phase09e-posture-banners.test.ts(60,3): error TS2741: Property 'plan_id' is missing in type '{ state: "paired_active"; label: string; detail: string; sync_configured: true; dashboard_url: string; inbox_url: string; fleet_url: string; connect_url: string; }' but required in type 'GuardCloudPairingState'.
+src/scsr-phase09f-mobile-polish.test.ts(67,3): error TS2741: Property 'plan_id' is missing in type '{ state: "paired_active"; label: string; detail: string; sync_configured: true; dashboard_url: string; inbox_url: string; fleet_url: string; connect_url: string; }' but required in type 'GuardCloudPairingState'.
+src/scsr-phase09g-cloud-capabilities.test.ts(41,3): error TS2741: Property 'plan_id' is missing in type '{ state: "local_only"; label: string; detail: string; sync_configured: false; dashboard_url: string; inbox_url: string; fleet_url: string; connect_url: string; }' but required in type 'GuardCloudPairingState'.
+src/scsr-phase09h-hero-cards.test.ts(42,3): error TS2741: Property 'plan_id' is missing in type '{ state: "local_only"; label: string; detail: string; sync_configured: false; dashboard_url: string; inbox_url: string; fleet_url: string; connect_url: string; }' but required in type 'GuardCloudPairingState'.
+src/secondary-risk-dedupe.test.ts(1,20): error TS2591: Cannot find name 'node:assert/strict'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/secondary-risk-dedupe.test.ts(134,3): error TS2739: Type '{ schema_version: number; action_id: string; harness: string; event_name: string; action_type: "prompt"; workspace: null; workspace_hash: null; tool_name: null; command: null; prompt_excerpt: string; prompt_text: null; target_paths: never[]; network_hosts: never[]; mcp_server: null; mcp_tool: null; package_manager: ...' is missing the following properties from type 'GuardActionEnvelope': script_name, raw_payload_redacted
+src/settings-presentation.test.ts(1,34): error TS2591: Cannot find name 'node:assert'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/settings-presentation.test.ts(44,30): error TS2769: No overload matches this call.
+  The last overload gave the following error.
+    Argument of type 'Partial<GuardSettings> | null' is not assignable to parameter of type 'object'.
+      Type 'null' is not assignable to type 'object'.
+src/settings-presentation.test.ts(50,14): error TS18047: 'payload' is possibly 'null'.
+src/settings-presentation.test.ts(51,14): error TS18047: 'payload' is possibly 'null'.
+src/settings-presentation.test.ts(52,14): error TS18047: 'payload' is possibly 'null'.
+src/settings-workspace-phase11.test.ts(1,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/settings-workspace.test.ts(19,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/settings-workspace.test.ts(20,31): error TS2591: Cannot find name 'node:url'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/shell-navigation.test.tsx(1,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/sidebar-local-guard-card.test.ts(1,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/sidebar-local-guard-card.test.ts(2,31): error TS2591: Cannot find name 'node:path'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/sidebar-local-guard-card.test.ts(3,31): error TS2591: Cannot find name 'node:url'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/supply-chain-evidence-rail.ts(117,23): error TS2304: Cannot find name 'GuardSupplyChainScannerEvidence'.
+src/supply-chain-issues.test.ts(65,3): error TS2741: Property 'plan_id' is missing in type '{ state: "local_only"; label: string; detail: string; sync_configured: false; dashboard_url: string; inbox_url: string; fleet_url: string; connect_url: string; }' but required in type 'GuardCloudPairingState'.
+src/supply-chain-ux-consolidation.test.ts(1,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/supply-chain-ux-consolidation.test.ts(2,31): error TS2591: Cannot find name 'node:path'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/supply-chain-ux-consolidation.test.ts(3,31): error TS2591: Cannot find name 'node:url'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/temporary-mcp-approval.test.tsx(69,55): error TS2345: Argument of type '{ server_name: string; server_identity_hash: string; category: string; target_label: string | null; hard_risk_exclusions: string[]; allowed_targets: readonly ["exact"]; allowed_durations: readonly ["15m"]; }' is not assignable to parameter of type 'TemporaryMcpApprovalOptions'.
+  Types of property 'allowed_targets' are incompatible.
+    The type 'readonly ["exact"]' is 'readonly' and cannot be assigned to the mutable type 'GuardTemporaryMcpGrantTarget[]'.
+src/use-focus-trap.ts(35,46): error TS2345: Argument of type 'HTMLElement | null' is not assignable to parameter of type 'HTMLElement'.
+  Type 'null' is not assignable to type 'HTMLElement'.
+src/user-reported-regressions.test.ts(1,30): error TS2591: Cannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/user-reported-regressions.test.ts(2,31): error TS2591: Cannot find name 'node:path'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+src/user-reported-regressions.test.ts(3,31): error TS2591: Cannot find name 'node:url'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+
+===== baseline =====
+src/guard-api.ts(4434,3): error TS2322: Type 'false' is not assignable to type 'true'.
+src/guard-types.ts(714,59): error TS2339: Property 'signal_id' does not exist on type 'GuardScannerEvidence'.
+  Property 'signal_id' does not exist on type 'GuardSupplyChainScannerEvidence'.
+src/guard-types.ts(720,57): error TS2339: Property 'operation' does not exist on type 'GuardScannerEvidence'.
+  Property 'operation' does not exist on type 'GuardWatchOnlyScannerEvidence'.
+src/guard-types.ts(734,11): error TS2339: Property 'kind' does not exist on type 'GuardScannerEvidence'.
+  Property 'kind' does not exist on type 'GuardSupplyChainScannerEvidence'.
+src/guard-types.ts(735,11): error TS2339: Property 'schema_version' does not exist on type 'GuardScannerEvidence'.
+  Property 'schema_version' does not exist on type 'GuardSupplyChainScannerEvidence'.
+src/guard-types.ts(736,18): error TS2339: Property 'portable' does not exist on type 'GuardScannerEvidence'.
+  Property 'portable' does not exist on type 'GuardSupplyChainScannerEvidence'.
+src/guard-types.ts(737,18): error TS2339: Property 'context_digest' does not exist on type 'GuardScannerEvidence'.
+  Property 'context_digest' does not exist on type 'GuardSupplyChainScannerEvidence'.
+===== scoped =====
+src/guard-api.ts(4434,3): error TS2322: Type 'false' is not assignable to type 'true'.
+src/guard-types.ts(714,59): error TS2339: Property 'signal_id' does not exist on type 'GuardScannerEvidence'.
+  Property 'signal_id' does not exist on type 'GuardSupplyChainScannerEvidence'.
+src/guard-types.ts(720,57): error TS2339: Property 'operation' does not exist on type 'GuardScannerEvidence'.
+  Property 'operation' does not exist on type 'GuardWatchOnlyScannerEvidence'.
+src/guard-types.ts(734,11): error TS2339: Property 'kind' does not exist on type 'GuardScannerEvidence'.
+  Property 'kind' does not exist on type 'GuardSupplyChainScannerEvidence'.
+src/guard-types.ts(735,11): error TS2339: Property 'schema_version' does not exist on type 'GuardScannerEvidence'.
+  Property 'schema_version' does not exist on type 'GuardSupplyChainScannerEvidence'.
+src/guard-types.ts(736,18): error TS2339: Property 'portable' does not exist on type 'GuardScannerEvidence'.
+  Property 'portable' does not exist on type 'GuardSupplyChainScannerEvidence'.
+src/guard-types.ts(737,18): error TS2339: Property 'context_digest' does not exist on type 'GuardScannerEvidence'.
+  Property 'context_digest' does not exist on type 'GuardSupplyChainScannerEvidence'.

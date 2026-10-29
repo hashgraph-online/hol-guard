@@ -1,0 +1,557 @@
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> crates/guard-scanner/src/secret_detection.rs:648:9
+    |
+648 |         &self,
+    |         ^^^^^ the lifetime is elided here
+649 |         fingerprint_key: Option<&[u8]>,
+650 |     ) -> Result<PublicFinding, EmptyFingerprintKeyError> {
+    |                 ^^^^^^^^^^^^^ the same lifetime is hidden here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+    = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+    |
+650 |     ) -> Result<PublicFinding<'_>, EmptyFingerprintKeyError> {
+    |                              ++++
+
+warning: `guard-scanner` (lib) generated 1 warning (run `cargo fix --lib -p guard-scanner` to apply 1 suggestion)
+warning: `guard-scanner` (lib) generated 1 warning (1 duplicate)
+   Compiling guard-context-assistance v0.1.0 (/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/rust/crates/guard-context-assistance)
+warning: use of deprecated method `std::sync::atomic::Atomic::<usize>::fetch_update`: renamed to `try_update` for consistency
+  --> crates/guard-command/src/restricted_archive_write.rs:21:14
+   |
+21 |             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+   |              ^^^^^^^^^^^^
+   |
+   = note: `#[warn(deprecated)]` on by default
+help: replace the use of the deprecated method
+   |
+21 -             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+21 +             .try_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+   |
+
+warning: `guard-command` (lib) generated 1 warning (run `cargo fix --lib -p guard-command` to apply 1 suggestion)
+warning: use of deprecated method `std::sync::atomic::Atomic::<u64>::fetch_update`: renamed to `try_update` for consistency
+  --> crates/guard-context-assistance/src/freshness.rs:28:14
+   |
+28 |             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |v| {
+   |              ^^^^^^^^^^^^
+   |
+   = note: `#[warn(deprecated)]` on by default
+help: replace the use of the deprecated method
+   |
+28 -             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |v| {
+28 +             .try_update(Ordering::AcqRel, Ordering::Acquire, |v| {
+   |
+
+warning: `guard-context-assistance` (lib) generated 1 warning (run `cargo fix --lib -p guard-context-assistance` to apply 1 suggestion)
+   Compiling hol-guard-runtime v3.16.3 (/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/rust/crates/guard-runtime)
+warning: use of deprecated method `std::sync::atomic::Atomic::<usize>::fetch_update`: renamed to `try_update` for consistency
+  --> crates/guard-runtime/src/archive_acquisition_op.rs:22:14
+   |
+22 |             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+   |              ^^^^^^^^^^^^
+   |
+   = note: `#[warn(deprecated)]` on by default
+help: replace the use of the deprecated method
+   |
+22 -             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+22 +             .try_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+   |
+
+warning: use of deprecated method `std::sync::atomic::Atomic::<i64>::fetch_update`: renamed to `try_update` for consistency
+   --> crates/guard-runtime/src/native_runtime_resilience.rs:472:25
+    |
+472 |         let prev = held.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |h| {
+    |                         ^^^^^^^^^^^^
+    |
+help: replace the use of the deprecated method
+    |
+472 -         let prev = held.fetch_update(Ordering::SeqCst, Ordering::SeqCst, |h| {
+472 +         let prev = held.try_update(Ordering::SeqCst, Ordering::SeqCst, |h| {
+    |
+
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `hol-guard-runtime` (lib test) generated 3 warnings (run `cargo fix --lib -p hol-guard-runtime --tests` to apply 2 suggestions)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 18.23s
+     Running unittests src/lib.rs (/private/tmp/hol-guard-cigar-upgrades-target/debug/deps/hol_guard_runtime-21f7f2b65f344f2a)
+
+running 53 tests
+test policy_store::context_assistance_registry::preparation::acquisition::policy::tests::configured_proxy_or_custom_ca_is_never_silently_bypassed ... ok
+test policy_store::context_assistance_registry::preparation::acquisition::tests::actual_published_0141_wheels_acquire_without_python_or_activation ... CIGAR_PUBLIC_ACQUISITION_PROOF {"activation_granted":false,"build_id":"cigar-0_14_1-10dd521dec82","cached_retry_equal":true,"elapsed_ms":2226,"expanded_bytes":11454530,"files":124,"sdk_processes_started":0,"sdk_version":"0.14.1","tree_sha256":"5ebfc715f581c40c9fce73209271479a1926d5044543a46c720ba0049c35e1f4","wheels":2}
+ok
+test policy_store::context_assistance_registry::preparation::acquisition::tests::exact_download_is_cached_and_wrong_hash_length_or_changed_file_is_refused ... ok
+test policy_store::context_assistance_registry::preparation::acquisition::tests::over_limit_or_cancelled_body_never_publishes_and_staged_bytes_are_cleaned ... ok
+test policy_store::context_assistance_registry::preparation::acquisition::tests::untrusted_redirect_is_refused_before_destination_dns_or_request ... ok
+test policy_store::context_assistance_registry::preparation::acquisition::transport::tests::dependency_url_must_match_exactly_and_honor_registry_policy ... ok
+test policy_store::context_assistance_registry::preparation::acquisition::transport::tests::private_python_redirect_is_limited_to_the_exact_source_and_named_cdn ... ok
+test policy_store::context_assistance_registry::preparation::acquisition::transport::tests::redirects_cannot_change_repository_or_escape_named_cdn ... ok
+test policy_store::context_assistance_registry::preparation::tests::actual::actual_managed_install_is_inactive_idempotent_and_reconciles_lost_publication_reply ... GUARD_CIGAR_MANAGED_INSTALL_VERIFIED {"build_id":"cigar-0_14_1-10dd521dec82","elapsed_ms":22781,"guard_binary_sha256":"6ceb66539ec2daef8e4533a539882075ce1b5dc30ff41b34a3ed2dd8b7103d16","idempotent":true,"lost_reply_reconciled":true,"off_preserved":true,"python":[3,14,7],"selection_unchanged":true,"tree":"5ebfc715f581c40c9fce73209271479a1926d5044543a46c720ba0049c35e1f4","worker":"4650473529f0dc14e596b5cd0ca9d66e2d3bcd8ae11418b87ad971ac51ca78b8"}
+ok
+test policy_store::context_assistance_registry::preparation::tests::actual::actual_preparation_cancellation_keeps_current_cigar_running_and_preferences_unchanged ... GUARD_CIGAR_ACTIVE_INSTALL_CONTINUITY_VERIFIED {"bounded_cleanup_recovery_required":false,"cancelled_before_publication":true,"elapsed_ms":20256,"generation_unchanged":true,"guard_binary_sha256":"6ceb66539ec2daef8e4533a539882075ce1b5dc30ff41b34a3ed2dd8b7103d16","max_status_us":79,"old_runtime_stayed_ready":true,"partial_slot_removed":true,"preferences_byte_identical":true,"replacement_verified_before_cancel":true}
+ok
+test policy_store::context_assistance_registry::preparation::tests::cleanup_preserves_every_registered_alias_even_when_it_is_not_selected ... ok
+test policy_store::context_assistance_registry::preparation::tests::cleanup_preserves_external_symlink_targets_and_records_recovery_needed ... ok
+test policy_store::context_assistance_registry::preparation::tests::durable_cancel_intent_is_reconciled_after_the_worker_is_gone ... ok
+test policy_store::context_assistance_registry::preparation::tests::interrupted_preparation_recovers_without_launching_or_selecting_a_runtime ... ok
+test policy_store::context_assistance_registry::preparation::tests::job_record_tampering_and_public_path_injection_are_refused ... ok
+test policy_store::context_assistance_registry::preparation::tests::later_python_patch_requirement_refuses_before_any_job_download_or_sdk ... ok
+test policy_store::context_assistance_registry::preparation::tests::local_setup_requires_operator_consent_and_rejects_supplied_interpreter_facts ... ok
+test policy_store::context_assistance_registry::preparation::tests::metadata_listing_tolerates_its_atomic_writer_and_refuses_malformed_names ... ok
+test policy_store::context_assistance_registry::preparation::tests::passive_job_metadata_never_requires_an_interpreter_or_sdk_tree ... ok
+test policy_store::context_assistance_registry::preparation::tests::private_python::actual_python::actual_private_python_setup_installs_sdk_and_recovers_without_replaying_processes ... PRIVATE_PYTHON_INSTALL_PROOF={"approval_schema":"guard-cigar-bundle-approval.v3","changed_stdlib_refused_with_same_executable":true,"elapsed_ms":73692,"features_verified":["graph","sharing","persistence","execution_context"],"idempotent_reuse":true,"lost_reply_recovered_without_probe":true,"max_metadata_us":1290,"off_preserved":true,"private_interpreter_id":"python:af55c1171c22c47c734003acb7293330c3ab12dcee560af5b3bd438c7086359c","python_build":{"archive_bytes":26753457,"archive_sha256":"95eb8c87d16af37c54e9765e31d8c56c0d8ffa9968ea0f704f73a9b83f84e9f9","build_id":"cpython-3_14_10-20261026-darwin-arm64","executable_sha256":"26b5194d2beb09e648b4676ddc18a1384f182a7ed84f3db73106096aba6febf4","expanded_bytes":106491517,"files":1701,"platform":"darwin-arm64","python_version":[3,14,10],"qualification":"guard_qualified","qualification_receipt_sha256":"e6b416326b45dbf45f5590a35162d02739eac29792f616d4038444bba3ee0c4a","source_release":"20261026","source_revision":"fa506e0858ac9f2cc5b289c137b888a2aa24d1ee","tree_sha256":"1e446c992cf2c8b93f33925a422e5f7f5f7af770536589ec4c065a567bb88375","withdrawn":false},"python_facts":{"abi":"cpython-314-darwin","debug_build":false,"free_threaded":false,"implementation":"cpython","platform":"darwin-arm64","release_level":"final","schema":"guard-cigar-interpreter.v1","version":[3,14,10]},"runtime_binary_sha256":"6ceb66539ec2daef8e4533a539882075ce1b5dc30ff41b34a3ed2dd8b7103d16","runtime_id":"cigar:9f4d5b789c102660047853f953eee53cc91da61345c3cb3dbb3fb0eda0f4e1c0","schema":"guard-cigar-private-python-install-proof.v1","scope":"local-source-macos-arm64-test-catalog-only","sdk_build":{"build_id":"cigar-0_14_1-10dd521dec82","core_version":"0.14.1","manifest_sha256":"472b722b5029f8dd3c7051c7d7d17a5909d251cf2ba3e0ae20ed9d7cf5b0b7f2","sdk_version":"0.14.1","source_revision":"10dd521dec8224d0957365a90111158e43c9d87f"},"selection_unchanged":true}
+ok
+test policy_store::context_assistance_registry::preparation::tests::private_python::atomic_job_status_reads_never_treat_a_replaced_snapshot_as_corrupt_metadata ... ok
+test policy_store::context_assistance_registry::preparation::tests::private_python::bounded_cleanup_keeps_ownership_available_for_the_next_recovery ... ok
+test policy_store::context_assistance_registry::preparation::tests::private_python::cancelled_python_setup_recovers_owned_staging_without_enabling_or_probing ... ok
+test policy_store::context_assistance_registry::preparation::tests::private_python::combined_python_and_sdk_job_status_is_bounded_and_detects_duplicate_keys ... ok
+test policy_store::context_assistance_registry::preparation::tests::private_python::idempotency_keys_cannot_change_setup_builds_or_cross_operation_types ... ok
+test policy_store::context_assistance_registry::preparation::tests::private_python::managed_python_namespace_and_symlink_alias_cannot_use_external_registration ... ok
+test policy_store::context_assistance_registry::preparation::tests::private_python::private_python_job_metadata_needs_no_python_or_installation_key ... ok
+test policy_store::context_assistance_registry::preparation::tests::private_python::setup_http_inputs_cannot_supply_paths_bindings_or_qualification_claims ... ok
+test policy_store::context_assistance_registry::preparation::tests::private_python::unknown_ownership_remains_available_for_explicit_recovery ... ok
+test policy_store::context_assistance_registry::preparation::tests::private_python::unqualified_or_unavailable_interpreters_refuse_setup_without_creating_jobs_or_keys ... ok
+test policy_store::context_assistance_registry::preparation::tests::recovery_will_not_race_an_existing_preparation_lease ... ok
+test policy_store::context_assistance_registry::preparation::tests::repeated_requests_converge_and_reused_keys_cannot_change_the_target ... ok
+test policy_store::context_assistance_registry::preparation::tests::reuse_tests::a_verification_commit_marker_is_authenticated_and_cannot_be_added_to_an_old_receipt ... ok
+test policy_store::context_assistance_registry::preparation::tests::reuse_tests::actual::actual_receipt_refresh_reuses_historical_slot_and_keeps_existing_sdk_responsive ... CIGAR_RECEIPT_REFRESH_PROOF={"build_id":"cigar-0_14_1-10dd521dec82","bundle_inodes_modes_mtimes_unchanged":true,"elapsed_ms":52025,"guard_binary_sha256":"6ceb66539ec2daef8e4533a539882075ce1b5dc30ff41b34a3ed2dd8b7103d16","historical_slot_reused":true,"lost_reply_reconciled_without_probe":true,"off_preserved":true,"old_sdk_answered_before_and_after_cancel_and_commit":true,"opaque_runtime_id_preserved":true,"qualified_features":["graph","sharing","persistence","execution_context"],"schema":"guard-cigar-receipt-refresh-proof.v1","scope":"local-source-macos-arm64-test-catalog-only","selection_unchanged":true}
+ok
+test policy_store::context_assistance_registry::preparation::tests::reuse_tests::an_unselected_stronger_receipt_does_not_block_the_compatible_canonical_record ... ok
+test policy_store::context_assistance_registry::preparation::tests::reuse_tests::exact_metadata_reuses_historical_slots_and_opaque_ids_without_sdk_file_reads ... ok
+test policy_store::context_assistance_registry::preparation::tests::reuse_tests::interrupted_reverification_does_not_claim_the_preexisting_record_is_its_commit ... ok
+test policy_store::context_assistance_registry::preparation::tests::reuse_tests::malformed_refresh_targets_do_not_turn_historical_job_metadata_into_authority ... ok
+test policy_store::context_assistance_registry::preparation::tests::reuse_tests::qualification_reduction_requires_a_separate_explicit_transition ... ok
+test policy_store::context_assistance_registry::preparation::tests::reuse_tests::recovery_preserves_a_different_explicit_receipt_commit_as_a_conflict ... ok
+test policy_store::context_assistance_registry::preparation::tests::upstream_only_build_is_refused_before_any_job_or_sdk_preparation ... ok
+test policy_store::context_assistance_registry::tests::enrollment_requires_explicit_local_candidate_approval_before_launch ... ok
+test policy_store::context_assistance_registry::tests::managed_prohibition_refuses_enrollment_before_any_selected_runtime_read_or_launch ... ok
+test policy_store::context_assistance_registry::tests::private_record_is_bound_to_selection_id_and_does_not_grant_readiness ... ok
+test policy_store::context_assistance_registry::tests::registry_rejects_shared_records_hardlinks_and_redirected_directories ... ok
+test policy_store::context_assistance_registry::tests::versioned_tests::a_mixed_legacy_schema_cannot_claim_published_qualification ... ok
+test policy_store::context_assistance_registry::tests::versioned_tests::authenticated_modern_metadata_is_read_without_sdk_paths_or_processes ... ok
+test policy_store::context_assistance_registry::tests::versioned_tests::installation_keys_refuse_shared_permissions_hardlinks_and_other_home_binding ... ok
+test policy_store::context_assistance_registry::tests::versioned_tests::legacy_reads_preserve_record_bytes_and_do_not_provision_a_key ... ok
+test policy_store::context_assistance_registry::tests::versioned_tests::managed_scope_cannot_point_at_an_operator_owned_environment ... ok
+test policy_store::context_assistance_registry::tests::versioned_tests::missing_key_is_unavailable_without_recreating_or_reapproving_anything ... ok
+test policy_store::context_assistance_registry::tests::versioned_tests::modified_installation_context_cannot_reuse_an_authenticated_receipt ... ok
+test policy_store::context_assistance_registry::tests::versioned_tests::requested_feature_qualification_is_checked_before_any_sdk_artifact_access ... ok
+
+test result: ok. 53 passed; 0 failed; 0 ignored; 0 measured; 3995 filtered out; finished in 186.71s
+
+
+
+CHECK=unit-stable
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> crates/guard-scanner/src/secret_detection.rs:648:9
+    |
+648 |         &self,
+    |         ^^^^^ the lifetime is elided here
+649 |         fingerprint_key: Option<&[u8]>,
+650 |     ) -> Result<PublicFinding, EmptyFingerprintKeyError> {
+    |                 ^^^^^^^^^^^^^ the same lifetime is hidden here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+    = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+    |
+650 |     ) -> Result<PublicFinding<'_>, EmptyFingerprintKeyError> {
+    |                              ++++
+
+warning: `guard-scanner` (lib) generated 1 warning (run `cargo fix --lib -p guard-scanner` to apply 1 suggestion)
+   Compiling guard-context-assistance v0.1.0 (/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/rust/crates/guard-context-assistance)
+warning: use of deprecated method `std::sync::atomic::Atomic::<u64>::fetch_update`: renamed to `try_update` for consistency
+  --> crates/guard-context-assistance/src/freshness.rs:28:14
+   |
+28 |             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |v| {
+   |              ^^^^^^^^^^^^
+   |
+   = note: `#[warn(deprecated)]` on by default
+help: replace the use of the deprecated method
+   |
+28 -             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |v| {
+28 +             .try_update(Ordering::AcqRel, Ordering::Acquire, |v| {
+   |
+
+warning: `guard-context-assistance` (lib) generated 1 warning (run `cargo fix --lib -p guard-context-assistance` to apply 1 suggestion)
+   Compiling guard-cigar-install v0.1.0 (/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/rust/crates/guard-cigar-install)
+warning: `guard-context-assistance` (lib test) generated 1 warning (1 duplicate)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.20s
+     Running unittests src/lib.rs (/private/tmp/hol-guard-cigar-upgrades-target/debug/deps/guard_cigar_artifacts-8928241204741fb5)
+     Running unittests src/lib.rs (/private/tmp/hol-guard-cigar-upgrades-target/debug/deps/guard_cigar_install-7b7146284b9cec90)
+     Running unittests src/lib.rs (/private/tmp/hol-guard-cigar-upgrades-target/debug/deps/guard_cigar_release-ee7c09afbada500b)
+     Running unittests src/lib.rs (/private/tmp/hol-guard-cigar-upgrades-target/debug/deps/guard_context_assistance-7597ea2eb57a6220)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 20 tests
+test wheel::safety_tests::member_count_and_zip64_or_multidisk_envelopes_are_refused_before_indexing ... ok
+test wheel::safety_tests::symlink_and_device_external_modes_cannot_become_output_files ... ok
+test wheel::safety_tests::declared_member_expansion_is_bounded_before_reading_content ... ok
+test wheel::safety_tests::crc_failure_truncation_and_password_encryption_are_refused ... ok
+test wheel::python_metadata_tests::locked_requires_python_must_match_actual_wheel_metadata_once ... ok
+test slot::tests::managed_sdk_slot_changes_when_only_private_standard_library_identity_changes ... ok
+test slot::tests::qualification_and_origin_refresh_reuse_exactly_the_same_slot ... ok
+test tests::cancellation_and_deadlines_refuse_before_reading_inputs ... ok
+test python_bundle::tests::cancellation_and_advertised_member_limits_refuse_before_output ... ok
+test tests::installed_tree_digest_is_required_before_output ... ok
+test tests::changed_wheel_bytes_and_missing_or_additional_dependencies_refuse ... ok
+test tests::output_symlink_or_public_directory_and_input_hardlinks_are_refused ... ok
+test tests::managed_slot_binds_interpreter_and_exact_build_without_catalog_checkpoint ... ok
+test tests::duplicate_paths_case_aliases_and_file_directory_collisions_refuse ... ok
+test python_bundle::tests::exact_archive_tree_executable_and_framing_are_checked_before_writes ... ok
+test python_bundle::tests::private_python_materializes_internal_aliases_and_rechecks_complete_tree ... ok
+test python_bundle::tests::unsafe_paths_aliases_special_records_and_ambiguous_extensions_are_refused ... ok
+test tests::extracts_exact_pinned_sdk_and_dependency_without_python_or_pip ... ok
+test tests::path_traversal_import_hooks_and_portable_aliases_refuse ... ok
+test python_bundle::tests::tree_verification_refuses_modified_files_extra_paths_links_and_writable_code ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.28s
+
+
+running 48 tests
+test python::tests::malformed_or_unbounded_requirements_are_not_catalog_authority ... ok
+test lifecycle_tests::update_defaults_require_intent_and_retain_recovery_bytes ... ok
+test python::tests::future_patch_requirement_is_data_and_existing_3147_remains_eligible ... ok
+test lifecycle_tests::changed_selection_settings_or_generation_cannot_commit_a_prepared_switch ... ok
+test source::tests::only_exact_content_addressed_dependency_files_are_allowed ... ok
+test tests::bundled_public_build_is_observed_upstream_data_and_not_guard_qualified ... ok
+test lifecycle_tests::terminals_do_not_resume_as_new_switches_and_unknown_journal_fields_are_refused ... ok
+test lifecycle_tests::cancellation_after_commit_rolls_back_instead_of_claiming_nothing_changed ... ok
+test lifecycle_tests::persistent_data_cannot_claim_a_copy_migration_without_a_separate_prepared_generation ... ok
+test lifecycle_tests::failed_or_withdrawn_target_uses_only_a_currently_eligible_previous_build ... ok
+test lifecycle_tests::preparation_and_cutover_do_not_change_the_off_intent_or_mint_authority ... ok
+test label_tests::preview_sdk_core_and_release_tag_are_independent_exact_catalog_data ... ok
+test binding_tests::legacy_profile_remains_historical_and_separate_from_published_qualification ... ok
+test label_tests::exact_core_label_changes_are_same_version_replacements_not_python_version_ordering ... ok
+test interpreter_receipt_tests::python_receipt_cannot_cross_guard_homes_or_installation_contexts ... ok
+test tests::a_future_compatible_release_is_catalog_data_with_independent_core_identity ... ok
+test tests::release_ordering_is_pep440_not_lexical ... ok
+test tests::same_version_build_replacements_are_distinct_and_identity_reuse_is_refused ... ok
+test tests::duplicate_nested_json_fields_are_refused_even_with_a_valid_signature ... ok
+test tests::candidate_enrollment_is_separate_from_catalog_qualification ... ok
+test binding_tests::catalog_refresh_preserves_exact_installed_identity_without_forcing_a_restart ... ok
+test tests::exact_signed_build_resolves_the_shipped_adapter_and_required_feature_receipts ... ok
+test installation_tests::changed_installation_scope_or_another_guard_home_key_cannot_reuse_a_receipt ... ok
+test installation_tests::receipt_does_not_upgrade_an_upstream_only_or_local_candidate_build ... ok
+test installation_tests::receipt_tampering_and_unknown_fields_are_not_local_approval ... ok
+test interpreter_receipt_tests::authenticated_private_python_survives_catalog_omission_without_new_setup_authority ... ok
+test interpreter_receipt_tests::qualification_refresh_is_metadata_but_unqualified_python_cannot_mint_receipts ... ok
+test lifecycle_tests::every_durable_boundary_has_an_explicit_crash_recovery_decision ... ok
+test installation_tests::feature_qualification_still_applies_after_offline_recovery ... ok
+test tests::unknown_keys_bad_signatures_and_payload_edits_cannot_supply_trust ... ok
+test installation_tests::old_receipt_payload_without_python_requirements_still_authenticates_and_resolves ... ok
+test binding_tests::preparation_never_mints_activation_and_profile_changes_change_installation_binding ... ok
+test interpreter_build::tests::interpreter_origins_are_fixed_and_setup_requires_qualification ... ok
+test label_tests::a_mislabeled_stable_prerelease_still_requires_preview_consent ... ok
+test tests::catalog_expiry_and_future_issue_dates_are_enforced_for_imports ... ok
+test artifact_identity_tests::catalog_origin_qualification_refresh_and_partial_omission_do_not_replace_installed_bytes ... ok
+test installation_tests::owner_verified_installed_build_survives_new_guard_catalog_omission ... ok
+test tests::revoked_not_yet_valid_expired_and_ambiguous_keys_are_refused ... ok
+test installation_tests::explicit_current_withdrawal_and_identity_reuse_override_the_archived_receipt ... ok
+test tests::monotonic_revision_prevents_replay_and_same_revision_equivocation ... ok
+test tests::catalog_cannot_download_an_adapter_or_widen_python_or_protocol_support ... ok
+test interpreter_build::tests::malformed_interpreter_builds_are_not_authenticated_catalog_data ... ok
+test artifact_identity_tests::installed_build_ids_cannot_be_reused_for_changed_artifact_or_dependency_bytes ... ok
+test tests::wheel_lock_tests::incomplete_dependency_locks_invalid_paths_hashes_and_duplicate_ids_are_refused ... ok
+test tests::withdrawn_unqualified_preview_unknown_and_missing_features_cannot_activate ... ok
+test interpreter_receipt_tests::receipt_tampering_with_python_tree_and_explicit_withdrawal_are_refused ... ok
+test tests::oversized_envelopes_unknown_fields_and_excess_builds_are_refused ... ok
+test label_tests::malformed_producer_labels_and_release_url_segments_are_rejected ... ok
+
+test result: ok. 48 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+
+running 70 tests
+test actor::tests::cleanup_acknowledgement_requires_dropping_private_state_after_process_close ... ignored, requires the explicitly approved installed CIGAR 0.14.1 candidate
+test actor::tests::installed_actor_serializes_graphs_bounds_queue_and_cancels_without_blocking_status ... ignored, requires the explicitly approved installed CIGAR 0.14.1 candidate
+test actor::tests::installed_short_deadline_abandons_queued_work_and_closes_dispatched_uncertainty ... ignored, requires the explicitly approved installed CIGAR 0.14.1 candidate
+test broker::execution::tests::actual_sdk_execution_precondition_requires_current_host_review_and_consumes_once ... ignored, requires the explicitly approved actual CPython 3.14/CIGAR 0.14.1 candidate
+test broker::tests::actual_broker_independent_clients_scopes_proposals_conflicts_leases_and_recovery ... ignored, requires explicitly selected approved final CPython 3.14 and actual CIGAR 0.14.1
+test broker_execution_doctor::tests::actual_execution_doctor_uses_private_memory_without_agent_or_storage_consent ... ignored, requires the explicitly approved actual CPython 3.14/CIGAR 0.14.1 candidate
+test broker_persistence_doctor::tests::actual_persistence_doctor_is_private_bounded_independent_and_resets_failed_qualification ... ignored, requires the explicitly approved final CPython 3.14 and actual CIGAR 0.14.1 worker
+test broker_storage::tests::actual_persistent_sdk_recovery_needs_fresh_catalog_grants_and_contexts ... ignored, requires the explicitly approved final CPython 3.14 and actual CIGAR 0.14.1 worker
+test evidence_cache::actual_tests::actual_private_cache_recovers_reviewed_notes_and_removes_only_after_worker_close ... ignored, requires the explicitly approved final CPython 3.14 and actual CIGAR 0.14.1 worker
+test evidence_cache::actual_tests::actual_sdk_admission_interruption_reconciles_uncommitted_intent_and_preserves_lost_committed_text ... ignored, requires the explicitly approved final CPython 3.14 and actual CIGAR 0.14.1 worker
+test freshness::tests::invalidation_drop_and_saturation_never_revive_a_fence ... ok
+test broker::tests::validation::source_revisions_remain_canonical_lossless_decimal_strings ... ok
+test broker::execution::tests::host_review_requires_bounded_policy_and_unique_exact_claim_keys ... ok
+test private_python::tests::old_selection_and_approval_serialization_preserve_legacy_receipt_contexts ... ok
+test broker::proposals::tests::carried_notes_cannot_launder_omitted_foreign_or_stale_file_dependencies ... ok
+test evidence_cache::tests::upgrade_tests::a_mismatched_approval_cannot_describe_a_compatible_data_producer ... ok
+test restriction_tests::an_overlay_cannot_enable_any_permission_that_local_consent_did_not_grant ... ok
+test restriction_tests::execution_preference_is_independent_but_managed_policy_can_only_narrow_it ... ok
+test restriction_tests::impossible_restricted_budgets_are_refused_without_silently_reducing_reserves ... ok
+test restriction_tests::portable_preferences_cannot_reactivate_machine_local_access ... ok
+test restriction_tests::restrictions_cannot_select_a_new_runtime_or_source_set ... ok
+test restriction_tests::restrictive_composition_preserves_only_locally_selected_runtime_and_sources ... ok
+test runtime::tests::cancelled_verification_is_refused_before_any_artifact_read_or_process_launch ... ok
+test runtime::tests::doctor_requires_exact_protocol_features_and_actual_compile ... ok
+test runtime::tests::installed_candidate_handshake_and_interpreter_refusal ... ignored, requires an explicitly staged CIGAR 0.14.1 bundle and CPython 3.14
+test runtime::tests::platform_path_is_not_a_source_locator ... ok
+test evidence_cache::tests::upgrade_tests::empty_cache_has_no_copy_or_authority_and_future_feature_reduction_is_explicit ... ok
+test broker::tests::validation::host_document_admission_refuses_unsafe_or_ambiguous_material ... ok
+test source::tests::protected_reads_preserve_lines_and_exact_revision_and_bound_chunks ... ok
+test tests::absent_configuration_is_off_without_selecting_a_runtime_or_sources ... ok
+test tests::budgets_cannot_be_negative_unbounded_or_reserve_the_whole_context ... ok
+test tests::configuration_roundtrips_without_adding_effective_authority_fields ... ok
+test tests::extra_documents_and_shared_agents_require_their_own_prerequisites ... ok
+test tests::malformed_persisted_enablement_fails_off_instead_of_coercing_truthiness ... ok
+test tests::malformed_probe_records_are_not_tolerated ... ok
+test tests::only_final_cpython_314_passes_version_eligibility ... ok
+test tests::platform_and_abi_must_describe_the_same_supported_process ... ok
+test tests::selected_ids_are_bounded_opaque_references_instead_of_paths_or_urls ... ok
+test tests::unqualified_builds_and_unknown_platforms_are_unavailable ... ok
+test private_python::tests::in_memory_tree_snapshot_never_enters_installation_json_or_survives_deserialization ... ok
+test source::tests::link_and_directory_replacement_do_not_reuse_admitted_roots ... ok
+test evidence_cache::tests::saved_note_limits_and_private_directory_identity_are_enforced ... ok
+test source::tests::secret_names_traversal_binary_encoding_and_limits_never_admit_documents ... ok
+test broker_storage::tests::private_storage_rejects_links_permissions_unknown_files_size_and_identity_changes ... ok
+test private_python::tests::cached_verification_refuses_changed_code_even_after_length_and_mtime_are_restored ... ok
+test artifacts::tests::symlinks_cannot_add_importable_code_outside_the_verified_tree ... ok
+test evidence_cache::tests::slot_and_database_leases_retain_exclusive_ownership_until_domain_close ... ok
+test artifacts::tests::releases::independent_native_core_preview_labels_are_bound_exactly_without_normalization ... ok
+test private_python::tests::protected_private_interpreter_requires_the_full_tree_and_exact_path ... ok
+test evidence_cache::tests::clock_rollback_and_malformed_records_preserve_saved_data_for_repair ... ok
+test evidence_cache::tests::upgrade_tests::same_sdk_with_changed_python_or_private_standard_library_requires_fresh_data ... ok
+test evidence_cache::tests::absent_cache_inspection_is_inactive_and_namespaces_are_opaque ... ok
+test private_python::tests::writable_code_unexpected_files_and_cancelled_checks_refuse ... ok
+test private_python::tests::unchanged_executable_does_not_hide_a_changed_standard_library_before_launch ... ok
+test artifacts::tests::releases::preparation_only_release_is_refused_before_any_runtime_artifact_is_read ... ok
+test artifacts::tests::releases::future_sdk_and_independent_core_are_inspected_through_catalog_data ... ok
+test artifacts::tests::releases::official_worker_beside_changed_sdk_code_does_not_match_the_approved_release ... ok
+test artifacts::tests::startup_hooks_worker_tampering_and_shared_writable_trees_are_refused ... ok
+test evidence_cache::tests::unexpected_files_links_and_permissions_refuse_removal_without_touching_other_data ... ok
+test evidence_cache::tests::upgrade_tests::corrupt_newer_and_interrupted_metadata_refuse_without_mutation_or_text_disclosure ... ok
+test artifacts::tests::releases::core_metadata_is_bound_independently_of_the_sdk_label ... ok
+test artifacts::tests::code_bytecode_and_extra_files_are_bound_to_the_approved_inventory ... ok
+test evidence_cache::tests::health_reports_pending_corrupt_and_expired_metadata_without_source_or_sdk_access ... ok
+test evidence_cache::tests::upgrade_tests::snapshot_changes_for_checkpoint_writes_and_for_manifest_commit ... ok
+test evidence_cache::tests::upgrade_tests::inventory_preserves_reviewed_notes_without_rendering_content_or_restoring_authority ... ok
+test private_python::tests::cached_verification_refuses_extra_directories_and_cannot_rebind_to_another_tree ... ok
+test evidence_cache::tests::interrupted_metadata_writes_poison_only_the_open_handle_and_recover_actual_commit ... ok
+test evidence_cache::tests::staged_admission_records_only_a_hash_and_reconciles_without_retry ... ok
+test evidence_cache::tests::upgrade_tests::expiry_and_capacity_are_reported_without_sweeping_or_deleting_previous_data ... ok
+test evidence_cache::tests::quota_and_retention_cover_inactive_stores_without_opening_sdk ... ok
+
+test result: ok. 59 passed; 0 failed; 11 ignored; 0 measured; 0 filtered out; finished in 0.75s
+
+
+
+CHECK=unit-msrv
+   Compiling guard-context-assistance v0.1.0 (/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/rust/crates/guard-context-assistance)
+   Compiling guard-cigar-install v0.1.0 (/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/rust/crates/guard-cigar-install)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.17s
+     Running unittests src/lib.rs (/private/tmp/hol-guard-cigar-upgrades-msrv-target/debug/deps/guard_cigar_artifacts-5bfa87d08047b007)
+     Running unittests src/lib.rs (/private/tmp/hol-guard-cigar-upgrades-msrv-target/debug/deps/guard_cigar_install-9cab964b31877741)
+     Running unittests src/lib.rs (/private/tmp/hol-guard-cigar-upgrades-msrv-target/debug/deps/guard_cigar_release-8f5f0a1e9ecc9648)
+     Running unittests src/lib.rs (/private/tmp/hol-guard-cigar-upgrades-msrv-target/debug/deps/guard_context_assistance-e6e457aed9473e75)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 20 tests
+test wheel::safety_tests::member_count_and_zip64_or_multidisk_envelopes_are_refused_before_indexing ... ok
+test wheel::safety_tests::symlink_and_device_external_modes_cannot_become_output_files ... ok
+test wheel::safety_tests::declared_member_expansion_is_bounded_before_reading_content ... ok
+test wheel::safety_tests::crc_failure_truncation_and_password_encryption_are_refused ... ok
+test wheel::python_metadata_tests::locked_requires_python_must_match_actual_wheel_metadata_once ... ok
+test slot::tests::managed_sdk_slot_changes_when_only_private_standard_library_identity_changes ... ok
+test slot::tests::qualification_and_origin_refresh_reuse_exactly_the_same_slot ... ok
+test python_bundle::tests::cancellation_and_advertised_member_limits_refuse_before_output ... ok
+test tests::cancellation_and_deadlines_refuse_before_reading_inputs ... ok
+test tests::changed_wheel_bytes_and_missing_or_additional_dependencies_refuse ... ok
+test tests::installed_tree_digest_is_required_before_output ... ok
+test tests::managed_slot_binds_interpreter_and_exact_build_without_catalog_checkpoint ... ok
+test tests::output_symlink_or_public_directory_and_input_hardlinks_are_refused ... ok
+test tests::duplicate_paths_case_aliases_and_file_directory_collisions_refuse ... ok
+test python_bundle::tests::exact_archive_tree_executable_and_framing_are_checked_before_writes ... ok
+test python_bundle::tests::private_python_materializes_internal_aliases_and_rechecks_complete_tree ... ok
+test python_bundle::tests::unsafe_paths_aliases_special_records_and_ambiguous_extensions_are_refused ... ok
+test tests::extracts_exact_pinned_sdk_and_dependency_without_python_or_pip ... ok
+test tests::path_traversal_import_hooks_and_portable_aliases_refuse ... ok
+test python_bundle::tests::tree_verification_refuses_modified_files_extra_paths_links_and_writable_code ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
+
+
+running 48 tests
+test lifecycle_tests::update_defaults_require_intent_and_retain_recovery_bytes ... ok
+test python::tests::malformed_or_unbounded_requirements_are_not_catalog_authority ... ok
+test source::tests::only_exact_content_addressed_dependency_files_are_allowed ... ok
+test lifecycle_tests::cancellation_after_commit_rolls_back_instead_of_claiming_nothing_changed ... ok
+test lifecycle_tests::terminals_do_not_resume_as_new_switches_and_unknown_journal_fields_are_refused ... ok
+test lifecycle_tests::changed_selection_settings_or_generation_cannot_commit_a_prepared_switch ... ok
+test lifecycle_tests::persistent_data_cannot_claim_a_copy_migration_without_a_separate_prepared_generation ... ok
+test lifecycle_tests::failed_or_withdrawn_target_uses_only_a_currently_eligible_previous_build ... ok
+test lifecycle_tests::preparation_and_cutover_do_not_change_the_off_intent_or_mint_authority ... ok
+test binding_tests::legacy_profile_remains_historical_and_separate_from_published_qualification ... ok
+test python::tests::future_patch_requirement_is_data_and_existing_3147_remains_eligible ... ok
+test tests::bundled_public_build_is_observed_upstream_data_and_not_guard_qualified ... ok
+test tests::duplicate_nested_json_fields_are_refused_even_with_a_valid_signature ... ok
+test tests::candidate_enrollment_is_separate_from_catalog_qualification ... ok
+test label_tests::exact_core_label_changes_are_same_version_replacements_not_python_version_ordering ... ok
+test interpreter_receipt_tests::python_receipt_cannot_cross_guard_homes_or_installation_contexts ... ok
+test tests::release_ordering_is_pep440_not_lexical ... ok
+test tests::a_future_compatible_release_is_catalog_data_with_independent_core_identity ... ok
+test tests::same_version_build_replacements_are_distinct_and_identity_reuse_is_refused ... ok
+test binding_tests::catalog_refresh_preserves_exact_installed_identity_without_forcing_a_restart ... ok
+test tests::exact_signed_build_resolves_the_shipped_adapter_and_required_feature_receipts ... ok
+test label_tests::preview_sdk_core_and_release_tag_are_independent_exact_catalog_data ... ok
+test installation_tests::receipt_tampering_and_unknown_fields_are_not_local_approval ... ok
+test installation_tests::receipt_does_not_upgrade_an_upstream_only_or_local_candidate_build ... ok
+test tests::unknown_keys_bad_signatures_and_payload_edits_cannot_supply_trust ... ok
+test interpreter_receipt_tests::authenticated_private_python_survives_catalog_omission_without_new_setup_authority ... ok
+test lifecycle_tests::every_durable_boundary_has_an_explicit_crash_recovery_decision ... ok
+test interpreter_receipt_tests::qualification_refresh_is_metadata_but_unqualified_python_cannot_mint_receipts ... ok
+test installation_tests::changed_installation_scope_or_another_guard_home_key_cannot_reuse_a_receipt ... ok
+test installation_tests::old_receipt_payload_without_python_requirements_still_authenticates_and_resolves ... ok
+test tests::catalog_expiry_and_future_issue_dates_are_enforced_for_imports ... ok
+test installation_tests::feature_qualification_still_applies_after_offline_recovery ... ok
+test binding_tests::preparation_never_mints_activation_and_profile_changes_change_installation_binding ... ok
+test interpreter_build::tests::interpreter_origins_are_fixed_and_setup_requires_qualification ... ok
+test artifact_identity_tests::catalog_origin_qualification_refresh_and_partial_omission_do_not_replace_installed_bytes ... ok
+test label_tests::a_mislabeled_stable_prerelease_still_requires_preview_consent ... ok
+test installation_tests::owner_verified_installed_build_survives_new_guard_catalog_omission ... ok
+test tests::revoked_not_yet_valid_expired_and_ambiguous_keys_are_refused ... ok
+test installation_tests::explicit_current_withdrawal_and_identity_reuse_override_the_archived_receipt ... ok
+test tests::monotonic_revision_prevents_replay_and_same_revision_equivocation ... ok
+test tests::catalog_cannot_download_an_adapter_or_widen_python_or_protocol_support ... ok
+test interpreter_build::tests::malformed_interpreter_builds_are_not_authenticated_catalog_data ... ok
+test artifact_identity_tests::installed_build_ids_cannot_be_reused_for_changed_artifact_or_dependency_bytes ... ok
+test tests::wheel_lock_tests::incomplete_dependency_locks_invalid_paths_hashes_and_duplicate_ids_are_refused ... ok
+test tests::withdrawn_unqualified_preview_unknown_and_missing_features_cannot_activate ... ok
+test interpreter_receipt_tests::receipt_tampering_with_python_tree_and_explicit_withdrawal_are_refused ... ok
+test tests::oversized_envelopes_unknown_fields_and_excess_builds_are_refused ... ok
+test label_tests::malformed_producer_labels_and_release_url_segments_are_rejected ... ok
+
+test result: ok. 48 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+
+running 70 tests
+test actor::tests::cleanup_acknowledgement_requires_dropping_private_state_after_process_close ... ignored, requires the explicitly approved installed CIGAR 0.14.1 candidate
+test actor::tests::installed_actor_serializes_graphs_bounds_queue_and_cancels_without_blocking_status ... ignored, requires the explicitly approved installed CIGAR 0.14.1 candidate
+test actor::tests::installed_short_deadline_abandons_queued_work_and_closes_dispatched_uncertainty ... ignored, requires the explicitly approved installed CIGAR 0.14.1 candidate
+test broker::execution::tests::actual_sdk_execution_precondition_requires_current_host_review_and_consumes_once ... ignored, requires the explicitly approved actual CPython 3.14/CIGAR 0.14.1 candidate
+test broker::tests::actual_broker_independent_clients_scopes_proposals_conflicts_leases_and_recovery ... ignored, requires explicitly selected approved final CPython 3.14 and actual CIGAR 0.14.1
+test broker_execution_doctor::tests::actual_execution_doctor_uses_private_memory_without_agent_or_storage_consent ... ignored, requires the explicitly approved actual CPython 3.14/CIGAR 0.14.1 candidate
+test broker_persistence_doctor::tests::actual_persistence_doctor_is_private_bounded_independent_and_resets_failed_qualification ... ignored, requires the explicitly approved final CPython 3.14 and actual CIGAR 0.14.1 worker
+test broker_storage::tests::actual_persistent_sdk_recovery_needs_fresh_catalog_grants_and_contexts ... ignored, requires the explicitly approved final CPython 3.14 and actual CIGAR 0.14.1 worker
+test evidence_cache::actual_tests::actual_private_cache_recovers_reviewed_notes_and_removes_only_after_worker_close ... ignored, requires the explicitly approved final CPython 3.14 and actual CIGAR 0.14.1 worker
+test evidence_cache::actual_tests::actual_sdk_admission_interruption_reconciles_uncommitted_intent_and_preserves_lost_committed_text ... ignored, requires the explicitly approved final CPython 3.14 and actual CIGAR 0.14.1 worker
+test freshness::tests::invalidation_drop_and_saturation_never_revive_a_fence ... ok
+test broker::tests::validation::source_revisions_remain_canonical_lossless_decimal_strings ... ok
+test broker::execution::tests::host_review_requires_bounded_policy_and_unique_exact_claim_keys ... ok
+test private_python::tests::old_selection_and_approval_serialization_preserve_legacy_receipt_contexts ... ok
+test broker::proposals::tests::carried_notes_cannot_launder_omitted_foreign_or_stale_file_dependencies ... ok
+test evidence_cache::tests::upgrade_tests::a_mismatched_approval_cannot_describe_a_compatible_data_producer ... ok
+test restriction_tests::an_overlay_cannot_enable_any_permission_that_local_consent_did_not_grant ... ok
+test restriction_tests::execution_preference_is_independent_but_managed_policy_can_only_narrow_it ... ok
+test restriction_tests::impossible_restricted_budgets_are_refused_without_silently_reducing_reserves ... ok
+test restriction_tests::portable_preferences_cannot_reactivate_machine_local_access ... ok
+test restriction_tests::restrictions_cannot_select_a_new_runtime_or_source_set ... ok
+test restriction_tests::restrictive_composition_preserves_only_locally_selected_runtime_and_sources ... ok
+test runtime::tests::cancelled_verification_is_refused_before_any_artifact_read_or_process_launch ... ok
+test runtime::tests::doctor_requires_exact_protocol_features_and_actual_compile ... ok
+test runtime::tests::installed_candidate_handshake_and_interpreter_refusal ... ignored, requires an explicitly staged CIGAR 0.14.1 bundle and CPython 3.14
+test runtime::tests::platform_path_is_not_a_source_locator ... ok
+test evidence_cache::tests::upgrade_tests::empty_cache_has_no_copy_or_authority_and_future_feature_reduction_is_explicit ... ok
+test broker::tests::validation::host_document_admission_refuses_unsafe_or_ambiguous_material ... ok
+test source::tests::protected_reads_preserve_lines_and_exact_revision_and_bound_chunks ... ok
+test tests::absent_configuration_is_off_without_selecting_a_runtime_or_sources ... ok
+test tests::budgets_cannot_be_negative_unbounded_or_reserve_the_whole_context ... ok
+test tests::configuration_roundtrips_without_adding_effective_authority_fields ... ok
+test tests::extra_documents_and_shared_agents_require_their_own_prerequisites ... ok
+test tests::malformed_persisted_enablement_fails_off_instead_of_coercing_truthiness ... ok
+test tests::malformed_probe_records_are_not_tolerated ... ok
+test tests::only_final_cpython_314_passes_version_eligibility ... ok
+test tests::platform_and_abi_must_describe_the_same_supported_process ... ok
+test tests::selected_ids_are_bounded_opaque_references_instead_of_paths_or_urls ... ok
+test tests::unqualified_builds_and_unknown_platforms_are_unavailable ... ok
+test source::tests::link_and_directory_replacement_do_not_reuse_admitted_roots ... ok
+test broker_storage::tests::private_storage_rejects_links_permissions_unknown_files_size_and_identity_changes ... ok
+test source::tests::secret_names_traversal_binary_encoding_and_limits_never_admit_documents ... ok
+test evidence_cache::tests::upgrade_tests::same_sdk_with_changed_python_or_private_standard_library_requires_fresh_data ... ok
+test private_python::tests::in_memory_tree_snapshot_never_enters_installation_json_or_survives_deserialization ... ok
+test artifacts::tests::startup_hooks_worker_tampering_and_shared_writable_trees_are_refused ... ok
+test artifacts::tests::releases::preparation_only_release_is_refused_before_any_runtime_artifact_is_read ... ok
+test evidence_cache::tests::absent_cache_inspection_is_inactive_and_namespaces_are_opaque ... ok
+test private_python::tests::protected_private_interpreter_requires_the_full_tree_and_exact_path ... ok
+test private_python::tests::cached_verification_refuses_changed_code_even_after_length_and_mtime_are_restored ... ok
+test artifacts::tests::symlinks_cannot_add_importable_code_outside_the_verified_tree ... ok
+test evidence_cache::tests::saved_note_limits_and_private_directory_identity_are_enforced ... ok
+test artifacts::tests::releases::future_sdk_and_independent_core_are_inspected_through_catalog_data ... ok
+test private_python::tests::unchanged_executable_does_not_hide_a_changed_standard_library_before_launch ... ok
+test evidence_cache::tests::clock_rollback_and_malformed_records_preserve_saved_data_for_repair ... ok
+test evidence_cache::tests::upgrade_tests::corrupt_newer_and_interrupted_metadata_refuse_without_mutation_or_text_disclosure ... ok
+test private_python::tests::writable_code_unexpected_files_and_cancelled_checks_refuse ... ok
+test evidence_cache::tests::slot_and_database_leases_retain_exclusive_ownership_until_domain_close ... ok
+test evidence_cache::tests::unexpected_files_links_and_permissions_refuse_removal_without_touching_other_data ... ok
+test artifacts::tests::releases::core_metadata_is_bound_independently_of_the_sdk_label ... ok
+test artifacts::tests::releases::independent_native_core_preview_labels_are_bound_exactly_without_normalization ... ok
+test artifacts::tests::releases::official_worker_beside_changed_sdk_code_does_not_match_the_approved_release ... ok
+test evidence_cache::tests::upgrade_tests::snapshot_changes_for_checkpoint_writes_and_for_manifest_commit ... ok
+test evidence_cache::tests::health_reports_pending_corrupt_and_expired_metadata_without_source_or_sdk_access ... ok
+test artifacts::tests::code_bytecode_and_extra_files_are_bound_to_the_approved_inventory ... ok
+test private_python::tests::cached_verification_refuses_extra_directories_and_cannot_rebind_to_another_tree ... ok
+test evidence_cache::tests::upgrade_tests::inventory_preserves_reviewed_notes_without_rendering_content_or_restoring_authority ... ok
+test evidence_cache::tests::interrupted_metadata_writes_poison_only_the_open_handle_and_recover_actual_commit ... ok
+test evidence_cache::tests::staged_admission_records_only_a_hash_and_reconciles_without_retry ... ok
+test evidence_cache::tests::upgrade_tests::expiry_and_capacity_are_reported_without_sweeping_or_deleting_previous_data ... ok
+test evidence_cache::tests::quota_and_retention_cover_inactive_stores_without_opening_sdk ... ok
+
+test result: ok. 59 passed; 0 failed; 11 ignored; 0 measured; 0 filtered out; finished in 0.76s
+
+
+
+CHECK=native-msrv
+    Checking guard-context-assistance v0.1.0 (/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/rust/crates/guard-context-assistance)
+    Checking hol-guard-runtime v3.16.3 (/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/rust/crates/guard-runtime)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.68s
+
+
+CHECK=clippy
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.09s
+
+
+CHECK=context-clippy
+warning: hiding a lifetime that's elided elsewhere is confusing
+   --> crates/guard-scanner/src/secret_detection.rs:648:9
+    |
+648 |         &self,
+    |         ^^^^^ the lifetime is elided here
+649 |         fingerprint_key: Option<&[u8]>,
+650 |     ) -> Result<PublicFinding, EmptyFingerprintKeyError> {
+    |                 ^^^^^^^^^^^^^ the same lifetime is hidden here
+    |
+    = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+    = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+    |
+650 |     ) -> Result<PublicFinding<'_>, EmptyFingerprintKeyError> {
+    |                              ++++
+
+warning: `guard-scanner` (lib) generated 1 warning (run `cargo clippy --fix --lib -p guard-scanner -- ` to apply 1 suggestion)
+    Checking guard-context-assistance v0.1.0 (/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/rust/crates/guard-context-assistance)
+warning: use of deprecated method `std::sync::atomic::Atomic::<u64>::fetch_update`: renamed to `try_update` for consistency
+  --> crates/guard-context-assistance/src/freshness.rs:28:14
+   |
+28 |             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |v| {
+   |              ^^^^^^^^^^^^
+   |
+   = note: `#[warn(deprecated)]` on by default
+help: replace the use of the deprecated method
+   |
+28 -             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |v| {
+28 +             .try_update(Ordering::AcqRel, Ordering::Acquire, |v| {
+   |
+
+warning: `guard-context-assistance` (lib) generated 1 warning (run `cargo clippy --fix --lib -p guard-context-assistance -- ` to apply 1 suggestion)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.51s

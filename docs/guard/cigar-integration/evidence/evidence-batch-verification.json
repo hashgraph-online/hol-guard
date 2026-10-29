@@ -1,0 +1,856 @@
+{
+  "schema": "guard-cigar-evidence-batch-source-verification.v1",
+  "source_base_commit": "bb36b0d69f3304643b697c6cc51b6498a6b75824",
+  "status": "source-qualified; matching installed candidate required",
+  "changes": [
+    "One private lock, bounded journal body and durable sync per native batch; previews share append rollback.",
+    "Store persistence stays in original record order; settled identities are removed together by atomic rewrite.",
+    "All accepted queued records remain journaled when the store-drain deadline expires.",
+    "Journal append and rewrite run outside the queue mutex; existing Stop deadlines and evidence authority stay unchanged.",
+    "Exact new native paths declared in the existing persistence ownership node and journal privacy inventory."
+  ],
+  "preceding_installed_candidate": {
+    "mode": "auto",
+    "target": "aarch64-macos",
+    "runtime_version": "3.55.1",
+    "protocol_version": 1,
+    "package_origin": "installed",
+    "artifact_sha256": "3243dbf7d5e855b0c948fb1a6b33fb4d416671983d6cb8042b345aa9cb6be721",
+    "artifact_size": 113583104,
+    "build_sha": "bb36b0d69f3304643b697c6cc51b6498a6b75824",
+    "rule_digest": "54e38cc15fe1e4bb231214e15876422e5c0f872d2d3d5bae85b6c02e43ac7111",
+    "platform_tag": "macosx_11_0_arm64",
+    "host_platform": "darwin",
+    "host_arch": "arm64",
+    "python_version": "3.12.13",
+    "CIGAR_imported": false,
+    "path_override": false,
+    "installed_prefix_selected_by_bootstrap": true,
+    "platform_tag_target_verified": true,
+    "static_files_verified": 33,
+    "compiler_manifest_verified": true,
+    "production_source_files_verified": 4,
+    "strict_installed_signature_verified": true,
+    "wheel_bytes": 41334479,
+    "wheel_sha256": "cb3c6d094365aea7230f8b836b6ba3ed11c1ef64f4020eaf94bb955bfa81ff40"
+  },
+  "preceding_build": {
+    "command": [
+      "/Users/construct/.rustup/toolchains/1.88.0-aarch64-apple-darwin/bin/cargo",
+      "build",
+      "--manifest-path",
+      "/private/tmp/hol-guard-cigar-evidence-shutdown-20261024/package-source/rust/Cargo.toml",
+      "--locked",
+      "--offline",
+      "-p",
+      "hol-guard-runtime",
+      "--bin",
+      "hol-guard-runtime"
+    ],
+    "source_commit": "bb36b0d69f3304643b697c6cc51b6498a6b75824",
+    "profile": "Rust 1.88.0 dev/debug=0; unpublished private artifact",
+    "returncode": 0,
+    "seconds": 71.313
+  },
+  "preceding_capability_wheel_gate": {
+    "path": "/private/tmp/hol-guard-cigar-evidence-shutdown-20261024/capability-wheel.json",
+    "bytes": 38727,
+    "sha256": "3b753041719f90ef28e049648beb2f1d554c48cdb94c44d3fe09ac2b3006e2dc"
+  },
+  "retained_diagnostics": [
+    {
+      "name": "ordinary component observer; no cleanup intervention",
+      "diagnostic_only": true,
+      "controller": {
+        "schema": "guard-cigar-ordered-evidence-installed-diagnostic.v1",
+        "diagnostic_only": true,
+        "not_matched_cohort_qualification": true,
+        "command": [
+          "/private/tmp/hol-guard-cigar-locked-runtime/bin/python",
+          "-u",
+          "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/scripts/bench_guard_cigar_cleanup_diagnostic.py",
+          "--runtime",
+          "/private/tmp/hol-guard-cigar-evidence-shutdown-20261024/package/installed/codex_plugin_scanner/_native/hol-guard-runtime",
+          "--root",
+          "/private/tmp/hol-guard-cigar-evidence-shutdown-installed-diagnostic-20261024/on",
+          "--mode",
+          "on",
+          "--expected-build-sha",
+          "bb36b0d69f3304643b697c6cc51b6498a6b75824"
+        ],
+        "returncode": 1,
+        "seconds": 50.385,
+        "inputs_unchanged": true,
+        "fingerprinted_files": 1620,
+        "completed": true,
+        "failed_gates": [
+          "all_observed_live_descendants_contained",
+          "daemon_shutdown_contained"
+        ],
+        "observer_complete": true
+      },
+      "inputs": {
+        "path": "/private/tmp/hol-guard-cigar-evidence-shutdown-installed-diagnostic-20261024/inputs.json",
+        "bytes": 329717,
+        "sha256": "e7881b1f81b80e6defde91dfcafe8799e0a0e9e7b2ec9f09f21b9f5eab8858c6"
+      },
+      "original_result": {
+        "path": "/private/tmp/hol-guard-cigar-evidence-shutdown-installed-diagnostic-20261024/on/result.json",
+        "bytes": 7669,
+        "sha256": "1b3c963fd099590be94ac8c33d2de66ea50edee4b52f362a98d754014e3c4a8a"
+      },
+      "gates": {
+        "direct_warm_p95_20ms": true,
+        "installed_warm_p95_1000ms": true,
+        "installed_c16_p99_1000ms": true,
+        "no_request_errors_or_unclassified_refusals": true,
+        "complete_observed_tree_rss_growth_12_percent": true,
+        "process_sampling_complete": true,
+        "optional_worker_coverage": true,
+        "real_compile_overlap": true,
+        "no_unexpected_context_refusals": true,
+        "unchanged_graph_revision_reused": true,
+        "strict_final_stop": true,
+        "all_observed_live_descendants_contained": false,
+        "daemon_shutdown_contained": false
+      },
+      "cleanup": {
+        "final_stop_status": "already-stopped",
+        "retained_stop_status": "already-stopped",
+        "recovery_used": false,
+        "daemon_stop_contained": false,
+        "observed_at_end": {
+          "rss_bytes": 265338880,
+          "counts": {
+            "native_runtime": 3,
+            "benchmark_daemon_host": 1
+          },
+          "rss_by_kind": {
+            "native_runtime": 94273536,
+            "benchmark_daemon_host": 171065344
+          }
+        },
+        "live_descendants_remaining": 3
+      },
+      "cleanup_observer": {
+        "path": "/private/tmp/hol-guard-cigar-evidence-shutdown-installed-diagnostic-20261024/on/cleanup-diagnostic.json",
+        "bytes": 23923,
+        "sha256": "bdc959cebf72ede96ffc9f6563e8274f31f3a7005751fdb180d5ccf9223f7689"
+      }
+    },
+    {
+      "name": "one explicit confirmation within existing five seconds",
+      "diagnostic_only": true,
+      "controller": {
+        "schema": "guard-cigar-shutdown-confirmation-controller.v1",
+        "diagnostic_only": true,
+        "explicit_cleanup_intervention": true,
+        "not_matched_cohort_qualification": true,
+        "command": [
+          "/private/tmp/hol-guard-cigar-locked-runtime/bin/python",
+          "-u",
+          "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/scripts/bench_guard_cigar_shutdown_confirmation.py",
+          "--runtime",
+          "/private/tmp/hol-guard-cigar-evidence-shutdown-20261024/package/installed/codex_plugin_scanner/_native/hol-guard-runtime",
+          "--root",
+          "/private/tmp/hol-guard-cigar-shutdown-confirmation-diagnostic-20261024/on",
+          "--mode",
+          "on",
+          "--expected-build-sha",
+          "bb36b0d69f3304643b697c6cc51b6498a6b75824"
+        ],
+        "returncode": 1,
+        "seconds": 46.137,
+        "inputs_unchanged": true,
+        "fingerprinted_files": 1619,
+        "completed": true,
+        "failed_gates": [
+          "strict_final_stop",
+          "daemon_shutdown_contained"
+        ]
+      },
+      "inputs": {
+        "path": "/private/tmp/hol-guard-cigar-shutdown-confirmation-diagnostic-20261024/inputs.json",
+        "bytes": 329534,
+        "sha256": "4aac6230ddb369cf0662f9015ae408baab08c76e444cd669f60fc0ef2211a6f9"
+      },
+      "original_result": {
+        "path": "/private/tmp/hol-guard-cigar-shutdown-confirmation-diagnostic-20261024/on/result.json",
+        "bytes": 7597,
+        "sha256": "10f223a8f01dd2497387df48a4227a995a0b3355817b40163c8d60a7e1a9d01e"
+      },
+      "gates": {
+        "direct_warm_p95_20ms": true,
+        "installed_warm_p95_1000ms": true,
+        "installed_c16_p99_1000ms": true,
+        "no_request_errors_or_unclassified_refusals": true,
+        "complete_observed_tree_rss_growth_12_percent": true,
+        "process_sampling_complete": true,
+        "optional_worker_coverage": true,
+        "real_compile_overlap": true,
+        "no_unexpected_context_refusals": true,
+        "unchanged_graph_revision_reused": true,
+        "strict_final_stop": false,
+        "all_observed_live_descendants_contained": true,
+        "daemon_shutdown_contained": false
+      },
+      "cleanup": {
+        "final_stop_status": "failed",
+        "retained_stop_status": "failed",
+        "recovery_used": true,
+        "daemon_stop_contained": false,
+        "observed_at_end": {
+          "rss_bytes": 156860416,
+          "counts": {
+            "benchmark_daemon_host": 1
+          },
+          "rss_by_kind": {
+            "benchmark_daemon_host": 156860416
+          }
+        },
+        "live_descendants_remaining": 0
+      },
+      "cleanup_observer": {
+        "path": "/private/tmp/hol-guard-cigar-shutdown-confirmation-diagnostic-20261024/on/cleanup-diagnostic.json",
+        "bytes": 24470,
+        "sha256": "ee41f40b9420aede17bf15148c35e9ff0c4e4d2d43ed39dfc1d5be0e0c3ef503"
+      },
+      "confirmation": {
+        "schema": "guard-cigar-post-join-confirmation-diagnostic.v1",
+        "diagnostic_only": true,
+        "not_matched_cohort_qualification": true,
+        "explicit_cleanup_intervention": true,
+        "wrapper_sha256": "a60bb48514accb871a490b0281b6a763d438636819e1a58bace550da298abf7a",
+        "observations": [
+          {
+            "original_finish_completed": false,
+            "serving_thread_joined": true,
+            "remaining_budget_before_confirmation_ms": 2959.6982919611037,
+            "attempted": true,
+            "acknowledged": false,
+            "final_finish_completed": false,
+            "elapsed_total_ms": 3556.9817079231143,
+            "within_five_seconds_from_original_stop": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "confirmation plus cleanup-only queue counter RPCs",
+      "diagnostic_only": true,
+      "controller": {
+        "schema": "guard-cigar-evidence-queue-controller.v1",
+        "diagnostic_only": true,
+        "not_matched_cohort_qualification": true,
+        "command": [
+          "/private/tmp/hol-guard-cigar-locked-runtime/bin/python",
+          "-u",
+          "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/scripts/bench_guard_cigar_evidence_queue_diagnostic.py",
+          "--runtime",
+          "/private/tmp/hol-guard-cigar-evidence-shutdown-20261024/package/installed/codex_plugin_scanner/_native/hol-guard-runtime",
+          "--root",
+          "/private/tmp/hol-guard-cigar-evidence-queue-diagnostic-20261024/on",
+          "--mode",
+          "on",
+          "--expected-build-sha",
+          "bb36b0d69f3304643b697c6cc51b6498a6b75824"
+        ],
+        "returncode": 1,
+        "seconds": 46.404,
+        "inputs_unchanged": true,
+        "fingerprinted_files": 1620,
+        "completed": true,
+        "failed_gates": [
+          "daemon_shutdown_contained"
+        ]
+      },
+      "inputs": {
+        "path": "/private/tmp/hol-guard-cigar-evidence-queue-diagnostic-20261024/inputs.json",
+        "bytes": 329746,
+        "sha256": "269826a626c845313ee4f48109f9fe518de8a8f4d8abd9193c64afa9e5585cd5"
+      },
+      "original_result": {
+        "path": "/private/tmp/hol-guard-cigar-evidence-queue-diagnostic-20261024/on/result.json",
+        "bytes": 7614,
+        "sha256": "a587f5ce98ad89d26ad3b33f39beff284d0f07713f59ecd8fff5b48ccd31a89b"
+      },
+      "gates": {
+        "direct_warm_p95_20ms": true,
+        "installed_warm_p95_1000ms": true,
+        "installed_c16_p99_1000ms": true,
+        "no_request_errors_or_unclassified_refusals": true,
+        "complete_observed_tree_rss_growth_12_percent": true,
+        "process_sampling_complete": true,
+        "optional_worker_coverage": true,
+        "real_compile_overlap": true,
+        "no_unexpected_context_refusals": true,
+        "unchanged_graph_revision_reused": true,
+        "strict_final_stop": true,
+        "all_observed_live_descendants_contained": true,
+        "daemon_shutdown_contained": false
+      },
+      "cleanup": {
+        "final_stop_status": "already-stopped",
+        "retained_stop_status": "already-stopped",
+        "recovery_used": false,
+        "daemon_stop_contained": false,
+        "observed_at_end": {
+          "rss_bytes": 157401088,
+          "counts": {
+            "benchmark_daemon_host": 1
+          },
+          "rss_by_kind": {
+            "benchmark_daemon_host": 157401088
+          }
+        },
+        "live_descendants_remaining": 0
+      },
+      "cleanup_observer": {
+        "path": "/private/tmp/hol-guard-cigar-evidence-queue-diagnostic-20261024/on/cleanup-diagnostic.json",
+        "bytes": 22950,
+        "sha256": "8e8c8c2c7a0b619e39742680c2c6f12f877ee95f5557a0914b493881e38a02e5"
+      },
+      "confirmation": {
+        "schema": "guard-cigar-post-join-confirmation-diagnostic.v1",
+        "diagnostic_only": true,
+        "not_matched_cohort_qualification": true,
+        "explicit_cleanup_intervention": true,
+        "wrapper_sha256": "a60bb48514accb871a490b0281b6a763d438636819e1a58bace550da298abf7a",
+        "observations": [
+          {
+            "original_finish_completed": false,
+            "serving_thread_joined": true,
+            "remaining_budget_before_confirmation_ms": 1347.0653747208416,
+            "attempted": true,
+            "acknowledged": false,
+            "final_finish_completed": false,
+            "elapsed_total_ms": 4913.962958846241,
+            "within_five_seconds_from_original_stop": true
+          }
+        ]
+      },
+      "queue": {
+        "schema": "guard-cigar-evidence-queue-diagnostic.v1",
+        "diagnostic_only": true,
+        "extra_stats_rpcs_during_cleanup": true,
+        "not_matched_cohort_qualification": true,
+        "wrapper_sha256": "499c815ac26771e6f67d32c0440606a7b0022a10cc5dae0280ab8b7e5fea6d30",
+        "observations": [
+          {
+            "kind": "writer_stop",
+            "before": {
+              "accepted": 1496,
+              "degraded": true,
+              "dropped": 0,
+              "durable_pending": 0,
+              "failures": 316,
+              "processed": 631,
+              "queued": 826,
+              "queued_bytes": 1050298,
+              "receipt_accepted": 748,
+              "receipt_deduped": 0,
+              "receipt_dropped": 0,
+              "receipt_durable_pending": 0,
+              "receipt_failures": 0,
+              "receipt_processed": 316,
+              "recovered": 0,
+              "running": true,
+              "started": true
+            },
+            "after": {
+              "accepted": 1496,
+              "degraded": true,
+              "dropped": 0,
+              "durable_pending": 48,
+              "failures": 354,
+              "processed": 708,
+              "queued": 726,
+              "queued_bytes": 923106,
+              "receipt_accepted": 748,
+              "receipt_deduped": 0,
+              "receipt_dropped": 0,
+              "receipt_durable_pending": 24,
+              "receipt_failures": 0,
+              "receipt_processed": 354,
+              "recovered": 0,
+              "running": false,
+              "started": true
+            }
+          },
+          {
+            "kind": "writer_stop",
+            "before": {
+              "accepted": 1496,
+              "degraded": true,
+              "dropped": 0,
+              "durable_pending": 49,
+              "failures": 354,
+              "processed": 708,
+              "queued": 726,
+              "queued_bytes": 923106,
+              "receipt_accepted": 748,
+              "receipt_deduped": 0,
+              "receipt_dropped": 0,
+              "receipt_durable_pending": 25,
+              "receipt_failures": 0,
+              "receipt_processed": 354,
+              "recovered": 0,
+              "running": false,
+              "started": true
+            },
+            "after": {
+              "accepted": 1496,
+              "degraded": true,
+              "dropped": 0,
+              "durable_pending": 97,
+              "failures": 416,
+              "processed": 781,
+              "queued": 576,
+              "queued_bytes": 732378,
+              "receipt_accepted": 748,
+              "receipt_deduped": 0,
+              "receipt_dropped": 0,
+              "receipt_durable_pending": 48,
+              "receipt_failures": 0,
+              "receipt_processed": 391,
+              "recovered": 0,
+              "running": false,
+              "started": true
+            }
+          },
+          {
+            "kind": "resident_stop",
+            "diagnostic": {
+              "status": "contained",
+              "acknowledged": "verified",
+              "authenticated": "verified",
+              "generation_present": "verified",
+              "owner_lock": "verified",
+              "marker_lock": "verified",
+              "endpoint": "verified",
+              "serving_shutdown": "verified"
+            }
+          },
+          {
+            "kind": "resident_stop",
+            "diagnostic": {
+              "status": "already-stopped",
+              "acknowledged": "unknown",
+              "authenticated": "unknown",
+              "generation_present": "unknown",
+              "owner_lock": "unknown",
+              "marker_lock": "unknown",
+              "endpoint": "unknown",
+              "serving_shutdown": "unknown"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "checks": {
+    "command-final": {
+      "receipt": {
+        "command": [
+          "/Users/construct/.rustup/toolchains/1.88.0-aarch64-apple-darwin/bin/cargo",
+          "test",
+          "--manifest-path",
+          "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/rust/Cargo.toml",
+          "--locked",
+          "--offline",
+          "-p",
+          "guard-command",
+          "--lib",
+          "hook_evidence"
+        ],
+        "returncode": 0,
+        "seconds": 18.98,
+        "inputs_unchanged": true,
+        "files": 14
+      },
+      "inputs": {
+        "rust/crates/guard-command/src/hook_evidence_batch.rs": "aeff4038ae537a139611c1b87bff52133bf6891994187d14d25ee81c26887357",
+        "rust/crates/guard-command/src/hook_evidence_batch_tests.rs": "21892bab15a8c1f84bfa95f94ee6e068c20ab907dab7a13770978f006e952c7f",
+        "rust/crates/guard-command/src/hook_evidence_deferred_post.rs": "3af3978a8baa040b3f9ffba3c2c13b81c6f7704f09e022724bf76c1ca6dc340d",
+        "rust/crates/guard-command/src/hook_evidence_journal_batch.rs": "b68d32c2e17f10daee38ea6343b6d90eeedcf290f7091993e5f7e4a65728dfa1",
+        "rust/crates/guard-command/src/hook_evidence_journal_batch_tests.rs": "f71e5a7dfefacbc07d05274b4ffa65540273c7aab275d6d288ae91c06d027858",
+        "rust/crates/guard-command/src/hook_evidence_journal_fs.rs": "2f3a5df6fa29161d2a990d3bf4ab520c373be76a683505974fa040f9bdf32e68",
+        "rust/crates/guard-command/src/hook_evidence_journal_fs_tests.rs": "3454904ab9e0e0dff584dc2e6760279fc705f3a0e0e7b6a26a90b37314908ad4",
+        "rust/crates/guard-command/src/hook_evidence_preview.rs": "53fffdfbc90858901589ee6509fdf2f1c09ea575220e0c5a4eb99809df124a63",
+        "rust/crates/guard-command/src/hook_evidence_preview_tests.rs": "b3d4fc1a26203dd0ba9d8209d5f51898a45b1da25cc4eb59d239920a6d22566a",
+        "rust/crates/guard-command/src/hook_evidence_receipt.rs": "b2fcd8c7b189f2d3ead0d1c20dac44659e7a48b8b2b6d4ceb0fcf114ff20d6b1",
+        "rust/crates/guard-command/src/hook_evidence_receipt_tests.rs": "ebcfb2d75b578d6d5f9e3299ca2eb22faf1fd577d8e3443c284c937768723b37",
+        "rust/crates/guard-command/src/hook_evidence_writer.rs": "501e6f98ac20d53f40bc9b7628f185c3c27a87e05cd66342394b6fd0e685b907",
+        "rust/crates/guard-command/src/hook_evidence_writer_tests.rs": "91767927e67d5c207c1141c07660c612864c6974ce1d293d14bfd88830f05a9a",
+        "docs/guard/contracts/hook-data-plane-ownership.v2.json": "35fb5472cfcc372948cf7e9729b2a43bdb0f0d3c715deb7170cb13fab2c3622b"
+      },
+      "stdout": {
+        "path": "/private/tmp/hol-guard-cigar-evidence-batch-20261024/command-final.stdout.log",
+        "bytes": 7371,
+        "sha256": "9872ae435d7337e0237608639f80142739960b67e4aef9ec4ff5c266534fe40b"
+      },
+      "stderr": {
+        "path": "/private/tmp/hol-guard-cigar-evidence-batch-20261024/command-final.stderr.log",
+        "bytes": 327,
+        "sha256": "fbb31d9259ec02e00e27ba5bf42d4d15a9b16c61ae0a536f4f0267f107b64a8d"
+      },
+      "tests_passed": 71
+    },
+    "runtime-lib": {
+      "receipt": {
+        "command": [
+          "/Users/construct/.rustup/toolchains/1.88.0-aarch64-apple-darwin/bin/cargo",
+          "test",
+          "--manifest-path",
+          "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/rust/Cargo.toml",
+          "--locked",
+          "--offline",
+          "-p",
+          "hol-guard-runtime",
+          "--lib",
+          "hook_evidence"
+        ],
+        "returncode": 0,
+        "seconds": 43.982,
+        "inputs_unchanged": true,
+        "files": 14
+      },
+      "inputs": {
+        "rust/crates/guard-command/src/hook_evidence_batch.rs": "aeff4038ae537a139611c1b87bff52133bf6891994187d14d25ee81c26887357",
+        "rust/crates/guard-command/src/hook_evidence_batch_tests.rs": "21892bab15a8c1f84bfa95f94ee6e068c20ab907dab7a13770978f006e952c7f",
+        "rust/crates/guard-command/src/hook_evidence_deferred_post.rs": "3af3978a8baa040b3f9ffba3c2c13b81c6f7704f09e022724bf76c1ca6dc340d",
+        "rust/crates/guard-command/src/hook_evidence_journal_batch.rs": "b68d32c2e17f10daee38ea6343b6d90eeedcf290f7091993e5f7e4a65728dfa1",
+        "rust/crates/guard-command/src/hook_evidence_journal_batch_tests.rs": "f71e5a7dfefacbc07d05274b4ffa65540273c7aab275d6d288ae91c06d027858",
+        "rust/crates/guard-command/src/hook_evidence_journal_fs.rs": "2f3a5df6fa29161d2a990d3bf4ab520c373be76a683505974fa040f9bdf32e68",
+        "rust/crates/guard-command/src/hook_evidence_journal_fs_tests.rs": "3454904ab9e0e0dff584dc2e6760279fc705f3a0e0e7b6a26a90b37314908ad4",
+        "rust/crates/guard-command/src/hook_evidence_preview.rs": "53fffdfbc90858901589ee6509fdf2f1c09ea575220e0c5a4eb99809df124a63",
+        "rust/crates/guard-command/src/hook_evidence_preview_tests.rs": "b3d4fc1a26203dd0ba9d8209d5f51898a45b1da25cc4eb59d239920a6d22566a",
+        "rust/crates/guard-command/src/hook_evidence_receipt.rs": "b2fcd8c7b189f2d3ead0d1c20dac44659e7a48b8b2b6d4ceb0fcf114ff20d6b1",
+        "rust/crates/guard-command/src/hook_evidence_receipt_tests.rs": "ebcfb2d75b578d6d5f9e3299ca2eb22faf1fd577d8e3443c284c937768723b37",
+        "rust/crates/guard-command/src/hook_evidence_writer.rs": "501e6f98ac20d53f40bc9b7628f185c3c27a87e05cd66342394b6fd0e685b907",
+        "rust/crates/guard-command/src/hook_evidence_writer_tests.rs": "91767927e67d5c207c1141c07660c612864c6974ce1d293d14bfd88830f05a9a",
+        "docs/guard/contracts/hook-data-plane-ownership.v2.json": "35fb5472cfcc372948cf7e9729b2a43bdb0f0d3c715deb7170cb13fab2c3622b"
+      },
+      "stdout": {
+        "path": "/private/tmp/hol-guard-cigar-evidence-batch-20261024/runtime-lib.stdout.log",
+        "bytes": 6474,
+        "sha256": "7206ad7287b77202002e2ac470eaa5bb8fac62dba5035353aaa13e2db475963f"
+      },
+      "stderr": {
+        "path": "/private/tmp/hol-guard-cigar-evidence-batch-20261024/runtime-lib.stderr.log",
+        "bytes": 336,
+        "sha256": "7742e50584de6549777220246d39b9805320aaf7ac7195001bfdd7b5a75db387"
+      },
+      "tests_passed": 68
+    },
+    "semantic": {
+      "receipt": {
+        "command": [
+          "/private/tmp/hol-guard-cigar-locked-runtime/bin/python",
+          "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/scripts/ci/python_hook_semantic_callgraph_gate.py",
+          "--root",
+          "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration",
+          "--json",
+          "/private/tmp/hol-guard-cigar-evidence-batch-20261024/semantic.json"
+        ],
+        "returncode": 0,
+        "seconds": 0.087,
+        "inputs_unchanged": true,
+        "files": 14
+      },
+      "inputs": {
+        "rust/crates/guard-command/src/hook_evidence_batch.rs": "aeff4038ae537a139611c1b87bff52133bf6891994187d14d25ee81c26887357",
+        "rust/crates/guard-command/src/hook_evidence_batch_tests.rs": "21892bab15a8c1f84bfa95f94ee6e068c20ab907dab7a13770978f006e952c7f",
+        "rust/crates/guard-command/src/hook_evidence_deferred_post.rs": "3af3978a8baa040b3f9ffba3c2c13b81c6f7704f09e022724bf76c1ca6dc340d",
+        "rust/crates/guard-command/src/hook_evidence_journal_batch.rs": "b68d32c2e17f10daee38ea6343b6d90eeedcf290f7091993e5f7e4a65728dfa1",
+        "rust/crates/guard-command/src/hook_evidence_journal_batch_tests.rs": "f71e5a7dfefacbc07d05274b4ffa65540273c7aab275d6d288ae91c06d027858",
+        "rust/crates/guard-command/src/hook_evidence_journal_fs.rs": "2f3a5df6fa29161d2a990d3bf4ab520c373be76a683505974fa040f9bdf32e68",
+        "rust/crates/guard-command/src/hook_evidence_journal_fs_tests.rs": "3454904ab9e0e0dff584dc2e6760279fc705f3a0e0e7b6a26a90b37314908ad4",
+        "rust/crates/guard-command/src/hook_evidence_preview.rs": "53fffdfbc90858901589ee6509fdf2f1c09ea575220e0c5a4eb99809df124a63",
+        "rust/crates/guard-command/src/hook_evidence_preview_tests.rs": "b3d4fc1a26203dd0ba9d8209d5f51898a45b1da25cc4eb59d239920a6d22566a",
+        "rust/crates/guard-command/src/hook_evidence_receipt.rs": "b2fcd8c7b189f2d3ead0d1c20dac44659e7a48b8b2b6d4ceb0fcf114ff20d6b1",
+        "rust/crates/guard-command/src/hook_evidence_receipt_tests.rs": "ebcfb2d75b578d6d5f9e3299ca2eb22faf1fd577d8e3443c284c937768723b37",
+        "rust/crates/guard-command/src/hook_evidence_writer.rs": "501e6f98ac20d53f40bc9b7628f185c3c27a87e05cd66342394b6fd0e685b907",
+        "rust/crates/guard-command/src/hook_evidence_writer_tests.rs": "91767927e67d5c207c1141c07660c612864c6974ce1d293d14bfd88830f05a9a",
+        "docs/guard/contracts/hook-data-plane-ownership.v2.json": "35fb5472cfcc372948cf7e9729b2a43bdb0f0d3c715deb7170cb13fab2c3622b"
+      },
+      "stdout": {
+        "path": "/private/tmp/hol-guard-cigar-evidence-batch-20261024/semantic.stdout.log",
+        "bytes": 99,
+        "sha256": "8e3101056186cd4d641add66f9eed89b0289db4e105bdb5885821ae3f0484e46"
+      },
+      "stderr": {
+        "path": "/private/tmp/hol-guard-cigar-evidence-batch-20261024/semantic.stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "report": {
+        "path": "/private/tmp/hol-guard-cigar-evidence-batch-20261024/semantic.json",
+        "bytes": 99,
+        "sha256": "8e3101056186cd4d641add66f9eed89b0289db4e105bdb5885821ae3f0484e46"
+      }
+    },
+    "capability": {
+      "receipt": {
+        "command": [
+          "/private/tmp/hol-guard-cigar-locked-runtime/bin/python",
+          "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/scripts/ci/python_capability_cleanup_gate.py",
+          "--root",
+          "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration",
+          "--json",
+          "/private/tmp/hol-guard-cigar-evidence-batch-20261024/capability.json"
+        ],
+        "returncode": 0,
+        "seconds": 32.913,
+        "inputs_unchanged": true,
+        "files": 14
+      },
+      "inputs": {
+        "rust/crates/guard-command/src/hook_evidence_batch.rs": "aeff4038ae537a139611c1b87bff52133bf6891994187d14d25ee81c26887357",
+        "rust/crates/guard-command/src/hook_evidence_batch_tests.rs": "21892bab15a8c1f84bfa95f94ee6e068c20ab907dab7a13770978f006e952c7f",
+        "rust/crates/guard-command/src/hook_evidence_deferred_post.rs": "3af3978a8baa040b3f9ffba3c2c13b81c6f7704f09e022724bf76c1ca6dc340d",
+        "rust/crates/guard-command/src/hook_evidence_journal_batch.rs": "b68d32c2e17f10daee38ea6343b6d90eeedcf290f7091993e5f7e4a65728dfa1",
+        "rust/crates/guard-command/src/hook_evidence_journal_batch_tests.rs": "f71e5a7dfefacbc07d05274b4ffa65540273c7aab275d6d288ae91c06d027858",
+        "rust/crates/guard-command/src/hook_evidence_journal_fs.rs": "2f3a5df6fa29161d2a990d3bf4ab520c373be76a683505974fa040f9bdf32e68",
+        "rust/crates/guard-command/src/hook_evidence_journal_fs_tests.rs": "3454904ab9e0e0dff584dc2e6760279fc705f3a0e0e7b6a26a90b37314908ad4",
+        "rust/crates/guard-command/src/hook_evidence_preview.rs": "53fffdfbc90858901589ee6509fdf2f1c09ea575220e0c5a4eb99809df124a63",
+        "rust/crates/guard-command/src/hook_evidence_preview_tests.rs": "b3d4fc1a26203dd0ba9d8209d5f51898a45b1da25cc4eb59d239920a6d22566a",
+        "rust/crates/guard-command/src/hook_evidence_receipt.rs": "b2fcd8c7b189f2d3ead0d1c20dac44659e7a48b8b2b6d4ceb0fcf114ff20d6b1",
+        "rust/crates/guard-command/src/hook_evidence_receipt_tests.rs": "ebcfb2d75b578d6d5f9e3299ca2eb22faf1fd577d8e3443c284c937768723b37",
+        "rust/crates/guard-command/src/hook_evidence_writer.rs": "501e6f98ac20d53f40bc9b7628f185c3c27a87e05cd66342394b6fd0e685b907",
+        "rust/crates/guard-command/src/hook_evidence_writer_tests.rs": "91767927e67d5c207c1141c07660c612864c6974ce1d293d14bfd88830f05a9a",
+        "docs/guard/contracts/hook-data-plane-ownership.v2.json": "35fb5472cfcc372948cf7e9729b2a43bdb0f0d3c715deb7170cb13fab2c3622b"
+      },
+      "stdout": {
+        "path": "/private/tmp/hol-guard-cigar-evidence-batch-20261024/capability.stdout.log",
+        "bytes": 38592,
+        "sha256": "7f6913b65e52ce7231d7da4ff5b3d7763ab348ad89317dc56387a1fd1519acb9"
+      },
+      "stderr": {
+        "path": "/private/tmp/hol-guard-cigar-evidence-batch-20261024/capability.stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "report": {
+        "path": "/private/tmp/hol-guard-cigar-evidence-batch-20261024/capability.json",
+        "bytes": 38592,
+        "sha256": "7f6913b65e52ce7231d7da4ff5b3d7763ab348ad89317dc56387a1fd1519acb9"
+      }
+    },
+    "authority": {
+      "receipt": {
+        "command": [
+          "/private/tmp/hol-guard-cigar-locked-runtime/bin/python",
+          "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/scripts/ci/rust_authority_ownership_gate.py",
+          "--root",
+          "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration",
+          "--base-ref",
+          "35180b995cb27fdc9f92e1f68307a756c785f154",
+          "--json",
+          "/private/tmp/hol-guard-cigar-evidence-batch-20261024/authority.json"
+        ],
+        "returncode": 0,
+        "seconds": 2.143,
+        "inputs_unchanged": true,
+        "files": 14
+      },
+      "inputs": {
+        "rust/crates/guard-command/src/hook_evidence_batch.rs": "aeff4038ae537a139611c1b87bff52133bf6891994187d14d25ee81c26887357",
+        "rust/crates/guard-command/src/hook_evidence_batch_tests.rs": "21892bab15a8c1f84bfa95f94ee6e068c20ab907dab7a13770978f006e952c7f",
+        "rust/crates/guard-command/src/hook_evidence_deferred_post.rs": "3af3978a8baa040b3f9ffba3c2c13b81c6f7704f09e022724bf76c1ca6dc340d",
+        "rust/crates/guard-command/src/hook_evidence_journal_batch.rs": "b68d32c2e17f10daee38ea6343b6d90eeedcf290f7091993e5f7e4a65728dfa1",
+        "rust/crates/guard-command/src/hook_evidence_journal_batch_tests.rs": "f71e5a7dfefacbc07d05274b4ffa65540273c7aab275d6d288ae91c06d027858",
+        "rust/crates/guard-command/src/hook_evidence_journal_fs.rs": "2f3a5df6fa29161d2a990d3bf4ab520c373be76a683505974fa040f9bdf32e68",
+        "rust/crates/guard-command/src/hook_evidence_journal_fs_tests.rs": "3454904ab9e0e0dff584dc2e6760279fc705f3a0e0e7b6a26a90b37314908ad4",
+        "rust/crates/guard-command/src/hook_evidence_preview.rs": "53fffdfbc90858901589ee6509fdf2f1c09ea575220e0c5a4eb99809df124a63",
+        "rust/crates/guard-command/src/hook_evidence_preview_tests.rs": "b3d4fc1a26203dd0ba9d8209d5f51898a45b1da25cc4eb59d239920a6d22566a",
+        "rust/crates/guard-command/src/hook_evidence_receipt.rs": "b2fcd8c7b189f2d3ead0d1c20dac44659e7a48b8b2b6d4ceb0fcf114ff20d6b1",
+        "rust/crates/guard-command/src/hook_evidence_receipt_tests.rs": "ebcfb2d75b578d6d5f9e3299ca2eb22faf1fd577d8e3443c284c937768723b37",
+        "rust/crates/guard-command/src/hook_evidence_writer.rs": "501e6f98ac20d53f40bc9b7628f185c3c27a87e05cd66342394b6fd0e685b907",
+        "rust/crates/guard-command/src/hook_evidence_writer_tests.rs": "91767927e67d5c207c1141c07660c612864c6974ce1d293d14bfd88830f05a9a",
+        "docs/guard/contracts/hook-data-plane-ownership.v2.json": "35fb5472cfcc372948cf7e9729b2a43bdb0f0d3c715deb7170cb13fab2c3622b"
+      },
+      "stdout": {
+        "path": "/private/tmp/hol-guard-cigar-evidence-batch-20261024/authority.stdout.log",
+        "bytes": 66874,
+        "sha256": "926ce152d2fea713394e0733bcdf98c0767df8ee1b974f95a445ea058399a523"
+      },
+      "stderr": {
+        "path": "/private/tmp/hol-guard-cigar-evidence-batch-20261024/authority.stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "report": {
+        "path": "/private/tmp/hol-guard-cigar-evidence-batch-20261024/authority.json",
+        "bytes": 66874,
+        "sha256": "926ce152d2fea713394e0733bcdf98c0767df8ee1b974f95a445ea058399a523"
+      }
+    },
+    "io": {
+      "receipt": {
+        "command": [
+          "/private/tmp/hol-guard-cigar-locked-runtime/bin/python",
+          "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/scripts/ci/rust_io_ownership_gate.py",
+          "--root",
+          "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration",
+          "--json",
+          "/private/tmp/hol-guard-cigar-evidence-batch-20261024/io.json"
+        ],
+        "returncode": 0,
+        "seconds": 5.631,
+        "inputs_unchanged": true,
+        "files": 14
+      },
+      "inputs": {
+        "rust/crates/guard-command/src/hook_evidence_batch.rs": "aeff4038ae537a139611c1b87bff52133bf6891994187d14d25ee81c26887357",
+        "rust/crates/guard-command/src/hook_evidence_batch_tests.rs": "21892bab15a8c1f84bfa95f94ee6e068c20ab907dab7a13770978f006e952c7f",
+        "rust/crates/guard-command/src/hook_evidence_deferred_post.rs": "3af3978a8baa040b3f9ffba3c2c13b81c6f7704f09e022724bf76c1ca6dc340d",
+        "rust/crates/guard-command/src/hook_evidence_journal_batch.rs": "b68d32c2e17f10daee38ea6343b6d90eeedcf290f7091993e5f7e4a65728dfa1",
+        "rust/crates/guard-command/src/hook_evidence_journal_batch_tests.rs": "f71e5a7dfefacbc07d05274b4ffa65540273c7aab275d6d288ae91c06d027858",
+        "rust/crates/guard-command/src/hook_evidence_journal_fs.rs": "2f3a5df6fa29161d2a990d3bf4ab520c373be76a683505974fa040f9bdf32e68",
+        "rust/crates/guard-command/src/hook_evidence_journal_fs_tests.rs": "3454904ab9e0e0dff584dc2e6760279fc705f3a0e0e7b6a26a90b37314908ad4",
+        "rust/crates/guard-command/src/hook_evidence_preview.rs": "53fffdfbc90858901589ee6509fdf2f1c09ea575220e0c5a4eb99809df124a63",
+        "rust/crates/guard-command/src/hook_evidence_preview_tests.rs": "b3d4fc1a26203dd0ba9d8209d5f51898a45b1da25cc4eb59d239920a6d22566a",
+        "rust/crates/guard-command/src/hook_evidence_receipt.rs": "b2fcd8c7b189f2d3ead0d1c20dac44659e7a48b8b2b6d4ceb0fcf114ff20d6b1",
+        "rust/crates/guard-command/src/hook_evidence_receipt_tests.rs": "ebcfb2d75b578d6d5f9e3299ca2eb22faf1fd577d8e3443c284c937768723b37",
+        "rust/crates/guard-command/src/hook_evidence_writer.rs": "501e6f98ac20d53f40bc9b7628f185c3c27a87e05cd66342394b6fd0e685b907",
+        "rust/crates/guard-command/src/hook_evidence_writer_tests.rs": "91767927e67d5c207c1141c07660c612864c6974ce1d293d14bfd88830f05a9a",
+        "docs/guard/contracts/hook-data-plane-ownership.v2.json": "35fb5472cfcc372948cf7e9729b2a43bdb0f0d3c715deb7170cb13fab2c3622b"
+      },
+      "stdout": {
+        "path": "/private/tmp/hol-guard-cigar-evidence-batch-20261024/io.stdout.log",
+        "bytes": 78222,
+        "sha256": "bcf901a1c39ebf936483fa5aebdcdb005372d016d67e41b8e46adc6fcbd68472"
+      },
+      "stderr": {
+        "path": "/private/tmp/hol-guard-cigar-evidence-batch-20261024/io.stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "report": {
+        "path": "/private/tmp/hol-guard-cigar-evidence-batch-20261024/io.json",
+        "bytes": 78222,
+        "sha256": "bcf901a1c39ebf936483fa5aebdcdb005372d016d67e41b8e46adc6fcbd68472"
+      }
+    },
+    "privacy": {
+      "receipt": {
+        "command": [
+          "/private/tmp/hol-guard-cigar-locked-runtime/bin/python",
+          "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/scripts/ci/rust_io_privacy_gate.py",
+          "--root",
+          "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration",
+          "--json",
+          "/private/tmp/hol-guard-cigar-evidence-batch-20261024/privacy.json"
+        ],
+        "returncode": 0,
+        "seconds": 0.042,
+        "inputs_unchanged": true,
+        "files": 14
+      },
+      "inputs": {
+        "rust/crates/guard-command/src/hook_evidence_batch.rs": "aeff4038ae537a139611c1b87bff52133bf6891994187d14d25ee81c26887357",
+        "rust/crates/guard-command/src/hook_evidence_batch_tests.rs": "21892bab15a8c1f84bfa95f94ee6e068c20ab907dab7a13770978f006e952c7f",
+        "rust/crates/guard-command/src/hook_evidence_deferred_post.rs": "3af3978a8baa040b3f9ffba3c2c13b81c6f7704f09e022724bf76c1ca6dc340d",
+        "rust/crates/guard-command/src/hook_evidence_journal_batch.rs": "b68d32c2e17f10daee38ea6343b6d90eeedcf290f7091993e5f7e4a65728dfa1",
+        "rust/crates/guard-command/src/hook_evidence_journal_batch_tests.rs": "f71e5a7dfefacbc07d05274b4ffa65540273c7aab275d6d288ae91c06d027858",
+        "rust/crates/guard-command/src/hook_evidence_journal_fs.rs": "2f3a5df6fa29161d2a990d3bf4ab520c373be76a683505974fa040f9bdf32e68",
+        "rust/crates/guard-command/src/hook_evidence_journal_fs_tests.rs": "3454904ab9e0e0dff584dc2e6760279fc705f3a0e0e7b6a26a90b37314908ad4",
+        "rust/crates/guard-command/src/hook_evidence_preview.rs": "53fffdfbc90858901589ee6509fdf2f1c09ea575220e0c5a4eb99809df124a63",
+        "rust/crates/guard-command/src/hook_evidence_preview_tests.rs": "b3d4fc1a26203dd0ba9d8209d5f51898a45b1da25cc4eb59d239920a6d22566a",
+        "rust/crates/guard-command/src/hook_evidence_receipt.rs": "b2fcd8c7b189f2d3ead0d1c20dac44659e7a48b8b2b6d4ceb0fcf114ff20d6b1",
+        "rust/crates/guard-command/src/hook_evidence_receipt_tests.rs": "ebcfb2d75b578d6d5f9e3299ca2eb22faf1fd577d8e3443c284c937768723b37",
+        "rust/crates/guard-command/src/hook_evidence_writer.rs": "501e6f98ac20d53f40bc9b7628f185c3c27a87e05cd66342394b6fd0e685b907",
+        "rust/crates/guard-command/src/hook_evidence_writer_tests.rs": "91767927e67d5c207c1141c07660c612864c6974ce1d293d14bfd88830f05a9a",
+        "docs/guard/contracts/hook-data-plane-ownership.v2.json": "35fb5472cfcc372948cf7e9729b2a43bdb0f0d3c715deb7170cb13fab2c3622b"
+      },
+      "stdout": {
+        "path": "/private/tmp/hol-guard-cigar-evidence-batch-20261024/privacy.stdout.log",
+        "bytes": 620,
+        "sha256": "3f99732114cd01afda57fec9bae91e307310125980da63e8859c1941fbb96b14"
+      },
+      "stderr": {
+        "path": "/private/tmp/hol-guard-cigar-evidence-batch-20261024/privacy.stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "report": {
+        "path": "/private/tmp/hol-guard-cigar-evidence-batch-20261024/privacy.json",
+        "bytes": 620,
+        "sha256": "3f99732114cd01afda57fec9bae91e307310125980da63e8859c1941fbb96b14"
+      }
+    }
+  },
+  "retained_setup_and_selection_errors": {
+    "controller_wrong_input_name": {
+      "phase": "controller_setup_before_child_launch",
+      "error": "FileNotFoundError for nonexistent scripts/cigar_activity.py",
+      "child_launched": false,
+      "correction": "Use existing scripts/cigar_slo_activity.py in the frozen input list."
+    },
+    "cargo_private_home_empty_offline_cache": {
+      "command": [
+        "/Users/construct/.rustup/toolchains/1.88.0-aarch64-apple-darwin/bin/cargo",
+        "test",
+        "--manifest-path",
+        "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/rust/Cargo.toml",
+        "--locked",
+        "--offline",
+        "-p",
+        "guard-command",
+        "--lib",
+        "hook_evidence"
+      ],
+      "returncode": 101,
+      "seconds": 0.044,
+      "inputs_unchanged": true,
+      "files": 13
+    },
+    "initial_source_tests": {
+      "command": [
+        "/Users/construct/.rustup/toolchains/1.88.0-aarch64-apple-darwin/bin/cargo",
+        "test",
+        "--manifest-path",
+        "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/rust/Cargo.toml",
+        "--locked",
+        "--offline",
+        "-p",
+        "guard-command",
+        "--lib",
+        "hook_evidence"
+      ],
+      "returncode": 0,
+      "seconds": 57.504,
+      "cache": "existing local Cargo registry; offline; private test HOME",
+      "inputs_unchanged": true,
+      "files": 13
+    },
+    "wrong_runtime_target_zero_tests_not_qualification": {
+      "command": [
+        "/Users/construct/.rustup/toolchains/1.88.0-aarch64-apple-darwin/bin/cargo",
+        "test",
+        "--manifest-path",
+        "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/rust/Cargo.toml",
+        "--locked",
+        "--offline",
+        "-p",
+        "hol-guard-runtime",
+        "--bin",
+        "hol-guard-runtime",
+        "hook_evidence"
+      ],
+      "returncode": 0,
+      "seconds": 40.34,
+      "inputs_unchanged": true,
+      "files": 14
+    }
+  },
+  "limits": [
+    "No installed verification is claimed for the new batch code before building and testing its exact committed artifact.",
+    "All three preceding installed diagnostics failed required shutdown checks; later disappearance/recovery is not a pass.",
+    "The queued counters establish unfinished native evidence work, not the cause of each individual failure counter.",
+    "No deadline, sample count, gate, relative estimator, approval contract or SDK bytes changed.",
+    "The eight new regressions cover batch ordering, partial admission failure, queue-lock independence, multi-batch deadline recovery, real-file rollback, unsafe sidecars, selective settlement and concurrent batches.",
+    "Full goal stays active; matched performance, useful outcomes, native-owner crash uncertainty and external application/Desktop/platform acceptance remain."
+  ]
+}

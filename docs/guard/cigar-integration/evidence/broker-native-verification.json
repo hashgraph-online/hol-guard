@@ -1,0 +1,277 @@
+{
+  "schema": "guard-cigar-native-broker-evidence.v1",
+  "recorded_at": "2026-10-24T01:54:05Z",
+  "qualification": "native_library_and_actual_candidate_sdk_only",
+  "source_commit": "9e369d24b5bab2cfcb37463be86fadbf6a8a8b9a",
+  "source_base": "93a782f9",
+  "sdk_source_commit": "b47380e5a5cbeaaad5a61cab3372e9e67368732f",
+  "sdk_source_worktree": "unchanged_clean_verified",
+  "qualified_source_files": {
+    "integrations/cigar/bridge.py": {
+      "sha256": "60476780f100abdba4702ad2403a58b78b8197e907d1ba8b34ad07564c32446b",
+      "bytes": 5969
+    },
+    "integrations/cigar/broker_client.py": {
+      "sha256": "de3622a9b5a40460f0e01080ccba36f42531288fed33ef0e94dff31e89ca26a0",
+      "bytes": 2879
+    },
+    "rust/crates/guard-context-assistance/src/broker.rs": {
+      "sha256": "db19d31332cdfaa6ffc914d8aa6ad191f1fbf67e41e3fc998b3934ac0a8f5d5d",
+      "bytes": 14342
+    },
+    "rust/crates/guard-context-assistance/src/broker_clients.rs": {
+      "sha256": "7276550e3b2f7c7bd5584ff84f15fd508a0979956d35a8e396bddeb40bd5b19a",
+      "bytes": 13382
+    },
+    "rust/crates/guard-context-assistance/src/broker_proposals.rs": {
+      "sha256": "f1cdaded9ad094a10cae371a7de74dfd575304ed4ae97cc130b1781288f9aef6",
+      "bytes": 11320
+    },
+    "rust/crates/guard-context-assistance/src/broker_tests.rs": {
+      "sha256": "c4223485fdd459c9c7674a986140cf0fd263e214f0632af24959946856df0080",
+      "bytes": 16130
+    },
+    "rust/crates/guard-context-assistance/src/broker_validation_tests.rs": {
+      "sha256": "5bfcb50020c761b86b939a65cbea32b81c7c8b666d3c9652bf07edf5da9ae6f1",
+      "bytes": 1528
+    },
+    "rust/crates/guard-context-assistance/src/graph.rs": {
+      "sha256": "d56eee1fe42f63d3613843db70f5b2ebc22b4551857d89e6713a28f789006112",
+      "bytes": 12981
+    },
+    "rust/crates/guard-context-assistance/src/graph_brief.rs": {
+      "sha256": "c22cbd1b75442830a93de2d2800a3845d718db685bb04014493d6d192632d3c0",
+      "bytes": 4660
+    },
+    "rust/crates/guard-context-assistance/src/lib.rs": {
+      "sha256": "237f543770eaa1ba8b2dde0726d188517ab9f433b956e102c86404abaa60b838",
+      "bytes": 1203
+    },
+    "rust/crates/guard-context-assistance/src/process.rs": {
+      "sha256": "284465ca52941eff6a2b5f64750bbba1410019b2f1babebb19c0b9ccef312486",
+      "bytes": 9421
+    },
+    "rust/crates/guard-context-assistance/src/runtime.rs": {
+      "sha256": "8b8b5480d3e42eb36dda5396832641f560a60a2151814bcbd537b8a88ab41fb1",
+      "bytes": 11028
+    }
+  },
+  "native_library": {
+    "passed": 29,
+    "failed": 0,
+    "ignored": 0,
+    "seconds": 40.69,
+    "includes_previously_ignored_actual_worker_tests": true
+  },
+  "broker_observation": {
+    "checks": [
+      "explicit_sharing_gate",
+      "protected_client_grant_delivery",
+      "independent_cpython_clients",
+      "foreign_source_refused",
+      "foreign_context_refused",
+      "read_only_cannot_propose",
+      "idempotent_proposal_key_and_changed_payload_conflict",
+      "quarantine_before_admission",
+      "host_inspection",
+      "host_admission_with_basis_dependencies",
+      "competing_source_cas_conflict",
+      "known_conflict_preserves_runtime",
+      "cross_client_status_refused",
+      "per_client_proposal_quota_and_explicit_forgetting",
+      "changed_basis_refuses_pending_admission",
+      "repeated_snapshot_tickets_remain_bounded",
+      "revoke_and_finite_lease",
+      "changed_upstream_invalidates_admitted_note",
+      "new_epoch_cannot_revive_old_handles",
+      "shutdown_reaps_live_client_and_host"
+    ],
+    "independent_client_processes": 3,
+    "package_fingerprint": "bd4d27349f01c4403a3e469e29d3785c4c8073e12c32744dfaa2304dcaf78a95",
+    "qualification": "native_library_actual_sdk_and_independent_clients",
+    "schema": "guard-cigar-broker-native-verification.v1",
+    "status": "passed",
+    "stop_ms": 1,
+    "worker_fingerprint": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112"
+  },
+  "additional_actual_worker_assertions": [
+    "Previously granted note-only client cannot read a note after its basis requires unreadable sources.",
+    "A new note-only grant cannot omit the admitted note's upstream source.",
+    "A proposal based on shared notes preserves the original source basis in host inspection.",
+    "Native source-closure metadata includes the file source used by an admitted note.",
+    "Broker and client startup preserve enrolled package bytes across SDK initialization."
+  ],
+  "qualified_runtime_after_cleanup": {
+    "active": false,
+    "compile_verified": true,
+    "features": [
+      "answer_review.v1",
+      "context_graph.v1",
+      "context_views.v1",
+      "document_boundaries.v1",
+      "selection_explanation.v1",
+      "snapshot_integrity.v1",
+      "source_replace.v1"
+    ],
+    "interpreter": {
+      "abi": "cpython-314-darwin",
+      "debug_build": false,
+      "free_threaded": false,
+      "implementation": "cpython",
+      "platform": "darwin-arm64",
+      "release_level": "final",
+      "schema": "guard-cigar-interpreter.v1",
+      "version": [
+        3,
+        14,
+        7
+      ]
+    },
+    "package_fingerprint": "bd4d27349f01c4403a3e469e29d3785c4c8073e12c32744dfaa2304dcaf78a95",
+    "package_version": "0.14.1",
+    "protocol": "cigar.context-worker.v1",
+    "schema": "guard-cigar-runtime-status.v1",
+    "worker_fingerprint": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112"
+  },
+  "bundle": {
+    "bytes": 38339470,
+    "files": 1094,
+    "package_tree_sha256": "bd4d27349f01c4403a3e469e29d3785c4c8073e12c32744dfaa2304dcaf78a95",
+    "platform": "darwin-arm64",
+    "python_sha256": "81c87d90892fe12428ee3b78a675c57c62d6c479236fb359ad5b2d7f07c38b2c",
+    "schema": "guard-cigar-bundle-approval.v1",
+    "worker_sha256": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112"
+  },
+  "previous_graph_actor_and_interpreter_checks": {
+    "actor": {
+      "cited_graph": true,
+      "exact_revision": "9007199254740993",
+      "final_active": false,
+      "queue_capacity": 4,
+      "queued_mutations_after_cancel": 0,
+      "real_sdk": true,
+      "schema": "guard-cigar-actor-verification.v1",
+      "status": "passed"
+    },
+    "runtime_checks": [
+      "actual_isolated_interpreter",
+      "package_fingerprint",
+      "worker_handshake",
+      "synthetic_compile_and_verify",
+      "python_312_refused_before_sdk_import",
+      "wrong_worker_approval_refused",
+      "transport_id_mismatch_closed",
+      "deadline_closed",
+      "pending_transport_cancelled",
+      "persistent_graph",
+      "workspace_limit",
+      "foreign_required_document_refused",
+      "scoped_citations",
+      "exact_large_revision_string",
+      "out_of_scope_update_preserves_context",
+      "readable_unselected_update_invalidates_context",
+      "view_revocation",
+      "empty_view_cannot_read_graph",
+      "reopened_workspace_rejects_old_handle",
+      "explicit_runtime_cleanup"
+    ]
+  },
+  "native_guard_regression": {
+    "passed": 55,
+    "failed": 0,
+    "ignored": 0,
+    "seconds": 80.39,
+    "profile": "context_assistance --include-ignored --test-threads=1",
+    "actual_worker_cases": 6
+  },
+  "source_checks": {
+    "clippy": "both_native_crates_lib_and_tests_passed_warnings_denied_rust_1_88",
+    "rustfmt": "passed_all_changed_native_source",
+    "ruff": "passed_both_sdk_transport_files_locked_0_15_17",
+    "python_runtime_logic_under_src_added": false,
+    "semantic_callgraph": "passed",
+    "python_capability_cleanup": "passed",
+    "rust_io_ownership": "passed",
+    "rust_io_privacy": "passed",
+    "rust_authority_ownership": "passed_against_requested_release_base"
+  },
+  "implemented_bounds": {
+    "maximum_domains": 8,
+    "domains_further_limited_by_active_workspace_preference": true,
+    "clients_per_verified_runtime": 8,
+    "lease_maximum_ms": 300000,
+    "contexts_per_client": 8,
+    "proposals_per_client": 4,
+    "proposals_per_domain": 32,
+    "proposal_documents": 32,
+    "proposal_text_bytes": 16384,
+    "proposal_maximum_lifetime_ms": 300000,
+    "domain_text_bytes": 4194304,
+    "domain_sources": 128,
+    "graph_documents": 1024,
+    "native_request_bytes": 1048576,
+    "native_response_bytes": 4194304,
+    "rpc_deadline_ms": 4000,
+    "shared_agent_jobs": 2,
+    "per_client_jobs": 1,
+    "per_client_queued_bytes": 524288,
+    "maximum_queue_wait_ms": 500,
+    "storage": "memory_only"
+  },
+  "failed_attempts": [
+    {
+      "case": "initial_actual_broker",
+      "result": "failed_worker_rejected_before_domain_creation",
+      "seconds": 5.39,
+      "cause": "SDK shared scheduler requires at least two agent jobs; per-client bytes also cannot exceed half its shared byte pool.",
+      "correction": "Two shared jobs with one per client and a 512 KiB client queue within the 1 MiB shared byte pool."
+    },
+    {
+      "case": "actual_proposal_initial_revision",
+      "result": "failed_context_conflict",
+      "seconds": 14.05,
+      "cause": "The fixture reused the revision from before admitting empty-source provenance.",
+      "correction": "Use the returned revision, preserving its exact decimal string; provenance-only changes can advance it."
+    },
+    {
+      "case": "actual_upstream_change",
+      "result": "failed_test_error_variant_expectation",
+      "seconds": 14.35,
+      "cause": "The fixture expected a generic worker rejection; the SDK correctly returned Stale for changed source provenance.",
+      "correction": "Assert the typed ContextStale refusal. The operation remains refused and no validation is weakened."
+    },
+    {
+      "case": "default_parallel_guard_unit_profile",
+      "passed": 48,
+      "failed": 1,
+      "ignored": 6,
+      "seconds": 0.08,
+      "failure": "context_assistance_notifications::tests::pending_receipts_invalidate_only_matching_workspace_and_harness_reads",
+      "source_diff_from_prior_checkpoint": "notification implementation and test unchanged",
+      "inference": "Cross-test changes to the shared global notification-loss epoch can invalidate this test's observation. This is a source-based inference, not an archived-baseline reproduction.",
+      "isolated_test": {
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0,
+        "seconds": 0
+      },
+      "disposition": "Retained failure; serial actual-worker profile passes. Parallel isolation/concurrency qualification remains open."
+    }
+  ],
+  "public_product_state": {
+    "sharing_activation": "still_refused_until_native_session_scope_and_host_admission_wiring_is_complete",
+    "installed_guard_package_and_browser_broker_acceptance": "not_run_for_this_core",
+    "private_persistence": "unimplemented_explicitly_refused",
+    "execution_handoff": "unqualified_not_exposed"
+  },
+  "limitations": [
+    "Native library actual-worker qualification does not prove an installed product sharing workflow, authenticated multi-session routing or operator admission proof/UI.",
+    "Independent client processes are proved; simultaneous multi-session product fairness and fault acceptance remain required.",
+    "Shutdown stop_ms is one local sample, not a lifecycle SLO, RSS, speedup or efficacy result.",
+    "No new Guard wheel/binary size qualification is claimed; existing size and performance thresholds remain unchanged.",
+    "P4 private persistence/retention/recovery and P5 exact native action/current-byte executor handoff remain open.",
+    "Public setup, app/harness/Desktop/other-platform qualification and measured hook SLO/all-worker RSS/useful reuse remain open.",
+    "The parallel notification-test failure, four earlier hardened-helper failures, the mixed installed/source profile assertion and existing typecheck diagnostics remain unresolved.",
+    "The full P0–P5 goal remains active."
+  ]
+}

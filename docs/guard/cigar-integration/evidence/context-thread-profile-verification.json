@@ -1,0 +1,2566 @@
+{
+  "schema": "guard-cigar-context-thread-profile-verification.v1",
+  "diagnostic_only": true,
+  "not_product_qualification": true,
+  "native_source_commit": "4c4db2d99f8e500c477704e33f79f8bc56fc4871",
+  "retained_attempts": [
+    {
+      "controller": {
+        "schema": "guard-cigar-context-cpu-controller.v1",
+        "diagnostic_only": true,
+        "not_product_qualification": true,
+        "command": [
+          "/private/tmp/hol-guard-cigar-locked-runtime/bin/python",
+          "-u",
+          "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/scripts/bench_guard_cigar_context_cpu.py",
+          "--runtime",
+          "/private/tmp/hol-guard-cigar-evidence-batch-20261024/package/installed/codex_plugin_scanner/_native/hol-guard-runtime",
+          "--root",
+          "/private/tmp/hol-guard-cigar-context-cpu-diagnostic-20261024/on",
+          "--mode",
+          "on",
+          "--expected-build-sha",
+          "4c4db2d99f8e500c477704e33f79f8bc56fc4871",
+          "--warm-iterations",
+          "200",
+          "--waves",
+          "5"
+        ],
+        "returncode": 1,
+        "seconds": 37.001,
+        "inputs_unchanged": true,
+        "fingerprinted_files": 1636,
+        "completed": false,
+        "failed_gates": []
+      },
+      "unit_checks": {
+        "command": [
+          "/private/tmp/hol-guard-cigar-locked-runtime/bin/python",
+          "-m",
+          "pytest",
+          "-q",
+          "-o",
+          "addopts=",
+          "--basetemp",
+          "/private/tmp/hol-guard-cigar-context-cpu-diagnostic-20261024/unit-state",
+          "--junitxml",
+          "/private/tmp/hol-guard-cigar-context-cpu-diagnostic-20261024/unit-results.xml",
+          "tests/test_cigar_context_profile.py"
+        ],
+        "returncode": 0,
+        "seconds": 1.059,
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "inputs_unchanged": true
+      },
+      "original_benchmark": {
+        "schema": "guard-cigar-installed-contention.v1",
+        "mode": "on",
+        "build_sha": "4c4db2d99f8e500c477704e33f79f8bc56fc4871",
+        "full_installed_SLO": false,
+        "diagnostic_transport_observer": false,
+        "client_topology": "driver, authenticated hook clients and daemon share one Python process",
+        "root_python": [
+          3,
+          12,
+          13
+        ],
+        "completed": false,
+        "active_stage": "capacity_prewarm",
+        "stages": {},
+        "native_readiness_ms": 1.0225423611700535,
+        "candidate_activation_ms": 20741.724375169724,
+        "fatal_error": {
+          "type": "RuntimeError",
+          "cause_type": "NoneType"
+        }
+      },
+      "profile": {
+        "schema": "guard-cigar-context-thread-cpu-diagnostic.v1",
+        "diagnostic_only": true,
+        "not_product_qualification": true,
+        "instrumentation_changes_workload_timing": true,
+        "clock": "time.thread_time",
+        "scope": "context load thread only",
+        "wrapper_sha256": "0de339ab79b22070b34c389ca2becc0f5fc0a94fa347e45ab2af5fa336bd4452",
+        "observations": []
+      },
+      "stderr": {
+        "path": "/private/tmp/hol-guard-cigar-context-cpu-diagnostic-20261024/on.stderr.log",
+        "bytes": 2245,
+        "sha256": "d213388e20f56df7dae2604c54ffcea6baefc7ad810f535fd6252bdfbb5739b0"
+      },
+      "inputs": {
+        "path": "/private/tmp/hol-guard-cigar-context-cpu-diagnostic-20261024/inputs.json",
+        "bytes": 328038,
+        "sha256": "59729b13103aa05c3afff3175b55f8ccf7bf9e3d3a9a245878b59fe0ac0623d5"
+      },
+      "matching_source_archives": [
+        {
+          "path": "/private/tmp/hol-guard-cigar-context-cpu-diagnostic-20261024/initial-source/scripts/bench_guard_cigar_context_cpu.py",
+          "bytes": 3910,
+          "sha256": "0de339ab79b22070b34c389ca2becc0f5fc0a94fa347e45ab2af5fa336bd4452"
+        },
+        {
+          "path": "/private/tmp/hol-guard-cigar-context-cpu-diagnostic-20261024/initial-source/scripts/cigar_context_profile.py",
+          "bytes": 3852,
+          "sha256": "7fb269c0966a497512b83f26e9aaae4fd5ee14d81508b63c6905ec7365243bb2"
+        },
+        {
+          "path": "/private/tmp/hol-guard-cigar-context-cpu-diagnostic-20261024/initial-source/tests/test_cigar_context_profile.py",
+          "bytes": 1946,
+          "sha256": "b32816aef799c5d70b2828a655878df320f3063c7c0707fbcee53a6565b2cb59"
+        }
+      ],
+      "valid_for_thread_attribution": false,
+      "reason": "Custom thread CPU clock in cProfile yielded invalid timings, rejected by projection. One first c64 prewarm HTTP disconnect also made the benchmark incomplete. No thread attribution is valid."
+    },
+    {
+      "controller": {
+        "schema": "guard-cigar-context-cpu-controller.v1",
+        "diagnostic_only": true,
+        "not_product_qualification": true,
+        "command": [
+          "/private/tmp/hol-guard-cigar-locked-runtime/bin/python",
+          "-u",
+          "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/scripts/bench_guard_cigar_context_cpu.py",
+          "--runtime",
+          "/private/tmp/hol-guard-cigar-evidence-batch-20261024/package/installed/codex_plugin_scanner/_native/hol-guard-runtime",
+          "--root",
+          "/private/tmp/hol-guard-cigar-context-elapsed-diagnostic-20261024/on",
+          "--mode",
+          "on",
+          "--expected-build-sha",
+          "4c4db2d99f8e500c477704e33f79f8bc56fc4871",
+          "--warm-iterations",
+          "200",
+          "--waves",
+          "5"
+        ],
+        "returncode": 0,
+        "seconds": 49.35,
+        "inputs_unchanged": true,
+        "fingerprinted_files": 1636,
+        "completed": true,
+        "failed_gates": []
+      },
+      "unit_checks": {
+        "command": [
+          "/private/tmp/hol-guard-cigar-locked-runtime/bin/python",
+          "-m",
+          "pytest",
+          "-q",
+          "-o",
+          "addopts=",
+          "--basetemp",
+          "/private/tmp/hol-guard-cigar-context-elapsed-diagnostic-20261024/unit-state",
+          "--junitxml",
+          "/private/tmp/hol-guard-cigar-context-elapsed-diagnostic-20261024/unit-results.xml",
+          "tests/test_cigar_context_profile.py"
+        ],
+        "returncode": 0,
+        "seconds": 1.176,
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "inputs_unchanged": true
+      },
+      "original_benchmark": {
+        "schema": "guard-cigar-installed-contention.v1",
+        "mode": "on",
+        "build_sha": "4c4db2d99f8e500c477704e33f79f8bc56fc4871",
+        "full_installed_SLO": false,
+        "diagnostic_transport_observer": false,
+        "client_topology": "driver, authenticated hook clients and daemon share one Python process",
+        "root_python": [
+          3,
+          12,
+          13
+        ],
+        "completed": true,
+        "active_stage": "completed",
+        "stages": {
+          "1": {
+            "latency": {
+              "count": 200,
+              "p50_ms": 15.493,
+              "p95_ms": 22.59,
+              "p99_ms": 27.434,
+              "max_ms": 31.527
+            },
+            "routes": {
+              "native_resident": 200
+            },
+            "errors": 0,
+            "allowed": 200,
+            "explicit_capacity": 0,
+            "unclassified_refusals": 0,
+            "successful_overlapping_compiles": 145,
+            "memory": {
+              "samples": 39,
+              "sampling_errors": 0,
+              "median_rss_bytes": 566067200,
+              "peak_rss_bytes": 566312960,
+              "at_peak_counts": {
+                "native_runtime": 8,
+                "sdk_worker": 2,
+                "benchmark_daemon_host": 1,
+                "other_python_child": 1,
+                "python_bridge": 1
+              },
+              "at_peak_rss_by_kind": {
+                "native_runtime": 226279424,
+                "sdk_worker": 120455168,
+                "benchmark_daemon_host": 161775616,
+                "other_python_child": 27426816,
+                "python_bridge": 30375936
+              },
+              "maximum_counts": {
+                "native_runtime": 8,
+                "other_python_child": 1,
+                "benchmark_daemon_host": 1,
+                "sdk_worker": 2,
+                "python_bridge": 1
+              },
+              "includes_observed_reparented_children": true,
+              "shared_pages_may_be_counted_in_multiple_processes": true
+            }
+          },
+          "16": {
+            "latency": {
+              "count": 80,
+              "p50_ms": 122.318,
+              "p95_ms": 171.186,
+              "p99_ms": 230.649,
+              "max_ms": 230.649
+            },
+            "routes": {
+              "native_resident": 80
+            },
+            "errors": 0,
+            "allowed": 80,
+            "explicit_capacity": 0,
+            "unclassified_refusals": 0,
+            "successful_overlapping_compiles": 31,
+            "memory": {
+              "samples": 11,
+              "sampling_errors": 0,
+              "median_rss_bytes": 603045888,
+              "peak_rss_bytes": 605044736,
+              "at_peak_counts": {
+                "native_runtime": 10,
+                "sdk_worker": 2,
+                "benchmark_daemon_host": 1,
+                "other_python_child": 1,
+                "python_bridge": 1
+              },
+              "at_peak_rss_by_kind": {
+                "native_runtime": 263831552,
+                "sdk_worker": 120455168,
+                "benchmark_daemon_host": 162955264,
+                "other_python_child": 27426816,
+                "python_bridge": 30375936
+              },
+              "maximum_counts": {
+                "native_runtime": 10,
+                "other_python_child": 1,
+                "benchmark_daemon_host": 1,
+                "sdk_worker": 2,
+                "python_bridge": 1
+              },
+              "includes_observed_reparented_children": true,
+              "shared_pages_may_be_counted_in_multiple_processes": true
+            }
+          },
+          "64": {
+            "latency": {
+              "count": 320,
+              "p50_ms": 370.931,
+              "p95_ms": 607.717,
+              "p99_ms": 625.66,
+              "max_ms": 647.078
+            },
+            "routes": {
+              "native_resident": 320
+            },
+            "errors": 0,
+            "allowed": 320,
+            "explicit_capacity": 0,
+            "unclassified_refusals": 0,
+            "successful_overlapping_compiles": 102,
+            "memory": {
+              "samples": 36,
+              "sampling_errors": 0,
+              "median_rss_bytes": 606773248,
+              "peak_rss_bytes": 608043008,
+              "at_peak_counts": {
+                "native_runtime": 10,
+                "sdk_worker": 2,
+                "benchmark_daemon_host": 1,
+                "other_python_child": 1,
+                "python_bridge": 1
+              },
+              "at_peak_rss_by_kind": {
+                "native_runtime": 263782400,
+                "sdk_worker": 120455168,
+                "benchmark_daemon_host": 166002688,
+                "other_python_child": 27426816,
+                "python_bridge": 30375936
+              },
+              "maximum_counts": {
+                "native_runtime": 10,
+                "other_python_child": 1,
+                "benchmark_daemon_host": 1,
+                "sdk_worker": 2,
+                "python_bridge": 1
+              },
+              "includes_observed_reparented_children": true,
+              "shared_pages_may_be_counted_in_multiple_processes": true
+            }
+          }
+        },
+        "native_readiness_ms": 1.1957082897424698,
+        "candidate_activation_ms": 21151.806499809027,
+        "rss_baseline": {
+          "samples": 11,
+          "sampling_errors": 0,
+          "median_rss_bytes": 565723136,
+          "peak_rss_bytes": 565919744,
+          "at_peak_counts": {
+            "native_runtime": 8,
+            "sdk_worker": 2,
+            "benchmark_daemon_host": 1,
+            "other_python_child": 1,
+            "python_bridge": 1
+          },
+          "at_peak_rss_by_kind": {
+            "native_runtime": 226246656,
+            "sdk_worker": 120455168,
+            "benchmark_daemon_host": 161415168,
+            "other_python_child": 27426816,
+            "python_bridge": 30375936
+          },
+          "maximum_counts": {
+            "native_runtime": 8,
+            "other_python_child": 1,
+            "benchmark_daemon_host": 1,
+            "sdk_worker": 2,
+            "python_bridge": 1
+          },
+          "includes_observed_reparented_children": true,
+          "shared_pages_may_be_counted_in_multiple_processes": true
+        },
+        "direct_adapter_warm": {
+          "p50_ms": 3.745,
+          "p95_ms": 7.045,
+          "p99_ms": 8.39,
+          "max_ms": 8.82
+        },
+        "successful_direct_overlapping_compiles": 35,
+        "context_workload": {
+          "successful_compiles": 412,
+          "latency": {
+            "count": 412,
+            "p50_ms": 11.023,
+            "p95_ms": 27.915,
+            "p99_ms": 33.387,
+            "max_ms": 103.82
+          },
+          "latency_sample_every": 1,
+          "refusals": {},
+          "distinct_graph_revisions": 1,
+          "unchanged_graph_revision_reused": true,
+          "internal_tokenization_work_measured": false
+        },
+        "all_observed_processes": {
+          "samples": 564,
+          "sampling_errors": 0,
+          "median_rss_bytes": 926318592,
+          "peak_rss_bytes": 1382219776,
+          "at_peak_counts": {
+            "native_runtime": 4,
+            "benchmark_daemon_host": 1,
+            "sdk_worker": 1,
+            "python_bridge": 1
+          },
+          "at_peak_rss_by_kind": {
+            "native_runtime": 142524416,
+            "benchmark_daemon_host": 1151057920,
+            "sdk_worker": 59506688,
+            "python_bridge": 29130752
+          },
+          "maximum_counts": {
+            "native_runtime": 11,
+            "other_python_child": 2,
+            "python_bridge": 1,
+            "benchmark_daemon_host": 1,
+            "other_descendant": 2,
+            "sdk_worker": 2,
+            "terminated_child": 1
+          },
+          "includes_observed_reparented_children": true,
+          "shared_pages_may_be_counted_in_multiple_processes": true
+        },
+        "steady_rss_growth": 0.07480668423643899,
+        "gates": {
+          "direct_warm_p95_20ms": true,
+          "installed_warm_p95_1000ms": true,
+          "installed_c16_p99_1000ms": true,
+          "no_request_errors_or_unclassified_refusals": true,
+          "complete_observed_tree_rss_growth_12_percent": true,
+          "process_sampling_complete": true,
+          "optional_worker_coverage": true,
+          "real_compile_overlap": true,
+          "no_unexpected_context_refusals": true,
+          "unchanged_graph_revision_reused": true,
+          "strict_final_stop": true,
+          "all_observed_live_descendants_contained": true,
+          "daemon_shutdown_contained": true
+        },
+        "cleanup": {
+          "final_stop_status": "already-stopped",
+          "retained_stop_status": "already-stopped",
+          "recovery_used": false,
+          "daemon_stop_contained": true,
+          "observed_at_end": {
+            "rss_bytes": 178356224,
+            "counts": {
+              "benchmark_daemon_host": 1
+            },
+            "rss_by_kind": {
+              "benchmark_daemon_host": 178356224
+            }
+          },
+          "live_descendants_remaining": 0
+        }
+      },
+      "profile": {
+        "schema": "guard-cigar-context-thread-cpu-diagnostic.v1",
+        "diagnostic_only": true,
+        "not_product_qualification": true,
+        "instrumentation_changes_workload_timing": true,
+        "profile_clock": "standard cProfile elapsed time, including waits",
+        "separate_total_cpu_clock": "time.thread_time",
+        "scope": "context load thread only",
+        "wrapper_sha256": "4b29ddb308389136b09f6e39d56ad45ed52d1deadb28431401af777113ddbb9d",
+        "observations": [
+          {
+            "thread_cpu_seconds": 0.5275522079999999,
+            "thread_elapsed_seconds": 11.209549750201404,
+            "successful_context_compiles": 412,
+            "profile": {
+              "functions": 1715,
+              "total_calls": 16910687,
+              "total_self_elapsed_seconds": 11.198107800999997,
+              "unmapped_functions": 15,
+              "unmapped_self_elapsed_seconds": 0.050939164,
+              "retained_functions": 80,
+              "top_by_self_elapsed": [
+                {
+                  "root": "builtin",
+                  "module": "builtin",
+                  "function": "posix.lstat",
+                  "line": 0,
+                  "primitive_calls": 106684,
+                  "total_calls": 289060,
+                  "self_elapsed_seconds": 1.140028101,
+                  "cumulative_elapsed_seconds": 112.35824655600001
+                },
+                {
+                  "root": "builtin",
+                  "module": "builtin",
+                  "function": "_io.BufferedReader.read",
+                  "line": 0,
+                  "primitive_calls": 3,
+                  "total_calls": 8973,
+                  "self_elapsed_seconds": 0.805386295,
+                  "cumulative_elapsed_seconds": 8.292000000000001e-06
+                },
+                {
+                  "root": "builtin",
+                  "module": "builtin",
+                  "function": "posix.stat",
+                  "line": 0,
+                  "primitive_calls": 55431,
+                  "total_calls": 104873,
+                  "self_elapsed_seconds": 0.5334793600000001,
+                  "cumulative_elapsed_seconds": 75.07981049700001
+                },
+                {
+                  "root": "builtin",
+                  "module": "builtin",
+                  "function": "_posixsubprocess.fork_exec",
+                  "line": 0,
+                  "primitive_calls": 130,
+                  "total_calls": 130,
+                  "self_elapsed_seconds": 0.310256906,
+                  "cumulative_elapsed_seconds": 0.310259863
+                },
+                {
+                  "root": "builtin",
+                  "module": "builtin",
+                  "function": "_thread.lock.acquire",
+                  "line": 0,
+                  "primitive_calls": 4,
+                  "total_calls": 88049,
+                  "self_elapsed_seconds": 0.304354357,
+                  "cumulative_elapsed_seconds": 1.624e-06
+                },
+                {
+                  "root": "stdlib",
+                  "module": "pathlib.py",
+                  "function": "_parse_path",
+                  "line": 387,
+                  "primitive_calls": 106293,
+                  "total_calls": 106293,
+                  "self_elapsed_seconds": 0.19781894300000002,
+                  "cumulative_elapsed_seconds": 0.397131817
+                },
+                {
+                  "root": "stdlib",
+                  "module": "<frozen posixpath>",
+                  "function": "join",
+                  "line": 71,
+                  "primitive_calls": 185470,
+                  "total_calls": 185495,
+                  "self_elapsed_seconds": 0.170989324,
+                  "cumulative_elapsed_seconds": 0.277176131
+                },
+                {
+                  "root": "stdlib",
+                  "module": "json/encoder.py",
+                  "function": "iterencode",
+                  "line": 205,
+                  "primitive_calls": 20884,
+                  "total_calls": 20884,
+                  "self_elapsed_seconds": 0.157411932,
+                  "cumulative_elapsed_seconds": 0.157411932
+                },
+                {
+                  "root": "stdlib",
+                  "module": "pathlib.py",
+                  "function": "__str__",
+                  "line": 437,
+                  "primitive_calls": 189055,
+                  "total_calls": 189055,
+                  "self_elapsed_seconds": 0.12007901400000001,
+                  "cumulative_elapsed_seconds": 0.697097073
+                },
+                {
+                  "root": "stdlib",
+                  "module": "pathlib.py",
+                  "function": "__init__",
+                  "line": 358,
+                  "primitive_calls": 149914,
+                  "total_calls": 149914,
+                  "self_elapsed_seconds": 0.11898902600000001,
+                  "cumulative_elapsed_seconds": 0.182935281
+                },
+                {
+                  "root": "builtin",
+                  "module": "builtin",
+                  "function": "builtins.isinstance",
+                  "line": 0,
+                  "primitive_calls": 1437573,
+                  "total_calls": 1437573,
+                  "self_elapsed_seconds": 0.11632964700000001,
+                  "cumulative_elapsed_seconds": 0.133455041
+                },
+                {
+                  "root": "builtin",
+                  "module": "builtin",
+                  "function": "sys.intern",
+                  "line": 0,
+                  "primitive_calls": 706761,
+                  "total_calls": 706761,
+                  "self_elapsed_seconds": 0.105908153,
+                  "cumulative_elapsed_seconds": 0.105908153
+                },
+                {
+                  "root": "builtin",
+                  "module": "builtin",
+                  "function": "_io.open",
+                  "line": 0,
+                  "primitive_calls": 6780,
+                  "total_calls": 10027,
+                  "self_elapsed_seconds": 0.102430088,
+                  "cumulative_elapsed_seconds": 0.065169219
+                },
+                {
+                  "root": "stdlib",
+                  "module": "importlib/metadata/__init__.py",
+                  "function": "mtime",
+                  "line": 695,
+                  "primitive_calls": 35246,
+                  "total_calls": 47898,
+                  "self_elapsed_seconds": 0.10050547200000001,
+                  "cumulative_elapsed_seconds": 76.729199159
+                },
+                {
+                  "root": "builtin",
+                  "module": "builtin",
+                  "function": "sqlite3.Connection.execute",
+                  "line": 0,
+                  "primitive_calls": 4275,
+                  "total_calls": 5296,
+                  "self_elapsed_seconds": 0.096186114,
+                  "cumulative_elapsed_seconds": 0.084116725
+                },
+                {
+                  "root": "stdlib",
+                  "module": "<frozen os>",
+                  "function": "__getitem__",
+                  "line": 709,
+                  "primitive_calls": 236023,
+                  "total_calls": 236023,
+                  "self_elapsed_seconds": 0.09210968500000001,
+                  "cumulative_elapsed_seconds": 0.247721284
+                },
+                {
+                  "root": "builtin",
+                  "module": "builtin",
+                  "function": "select.kqueue.control",
+                  "line": 0,
+                  "primitive_calls": 269,
+                  "total_calls": 10991,
+                  "self_elapsed_seconds": 0.09184674000000001,
+                  "cumulative_elapsed_seconds": 0.001271341
+                },
+                {
+                  "root": "installed",
+                  "module": "codex_plugin_scanner/guard/native_runtime.py",
+                  "function": "_isolated_environment",
+                  "line": 233,
+                  "primitive_calls": 4468,
+                  "total_calls": 4468,
+                  "self_elapsed_seconds": 0.09182842100000001,
+                  "cumulative_elapsed_seconds": 0.44180301200000005
+                },
+                {
+                  "root": "stdlib",
+                  "module": "<frozen posixpath>",
+                  "function": "_joinrealpath",
+                  "line": 429,
+                  "primitive_calls": 7507,
+                  "total_calls": 13389,
+                  "self_elapsed_seconds": 0.088467286,
+                  "cumulative_elapsed_seconds": 24.707200423000003
+                },
+                {
+                  "root": "stdlib",
+                  "module": "pathlib.py",
+                  "function": "_load_parts",
+                  "line": 407,
+                  "primitive_calls": 106273,
+                  "total_calls": 106290,
+                  "self_elapsed_seconds": 0.084592636,
+                  "cumulative_elapsed_seconds": 0.619505423
+                },
+                {
+                  "root": "builtin",
+                  "module": "builtin",
+                  "function": "builtins.next",
+                  "line": 0,
+                  "primitive_calls": 54699,
+                  "total_calls": 117951,
+                  "self_elapsed_seconds": 0.08303497700000001,
+                  "cumulative_elapsed_seconds": 41.238627091000005
+                },
+                {
+                  "root": "stdlib",
+                  "module": "importlib/metadata/__init__.py",
+                  "function": "search",
+                  "line": 692,
+                  "primitive_calls": 33276,
+                  "total_calls": 47898,
+                  "self_elapsed_seconds": 0.07175614500000001,
+                  "cumulative_elapsed_seconds": 102.402608332
+                },
+                {
+                  "root": "stdlib",
+                  "module": "json/decoder.py",
+                  "function": "raw_decode",
+                  "line": 344,
+                  "primitive_calls": 11602,
+                  "total_calls": 11602,
+                  "self_elapsed_seconds": 0.070384403,
+                  "cumulative_elapsed_seconds": 0.07156915400000001
+                },
+                {
+                  "root": "stdlib",
+                  "module": "pathlib.py",
+                  "function": "drive",
+                  "line": 551,
+                  "primitive_calls": 144029,
+                  "total_calls": 144049,
+                  "self_elapsed_seconds": 0.069704233,
+                  "cumulative_elapsed_seconds": 0.6716331680000001
+                },
+                {
+                  "root": "builtin",
+                  "module": "builtin",
+                  "function": "str.split",
+                  "line": 0,
+                  "primitive_calls": 227103,
+                  "total_calls": 227103,
+                  "self_elapsed_seconds": 0.06625299500000001,
+                  "cumulative_elapsed_seconds": 0.06625299500000001
+                },
+                {
+                  "root": "stdlib",
+                  "module": "pathlib.py",
+                  "function": "with_segments",
+                  "line": 380,
+                  "primitive_calls": 124273,
+                  "total_calls": 124273,
+                  "self_elapsed_seconds": 0.064477484,
+                  "cumulative_elapsed_seconds": 0.30857956000000003
+                },
+                {
+                  "root": "installed",
+                  "module": "codex_plugin_scanner/guard/path_resolution_cache.py",
+                  "function": "_marks_unchanged",
+                  "line": 58,
+                  "primitive_calls": 6249,
+                  "total_calls": 11987,
+                  "self_elapsed_seconds": 0.063893853,
+                  "cumulative_elapsed_seconds": 35.986241743
+                },
+                {
+                  "root": "stdlib",
+                  "module": "pathlib.py",
+                  "function": "__init__",
+                  "line": 1157,
+                  "primitive_calls": 149914,
+                  "total_calls": 149914,
+                  "self_elapsed_seconds": 0.06330337800000001,
+                  "cumulative_elapsed_seconds": 0.24623865900000003
+                },
+                {
+                  "root": "builtin",
+                  "module": "builtin",
+                  "function": "select.poll.poll",
+                  "line": 0,
+                  "primitive_calls": 1250,
+                  "total_calls": 1465,
+                  "self_elapsed_seconds": 0.059875152,
+                  "cumulative_elapsed_seconds": 0.059347229
+                },
+                {
+                  "root": "stdlib",
+                  "module": "<frozen os>",
+                  "function": "encode",
+                  "line": 791,
+                  "primitive_calls": 236023,
+                  "total_calls": 236023,
+                  "self_elapsed_seconds": 0.058352696,
+                  "cumulative_elapsed_seconds": 0.100656018
+                },
+                {
+                  "root": "builtin",
+                  "module": "builtin",
+                  "function": "str.startswith",
+                  "line": 0,
+                  "primitive_calls": 458533,
+                  "total_calls": 458533,
+                  "self_elapsed_seconds": 0.057783383,
+                  "cumulative_elapsed_seconds": 0.057783383
+                },
+                {
+                  "root": "stdlib",
+                  "module": "importlib/metadata/__init__.py",
+                  "function": "<genexpr>",
+                  "line": 794,
+                  "primitive_calls": 37086,
+                  "total_calls": 53220,
+                  "self_elapsed_seconds": 0.05659853,
+                  "cumulative_elapsed_seconds": 114.64985750400001
+                },
+                {
+                  "root": "stdlib",
+                  "module": "importlib/metadata/__init__.py",
+                  "function": "search",
+                  "line": 728,
+                  "primitive_calls": 47898,
+                  "total_calls": 47898,
+                  "self_elapsed_seconds": 0.054722138000000003,
+                  "cumulative_elapsed_seconds": 0.137066726
+                },
+                {
+                  "root": "builtin",
+                  "module": "builtin",
+                  "function": "bytes.decode",
+                  "line": 0,
+                  "primitive_calls": 417356,
+                  "total_calls": 417356,
+                  "self_elapsed_seconds": 0.053726936,
+                  "cumulative_elapsed_seconds": 0.053726936
+                },
+                {
+                  "root": "stdlib",
+                  "module": "<frozen os>",
+                  "function": "decode",
+                  "line": 795,
+                  "primitive_calls": 395986,
+                  "total_calls": 395986,
+                  "self_elapsed_seconds": 0.052966527000000006,
+                  "cumulative_elapsed_seconds": 0.097264793
+                },
+                {
+                  "root": "builtin",
+                  "module": "builtin",
+                  "function": "builtins.len",
+                  "line": 0,
+                  "primitive_calls": 576147,
+                  "total_calls": 627011,
+                  "self_elapsed_seconds": 0.051487617000000006,
+                  "cumulative_elapsed_seconds": 0.058706173
+                },
+                {
+                  "root": "installed",
+                  "module": "codex_plugin_scanner/guard/native_resident_client.py",
+                  "function": "request",
+                  "line": 247,
+                  "primitive_calls": 1665,
+                  "total_calls": 4468,
+                  "self_elapsed_seconds": 0.050098687,
+                  "cumulative_elapsed_seconds": 19.287794888
+                },
+                {
+                  "root": "builtin",
+                  "module": "builtin",
+                  "function": "str.encode",
+                  "line": 0,
+                  "primitive_calls": 345307,
+                  "total_calls": 345307,
+                  "self_elapsed_seconds": 0.048428818000000005,
+                  "cumulative_elapsed_seconds": 0.048428818000000005
+                },
+                {
+                  "root": "builtin",
+                  "module": "builtin",
+                  "function": "builtins.getattr",
+                  "line": 0,
+                  "primitive_calls": 280888,
+                  "total_calls": 280952,
+                  "self_elapsed_seconds": 0.047676827000000005,
+                  "cumulative_elapsed_seconds": 0.051310502
+                },
+                {
+                  "root": "stdlib",
+                  "module": "<frozen posixpath>",
+                  "function": "splitroot",
+                  "line": 138,
+                  "primitive_calls": 106293,
+                  "total_calls": 106293,
+                  "self_elapsed_seconds": 0.047382195,
+                  "cumulative_elapsed_seconds": 0.06154322
+                },
+                {
+                  "root": "stdlib",
+                  "module": "<frozen _collections_abc>",
+                  "function": "__iter__",
+                  "line": 892,
+                  "primitive_calls": 187656,
+                  "total_calls": 187656,
+                  "self_elapsed_seconds": 0.04696567,
+                  "cumulative_elapsed_seconds": 0.29671551300000004
+                },
+                {
+                  "root": "stdlib",
+                  "module": "threading.py",
+                  "function": "wait",
+                  "line": 323,
+                  "primitive_calls": 1142,
+                  "total_calls": 6963,
+                  "self_elapsed_seconds": 0.045378518,
+                  "cumulative_elapsed_seconds": 11.777474656
+                },
+                {
+                  "root": "stdlib",
+                  "module": "importlib/metadata/_collections.py",
+                  "function": "__missing__",
+                  "line": 20,
+                  "primitive_calls": 95796,
+                  "total_calls": 95796,
+                  "self_elapsed_seconds": 0.044800159000000006,
+                  "cumulative_elapsed_seconds": 0.07015982200000001
+                },
+                {
+                  "root": "builtin",
+                  "module": "builtin",
+                  "function": "posix.fspath",
+                  "line": 0,
+                  "primitive_calls": 514044,
+                  "total_calls": 518850,
+                  "self_elapsed_seconds": 0.042847733000000006,
+                  "cumulative_elapsed_seconds": 0.09460850600000001
+                },
+                {
+                  "root": "builtin",
+                  "module": "builtin",
+                  "function": "posix.waitpid",
+                  "line": 0,
+                  "primitive_calls": 17720,
+                  "total_calls": 18033,
+                  "self_elapsed_seconds": 0.040844143,
+                  "cumulative_elapsed_seconds": 0.040470940000000004
+                },
+                {
+                  "root": "stdlib",
+                  "module": "pathlib.py",
+                  "function": "stat",
+                  "line": 835,
+                  "primitive_calls": 28822,
+                  "total_calls": 43129,
+                  "self_elapsed_seconds": 0.040493326,
+                  "cumulative_elapsed_seconds": 4.735302542
+                },
+                {
+                  "root": "builtin",
+                  "module": "builtin",
+                  "function": "_socket.socket.sendall",
+                  "line": 0,
+                  "primitive_calls": 3758,
+                  "total_calls": 5984,
+                  "self_elapsed_seconds": 0.03947185,
+                  "cumulative_elapsed_seconds": 0.026010143000000003
+                },
+                {
+                  "root": "builtin",
+                  "module": "builtin",
+                  "function": "dict.get",
+                  "line": 0,
+                  "primitive_calls": 234077,
+                  "total_calls": 234077,
+                  "self_elapsed_seconds": 0.039257021,
+                  "cumulative_elapsed_seconds": 0.039257104
+                },
+                {
+                  "root": "builtin",
+                  "module": "builtin",
+                  "function": "str.join",
+                  "line": 0,
+                  "primitive_calls": 184889,
+                  "total_calls": 184889,
+                  "self_elapsed_seconds": 0.039221359000000004,
+                  "cumulative_elapsed_seconds": 0.055614487000000004
+                },
+                {
+                  "root": "stdlib",
+                  "module": "pathlib.py",
+                  "function": "__fspath__",
+                  "line": 447,
+                  "primitive_calls": 137143,
+                  "total_calls": 137143,
+                  "self_elapsed_seconds": 0.039007352,
+                  "cumulative_elapsed_seconds": 0.594845748
+                },
+                {
+                  "root": "installed",
+                  "module": "codex_plugin_scanner/guard/native_runtime.py",
+                  "function": "_discover_runtime_candidates",
+                  "line": 102,
+                  "primitive_calls": 3810,
+                  "total_calls": 5323,
+                  "self_elapsed_seconds": 0.038379486000000004,
+                  "cumulative_elapsed_seconds": 55.60966938000001
+                },
+                {
+                  "root": "stdlib",
+                  "module": "pathlib.py",
+                  "function": "_format_parsed_parts",
+                  "line": 429,
+                  "primitive_calls": 138165,
+                  "total_calls": 138165,
+                  "self_elapsed_seconds": 0.038244297000000003,
+                  "cumulative_elapsed_seconds": 0.06616661700000001
+                },
+                {
+                  "root": "installed",
+                  "module": "codex_plugin_scanner/guard/native_execution.py",
+                  "function": "_resident_request",
+                  "line": 70,
+                  "primitive_calls": 1086,
+                  "total_calls": 3471,
+                  "self_elapsed_seconds": 0.037517743,
+                  "cumulative_elapsed_seconds": 15.284550209
+                },
+                {
+                  "root": "installed",
+                  "module": "codex_plugin_scanner/guard/native_resident_stream.py",
+                  "function": "_hold_until",
+                  "line": 57,
+                  "primitive_calls": 89358,
+                  "total_calls": 89358,
+                  "self_elapsed_seconds": 0.036030036,
+                  "cumulative_elapsed_seconds": 0.06777387
+                },
+                {
+                  "root": "stdlib",
+                  "module": "pathlib.py",
+                  "function": "__new__",
+                  "line": 1164,
+                  "primitive_calls": 149914,
+                  "total_calls": 149914,
+                  "self_elapsed_seconds": 0.034485492,
+                  "cumulative_elapsed_seconds": 0.053610823
+                },
+                {
+                  "root": "installed",
+                  "module": "codex_plugin_scanner/guard/native_policy_snapshot_workspace_readiness.py",
+                  "function": "_overlay_absent",
+                  "line": 163,
+                  "primitive_calls": 23581,
+                  "total_calls": 26928,
+                  "self_elapsed_seconds": 0.034350963000000005,
+                  "cumulative_elapsed_seconds": 1.2125351130000002
+                },
+                {
+                  "root": "builtin",
+                  "module": "builtin",
+                  "function": "_socket.socket.recv_into",
+                  "line": 0,
+                  "primitive_calls": 478,
+                  "total_calls": 4461,
+                  "self_elapsed_seconds": 0.033981941,
+                  "cumulative_elapsed_seconds": 0.0032516800000000003
+                },
+                {
+                  "root": "stdlib",
+                  "module": "<frozen posixpath>",
+                  "function": "_get_sep",
+                  "line": 41,
+                  "primitive_calls": 219599,
+                  "total_calls": 219599,
+                  "self_elapsed_seconds": 0.033519678000000004,
+                  "cumulative_elapsed_seconds": 0.051037497
+                },
+                {
+                  "root": "stdlib",
+                  "module": "queue.py",
+                  "function": "get",
+                  "line": 154,
+                  "primitive_calls": 1651,
+                  "total_calls": 6457,
+                  "self_elapsed_seconds": 0.033131762,
+                  "cumulative_elapsed_seconds": 0.8920523090000001
+                },
+                {
+                  "root": "installed",
+                  "module": "codex_plugin_scanner/guard/path_resolution_cache.py",
+                  "function": "cached_realpath",
+                  "line": 73,
+                  "primitive_calls": 5960,
+                  "total_calls": 12027,
+                  "self_elapsed_seconds": 0.032463435,
+                  "cumulative_elapsed_seconds": 38.715806929
+                },
+                {
+                  "root": "stdlib",
+                  "module": "<frozen os>",
+                  "function": "__iter__",
+                  "line": 732,
+                  "primitive_calls": 187656,
+                  "total_calls": 187656,
+                  "self_elapsed_seconds": 0.032074599,
+                  "cumulative_elapsed_seconds": 0.07438381100000001
+                },
+                {
+                  "root": "builtin",
+                  "module": "builtin",
+                  "function": "str.upper",
+                  "line": 0,
+                  "primitive_calls": 353014,
+                  "total_calls": 353014,
+                  "self_elapsed_seconds": 0.031709201,
+                  "cumulative_elapsed_seconds": 0.031709201
+                },
+                {
+                  "root": "builtin",
+                  "module": "builtin",
+                  "function": "list.append",
+                  "line": 0,
+                  "primitive_calls": 272194,
+                  "total_calls": 272194,
+                  "self_elapsed_seconds": 0.03110676,
+                  "cumulative_elapsed_seconds": 0.03110676
+                },
+                {
+                  "root": "stdlib",
+                  "module": "contextlib.py",
+                  "function": "__init__",
+                  "line": 104,
+                  "primitive_calls": 55943,
+                  "total_calls": 55943,
+                  "self_elapsed_seconds": 0.030285633000000003,
+                  "cumulative_elapsed_seconds": 0.037497358
+                },
+                {
+                  "root": "stdlib",
+                  "module": "pathlib.py",
+                  "function": "joinpath",
+                  "line": 711,
+                  "primitive_calls": 77786,
+                  "total_calls": 77786,
+                  "self_elapsed_seconds": 0.030110151,
+                  "cumulative_elapsed_seconds": 0.22976987100000001
+                },
+                {
+                  "root": "builtin",
+                  "module": "builtin",
+                  "function": "sqlite3.Connection.close",
+                  "line": 0,
+                  "primitive_calls": 1137,
+                  "total_calls": 1166,
+                  "self_elapsed_seconds": 0.029037109000000002,
+                  "cumulative_elapsed_seconds": 0.028803560000000002
+                },
+                {
+                  "root": "builtin",
+                  "module": "builtin",
+                  "function": "posix.read",
+                  "line": 0,
+                  "primitive_calls": 5251,
+                  "total_calls": 5644,
+                  "self_elapsed_seconds": 0.029036755,
+                  "cumulative_elapsed_seconds": 0.027691252000000003
+                },
+                {
+                  "root": "builtin",
+                  "module": "builtin",
+                  "function": "sqlite3.Connection.commit",
+                  "line": 0,
+                  "primitive_calls": 1334,
+                  "total_calls": 1369,
+                  "self_elapsed_seconds": 0.028849390000000003,
+                  "cumulative_elapsed_seconds": 0.029702597
+                },
+                {
+                  "root": "stdlib",
+                  "module": "contextlib.py",
+                  "function": "__enter__",
+                  "line": 132,
+                  "primitive_calls": 39949,
+                  "total_calls": 55943,
+                  "self_elapsed_seconds": 0.028351784,
+                  "cumulative_elapsed_seconds": 15.210624817000001
+                },
+                {
+                  "root": "builtin",
+                  "module": "builtin",
+                  "function": "_io.TextIOWrapper.read",
+                  "line": 0,
+                  "primitive_calls": 1990,
+                  "total_calls": 3258,
+                  "self_elapsed_seconds": 0.028188695000000003,
+                  "cumulative_elapsed_seconds": 0.019217993000000003
+                },
+                {
+                  "root": "builtin",
+                  "module": "builtin",
+                  "function": "posix.urandom",
+                  "line": 0,
+                  "primitive_calls": 4101,
+                  "total_calls": 5007,
+                  "self_elapsed_seconds": 0.027505386000000003,
+                  "cumulative_elapsed_seconds": 11.218816945
+                },
+                {
+                  "root": "stdlib",
+                  "module": "<frozen posixpath>",
+                  "function": "realpath",
+                  "line": 420,
+                  "primitive_calls": 7507,
+                  "total_calls": 13389,
+                  "self_elapsed_seconds": 0.027491815000000003,
+                  "cumulative_elapsed_seconds": 27.846199767
+                },
+                {
+                  "root": "installed",
+                  "module": "codex_plugin_scanner/guard/native_resident_stream.py",
+                  "function": "request",
+                  "line": 390,
+                  "primitive_calls": 1665,
+                  "total_calls": 4467,
+                  "self_elapsed_seconds": 0.027421561,
+                  "cumulative_elapsed_seconds": 5.1893219230000005
+                },
+                {
+                  "root": "builtin",
+                  "module": "builtin",
+                  "function": "posix.listdir",
+                  "line": 0,
+                  "primitive_calls": 4976,
+                  "total_calls": 5366,
+                  "self_elapsed_seconds": 0.027098506,
+                  "cumulative_elapsed_seconds": 8.555222930000001
+                },
+                {
+                  "root": "stdlib",
+                  "module": "json/__init__.py",
+                  "function": "dumps",
+                  "line": 183,
+                  "primitive_calls": 20884,
+                  "total_calls": 20884,
+                  "self_elapsed_seconds": 0.027013615,
+                  "cumulative_elapsed_seconds": 0.21871050500000003
+                },
+                {
+                  "root": "installed",
+                  "module": "codex_plugin_scanner/guard/native_runtime_process_cache.py",
+                  "function": "_fingerprint",
+                  "line": 33,
+                  "primitive_calls": 9852,
+                  "total_calls": 10644,
+                  "self_elapsed_seconds": 0.026666178000000002,
+                  "cumulative_elapsed_seconds": 2.660840066
+                },
+                {
+                  "root": "builtin",
+                  "module": "builtin",
+                  "function": "str.endswith",
+                  "line": 0,
+                  "primitive_calls": 211980,
+                  "total_calls": 211980,
+                  "self_elapsed_seconds": 0.026663433,
+                  "cumulative_elapsed_seconds": 0.026663433
+                },
+                {
+                  "root": "stdlib",
+                  "module": "email/message.py",
+                  "function": "get",
+                  "line": 504,
+                  "primitive_calls": 28424,
+                  "total_calls": 28424,
+                  "self_elapsed_seconds": 0.026651853000000003,
+                  "cumulative_elapsed_seconds": 0.058821394000000006
+                },
+                {
+                  "root": "stdlib",
+                  "module": "contextlib.py",
+                  "function": "__exit__",
+                  "line": 141,
+                  "primitive_calls": 45959,
+                  "total_calls": 55941,
+                  "self_elapsed_seconds": 0.02664489,
+                  "cumulative_elapsed_seconds": 10.441723011
+                },
+                {
+                  "root": "installed",
+                  "module": "codex_plugin_scanner/guard/daemon/runtime_hook_scheduler.py",
+                  "function": "_service_estimate",
+                  "line": 394,
+                  "primitive_calls": 748,
+                  "total_calls": 748,
+                  "self_elapsed_seconds": 0.026522433,
+                  "cumulative_elapsed_seconds": 0.044065764
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "stderr": {
+        "path": "/private/tmp/hol-guard-cigar-context-elapsed-diagnostic-20261024/on.stderr.log",
+        "bytes": 5076,
+        "sha256": "2f44d95971220d351dcd274289aa434ea3df6e3775da7f6f73a600bbd4bd844b"
+      },
+      "inputs": {
+        "path": "/private/tmp/hol-guard-cigar-context-elapsed-diagnostic-20261024/inputs.json",
+        "bytes": 328042,
+        "sha256": "7ddc1b9a3317d4a14316547d4c9842ef0c5d1a236486a090df425fc4f9a24468"
+      },
+      "matching_source_archives": [
+        {
+          "path": "/private/tmp/hol-guard-cigar-context-elapsed-diagnostic-20261024/measured-source/scripts/bench_guard_cigar_context_cpu.py",
+          "bytes": 4009,
+          "sha256": "4b29ddb308389136b09f6e39d56ad45ed52d1deadb28431401af777113ddbb9d"
+        },
+        {
+          "path": "/private/tmp/hol-guard-cigar-context-elapsed-diagnostic-20261024/measured-source/scripts/cigar_context_profile.py",
+          "bytes": 3867,
+          "sha256": "b91b5f40667c4e3988776e9851c44d7709c65e567d090ecad57b644de88d0318"
+        },
+        {
+          "path": "/private/tmp/hol-guard-cigar-context-elapsed-diagnostic-20261024/measured-source/tests/test_cigar_context_profile.py",
+          "bytes": 2400,
+          "sha256": "1e252e56dddcebcde838d66ffb23805a0dc4dfd4a70cf8fefe47bc109324a86a"
+        }
+      ],
+      "valid_for_thread_attribution": false,
+      "reason": "Underlying thirteen benchmark gates pass, but the profiler contains foreign hook-scheduler functions. CPython 3.12 interpreter monitoring makes the intended thread-only attribution invalid."
+    }
+  ],
+  "final": {
+    "controller": {
+      "schema": "guard-cigar-context-cpu-controller.v1",
+      "diagnostic_only": true,
+      "not_product_qualification": true,
+      "command": [
+        "/private/tmp/hol-guard-cigar-locked-runtime/bin/python",
+        "-u",
+        "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/scripts/bench_guard_cigar_context_cpu.py",
+        "--runtime",
+        "/private/tmp/hol-guard-cigar-evidence-batch-20261024/package/installed/codex_plugin_scanner/_native/hol-guard-runtime",
+        "--root",
+        "/private/tmp/hol-guard-cigar-thread-sampled-diagnostic-20261024/on",
+        "--mode",
+        "on",
+        "--expected-build-sha",
+        "4c4db2d99f8e500c477704e33f79f8bc56fc4871",
+        "--warm-iterations",
+        "200",
+        "--waves",
+        "5"
+      ],
+      "returncode": 0,
+      "seconds": 44.739,
+      "inputs_unchanged": true,
+      "fingerprinted_files": 1638,
+      "completed": true,
+      "failed_gates": []
+    },
+    "unit_checks": {
+      "command": [
+        "/private/tmp/hol-guard-cigar-locked-runtime/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "-o",
+        "addopts=",
+        "--basetemp",
+        "/private/tmp/hol-guard-cigar-thread-sampled-diagnostic-20261024/unit-state",
+        "--junitxml",
+        "/private/tmp/hol-guard-cigar-thread-sampled-diagnostic-20261024/unit-results.xml",
+        "tests/test_cigar_context_profile.py",
+        "tests/test_cigar_thread_profile.py"
+      ],
+      "returncode": 0,
+      "seconds": 1.352,
+      "tests": 8,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "inputs_unchanged": true
+    },
+    "inputs": {
+      "path": "/private/tmp/hol-guard-cigar-thread-sampled-diagnostic-20261024/inputs.json",
+      "bytes": 328422,
+      "sha256": "264fb279e195292f26c5da8ec3aa8ef49d2d936d309e63e64529d5a733f20e60"
+    },
+    "profile": {
+      "schema": "guard-cigar-context-thread-profile-diagnostic.v2",
+      "diagnostic_only": true,
+      "not_product_qualification": true,
+      "instrumentation_changes_workload_timing": true,
+      "profile_hook": "thread-specific sys.setprofile, Python call/return only",
+      "profile_clocks": [
+        "time.monotonic_ns",
+        "time.thread_time_ns"
+      ],
+      "sample_every_nth_compile": 16,
+      "separate_total_cpu_clock": "time.thread_time",
+      "scope": "context load thread only",
+      "wrapper_sha256": "b96e32f696d43d417416de7894cc9a3f5278e7aa043904bd0d8bfae4f69506f7",
+      "observations": [
+        {
+          "thread_cpu_seconds": 0.34619095899999996,
+          "thread_elapsed_seconds": 7.932015582919121,
+          "successful_context_compiles": 317,
+          "profile": {
+            "sampled_compiles": 19,
+            "completed_samples": 19,
+            "profile_complete": true,
+            "errors": [],
+            "unmapped_functions": 2,
+            "unmapped_self_cpu_seconds": 0.000184006,
+            "top_by_self_cpu": [
+              {
+                "root": "installed",
+                "module": "codex_plugin_scanner/guard/path_resolution_cache.py",
+                "function": "_marks_unchanged",
+                "line": 58,
+                "call_events": 38,
+                "self_elapsed_seconds": 0.049145794,
+                "total_elapsed_seconds": 0.049145794,
+                "self_cpu_seconds": 0.004529877,
+                "total_cpu_seconds": 0.004529877
+              },
+              {
+                "root": "stdlib",
+                "module": "importlib/metadata/__init__.py",
+                "function": "mtime",
+                "line": 695,
+                "call_events": 171,
+                "self_elapsed_seconds": 0.019411917,
+                "total_elapsed_seconds": 0.019648546,
+                "self_cpu_seconds": 0.003184296,
+                "total_cpu_seconds": 0.00340375
+              },
+              {
+                "root": "stdlib",
+                "module": "<frozen os>",
+                "function": "__getitem__",
+                "line": 709,
+                "call_events": 950,
+                "self_elapsed_seconds": 0.002430603,
+                "total_elapsed_seconds": 0.003824217,
+                "self_cpu_seconds": 0.002432469,
+                "total_cpu_seconds": 0.003819341
+              },
+              {
+                "root": "stdlib",
+                "module": "<frozen _collections_abc>",
+                "function": "__iter__",
+                "line": 892,
+                "call_events": 798,
+                "self_elapsed_seconds": 0.001921683,
+                "total_elapsed_seconds": 0.006592338,
+                "self_cpu_seconds": 0.001925633,
+                "total_cpu_seconds": 0.006589628
+              },
+              {
+                "root": "installed",
+                "module": "codex_plugin_scanner/guard/native_runtime.py",
+                "function": "_isolated_environment",
+                "line": 233,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.001574952,
+                "total_elapsed_seconds": 0.008219499,
+                "self_cpu_seconds": 0.001572662,
+                "total_cpu_seconds": 0.008214832
+              },
+              {
+                "root": "stdlib",
+                "module": "<frozen posixpath>",
+                "function": "_joinrealpath",
+                "line": 429,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.004573583,
+                "total_elapsed_seconds": 0.005185585,
+                "self_cpu_seconds": 0.001351711,
+                "total_cpu_seconds": 0.001959083
+              },
+              {
+                "root": "stdlib",
+                "module": "<frozen os>",
+                "function": "__iter__",
+                "line": 732,
+                "call_events": 798,
+                "self_elapsed_seconds": 0.001101346,
+                "total_elapsed_seconds": 0.001587856,
+                "self_cpu_seconds": 0.001099306,
+                "total_cpu_seconds": 0.001585531
+              },
+              {
+                "root": "stdlib",
+                "module": "<frozen os>",
+                "function": "decode",
+                "line": 795,
+                "call_events": 1653,
+                "self_elapsed_seconds": 0.001070617,
+                "total_elapsed_seconds": 0.001070617,
+                "self_cpu_seconds": 0.001063661,
+                "total_cpu_seconds": 0.001063661
+              },
+              {
+                "root": "stdlib",
+                "module": "importlib/metadata/__init__.py",
+                "function": "search",
+                "line": 728,
+                "call_events": 171,
+                "self_elapsed_seconds": 0.001006628,
+                "total_elapsed_seconds": 0.002038546,
+                "self_cpu_seconds": 0.001007674,
+                "total_cpu_seconds": 0.002037587
+              },
+              {
+                "root": "stdlib",
+                "module": "pathlib.py",
+                "function": "stat",
+                "line": 835,
+                "call_events": 95,
+                "self_elapsed_seconds": 0.00593937,
+                "total_elapsed_seconds": 0.006606707,
+                "self_cpu_seconds": 0.000888036,
+                "total_cpu_seconds": 0.001555077
+              },
+              {
+                "root": "stdlib",
+                "module": "json/decoder.py",
+                "function": "raw_decode",
+                "line": 344,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.000880461,
+                "total_elapsed_seconds": 0.000880461,
+                "self_cpu_seconds": 0.000881252,
+                "total_cpu_seconds": 0.000881252
+              },
+              {
+                "root": "stdlib",
+                "module": "pathlib.py",
+                "function": "_parse_path",
+                "line": 387,
+                "call_events": 114,
+                "self_elapsed_seconds": 0.000859119,
+                "total_elapsed_seconds": 0.001012533,
+                "self_cpu_seconds": 0.000858087,
+                "total_cpu_seconds": 0.001012127
+              },
+              {
+                "root": "stdlib",
+                "module": "<frozen os>",
+                "function": "encode",
+                "line": 791,
+                "call_events": 950,
+                "self_elapsed_seconds": 0.000809507,
+                "total_elapsed_seconds": 0.000809507,
+                "self_cpu_seconds": 0.000809436,
+                "total_cpu_seconds": 0.000809436
+              },
+              {
+                "root": "stdlib",
+                "module": "pathlib.py",
+                "function": "__str__",
+                "line": 437,
+                "call_events": 304,
+                "self_elapsed_seconds": 0.00076551,
+                "total_elapsed_seconds": 0.001871718,
+                "self_cpu_seconds": 0.000761584,
+                "total_cpu_seconds": 0.001867417
+              },
+              {
+                "root": "installed",
+                "module": "codex_plugin_scanner/guard/path_resolution_cache.py",
+                "function": "cached_realpath",
+                "line": 73,
+                "call_events": 38,
+                "self_elapsed_seconds": 0.002611706,
+                "total_elapsed_seconds": 0.0517575,
+                "self_cpu_seconds": 0.000750039,
+                "total_cpu_seconds": 0.005279916
+              },
+              {
+                "root": "stdlib",
+                "module": "importlib/metadata/_collections.py",
+                "function": "__missing__",
+                "line": 20,
+                "call_events": 342,
+                "self_elapsed_seconds": 0.000727007,
+                "total_elapsed_seconds": 0.000884548,
+                "self_cpu_seconds": 0.000727869,
+                "total_cpu_seconds": 0.000883792
+              },
+              {
+                "root": "stdlib",
+                "module": "<frozen posixpath>",
+                "function": "join",
+                "line": 71,
+                "call_events": 209,
+                "self_elapsed_seconds": 0.00073034,
+                "total_elapsed_seconds": 0.000869418,
+                "self_cpu_seconds": 0.000726657,
+                "total_cpu_seconds": 0.000864956
+              },
+              {
+                "root": "installed",
+                "module": "codex_plugin_scanner/guard/native_resident_decision.py",
+                "function": "resident_decide",
+                "line": 94,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.000695172,
+                "total_elapsed_seconds": 0.268541623,
+                "self_cpu_seconds": 0.000694914,
+                "total_cpu_seconds": 0.050696291
+              },
+              {
+                "root": "stdlib",
+                "module": "importlib/metadata/__init__.py",
+                "function": "search",
+                "line": 692,
+                "call_events": 171,
+                "self_elapsed_seconds": 0.000676117,
+                "total_elapsed_seconds": 0.025264833,
+                "self_cpu_seconds": 0.000672582,
+                "total_cpu_seconds": 0.007745209
+              },
+              {
+                "root": "stdlib",
+                "module": "importlib/metadata/__init__.py",
+                "function": "<genexpr>",
+                "line": 794,
+                "call_events": 190,
+                "self_elapsed_seconds": 0.000633743,
+                "total_elapsed_seconds": 0.025988948,
+                "self_cpu_seconds": 0.000627045,
+                "total_cpu_seconds": 0.008462378
+              },
+              {
+                "root": "installed",
+                "module": "codex_plugin_scanner/guard/native_resident_stream.py",
+                "function": "request",
+                "line": 390,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.00062208,
+                "total_elapsed_seconds": 0.151586835,
+                "self_cpu_seconds": 0.000622416,
+                "total_cpu_seconds": 0.006962294
+              },
+              {
+                "root": "stdlib",
+                "module": "threading.py",
+                "function": "wait",
+                "line": 323,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.139587501,
+                "total_elapsed_seconds": 0.139658622,
+                "self_cpu_seconds": 0.000605784,
+                "total_cpu_seconds": 0.00066304
+              },
+              {
+                "root": "installed",
+                "module": "codex_plugin_scanner/guard/native_resident_stream.py",
+                "function": "_request_is_current",
+                "line": 470,
+                "call_events": 57,
+                "self_elapsed_seconds": 0.000561956,
+                "total_elapsed_seconds": 0.001889665,
+                "self_cpu_seconds": 0.000562381,
+                "total_cpu_seconds": 0.001889419
+              },
+              {
+                "root": "installed",
+                "module": "codex_plugin_scanner/guard/native_resident_decision.py",
+                "function": "shape_fields",
+                "line": 55,
+                "call_events": 76,
+                "self_elapsed_seconds": 0.000558039,
+                "total_elapsed_seconds": 0.000558039,
+                "self_cpu_seconds": 0.000558209,
+                "total_cpu_seconds": 0.000558209
+              },
+              {
+                "root": "installed",
+                "module": "codex_plugin_scanner/guard/native_resident_transport.py",
+                "function": "_write_frame_nonblocking",
+                "line": 13,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.00190213,
+                "total_elapsed_seconds": 0.007355167,
+                "self_cpu_seconds": 0.00053208,
+                "total_cpu_seconds": 0.001757833
+              },
+              {
+                "root": "installed",
+                "module": "codex_plugin_scanner/guard/native_context_assistance.py",
+                "function": "workspace",
+                "line": 107,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.000521081,
+                "total_elapsed_seconds": 0.269216834,
+                "self_cpu_seconds": 0.000521077,
+                "total_cpu_seconds": 0.051371082
+              },
+              {
+                "root": "installed",
+                "module": "codex_plugin_scanner/guard/native_execution.py",
+                "function": "_resident_request",
+                "line": 70,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.000516754,
+                "total_elapsed_seconds": 0.199491417,
+                "self_cpu_seconds": 0.000517957,
+                "total_cpu_seconds": 0.0237955
+              },
+              {
+                "root": "stdlib",
+                "module": "pathlib.py",
+                "function": "_load_parts",
+                "line": 407,
+                "call_events": 114,
+                "self_elapsed_seconds": 0.000477387,
+                "total_elapsed_seconds": 0.001799963,
+                "self_cpu_seconds": 0.000477751,
+                "total_cpu_seconds": 0.00180017
+              },
+              {
+                "root": "stdlib",
+                "module": "pathlib.py",
+                "function": "__init__",
+                "line": 1157,
+                "call_events": 152,
+                "self_elapsed_seconds": 0.000461839,
+                "total_elapsed_seconds": 0.000807543,
+                "self_cpu_seconds": 0.000461547,
+                "total_cpu_seconds": 0.000798336
+              },
+              {
+                "root": "installed",
+                "module": "codex_plugin_scanner/guard/native_resident_stream.py",
+                "function": "_hold_until",
+                "line": 57,
+                "call_events": 380,
+                "self_elapsed_seconds": 0.00046012,
+                "total_elapsed_seconds": 0.00046012,
+                "self_cpu_seconds": 0.0004595,
+                "total_cpu_seconds": 0.0004595
+              },
+              {
+                "root": "stdlib",
+                "module": "selectors.py",
+                "function": "close",
+                "line": 583,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.003969081,
+                "total_elapsed_seconds": 0.004014666,
+                "self_cpu_seconds": 0.000446915,
+                "total_cpu_seconds": 0.000489167
+              },
+              {
+                "root": "installed",
+                "module": "codex_plugin_scanner/guard/native_runtime.py",
+                "function": "_discover_runtime_candidates",
+                "line": 102,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.000437034,
+                "total_elapsed_seconds": 0.030232502,
+                "self_cpu_seconds": 0.000437076,
+                "total_cpu_seconds": 0.01268625
+              },
+              {
+                "root": "stdlib",
+                "module": "importlib/metadata/__init__.py",
+                "function": "children",
+                "line": 678,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.001178118,
+                "total_elapsed_seconds": 0.002551,
+                "self_cpu_seconds": 0.000435495,
+                "total_cpu_seconds": 0.001280002
+              },
+              {
+                "root": "stdlib",
+                "module": "queue.py",
+                "function": "get",
+                "line": 154,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.000431215,
+                "total_elapsed_seconds": 0.140237206,
+                "self_cpu_seconds": 0.000431626,
+                "total_cpu_seconds": 0.00124121
+              },
+              {
+                "root": "installed",
+                "module": "codex_plugin_scanner/guard/native_resident_client.py",
+                "function": "request",
+                "line": 247,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.000430708,
+                "total_elapsed_seconds": 0.152461503,
+                "self_cpu_seconds": 0.000430036,
+                "total_cpu_seconds": 0.007836538
+              },
+              {
+                "root": "stdlib",
+                "module": "uuid.py",
+                "function": "uuid4",
+                "line": 723,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.001325377,
+                "total_elapsed_seconds": 0.001443626,
+                "self_cpu_seconds": 0.000428709,
+                "total_cpu_seconds": 0.000544043
+              },
+              {
+                "root": "stdlib",
+                "module": "importlib/metadata/__init__.py",
+                "function": "from_name",
+                "line": 383,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.000415841,
+                "total_elapsed_seconds": 0.027550874,
+                "self_cpu_seconds": 0.000416333,
+                "total_cpu_seconds": 0.010014376
+              },
+              {
+                "root": "stdlib",
+                "module": "zipfile/__init__.py",
+                "function": "__init__",
+                "line": 1313,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.000925371,
+                "total_elapsed_seconds": 0.00096304,
+                "self_cpu_seconds": 0.000399748,
+                "total_cpu_seconds": 0.000437459
+              },
+              {
+                "root": "stdlib",
+                "module": "contextlib.py",
+                "function": "__exit__",
+                "line": 141,
+                "call_events": 190,
+                "self_elapsed_seconds": 0.000386046,
+                "total_elapsed_seconds": 0.000524332,
+                "self_cpu_seconds": 0.000386035,
+                "total_cpu_seconds": 0.000523454
+              },
+              {
+                "root": "installed",
+                "module": "codex_plugin_scanner/guard/native_runtime.py",
+                "function": "native_mode",
+                "line": 80,
+                "call_events": 57,
+                "self_elapsed_seconds": 0.000382959,
+                "total_elapsed_seconds": 0.001350711,
+                "self_cpu_seconds": 0.000382495,
+                "total_cpu_seconds": 0.001350788
+              },
+              {
+                "root": "installed",
+                "module": "codex_plugin_scanner/guard/directory_path_authority.py",
+                "function": "canonical_guard_home_path",
+                "line": 16,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.000377837,
+                "total_elapsed_seconds": 0.024054375,
+                "self_cpu_seconds": 0.000377458,
+                "total_cpu_seconds": 0.004031373
+              },
+              {
+                "root": "stdlib",
+                "module": "json/encoder.py",
+                "function": "iterencode",
+                "line": 205,
+                "call_events": 38,
+                "self_elapsed_seconds": 0.000354499,
+                "total_elapsed_seconds": 0.000354499,
+                "self_cpu_seconds": 0.00035817,
+                "total_cpu_seconds": 0.00035817
+              },
+              {
+                "root": "stdlib",
+                "module": "contextlib.py",
+                "function": "__enter__",
+                "line": 132,
+                "call_events": 190,
+                "self_elapsed_seconds": 0.000353213,
+                "total_elapsed_seconds": 0.000675047,
+                "self_cpu_seconds": 0.000351882,
+                "total_cpu_seconds": 0.000673963
+              },
+              {
+                "root": "stdlib",
+                "module": "contextlib.py",
+                "function": "helper",
+                "line": 299,
+                "call_events": 190,
+                "self_elapsed_seconds": 0.000350292,
+                "total_elapsed_seconds": 0.000560081,
+                "self_cpu_seconds": 0.00035046,
+                "total_cpu_seconds": 0.000560453
+              },
+              {
+                "root": "stdlib",
+                "module": "pathlib.py",
+                "function": "drive",
+                "line": 551,
+                "call_events": 209,
+                "self_elapsed_seconds": 0.000350738,
+                "total_elapsed_seconds": 0.002150701,
+                "self_cpu_seconds": 0.000347703,
+                "total_cpu_seconds": 0.002147873
+              },
+              {
+                "root": "stdlib",
+                "module": "pathlib.py",
+                "function": "__init__",
+                "line": 358,
+                "call_events": 152,
+                "self_elapsed_seconds": 0.000345704,
+                "total_elapsed_seconds": 0.000345704,
+                "self_cpu_seconds": 0.000336789,
+                "total_cpu_seconds": 0.000336789
+              },
+              {
+                "root": "stdlib",
+                "module": "subprocess.py",
+                "function": "_internal_poll",
+                "line": 1973,
+                "call_events": 76,
+                "self_elapsed_seconds": 0.000365411,
+                "total_elapsed_seconds": 0.000365411,
+                "self_cpu_seconds": 0.000334454,
+                "total_cpu_seconds": 0.000334454
+              },
+              {
+                "root": "stdlib",
+                "module": "<frozen _collections_abc>",
+                "function": "get",
+                "line": 804,
+                "call_events": 171,
+                "self_elapsed_seconds": 0.000305921,
+                "total_elapsed_seconds": 0.001047339,
+                "self_cpu_seconds": 0.000306252,
+                "total_cpu_seconds": 0.001047129
+              },
+              {
+                "root": "stdlib",
+                "module": "pathlib.py",
+                "function": "with_segments",
+                "line": 380,
+                "call_events": 95,
+                "self_elapsed_seconds": 0.000295245,
+                "total_elapsed_seconds": 0.000779377,
+                "self_cpu_seconds": 0.000295374,
+                "total_cpu_seconds": 0.000770083
+              },
+              {
+                "root": "installed",
+                "module": "codex_plugin_scanner/guard/native_daemon_route.py",
+                "function": "bounded_request",
+                "line": 186,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.0002915,
+                "total_elapsed_seconds": 0.200093168,
+                "self_cpu_seconds": 0.000291668,
+                "total_cpu_seconds": 0.024397124
+              },
+              {
+                "root": "tooling",
+                "module": "scripts/cigar_benchmark_workload.py",
+                "function": "compile",
+                "line": 109,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.000276207,
+                "total_elapsed_seconds": 0.269493041,
+                "self_cpu_seconds": 0.00026125,
+                "total_cpu_seconds": 0.051632332
+              },
+              {
+                "root": "installed",
+                "module": "codex_plugin_scanner/guard/native_context.py",
+                "function": "_canonical_request_sha256",
+                "line": 357,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.000265956,
+                "total_elapsed_seconds": 0.000784998,
+                "self_cpu_seconds": 0.000260291,
+                "total_cpu_seconds": 0.000779247
+              },
+              {
+                "root": "stdlib",
+                "module": "pathlib.py",
+                "function": "expanduser",
+                "line": 1398,
+                "call_events": 76,
+                "self_elapsed_seconds": 0.000249006,
+                "total_elapsed_seconds": 0.001515457,
+                "self_cpu_seconds": 0.000249789,
+                "total_cpu_seconds": 0.001515794
+              },
+              {
+                "root": "stdlib",
+                "module": "pathlib.py",
+                "function": "__fspath__",
+                "line": 447,
+                "call_events": 152,
+                "self_elapsed_seconds": 0.000250204,
+                "total_elapsed_seconds": 0.000953287,
+                "self_cpu_seconds": 0.000249636,
+                "total_cpu_seconds": 0.00095263
+              },
+              {
+                "root": "installed",
+                "module": "codex_plugin_scanner/guard/native_runtime_process_cache.py",
+                "function": "process_status",
+                "line": 91,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.00024821,
+                "total_elapsed_seconds": 0.008311251,
+                "self_cpu_seconds": 0.000246043,
+                "total_cpu_seconds": 0.004638083
+              },
+              {
+                "root": "installed",
+                "module": "codex_plugin_scanner/guard/native_resident_client.py",
+                "function": "_pinned_state_dir",
+                "line": 415,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.000244216,
+                "total_elapsed_seconds": 0.033934709,
+                "self_cpu_seconds": 0.000244325,
+                "total_cpu_seconds": 0.004159956
+              },
+              {
+                "root": "installed",
+                "module": "codex_plugin_scanner/guard/native_resident_client.py",
+                "function": "native_resident_client_request",
+                "line": 702,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.000225407,
+                "total_elapsed_seconds": 0.189455289,
+                "self_cpu_seconds": 0.000225211,
+                "total_cpu_seconds": 0.013763665
+              },
+              {
+                "root": "stdlib",
+                "module": "subprocess.py",
+                "function": "poll",
+                "line": 1233,
+                "call_events": 76,
+                "self_elapsed_seconds": 0.000220546,
+                "total_elapsed_seconds": 0.000585957,
+                "self_cpu_seconds": 0.000220464,
+                "total_cpu_seconds": 0.000554918
+              },
+              {
+                "root": "installed",
+                "module": "codex_plugin_scanner/guard/native_runtime_values.py",
+                "function": "_resolve_native_mode",
+                "line": 69,
+                "call_events": 57,
+                "self_elapsed_seconds": 0.000213293,
+                "total_elapsed_seconds": 0.000237252,
+                "self_cpu_seconds": 0.000216084,
+                "total_cpu_seconds": 0.000237418
+              },
+              {
+                "root": "installed",
+                "module": "codex_plugin_scanner/guard/native_runtime.py",
+                "function": "native_runtime_status",
+                "line": 377,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.000212585,
+                "total_elapsed_seconds": 0.040258706,
+                "self_cpu_seconds": 0.000211997,
+                "total_cpu_seconds": 0.019038791
+              },
+              {
+                "root": "stdlib",
+                "module": "contextlib.py",
+                "function": "__init__",
+                "line": 104,
+                "call_events": 190,
+                "self_elapsed_seconds": 0.000209789,
+                "total_elapsed_seconds": 0.000209789,
+                "self_cpu_seconds": 0.000209993,
+                "total_cpu_seconds": 0.000209993
+              },
+              {
+                "root": "installed",
+                "module": "codex_plugin_scanner/guard/native_runtime_process_cache.py",
+                "function": "_fingerprint",
+                "line": 33,
+                "call_events": 38,
+                "self_elapsed_seconds": 0.000209169,
+                "total_elapsed_seconds": 0.001120874,
+                "self_cpu_seconds": 0.000209293,
+                "total_cpu_seconds": 0.000674833
+              },
+              {
+                "root": "stdlib",
+                "module": "json/__init__.py",
+                "function": "dumps",
+                "line": 183,
+                "call_events": 38,
+                "self_elapsed_seconds": 0.000202542,
+                "total_elapsed_seconds": 0.000755832,
+                "self_cpu_seconds": 0.000202375,
+                "total_cpu_seconds": 0.000755333
+              },
+              {
+                "root": "installed",
+                "module": "codex_plugin_scanner/guard/native_resident_stream.py",
+                "function": "_request_snapshot",
+                "line": 355,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.000200174,
+                "total_elapsed_seconds": 0.000901711,
+                "self_cpu_seconds": 0.000201,
+                "total_cpu_seconds": 0.000870207
+              },
+              {
+                "root": "installed",
+                "module": "codex_plugin_scanner/guard/native_context.py",
+                "function": "ensure_resident_prerequisite",
+                "line": 289,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.000199375,
+                "total_elapsed_seconds": 0.02425375,
+                "self_cpu_seconds": 0.000199338,
+                "total_cpu_seconds": 0.004230711
+              },
+              {
+                "root": "stdlib",
+                "module": "selectors.py",
+                "function": "register",
+                "line": 517,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.000589584,
+                "total_elapsed_seconds": 0.000763458,
+                "self_cpu_seconds": 0.000195124,
+                "total_cpu_seconds": 0.00036879
+              },
+              {
+                "root": "installed",
+                "module": "codex_plugin_scanner/guard/native_resident_client.py",
+                "function": "_client_pool_for",
+                "line": 380,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.000189163,
+                "total_elapsed_seconds": 0.036539543,
+                "self_cpu_seconds": 0.000193207,
+                "total_cpu_seconds": 0.005472915
+              },
+              {
+                "root": "stdlib",
+                "module": "importlib/metadata/__init__.py",
+                "function": "discover",
+                "line": 401,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.000192879,
+                "total_elapsed_seconds": 0.000250085,
+                "self_cpu_seconds": 0.000183916,
+                "total_cpu_seconds": 0.000239374
+              },
+              {
+                "root": "stdlib",
+                "module": "importlib/metadata/__init__.py",
+                "function": "__init__",
+                "line": 707,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.000180537,
+                "total_elapsed_seconds": 0.002845123,
+                "self_cpu_seconds": 0.000181166,
+                "total_cpu_seconds": 0.001574538
+              },
+              {
+                "root": "stdlib",
+                "module": "json/encoder.py",
+                "function": "encode",
+                "line": 183,
+                "call_events": 38,
+                "self_elapsed_seconds": 0.000182,
+                "total_elapsed_seconds": 0.000536499,
+                "self_cpu_seconds": 0.000178039,
+                "total_cpu_seconds": 0.000536209
+              },
+              {
+                "root": "stdlib",
+                "module": "<frozen posixpath>",
+                "function": "_get_sep",
+                "line": 41,
+                "call_events": 266,
+                "self_elapsed_seconds": 0.000176999,
+                "total_elapsed_seconds": 0.000176999,
+                "self_cpu_seconds": 0.000176254,
+                "total_cpu_seconds": 0.000176254
+              },
+              {
+                "root": "installed",
+                "module": "codex_plugin_scanner/guard/native_context_assistance.py",
+                "function": "_validate_state",
+                "line": 62,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.000170999,
+                "total_elapsed_seconds": 0.000560709,
+                "self_cpu_seconds": 0.000171045,
+                "total_cpu_seconds": 0.000560794
+              },
+              {
+                "root": "stdlib",
+                "module": "importlib/metadata/__init__.py",
+                "function": "<genexpr>",
+                "line": 415,
+                "call_events": 38,
+                "self_elapsed_seconds": 0.000169914,
+                "total_elapsed_seconds": 0.000896,
+                "self_cpu_seconds": 0.000169956,
+                "total_cpu_seconds": 0.000896291
+              },
+              {
+                "root": "stdlib",
+                "module": "selectors.py",
+                "function": "__init__",
+                "line": 509,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.000469001,
+                "total_elapsed_seconds": 0.00051929,
+                "self_cpu_seconds": 0.00016388,
+                "total_cpu_seconds": 0.000214128
+              },
+              {
+                "root": "installed",
+                "module": "codex_plugin_scanner/guard/native_resident_client.py",
+                "function": "_track_resident",
+                "line": 503,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.000158503,
+                "total_elapsed_seconds": 0.001956044,
+                "self_cpu_seconds": 0.000158205,
+                "total_cpu_seconds": 0.00066379
+              },
+              {
+                "root": "stdlib",
+                "module": "<frozen posixpath>",
+                "function": "splitroot",
+                "line": 138,
+                "call_events": 114,
+                "self_elapsed_seconds": 0.000153414,
+                "total_elapsed_seconds": 0.000153414,
+                "self_cpu_seconds": 0.00015404,
+                "total_cpu_seconds": 0.00015404
+              },
+              {
+                "root": "stdlib",
+                "module": "<frozen importlib._bootstrap_external>",
+                "function": "find_distributions",
+                "line": 1548,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.000147496,
+                "total_elapsed_seconds": 0.000650082,
+                "self_cpu_seconds": 0.000147248,
+                "total_cpu_seconds": 0.000649877
+              },
+              {
+                "root": "stdlib",
+                "module": "importlib/metadata/__init__.py",
+                "function": "__bool__",
+                "line": 772,
+                "call_events": 342,
+                "self_elapsed_seconds": 0.00014737,
+                "total_elapsed_seconds": 0.00014737,
+                "self_cpu_seconds": 0.000146121,
+                "total_cpu_seconds": 0.000146121
+              },
+              {
+                "root": "stdlib",
+                "module": "selectors.py",
+                "function": "select",
+                "line": 558,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.000146083,
+                "total_elapsed_seconds": 0.000155623,
+                "self_cpu_seconds": 0.000144332,
+                "total_cpu_seconds": 0.000153668
+              },
+              {
+                "root": "stdlib",
+                "module": "pathlib.py",
+                "function": "with_name",
+                "line": 628,
+                "call_events": 19,
+                "self_elapsed_seconds": 0.000135623,
+                "total_elapsed_seconds": 0.000396959,
+                "self_cpu_seconds": 0.000138082,
+                "total_cpu_seconds": 0.000396958
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "benchmark": {
+      "schema": "guard-cigar-installed-contention.v1",
+      "mode": "on",
+      "build_sha": "4c4db2d99f8e500c477704e33f79f8bc56fc4871",
+      "full_installed_SLO": false,
+      "diagnostic_transport_observer": false,
+      "client_topology": "driver, authenticated hook clients and daemon share one Python process",
+      "root_python": [
+        3,
+        12,
+        13
+      ],
+      "completed": true,
+      "active_stage": "completed",
+      "stages": {
+        "1": {
+          "latency": {
+            "count": 200,
+            "p50_ms": 9.333,
+            "p95_ms": 15.632,
+            "p99_ms": 19.324,
+            "max_ms": 21.341
+          },
+          "routes": {
+            "native_resident": 200
+          },
+          "errors": 0,
+          "allowed": 200,
+          "explicit_capacity": 0,
+          "unclassified_refusals": 0,
+          "successful_overlapping_compiles": 96,
+          "memory": {
+            "samples": 26,
+            "sampling_errors": 0,
+            "median_rss_bytes": 580714496,
+            "peak_rss_bytes": 580911104,
+            "at_peak_counts": {
+              "native_runtime": 9,
+              "other_python_child": 1,
+              "sdk_worker": 2,
+              "benchmark_daemon_host": 1,
+              "python_bridge": 1
+            },
+            "at_peak_rss_by_kind": {
+              "native_runtime": 244645888,
+              "other_python_child": 27328512,
+              "sdk_worker": 120569856,
+              "benchmark_daemon_host": 157990912,
+              "python_bridge": 30375936
+            },
+            "maximum_counts": {
+              "native_runtime": 9,
+              "python_bridge": 1,
+              "sdk_worker": 2,
+              "other_python_child": 1,
+              "benchmark_daemon_host": 1
+            },
+            "includes_observed_reparented_children": true,
+            "shared_pages_may_be_counted_in_multiple_processes": true
+          }
+        },
+        "16": {
+          "latency": {
+            "count": 80,
+            "p50_ms": 82.338,
+            "p95_ms": 114.861,
+            "p99_ms": 122.074,
+            "max_ms": 122.074
+          },
+          "routes": {
+            "native_resident": 80
+          },
+          "errors": 0,
+          "allowed": 80,
+          "explicit_capacity": 0,
+          "unclassified_refusals": 0,
+          "successful_overlapping_compiles": 20,
+          "memory": {
+            "samples": 7,
+            "sampling_errors": 0,
+            "median_rss_bytes": 580861952,
+            "peak_rss_bytes": 581042176,
+            "at_peak_counts": {
+              "native_runtime": 9,
+              "other_python_child": 1,
+              "sdk_worker": 2,
+              "benchmark_daemon_host": 1,
+              "python_bridge": 1
+            },
+            "at_peak_rss_by_kind": {
+              "native_runtime": 244760576,
+              "other_python_child": 27328512,
+              "sdk_worker": 120569856,
+              "benchmark_daemon_host": 158007296,
+              "python_bridge": 30375936
+            },
+            "maximum_counts": {
+              "native_runtime": 9,
+              "python_bridge": 1,
+              "sdk_worker": 2,
+              "other_python_child": 1,
+              "benchmark_daemon_host": 1
+            },
+            "includes_observed_reparented_children": true,
+            "shared_pages_may_be_counted_in_multiple_processes": true
+          }
+        },
+        "64": {
+          "latency": {
+            "count": 320,
+            "p50_ms": 267.634,
+            "p95_ms": 440.221,
+            "p99_ms": 476.113,
+            "max_ms": 485.36
+          },
+          "routes": {
+            "native_resident": 320
+          },
+          "errors": 0,
+          "allowed": 320,
+          "explicit_capacity": 0,
+          "unclassified_refusals": 0,
+          "successful_overlapping_compiles": 80,
+          "memory": {
+            "samples": 27,
+            "sampling_errors": 0,
+            "median_rss_bytes": 582795264,
+            "peak_rss_bytes": 585170944,
+            "at_peak_counts": {
+              "native_runtime": 9,
+              "other_python_child": 1,
+              "sdk_worker": 2,
+              "benchmark_daemon_host": 1,
+              "python_bridge": 1
+            },
+            "at_peak_rss_by_kind": {
+              "native_runtime": 245415936,
+              "other_python_child": 27328512,
+              "sdk_worker": 120569856,
+              "benchmark_daemon_host": 161480704,
+              "python_bridge": 30375936
+            },
+            "maximum_counts": {
+              "native_runtime": 9,
+              "python_bridge": 1,
+              "sdk_worker": 2,
+              "other_python_child": 1,
+              "benchmark_daemon_host": 1
+            },
+            "includes_observed_reparented_children": true,
+            "shared_pages_may_be_counted_in_multiple_processes": true
+          }
+        }
+      },
+      "native_readiness_ms": 0.8833329193294048,
+      "candidate_activation_ms": 21062.01275018975,
+      "rss_baseline": {
+        "samples": 12,
+        "sampling_errors": 0,
+        "median_rss_bytes": 580575232,
+        "peak_rss_bytes": 580780032,
+        "at_peak_counts": {
+          "native_runtime": 9,
+          "other_python_child": 1,
+          "sdk_worker": 2,
+          "benchmark_daemon_host": 1,
+          "python_bridge": 1
+        },
+        "at_peak_rss_by_kind": {
+          "native_runtime": 244613120,
+          "other_python_child": 27328512,
+          "sdk_worker": 120537088,
+          "benchmark_daemon_host": 157925376,
+          "python_bridge": 30375936
+        },
+        "maximum_counts": {
+          "native_runtime": 9,
+          "python_bridge": 1,
+          "sdk_worker": 2,
+          "other_python_child": 1,
+          "benchmark_daemon_host": 1
+        },
+        "includes_observed_reparented_children": true,
+        "shared_pages_may_be_counted_in_multiple_processes": true
+      },
+      "direct_adapter_warm": {
+        "p50_ms": 3.055,
+        "p95_ms": 5.768,
+        "p99_ms": 7.456,
+        "max_ms": 8.493
+      },
+      "successful_direct_overlapping_compiles": 32,
+      "context_workload": {
+        "successful_compiles": 317,
+        "latency": {
+          "count": 317,
+          "p50_ms": 10.427,
+          "p95_ms": 22.034,
+          "p99_ms": 32.065,
+          "max_ms": 38.576
+        },
+        "latency_sample_every": 1,
+        "refusals": {},
+        "distinct_graph_revisions": 1,
+        "unchanged_graph_revision_reused": true,
+        "internal_tokenization_work_measured": false
+      },
+      "all_observed_processes": {
+        "samples": 520,
+        "sampling_errors": 0,
+        "median_rss_bytes": 951533568,
+        "peak_rss_bytes": 1386823680,
+        "at_peak_counts": {
+          "native_runtime": 4,
+          "benchmark_daemon_host": 1,
+          "python_bridge": 1,
+          "sdk_worker": 1
+        },
+        "at_peak_rss_by_kind": {
+          "native_runtime": 144801792,
+          "benchmark_daemon_host": 1152532480,
+          "python_bridge": 29245440,
+          "sdk_worker": 60243968
+        },
+        "maximum_counts": {
+          "native_runtime": 10,
+          "python_bridge": 1,
+          "sdk_worker": 2,
+          "other_descendant": 1,
+          "other_python_child": 1,
+          "benchmark_daemon_host": 1,
+          "terminated_child": 1
+        },
+        "includes_observed_reparented_children": true,
+        "shared_pages_may_be_counted_in_multiple_processes": true
+      },
+      "steady_rss_growth": 0.007915790661906952,
+      "gates": {
+        "direct_warm_p95_20ms": true,
+        "installed_warm_p95_1000ms": true,
+        "installed_c16_p99_1000ms": true,
+        "no_request_errors_or_unclassified_refusals": true,
+        "complete_observed_tree_rss_growth_12_percent": true,
+        "process_sampling_complete": true,
+        "optional_worker_coverage": true,
+        "real_compile_overlap": true,
+        "no_unexpected_context_refusals": true,
+        "unchanged_graph_revision_reused": true,
+        "strict_final_stop": true,
+        "all_observed_live_descendants_contained": true,
+        "daemon_shutdown_contained": true
+      },
+      "cleanup": {
+        "final_stop_status": "already-stopped",
+        "retained_stop_status": "already-stopped",
+        "recovery_used": false,
+        "daemon_stop_contained": true,
+        "observed_at_end": {
+          "rss_bytes": 156942336,
+          "counts": {
+            "benchmark_daemon_host": 1
+          },
+          "rss_by_kind": {
+            "benchmark_daemon_host": 156942336
+          }
+        },
+        "live_descendants_remaining": 0
+      }
+    },
+    "source_sha256": {
+      "scripts/cigar_context_profile.py": "b91b5f40667c4e3988776e9851c44d7709c65e567d090ecad57b644de88d0318",
+      "scripts/cigar_thread_profile.py": "a1a2c2cfda4c5783e7b755711895c9715b041d8b843d06f74a08679cd6d8ebca",
+      "scripts/bench_guard_cigar_context_cpu.py": "b96e32f696d43d417416de7894cc9a3f5278e7aa043904bd0d8bfae4f69506f7",
+      "tests/test_cigar_context_profile.py": "1e252e56dddcebcde838d66ffb23805a0dc4dfd4a70cf8fefe47bc109324a86a",
+      "tests/test_cigar_thread_profile.py": "13db19844cf2256c4c1f88d238fdffa3e3b4beeafb7e4577d24343d948c975de"
+    }
+  },
+  "upstream_evidence": [
+    {
+      "url": "https://raw.githubusercontent.com/python/cpython/v3.12.13/Modules/_lsprof.c",
+      "observed": "Exact-version cProfile implementation registers sys.monitoring events and has one currentProfilerContext in its profiler object. Together with observed foreign frames, this invalidates thread-only attribution."
+    },
+    {
+      "url": "https://github.com/python/cpython/issues/124656",
+      "observed": "Upstream CPython issue documents Python 3.12 profiler tool sharing across threads; issue discussion is distinguished from version-tagged source."
+    },
+    {
+      "url": "https://docs.python.org/3.12/library/sys.html#sys.setprofile",
+      "observed": "Legacy profile hook is documented as thread-specific; it supplies Python call/return events. Wall timing still includes descheduling, so an independent thread CPU clock is retained."
+    }
+  ],
+  "interpretation": [
+    "Eight privacy/clock/thread-isolation/exception-restoration regressions pass; the corrected installed diagnostic passes all thirteen original gates.",
+    "Every sixteenth context compile is sampled with a thread-specific legacy hook. Nineteen samples finish with no foreign events or clock errors.",
+    "The context worker records 0.346190959 total CPU seconds across 7.932015583 elapsed seconds and 317 successful compiles. Profiling overhead is included; sampled times must not be extrapolated as uninstrumented latency.",
+    "Each sampled compile projects the isolated environment once. The nine importlib metadata search-root probes arise from one force-only compatibility-distribution discovery; production auto mode does not use that search.",
+    "Current environment projection iterates items, reading every value before filtering. A key-first projection can preserve admitted output while avoiding rejected-value reads; this remains a proposed source correction here.",
+    "Binary/manifest/path invalidation, approval authority, runtime Python gate and every measurement limit remain unchanged. No product efficiency benefit is claimed."
+  ]
+}

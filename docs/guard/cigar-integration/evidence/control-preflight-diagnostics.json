@@ -1,0 +1,1112 @@
+{
+  "schema": "guard-cigar-control-preflight-diagnostics.v1",
+  "product_source_commit": "d780af20d775564298c72e0e78616f7afd76e69a",
+  "diagnostic_only": true,
+  "product_qualification": false,
+  "instrumentation": {
+    "schema": "guard-cigar-worker-onefile-control-diagnostic-source.v1",
+    "original_entry_sha256": "1d29e69aedc213327168d31b1db0f1db0653528a3fdd50726884d5217690eff0",
+    "instrumented_entry_sha256": "3049ba239b13e736bac9dde3589ecb7027b8eee6fe615c65e7d50adbba329e72",
+    "actual_product_source_commit": "d780af20d775564298c72e0e78616f7afd76e69a",
+    "declared_cases": 1,
+    "diagnostic_only": true,
+    "product_qualification": false,
+    "observation": "Existing v2 bounded clocks/status reasons/capability booleans/native client budgets and result/failure codes on the called decision/context aliases; context CLI only",
+    "new_RPC_or_deadline_scope_policy_changes": false,
+    "failure_policy": "One fresh profile, stop on failure and retain all cleanup observations; original failed product case is not retried in its profile"
+  },
+  "instrumented_entry": {
+    "path": "/private/tmp/hol-guard-cigar-context-worker-reuse-20261025/onefile-control-diagnostic/entry/hol-guard-entry.py",
+    "bytes": 42972,
+    "sha256": "3049ba239b13e736bac9dde3589ecb7027b8eee6fe615c65e7d50adbba329e72"
+  },
+  "product_artifact": {
+    "source_commit": "d780af20d775564298c72e0e78616f7afd76e69a",
+    "layout": "PyInstaller 6.21.0 onefile development bundle",
+    "python": "3.12.13",
+    "binary": "/private/tmp/hol-guard-cigar-context-worker-reuse-20261025/onefile/dist/hol-guard",
+    "binary_sha256": "e47df99e8927e0897d8abfdc895a6afef6b5e4dce4b0cfbfc5ed18473ee8494a",
+    "binary_bytes": 55749312,
+    "operator_native": "/private/tmp/hol-guard-cigar-context-worker-reuse-20261025/onefile/operator-runtime/codex_plugin_scanner/_native/hol-guard-runtime",
+    "native_sha256": "30a6d246fb19de5d8fbda01039cd844cec62289d628f21b3c6f4ba6da42c80c1",
+    "native_bytes": 36786288,
+    "archive_declared_python": "libpython3.12.dylib",
+    "verified_static_files": 33,
+    "operator_files": 80,
+    "strict_outer_and_native_signature_verified": true,
+    "runtime_and_compiler_manifest_verified": true,
+    "signing": "local ad-hoc; no Developer ID/notarization qualification",
+    "functional_context_qualification": "pending"
+  },
+  "diagnostic_artifact": {
+    "source_commit": "d780af20d775564298c72e0e78616f7afd76e69a",
+    "layout": "PyInstaller 6.21.0 onefile development bundle",
+    "python": "3.12.13",
+    "binary": "/private/tmp/hol-guard-cigar-context-worker-reuse-20261025/onefile-control-diagnostic/dist/hol-guard",
+    "binary_sha256": "f620e1c43b1f670c9d75e58612acaf5b9fc8220f7c512dbf173ac793cab18bf8",
+    "binary_bytes": 55754160,
+    "operator_native": "/private/tmp/hol-guard-cigar-context-worker-reuse-20261025/onefile-control-diagnostic/operator-runtime/codex_plugin_scanner/_native/hol-guard-runtime",
+    "native_sha256": "30a6d246fb19de5d8fbda01039cd844cec62289d628f21b3c6f4ba6da42c80c1",
+    "native_bytes": 36786288,
+    "archive_declared_python": "libpython3.12.dylib",
+    "verified_static_files": 33,
+    "operator_files": 80,
+    "strict_outer_and_native_signature_verified": true,
+    "runtime_and_compiler_manifest_verified": true,
+    "signing": "local ad-hoc; no Developer ID/notarization qualification",
+    "functional_context_qualification": "diagnostic only; no product qualification"
+  },
+  "same_packaged_native_bytes": true,
+  "full_context_controller": {
+    "predeclared_cases": 1,
+    "diagnostic_only": true,
+    "schema": "guard-cigar-worker-onefile-control-diagnostic.v1",
+    "command": [
+      "/private/tmp/hol-guard-cigar-locked-runtime/bin/python",
+      "-m",
+      "pytest",
+      "-x",
+      "-q",
+      "-o",
+      "addopts=",
+      "--basetemp",
+      "/private/tmp/hol-guard-cigar-context-worker-reuse-20261025/onefile-control-diagnostic/acceptance/test-state",
+      "--junitxml",
+      "/private/tmp/hol-guard-cigar-context-worker-reuse-20261025/onefile-control-diagnostic/acceptance/results.xml",
+      "tests/test_context_frozen_installed.py::test_frozen_cli_and_mcp_with_running_host_use_python_314_and_persist_opt_out[1]"
+    ],
+    "returncode": 0,
+    "seconds": 45.5,
+    "tests": 1,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "installed_driver_with_explicit_bundled_test_native_selection": true,
+    "frozen_application_uses_minimal_environment_without_overrides": true,
+    "inputs_unchanged": true,
+    "fingerprinted_files": 4095
+  },
+  "full_context_report": {
+    "schema": "guard-cigar-frozen-context-installed.v1",
+    "fixed_fresh_profile_repetition": 1,
+    "completed": true,
+    "frozen_application_environment_keys": [
+      "HOME",
+      "LANG",
+      "PATH",
+      "TMPDIR"
+    ],
+    "application_native_mode": "auto; no native/test/SDK path override",
+    "operator_transport": "installed thin Python IPC explicitly selects verified native bytes from the frozen artifact",
+    "frozen_entry_sha256": "f620e1c43b1f670c9d75e58612acaf5b9fc8220f7c512dbf173ac793cab18bf8",
+    "bundled_native_sha256": "30a6d246fb19de5d8fbda01039cd844cec62289d628f21b3c6f4ba6da42c80c1",
+    "sources": {
+      "runtime-controls.md": "f85c5d0ff95ee60f1eb5e3bd730aeec71b6f133eb81e0e97d69c99ae0ee74538",
+      "agent-access.md": "4517c2e873ca352b16d0a25385d23330d317031f58e2bcad406eea67dd9ec92b"
+    },
+    "answers": [
+      {
+        "id": "separate-runtime",
+        "coverage": {
+          "a separate verified Python 3.14 environment is valid": true,
+          "Python 3.13, 3.15, prereleases, PyPy, debug and free-threaded builds do not qualify": true,
+          "approved CIGAR 0.14.1 package and matching bundled worker": true
+        },
+        "brief": {
+          "citations": [
+            {
+              "document_digest": "310d6074f328d0b16f6c6d6d9e0a9b562d05309df3e980d2d4509754f51e24a0",
+              "end_line": 1,
+              "node_id": "guard-policy-facts",
+              "source": "guard:policy",
+              "start_line": 1
+            },
+            {
+              "document_digest": "4f1419338de76eeb3438e8b3a5b0d5f0c1d30970cd55460cb565bec037844e8c",
+              "end_line": 41,
+              "node_id": "doc:e787371cb1a9fd43fa96f57df03b5c8b039f3f82477f78670ba70aa9af7ddff2:0",
+              "source": "source:e787371cb1a9fd43fa96f57df03b5c8b039f3f82477f78670ba70aa9af7ddff2",
+              "start_line": 1
+            }
+          ],
+          "data_role": true,
+          "excerpts": [
+            {
+              "citations": [
+                {
+                  "document_digest": "310d6074f328d0b16f6c6d6d9e0a9b562d05309df3e980d2d4509754f51e24a0",
+                  "end_line": 1,
+                  "node_id": "guard-policy-facts",
+                  "source": "guard:policy",
+                  "start_line": 1
+                }
+              ],
+              "text": "Guard provides Allow once and Always allow for supported executable reviews. Context assistance supplies data and grants no command approval."
+            },
+            {
+              "citations": [
+                {
+                  "document_digest": "4f1419338de76eeb3438e8b3a5b0d5f0c1d30970cd55460cb565bec037844e8c",
+                  "end_line": 41,
+                  "node_id": "doc:e787371cb1a9fd43fa96f57df03b5c8b039f3f82477f78670ba70aa9af7ddff2:0",
+                  "source": "source:e787371cb1a9fd43fa96f57df03b5c8b039f3f82477f78670ba70aa9af7ddff2",
+                  "start_line": 1
+                }
+              ],
+              "text": "# Development runtime controls\n\nThe optional native service has configuration, local candidate enrollment, runtime controls and explicit workspace/source grants. The Protection panel and public CLI project those APIs. The full integration remains under implementation. See the [execution log](EXECUTION_LOG.md) for exact qualification scope and outstanding checks.\n\n## End-user controls\n\nOpen **Protection \u2192 Context assistance**. Choose an enrolled runtime, select preferences and save through Guard's existing settings/proof flow. Saving opt-in does not report a running runtime. **Start context assistance** performs native process verification in the background. **Turn off now** cancels work, closes the active capability and persists opt-out without clearing Guard approvals or other preferences.\n\nHome also shows native context readiness, a link to its Protection settings and **Turn off context assistance** when an enabled preference or pending job is known. Opening Home reads status only; it does not start or probe a runtime. Context status failures are separate from Guard protection and approval controls.\n\nThese CLI commands reach the same resident-owned service:\n\n| Command | Behavior |\n| --- | --- |\n| `hol-guard context status --json` | Read native state; no CIGAR probe, import or installation |\n| `hol-guard context runtimes --json` | Explicit metadata-only listing of enrolled local candidates |\n| `hol-guard context check --json` | Schedule selected-runtime verification; an off preference stays off |\n| `hol-guard context start --json` | Verify and activate only an already saved, enabled selection |\n| `hol-guard context off --json` | Cancel/stop optional work and persist opt-out |\n\nEach accepts `--guard-home` for an explicit installation. The commands also work below the scanner's `guard` command. Human output reports native requested/effective state and any pending job. JSON preserves opaque revisions as strings. Neither entry point accepts interpreter facts, executable paths or approval fingerprints as activation authority. There is no CLI shortcut that creates user consent.\n\nA successful start response can mean a background verification job was accepted. Read status for its result. A transport timeout is an unknown result: inspect status before another start request. The service does not automatically retry a mutation after an uncertain outcome.\n\nKeep Guard's desktop app or daemon running for `check`, `start` and context tools. These commands control the existing service; they do not launch a persistent Guard host. If a standalone CLI invocation accepts a job but subsequent status reports `runtime_not_verified`, open Guard and explicitly start assistance again. Off-state status and runtime listing remain available.\n\n## Runtime requirement\n\nThe actual selected executable must be a verified final CPython 3.14 process with the supported build/ABI, approved CIGAR 0.14.1 package and matching bundled worker. Python 3.13, 3.15, prereleases, PyPy, debug and free-threaded builds do not qualify. Guard retains its broader base Python support; a separate verified Python 3.14 environment is valid. The dashboard reports the Guard host's state, including when viewed from another device.\n\nCurrent installed development evidence covers darwin-arm64 only. Windows activation explicitly refuses until persistent Job Object transport is implemented and qualified. The existence of an eligibility predicate for another platform is not platform qualification.\n\n## Local candidate enrollment\n\nPublic package installation and its product setup experience remain pending. Development tests use the explicitly staged, independently approved local candidate described in the [runtime receipt](evidence/runtime-development-verification.json). No system Python or live Guard installation is changed by those tests.\n\nThe native operator command is `context-assistance-enroll-local --stdin` on the matching `hol-guard-runtime` binary. Its JSON request has these fields:\n\n| Field | Meaning |\n| --- | --- |\n| `schema` | `guard-cigar-enroll-local.v1` |\n"
+            }
+          ],
+          "graph_revision": 3,
+          "policy_revision": "c19a26b6f95055de4ffd1a94c920d3073816c2a42be6b151e8f3d2aa6d08a963",
+          "rendered": "{\"sources\":[[\"guard-policy-facts\",\"guard:policy\",1,1]],\"text\":\"Guard provides Allow once and Always allow for supported executable reviews. Context assistance supplies data and grants no command approval.\"}\n{\"sources\":[[\"doc:e787371cb1a9fd43fa96f57df03b5c8b039f3f82477f78670ba70aa9af7ddff2:0\",\"source:e787371cb1a9fd43fa96f57df03b5c8b039f3f82477f78670ba70aa9af7ddff2\",1,41]],\"text\":\"# Development runtime controls\\n\\nThe optional native service has configuration, local candidate enrollment, runtime controls and explicit workspace/source grants. The Protection panel and public CLI project those APIs. The full integration remains under implementation. See the [execution log](EXECUTION_LOG.md) for exact qualification scope and outstanding checks.\\n\\n## End-user controls\\n\\nOpen **Protection \u2192 Context assistance**. Choose an enrolled runtime, select preferences and save through Guard's existing settings/proof flow. Saving opt-in does not report a running runtime. **Start context assistance** performs native process verification in the background. **Turn off now** cancels work, closes the active capability and persists opt-out without clearing Guard approvals or other preferences.\\n\\nHome also shows native context readiness, a link to its Protection settings and **Turn off context assistance** when an enabled preference or pending job is known. Opening Home reads status only; it does not start or probe a runtime. Context status failures are separate from Guard protection and approval controls.\\n\\nThese CLI commands reach the same resident-owned service:\\n\\n| Command | Behavior |\\n| --- | --- |\\n| `hol-guard context status --json` | Read native state; no CIGAR probe, import or installation |\\n| `hol-guard context runtimes --json` | Explicit metadata-only listing of enrolled local candidates |\\n| `hol-guard context check --json` | Schedule selected-runtime verification; an off preference stays off |\\n| `hol-guard context start --json` | Verify and activate only an already saved, enabled selection |\\n| `hol-guard context off --json` | Cancel/stop optional work and persist opt-out |\\n\\nEach accepts `--guard-home` for an explicit installation. The commands also work below the scanner's `guard` command. Human output reports native requested/effective state and any pending job. JSON preserves opaque revisions as strings. Neither entry point accepts interpreter facts, executable paths or approval fingerprints as activation authority. There is no CLI shortcut that creates user consent.\\n\\nA successful start response can mean a background verification job was accepted. Read status for its result. A transport timeout is an unknown result: inspect status before another start request. The service does not automatically retry a mutation after an uncertain outcome.\\n\\nKeep Guard's desktop app or daemon running for `check`, `start` and context tools. These commands control the existing service; they do not launch a persistent Guard host. If a standalone CLI invocation accepts a job but subsequent status reports `runtime_not_verified`, open Guard and explicitly start assistance again. Off-state status and runtime listing remain available.\\n\\n## Runtime requirement\\n\\nThe actual selected executable must be a verified final CPython 3.14 process with the supported build/ABI, approved CIGAR 0.14.1 package and matching bundled worker. Python 3.13, 3.15, prereleases, PyPy, debug and free-threaded builds do not qualify. Guard retains its broader base Python support; a separate verified Python 3.14 environment is valid. The dashboard reports the Guard host's state, including when viewed from another device.\\n\\nCurrent installed development evidence covers darwin-arm64 only. Windows activation explicitly refuses until persistent Job Object transport is implemented and qualified. The existence of an eligibility predicate for another platform is not platform qualification.\\n\\n## Local candidate enrollment\\n\\nPublic package installation and its product setup experience remain pending. Development tests use the explicitly staged, independently approved local candidate described in the [runtime receipt](evidence/runtime-development-verification.json). No system Python or live Guard installation is changed by those tests.\\n\\nThe native operator command is `context-assistance-enroll-local --stdin` on the matching `hol-guard-runtime` binary. Its JSON request has these fields:\\n\\n| Field | Meaning |\\n| --- | --- |\\n| `schema` | `guard-cigar-enroll-local.v1` |\\n\"}",
+          "rendered_tokens": 947,
+          "schema": "guard-cigar-context-brief.v1",
+          "snapshot_id": "655c1cc2243c817d260a172dbfde341743eadd8f45ee31d99eb142a85446064c"
+        },
+        "citations": [
+          {
+            "document": "runtime-controls.md",
+            "start_line": 1,
+            "end_line": 41
+          }
+        ]
+      },
+      {
+        "id": "agent-authority",
+        "coverage": {
+          "A dashboard grant cannot authorize an agent": true,
+          "human_paired_mcp_process": true,
+          "harness_route_qualification: not_established": true,
+          "not a claim that Guard has attested that app's executable": true
+        },
+        "brief": {
+          "citations": [
+            {
+              "document_digest": "310d6074f328d0b16f6c6d6d9e0a9b562d05309df3e980d2d4509754f51e24a0",
+              "end_line": 1,
+              "node_id": "guard-policy-facts",
+              "source": "guard:policy",
+              "start_line": 1
+            },
+            {
+              "document_digest": "200da7221752078f482c7be8814862496a6fb8b3ab8d6e0ddd188613a8bb80d0",
+              "end_line": 24,
+              "node_id": "doc:5255fb14670ce0094892742bb1849d03c74ce208f0ba096942a820a5b6510e83:0",
+              "source": "source:5255fb14670ce0094892742bb1849d03c74ce208f0ba096942a820a5b6510e83",
+              "start_line": 1
+            }
+          ],
+          "data_role": true,
+          "excerpts": [
+            {
+              "citations": [
+                {
+                  "document_digest": "310d6074f328d0b16f6c6d6d9e0a9b562d05309df3e980d2d4509754f51e24a0",
+                  "end_line": 1,
+                  "node_id": "guard-policy-facts",
+                  "source": "guard:policy",
+                  "start_line": 1
+                }
+              ],
+              "text": "Guard provides Allow once and Always allow for supported executable reviews. Context assistance supplies data and grants no command approval."
+            },
+            {
+              "citations": [
+                {
+                  "document_digest": "200da7221752078f482c7be8814862496a6fb8b3ab8d6e0ddd188613a8bb80d0",
+                  "end_line": 24,
+                  "node_id": "doc:5255fb14670ce0094892742bb1849d03c74ce208f0ba096942a820a5b6510e83:0",
+                  "source": "source:5255fb14670ce0094892742bb1849d03c74ce208f0ba096942a820a5b6510e83",
+                  "start_line": 1
+                }
+              ],
+              "text": "# Paired MCP context access\n\nContext assistance is optional and off by default. The native service must verify the actual selected final CPython 3.14 process, CIGAR 0.14.1 package and approved worker before it accepts a context connection. Guard and its MCP server can continue using a different supported Python.\n\n## Connect an app\n\n1. In Protection, enable **Context for AI apps**, save preferences and start the verified runtime.\n2. Under Workspace context access, choose the app as the **Context consumer**, choose the workspace and explicitly selected files, and approve the source grant. A dashboard grant cannot authorize an agent.\n3. Configure the app to run the existing Guard MCP command, `hol-guard mcp serve --stdio`. Use `--guard-home` if selecting a separate Guard installation. This is a standard MCP stdio route; native app launch/extension qualification is reported separately.\n4. Ask the app to call `get_context_status`. Match its public connection code in **AI app context connections**, select the workspace/app grant and approve the connection using Guard's existing proof flow.\n5. Call `get_context_status` again to refresh discovery. The server advertises tool-list change notifications. The paired connection can use `get_guard_context` and `explain_guard_context` for its granted sources.\n\nThe current UI offers Codex, Claude Code and Cursor as permission targets. Pairing authenticates the MCP process that owns the private credential. The app label is the user's permission choice, not a claim that Guard has attested that app's executable or qualified every harness route. Current native status reports `identity_binding: human_paired_mcp_process` and `harness_route_qualification: not_established`. The actual generic MCP stdio protocol is tested; installed app routes remain required qualification work.\n\n## Authority and privacy\n\nThe host generates a public connection code and a separate random 256-bit private credential. Only the authenticated native application IPC returns that credential to the MCP process. It is held privately in that process, and only its digest is retained in the native session table. No HTTP route creates a session or returns its credential. MCP tool arguments, prompts, argv, environment, browser payloads, operator lists, SDK context and diagnostics do not carry the credential. Debug formatting redacts it.\n\nOnly an existing proof-protected operator grant can bind a pending connection to an app/workspace scope. Reads and access-reduction routes cannot authorize. The native backend derives the scope from that authenticated session on every call; there are no caller-selected app, workspace, source, scope or runtime fields in context tools. Nested tool arguments are validated in Rust, including when FastMCP would otherwise convert or discard extra function arguments.\n\nEach connection can explain only snapshots it prepared. A replacement connection cannot reuse the preceding connection's retained snapshots, even if the owner later gives it the same app scope. Current source, workspace policy, effective feature flags, runtime generation, lease and snapshot checks still apply. Context is supporting data and gives no command approval or execution confirmation. Logical scopes are not OS isolation between hostile processes running as the same user.\n\n## Limits and recovery\n\n"
+            }
+          ],
+          "graph_revision": 3,
+          "policy_revision": "c19a26b6f95055de4ffd1a94c920d3073816c2a42be6b151e8f3d2aa6d08a963",
+          "rendered": "{\"sources\":[[\"guard-policy-facts\",\"guard:policy\",1,1]],\"text\":\"Guard provides Allow once and Always allow for supported executable reviews. Context assistance supplies data and grants no command approval.\"}\n{\"sources\":[[\"doc:5255fb14670ce0094892742bb1849d03c74ce208f0ba096942a820a5b6510e83:0\",\"source:5255fb14670ce0094892742bb1849d03c74ce208f0ba096942a820a5b6510e83\",1,24]],\"text\":\"# Paired MCP context access\\n\\nContext assistance is optional and off by default. The native service must verify the actual selected final CPython 3.14 process, CIGAR 0.14.1 package and approved worker before it accepts a context connection. Guard and its MCP server can continue using a different supported Python.\\n\\n## Connect an app\\n\\n1. In Protection, enable **Context for AI apps**, save preferences and start the verified runtime.\\n2. Under Workspace context access, choose the app as the **Context consumer**, choose the workspace and explicitly selected files, and approve the source grant. A dashboard grant cannot authorize an agent.\\n3. Configure the app to run the existing Guard MCP command, `hol-guard mcp serve --stdio`. Use `--guard-home` if selecting a separate Guard installation. This is a standard MCP stdio route; native app launch/extension qualification is reported separately.\\n4. Ask the app to call `get_context_status`. Match its public connection code in **AI app context connections**, select the workspace/app grant and approve the connection using Guard's existing proof flow.\\n5. Call `get_context_status` again to refresh discovery. The server advertises tool-list change notifications. The paired connection can use `get_guard_context` and `explain_guard_context` for its granted sources.\\n\\nThe current UI offers Codex, Claude Code and Cursor as permission targets. Pairing authenticates the MCP process that owns the private credential. The app label is the user's permission choice, not a claim that Guard has attested that app's executable or qualified every harness route. Current native status reports `identity_binding: human_paired_mcp_process` and `harness_route_qualification: not_established`. The actual generic MCP stdio protocol is tested; installed app routes remain required qualification work.\\n\\n## Authority and privacy\\n\\nThe host generates a public connection code and a separate random 256-bit private credential. Only the authenticated native application IPC returns that credential to the MCP process. It is held privately in that process, and only its digest is retained in the native session table. No HTTP route creates a session or returns its credential. MCP tool arguments, prompts, argv, environment, browser payloads, operator lists, SDK context and diagnostics do not carry the credential. Debug formatting redacts it.\\n\\nOnly an existing proof-protected operator grant can bind a pending connection to an app/workspace scope. Reads and access-reduction routes cannot authorize. The native backend derives the scope from that authenticated session on every call; there are no caller-selected app, workspace, source, scope or runtime fields in context tools. Nested tool arguments are validated in Rust, including when FastMCP would otherwise convert or discard extra function arguments.\\n\\nEach connection can explain only snapshots it prepared. A replacement connection cannot reuse the preceding connection's retained snapshots, even if the owner later gives it the same app scope. Current source, workspace policy, effective feature flags, runtime generation, lease and snapshot checks still apply. Context is supporting data and gives no command approval or execution confirmation. Logical scopes are not OS isolation between hostile processes running as the same user.\\n\\n## Limits and recovery\\n\\n\"}",
+          "rendered_tokens": 787,
+          "schema": "guard-cigar-context-brief.v1",
+          "snapshot_id": "66317ac6b6e246d43fc92de2e83dbcd1eed3526b0b40ec95dc95de114cddd68a"
+        },
+        "citations": [
+          {
+            "document": "agent-access.md",
+            "start_line": 1,
+            "end_line": 24
+          }
+        ]
+      },
+      {
+        "id": "safe-opt-out",
+        "coverage": {
+          "persists opt-out without clearing Guard approvals": true,
+          "Opening Home reads status only; it does not start or probe a runtime": true,
+          "no CIGAR probe, import or installation": true
+        },
+        "brief": {
+          "citations": [
+            {
+              "document_digest": "310d6074f328d0b16f6c6d6d9e0a9b562d05309df3e980d2d4509754f51e24a0",
+              "end_line": 1,
+              "node_id": "guard-policy-facts",
+              "source": "guard:policy",
+              "start_line": 1
+            },
+            {
+              "document_digest": "4f1419338de76eeb3438e8b3a5b0d5f0c1d30970cd55460cb565bec037844e8c",
+              "end_line": 41,
+              "node_id": "doc:e787371cb1a9fd43fa96f57df03b5c8b039f3f82477f78670ba70aa9af7ddff2:0",
+              "source": "source:e787371cb1a9fd43fa96f57df03b5c8b039f3f82477f78670ba70aa9af7ddff2",
+              "start_line": 1
+            }
+          ],
+          "data_role": true,
+          "excerpts": [
+            {
+              "citations": [
+                {
+                  "document_digest": "310d6074f328d0b16f6c6d6d9e0a9b562d05309df3e980d2d4509754f51e24a0",
+                  "end_line": 1,
+                  "node_id": "guard-policy-facts",
+                  "source": "guard:policy",
+                  "start_line": 1
+                }
+              ],
+              "text": "Guard provides Allow once and Always allow for supported executable reviews. Context assistance supplies data and grants no command approval."
+            },
+            {
+              "citations": [
+                {
+                  "document_digest": "4f1419338de76eeb3438e8b3a5b0d5f0c1d30970cd55460cb565bec037844e8c",
+                  "end_line": 41,
+                  "node_id": "doc:e787371cb1a9fd43fa96f57df03b5c8b039f3f82477f78670ba70aa9af7ddff2:0",
+                  "source": "source:e787371cb1a9fd43fa96f57df03b5c8b039f3f82477f78670ba70aa9af7ddff2",
+                  "start_line": 1
+                }
+              ],
+              "text": "# Development runtime controls\n\nThe optional native service has configuration, local candidate enrollment, runtime controls and explicit workspace/source grants. The Protection panel and public CLI project those APIs. The full integration remains under implementation. See the [execution log](EXECUTION_LOG.md) for exact qualification scope and outstanding checks.\n\n## End-user controls\n\nOpen **Protection \u2192 Context assistance**. Choose an enrolled runtime, select preferences and save through Guard's existing settings/proof flow. Saving opt-in does not report a running runtime. **Start context assistance** performs native process verification in the background. **Turn off now** cancels work, closes the active capability and persists opt-out without clearing Guard approvals or other preferences.\n\nHome also shows native context readiness, a link to its Protection settings and **Turn off context assistance** when an enabled preference or pending job is known. Opening Home reads status only; it does not start or probe a runtime. Context status failures are separate from Guard protection and approval controls.\n\nThese CLI commands reach the same resident-owned service:\n\n| Command | Behavior |\n| --- | --- |\n| `hol-guard context status --json` | Read native state; no CIGAR probe, import or installation |\n| `hol-guard context runtimes --json` | Explicit metadata-only listing of enrolled local candidates |\n| `hol-guard context check --json` | Schedule selected-runtime verification; an off preference stays off |\n| `hol-guard context start --json` | Verify and activate only an already saved, enabled selection |\n| `hol-guard context off --json` | Cancel/stop optional work and persist opt-out |\n\nEach accepts `--guard-home` for an explicit installation. The commands also work below the scanner's `guard` command. Human output reports native requested/effective state and any pending job. JSON preserves opaque revisions as strings. Neither entry point accepts interpreter facts, executable paths or approval fingerprints as activation authority. There is no CLI shortcut that creates user consent.\n\nA successful start response can mean a background verification job was accepted. Read status for its result. A transport timeout is an unknown result: inspect status before another start request. The service does not automatically retry a mutation after an uncertain outcome.\n\nKeep Guard's desktop app or daemon running for `check`, `start` and context tools. These commands control the existing service; they do not launch a persistent Guard host. If a standalone CLI invocation accepts a job but subsequent status reports `runtime_not_verified`, open Guard and explicitly start assistance again. Off-state status and runtime listing remain available.\n\n## Runtime requirement\n\nThe actual selected executable must be a verified final CPython 3.14 process with the supported build/ABI, approved CIGAR 0.14.1 package and matching bundled worker. Python 3.13, 3.15, prereleases, PyPy, debug and free-threaded builds do not qualify. Guard retains its broader base Python support; a separate verified Python 3.14 environment is valid. The dashboard reports the Guard host's state, including when viewed from another device.\n\nCurrent installed development evidence covers darwin-arm64 only. Windows activation explicitly refuses until persistent Job Object transport is implemented and qualified. The existence of an eligibility predicate for another platform is not platform qualification.\n\n## Local candidate enrollment\n\nPublic package installation and its product setup experience remain pending. Development tests use the explicitly staged, independently approved local candidate described in the [runtime receipt](evidence/runtime-development-verification.json). No system Python or live Guard installation is changed by those tests.\n\nThe native operator command is `context-assistance-enroll-local --stdin` on the matching `hol-guard-runtime` binary. Its JSON request has these fields:\n\n| Field | Meaning |\n| --- | --- |\n| `schema` | `guard-cigar-enroll-local.v1` |\n"
+            }
+          ],
+          "graph_revision": 3,
+          "policy_revision": "c19a26b6f95055de4ffd1a94c920d3073816c2a42be6b151e8f3d2aa6d08a963",
+          "rendered": "{\"sources\":[[\"guard-policy-facts\",\"guard:policy\",1,1]],\"text\":\"Guard provides Allow once and Always allow for supported executable reviews. Context assistance supplies data and grants no command approval.\"}\n{\"sources\":[[\"doc:e787371cb1a9fd43fa96f57df03b5c8b039f3f82477f78670ba70aa9af7ddff2:0\",\"source:e787371cb1a9fd43fa96f57df03b5c8b039f3f82477f78670ba70aa9af7ddff2\",1,41]],\"text\":\"# Development runtime controls\\n\\nThe optional native service has configuration, local candidate enrollment, runtime controls and explicit workspace/source grants. The Protection panel and public CLI project those APIs. The full integration remains under implementation. See the [execution log](EXECUTION_LOG.md) for exact qualification scope and outstanding checks.\\n\\n## End-user controls\\n\\nOpen **Protection \u2192 Context assistance**. Choose an enrolled runtime, select preferences and save through Guard's existing settings/proof flow. Saving opt-in does not report a running runtime. **Start context assistance** performs native process verification in the background. **Turn off now** cancels work, closes the active capability and persists opt-out without clearing Guard approvals or other preferences.\\n\\nHome also shows native context readiness, a link to its Protection settings and **Turn off context assistance** when an enabled preference or pending job is known. Opening Home reads status only; it does not start or probe a runtime. Context status failures are separate from Guard protection and approval controls.\\n\\nThese CLI commands reach the same resident-owned service:\\n\\n| Command | Behavior |\\n| --- | --- |\\n| `hol-guard context status --json` | Read native state; no CIGAR probe, import or installation |\\n| `hol-guard context runtimes --json` | Explicit metadata-only listing of enrolled local candidates |\\n| `hol-guard context check --json` | Schedule selected-runtime verification; an off preference stays off |\\n| `hol-guard context start --json` | Verify and activate only an already saved, enabled selection |\\n| `hol-guard context off --json` | Cancel/stop optional work and persist opt-out |\\n\\nEach accepts `--guard-home` for an explicit installation. The commands also work below the scanner's `guard` command. Human output reports native requested/effective state and any pending job. JSON preserves opaque revisions as strings. Neither entry point accepts interpreter facts, executable paths or approval fingerprints as activation authority. There is no CLI shortcut that creates user consent.\\n\\nA successful start response can mean a background verification job was accepted. Read status for its result. A transport timeout is an unknown result: inspect status before another start request. The service does not automatically retry a mutation after an uncertain outcome.\\n\\nKeep Guard's desktop app or daemon running for `check`, `start` and context tools. These commands control the existing service; they do not launch a persistent Guard host. If a standalone CLI invocation accepts a job but subsequent status reports `runtime_not_verified`, open Guard and explicitly start assistance again. Off-state status and runtime listing remain available.\\n\\n## Runtime requirement\\n\\nThe actual selected executable must be a verified final CPython 3.14 process with the supported build/ABI, approved CIGAR 0.14.1 package and matching bundled worker. Python 3.13, 3.15, prereleases, PyPy, debug and free-threaded builds do not qualify. Guard retains its broader base Python support; a separate verified Python 3.14 environment is valid. The dashboard reports the Guard host's state, including when viewed from another device.\\n\\nCurrent installed development evidence covers darwin-arm64 only. Windows activation explicitly refuses until persistent Job Object transport is implemented and qualified. The existence of an eligibility predicate for another platform is not platform qualification.\\n\\n## Local candidate enrollment\\n\\nPublic package installation and its product setup experience remain pending. Development tests use the explicitly staged, independently approved local candidate described in the [runtime receipt](evidence/runtime-development-verification.json). No system Python or live Guard installation is changed by those tests.\\n\\nThe native operator command is `context-assistance-enroll-local --stdin` on the matching `hol-guard-runtime` binary. Its JSON request has these fields:\\n\\n| Field | Meaning |\\n| --- | --- |\\n| `schema` | `guard-cigar-enroll-local.v1` |\\n\"}",
+          "rendered_tokens": 947,
+          "schema": "guard-cigar-context-brief.v1",
+          "snapshot_id": "c12562724a23d3c36731331f99178e29170bdeb24d3beacf9982a51922d78974"
+        },
+        "citations": [
+          {
+            "document": "runtime-controls.md",
+            "start_line": 1,
+            "end_line": 41
+          }
+        ]
+      }
+    ],
+    "external_model_calls": 0,
+    "persistent_frozen_daemon_requested": true,
+    "persistent_frozen_daemon_ready": true,
+    "native_transport_observations": [
+      {
+        "action": "status",
+        "data": {
+          "schema": "guard-cigar-native-transport-observation.v2",
+          "status_calls": [
+            {
+              "mode": "auto",
+              "available": true,
+              "compatible": true,
+              "reason": "native_ready",
+              "status_ms": 435.42,
+              "native_sha256": "30a6d246fb19de5d8fbda01039cd844cec62289d628f21b3c6f4ba6da42c80c1",
+              "context_control_feature": true
+            }
+          ],
+          "request_calls": [
+            {
+              "caller": "native_execution",
+              "wall_ms": 76.77,
+              "budget_seconds": 1.5644147079437971,
+              "response_present": true,
+              "resident_failure_code": null
+            }
+          ],
+          "resident_failure_code": null
+        }
+      },
+      {
+        "action": "runtimes",
+        "data": {
+          "schema": "guard-cigar-native-transport-observation.v2",
+          "status_calls": [
+            {
+              "mode": "auto",
+              "available": true,
+              "compatible": true,
+              "reason": "native_ready",
+              "status_ms": 1622.173,
+              "native_sha256": "30a6d246fb19de5d8fbda01039cd844cec62289d628f21b3c6f4ba6da42c80c1",
+              "context_control_feature": true
+            }
+          ],
+          "request_calls": [
+            {
+              "caller": "native_execution",
+              "wall_ms": 75.864,
+              "budget_seconds": 0.3776502497494221,
+              "response_present": true,
+              "resident_failure_code": null
+            }
+          ],
+          "resident_failure_code": null
+        }
+      },
+      {
+        "action": "start",
+        "data": {
+          "schema": "guard-cigar-native-transport-observation.v2",
+          "status_calls": [
+            {
+              "mode": "auto",
+              "available": true,
+              "compatible": true,
+              "reason": "native_ready",
+              "status_ms": 438.297,
+              "native_sha256": "30a6d246fb19de5d8fbda01039cd844cec62289d628f21b3c6f4ba6da42c80c1",
+              "context_control_feature": true
+            }
+          ],
+          "request_calls": [
+            {
+              "caller": "native_execution",
+              "wall_ms": 75.414,
+              "budget_seconds": 1.561524416320026,
+              "response_present": true,
+              "resident_failure_code": null
+            }
+          ],
+          "resident_failure_code": null
+        }
+      },
+      {
+        "action": "status",
+        "data": {
+          "schema": "guard-cigar-native-transport-observation.v2",
+          "status_calls": [
+            {
+              "mode": "auto",
+              "available": true,
+              "compatible": true,
+              "reason": "native_ready",
+              "status_ms": 421.95,
+              "native_sha256": "30a6d246fb19de5d8fbda01039cd844cec62289d628f21b3c6f4ba6da42c80c1",
+              "context_control_feature": true
+            }
+          ],
+          "request_calls": [
+            {
+              "caller": "native_execution",
+              "wall_ms": 75.062,
+              "budget_seconds": 1.57787795830518,
+              "response_present": true,
+              "resident_failure_code": null
+            }
+          ],
+          "resident_failure_code": null
+        }
+      },
+      {
+        "action": "off",
+        "data": {
+          "schema": "guard-cigar-native-transport-observation.v2",
+          "status_calls": [
+            {
+              "mode": "auto",
+              "available": true,
+              "compatible": true,
+              "reason": "native_ready",
+              "status_ms": 435.819,
+              "native_sha256": "30a6d246fb19de5d8fbda01039cd844cec62289d628f21b3c6f4ba6da42c80c1",
+              "context_control_feature": true
+            }
+          ],
+          "request_calls": [
+            {
+              "caller": "native_execution",
+              "wall_ms": 150.931,
+              "budget_seconds": 1.5640057921409607,
+              "response_present": true,
+              "resident_failure_code": null
+            }
+          ],
+          "resident_failure_code": null
+        }
+      },
+      {
+        "action": "status",
+        "data": {
+          "schema": "guard-cigar-native-transport-observation.v2",
+          "status_calls": [
+            {
+              "mode": "auto",
+              "available": true,
+              "compatible": true,
+              "reason": "native_ready",
+              "status_ms": 1074.203,
+              "native_sha256": "30a6d246fb19de5d8fbda01039cd844cec62289d628f21b3c6f4ba6da42c80c1",
+              "context_control_feature": true
+            }
+          ],
+          "request_calls": [
+            {
+              "caller": "native_execution",
+              "wall_ms": 74.587,
+              "budget_seconds": 0.9256313340738416,
+              "response_present": true,
+              "resident_failure_code": null
+            }
+          ],
+          "resident_failure_code": null
+        }
+      },
+      {
+        "action": "off",
+        "data": {
+          "schema": "guard-cigar-native-transport-observation.v2",
+          "status_calls": [
+            {
+              "mode": "auto",
+              "available": true,
+              "compatible": true,
+              "reason": "native_ready",
+              "status_ms": 1697.38,
+              "native_sha256": "30a6d246fb19de5d8fbda01039cd844cec62289d628f21b3c6f4ba6da42c80c1",
+              "context_control_feature": true
+            }
+          ],
+          "request_calls": [
+            {
+              "caller": "native_execution",
+              "wall_ms": 77.972,
+              "budget_seconds": 0.302435708232224,
+              "response_present": true,
+              "resident_failure_code": null
+            }
+          ],
+          "resident_failure_code": null
+        }
+      }
+    ],
+    "off_has_no_observed_optional_worker": true,
+    "activation_accepted": {
+      "availability": "checking",
+      "capabilities": {
+        "execution_context": true,
+        "private_persistence": true,
+        "shared_agents": true
+      },
+      "diagnostic": null,
+      "effective_enabled": false,
+      "effective_preferences": {
+        "enabled": true,
+        "features": {
+          "agent_context": true,
+          "execution_context": false,
+          "review_briefs": true,
+          "shared_agents": false
+        },
+        "limits": {
+          "context_tokens": 2048,
+          "idle_shutdown_seconds": 600,
+          "max_active_workspaces": 2,
+          "reserve_tokens": 256
+        },
+        "resource_profile": "balanced",
+        "runtime_id": "frozen-candidate",
+        "schema_version": 1,
+        "sources": {
+          "native_policy_facts": true,
+          "sanitized_receipt_facts": true,
+          "source_set_id": "frozen-selected-documents",
+          "workspace_documents": true
+        },
+        "storage": {
+          "mode": "memory",
+          "retention_hours": 24
+        }
+      },
+      "execution_observations": [],
+      "execution_ready": false,
+      "generation": "3",
+      "installation_options": null,
+      "job": {
+        "id": "3",
+        "operation": "activate",
+        "phase": "verifying"
+      },
+      "last_check": null,
+      "preferences": {
+        "enabled": true,
+        "features": {
+          "agent_context": true,
+          "execution_context": false,
+          "review_briefs": true,
+          "shared_agents": false
+        },
+        "limits": {
+          "context_tokens": 2048,
+          "idle_shutdown_seconds": 600,
+          "max_active_workspaces": 2,
+          "reserve_tokens": 256
+        },
+        "resource_profile": "balanced",
+        "runtime_id": "frozen-candidate",
+        "schema_version": 1,
+        "sources": {
+          "native_policy_facts": true,
+          "sanitized_receipt_facts": true,
+          "source_set_id": "frozen-selected-documents",
+          "workspace_documents": true
+        },
+        "storage": {
+          "mode": "memory",
+          "retention_hours": 24
+        }
+      },
+      "qualification": null,
+      "requested_enabled": true,
+      "restriction": null,
+      "runtime": null,
+      "schema": "guard-context-assistance-status.v2",
+      "verification_permitted": true
+    },
+    "activation_status": {
+      "availability": "ready",
+      "capabilities": {
+        "execution_context": true,
+        "private_persistence": true,
+        "shared_agents": true
+      },
+      "diagnostic": null,
+      "effective_enabled": true,
+      "effective_preferences": {
+        "enabled": true,
+        "features": {
+          "agent_context": true,
+          "execution_context": false,
+          "review_briefs": true,
+          "shared_agents": false
+        },
+        "limits": {
+          "context_tokens": 2048,
+          "idle_shutdown_seconds": 600,
+          "max_active_workspaces": 2,
+          "reserve_tokens": 256
+        },
+        "resource_profile": "balanced",
+        "runtime_id": "frozen-candidate",
+        "schema_version": 1,
+        "sources": {
+          "native_policy_facts": true,
+          "sanitized_receipt_facts": true,
+          "source_set_id": "frozen-selected-documents",
+          "workspace_documents": true
+        },
+        "storage": {
+          "mode": "memory",
+          "retention_hours": 24
+        }
+      },
+      "execution_observations": [],
+      "execution_ready": false,
+      "generation": "3",
+      "installation_options": null,
+      "job": null,
+      "last_check": {
+        "active": false,
+        "compile_verified": true,
+        "execution_handoff_verified": false,
+        "features": [
+          "answer_review.v1",
+          "context_graph.v1",
+          "context_views.v1",
+          "document_boundaries.v1",
+          "selection_explanation.v1",
+          "snapshot_integrity.v1",
+          "source_replace.v1"
+        ],
+        "interpreter": {
+          "abi": "cpython-314-darwin",
+          "debug_build": false,
+          "free_threaded": false,
+          "implementation": "cpython",
+          "platform": "darwin-arm64",
+          "release_level": "final",
+          "schema": "guard-cigar-interpreter.v1",
+          "version": [
+            3,
+            14,
+            7
+          ]
+        },
+        "package_fingerprint": "bd4d27349f01c4403a3e469e29d3785c4c8073e12c32744dfaa2304dcaf78a95",
+        "package_version": "0.14.1",
+        "persistence_compile_verified": false,
+        "protocol": "cigar.context-worker.v1",
+        "schema": "guard-cigar-runtime-status.v1",
+        "shared_compile_verified": false,
+        "worker_fingerprint": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112"
+      },
+      "preferences": {
+        "enabled": true,
+        "features": {
+          "agent_context": true,
+          "execution_context": false,
+          "review_briefs": true,
+          "shared_agents": false
+        },
+        "limits": {
+          "context_tokens": 2048,
+          "idle_shutdown_seconds": 600,
+          "max_active_workspaces": 2,
+          "reserve_tokens": 256
+        },
+        "resource_profile": "balanced",
+        "runtime_id": "frozen-candidate",
+        "schema_version": 1,
+        "sources": {
+          "native_policy_facts": true,
+          "sanitized_receipt_facts": true,
+          "source_set_id": "frozen-selected-documents",
+          "workspace_documents": true
+        },
+        "storage": {
+          "mode": "memory",
+          "retention_hours": 24
+        }
+      },
+      "qualification": "local_candidate",
+      "requested_enabled": true,
+      "restriction": null,
+      "runtime": {
+        "active": true,
+        "compile_verified": true,
+        "execution_handoff_verified": false,
+        "features": [
+          "answer_review.v1",
+          "context_graph.v1",
+          "context_views.v1",
+          "document_boundaries.v1",
+          "selection_explanation.v1",
+          "snapshot_integrity.v1",
+          "source_replace.v1"
+        ],
+        "interpreter": {
+          "abi": "cpython-314-darwin",
+          "debug_build": false,
+          "free_threaded": false,
+          "implementation": "cpython",
+          "platform": "darwin-arm64",
+          "release_level": "final",
+          "schema": "guard-cigar-interpreter.v1",
+          "version": [
+            3,
+            14,
+            7
+          ]
+        },
+        "package_fingerprint": "bd4d27349f01c4403a3e469e29d3785c4c8073e12c32744dfaa2304dcaf78a95",
+        "package_version": "0.14.1",
+        "persistence_compile_verified": false,
+        "protocol": "cigar.context-worker.v1",
+        "schema": "guard-cigar-runtime-status.v1",
+        "shared_compile_verified": false,
+        "worker_fingerprint": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112"
+      },
+      "schema": "guard-context-assistance-status.v2",
+      "verification_permitted": true
+    },
+    "selected_interpreter": {
+      "abi": "cpython-314-darwin",
+      "debug_build": false,
+      "free_threaded": false,
+      "implementation": "cpython",
+      "platform": "darwin-arm64",
+      "release_level": "final",
+      "schema": "guard-cigar-interpreter.v1",
+      "version": [
+        3,
+        14,
+        7
+      ]
+    },
+    "frozen_mcp_effective_environment_keys": [
+      "HOME",
+      "LANG",
+      "LOGNAME",
+      "PATH",
+      "SHELL",
+      "TERM",
+      "TMPDIR",
+      "USER"
+    ],
+    "base_tools_remain_available": true,
+    "cached_context_refused": true,
+    "persisted_opt_out": true,
+    "resident_closed": true,
+    "clients_closed": true,
+    "frozen_daemon_exit": {
+      "returncode": 0,
+      "requested_signal": "SIGINT",
+      "fallback_used": false,
+      "exception_types": [],
+      "expected_join_interrupt": false,
+      "graceful_zero_exit": true
+    },
+    "new_processes_remaining": 0,
+    "resources": {
+      "samples": 524,
+      "sampling_errors": 0,
+      "median_rss_bytes": 709165056,
+      "peak_rss_bytes": 897548288,
+      "at_peak_counts": {
+        "other_descendant": 4,
+        "native_runtime": 8,
+        "benchmark_daemon_host": 1
+      },
+      "at_peak_rss_by_kind": {
+        "other_descendant": 574537728,
+        "native_runtime": 123174912,
+        "benchmark_daemon_host": 199835648
+      },
+      "maximum_counts": {
+        "benchmark_daemon_host": 1,
+        "sdk_worker": 1,
+        "terminated_child": 2,
+        "python_bridge": 1,
+        "other_python_child": 1,
+        "native_runtime": 10,
+        "other_descendant": 7
+      },
+      "includes_observed_reparented_children": true,
+      "shared_pages_may_be_counted_in_multiple_processes": true
+    }
+  },
+  "full_context_inputs": {
+    "path": "/private/tmp/hol-guard-cigar-context-worker-reuse-20261025/onefile-control-diagnostic/acceptance/inputs.json",
+    "bytes": 904854,
+    "sha256": "1511a9731937e67a20b7eb960ea50a961afedb8bb15797bbcb1177a4a6963557"
+  },
+  "read_only_probe": {
+    "schema": "guard-cigar-frozen-status-boundary.v1",
+    "diagnostic_only": true,
+    "plan": {
+      "schema": "guard-cigar-frozen-status-boundary-plan.v1",
+      "diagnostic_only": true,
+      "fresh_profiles": 5,
+      "action_per_profile": "one context status call with an owned persistent frozen daemon; no CIGAR enrollment or activation",
+      "stop_on_first_failure": true,
+      "mutations_retried": false,
+      "product_native_or_control_deadlines_changed": false
+    },
+    "rows": [
+      {
+        "case": 1,
+        "completed": true,
+        "diagnostic_only": true,
+        "seconds": 4.687,
+        "returncode": 0,
+        "availability": "off",
+        "failure_code": null,
+        "observations": [
+          {
+            "schema": "guard-cigar-native-transport-observation.v2",
+            "status_calls": [
+              {
+                "mode": "auto",
+                "available": true,
+                "compatible": true,
+                "reason": "native_ready",
+                "status_ms": 430.918,
+                "native_sha256": "30a6d246fb19de5d8fbda01039cd844cec62289d628f21b3c6f4ba6da42c80c1",
+                "context_control_feature": true
+              }
+            ],
+            "request_calls": [
+              {
+                "caller": "native_execution",
+                "wall_ms": 74.594,
+                "budget_seconds": 1.5688912090845406,
+                "response_present": true,
+                "resident_failure_code": null
+              }
+            ],
+            "resident_failure_code": null
+          }
+        ],
+        "daemon_exit": {
+          "returncode": 0,
+          "requested_signal": "SIGINT",
+          "fallback_used": false,
+          "exception_types": [],
+          "expected_join_interrupt": false,
+          "graceful_zero_exit": true
+        },
+        "new_descendants_remaining": 0,
+        "resources": {
+          "samples": 152,
+          "sampling_errors": 0,
+          "median_rss_bytes": 372850688,
+          "peak_rss_bytes": 738869248,
+          "at_peak_counts": {
+            "native_runtime": 5,
+            "other_descendant": 4,
+            "benchmark_daemon_host": 1
+          },
+          "at_peak_rss_by_kind": {
+            "native_runtime": 74776576,
+            "other_descendant": 579289088,
+            "benchmark_daemon_host": 84803584
+          },
+          "maximum_counts": {
+            "native_runtime": 5,
+            "other_descendant": 4,
+            "benchmark_daemon_host": 1
+          },
+          "includes_observed_reparented_children": true,
+          "shared_pages_may_be_counted_in_multiple_processes": true
+        },
+        "clean": true
+      },
+      {
+        "case": 2,
+        "completed": true,
+        "diagnostic_only": true,
+        "seconds": 3.844,
+        "returncode": 0,
+        "availability": "off",
+        "failure_code": null,
+        "observations": [
+          {
+            "schema": "guard-cigar-native-transport-observation.v2",
+            "status_calls": [
+              {
+                "mode": "auto",
+                "available": true,
+                "compatible": true,
+                "reason": "native_ready",
+                "status_ms": 563.679,
+                "native_sha256": "30a6d246fb19de5d8fbda01039cd844cec62289d628f21b3c6f4ba6da42c80c1",
+                "context_control_feature": true
+              }
+            ],
+            "request_calls": [
+              {
+                "caller": "native_execution",
+                "wall_ms": 76.91,
+                "budget_seconds": 1.4361642501316965,
+                "response_present": true,
+                "resident_failure_code": null
+              }
+            ],
+            "resident_failure_code": null
+          }
+        ],
+        "daemon_exit": {
+          "returncode": 0,
+          "requested_signal": "SIGINT",
+          "fallback_used": false,
+          "exception_types": [],
+          "expected_join_interrupt": false,
+          "graceful_zero_exit": true
+        },
+        "new_descendants_remaining": 0,
+        "resources": {
+          "samples": 142,
+          "sampling_errors": 0,
+          "median_rss_bytes": 203407360,
+          "peak_rss_bytes": 681394176,
+          "at_peak_counts": {
+            "other_descendant": 4,
+            "native_runtime": 5,
+            "benchmark_daemon_host": 1
+          },
+          "at_peak_rss_by_kind": {
+            "other_descendant": 577716224,
+            "native_runtime": 74203136,
+            "benchmark_daemon_host": 29474816
+          },
+          "maximum_counts": {
+            "native_runtime": 5,
+            "other_descendant": 4,
+            "benchmark_daemon_host": 1,
+            "terminated_child": 1
+          },
+          "includes_observed_reparented_children": true,
+          "shared_pages_may_be_counted_in_multiple_processes": true
+        },
+        "clean": true
+      },
+      {
+        "case": 3,
+        "completed": true,
+        "diagnostic_only": true,
+        "seconds": 4.045,
+        "returncode": 0,
+        "availability": "off",
+        "failure_code": null,
+        "observations": [
+          {
+            "schema": "guard-cigar-native-transport-observation.v2",
+            "status_calls": [
+              {
+                "mode": "auto",
+                "available": true,
+                "compatible": true,
+                "reason": "native_ready",
+                "status_ms": 442.634,
+                "native_sha256": "30a6d246fb19de5d8fbda01039cd844cec62289d628f21b3c6f4ba6da42c80c1",
+                "context_control_feature": true
+              }
+            ],
+            "request_calls": [
+              {
+                "caller": "native_execution",
+                "wall_ms": 73.697,
+                "budget_seconds": 1.5572014157660306,
+                "response_present": true,
+                "resident_failure_code": null
+              }
+            ],
+            "resident_failure_code": null
+          }
+        ],
+        "daemon_exit": {
+          "returncode": 0,
+          "requested_signal": "SIGINT",
+          "fallback_used": false,
+          "exception_types": [],
+          "expected_join_interrupt": false,
+          "graceful_zero_exit": true
+        },
+        "new_descendants_remaining": 0,
+        "resources": {
+          "samples": 117,
+          "sampling_errors": 0,
+          "median_rss_bytes": 465764352,
+          "peak_rss_bytes": 702529536,
+          "at_peak_counts": {
+            "native_runtime": 4,
+            "other_descendant": 5,
+            "benchmark_daemon_host": 1
+          },
+          "at_peak_rss_by_kind": {
+            "native_runtime": 66584576,
+            "other_descendant": 606404608,
+            "benchmark_daemon_host": 29540352
+          },
+          "maximum_counts": {
+            "native_runtime": 5,
+            "other_descendant": 5,
+            "benchmark_daemon_host": 1,
+            "terminated_child": 1
+          },
+          "includes_observed_reparented_children": true,
+          "shared_pages_may_be_counted_in_multiple_processes": true
+        },
+        "clean": true
+      },
+      {
+        "case": 4,
+        "completed": true,
+        "diagnostic_only": true,
+        "seconds": 6.756,
+        "returncode": 1,
+        "availability": null,
+        "failure_code": "native_context_assistance_unavailable",
+        "observations": [
+          {
+            "schema": "guard-cigar-native-transport-observation.v2",
+            "status_calls": [
+              {
+                "mode": "auto",
+                "available": true,
+                "compatible": true,
+                "reason": "native_ready",
+                "status_ms": 2114.923,
+                "native_sha256": "30a6d246fb19de5d8fbda01039cd844cec62289d628f21b3c6f4ba6da42c80c1",
+                "context_control_feature": true
+              }
+            ],
+            "request_calls": [],
+            "resident_failure_code": null
+          }
+        ],
+        "daemon_exit": {
+          "returncode": 0,
+          "requested_signal": "SIGINT",
+          "fallback_used": false,
+          "exception_types": [],
+          "expected_join_interrupt": false,
+          "graceful_zero_exit": true
+        },
+        "new_descendants_remaining": 0,
+        "resources": {
+          "samples": 146,
+          "sampling_errors": 0,
+          "median_rss_bytes": 567828480,
+          "peak_rss_bytes": 684163072,
+          "at_peak_counts": {
+            "other_descendant": 4,
+            "native_runtime": 5,
+            "benchmark_daemon_host": 1
+          },
+          "at_peak_rss_by_kind": {
+            "other_descendant": 585121792,
+            "native_runtime": 69353472,
+            "benchmark_daemon_host": 29687808
+          },
+          "maximum_counts": {
+            "native_runtime": 5,
+            "other_descendant": 4,
+            "benchmark_daemon_host": 1,
+            "terminated_child": 1
+          },
+          "includes_observed_reparented_children": true,
+          "shared_pages_may_be_counted_in_multiple_processes": true
+        },
+        "clean": true
+      }
+    ],
+    "inputs_unchanged": true,
+    "original_failed_product_case_remains_unqualified": true,
+    "CIGAR_enrollment_or_activation_requested": false
+  },
+  "probe_inputs": {
+    "path": "/private/tmp/hol-guard-cigar-context-worker-reuse-20261025/frozen-status-boundary-probe/inputs.json",
+    "bytes": 328306,
+    "sha256": "2313b61a7caf6c39becfa3b2e045036cb5415cb9cf5d9ac01b986700e20ffaa2"
+  },
+  "probe_source": {
+    "receipt": {
+      "path": "/private/tmp/hol-guard-cigar-context-worker-reuse-20261025/probe_frozen_status_boundary.py",
+      "bytes": 4893,
+      "sha256": "2dac5a1609a23ea374d0e82056ed5c5429786fadf79759548beaf3f524adccf6"
+    },
+    "text": "\"\"\"Five declared fresh-profile, read-only frozen control observations.\"\"\"\nfrom pathlib import Path\nimport hashlib,json,os,subprocess,sys,time\nROOT=Path('/private/tmp/hol-guard-cigar-context-worker-reuse-20261025')\nREPO=Path('/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration')\nDIAG=ROOT/'onefile-control-diagnostic'\nINSTALLED=ROOT/'package/installed'\nEXE=DIAG/'dist/hol-guard'\nJOB=ROOT/'frozen-status-boundary-probe'\nJOB.mkdir(mode=0o700)\nsys.path[:0]=[str(INSTALLED),str(REPO)]\nfrom tests.context_frozen_daemon import FrozenDaemon\nfrom scripts.cigar_benchmark_processes import ProcessSampler\nselected=Path(json.loads(Path('/private/tmp/hol-guard-cigar-runtime-validation/selection.json').read_text())['python'])\npaths={Path(__file__),EXE,DIAG/'instrumentation.json',REPO/'tests/context_frozen_daemon.py',REPO/'scripts/cigar_benchmark_processes.py'}\npaths.update((INSTALLED/'codex_plugin_scanner').rglob('*.py'))\ninputs={str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}\nplan={'schema':'guard-cigar-frozen-status-boundary-plan.v1','diagnostic_only':True,'fresh_profiles':5,\n      'action_per_profile':'one context status call with an owned persistent frozen daemon; no CIGAR enrollment or activation',\n      'stop_on_first_failure':True,'mutations_retried':False,'product_native_or_control_deadlines_changed':False}\nwith (JOB/'plan.json').open('x') as out:json.dump(plan,out,indent=2)\nwith (JOB/'inputs.json').open('x') as out:json.dump(inputs,out,indent=2)\nrows=[]\nfor i in range(1,6):\n    case=JOB/f'case-{i}';case.mkdir(mode=0o700)\n    for name in ['home','tmp','project']:(case/name).mkdir(mode=0o700)\n    environment={'HOME':str(case/'home'),'TMPDIR':str(case/'tmp'),'LANG':'en_US.UTF-8','PATH':'/usr/bin:/bin:/usr/sbin:/sbin'}\n    row={'case':i,'completed':False,'diagnostic_only':True};rows.append(row)\n    daemon=None\n    with ProcessSampler(selected) as sampler:\n        before,baseline=sampler.sample_with_identities()\n        try:\n            daemon=FrozenDaemon(EXE,case,case/'guard',case/'project',environment)\n            daemon.wait_ready()\n            started=time.monotonic()\n            result=subprocess.run([str(EXE),'context','status','--guard-home',str(case/'guard'),'--json'],\n                                  cwd=case/'project',env=environment,capture_output=True,timeout=45)\n            row['seconds']=round(time.monotonic()-started,3);row['returncode']=result.returncode\n            with (case/'status.stdout.log').open('xb') as out:out.write(result.stdout)\n            with (case/'status.stderr.log').open('xb') as out:out.write(result.stderr)\n            payload=json.loads(result.stdout)\n            row['availability']=payload.get('availability');row['failure_code']=payload.get('code')\n            observations=[]\n            for line in result.stderr.decode().splitlines():\n                if line.startswith('GUARD_CIGAR_NATIVE_DIAGNOSTIC='):observations.append(json.loads(line.split('=',1)[1]))\n            row['observations']=observations\n            row['completed']=True\n        except Exception as error:\n            row['exception']={'type':type(error).__name__,'message':str(error)[:1024]}\n        finally:\n            if daemon is not None:\n                daemon.stop();row['daemon_exit']=daemon.exit_metadata()\n            deadline=time.monotonic()+5\n            after,remaining=sampler.sample_with_identities()\n            while remaining.keys()-baseline.keys() and time.monotonic()<deadline:\n                time.sleep(.05);after,remaining=sampler.sample_with_identities()\n            row['new_descendants_remaining']=len(remaining.keys()-baseline.keys())\n            row['resources']=sampler.summary()\n            with (case/'report.json').open('x') as out:json.dump(row,out,indent=2);out.write('\\n')\n    clean=(row.get('daemon_exit',{}).get('graceful_zero_exit') and not row['daemon_exit']['fallback_used']\n           and not row['daemon_exit']['exception_types'] and row['new_descendants_remaining']==0\n           and row['resources']['sampling_errors']==0)\n    row['clean']=bool(clean)\n    if row.get('returncode')!=0 or not clean:break\nreport={'schema':'guard-cigar-frozen-status-boundary.v1','diagnostic_only':True,'plan':plan,'rows':rows,\n        'inputs_unchanged':all(hashlib.sha256(Path(p).read_bytes()).hexdigest()==h for p,h in inputs.items()),\n        'original_failed_product_case_remains_unqualified':True,'CIGAR_enrollment_or_activation_requested':False}\nwith (JOB/'report.json').open('x') as out:json.dump(report,out,indent=2);out.write('\\n')\nprint(json.dumps({'cases':len(rows),'returncodes':[r.get('returncode') for r in rows],\n                  'clean':all(r['clean'] for r in rows),'inputs_unchanged':report['inputs_unchanged'],'diagnostic_only':True}))\nraise SystemExit(int(not report['inputs_unchanged']) or int(any(r.get('returncode')!=0 or not r['clean'] for r in rows)))\n"
+  },
+  "original_failed_product": {
+    "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/docs/guard/cigar-integration/evidence/context-worker-reuse-onefile-failed-verification.json",
+    "bytes": 66224,
+    "sha256": "802d3203376c5d86807829050371f18ae4361153bad80c085105835f48c43118"
+  },
+  "interpretation": [
+    "One fresh full-context diagnostic passes, including both off calls and strict cleanup. It observes native readiness up to 1,697.380 ms and only 0.302 seconds remaining for one control RPC. Instrumented success does not qualify the original failed product case.",
+    "The separately declared five-profile read-only probe stops after its fourth profile fails. Native readiness succeeds in 2,114.923 ms with the control feature and matching native hash, then no client request is sent and context status returns native_context_assistance_unavailable. No CIGAR enrollment or activation is requested.",
+    "All four read-only profiles retain graceful zero-exit host shutdown, no fallback/exception/sampling error and zero remaining descendant. The fifth profile is not executed. No unknown mutation is retried.",
+    "The observed failure is control-budget starvation: the Python route starts its two-second timer before the independently bounded native bootstrap. The original repeated-off failure lacks these observations; this reproduction identifies the same control availability defect without claiming a trace of that original call.",
+    "The native packaged bytes are identical between the unmodified and diagnostic applications. Diagnostics observe only bounded clocks, reasons, capability booleans, budgets/outcomes and aggregate process metadata, with no new RPC or changed policy, scope or timeout."
+  ]
+}

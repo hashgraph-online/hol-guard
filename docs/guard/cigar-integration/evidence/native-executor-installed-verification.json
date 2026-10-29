@@ -1,0 +1,325 @@
+{
+  "schema": "guard-cigar-native-executor-installed-verification.v1",
+  "status": "passed",
+  "qualification": "local_darwin_arm64_installed_owning_executor_and_real_browser_consent_with_actual_SDK",
+  "source_sha": "75c78563ed4e3c949c01285133fff9e15aa24193",
+  "native_adapter_source_sha": "2799b26d1766c08de3f0a3ea923e134f629460ca",
+  "native_runtime_and_python_product_source_unchanged_since_adapter_commit": true,
+  "test_source_sha": "2ed20822c400df71d56d1c3747a072538fe10e1d",
+  "product_version": "3.55.1",
+  "platform": "darwin-arm64",
+  "SDK": {
+    "version": "0.14.1",
+    "python": [
+      3,
+      14,
+      7
+    ],
+    "source_sha": "b47380e5a5cbeaaad5a61cab3372e9e67368732f",
+    "source_clean": true,
+    "rebuilt": false,
+    "worker_sha256": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112",
+    "package_tree_sha256": "bd4d27349f01c4403a3e469e29d3785c4c8073e12c32744dfaa2304dcaf78a95"
+  },
+  "package": {
+    "binary": {
+      "private_path": "/private/tmp/hol-guard-cigar-package-build/native-execution-context-final/hol-guard-runtime",
+      "sha256": "0348ad3a05c61c365ea14a84190b2e958966e4e40cf57489e28b10b090b6087f",
+      "bytes": 113264512,
+      "strict_macos_signature_verified": true,
+      "unchanged_128_mib_cap_passed": true
+    },
+    "wheel": {
+      "private_path": "/private/tmp/hol-guard-cigar-package-build/native-execution-context-final/native-wheels/hol_guard-3.55.1-py3-none-macosx_11_0_arm64.whl",
+      "sha256": "038c80a19bd248317a06ef7a1e91d63b6796361da56ad29355e386ba9f2e1074",
+      "bytes": 40959695
+    },
+    "runtime_source_matches_bundle_source": true,
+    "base_program_digest": "489b75f13ee16cef56cb12ccd0716bb1af7ff8b437a3403b3cffc51cfa1cafd7",
+    "implementation_digest": "131c80bccfe3719e535fa6bf780eca46ddef008a8d63c8f1afae36d21d083035",
+    "rule_digest": "54e38cc15fe1e4bb231214e15876422e5c0f872d2d3d5bae85b6c02e43ac7111",
+    "automatic_discovery": {
+      "available": true,
+      "compatible": true,
+      "python": [
+        3,
+        12,
+        13
+      ],
+      "source_sha": "75c78563ed4e3c949c01285133fff9e15aa24193",
+      "cigar_imported": false,
+      "bundled_binary": true
+    },
+    "dashboard_built_before_packaging": true,
+    "installed_static_hashes_verified": 33,
+    "static_manifest": {
+      "private_path": "/private/tmp/hol-guard-cigar-package-build/native-execution-context-final/static-built.json",
+      "sha256": "0c2fecceb9e82e80d618131c5d86809594bf909da155f1db77cb3f2c87ff6a66",
+      "bytes": 3700
+    },
+    "owned_cleanup_manifest": {
+      "private_path": "/private/tmp/hol-guard-cigar-package-build/native-execution-context-final/static-cleanup-plan.json",
+      "sha256": "cfa373fed55b27722e6f32889d5565d1ddeee6322c3e4e6cf45f61ad6f005030",
+      "bytes": 5482
+    },
+    "only_owned_new_chunks_removed": 19,
+    "tracked_static_restored": true
+  },
+  "installed_tests": {
+    "backend_and_executor": {
+      "private_path": "/private/tmp/hol-guard-cigar-package-build/native-execution-context-final/installed-backend-and-executor.xml",
+      "sha256": "bf0c383daf929bc59af16e9ee42c33d662cf2d0b04fd3a9708fa42fd0eb1a696",
+      "bytes": 9358,
+      "log": {
+        "private_path": "/private/tmp/hol-guard-cigar-package-build/native-execution-context-final/installed-backend-and-executor.log",
+        "sha256": "91895f1e911d35f5530155fd2ad90bb7905e10c2553ce97299396b015c18ab59",
+        "bytes": 110
+      },
+      "passed": 63,
+      "errors": 0,
+      "failed": 0,
+      "skipped": 0,
+      "seconds": 91.573,
+      "backend_tests": 61,
+      "actual_installed_sink_consent_durations": 2
+    },
+    "execution_browser": {
+      "private_path": "/private/tmp/hol-guard-cigar-package-build/native-execution-context-final/execution-browser-fourth/report.json",
+      "sha256": "48daed6e253a7b5bbcad221be13fc9a141919c19dbd227c21cb1c9b70fe28417",
+      "bytes": 4330,
+      "summary": {
+        "private_path": "/private/tmp/hol-guard-cigar-package-build/native-execution-context-final/execution-browser-fourth/summary.json",
+        "sha256": "880eb9553697a7f0b4e251f9a70e3626794f068f76e986aa8665a45808a7ef95",
+        "bytes": 325
+      },
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "seconds_including_setup": 72.085,
+      "playwright_milliseconds": 71781.937
+    },
+    "review_sharing_persistence_browser_regression": {
+      "private_path": "/private/tmp/hol-guard-cigar-package-build/native-execution-context-final/browser-full-regressions/report.json",
+      "sha256": "866e014bacc98e776296cb2c02dcb3a5573295068f7ca2c3c23952105c2aed1a",
+      "bytes": 6908,
+      "summary": {
+        "private_path": "/private/tmp/hol-guard-cigar-package-build/native-execution-context-final/browser-full-regressions/summary.json",
+        "sha256": "7e381de589bbba6e185b2ccd79c99df0a8120eb00527119b0887ee6188c11a0b",
+        "bytes": 327
+      },
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "flaky": 0,
+      "seconds_including_setup": 264.874,
+      "phases": [
+        {
+          "file": "context-assistance.mutating.spec.ts",
+          "status": "passed",
+          "milliseconds": 84695
+        },
+        {
+          "file": "context-execution.mutating.spec.ts",
+          "status": "passed",
+          "milliseconds": 51011
+        },
+        {
+          "file": "context-persistence.mutating.spec.ts",
+          "status": "passed",
+          "milliseconds": 108904
+        }
+      ],
+      "includes_execution_browser_again": true
+    }
+  },
+  "execution_browser_checks": [
+    "independent_execution_preference_off_by_default",
+    "actual_final_CPython_3_14_runtime_and_SDK_handoff_doctor",
+    "execution_ready_without_agent_MCP_sharing_or_persistence",
+    "native_consumer_options_dashboard_pi_omp_only",
+    "password_backed_workspace_grant_identifies_app_and_workspace",
+    "explicit_subprocess_review_policy_without_pregranted_approvals",
+    "both_native_duration_choices_enabled_and_selected_by_keyboard",
+    "password_backed_HTTP_Run_once_resolution_and_actual_sink_effect",
+    "password_backed_HTTP_Always_allow_resolution_and_actual_sink_effect",
+    "native_completion_has_applied_context_and_dispatch_acknowledgement",
+    "SDK_context_has_no_approval_grant_or_atomic_send_claim",
+    "completed_operation_replay_preserves_public_fixture_sentinel",
+    "spent_once_requires_new_consent_while_saved_allow_reuses",
+    "narrow_viewport_Stop_clears_runtime_and_observations",
+    "saved_native_allow_still_runs_after_CIGAR_Stop",
+    "spent_once_does_not_become_saved_allow_after_Stop",
+    "off_state_survives_reload_without_error_boundary"
+  ],
+  "source_checks": {
+    "frontend_context_files_passed": 8,
+    "ruff_and_format": "passed",
+    "production_typecheck": {
+      "exit_code": 1,
+      "known_baseline_diagnostics": 18,
+      "unchanged_by_exact_comparison": true,
+      "context_assistance_diagnostics": 0,
+      "log": {
+        "private_path": "/private/tmp/hol-guard-cigar-package-build/native-execution-context-final/production-typecheck.log",
+        "sha256": "e168e402cffadeb7c2ef132a3d02dd03f047ff743856948a1ca713b55f5e6e82",
+        "bytes": 4653
+      }
+    },
+    "ownership_privacy_gates": {
+      "python_hook_semantic_callgraph_gate": {
+        "status": "passed",
+        "sha256": "8e3101056186cd4d641add66f9eed89b0289db4e105bdb5885821ae3f0484e46"
+      },
+      "python_capability_cleanup_gate": {
+        "status": "passed",
+        "sha256": "d975dee5fe67bdb3f901777eaa0e7a95a5e8ce9e5f310467754474d61c80dc74"
+      },
+      "rust_io_ownership_gate": {
+        "status": "passed",
+        "sha256": "bcf901a1c39ebf936483fa5aebdcdb005372d016d67e41b8e46adc6fcbd68472"
+      },
+      "rust_io_privacy_gate": {
+        "status": "passed",
+        "sha256": "3f99732114cd01afda57fec9bae91e307310125980da63e8859c1941fbb96b14"
+      },
+      "rust_authority_ownership_gate": {
+        "status": "passed",
+        "sha256": "a13dca766adc3d7c5213b3f7a956ea098f403c50e1adfbaad2e583ceebc7fe72",
+        "changed_files_checked": 305
+      }
+    },
+    "test_and_confirmation_sources": {
+      "dashboard/src/context-assistance/workspaces-panel.tsx": "08775bb780229a92695e445e7533810f3ec2315ffc87e27c11c01e9eb4664d2d",
+      "dashboard/e2e/integration/context-execution.mutating.spec.ts": "96d514ce0edb4cb512de0972e081f86df4de350d749666be96227f311e67dcb7",
+      "scripts/ci/dashboard_context_execution.py": "2dc7ec47fda0f874ad7d8f01c27db83b245b233f66e1c7e8f3d659e7e9e43451",
+      "tests/test_context_execution_sink_installed.py": "fe2059e54997d2c0bf9a84cc3b708b82cbaca76da8c8f781939cbe092aa58205",
+      "dashboard/e2e/integration/context-status.ts": "00aef689a463ebcbace697ed4a2fa545e28c9f82d9dd16586584958ccaa85820",
+      "dashboard/e2e/integration/context-assistance.mutating.spec.ts": "d51f3fef04ab77b895036ae12545b321c9f730ea868d31f620a0bbd4395f4b89",
+      "dashboard/e2e/integration/context-persistence.mutating.spec.ts": "e917f4069d042a426568cd21385f973e123caba6e74753dc969e9d3092e09f5f",
+      "dashboard/e2e/integration/context-sharing-flow.ts": "83de6ad0a4a46502076039e2c96a44dab2534c8fc279865cdb8719cf1c7d0d99"
+    },
+    "status_read_retry": {
+      "read_only": true,
+      "attempt_limit": 12,
+      "maximum_total_backoff_milliseconds": 1050,
+      "mutations_retried": false,
+      "permission_or_other_conflicts_retried": false
+    },
+    "post_test_commit_gates": {
+      "python_hook_semantic_callgraph_gate": {
+        "private_path": "/private/tmp/hol-guard-cigar-package-build/native-execution-context-final/python_hook_semantic_callgraph_gate-post-browser.log",
+        "sha256": "8e3101056186cd4d641add66f9eed89b0289db4e105bdb5885821ae3f0484e46",
+        "bytes": 99,
+        "status": "passed"
+      },
+      "python_capability_cleanup_gate": {
+        "private_path": "/private/tmp/hol-guard-cigar-package-build/native-execution-context-final/python_capability_cleanup_gate-post-browser.log",
+        "sha256": "d975dee5fe67bdb3f901777eaa0e7a95a5e8ce9e5f310467754474d61c80dc74",
+        "bytes": 38592,
+        "status": "passed"
+      },
+      "rust_io_ownership_gate": {
+        "private_path": "/private/tmp/hol-guard-cigar-package-build/native-execution-context-final/rust_io_ownership_gate-post-browser.log",
+        "sha256": "bcf901a1c39ebf936483fa5aebdcdb005372d016d67e41b8e46adc6fcbd68472",
+        "bytes": 78222,
+        "status": "passed"
+      },
+      "rust_io_privacy_gate": {
+        "private_path": "/private/tmp/hol-guard-cigar-package-build/native-execution-context-final/rust_io_privacy_gate-post-browser.log",
+        "sha256": "3f99732114cd01afda57fec9bae91e307310125980da63e8859c1941fbb96b14",
+        "bytes": 620,
+        "status": "passed"
+      },
+      "rust_authority_ownership_gate": {
+        "private_path": "/private/tmp/hol-guard-cigar-package-build/native-execution-context-final/rust_authority_ownership_gate-post-browser.log",
+        "sha256": "356619414451fb3dda1259336c64d93408cbf417e5f0c176c8214ee482e2db23",
+        "bytes": 61436,
+        "status": "passed",
+        "changed_files_checked": 306
+      }
+    }
+  },
+  "retained_failed_attempts": {
+    "wheel_provenance": {
+      "private_path": "/private/tmp/hol-guard-cigar-package-build/native-execution-context/native-wheel-assembly.log",
+      "sha256": "987e0b7a5b74e8a453f95ebe420f1dd190a5cf8c23e49852143c989e52ba167c",
+      "bytes": 3258,
+      "cause": "base_bundle_used_actual_docs_HEAD_591f_but_binary_reported_2799; strict_assembler_correctly_refused; rebuilt_matching_inputs_without_relaxing_verification"
+    },
+    "debug_symbol_only_strip": {
+      "binary_bytes": 155400064,
+      "cap_bytes": 134217728,
+      "result": "refused_by_local_size_assertion; normal_release_strip_then_passed_unchanged_cap"
+    },
+    "installed_sink_first": {
+      "private_path": "/private/tmp/hol-guard-cigar-package-build/native-execution-context/installed-execution-sink-first.log",
+      "sha256": "45ae1f1d4cd4e32917e5ed2d808548f1c541e954536273675dff6cb769549ad0",
+      "bytes": 9759,
+      "cause": "fixture_mixed_memory_and_file_policy_keys; use_consistent_private_fixture_file_store"
+    },
+    "installed_sink_second": {
+      "private_path": "/private/tmp/hol-guard-cigar-package-build/native-execution-context/installed-execution-sink-second.log",
+      "sha256": "9ddfb1254c3afac42493ccb3ebebf326340ffb940125896413d037046f33dae2",
+      "bytes": 6387,
+      "cause": "fixed_captured_builtins_are_policy_allowed_by_default; configure_explicit_review_for_consent_acceptance"
+    },
+    "installed_sink_third": {
+      "private_path": "/private/tmp/hol-guard-cigar-package-build/native-execution-context/installed-execution-sink-third.log",
+      "sha256": "9ad1803d26e6358b95f9e8503c36ea7ac8854c2d2d31679da416c538ee658327",
+      "bytes": 5108,
+      "cause": "legacy_snapshot_execution_risk_key_is_not_an_editable_settings_key; use_supported_subprocess_action_review"
+    },
+    "installed_sink_corrected": {
+      "private_path": "/private/tmp/hol-guard-cigar-package-build/native-execution-context/installed-execution-sink-fourth.log",
+      "sha256": "24fd3f03ba8037c948e0b50c2e563406c5cd850e4a5c61a9f49b140e5be33a43",
+      "bytes": 109,
+      "passed": 2,
+      "failed": 0,
+      "seconds": 61.51
+    },
+    "browser_first": {
+      "private_path": "/private/tmp/hol-guard-cigar-package-build/native-execution-context-final/execution-browser-first/report.json",
+      "sha256": "7d4087b9bada01ee8777194b052fce283fc0cfae962678175241df729a2cd512",
+      "bytes": 9215,
+      "cause": "generic_Always_allow_selector_did_not_match_native_version_bound_duration_copy"
+    },
+    "browser_second": {
+      "private_path": "/private/tmp/hol-guard-cigar-package-build/native-execution-context-final/execution-browser-second/report.json",
+      "sha256": "5b011a779e65684ccce7a068c24c28b2afb9105e19412ca906763158dc6d4c31",
+      "bytes": 8634,
+      "cause": "pointer_click_on_sr_only_radio_was_intercepted_by_its_label; exercise_real_keyboard_duration_selection"
+    },
+    "browser_third": {
+      "private_path": "/private/tmp/hol-guard-cigar-package-build/native-execution-context-final/execution-browser-third/report.json",
+      "sha256": "12d11e701f86c9623808afe76d52b87b58ae5fbec0c7c47d1481b2aee79d3810",
+      "bytes": 9400,
+      "cause": "importing_fixture_server_reset_helper_HOME; removed_server_import_side_effect_and_kept_dedicated_private_profile"
+    },
+    "broader_browser_first": {
+      "private_path": "/private/tmp/hol-guard-cigar-package-build/native-execution-context-final/browser-regressions/report.json",
+      "sha256": "2f2b57b1f9fa559e65a724fe09c1b0b0998a7e26515f531a97819a52ee06c4b9",
+      "bytes": 9853,
+      "passed": 1,
+      "failed": 1,
+      "cause": "startup_status_GET_returned_HTTP409_and_poll_helper_threw_immediately; bounded_read_only_retry_now_accepts_only_explicit_native_busy_codes"
+    }
+  },
+  "qualification_limits": {
+    "real_native_owning_executor": true,
+    "actual_approved_SDK": true,
+    "installed_native_sink": true,
+    "browser_password_proof": true,
+    "actual_external_Pi_or_OMP_delivery": false,
+    "other_executor_harnesses": false,
+    "new_Desktop_or_other_platform_qualification": false,
+    "feature_on_contention_and_all_worker_RSS": false,
+    "useful_reuse_or_exponential_efficiency_claim": false,
+    "mutable_file_currentness_at_launch": false,
+    "atomic_SDK_take_and_native_send": false,
+    "hardened_helper_baseline_failures_resolved": false,
+    "full_P0_P5_goal_complete": false,
+    "public_release": false
+  },
+  "initial_execution_browser_test_source_sha": "695446c0b03ed484e9703adb06b2fdd445b402e5"
+}

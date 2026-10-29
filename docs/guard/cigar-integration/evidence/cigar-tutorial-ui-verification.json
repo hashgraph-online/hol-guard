@@ -1,0 +1,125 @@
+{
+  "schema": "guard-cigar-tutorial-ui-verification.v1",
+  "recorded_at": "2026-10-26T00:00:31.087729+00:00",
+  "product_name": "Context Intelligence Graph Agentic Runtime",
+  "learning": {
+    "url": "/cigar?section=tutorials",
+    "tracks": {
+      "first_cited_brief": 6,
+      "scoped_ai_app_access": 5,
+      "supported_native_execution_preparation": 4
+    },
+    "progress_storage": "browser session; schema, lesson identifier and step only",
+    "progress_is_native_readiness": false,
+    "controls": "resume, restart, exit, expected outcomes, copy example questions and navigation to live controls",
+    "how_it_works": "interactive conceptual flow for admitted sources, scoped graphs, cited compilation and use by Guard/apps"
+  },
+  "checks": {
+    "production_build": "passed",
+    "context_component_suite": "passed",
+    "tutorial_progress_and_rendering": "passed",
+    "workspace_navigation_routing": "passed",
+    "ui_browser_cases_passed": 10,
+    "responsive_widths": [
+      1440,
+      790,
+      390,
+      320
+    ],
+    "native_browser": {
+      "returncode": 0,
+      "seconds": 50.7,
+      "stats": {
+        "startTime": "2026-10-25T23:50:58.429Z",
+        "duration": 49072.972,
+        "expected": 1,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "remaining_optional_processes": 0,
+      "native_core_unchanged": true,
+      "user_preview_profile_used": false
+    },
+    "static_source_matches_preview": true,
+    "static_files": 33,
+    "production_typescript": "same 18 existing non-context diagnostics; no tutorial/CIGAR production diagnostics"
+  },
+  "source": {
+    "tutorial-content.ts": {
+      "sha256": "e1e53c9348fbca196db536c938d3da9590c9ce2a55ba44eec85f083b7d2ee5f4",
+      "lines": 136
+    },
+    "tutorial-progress.ts": {
+      "sha256": "bf428893adf33a102c5cd078ecf35b6fd7dea8aef54fa2c9b8be07881bae1f50",
+      "lines": 41
+    },
+    "tutorials.tsx": {
+      "sha256": "f114609af51ff11117104ab3eb02560591139413118a9e88661045317887a2d8",
+      "lines": 103
+    },
+    "tutorials.css": {
+      "sha256": "9883f3d8323dd3978a6475b489dba3fbc5afc40583eec8ff6d5104cd1d2f920a",
+      "lines": 60
+    },
+    "tutorials.test.tsx": {
+      "sha256": "640dcffcef1e7f9234c22b1d4c1bf4d9f62f7fed50fbcf49405ac71699442f27",
+      "lines": 36
+    },
+    "workspace-guide.tsx": {
+      "sha256": "1fd23c8aeb66428782a05de3d018dba6ff9195c0bbce58ce1e6446e874fcf13b",
+      "lines": 89
+    },
+    "workspace.tsx": {
+      "sha256": "59fd6ae3829d908734a686817f08ff4b9b777aefbc2c66d4a23810e0c6d96dbe",
+      "lines": 150
+    }
+  },
+  "preview": {
+    "root": "/private/tmp/hol-guard-cigar-tutorial-ui-25jv63oz",
+    "url": "http://127.0.0.1:5041/cigar?section=tutorials",
+    "native_source_commit": "ed5011acbba43cb19c093064b34ffe47bf3f2616",
+    "native_sha256": "57305baefafd1869ffc6e210ac8db1f36205a86ea97a5071f9ea5088c7a9cf2a",
+    "profile": {
+      "availability": "unavailable",
+      "requested_enabled": true,
+      "effective_enabled": false,
+      "diagnostic": "runtime_not_verified",
+      "job": null,
+      "preferences_preserved": true,
+      "runtime_started_by_update": false
+    },
+    "served_assets": [
+      {
+        "path": "/healthz",
+        "http_status": 200,
+        "bytes": 40
+      },
+      {
+        "path": "/cigar?section=tutorials",
+        "http_status": 200,
+        "bytes": 1581
+      },
+      {
+        "path": "/assets/guard-dashboard.js",
+        "http_status": 200,
+        "bytes": 1929547,
+        "matches_staged_build": true
+      },
+      {
+        "path": "/assets/chunks/settings-workspace-Bn9uDGHj.js",
+        "http_status": 200,
+        "bytes": 391870,
+        "matches_staged_build": true,
+        "full_name_and_tutorials_present": true
+      }
+    ]
+  },
+  "limits": [
+    "No native or SDK code changes",
+    "No automatic runtime activation, feature enablement, source grants or app authorization from learning actions",
+    "Execution tutorial describes existing candidate qualification limits",
+    "No new frozen/public release or model/performance benefit qualification",
+    "Existing broader TypeScript and Bun constraints remain"
+  ]
+}

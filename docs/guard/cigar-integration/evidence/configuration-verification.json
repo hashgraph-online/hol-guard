@@ -1,0 +1,19 @@
+{
+  "schema": "hol-guard.cigar-configuration-verification.v1",
+  "implementation_commit": "01ed8521",
+  "scope": "Native settings/consent composition and presentation projections; not complete CIGAR integration qualification",
+  "contract_tests": {"passed": 15, "failed": 0, "rust_versions": ["1.88.0", "1.92.0"]},
+  "native_configuration_tests": {"passed": 25, "failed": 0, "read_parity_cases": 91, "write_parity_vectors": 1724},
+  "python_projection_tests": {"passed": 5, "failed": 0, "python_version": "3.12.13"},
+  "source_gates": {
+    "native_authority_ownership": "passed",
+    "native_authority_committed_files_checked": 36,
+    "python_semantic_reachability": "passed",
+    "python_capability_cleanup": "passed",
+    "rust_io_ownership": "passed",
+    "rust_io_privacy": "passed"
+  },
+  "lint": {"assistance_crate_clippy": "passed", "changed_python_ruff": "passed", "whitespace": "passed"},
+  "unperformed": ["frontend_typecheck", "sdk_installation", "actual_runtime_gate", "installed_worker_handshake", "integration_benchmarks", "full_application_qualification"],
+  "independent_attestation": false
+}

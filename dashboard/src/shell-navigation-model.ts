@@ -2,6 +2,7 @@ import type { IconType } from "react-icons";
 import {
   HiMiniAdjustmentsHorizontal,
   HiMiniClipboardDocumentList,
+  HiMiniCircleStack,
   HiMiniDocumentText,
   HiMiniHome,
   HiMiniInbox,
@@ -82,6 +83,15 @@ export const SHELL_NAV_ITEMS: readonly ShellNavigationItem[] = [
     icon: HiMiniShieldCheck,
   },
   {
+    href: "/cigar",
+    label: "CIGAR",
+    shortLabel: "CIGAR",
+    description: "Local context, setup, sources, and AI app access",
+    view: "cigar",
+    group: "primary",
+    icon: HiMiniCircleStack,
+  },
+  {
     href: "/extensions",
     label: "Extensions",
     shortLabel: "Extensions",
@@ -146,7 +156,7 @@ export const SHELL_NAV_ITEMS: readonly ShellNavigationItem[] = [
   },
 ] as const;
 
-const MOBILE_PRIMARY_VIEWS = new Set<NavigationView>(["home", "inbox", "fleet", "extensions"]);
+const MOBILE_PRIMARY_VIEWS = new Set<NavigationView>(["home", "inbox", "fleet", "cigar"]);
 
 export const NAVIGATION_GROUPS: ReadonlyArray<{ id: NavigationGroup; label: string }> = [
   { id: "primary", label: "Guard" },

@@ -1,0 +1,128 @@
+{
+  "schema": "guard-cigar-native-decision-installed-browser-evidence.v1",
+  "status": "passed",
+  "qualification": "local_candidate_macos_arm64_only",
+  "source_commit": "3517c20dc20e99b5fc03d3912551cc56098c4e88",
+  "native_implementation_commit": "b37100c11baf12303d19693ebb272768e06b5ab3",
+  "package_version": "3.55.1",
+  "host_python": "CPython 3.12.13",
+  "mcp_version": "1.30.0",
+  "declared_mcp_floor_satisfied": true,
+  "lock_sha256": "1eaa8ab681a9e52dd16aa4573ca7d1d0eb8a35a2e352553863eeff261ca7c1ef",
+  "sdk_python": "CPython 3.14.7",
+  "sdk_version": "0.14.1",
+  "sdk_source_commit": "b47380e5a5cbeaaad5a61cab3372e9e67368732f",
+  "worker_sha256": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112",
+  "artifacts": {
+    "native": {
+      "bytes": 111132512,
+      "sha256": "768a91c00dc18e5aa66c9b4eb79a7acb64cfc7f7b5e175867c5ab6563446bdbe",
+      "capabilities": {
+        "protocol_version": 1,
+        "runtime_version": "3.55.1",
+        "rule_digest": "9433dece9c6a512de915392ee5f58fb70e0156bcdd7d2ca86930af8b687678b0",
+        "build_sha": "3517c20dc20e99b5fc03d3912551cc56098c4e88",
+        "target": "aarch64-macos",
+        "program_digest": "489b75f13ee16cef56cb12ccd0716bb1af7ff8b437a3403b3cffc51cfa1cafd7",
+        "catalog_digest": "540fe5015ed273d6fa94da91085b2a987e3b5eb5c7ae95d0fe3c30a3cecfa39b",
+        "trust_digest": "aa437eec9b2a68fd3cac25c033ccbf5c9612fa2c4244bf83bc7b3df414f5e07d"
+      },
+      "implementation_digest": "131c80bccfe3719e535fa6bf780eca46ddef008a8d63c8f1afae36d21d083035",
+      "new_feature": true
+    },
+    "wheel": {
+      "path": "/private/tmp/hol-guard-cigar-package-build/native-decision-projection-checkpoint/native-wheels/hol_guard-3.55.1-py3-none-macosx_11_0_arm64.whl",
+      "bytes": 40344618,
+      "sha256": "62753e3aad9fb8855b762c693b45db8778524525d3be17966e25504ed154f452"
+    },
+    "browser": {
+      "report": {
+        "path": "/private/tmp/hol-guard-cigar-native-decision-browser-proof-v3/results.json",
+        "bytes": 4198,
+        "sha256": "79cd91d1771fe04265fe18bc599c67c276fe5f8d973d491a5acd2af189a3e7c4"
+      },
+      "stats": {
+        "startTime": "2026-10-24T00:00:52.603Z",
+        "duration": 58262.787,
+        "expected": 1,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "test_results": [
+        {
+          "status": "passed",
+          "duration_ms": 37902
+        }
+      ]
+    },
+    "installed_tests": {
+      "report": {
+        "path": "/private/tmp/hol-guard-cigar-native-decision-installed-results.xml",
+        "bytes": 6982,
+        "sha256": "9d3904eb5c5b6bfface8b1148ecde22ce32eb698513269fd6f23e20cb4a14b98"
+      },
+      "summary": {
+        "name": "pytest",
+        "errors": "0",
+        "failures": "0",
+        "skipped": "0",
+        "tests": "49",
+        "time": "25.648",
+        "timestamp": "2026-10-23T16:58:51.191658-07:00",
+        "hostname": "constructs-Mac-Studio.local"
+      }
+    },
+    "acceptance_test": {
+      "path": "dashboard/e2e/integration/context-assistance.mutating.spec.ts",
+      "bytes": 15950,
+      "sha256": "7c10a28840b773aeb9e4b911bdbab815e4807c94ece3886beac6f365b253c482"
+    },
+    "native_review_fixture": {
+      "path": "scripts/ci/dashboard_context_native_review.py",
+      "bytes": 3099,
+      "sha256": "3c001b3baaf43323268db01112e6dbd4f64d6743b4c0b95e1b532d44e0584731"
+    }
+  },
+  "checks": [
+    "actual_installed_package_and_dashboard",
+    "explicit_opt_in_and_verified_selected_314_runtime",
+    "proof_required_for_sources_and_pairing",
+    "actual_sdk_source_compilation_and_citations",
+    "source_change_refresh_withdrawal_and_comparison",
+    "real_native_evaluation_and_queued_review",
+    "actual_mcp_native_decision_context_and_mandatory_citation",
+    "actual_mcp_action_selection_explanation",
+    "caller_fact_and_scope_injection_refused",
+    "normal_review_projection_preserves_bounded_selector",
+    "optional_review_context_loads_independently",
+    "review_source_drawer_and_retained_selection_verification",
+    "allow_once_and_always_allow_choices_remain_enabled",
+    "connection_revocation_cached_call_refusal",
+    "home_opt_out_no_runtime",
+    "explicit_runtime_restart",
+    "mobile_opt_out"
+  ],
+  "previous_attempts": [
+    {
+      "report": "/private/tmp/hol-guard-cigar-native-decision-browser-proof-v1/results.json",
+      "sha256": "c63d52aceb2597be2497cbb79a08299f7d173cd895f9d8e3b41c704f848d74ce",
+      "status": "failed",
+      "reason": "Review normalizer omitted native receipt selector; fixed in source 3517c20d."
+    },
+    {
+      "report": "/private/tmp/hol-guard-cigar-native-decision-browser-proof-v2/results.json",
+      "sha256": "903abd7717a2bac11f36f7b8d7a2d5cf3674ccf7145d3f784ee224f15811b5aa",
+      "status": "failed",
+      "reason": "Acceptance locator expected Allow once instead of the existing Allow just this once label; product controls were present."
+    }
+  ],
+  "limitations": [
+    "This is candidate macOS arm64 qualification, not public release, Desktop, or other-platform acceptance.",
+    "Native decision association does not bind a mutable approval row or current executable bytes and is not an executor handoff.",
+    "App labels are human-paired permission targets; actual harness executable routes remain unqualified.",
+    "No runtime latency, all-process RSS, useful-reuse or exponential-efficiency benefit is claimed.",
+    "Evidence history/Data and repair, P4 sharing/persistence, P5 executor handoff, remaining setup/platform and performance gates remain required.",
+    "The mixed source/installed legacy off assertion and four reproduced baseline helper-launch failures remain unresolved."
+  ]
+}

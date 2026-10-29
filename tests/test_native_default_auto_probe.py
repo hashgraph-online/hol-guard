@@ -65,7 +65,7 @@ def test_wait_for_receipt_corpus_polls_until_processed() -> None:
 
 
 def test_installed_corpus_waits_before_mode_changes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from ci.native_runtime import probe_native_default_auto as probe
+    from scripts import native_installed_hook_corpus as probe
 
     events: list[str] = []
 
@@ -122,6 +122,20 @@ def test_installed_corpus_waits_before_mode_changes(tmp_path: Path, monkeypatch:
     assert result["native_resident_decisions"] == 23
     assert result["route_count"] == 23
     assert events == ["started", "modes", "stopped"]
+
+
+def test_probe_loads_when_an_installed_dependency_owns_the_ci_namespace(monkeypatch: pytest.MonkeyPatch) -> None:
+    import importlib.util
+    import sys
+    from types import ModuleType
+
+    monkeypatch.setitem(sys.modules, "ci", ModuleType("ci"))
+    source = Path(__file__).resolve().parents[1] / "ci/native_runtime/probe_native_default_auto.py"
+    spec = importlib.util.spec_from_file_location("isolated_installed_probe", source)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert callable(module._installed_hook_corpus)
 
 
 def test_wait_for_route_corpus_observes_completion_before_snapshot() -> None:

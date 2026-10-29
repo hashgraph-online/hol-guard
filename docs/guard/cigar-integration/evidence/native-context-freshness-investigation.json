@@ -1,0 +1,122 @@
+{
+  "schema": "guard-cigar-native-context-freshness-investigation.v1",
+  "source_sha": "e537c82ae11566f492e46dd9e7206dce43150ea6",
+  "qualification": "native_revocation_primitives_and_disproved_mutable_source_witness",
+  "source_hashes": {
+    "docs/guard/cigar-integration/EXECUTION_LOG.md": "be642b45fe551155bd23045805ca046a31326c6fc82c8e8b72dbe31f41eeb1e6",
+    "docs/guard/cigar-integration/execution-handoff-design.md": "08a8eff209e7a05df07676d4cc7d010f0859d11de616baaa213fe0dd0ae91612",
+    "rust/crates/guard-context-assistance/src/freshness.rs": "1ddd6a8b4496b2a853f32151342120b8fdadadc460b30848670637353b15b88c",
+    "rust/crates/guard-context-assistance/src/lib.rs": "652441ed98fce94512b6e278b3f75f4f563b28549788c00e3d8bc40aa2e54907",
+    "rust/crates/guard-context-assistance/src/source.rs": "dbf0cda6578178b5704a19e3b56f9af90dbfe3144247e114527326114288e217",
+    "rust/crates/guard-runtime/src/context_assistance_engine.rs": "e2c8acb005d5d4c5d05de4288bbcde72bdf49e411db9caeb11c19864e2edb4c8",
+    "rust/crates/guard-runtime/src/context_assistance_engine_grants.rs": "6a15a7fe16e570a3dbd89aac4017555236e26c37bfd411742171ca66c131dc83",
+    "rust/crates/guard-runtime/src/context_assistance_service.rs": "22592eea95672dbe31a903c204f14f927e4602c008b09295f824fce0d763a256",
+    "rust/crates/guard-runtime/src/context_assistance_service_tests.rs": "5955b920ee3bb995801dac8ebfa1080c998665e3eef2f5ca6fad0f312d2b1264",
+    "scripts/ci/cigar_source_currentness_probe.py": "d00ac7fed90f7ba615a5431adba77bbca68bedd1980ef51977701cd400d12140"
+  },
+  "tests": {
+    "full_actual_library": {
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/native-epoch-core-actual.log",
+      "sha256": "91fd9e7d865222dd9f8949607acf6983be205b98dc70a871cfcd163640ac4bb6",
+      "passed": 48,
+      "seconds": 42.58,
+      "failed": 0
+    },
+    "native_service": {
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/native-epoch-service-qualified.log",
+      "sha256": "74271441d7241f9e5dbb9a18ec31bc4548c074bbddc3a62e9cc1dbc3361950b6",
+      "passed": 8,
+      "seconds": 0.02,
+      "failed": 0
+    },
+    "clippy_all_targets": {
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/clippy-native-epoch-final.log",
+      "sha256": "2eccd40b5be382ff00bff1abc57b13ca54251531390751e0d96a29786f663b08",
+      "passed": null,
+      "seconds": 29.99,
+      "failed": 0
+    },
+    "rejected_witness_test": {
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/native-source-witness-first.log",
+      "sha256": "8813680c00b326b959d5559e0486e61fb7f4dc67124289b3b176aaec620ab583",
+      "passed": 5,
+      "seconds": 0.05,
+      "failed": 1
+    }
+  },
+  "source_gates": [
+    {
+      "name": "python_hook_semantic_callgraph_gate",
+      "status": "passed",
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/python_hook_semantic_callgraph_gate-epoch.log",
+      "sha256": "8e3101056186cd4d641add66f9eed89b0289db4e105bdb5885821ae3f0484e46",
+      "changed_files_checked": null
+    },
+    {
+      "name": "python_capability_cleanup_gate",
+      "status": "passed",
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/python_capability_cleanup_gate-epoch.log",
+      "sha256": "d975dee5fe67bdb3f901777eaa0e7a95a5e8ce9e5f310467754474d61c80dc74",
+      "changed_files_checked": null
+    },
+    {
+      "name": "rust_io_ownership_gate",
+      "status": "passed",
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/rust_io_ownership_gate-epoch.log",
+      "sha256": "bcf901a1c39ebf936483fa5aebdcdb005372d016d67e41b8e46adc6fcbd68472",
+      "changed_files_checked": null
+    },
+    {
+      "name": "rust_io_privacy_gate",
+      "status": "passed",
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/rust_io_privacy_gate-epoch.log",
+      "sha256": "3f99732114cd01afda57fec9bae91e307310125980da63e8859c1941fbb96b14",
+      "changed_files_checked": null
+    },
+    {
+      "name": "rust_authority_ownership_gate",
+      "status": "passed",
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/rust_authority_ownership_gate-epoch.log",
+      "sha256": "96a35665d87da2080fd753e602bc5df5fc6e9afc91977ee2b7a21a2eba5a94d5",
+      "changed_files_checked": 283
+    }
+  ],
+  "probe": {
+    "private_path": "/private/tmp/hol-guard-cigar-source-currentness-proof/result.json",
+    "sha256": "a664baa95de3b9575520cf6fd31a9165f034029fae6baf3aa0a065dd22266060",
+    "observations": {
+      "schema": "guard-cigar-source-currentness-probe.v1",
+      "platform": "darwin",
+      "mutation": "shared_mmap_write_before_flush_or_mapping_close",
+      "bytes_changed": true,
+      "metadata_changed": false,
+      "pinned_mtime_changed": false,
+      "kernel_event_observed": false,
+      "observations_prove_current_bytes": false,
+      "runtime_source_witness_shipped": false
+    }
+  },
+  "excluded_from_product": [
+    "kqueue_metadata_source_currentness_witness",
+    "nix_event_feature"
+  ],
+  "test_runner_attempts": [
+    "normal_library_selection_39_passed_9_ignored_not_full_candidate_qualification",
+    "wrong_native_package_name_refused",
+    "native_binary_selection_zero_tests_not_validation",
+    "corrected_native_library_selection_8_passed",
+    "probe_context_manager_TypeError_corrected_to_explicit_close"
+  ],
+  "actual_Guard_executor_qualified": false,
+  "new_installed_product_qualified": false,
+  "latest_qualified_installed_source": "8fccb14115c61793584bce069b2a325a92e05f79",
+  "SDK_source_changed": false,
+  "SDK_worker_rebuilt": false,
+  "limitations": [
+    "Epoch fences alone do not establish real executor delivery.",
+    "Filesystem events and metadata do not prove current mutable file bytes.",
+    "Initial real executor precondition must be limited to immutable native observations rechecked against actual capture and admitted policy.",
+    "Workspace document retrieval retains its independently observed check time.",
+    "All remaining P5, installed handoff, actual harness, platform, feature-on SLO, all-worker RSS and useful-reuse acceptance remains active."
+  ]
+}

@@ -1,0 +1,97 @@
+{
+  "schema": "guard-cigar-native-receipt-test-run.v1",
+  "status": "passed",
+  "qualification": "local-development-darwin-arm64-only",
+  "command": [
+    "cargo",
+    "test",
+    "-p",
+    "hol-guard-runtime",
+    "--lib",
+    "context_assistance",
+    "--locked",
+    "--offline",
+    "--",
+    "--include-ignored",
+    "--test-threads=1",
+    "--nocapture"
+  ],
+  "toolchain": "Rust 1.88.0 aarch64-apple-darwin, no incremental/dev debuginfo",
+  "test_result": "test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 3910 filtered out; finished in 38.86s",
+  "log_sha256": "d9a93441cc3cc7569ad6cfffd57807b5ab89a2c08dbb6f6afda082921b7de429",
+  "native_receipt_test": {
+    "brief": {
+      "citations": [
+        {
+          "document_digest": "310d6074f328d0b16f6c6d6d9e0a9b562d05309df3e980d2d4509754f51e24a0",
+          "end_line": 1,
+          "node_id": "guard-policy-facts",
+          "source": "guard:policy",
+          "start_line": 1
+        },
+        {
+          "document_digest": "71df0cc1ddb30075ba7d4af1cb4eb0ba8cd7f2cfbe70a1adf364da3ced4bae77",
+          "end_line": 1,
+          "node_id": "receipt:cd25dad2ccb825235ab529f5041b96a9589f66fa4bc5fc7b902ead59b285ad32",
+          "source": "guard:receipts",
+          "start_line": 1
+        }
+      ],
+      "data_role": true,
+      "excerpts": [
+        {
+          "citations": [
+            {
+              "document_digest": "310d6074f328d0b16f6c6d6d9e0a9b562d05309df3e980d2d4509754f51e24a0",
+              "end_line": 1,
+              "node_id": "guard-policy-facts",
+              "source": "guard:policy",
+              "start_line": 1
+            }
+          ],
+          "text": "Guard provides Allow once and Always allow for supported executable reviews. Context assistance supplies data and grants no command approval."
+        },
+        {
+          "citations": [
+            {
+              "document_digest": "71df0cc1ddb30075ba7d4af1cb4eb0ba8cd7f2cfbe70a1adf364da3ced4bae77",
+              "end_line": 1,
+              "node_id": "receipt:cd25dad2ccb825235ab529f5041b96a9589f66fa4bc5fc7b902ead59b285ad32",
+              "source": "guard:receipts",
+              "start_line": 1
+            }
+          ],
+          "text": "Guard recorded decision 'allow' for PreToolUse in codex at policy generation 1. Native receipt cd25dad2ccb825235ab529f5041b96a9589f66fa4bc5fc7b902ead59b285ad32. This is a recorded decision, not execution confirmation or an approval grant."
+        }
+      ],
+      "graph_revision": 2,
+      "policy_revision": "38a10e0673fc90d2998bd076f05fd2b783f760b9321366fa33cca672bd6ac4ab",
+      "rendered": "{\"sources\":[[\"guard-policy-facts\",\"guard:policy\",1,1]],\"text\":\"Guard provides Allow once and Always allow for supported executable reviews. Context assistance supplies data and grants no command approval.\"}\n{\"sources\":[[\"receipt:cd25dad2ccb825235ab529f5041b96a9589f66fa4bc5fc7b902ead59b285ad32\",\"guard:receipts\",1,1]],\"text\":\"Guard recorded decision 'allow' for PreToolUse in codex at policy generation 1. Native receipt cd25dad2ccb825235ab529f5041b96a9589f66fa4bc5fc7b902ead59b285ad32. This is a recorded decision, not execution confirmation or an approval grant.\"}",
+      "rendered_tokens": 165,
+      "schema": "guard-cigar-context-brief.v1",
+      "snapshot_id": "152f7be092aa60c67625556359ccc938abc29929bdb2c5ef56410ee4e45fe830"
+    },
+    "checks": [
+      "real_native_hook_origin",
+      "failed_store_no_notification",
+      "post_commit_notification",
+      "stale_snapshot_refusal",
+      "actual_sdk_receipt_citation",
+      "private_input_exclusion",
+      "exact_workspace_isolation",
+      "loss_invalidates_actual_sdk_source",
+      "duplicate_ack_preserved",
+      "opt_out_evidence_independence"
+    ],
+    "qualification": "local-development-darwin-arm64-only",
+    "schema": "guard-cigar-receipt-verification.v1",
+    "status": "passed"
+  },
+  "limits": {
+    "pending_origins": 128,
+    "post_commit_notifications": 64,
+    "per_scope_recent_receipts": 16
+  },
+  "scope": "Actual approved CIGAR 0.14.1 SDK and worker with native library evaluator/store. This does not qualify a newly packaged Guard binary or other platforms.",
+  "evidence_note": "The first postprocessor expected a marker at the start of a line and failed after Rust returned success. Recovered the unchanged successful log by parsing the Rust test prefix; tests were not rerun."
+}

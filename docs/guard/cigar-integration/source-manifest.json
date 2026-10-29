@@ -1,0 +1,294 @@
+{
+  "schema": "hol-guard-cigar-integration-source-manifest.v1",
+  "created_at_utc": "2026-10-22T23:08:53+00:00",
+  "scope": "Source analysis and proposed design; no runtime integration implemented",
+  "checkout": {
+    "branch": "feature/integrate-cigar-0.14.1",
+    "baseline_release": "v3.55.1",
+    "origin": "https://github.com/hashgraph-online/hol-guard.git",
+    "creation_method": "Independent local clone without hardlinks; checked out the commit confirmed by the public release page"
+  },
+  "sources": [
+    {
+      "repository": "hol-guard",
+      "repository_url": "https://github.com/hashgraph-online/hol-guard",
+      "revision": "35180b995cb27fdc9f92e1f68307a756c785f154",
+      "local_directory": ".",
+      "files": [
+        {
+          "path": "AGENTS.md",
+          "git_blob_sha1": "7fa0702f59ab9ffad1c27f1bd5d59fabc904ef40",
+          "sha256": "ac20bc4ce0a32bfd0bb87cc5b71aa3a92b7559792bffb31e7a311bcce0f14ac3"
+        },
+        {
+          "path": "PRODUCT.md",
+          "git_blob_sha1": "bfca85c5d3f7e5e5bb9b683a2ee337c4885cada8",
+          "sha256": "0fb6c04058b509d2f6f09262de5ad587ad666725afb5c66be9fcc7dab427c153"
+        },
+        {
+          "path": "dashboard/src/action-explanation-summary.tsx",
+          "git_blob_sha1": "fa8d5b0f7b49b7dabbbceed7ab05995fbfce6a37",
+          "sha256": "7981306703da85675643c0ce8b1e3fd7ddfc8cda097849e97efed912c6363104"
+        },
+        {
+          "path": "dashboard/src/evidence/evidence-action-detail.tsx",
+          "git_blob_sha1": "1eee98b0ef7034664318b50fa098d85faf1c6db5",
+          "sha256": "71dd364520c51441559dbb3febedf244a7caa497375a701ac0a02d7792fb76fa"
+        },
+        {
+          "path": "dashboard/src/review-decision-card.tsx",
+          "git_blob_sha1": "ee34bd1be8630bc02243719d2767ee98be78d960",
+          "sha256": "e321934555f836c90c01258dcaf1267af344a957e3982c62ae7377b740b2e14e"
+        },
+        {
+          "path": "dashboard/src/review-evidence.tsx",
+          "git_blob_sha1": "099cc722d1b7b376a4e23695fa51c523a92bb425",
+          "sha256": "4b25be5f0d7b9f6e637512d65ff6b52677b95ac772e20e5388b35b23b486d01f"
+        },
+        {
+          "path": "dashboard/src/settings/settings-ia.tsx",
+          "git_blob_sha1": "99e3285d5e1bfe5755af7af0d4c09cf90634a477",
+          "sha256": "f7c08393169515ccefdb11899e9a490c62e1e93d173ef6d4c789b69594d493e7"
+        },
+        {
+          "path": "dashboard/src/settings-workspace.tsx",
+          "git_blob_sha1": "cc9549c6421055c282d66921757182eccf8b93db",
+          "sha256": "0b702f366b22de837630e921ec8465638e0dfc3b0a51467bfdc9cee29f8c5111"
+        },
+        {
+          "path": "docs/guard/approval-invariant.md",
+          "git_blob_sha1": "fa1a66a250ac6b339f9b0e9476f5b4b1cf464f6d",
+          "sha256": "9a32db3a8047d66fc1c13ffb57958e2ff9692c03ed04a54db11355ffba16092f"
+        },
+        {
+          "path": "docs/guard/contracts/hook-data-plane-ownership.v2.json",
+          "git_blob_sha1": "532954bfcb5d196ee21b2bb72c7ebf64225fec0d",
+          "sha256": "ab02907b1d7967c238bcbbd3c5eef573710084b6b9a2f6f9d5f15966d4f5c088"
+        },
+        {
+          "path": "docs/guard/native-hook-data-plane-ownership.md",
+          "git_blob_sha1": "263cdb102d5bde8efc74f9c27ff5e12ece086e79",
+          "sha256": "00faf8a7630d71fd36ac0aa6d7504a4052db13479232b3dce76255f2efd4b2b8"
+        },
+        {
+          "path": "docs/guard/native-runtime-slo-proof.md",
+          "git_blob_sha1": "edbeb954d788c3fc9f73a9300cd50945a3b5167b",
+          "sha256": "594007282c19bec4ef3d3e5103d91dff4251679ca27902fe3e6b80083b88f078"
+        },
+        {
+          "path": "docs/guard/privacy-safe-outcome-receipts.md",
+          "git_blob_sha1": "37ecc1d6a7e28e57e5543fcb92f2e3a6d8248893",
+          "sha256": "93ea4aa72139834a9c2c68f02fe68c330112d899d3df846520786a9a934087f1"
+        },
+        {
+          "path": "pyproject.toml",
+          "git_blob_sha1": "db7329b9c02d29ecdc6d8287ba60cfa86f651766",
+          "sha256": "0f6bb52b06d77ac709bb3560ebce79448d68c0c6f653925137e0d8eaea7a41b9"
+        },
+        {
+          "path": "rust/crates/guard-runtime/src/guard_config_update.rs",
+          "git_blob_sha1": "11c5ebb77cce91e543c4ca0b2f8d58c14154919d",
+          "sha256": "3184c95360548f8eab9e8e095d999e01ca7d1c75eface7d094a2dbdba5991c21"
+        },
+        {
+          "path": "rust/crates/guard-runtime/src/guard_config_update_settings.rs",
+          "git_blob_sha1": "7f0221a149affc89c44d0130b030a35f374f7bba",
+          "sha256": "813ac152fc8c693624649df6fee855ff8243d213dad0795d0e14712d208ccfe7"
+        },
+        {
+          "path": "rust/crates/guard-runtime/src/hook_direct_evidence.rs",
+          "git_blob_sha1": "43a14db0a91b36bf3357b2dd7ce62e9d16f29388",
+          "sha256": "08f16589dc4cb6d86d4828ebedb8d20f3d03acdc4a217dbc93e5ae8edf0413b1"
+        },
+        {
+          "path": "rust/crates/guard-runtime/src/hook_direct_saved_decision.rs",
+          "git_blob_sha1": "693743b99d2cd30997d2ee4139cbde5b7f49c84d",
+          "sha256": "b49f4918781851a4bda8f50bde9229957dd927af54fc2e48ba3dca9b36ed1ab5"
+        },
+        {
+          "path": "rust/crates/guard-runtime/src/hook_evidence_writer_op.rs",
+          "git_blob_sha1": "601edb8d826e062372fe48549346d841fe63876d",
+          "sha256": "d5de296fd5d96d9d6b4dcea5929aa06441748163cc174c589ea86d86add1662b"
+        },
+        {
+          "path": "rust/crates/guard-runtime/src/inventory_source_evidence_op.rs",
+          "git_blob_sha1": "36d0d1298eb90d2f0a9a3053f62cb2e99ebee292",
+          "sha256": "93021d84fb58b3b7fd24ed78a16d8929ebe02a2df7ffa71a254cfcc591b6aab9"
+        },
+        {
+          "path": "rust/crates/guard-runtime/src/native_exact_action_op/token.rs",
+          "git_blob_sha1": "00abe6523ce476191b3313e1eed1146cfbc8d0d8",
+          "sha256": "83a989d0066273d22a1c30bd7687f412767e0424972e60da22bc3d95dbf513e8"
+        },
+        {
+          "path": "rust/crates/guard-runtime/src/resident_workspace_review_context.rs",
+          "git_blob_sha1": "fd3fef4fe1bc669ba41b7e2393090b1b294ea44c",
+          "sha256": "236da8b257ed35bbfc5f6cefc386f37ee829fb641eb04d5292ae2faae8037ec9"
+        },
+        {
+          "path": "scripts/release/stage_native_runtime_for_desktop_core.py",
+          "git_blob_sha1": "38c09faaeb25b303e83ca29853356e390ab9ea5a",
+          "sha256": "fd32760319ea428adcafa3d6d667af5fe81fdfbd5d74e3e61b7e467096972b2e"
+        },
+        {
+          "path": "scripts/release/verify_pyinstaller_native_runtime.py",
+          "git_blob_sha1": "e37c984dd5abfb8bf051f2149d534a15f69129fa",
+          "sha256": "2570b8d077858ff88928203e306637a490fc9260cd96c3272e9bab543b660960"
+        },
+        {
+          "path": "src/codex_plugin_scanner/guard/config.py",
+          "git_blob_sha1": "a7db4beb2e6c56cdf2269b36597abce3924b7718",
+          "sha256": "e1eba0e3712d752bec771fd9246cf4f1221170338266453a73cd86f691813c5f"
+        },
+        {
+          "path": "src/codex_plugin_scanner/guard/daemon/hook_evidence_dispatch.py",
+          "git_blob_sha1": "c106af0dcd8ea586c168815d187d6558877f21c1",
+          "sha256": "6860c02caa38507f2b7e5c0be232eb8eefb9f3f68a12791f7ff6c052a011fb41"
+        },
+        {
+          "path": "src/codex_plugin_scanner/guard/mcp/registry.py",
+          "git_blob_sha1": "cbef387524796c24a887daa2097abd3a944ef70f",
+          "sha256": "9306a06c696d1743d3ca42a2676d24b3719109cb6fbe122be7850223bbc8f68e"
+        },
+        {
+          "path": "src/codex_plugin_scanner/guard/mcp/server.py",
+          "git_blob_sha1": "233e307987ae401ab9a2db38361084cb0c475700",
+          "sha256": "04e69c2da493dd3c3154e15672453419aa20ba72979b1cdac4640b2c9b769004"
+        },
+        {
+          "path": "src/codex_plugin_scanner/guard/native_hook_evidence_writer.py",
+          "git_blob_sha1": "2bb38d5f0e729b3ebfd50645afadf0e768e30502",
+          "sha256": "dbfc3adef4f98f9eeaaf85e82d3cf410bc5a0a2bd8fd8cbf9ba9cc9eae6f095e"
+        },
+        {
+          "path": "src/codex_plugin_scanner/guard/runtime/hook_enrichment_queue.py",
+          "git_blob_sha1": "89fe48f16ad878b717cced58bb4ea80d1b9a3700",
+          "sha256": "bbaf5b42c176254d47d83ef1f3a9e67372cccd845d0c0ed951a1d01f4c7aad1d"
+        }
+      ]
+    },
+    {
+      "repository": "hol-cigar",
+      "repository_url": "https://github.com/hashgraph-online/hol-cigar",
+      "revision": "b47380e5a5cbeaaad5a61cab3372e9e67368732f",
+      "local_directory": "../hol-cigar-0.14.1-security",
+      "files": [
+        {
+          "path": "README.md",
+          "git_blob_sha1": "8e79cdb9118b423fbaf3841e7713e9449d640c84",
+          "sha256": "97779ba21e1dba73c74d071f3c7c843f43216bcff55757d723354fa4ce5e9e4f"
+        },
+        {
+          "path": "crates/cigar-context/Cargo.toml",
+          "git_blob_sha1": "d0b90e60e58ea34fd9d5899dca5f2c8f0985eba6",
+          "sha256": "ce07ebb52285a407ceea1044bd41fd76f3f606fd2ac89b46fe43dfa0c1b1210b"
+        },
+        {
+          "path": "docs/release/context-sdk-0.14.1-notes.md",
+          "git_blob_sha1": "54e7296df8a8617f34c7d611f237f3910b6c2645",
+          "sha256": "49523807fe610f5c94ed3b4736f35d9705d4f653a70016c5b72abf54a72bf868"
+        },
+        {
+          "path": "packaging/pypi/pyproject.toml",
+          "git_blob_sha1": "4e1232b5d67b72c94cbbb7fdea056ec7a00d393c",
+          "sha256": "3cb93ef2b8aa2dfd581e7e2f9a660c1717ea99001cd9eeb304122721f58c2ce9"
+        },
+        {
+          "path": "sdk/LOCAL_BROKER_GUIDE.md",
+          "git_blob_sha1": "5ecf188f4ec8324f51b4db6c0fd75088355eca47",
+          "sha256": "dd631a498aee4a10a112f96d2bbc2a484c3d3cfede7ee9f43942625b02f3418e"
+        },
+        {
+          "path": "sdk/LOCAL_CONTEXT_GUIDE.md",
+          "git_blob_sha1": "13020740940cde4f7b915a57e44d877ef2a955b1",
+          "sha256": "3aa5c2fbf0b4fb1d4c872f6e1e56ccf1eb2104d47f7cc2914ed55960f29126cb"
+        },
+        {
+          "path": "sdk/SELECTION_EXPLANATIONS.md",
+          "git_blob_sha1": "a63bea0bf4772dac7c469f4175ba39a82d510383",
+          "sha256": "38ddbce0ee69f826ebd1f99fecebde28d5ce1d1190e686372b1996a379ba5c9c"
+        },
+        {
+          "path": "sdk/python/README.md",
+          "git_blob_sha1": "8c199dece203f4e23a04f2a648010315645be9e0",
+          "sha256": "3d753e2d3c7da753798ee80d1450b4a013a572a78625cff86b2c9e8f8922e7c5"
+        },
+        {
+          "path": "sdk/python/pyproject.toml",
+          "git_blob_sha1": "c64a9458a03aec7d7ec2b163e1f7b48c6fdbb865",
+          "sha256": "ed95ecd5a24a685213f77d949e791d1204f3ce6f935f8ffeb3d859cedc432edf"
+        },
+        {
+          "path": "sdk/python/src/cigar_sdk/broker.py",
+          "git_blob_sha1": "a5193cf2781f12c1e131e517ba1c58f446216fbc",
+          "sha256": "b5059950af4a3a6e2f049af6a73202dbfc84489130388916da739918362e199e"
+        },
+        {
+          "path": "sdk/python/src/cigar_sdk/broker_types.py",
+          "git_blob_sha1": "08463676416292a7ea25a886c9e57f43dfe9babb",
+          "sha256": "3ce3669c10575d2520396eb2f10e1494b079084c389b57157a6a9dbef048e39a"
+        },
+        {
+          "path": "sdk/python/src/cigar_sdk/context.py",
+          "git_blob_sha1": "adbea528856850118e393d174ac632b8c77f022a",
+          "sha256": "ce64c45579f63a76edc87bbded61a43e88f1c250c6080e2c9123e8b5afe59d7a"
+        },
+        {
+          "path": "sdk/python/src/cigar_sdk/context_types.py",
+          "git_blob_sha1": "c72bb8d9b254f26c2655e432a407e8fabd451af8",
+          "sha256": "22905d48bd2cbd1f6ddacca0f9614495706af9d2d5f048a47e676df792369211"
+        },
+        {
+          "path": "sdk/python/src/cigar_sdk/local_runtime.py",
+          "git_blob_sha1": "1fd85b165b707df5386b5cee4900ea0ed4abb6fb",
+          "sha256": "95b7209e46a3861dc015014f8653bd0ac48d356e5bb9c6d33e6bf549854f8a5f"
+        },
+        {
+          "path": "sdk/python/src/cigar_sdk/native_platforms.py",
+          "git_blob_sha1": "4290c3f5915d2fc91ee9315208bc2335a8bc6d77",
+          "sha256": "7fe959a57375a24bd2761d4ea31ea90d053e25897019b2d600db849fdbae6cf8"
+        }
+      ]
+    }
+  ],
+  "public_release_observations": [
+    {
+      "url": "https://github.com/hashgraph-online/hol-guard/releases/tag/v3.55.1",
+      "observed_on": "2026-10-22",
+      "http_status": 200,
+      "release_commit": "35180b995cb27fdc9f92e1f68307a756c785f154"
+    },
+    {
+      "url": "https://pypi.org/project/hol-cigar/0.14.1/",
+      "observed_on": "2026-10-22",
+      "http_status": 404
+    },
+    {
+      "url": "https://github.com/hashgraph-online/hol-cigar/releases/tag/v0.14.1",
+      "observed_on": "2026-10-22",
+      "http_status": 404
+    }
+  ],
+  "local_interpreter_observation": {
+    "implementation": "cpython",
+    "version": [
+      3,
+      14,
+      7
+    ],
+    "release_level": "final",
+    "system": "Darwin",
+    "machine": "arm64",
+    "isolated_package_metadata": {
+      "hol-cigar": null
+    },
+    "scope": "One selected interpreter; not every environment on this machine"
+  },
+  "verification_scope": {
+    "source_files_match_declared_commits": true,
+    "application_tests_run": false,
+    "package_installation_performed": false,
+    "cigar_worker_started": false,
+    "integration_benchmarks_run": false
+  }
+}

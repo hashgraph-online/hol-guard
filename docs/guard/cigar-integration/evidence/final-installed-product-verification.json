@@ -1,0 +1,2289 @@
+{
+  "schema": "guard-cigar-final-installed-product-verification.v1",
+  "product_build_sha": "83d62bf72ea2fbde46b2d41a32fa2ba1a9b4a92d",
+  "latest_test_and_soak_source_sha": "f38f95242ad278f72d7c804ecf3c3fb4c79b6da6",
+  "native_and_Python_runtime_source_unchanged_from": "75c78563ed4e3c949c01285133fff9e15aa24193",
+  "only_product_source_change_from_prior_package": "dashboard/src/context-assistance/workspaces-panel.tsx: storage disclosure follows Evidence storage preference",
+  "SDK_source_sha": "b47380e5a5cbeaaad5a61cab3372e9e67368732f",
+  "SDK_not_modified_or_rebuilt": true,
+  "artifact": {
+    "path": "/private/tmp/hol-guard-cigar-package-build/final-disclosure-83d62bf7/installed-artifact-verification.json",
+    "bytes": 594,
+    "sha256": "fe295d9a61149df7387e6a382b770806f12d636bc8a6b144826ef43b26341fef",
+    "result": {
+      "source_sha": "83d62bf72ea2fbde46b2d41a32fa2ba1a9b4a92d",
+      "mode": "auto",
+      "native_available": true,
+      "native_compatible": true,
+      "path_override": false,
+      "CIGAR_imported_in_Guard": false,
+      "Guard_python": [
+        3,
+        12,
+        13
+      ],
+      "binary_bytes": 112624128,
+      "binary_sha256": "7f451d549ab9291d62507d44ca7726d2e2661faea82f8e9abcfdde89106cde90",
+      "wheel_bytes": 40318744,
+      "wheel_sha256": "b43227eadece5f0bf564afdced7506f3fad0326dddd39d25663fe8e921b71c38",
+      "static_files_verified": 33,
+      "corrected_retention_disclosure": true,
+      "manifest_target": "aarch64-apple-darwin"
+    }
+  },
+  "native_metadata": {
+    "path": "/private/tmp/hol-guard-cigar-package-build/final-disclosure-83d62bf7/native-metadata.json",
+    "bytes": 9138,
+    "sha256": "15a6729e10b0c8f0dce75d343fa007f957d2a13f5ee42b813038025de2b67114",
+    "result": {
+      "binary_bytes": 112624128,
+      "binary_sha256": "7f451d549ab9291d62507d44ca7726d2e2661faea82f8e9abcfdde89106cde90",
+      "capabilities": {
+        "protocol_version": 1,
+        "runtime_version": "3.55.1",
+        "rule_digest": "54e38cc15fe1e4bb231214e15876422e5c0f872d2d3d5bae85b6c02e43ac7111",
+        "build_sha": "83d62bf72ea2fbde46b2d41a32fa2ba1a9b4a92d",
+        "target": "aarch64-macos",
+        "features": [
+          "post-tool-inline-v1",
+          "post-tool-source-read-v1",
+          "oneshot-v1",
+          "framed-serve-v1",
+          "resident-protocol-v2",
+          "bounded-admission-v2",
+          "overload-signal-v1",
+          "panic-containment-v1",
+          "rule-contract-v2",
+          "pre-tool-command-model-shadow-v1",
+          "resident-command-model-shadow-v1",
+          "rich-command-model-v1",
+          "pre-tool-command-authority-v1",
+          "pre-tool-path-context-v1",
+          "pre-tool-execution-environment-v1",
+          "pre-tool-generic-authority-v1",
+          "native-command-program-v1",
+          "native-command-control-fence-v1",
+          "policy-snapshot-v3",
+          "policy-snapshot-push-v1",
+          "policy-snapshot-resident-generation-v1",
+          "policy-snapshot-direct-lane-v1",
+          "hook-direct-v1",
+          "hook-direct-contained-route-v1",
+          "hook-direct-permission-notice-v1",
+          "hook-direct-saved-decision-v1",
+          "hook-direct-structured-output-v1",
+          "hook-direct-review-facts-v1",
+          "hook-direct-evidence-v1",
+          "directory-trust-v1",
+          "hook-path-rules-v1",
+          "mcp-relay-decide-v2",
+          "mcp-relay-server-report-v1",
+          "native-approval-artifact-v3",
+          "native-approval-challenge-v3",
+          "native-approval-validation-v3",
+          "native-approval-consume-v3",
+          "native-approval-webauthn-v4",
+          "native-approval-challenge-v4",
+          "native-approval-validation-v4",
+          "native-approval-consume-v4",
+          "native-approval-replay-memory-v1",
+          "native-workspace-review-authority-v1",
+          "native-workspace-review-enrollment-resident-v1",
+          "native-workspace-review-context-v1",
+          "native-local-business-review-summary-v1",
+          "native-local-business-review-queue-v1",
+          "native-workspace-review-decision-v1",
+          "native-policy-in-memory-v1",
+          "native-policy-snapshot-build-v1",
+          "native-policy-snapshot-inspect-v1",
+          "native-business-policy-retained-floor-v1",
+          "native-business-policy-document-compile-v1",
+          "native-guard-config-load-v1",
+          "native-guard-config-update-v1",
+          "native-policy-effective-v1",
+          "native-business-source-codec-v1",
+          "native-business-source-anchor-codec-v1",
+          "native-business-source-current-fence-v2",
+          "hook-envelope-v2",
+          "hook-harness-response-v1",
+          "git-execution-context-v1",
+          "native-resident-client-v1",
+          "shell-helpers-v1",
+          "native-resident-lifecycle-v1",
+          "secrets-cli-v1",
+          "context-assistance-control-v2",
+          "context-assistance-workspaces-v1",
+          "context-assistance-native-decisions-v1",
+          "context-assistance-history-v1",
+          "context-assistance-agents-v1",
+          "archive-inspection-v1",
+          "archive-acquisition-v1",
+          "context-digest-v1",
+          "native-bash-reply-validation-v1",
+          "command-effect-v1",
+          "command-effect-batch-v1",
+          "approval-reuse-v1",
+          "composio-role-v1",
+          "extension-control-v1",
+          "extension-allow-hint-v1",
+          "pre-tool-extension-evidence-v1",
+          "approval-extension-recommendation-v1",
+          "github-cli-classify-v1",
+          "protect-request-v1",
+          "claim-approval-reuse-v1",
+          "approval-reuse-diagnostic-v1",
+          "approval-reuse-diagnostic-reuse-v1",
+          "approval-bulk-eligibility-v1",
+          "codex-request-resume-v1",
+          "approval-queue-identity-v1",
+          "approval-resolution-plan-v1",
+          "approval-scope-v1",
+          "approval-scope-select-v1",
+          "approval-resolution-eligibility-v1",
+          "approval-persist-select-v1",
+          "policy-document-decision-v1",
+          "command-policy-decision-v1",
+          "command-expression-validation-v1",
+          "reviewed-invocation-bindings-v1",
+          "hook-render-v2",
+          "guard-store-v1",
+          "approval-gate-v2",
+          "package-authority-v1",
+          "package-evaluation-compose-v1",
+          "package-approval-hash-v1",
+          "verified-npm-v1",
+          "package-policy-resolve-v1",
+          "package-protect-finalize-v1",
+          "package-posture-v1",
+          "package-audit-projection-v1",
+          "workspace-inventory-v1",
+          "supply-chain-eval-v1",
+          "shim-admin-v4",
+          "package-context-build-v1",
+          "mcp-stdio-probe-v1",
+          "mcp-classification-v1",
+          "prompt-analyze-v2",
+          "data-flow-analyze-v2",
+          "tool-action-request-identity-v1",
+          "runtime-artifact-identity-v1",
+          "verified-read-decision-v1",
+          "policy-decision-lookup-v1",
+          "runtime-saved-reuse-v1",
+          "policy-decision-lookup-memory-v1",
+          "policy-decision-lookup-local-tool-grant-v1",
+          "policy-decision-lookup-portable-composition-v1",
+          "catalog-read-model-v1",
+          "catalog-read-discovery-v2",
+          "catalog-prepare-v1",
+          "catalog-prepare-batch-v1",
+          "cloud-catalog-producer-v2",
+          "discovery-placement-projection-v1",
+          "release-feed-projection-v1",
+          "git-execution-safety-v1",
+          "compound-git-inspection-v1",
+          "codex-tool-output-v1",
+          "policy-bundle-authority-v1",
+          "mcp-runtime-evidence-v1",
+          "runtime-detector-run-v1",
+          "runner-authority-v1",
+          "local-cli-grant-v1",
+          "local-cli-hook-v1",
+          "connector-setup-context-v1",
+          "artifact-risk-v1",
+          "local-tool-eligibility-v1",
+          "approval-proof-v1",
+          "approval-proof-claim-row-v1",
+          "cursor-observer-proof-v1",
+          "hook-authority-state-v1",
+          "extension-control-authority-v1",
+          "hook-authority-state-session-ops-v1",
+          "policy-integrity-rows-v1",
+          "policy-integrity-generation-v1",
+          "hook-decision-v1",
+          "hook-decision-post-claim-compose-v1",
+          "hook-decision-artifact-directive-v1",
+          "hook-decision-native-permission-persist-plan-v1",
+          "hook-decision-artifact-review-route-v1",
+          "hook-decision-json-exit-code-v1",
+          "hook-decision-native-edge-reason-v1",
+          "hook-decision-artifact-finalize-v1",
+          "hook-decision-artifact-reuse-step-v1",
+          "hook-decision-hook-route-v1",
+          "hook-decision-pretool-floor-v1",
+          "hook-decision-containment-route-v1",
+          "hook-decision-claude-permission-verdict-v1",
+          "daemon-route-v1",
+          "daemon-handler-v1",
+          "hook-artifact-compose-v1",
+          "hook-artifact-facts-v1",
+          "hook-artifact-facts-content-hash-v1",
+          "artifact-content-hash-v1",
+          "hook-artifact-compose-package-firewall-access-v1",
+          "hook-artifact-compose-prompt-reason-v1",
+          "hook-artifact-compose-remembered-rule-v1",
+          "hook-artifact-compose-package-firewall-entitlement-v1",
+          "hook-artifact-compose-package-reuse-v1",
+          "hook-artifact-compose-policy-lookup-v1",
+          "hook-artifact-compose-signal-composition-v1",
+          "hook-artifact-compose-policy-tail-v1",
+          "consumer-artifact-compose-v2",
+          "consumer-artifact-project-v1",
+          "hook-adapter-v1",
+          "mcp-tool-evidence-v1",
+          "local-mcp-grant-v1",
+          "mcp-proxy-decision-v1",
+          "mcp-proxy-archive-verify-v1",
+          "mcp-proxy-inline-approval-reply-v1",
+          "mcp-proxy-archive-binding-required-v1",
+          "mcp-sensitive-read-artifact-v1",
+          "cisco-preflight-v2",
+          "daemon-lifecycle-decision-v1",
+          "contributed-mcp-decision-v1",
+          "request-context-v1",
+          "mcp-tool-policy-decide-v1",
+          "mcp-tool-call-identity-v1",
+          "github-workflow-prepare-v1",
+          "native-exact-action-v4",
+          "native-exact-action-v3",
+          "native-exact-action-v2",
+          "native-exact-action-v1",
+          "native-bash-subject-inspection-v1",
+          "native-bash-owner-protocol-v1",
+          "native-bash-package-evidence-v1",
+          "native-bash-review-lineage-v1",
+          "native-bash-review-descriptor-v1",
+          "native-bash-activity-v1",
+          "native-bash-host-liveness-v1",
+          "native-bash-invocation-lifetime-v1",
+          "native-bash-result-policy-v1",
+          "skill-workflow-preflight-v1",
+          "inventory-source-evidence-v1",
+          "command-pack-record-v1",
+          "mcp-stdio-session-v1",
+          "authenticated-unix-resident-v1",
+          "contained-execution-v1",
+          "codex-binding-capture-v1",
+          "mcp-stdio-relay-v1",
+          "hook-evidence-writer-v1",
+          "claude-session-start-v1",
+          "claude-hook-bridge-v1",
+          "codex-hook-bridge-v1",
+          "bounded-hook-bridge-v1",
+          "cursor-hook-bridge-v1",
+          "pi-hook-bridge-v1",
+          "skill-directory-identity-v1"
+        ],
+        "program_digest": "489b75f13ee16cef56cb12ccd0716bb1af7ff8b437a3403b3cffc51cfa1cafd7",
+        "catalog_digest": "540fe5015ed273d6fa94da91085b2a987e3b5eb5c7ae95d0fe3c30a3cecfa39b",
+        "trust_digest": "aa437eec9b2a68fd3cac25c033ccbf5c9612fa2c4244bf83bc7b3df414f5e07d"
+      },
+      "compiler": {
+        "embedded_catalog": true,
+        "implementation_digest": "131c80bccfe3719e535fa6bf780eca46ddef008a8d63c8f1afae36d21d083035",
+        "schema": "guard.source-compiler-capabilities.v1"
+      }
+    }
+  },
+  "strict_macos_signature_and_unchanged_128_mib_cap_passed": true,
+  "static": {
+    "built": {
+      "path": "/private/tmp/hol-guard-cigar-package-build/final-disclosure-83d62bf7/static-built.json",
+      "bytes": 5185,
+      "sha256": "0cace864216188deb44eae75f47f47fd1bb0e7113aadca37a01279e93de19a34",
+      "result": {
+        "src/codex_plugin_scanner/guard/daemon/static/apple-touch-icon.png": "b61ad573476e1f7113834dea9517abf7bd78269461d03198aa9d91a6f5464dd7",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/about-content-BwtrHEyh.js": "b00cc5a0d7e56f8ab370b21c644165a2d366ae7ac412c5d3003941486555da35",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/about-workspace-BPejD30e.js": "fa8a52ab23ac56eb0365648fabb6ed2d7073893cce48cd79b722eadb655dff69",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/app-catalog-CMiFwya1.js": "ebadc4d050b904d56b737ba7936b6a68fdba4905c32d8cfb5c5dfe9c1aef9d5a",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/app-detail-workspace-Bkb30DTE.js": "604e6b90703571491af569f256fc062b7cf94187c7de8ac470569ed73bf2228a",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/audit-workspace-DlRO6m5v.js": "4a6e734fa2a6ed3320248dcaf6a3e50837a7c633f1a5e12e76c95d450a7a3632",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/business-policy-recovery-panel-DUvgw-7G.js": "42f57c4f6c3dd3ad5040c4ff211489c10ecad9c0738e5ccdca9427fc305a3a62",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/confirm-dialog-CE725nAF.js": "28e2980e4414319422cbb8bf9ada7fc47433191b618ed08657360bd94328d294",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/connect-guard-cloud-button-BbTxZ6P3.js": "65fad2f05b7350065af9fa16001b71485721c949700733c85cd65448fa3322a4",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/extensions-workspace-xMXpA97W.js": "f8a41d539a27e1db1bc5b6e41c8eacaaa4d37696517ace435c56c337da7c2ac6",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/feed-health-workspace-DlDiW93E.js": "08a8a3b853b75abe42045e51d30c7773f4cbe7c7e19dcfc21b9a899ad837daad",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/fleet-workspace-C2S-LSG3.js": "50cb32c5100ea063c9e600e9e0282306e6d3b7e18cc34ed5b251c70a4934bee2",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/harness-version-label-4PeauLXZ.js": "2591957702721b3c569d5e1c637034606d38faa08f616737e3d5e2513aeacb6d",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/help-modal-BujMSJ2-.js": "ccaad794338b783becc6ec4b60bb245f31699d691ce7c74a5a8e6c63e494a7f1",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/home-dashboard-b4E-f4N7.js": "82a9386b9ea9875567e02a38c4c3a23fcd8afa28ee82cad3e123a641c25d31fc",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/home-protection-module-BZFaZ7TY.js": "f6227ef4f4cd289470f17e9f9058c87b36d0b1968c2a771c0d40bf3bb06baeb0",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/mcp-policy-request-panel-CaQRzyjh.js": "544dc72a176eaa9294273ca4cf2695af80dd659e62d3e16d080e074c99a93d43",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/policy-workspace-page-C1tdWXy9.js": "e1508276fa62450760b409b56f56b4de6687b356c0d7a2d80d6d74aad783c819",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/protection-repair-page-DA6OjYwM.js": "1cce65409d300694b8f7bb263667b160ab357a01f79e66fa79d2f5356e68eec6",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/releases-workspace-OyIFXX2T.js": "519e4e4aa1c221a8a0ce09d13d590dd321bca5326ebb5a390c4352af1db856de",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/settings-save-proof-modal-DVNLQ9a9.js": "8928a9eefd949728aacca7e401de51e052f4fb349bcf9d69d9a452a2f4be58b2",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/settings-workspace-TprQ_wio.js": "e0acee4faa44d20e02b823bfba39c93301dc2fcb45562e1226481faa1c068f14",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/supply-chain-hub-workspace-BifnUu1z.js": "a470fbb2a62e677b8ecb8cc7cf1c7fff867a54e8940b3756948c77985de809d1",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/supply-chain-protection-stats-CJkxdP0r.js": "9e54074754d37c993fd24de8fc9f56f0fbcdb2786d637fe2846e50bedb3b9c5d",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/supply-chain-workspace-BsHWdaXm.js": "feacd3a1fe03676d9175d11d9beb44cfaaf1d3df843a63f53eaf6ae8bbf67650",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/guard-dashboard.js": "a916cac98a936a236e23850df764e74d28fdfcfb9694db5c1dce7a4db1391378",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/index.css": "2d8d72a76e69ad99feb9d20f561a2d0bec76912bfd949f8716f33bab3c9e5bc6",
+        "src/codex_plugin_scanner/guard/daemon/static/brand/Logo_Icon_Dark.png": "f9ef58257cd709dbf75c47fac93504e37b8e8c6eea4cf6958fca07a7ea209ec5",
+        "src/codex_plugin_scanner/guard/daemon/static/brand/Logo_Whole.png": "019346b00ea0eaf9d82a8fe2a162fd6454d1316c28a559430de4ce78861b6b3e",
+        "src/codex_plugin_scanner/guard/daemon/static/favicon-16x16.png": "8dc725296d995ec84e25430b8d8f1192f5ad77b832eb47626e4e207ed1b263c7",
+        "src/codex_plugin_scanner/guard/daemon/static/favicon-32x32.png": "905815177668adf03008273906508be8661aa0f8a509fde6e47e1e9643d47aca",
+        "src/codex_plugin_scanner/guard/daemon/static/favicon.ico": "3721d494202b5cb250258bbbaa94dbf3d239ab87b6954c306bce7c6114af54cd",
+        "src/codex_plugin_scanner/guard/daemon/static/index.html": "afa0b9eae5aa6ab47f111f2f2db04c21d9db2bed08e0b2802c24c92b4f82c894"
+      }
+    },
+    "original": {
+      "path": "/private/tmp/hol-guard-cigar-package-build/final-disclosure-83d62bf7/static-original.json",
+      "bytes": 5185,
+      "sha256": "b80f61be69e1b866bdd2edc8d371d7b29e418fb66fa72257eeb2bc54f4a36ede",
+      "result": {
+        "src/codex_plugin_scanner/guard/daemon/static/apple-touch-icon.png": "b61ad573476e1f7113834dea9517abf7bd78269461d03198aa9d91a6f5464dd7",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/about-content-BwtrHEyh.js": "b00cc5a0d7e56f8ab370b21c644165a2d366ae7ac412c5d3003941486555da35",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/about-workspace-CwAXaY68.js": "92e689ba18951c0992ca1db0f0968c775e891597a1b5f9aeec275a2b9e40aa3f",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/app-catalog-CMiFwya1.js": "ebadc4d050b904d56b737ba7936b6a68fdba4905c32d8cfb5c5dfe9c1aef9d5a",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/app-detail-workspace-DuZMRSTN.js": "41a6fc8080e99c9cfeb08776a7bd16c08816743f4d05eacb90c4f43febe86571",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/audit-workspace-CIN8COUS.js": "210850e39649e99c0b81848d493d696d9fa55929a818d059dcc401714d463063",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/business-policy-recovery-panel-DUvgw-7G.js": "42f57c4f6c3dd3ad5040c4ff211489c10ecad9c0738e5ccdca9427fc305a3a62",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/confirm-dialog-DmyTDLpJ.js": "4eb23d484a6a19ca3408828755cb60835d0f5888ae78e2174b7184d64c5a9710",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/connect-guard-cloud-button-6cOinrj4.js": "4568ef2316fc33a5d4a064c4d839da364ae408fc559042f58deaa2845da75a5d",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/extensions-workspace-BZ2FE6aV.js": "40f72ca2dae9489ba173a2027b144e265621520b2f7ad58d6eb990f98152868e",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/feed-health-workspace-BiGTZO_a.js": "51eca6d1eddf01e7e450d5af3590905272ddc91c2d1379b3dc0a05a16b7ac98c",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/fleet-workspace-CKGqZAvt.js": "9e67805db3dcf34c734b415eea4101410b427e9edd9ed050d92ceee62a36f027",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/harness-version-label-BtWky0QK.js": "5260e8ecea69c20a0a8e8134d1f13613d3a7296094610478f010f2d6a19fcf47",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/help-modal-BujMSJ2-.js": "ccaad794338b783becc6ec4b60bb245f31699d691ce7c74a5a8e6c63e494a7f1",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/home-dashboard-DxnaEv4t.js": "9ff209ef070fed3c43b1462c65a7a579c946c98c527ce53b783c35cbe4dfc7f8",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/home-protection-module-BKnUcfkF.js": "6a7dd2a493a9081997de19893eb07cee699acf2e08de55b9dc52580987a2ac13",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/mcp-policy-request-panel-D8ngVaRU.js": "8e12837b8ecd9f5baf8da82d76a7b28d62207d1c1b77f51f348466c9ace0eb43",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/policy-workspace-page-BkQZ2cX7.js": "9be9f4cd9bcc90c7e6719b1b5c67905ebf2909ed6d7934a472d223a48c2191b7",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/protection-repair-page-DutC0-Fg.js": "d68e232bba528c2abd689b7d7e0d57eca2125d2a6d53caaf0236a14f83e6ca87",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/releases-workspace-DbXydEYd.js": "efce4923364515c1125b413a34a8588baec3097dd367ebff75ae0e53fd62ba90",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/settings-save-proof-modal-DC5SmT_y.js": "9dc7c43f94a72ad0447ef27dd151289bc47e9a5b06a3d76f8aee3a072a3f2359",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/settings-workspace-BFuizqwp.js": "e337280980c51c6cb0ba1018742f011b6df56a25e508bfcc3a8047cb0fe06386",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/supply-chain-hub-workspace-YJbr9bD2.js": "67bc02dfdecb3587bb92fa45d4966d990b97bfb31364ab0b790ebcca7c2cb923",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/supply-chain-protection-stats-CJkxdP0r.js": "9e54074754d37c993fd24de8fc9f56f0fbcdb2786d637fe2846e50bedb3b9c5d",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/supply-chain-workspace-nNClhkky.js": "f9503a39a764bd502121e879bad6e2aa59c2b97f8738689692e0734455674b2b",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/guard-dashboard.js": "eae7430ba75be280e249eb60e7548c4e6a040557eeebc27b9431674435e80a01",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/index.css": "2d8d72a76e69ad99feb9d20f561a2d0bec76912bfd949f8716f33bab3c9e5bc6",
+        "src/codex_plugin_scanner/guard/daemon/static/brand/Logo_Icon_Dark.png": "f9ef58257cd709dbf75c47fac93504e37b8e8c6eea4cf6958fca07a7ea209ec5",
+        "src/codex_plugin_scanner/guard/daemon/static/brand/Logo_Whole.png": "019346b00ea0eaf9d82a8fe2a162fd6454d1316c28a559430de4ce78861b6b3e",
+        "src/codex_plugin_scanner/guard/daemon/static/favicon-16x16.png": "8dc725296d995ec84e25430b8d8f1192f5ad77b832eb47626e4e207ed1b263c7",
+        "src/codex_plugin_scanner/guard/daemon/static/favicon-32x32.png": "905815177668adf03008273906508be8661aa0f8a509fde6e47e1e9643d47aca",
+        "src/codex_plugin_scanner/guard/daemon/static/favicon.ico": "3721d494202b5cb250258bbbaa94dbf3d239ab87b6954c306bce7c6114af54cd",
+        "src/codex_plugin_scanner/guard/daemon/static/index.html": "afa0b9eae5aa6ab47f111f2f2db04c21d9db2bed08e0b2802c24c92b4f82c894"
+      }
+    },
+    "cleanup_plan": {
+      "path": "/private/tmp/hol-guard-cigar-package-build/final-disclosure-83d62bf7/static-cleanup-plan.json",
+      "bytes": 6233,
+      "sha256": "01972429ff7a2d78fbd4968f479d6bff2074239533fd11fb0c6d65fbdad32ab5",
+      "result": {
+        "owned_new_files": {
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/about-workspace-BPejD30e.js": "fa8a52ab23ac56eb0365648fabb6ed2d7073893cce48cd79b722eadb655dff69",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/app-detail-workspace-Bkb30DTE.js": "604e6b90703571491af569f256fc062b7cf94187c7de8ac470569ed73bf2228a",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/audit-workspace-DlRO6m5v.js": "4a6e734fa2a6ed3320248dcaf6a3e50837a7c633f1a5e12e76c95d450a7a3632",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/confirm-dialog-CE725nAF.js": "28e2980e4414319422cbb8bf9ada7fc47433191b618ed08657360bd94328d294",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/connect-guard-cloud-button-BbTxZ6P3.js": "65fad2f05b7350065af9fa16001b71485721c949700733c85cd65448fa3322a4",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/extensions-workspace-xMXpA97W.js": "f8a41d539a27e1db1bc5b6e41c8eacaaa4d37696517ace435c56c337da7c2ac6",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/feed-health-workspace-DlDiW93E.js": "08a8a3b853b75abe42045e51d30c7773f4cbe7c7e19dcfc21b9a899ad837daad",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/fleet-workspace-C2S-LSG3.js": "50cb32c5100ea063c9e600e9e0282306e6d3b7e18cc34ed5b251c70a4934bee2",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/harness-version-label-4PeauLXZ.js": "2591957702721b3c569d5e1c637034606d38faa08f616737e3d5e2513aeacb6d",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/home-dashboard-b4E-f4N7.js": "82a9386b9ea9875567e02a38c4c3a23fcd8afa28ee82cad3e123a641c25d31fc",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/home-protection-module-BZFaZ7TY.js": "f6227ef4f4cd289470f17e9f9058c87b36d0b1968c2a771c0d40bf3bb06baeb0",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/mcp-policy-request-panel-CaQRzyjh.js": "544dc72a176eaa9294273ca4cf2695af80dd659e62d3e16d080e074c99a93d43",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/policy-workspace-page-C1tdWXy9.js": "e1508276fa62450760b409b56f56b4de6687b356c0d7a2d80d6d74aad783c819",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/protection-repair-page-DA6OjYwM.js": "1cce65409d300694b8f7bb263667b160ab357a01f79e66fa79d2f5356e68eec6",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/releases-workspace-OyIFXX2T.js": "519e4e4aa1c221a8a0ce09d13d590dd321bca5326ebb5a390c4352af1db856de",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/settings-save-proof-modal-DVNLQ9a9.js": "8928a9eefd949728aacca7e401de51e052f4fb349bcf9d69d9a452a2f4be58b2",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/settings-workspace-TprQ_wio.js": "e0acee4faa44d20e02b823bfba39c93301dc2fcb45562e1226481faa1c068f14",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/supply-chain-hub-workspace-BifnUu1z.js": "a470fbb2a62e677b8ecb8cc7cf1c7fff867a54e8940b3756948c77985de809d1",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/supply-chain-workspace-BsHWdaXm.js": "feacd3a1fe03676d9175d11d9beb44cfaaf1d3df843a63f53eaf6ae8bbf67650"
+        },
+        "restore_tracked": [
+          "src/codex_plugin_scanner/guard/daemon/static/apple-touch-icon.png",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/about-content-BwtrHEyh.js",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/about-workspace-CwAXaY68.js",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/app-catalog-CMiFwya1.js",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/app-detail-workspace-DuZMRSTN.js",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/audit-workspace-CIN8COUS.js",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/business-policy-recovery-panel-DUvgw-7G.js",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/confirm-dialog-DmyTDLpJ.js",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/connect-guard-cloud-button-6cOinrj4.js",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/extensions-workspace-BZ2FE6aV.js",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/feed-health-workspace-BiGTZO_a.js",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/fleet-workspace-CKGqZAvt.js",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/harness-version-label-BtWky0QK.js",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/help-modal-BujMSJ2-.js",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/home-dashboard-DxnaEv4t.js",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/home-protection-module-BKnUcfkF.js",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/mcp-policy-request-panel-D8ngVaRU.js",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/policy-workspace-page-BkQZ2cX7.js",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/protection-repair-page-DutC0-Fg.js",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/releases-workspace-DbXydEYd.js",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/settings-save-proof-modal-DC5SmT_y.js",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/settings-workspace-BFuizqwp.js",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/supply-chain-hub-workspace-YJbr9bD2.js",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/supply-chain-protection-stats-CJkxdP0r.js",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/supply-chain-workspace-nNClhkky.js",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/guard-dashboard.js",
+          "src/codex_plugin_scanner/guard/daemon/static/assets/index.css",
+          "src/codex_plugin_scanner/guard/daemon/static/brand/Logo_Icon_Dark.png",
+          "src/codex_plugin_scanner/guard/daemon/static/brand/Logo_Whole.png",
+          "src/codex_plugin_scanner/guard/daemon/static/favicon-16x16.png",
+          "src/codex_plugin_scanner/guard/daemon/static/favicon-32x32.png",
+          "src/codex_plugin_scanner/guard/daemon/static/favicon.ico",
+          "src/codex_plugin_scanner/guard/daemon/static/index.html"
+        ]
+      }
+    },
+    "all_33_installed_file_hashes_verified": true,
+    "correct_retention_disclosure_in_built_JS": true,
+    "removed_only_19_manifest_owned_new_chunks": true,
+    "restored_and_verified_all_33_original_tracked_files": true,
+    "no_build_environment_files_present": true
+  },
+  "installed_tests": {
+    "path": "/private/tmp/hol-guard-cigar-package-build/final-disclosure-83d62bf7/backend-results.xml",
+    "bytes": 10375,
+    "sha256": "c80d57723a271ae65f88f4ade4ee7484bb0f37413ce7f8d47d234fd6535b907a",
+    "tests": "69",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "time": "344.454"
+  },
+  "installed_test_runner_summary": {
+    "passed": 69,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 344.46,
+    "includes": [
+      "prior MCP/transport/registry contracts",
+      "two actual CIGAR executor restart and approval-duration cases",
+      "four actual Pi/OMP SDK CIGAR execution cases",
+      "two ordinary CIGAR-off SDK once cases"
+    ]
+  },
+  "browser_initial": {
+    "summary": {
+      "path": "/private/tmp/hol-guard-cigar-package-build/final-disclosure-83d62bf7/browser-regressions/summary.json",
+      "bytes": 270,
+      "sha256": "1f7454ec68a8bff9e5532485853e239316ebdea53fb5129dfc468c59970558e1",
+      "result": {
+        "exit_code": 1,
+        "seconds": 205.005,
+        "product_source": "83d62bf72ea2fbde46b2d41a32fa2ba1a9b4a92d",
+        "stats": {
+          "startTime": "2026-10-24T15:50:43.067Z",
+          "duration": 204666.255,
+          "expected": 2,
+          "skipped": 0,
+          "unexpected": 1,
+          "flaky": 0
+        }
+      }
+    },
+    "report": {
+      "path": "/private/tmp/hol-guard-cigar-package-build/final-disclosure-83d62bf7/browser-regressions/report.json",
+      "bytes": 11165,
+      "sha256": "280de5939b754951c4d375728090741724f8ba45dfb1444f3a857d984f3962e5",
+      "stats": {
+        "startTime": "2026-10-24T15:50:43.067Z",
+        "duration": 204666.255,
+        "expected": 2,
+        "skipped": 0,
+        "unexpected": 1,
+        "flaky": 0
+      },
+      "cases": [
+        {
+          "title": "real candidate sources, proof-backed MCP pairing and opt-out survive reload",
+          "status": "passed",
+          "duration_ms": 84074
+        },
+        {
+          "title": "execution opt-in and browser approvals reach the installed native executor",
+          "status": "passed",
+          "duration_ms": 46061
+        },
+        {
+          "title": "private saved evidence survives runtime restart with fresh grants and can be removed while off",
+          "status": "failed",
+          "duration_ms": 53440
+        }
+      ]
+    },
+    "failure": "persistence status polling rejected a non-busy 409 during activation; exact initial code was discarded by its helper"
+  },
+  "browser_repair": {
+    "runtime_or_permission_rules_changed": false,
+    "read_only_helper_retries": [
+      "native_context_assistance_busy",
+      "native_context_assistance_context_busy",
+      "native_context_assistance_context_stale"
+    ],
+    "max_attempts": 12,
+    "known_generation_fence_source": "rust/crates/guard-runtime/src/context_assistance_service_lifecycle.rs",
+    "initial_error_cause_proved": false,
+    "bounded_GET_only_tests_passed": 3,
+    "unit_seconds": 1.233288916,
+    "unknown_or_disabled_conflicts_and_HTTP_401_fail_immediately": true,
+    "unknown_response_text_not_echoed": true,
+    "mutations_retried": false
+  },
+  "browser_qualified_final": {
+    "summary": {
+      "path": "/private/tmp/hol-guard-cigar-package-build/final-disclosure-83d62bf7/browser-regressions-second/summary.json",
+      "bytes": 270,
+      "sha256": "01353b445c39044b22494f447a83541e157592a302ac58cdcd8d5d6ebeb97ca1",
+      "result": {
+        "exit_code": 0,
+        "seconds": 257.319,
+        "product_source": "83d62bf72ea2fbde46b2d41a32fa2ba1a9b4a92d",
+        "stats": {
+          "startTime": "2026-10-24T16:01:15.333Z",
+          "duration": 257029.241,
+          "expected": 3,
+          "skipped": 0,
+          "unexpected": 0,
+          "flaky": 0
+        }
+      }
+    },
+    "report": {
+      "path": "/private/tmp/hol-guard-cigar-package-build/final-disclosure-83d62bf7/browser-regressions-second/report.json",
+      "bytes": 6863,
+      "sha256": "da01b94167092d869f62b99c4ca6540f7e1471a1e351e3b0cd2525eb889b8986",
+      "stats": {
+        "startTime": "2026-10-24T16:01:15.333Z",
+        "duration": 257029.241,
+        "expected": 3,
+        "skipped": 0,
+        "unexpected": 0,
+        "flaky": 0
+      },
+      "cases": [
+        {
+          "title": "real candidate sources, proof-backed MCP pairing and opt-out survive reload",
+          "status": "passed",
+          "duration_ms": 82971
+        },
+        {
+          "title": "execution opt-in and browser approvals reach the installed native executor",
+          "status": "passed",
+          "duration_ms": 46090
+        },
+        {
+          "title": "private saved evidence survives runtime restart with fresh grants and can be removed while off",
+          "status": "passed",
+          "duration_ms": 107384
+        }
+      ]
+    },
+    "installed_static_only": true
+  },
+  "complete_feature_off_installed_SLO": {
+    "path": "/private/tmp/hol-guard-cigar-package-build/final-disclosure-83d62bf7/installed-slo.json",
+    "bytes": 11515,
+    "sha256": "4c2ca7fc970029a1363ef82b4402fc4793096610c1935ccdc76cd94c8e890b4a",
+    "result": {
+      "concurrency": {
+        "sixteen": {
+          "deadline_ms": 1000.0,
+          "denominators": {
+            "attempted": 16,
+            "cancelled": 0,
+            "completed": 16,
+            "failed": 0,
+            "missing": 0,
+            "planned": 16,
+            "skipped": false,
+            "started": 16,
+            "submitted": 16
+          },
+          "errors": 0,
+          "latency": {
+            "count": 16,
+            "max_ms": 30.211,
+            "p50_ms": 21.325,
+            "p95_ms": 30.211,
+            "p99_ms": 30.211
+          },
+          "overloaded": 0
+        },
+        "sixty_four": {
+          "bounded": true,
+          "denominators": {
+            "attempted": 64,
+            "cancelled": 0,
+            "completed": 64,
+            "failed": 0,
+            "missing": 0,
+            "planned": 64,
+            "skipped": false,
+            "started": 64,
+            "submitted": 64
+          },
+          "errors": 0,
+          "fail_safe": 0,
+          "latency": {
+            "count": 64,
+            "max_ms": 132.849,
+            "p50_ms": 72.205,
+            "p95_ms": 127.162,
+            "p99_ms": 132.849
+          },
+          "latency_ceiling_ms": null,
+          "overloaded": 0
+        }
+      },
+      "corpus": {
+        "attempted": 153,
+        "cancelled": 0,
+        "completed": 153,
+        "corpus_origin": "installed_wheel_ownership_contract",
+        "denominators": {
+          "capacity_prewarm": {
+            "attempted": 16,
+            "cancelled": 0,
+            "completed": 16,
+            "failed": 0,
+            "missing": 0,
+            "planned": 16,
+            "skipped": false,
+            "started": 16,
+            "submitted": 16
+          },
+          "capacity_prewarm_ready": {
+            "attempted": 1,
+            "cancelled": 0,
+            "completed": 1,
+            "failed": 0,
+            "missing": 0,
+            "planned": 1,
+            "skipped": false,
+            "started": 1,
+            "submitted": 1
+          },
+          "capacity_stabilization": {
+            "attempted": 1,
+            "cancelled": 0,
+            "completed": 1,
+            "failed": 0,
+            "missing": 0,
+            "planned": 1,
+            "skipped": false,
+            "started": 1,
+            "submitted": 1
+          },
+          "cleanup": {
+            "attempted": 1,
+            "cancelled": 0,
+            "completed": 1,
+            "failed": 0,
+            "missing": 0,
+            "planned": 1,
+            "skipped": false,
+            "started": 1,
+            "submitted": 1
+          },
+          "cold": {
+            "attempted": 3,
+            "cancelled": 0,
+            "completed": 3,
+            "failed": 0,
+            "missing": 0,
+            "planned": 3,
+            "skipped": false,
+            "started": 3,
+            "submitted": 3
+          },
+          "concurrent_16": {
+            "attempted": 16,
+            "cancelled": 0,
+            "completed": 16,
+            "failed": 0,
+            "missing": 0,
+            "planned": 16,
+            "skipped": false,
+            "started": 16,
+            "submitted": 16
+          },
+          "concurrent_64": {
+            "attempted": 64,
+            "cancelled": 0,
+            "completed": 64,
+            "failed": 0,
+            "missing": 0,
+            "planned": 64,
+            "skipped": false,
+            "started": 64,
+            "submitted": 64
+          },
+          "installed_corpus": {
+            "attempted": 1,
+            "cancelled": 0,
+            "completed": 1,
+            "failed": 0,
+            "missing": 0,
+            "planned": 1,
+            "skipped": false,
+            "started": 1,
+            "submitted": 1
+          },
+          "installed_corpus_routes": {
+            "attempted": 23,
+            "cancelled": 0,
+            "completed": 23,
+            "failed": 0,
+            "missing": 0,
+            "planned": 23,
+            "skipped": false,
+            "started": 23,
+            "submitted": 23
+          },
+          "readiness": {
+            "attempted": 3,
+            "cancelled": 0,
+            "completed": 3,
+            "failed": 0,
+            "missing": 0,
+            "planned": 3,
+            "skipped": false,
+            "started": 3,
+            "submitted": 3
+          },
+          "recovery": {
+            "attempted": 3,
+            "cancelled": 0,
+            "completed": 3,
+            "failed": 0,
+            "missing": 0,
+            "planned": 3,
+            "skipped": false,
+            "started": 3,
+            "submitted": 3
+          },
+          "recovery_precondition": {
+            "attempted": 3,
+            "cancelled": 0,
+            "completed": 3,
+            "failed": 0,
+            "missing": 0,
+            "planned": 3,
+            "skipped": false,
+            "started": 3,
+            "submitted": 3
+          },
+          "recovery_stop": {
+            "attempted": 3,
+            "cancelled": 0,
+            "completed": 3,
+            "failed": 0,
+            "missing": 0,
+            "planned": 3,
+            "skipped": false,
+            "started": 3,
+            "submitted": 3
+          },
+          "routes": {
+            "attempted": 1,
+            "cancelled": 0,
+            "completed": 1,
+            "failed": 0,
+            "missing": 0,
+            "planned": 1,
+            "skipped": false,
+            "started": 1,
+            "submitted": 1
+          },
+          "rss_baseline": {
+            "attempted": 1,
+            "cancelled": 0,
+            "completed": 1,
+            "failed": 0,
+            "missing": 0,
+            "planned": 1,
+            "skipped": false,
+            "started": 1,
+            "submitted": 1
+          },
+          "rss_baseline_requests": {
+            "attempted": 112,
+            "cancelled": 0,
+            "completed": 112,
+            "failed": 0,
+            "missing": null,
+            "planned": null,
+            "skipped": false,
+            "started": 112,
+            "submitted": 112
+          },
+          "runtime": {
+            "attempted": 1,
+            "cancelled": 0,
+            "completed": 1,
+            "failed": 0,
+            "missing": 0,
+            "planned": 1,
+            "skipped": false,
+            "started": 1,
+            "submitted": 1
+          },
+          "runtime_input": {
+            "attempted": 1,
+            "cancelled": 0,
+            "completed": 1,
+            "failed": 0,
+            "missing": 0,
+            "planned": 1,
+            "skipped": false,
+            "started": 1,
+            "submitted": 1
+          },
+          "serialized_warmup": {
+            "attempted": 1,
+            "cancelled": 0,
+            "completed": 1,
+            "failed": 0,
+            "missing": 0,
+            "planned": 1,
+            "skipped": false,
+            "started": 1,
+            "submitted": 1
+          },
+          "size_1m": {
+            "attempted": 9,
+            "cancelled": 0,
+            "completed": 9,
+            "failed": 0,
+            "missing": 0,
+            "planned": 9,
+            "skipped": false,
+            "started": 9,
+            "submitted": 9
+          },
+          "size_250k": {
+            "attempted": 9,
+            "cancelled": 0,
+            "completed": 9,
+            "failed": 0,
+            "missing": 0,
+            "planned": 9,
+            "skipped": false,
+            "started": 9,
+            "submitted": 9
+          },
+          "size_5m": {
+            "attempted": 9,
+            "cancelled": 0,
+            "completed": 9,
+            "failed": 0,
+            "missing": 0,
+            "planned": 9,
+            "skipped": false,
+            "started": 9,
+            "submitted": 9
+          },
+          "warm": {
+            "attempted": 46,
+            "cancelled": 0,
+            "completed": 46,
+            "failed": 0,
+            "missing": 0,
+            "planned": 46,
+            "skipped": false,
+            "started": 46,
+            "submitted": 46
+          },
+          "warm_precondition": {
+            "attempted": 23,
+            "cancelled": 0,
+            "completed": 23,
+            "failed": 0,
+            "missing": 0,
+            "planned": 23,
+            "skipped": false,
+            "started": 23,
+            "submitted": 23
+          }
+        },
+        "fail_safe_decisions": 0,
+        "fail_safe_rate": 0.0,
+        "failed": 0,
+        "harnesses": 14,
+        "installed": {
+          "fail_safe": 0,
+          "oneshot": 0,
+          "python_semantic": 0,
+          "python_semantic_decisions": 0,
+          "resident": 23,
+          "routes": 23
+        },
+        "missing": 0,
+        "observations": 153,
+        "oneshot_decisions": 0,
+        "planned": 153,
+        "python_fallback_decisions": 0,
+        "python_semantic_decisions": 0,
+        "resident_share": 1.0,
+        "route_corpus": "installed_routes",
+        "routes": 23,
+        "rss_baseline_bytes": 1502871552,
+        "rss_growth": 0.000654,
+        "rss_peak_bytes": 1503854592,
+        "safe_failure_rate": 0.0,
+        "safe_failures": 0,
+        "safe_failures_by_size": {},
+        "security_denials": 21,
+        "security_denials_by_size": {
+          "1m": 7,
+          "250k": 7,
+          "5m": 7
+        },
+        "started": 153,
+        "submitted": 153,
+        "warm_failures": 0
+      },
+      "errors_16": 0,
+      "errors_64": 0,
+      "gates": {
+        "1m_latency": true,
+        "250k_latency": true,
+        "5m_latency": true,
+        "cold_latency": true,
+        "concurrency": true,
+        "concurrency_64_bounded": true,
+        "installed_corpus": true,
+        "python_fallback": true,
+        "readiness": true,
+        "recovery_latency": true,
+        "resident_share": true,
+        "rss": true,
+        "safe_corpus": true,
+        "warm_latency": true
+      },
+      "latency": {
+        "cold_native_oneshot": {
+          "count": 3,
+          "max_ms": 20.951,
+          "p50_ms": 18.949,
+          "p95_ms": 20.951,
+          "p99_ms": 20.951
+        },
+        "readiness": {
+          "count": 3,
+          "max_ms": 2.785,
+          "p50_ms": 0.592,
+          "p95_ms": 2.785,
+          "p99_ms": 2.785
+        },
+        "resident_recovery": {
+          "count": 3,
+          "max_ms": 155.54,
+          "p50_ms": 154.66,
+          "p95_ms": 155.54,
+          "p99_ms": 155.54
+        },
+        "size_classes": {
+          "1k": {
+            "count": 126,
+            "max_ms": 132.849,
+            "p50_ms": 26.04,
+            "p95_ms": 118.278,
+            "p99_ms": 130.532
+          },
+          "1m": {
+            "count": 9,
+            "max_ms": 141.632,
+            "p50_ms": 5.482,
+            "p95_ms": 141.632,
+            "p99_ms": 141.632
+          },
+          "250k": {
+            "count": 9,
+            "max_ms": 38.677,
+            "p50_ms": 4.859,
+            "p95_ms": 38.677,
+            "p99_ms": 38.677
+          },
+          "5m": {
+            "count": 9,
+            "max_ms": 676.635,
+            "p50_ms": 6.142,
+            "p95_ms": 676.635,
+            "p99_ms": 676.635
+          }
+        },
+        "warm_all_harnesses": {
+          "count": 46,
+          "max_ms": 8.729,
+          "p50_ms": 4.604,
+          "p95_ms": 6.991,
+          "p99_ms": 8.729
+        },
+        "warm_by_event": {
+          "PostToolUse": {
+            "count": 18,
+            "max_ms": 7.313,
+            "p50_ms": 4.575,
+            "p95_ms": 7.313,
+            "p99_ms": 7.313
+          },
+          "PreToolUse": {
+            "count": 28,
+            "max_ms": 8.729,
+            "p50_ms": 4.634,
+            "p95_ms": 6.991,
+            "p99_ms": 8.729
+          }
+        }
+      },
+      "passed": true,
+      "python_semantic_decisions": 0,
+      "routes": {
+        "native_resident": 153
+      },
+      "runtime": {
+        "artifact_sha256": "7f451d549ab9291d62507d44ca7726d2e2661faea82f8e9abcfdde89106cde90",
+        "artifact_size": 112624128,
+        "build_sha": "83d62bf72ea2fbde46b2d41a32fa2ba1a9b4a92d",
+        "host_arch": "arm64",
+        "host_platform": "darwin",
+        "mode": "auto",
+        "package_origin": "installed",
+        "platform_tag": "macosx_11_0_arm64",
+        "platform_tag_target_verified": true,
+        "protocol_version": 1,
+        "python_version": "3.12.13",
+        "rule_digest": "54e38cc15fe1e4bb231214e15876422e5c0f872d2d3d5bae85b6c02e43ac7111",
+        "runtime_version": "3.55.1",
+        "target": "aarch64-macos"
+      },
+      "schema": "hol-guard.native-installed-slo.v1",
+      "scope": "installed_adapter_to_decision",
+      "thresholds": {
+        "direct_cold_p95_ms": 150.0,
+        "installed_adapter_concurrent_p99_ms": 1000.0,
+        "installed_adapter_p95_ms": 1000.0,
+        "readiness_p95_ms": 400.0
+      },
+      "timing": {
+        "adapter": {
+          "count": 153,
+          "max_ms": 676.635,
+          "p50_ms": 22.934,
+          "p95_ms": 127.162,
+          "p99_ms": 674.319
+        },
+        "enclosing": {
+          "count": 153,
+          "max_ms": 676.67,
+          "p50_ms": 23.035,
+          "p95_ms": 127.175,
+          "p99_ms": 674.33
+        },
+        "recovery_adapter": {
+          "count": 3,
+          "max_ms": 155.482,
+          "p50_ms": 154.599,
+          "p95_ms": 155.482,
+          "p99_ms": 155.482
+        },
+        "recovery_enclosing": {
+          "count": 3,
+          "max_ms": 155.54,
+          "p50_ms": 154.66,
+          "p95_ms": 155.54,
+          "p99_ms": 155.54
+        }
+      }
+    }
+  },
+  "complete_installed_SLO_runner": {
+    "path": "/private/tmp/hol-guard-cigar-package-build/final-disclosure-83d62bf7/installed-slo-summary.json",
+    "bytes": 41,
+    "sha256": "c0cd51f0512c783b325d02d8a8126734dd701269f9fdd2537cb270ce4c86c87d",
+    "result": {
+      "exit_code": 0,
+      "seconds": 29.901
+    }
+  },
+  "fixed_input_six_minute_soak": {
+    "runs": {
+      "path": "/private/tmp/hol-guard-cigar-soak-20261024/runs.json",
+      "bytes": 549,
+      "sha256": "ee7da1d60d14e11d33beda5d7c4a63cd0ccef594e49b12554be90b09618ff3c6",
+      "result": {
+        "schema": "guard-cigar-fixed-input-soak-runs.v1",
+        "planned_modes": [
+          "on",
+          "off"
+        ],
+        "seconds_per_mode": 360,
+        "benchmark_sha256": "c69887803663fa5050109c4bf30ea97d02fc52c5822171637662e2c5f463398f",
+        "runs": [
+          {
+            "mode": "on",
+            "exit_code": 0,
+            "seconds": 398.705,
+            "report": "/private/tmp/hol-guard-cigar-soak-20261024/on/result.json"
+          },
+          {
+            "mode": "off",
+            "exit_code": 0,
+            "seconds": 372.501,
+            "report": "/private/tmp/hol-guard-cigar-soak-20261024/off/result.json"
+          }
+        ]
+      }
+    },
+    "reports": {
+      "on": {
+        "path": "/private/tmp/hol-guard-cigar-soak-20261024/on/result.json",
+        "bytes": 16893,
+        "sha256": "bf0c8e627cb7b9c89ef0b3fe50e9cf7dff53470c0a61db5bb171fefc253bb4da",
+        "result": {
+          "schema": "guard-cigar-installed-soak.v1",
+          "build_sha": "83d62bf72ea2fbde46b2d41a32fa2ba1a9b4a92d",
+          "mode": "on",
+          "Guard_python": [
+            3,
+            12,
+            13
+          ],
+          "native_sha256": "7f451d549ab9291d62507d44ca7726d2e2661faea82f8e9abcfdde89106cde90",
+          "native_bytes": 112624128,
+          "duration_seconds": 360,
+          "completed": true,
+          "full_installed_SLO": false,
+          "client_topology": "driver, hook clients and daemon share one Python process",
+          "source_sha256": {
+            "bench_guard_cigar_soak.py": "c69887803663fa5050109c4bf30ea97d02fc52c5822171637662e2c5f463398f",
+            "cigar_benchmark_workload.py": "1e77fce845c354ce54e471d8db70c2e2c04b6f90a6ffbc5204e89d7feb2e3533",
+            "cigar_benchmark_processes.py": "13b981d846ed41f2ab31f9234876a6cbfa1d3d71620a0ee23e1d50c9fac5b72a",
+            "native_slo_session.py": "22becd5eb61af0005a5dbf8c24803f250443952b86a7d9f28f47d3f104fa11cb",
+            "native_slo_diagnostics.py": "c29435bd270cff224c20f80b9c12c4aae1d5d310d35d74e13c0b12c1d119a32f"
+          },
+          "windows": [
+            {
+              "window": 1,
+              "elapsed_seconds": 30.681,
+              "memory": {
+                "samples": 368,
+                "sampling_errors": 0,
+                "median_rss_bytes": 591937536,
+                "peak_rss_bytes": 628719616,
+                "at_peak_counts": {
+                  "benchmark_daemon_host": 1,
+                  "sdk_worker": 2,
+                  "other_python_child": 1,
+                  "python_bridge": 1,
+                  "native_runtime": 12
+                },
+                "at_peak_rss_by_kind": {
+                  "benchmark_daemon_host": 158138368,
+                  "sdk_worker": 120553472,
+                  "other_python_child": 27770880,
+                  "python_bridge": 29376512,
+                  "native_runtime": 292880384
+                },
+                "maximum_counts": {
+                  "native_runtime": 12,
+                  "other_descendant": 3,
+                  "other_python_child": 1,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "sdk_worker": 2
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "successful_overlapping_compiles": 1525
+            },
+            {
+              "window": 2,
+              "elapsed_seconds": 60.588,
+              "memory": {
+                "samples": 360,
+                "sampling_errors": 0,
+                "median_rss_bytes": 629342208,
+                "peak_rss_bytes": 629735424,
+                "at_peak_counts": {
+                  "benchmark_daemon_host": 1,
+                  "sdk_worker": 2,
+                  "other_python_child": 1,
+                  "python_bridge": 1,
+                  "native_runtime": 12
+                },
+                "at_peak_rss_by_kind": {
+                  "benchmark_daemon_host": 158449664,
+                  "sdk_worker": 120553472,
+                  "other_python_child": 27770880,
+                  "python_bridge": 29376512,
+                  "native_runtime": 293584896
+                },
+                "maximum_counts": {
+                  "native_runtime": 12,
+                  "other_python_child": 1,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "sdk_worker": 2
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "successful_overlapping_compiles": 1475
+            },
+            {
+              "window": 3,
+              "elapsed_seconds": 90.609,
+              "memory": {
+                "samples": 360,
+                "sampling_errors": 0,
+                "median_rss_bytes": 573816832,
+                "peak_rss_bytes": 596459520,
+                "at_peak_counts": {
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 10,
+                  "sdk_worker": 2,
+                  "other_python_child": 1,
+                  "python_bridge": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "benchmark_daemon_host": 161087488,
+                  "native_runtime": 257671168,
+                  "sdk_worker": 120553472,
+                  "other_python_child": 27770880,
+                  "python_bridge": 29376512
+                },
+                "maximum_counts": {
+                  "native_runtime": 10,
+                  "other_python_child": 1,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "sdk_worker": 2
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "successful_overlapping_compiles": 1482
+            },
+            {
+              "window": 4,
+              "elapsed_seconds": 120.565,
+              "memory": {
+                "samples": 359,
+                "sampling_errors": 0,
+                "median_rss_bytes": 537985024,
+                "peak_rss_bytes": 549863424,
+                "at_peak_counts": {
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 9,
+                  "sdk_worker": 2,
+                  "other_python_child": 1,
+                  "python_bridge": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "benchmark_daemon_host": 162643968,
+                  "native_runtime": 209518592,
+                  "sdk_worker": 120553472,
+                  "other_python_child": 27770880,
+                  "python_bridge": 29376512
+                },
+                "maximum_counts": {
+                  "native_runtime": 9,
+                  "other_python_child": 1,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "sdk_worker": 2
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "successful_overlapping_compiles": 1489
+            },
+            {
+              "window": 5,
+              "elapsed_seconds": 150.673,
+              "memory": {
+                "samples": 362,
+                "sampling_errors": 0,
+                "median_rss_bytes": 556793856,
+                "peak_rss_bytes": 557744128,
+                "at_peak_counts": {
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 9,
+                  "sdk_worker": 2,
+                  "other_python_child": 1,
+                  "python_bridge": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "benchmark_daemon_host": 163463168,
+                  "native_runtime": 216580096,
+                  "sdk_worker": 120553472,
+                  "other_python_child": 27770880,
+                  "python_bridge": 29376512
+                },
+                "maximum_counts": {
+                  "native_runtime": 9,
+                  "other_python_child": 1,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "sdk_worker": 2
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "successful_overlapping_compiles": 1490
+            },
+            {
+              "window": 6,
+              "elapsed_seconds": 180.55,
+              "memory": {
+                "samples": 359,
+                "sampling_errors": 0,
+                "median_rss_bytes": 539541504,
+                "peak_rss_bytes": 539967488,
+                "at_peak_counts": {
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 8,
+                  "sdk_worker": 2,
+                  "other_python_child": 1,
+                  "python_bridge": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "benchmark_daemon_host": 163872768,
+                  "native_runtime": 198393856,
+                  "sdk_worker": 120553472,
+                  "other_python_child": 27770880,
+                  "python_bridge": 29376512
+                },
+                "maximum_counts": {
+                  "native_runtime": 8,
+                  "other_python_child": 1,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "sdk_worker": 2
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "successful_overlapping_compiles": 1484
+            },
+            {
+              "window": 7,
+              "elapsed_seconds": 210.545,
+              "memory": {
+                "samples": 361,
+                "sampling_errors": 0,
+                "median_rss_bytes": 540164096,
+                "peak_rss_bytes": 540622848,
+                "at_peak_counts": {
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 8,
+                  "sdk_worker": 2,
+                  "other_python_child": 1,
+                  "python_bridge": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "benchmark_daemon_host": 164478976,
+                  "native_runtime": 198443008,
+                  "sdk_worker": 120553472,
+                  "other_python_child": 27770880,
+                  "python_bridge": 29376512
+                },
+                "maximum_counts": {
+                  "native_runtime": 8,
+                  "other_python_child": 1,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "sdk_worker": 2
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "successful_overlapping_compiles": 1487
+            },
+            {
+              "window": 8,
+              "elapsed_seconds": 240.523,
+              "memory": {
+                "samples": 359,
+                "sampling_errors": 0,
+                "median_rss_bytes": 540606464,
+                "peak_rss_bytes": 564445184,
+                "at_peak_counts": {
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 8,
+                  "sdk_worker": 2,
+                  "python_bridge": 1,
+                  "other_python_child": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "benchmark_daemon_host": 165068800,
+                  "native_runtime": 221773824,
+                  "sdk_worker": 120733696,
+                  "python_bridge": 29376512,
+                  "other_python_child": 27492352
+                },
+                "maximum_counts": {
+                  "native_runtime": 8,
+                  "other_python_child": 1,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "sdk_worker": 2
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "successful_overlapping_compiles": 1290
+            },
+            {
+              "window": 9,
+              "elapsed_seconds": 270.634,
+              "memory": {
+                "samples": 361,
+                "sampling_errors": 0,
+                "median_rss_bytes": 564117504,
+                "peak_rss_bytes": 564576256,
+                "at_peak_counts": {
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 8,
+                  "sdk_worker": 2,
+                  "python_bridge": 1,
+                  "other_python_child": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "benchmark_daemon_host": 165150720,
+                  "native_runtime": 221822976,
+                  "sdk_worker": 120733696,
+                  "python_bridge": 29376512,
+                  "other_python_child": 27492352
+                },
+                "maximum_counts": {
+                  "native_runtime": 8,
+                  "other_python_child": 1,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "sdk_worker": 2
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "successful_overlapping_compiles": 1465
+            },
+            {
+              "window": 10,
+              "elapsed_seconds": 300.455,
+              "memory": {
+                "samples": 356,
+                "sampling_errors": 0,
+                "median_rss_bytes": 564404224,
+                "peak_rss_bytes": 568344576,
+                "at_peak_counts": {
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 8,
+                  "sdk_worker": 2,
+                  "python_bridge": 1,
+                  "other_python_child": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "benchmark_daemon_host": 168886272,
+                  "native_runtime": 221855744,
+                  "sdk_worker": 120733696,
+                  "python_bridge": 29376512,
+                  "other_python_child": 27492352
+                },
+                "maximum_counts": {
+                  "native_runtime": 9,
+                  "other_python_child": 1,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "sdk_worker": 2
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "successful_overlapping_compiles": 1476
+            },
+            {
+              "window": 11,
+              "elapsed_seconds": 330.626,
+              "memory": {
+                "samples": 360,
+                "sampling_errors": 0,
+                "median_rss_bytes": 564101120,
+                "peak_rss_bytes": 582369280,
+                "at_peak_counts": {
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 10,
+                  "sdk_worker": 2,
+                  "python_bridge": 1,
+                  "other_python_child": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "benchmark_daemon_host": 169623552,
+                  "native_runtime": 235143168,
+                  "sdk_worker": 120733696,
+                  "python_bridge": 29376512,
+                  "other_python_child": 27492352
+                },
+                "maximum_counts": {
+                  "native_runtime": 10,
+                  "other_python_child": 1,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "sdk_worker": 2
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "successful_overlapping_compiles": 1490
+            },
+            {
+              "window": 12,
+              "elapsed_seconds": 360.652,
+              "memory": {
+                "samples": 359,
+                "sampling_errors": 0,
+                "median_rss_bytes": 583172096,
+                "peak_rss_bytes": 583876608,
+                "at_peak_counts": {
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 10,
+                  "sdk_worker": 2,
+                  "python_bridge": 1,
+                  "other_python_child": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "benchmark_daemon_host": 170246144,
+                  "native_runtime": 236027904,
+                  "sdk_worker": 120733696,
+                  "python_bridge": 29376512,
+                  "other_python_child": 27492352
+                },
+                "maximum_counts": {
+                  "native_runtime": 10,
+                  "other_python_child": 1,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "sdk_worker": 2
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "successful_overlapping_compiles": 1485
+            }
+          ],
+          "activation_ms": 20878.26391728595,
+          "rss_baseline": {
+            "samples": 12,
+            "sampling_errors": 0,
+            "median_rss_bytes": 591372288,
+            "peak_rss_bytes": 591478784,
+            "at_peak_counts": {
+              "benchmark_daemon_host": 1,
+              "sdk_worker": 2,
+              "other_python_child": 1,
+              "python_bridge": 1,
+              "native_runtime": 10
+            },
+            "at_peak_rss_by_kind": {
+              "benchmark_daemon_host": 156663808,
+              "sdk_worker": 120537088,
+              "other_python_child": 27770880,
+              "python_bridge": 29376512,
+              "native_runtime": 257130496
+            },
+            "maximum_counts": {
+              "native_runtime": 10,
+              "other_python_child": 1,
+              "python_bridge": 1,
+              "benchmark_daemon_host": 1,
+              "sdk_worker": 2
+            },
+            "includes_observed_reparented_children": true,
+            "shared_pages_may_be_counted_in_multiple_processes": true
+          },
+          "direct_warm": {
+            "p50_ms": 2.511,
+            "p95_ms": 3.812,
+            "p99_ms": 5.683,
+            "max_ms": 6.34
+          },
+          "ordinary": {
+            "latency": {
+              "count": 3138,
+              "p50_ms": 9.263,
+              "p95_ms": 16.253,
+              "p99_ms": 32.342,
+              "max_ms": 54.358
+            },
+            "native_resident": 3138,
+            "explicit_capacity": 0,
+            "unclassified_refusals": 0
+          },
+          "c16": {
+            "latency": {
+              "count": 192,
+              "p50_ms": 62.899,
+              "p95_ms": 96.767,
+              "p99_ms": 129.287,
+              "max_ms": 146.31
+            },
+            "native_resident": 192,
+            "explicit_capacity": 0,
+            "unclassified_refusals": 0
+          },
+          "c64": {
+            "latency": {
+              "count": 768,
+              "p50_ms": 196.304,
+              "p95_ms": 319.356,
+              "p99_ms": 339.227,
+              "max_ms": 358.875
+            },
+            "native_resident": 768,
+            "explicit_capacity": 0,
+            "unclassified_refusals": 0
+          },
+          "effective_enabled_at_end": true,
+          "selected_CIGAR_interpreter": [
+            3,
+            14,
+            7
+          ],
+          "context_workload": {
+            "successful_compiles": 17753,
+            "latency": {
+              "count": 2220,
+              "p50_ms": 7.397,
+              "p95_ms": 9.51,
+              "p99_ms": 12.157,
+              "max_ms": 20.29
+            },
+            "latency_sample_every": 8,
+            "refusals": {},
+            "distinct_graph_revisions": 1,
+            "unchanged_graph_revision_reused": true,
+            "internal_tokenization_work_measured": false
+          },
+          "observed_processes": {
+            "samples": 4763,
+            "sampling_errors": 0,
+            "median_rss_bytes": 564117504,
+            "peak_rss_bytes": 1378467840,
+            "at_peak_counts": {
+              "python_bridge": 1,
+              "sdk_worker": 1,
+              "native_runtime": 4,
+              "benchmark_daemon_host": 1,
+              "other_descendant": 1
+            },
+            "at_peak_rss_by_kind": {
+              "python_bridge": 29163520,
+              "sdk_worker": 58507264,
+              "native_runtime": 140066816,
+              "benchmark_daemon_host": 1142145024,
+              "other_descendant": 8585216
+            },
+            "maximum_counts": {
+              "native_runtime": 12,
+              "other_descendant": 3,
+              "terminated_child": 1,
+              "other_python_child": 1,
+              "python_bridge": 1,
+              "benchmark_daemon_host": 1,
+              "sdk_worker": 2
+            },
+            "includes_observed_reparented_children": true,
+            "shared_pages_may_be_counted_in_multiple_processes": true
+          },
+          "steady_rss_growth": 0.06487137929601472,
+          "gates": {
+            "direct_p95_20ms": true,
+            "ordinary_p95_1000ms": true,
+            "c16_p99_1000ms": true,
+            "no_unclassified_refusals": true,
+            "no_python_or_unknown_routes": true,
+            "observed_tree_rss_growth_12_percent": true,
+            "process_sampling_complete": true,
+            "worker_coverage": true,
+            "real_compiles_in_every_window": true,
+            "runtime_still_effective": true,
+            "no_context_refusals": true
+          }
+        }
+      },
+      "off": {
+        "path": "/private/tmp/hol-guard-cigar-soak-20261024/off/result.json",
+        "bytes": 12527,
+        "sha256": "cd61de15ae09ed688bc970eb1d427a71e1b5006ad17f65ed3b3131df4c5cec0e",
+        "result": {
+          "schema": "guard-cigar-installed-soak.v1",
+          "build_sha": "83d62bf72ea2fbde46b2d41a32fa2ba1a9b4a92d",
+          "mode": "off",
+          "Guard_python": [
+            3,
+            12,
+            13
+          ],
+          "native_sha256": "7f451d549ab9291d62507d44ca7726d2e2661faea82f8e9abcfdde89106cde90",
+          "native_bytes": 112624128,
+          "duration_seconds": 360,
+          "completed": true,
+          "full_installed_SLO": false,
+          "client_topology": "driver, hook clients and daemon share one Python process",
+          "source_sha256": {
+            "bench_guard_cigar_soak.py": "c69887803663fa5050109c4bf30ea97d02fc52c5822171637662e2c5f463398f",
+            "cigar_benchmark_workload.py": "1e77fce845c354ce54e471d8db70c2e2c04b6f90a6ffbc5204e89d7feb2e3533",
+            "cigar_benchmark_processes.py": "13b981d846ed41f2ab31f9234876a6cbfa1d3d71620a0ee23e1d50c9fac5b72a",
+            "native_slo_session.py": "22becd5eb61af0005a5dbf8c24803f250443952b86a7d9f28f47d3f104fa11cb",
+            "native_slo_diagnostics.py": "c29435bd270cff224c20f80b9c12c4aae1d5d310d35d74e13c0b12c1d119a32f"
+          },
+          "windows": [
+            {
+              "window": 1,
+              "elapsed_seconds": 30.641,
+              "memory": {
+                "samples": 368,
+                "sampling_errors": 0,
+                "median_rss_bytes": 951353344,
+                "peak_rss_bytes": 1401536512,
+                "at_peak_counts": {
+                  "native_runtime": 10,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 230785024,
+                  "benchmark_daemon_host": 1170751488
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "terminated_child": 1,
+                  "other_descendant": 1,
+                  "native_runtime": 11
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "successful_overlapping_compiles": 0
+            },
+            {
+              "window": 2,
+              "elapsed_seconds": 60.46,
+              "memory": {
+                "samples": 359,
+                "sampling_errors": 0,
+                "median_rss_bytes": 407142400,
+                "peak_rss_bytes": 408469504,
+                "at_peak_counts": {
+                  "native_runtime": 11,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 249036800,
+                  "benchmark_daemon_host": 159432704
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 11
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "successful_overlapping_compiles": 0
+            },
+            {
+              "window": 3,
+              "elapsed_seconds": 90.407,
+              "memory": {
+                "samples": 362,
+                "sampling_errors": 0,
+                "median_rss_bytes": 334856192,
+                "peak_rss_bytes": 353501184,
+                "at_peak_counts": {
+                  "native_runtime": 8,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 192806912,
+                  "benchmark_daemon_host": 160694272
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "other_descendant": 1,
+                  "native_runtime": 8
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "successful_overlapping_compiles": 0
+            },
+            {
+              "window": 4,
+              "elapsed_seconds": 120.401,
+              "memory": {
+                "samples": 363,
+                "sampling_errors": 0,
+                "median_rss_bytes": 354025472,
+                "peak_rss_bytes": 358498304,
+                "at_peak_counts": {
+                  "native_runtime": 8,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 193363968,
+                  "benchmark_daemon_host": 165134336
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 8
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "successful_overlapping_compiles": 0
+            },
+            {
+              "window": 5,
+              "elapsed_seconds": 150.616,
+              "memory": {
+                "samples": 365,
+                "sampling_errors": 0,
+                "median_rss_bytes": 358563840,
+                "peak_rss_bytes": 359383040,
+                "at_peak_counts": {
+                  "native_runtime": 8,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 193413120,
+                  "benchmark_daemon_host": 165969920
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 8
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "successful_overlapping_compiles": 0
+            },
+            {
+              "window": 6,
+              "elapsed_seconds": 180.564,
+              "memory": {
+                "samples": 360,
+                "sampling_errors": 0,
+                "median_rss_bytes": 359366656,
+                "peak_rss_bytes": 359923712,
+                "at_peak_counts": {
+                  "native_runtime": 8,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 193511424,
+                  "benchmark_daemon_host": 166412288
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 8
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "successful_overlapping_compiles": 0
+            },
+            {
+              "window": 7,
+              "elapsed_seconds": 210.414,
+              "memory": {
+                "samples": 362,
+                "sampling_errors": 0,
+                "median_rss_bytes": 359890944,
+                "peak_rss_bytes": 360448000,
+                "at_peak_counts": {
+                  "native_runtime": 8,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 193626112,
+                  "benchmark_daemon_host": 166821888
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 8
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "successful_overlapping_compiles": 0
+            },
+            {
+              "window": 8,
+              "elapsed_seconds": 240.486,
+              "memory": {
+                "samples": 360,
+                "sampling_errors": 0,
+                "median_rss_bytes": 360398848,
+                "peak_rss_bytes": 415252480,
+                "at_peak_counts": {
+                  "native_runtime": 11,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 248053760,
+                  "benchmark_daemon_host": 167198720
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 11
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "successful_overlapping_compiles": 0
+            },
+            {
+              "window": 9,
+              "elapsed_seconds": 270.455,
+              "memory": {
+                "samples": 361,
+                "sampling_errors": 0,
+                "median_rss_bytes": 415694848,
+                "peak_rss_bytes": 415907840,
+                "at_peak_counts": {
+                  "native_runtime": 11,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 248512512,
+                  "benchmark_daemon_host": 167395328
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 11
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "successful_overlapping_compiles": 0
+            },
+            {
+              "window": 10,
+              "elapsed_seconds": 300.604,
+              "memory": {
+                "samples": 363,
+                "sampling_errors": 0,
+                "median_rss_bytes": 379568128,
+                "peak_rss_bytes": 398098432,
+                "at_peak_counts": {
+                  "native_runtime": 10,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 230309888,
+                  "benchmark_daemon_host": 167788544
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 10
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "successful_overlapping_compiles": 0
+            },
+            {
+              "window": 11,
+              "elapsed_seconds": 330.529,
+              "memory": {
+                "samples": 359,
+                "sampling_errors": 0,
+                "median_rss_bytes": 400179200,
+                "peak_rss_bytes": 400392192,
+                "at_peak_counts": {
+                  "native_runtime": 10,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 230572032,
+                  "benchmark_daemon_host": 169820160
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "terminated_child": 1,
+                  "native_runtime": 10
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "successful_overlapping_compiles": 0
+            },
+            {
+              "window": 12,
+              "elapsed_seconds": 360.544,
+              "memory": {
+                "samples": 364,
+                "sampling_errors": 0,
+                "median_rss_bytes": 363757568,
+                "peak_rss_bytes": 364216320,
+                "at_peak_counts": {
+                  "native_runtime": 8,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 193871872,
+                  "benchmark_daemon_host": 170344448
+                },
+                "maximum_counts": {
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 8
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "successful_overlapping_compiles": 0
+            }
+          ],
+          "activation_ms": null,
+          "rss_baseline": {
+            "samples": 12,
+            "sampling_errors": 0,
+            "median_rss_bytes": 1371553792,
+            "peak_rss_bytes": 1371570176,
+            "at_peak_counts": {
+              "native_runtime": 10,
+              "benchmark_daemon_host": 1
+            },
+            "at_peak_rss_by_kind": {
+              "native_runtime": 230670336,
+              "benchmark_daemon_host": 1140899840
+            },
+            "maximum_counts": {
+              "benchmark_daemon_host": 1,
+              "terminated_child": 1,
+              "native_runtime": 10
+            },
+            "includes_observed_reparented_children": true,
+            "shared_pages_may_be_counted_in_multiple_processes": true
+          },
+          "direct_warm": {
+            "p50_ms": 2.534,
+            "p95_ms": 3.655,
+            "p99_ms": 5.932,
+            "max_ms": 6.461
+          },
+          "ordinary": {
+            "latency": {
+              "count": 3140,
+              "p50_ms": 9.281,
+              "p95_ms": 15.952,
+              "p99_ms": 25.372,
+              "max_ms": 40.339
+            },
+            "native_resident": 3140,
+            "explicit_capacity": 0,
+            "unclassified_refusals": 0
+          },
+          "c16": {
+            "latency": {
+              "count": 192,
+              "p50_ms": 62.015,
+              "p95_ms": 97.316,
+              "p99_ms": 162.871,
+              "max_ms": 170.525
+            },
+            "native_resident": 192,
+            "explicit_capacity": 0,
+            "unclassified_refusals": 0
+          },
+          "c64": {
+            "latency": {
+              "count": 768,
+              "p50_ms": 189.875,
+              "p95_ms": 323.847,
+              "p99_ms": 353.628,
+              "max_ms": 365.815
+            },
+            "native_resident": 768,
+            "explicit_capacity": 0,
+            "unclassified_refusals": 0
+          },
+          "effective_enabled_at_end": false,
+          "selected_CIGAR_interpreter": null,
+          "observed_processes": {
+            "samples": 4451,
+            "sampling_errors": 0,
+            "median_rss_bytes": 363757568,
+            "peak_rss_bytes": 1401536512,
+            "at_peak_counts": {
+              "native_runtime": 10,
+              "benchmark_daemon_host": 1
+            },
+            "at_peak_rss_by_kind": {
+              "native_runtime": 230785024,
+              "benchmark_daemon_host": 1170751488
+            },
+            "maximum_counts": {
+              "terminated_child": 1,
+              "native_runtime": 11,
+              "other_descendant": 1,
+              "benchmark_daemon_host": 1,
+              "exiting_host_python_child": 1
+            },
+            "includes_observed_reparented_children": true,
+            "shared_pages_may_be_counted_in_multiple_processes": true
+          },
+          "steady_rss_growth": 0.02186040399937883,
+          "gates": {
+            "direct_p95_20ms": true,
+            "ordinary_p95_1000ms": true,
+            "c16_p99_1000ms": true,
+            "no_unclassified_refusals": true,
+            "no_python_or_unknown_routes": true,
+            "observed_tree_rss_growth_12_percent": true,
+            "process_sampling_complete": true,
+            "worker_coverage": true,
+            "real_compiles_in_every_window": true,
+            "runtime_still_effective": true,
+            "no_context_refusals": true
+          }
+        }
+      }
+    },
+    "latency_context_sampling_every": 8,
+    "all_compiles_verified_and_counted": true,
+    "workspace_input": "one explicitly selected synthetic README, one operator scope",
+    "guard_host_and_driver_same_process": true,
+    "memory": "sum RSS of host and every observed descendant, including observed reparented identities; shared pages may be counted multiple times; not exhaustive spawn tracing",
+    "one_unchanged_graph_revision_reused": true,
+    "internal_tokenization_work_measured": false,
+    "off_optional_workers_observed": false,
+    "source_churn_exercised": false,
+    "private_execution_lease_renewal_proved_at_late_dispatch": false,
+    "memory_plateau_proved": false,
+    "absolute_on_off_memory_comparable": false,
+    "memory_comparability_limit": "Initial protocol baselines differ substantially: off 1371553792 bytes versus on 591372288 bytes; off drops to a much lower late-window total. On includes additional explicit activation time before measurement. Startup/collection timing is a possible explanation, not a directly measured cause. Do not infer lower CIGAR memory use or a settled plateau from these baselines.",
+    "single_pair_direct_p95_difference_ms": 0.157,
+    "single_pair_HTTP_p95_difference_ms": 0.301,
+    "qualifies_previous_incomplete_relative_cohort": false
+  },
+  "source_files": [
+    {
+      "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/scripts/bench_guard_cigar_soak.py",
+      "bytes": 10687,
+      "sha256": "c69887803663fa5050109c4bf30ea97d02fc52c5822171637662e2c5f463398f"
+    },
+    {
+      "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/scripts/cigar_benchmark_workload.py",
+      "bytes": 6386,
+      "sha256": "1e77fce845c354ce54e471d8db70c2e2c04b6f90a6ffbc5204e89d7feb2e3533"
+    },
+    {
+      "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/scripts/cigar_benchmark_processes.py",
+      "bytes": 7508,
+      "sha256": "13b981d846ed41f2ab31f9234876a6cbfa1d3d71620a0ee23e1d50c9fac5b72a"
+    },
+    {
+      "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/scripts/native_slo_session.py",
+      "bytes": 19618,
+      "sha256": "22becd5eb61af0005a5dbf8c24803f250443952b86a7d9f28f47d3f104fa11cb"
+    },
+    {
+      "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/scripts/native_slo_diagnostics.py",
+      "bytes": 3571,
+      "sha256": "c29435bd270cff224c20f80b9c12c4aae1d5d310d35d74e13c0b12c1d119a32f"
+    },
+    {
+      "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/dashboard/e2e/integration/context-status.ts",
+      "bytes": 1394,
+      "sha256": "9ecab52d2e7f6480eb5a300edbeb602272659b14c5ebbd822056088bace0790f"
+    },
+    {
+      "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/dashboard/scripts/context-status.test.ts",
+      "bytes": 2477,
+      "sha256": "a76730c5a1ca1bd576ae02325e4345e1f3f8316619424e25126a66a5ca045b98"
+    },
+    {
+      "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/dashboard/src/context-assistance/workspaces-panel.tsx",
+      "bytes": 16063,
+      "sha256": "5b6a0417fa3d286ce9b69633ed5c845e6cb980136253be8c91f4729034bd89d7"
+    },
+    {
+      "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/tests/test_context_execution_sink_installed.py",
+      "bytes": 11111,
+      "sha256": "f867e48893992eed12f01e4d418c6da8bd5c72c600f3cbd2b728b489df2cd2f5"
+    },
+    {
+      "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/tests/test_context_pi_sdk_installed.py",
+      "bytes": 1276,
+      "sha256": "a58b9cd7463eb41efb87958bf7f71e1b031a903b935551510be33f1bdb030170"
+    },
+    {
+      "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/tests/context_pi_sdk_support.py",
+      "bytes": 4509,
+      "sha256": "c20df0bb90652cbfddde7880b8a79bb6b3379d60140a5e0dd1d51730c71d7979"
+    },
+    {
+      "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/tests/test_omp_bound_bash_sdk.py",
+      "bytes": 23292,
+      "sha256": "019e26ce728666e76c679307ebaae0d0016a4d2a4e77ffcb64538a7683d56e6a"
+    }
+  ],
+  "ownership_gates": {
+    "semantic": {
+      "path": "/private/tmp/hol-guard-cigar-package-build/final-disclosure-83d62bf7/semantic-final.json",
+      "bytes": 99,
+      "sha256": "8e3101056186cd4d641add66f9eed89b0289db4e105bdb5885821ae3f0484e46",
+      "status": "passed"
+    },
+    "capability": {
+      "path": "/private/tmp/hol-guard-cigar-package-build/final-disclosure-83d62bf7/capability-final.json",
+      "bytes": 38592,
+      "sha256": "d975dee5fe67bdb3f901777eaa0e7a95a5e8ce9e5f310467754474d61c80dc74",
+      "status": "passed"
+    },
+    "authority": {
+      "path": "/private/tmp/hol-guard-cigar-package-build/final-disclosure-83d62bf7/authority-final.json",
+      "bytes": 62226,
+      "sha256": "3a31273abd2283ba72e3eaf78809556f9a6aafc1a5cde3dd06634a1359e0b1b0",
+      "status": "passed",
+      "changed_files_checked": 321
+    },
+    "io": {
+      "path": "/private/tmp/hol-guard-cigar-package-build/final-disclosure-83d62bf7/io-final.json",
+      "bytes": 78222,
+      "sha256": "bcf901a1c39ebf936483fa5aebdcdb005372d016d67e41b8e46adc6fcbd68472",
+      "status": "passed"
+    },
+    "privacy": {
+      "path": "/private/tmp/hol-guard-cigar-package-build/final-disclosure-83d62bf7/privacy-final.json",
+      "bytes": 620,
+      "sha256": "3f99732114cd01afda57fec9bae91e307310125980da63e8859c1941fbb96b14",
+      "status": "passed"
+    }
+  },
+  "qualification": {
+    "installed_native_product": true,
+    "built_retention_disclosure": true,
+    "installed_backend_executor_and_SDK_cases": true,
+    "three_actual_browser_flows": true,
+    "feature_off_full_installed_SLO_this_run": true,
+    "fixed_input_six_minute_on_and_off_observed_tree_protocol": true,
+    "complete_feature_on_full_installed_SLO": false,
+    "matched_relative_latency_qualified": false,
+    "earlier_intermittent_HTTP_failure_resolved": false,
+    "long_term_memory_stability": false,
+    "c5_c12_assistance_clients": false,
+    "source_churn_soak": false,
+    "late_execution_lease_renewal_and_abrupt_dispatch_crash": false,
+    "interactive_CLI_model_and_MCP_harness_delivery": false,
+    "human_or_model_efficiency": false,
+    "exponential_improvement": false,
+    "Desktop_and_other_platforms": false,
+    "public_release": false
+  },
+  "production_typecheck": "pre-existing 18 diagnostics remain unqualified; no new production TypeScript change after the already checked storage-disclosure edit",
+  "prior_failures_preserved": "earlier incomplete relative-latency cohorts, hook disconnect/timeout, hardened-helper failures and first final-package browser attempt remain limits; later passing runs do not erase them",
+  "live_configuration_changed": false,
+  "external_credentials_accessed": false,
+  "fixture_password_proofs_used": true,
+  "pushed_or_published": false
+}

@@ -1,0 +1,33 @@
+{
+  "schema": "hol-guard.cigar-worker-development-build.v1",
+  "created_at_utc": "2026-10-23T14:44:43+00:00",
+  "source_revision": "b47380e5a5cbeaaad5a61cab3372e9e67368732f",
+  "source_worktree_clean_after_build": true,
+  "declared_core_version": "0.14.1",
+  "source_lock_sha256": "3440e5619a21e4af687ebb4ed763f3f3488c84db85a024e58d55b1fe4be6eb2e",
+  "artifact": {
+    "name": "cigar-context-worker",
+    "sha256": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112",
+    "bytes": 22708072,
+    "profile": "debug",
+    "target": "aarch64-apple-darwin"
+  },
+  "build": {
+    "package": "cigar-context",
+    "features": [
+      "bpe",
+      "broker-persistence"
+    ],
+    "locked": true,
+    "offline": true,
+    "rustc": "1.92.0 (ded5c06cf 2025-12-08)"
+  },
+  "qualification": {
+    "worker_built": true,
+    "worker_started": false,
+    "sdk_installed": false,
+    "protocol_handshake_checked": false,
+    "platform_release_qualified": false
+  },
+  "scope": "Development build only; not installed package, runtime-gate, performance, or public-release qualification"
+}

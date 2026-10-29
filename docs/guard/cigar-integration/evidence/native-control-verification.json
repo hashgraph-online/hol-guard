@@ -1,0 +1,188 @@
+{
+  "schema": "guard-cigar-native-control-evidence.v1",
+  "observed_date": "2026-10-23",
+  "scope": "local-development-darwin-arm64",
+  "source_revision": "b47380e5a5cbeaaad5a61cab3372e9e67368732f",
+  "native_test": {
+    "activation_scheduling_ms": 0,
+    "checks": [
+      "local_enrollment_actual_process_verification",
+      "enrollment_grants_no_activation",
+      "private_metadata_listing",
+      "setup_listing_omits_paths",
+      "native_opt_in_gate",
+      "requested_is_not_effective",
+      "background_activation",
+      "actual_cpython_314_sdk_worker",
+      "persisted_opt_out",
+      "out_of_band_opt_out_watched",
+      "pending_verification_cancelled",
+      "no_late_reactivation"
+    ],
+    "final_availability": "off",
+    "final_effective_enabled": false,
+    "qualification": "local-development-darwin-arm64-only",
+    "ready_observation": {
+      "availability": "ready",
+      "diagnostic": null,
+      "effective_enabled": true,
+      "generation": "3",
+      "installation_options": null,
+      "job": null,
+      "last_check": {
+        "active": false,
+        "compile_verified": true,
+        "features": [
+          "answer_review.v1",
+          "context_graph.v1",
+          "context_views.v1",
+          "document_boundaries.v1",
+          "selection_explanation.v1",
+          "snapshot_integrity.v1",
+          "source_replace.v1"
+        ],
+        "interpreter": {
+          "abi": "cpython-314-darwin",
+          "debug_build": false,
+          "free_threaded": false,
+          "implementation": "cpython",
+          "platform": "darwin-arm64",
+          "release_level": "final",
+          "schema": "guard-cigar-interpreter.v1",
+          "version": [
+            3,
+            14,
+            7
+          ]
+        },
+        "package_fingerprint": "bd4d27349f01c4403a3e469e29d3785c4c8073e12c32744dfaa2304dcaf78a95",
+        "package_version": "0.14.1",
+        "protocol": "cigar.context-worker.v1",
+        "schema": "guard-cigar-runtime-status.v1",
+        "worker_fingerprint": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112"
+      },
+      "preferences": {
+        "enabled": true,
+        "features": {
+          "agent_context": false,
+          "review_briefs": true,
+          "shared_agents": false
+        },
+        "limits": {
+          "context_tokens": 2048,
+          "idle_shutdown_seconds": 600,
+          "max_active_workspaces": 2,
+          "reserve_tokens": 256
+        },
+        "resource_profile": "balanced",
+        "runtime_id": "candidate-314",
+        "schema_version": 1,
+        "sources": {
+          "native_policy_facts": true,
+          "sanitized_receipt_facts": true,
+          "source_set_id": "",
+          "workspace_documents": false
+        },
+        "storage": {
+          "mode": "memory",
+          "retention_hours": 24
+        }
+      },
+      "qualification": "local_candidate",
+      "requested_enabled": true,
+      "runtime": {
+        "active": true,
+        "compile_verified": true,
+        "features": [
+          "answer_review.v1",
+          "context_graph.v1",
+          "context_views.v1",
+          "document_boundaries.v1",
+          "selection_explanation.v1",
+          "snapshot_integrity.v1",
+          "source_replace.v1"
+        ],
+        "interpreter": {
+          "abi": "cpython-314-darwin",
+          "debug_build": false,
+          "free_threaded": false,
+          "implementation": "cpython",
+          "platform": "darwin-arm64",
+          "release_level": "final",
+          "schema": "guard-cigar-interpreter.v1",
+          "version": [
+            3,
+            14,
+            7
+          ]
+        },
+        "package_fingerprint": "bd4d27349f01c4403a3e469e29d3785c4c8073e12c32744dfaa2304dcaf78a95",
+        "package_version": "0.14.1",
+        "protocol": "cigar.context-worker.v1",
+        "schema": "guard-cigar-runtime-status.v1",
+        "worker_fingerprint": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112"
+      },
+      "schema": "guard-context-assistance-status.v1"
+    },
+    "schema": "guard-cigar-native-control-verification.v1",
+    "status": "passed",
+    "worker_fingerprint": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112"
+  },
+  "tests": {
+    "sdk_library": {
+      "passed": 22,
+      "failed": 0,
+      "ignored": 0,
+      "elapsed_seconds": 21.75,
+      "scope": "host-library-only"
+    },
+    "native_control": {
+      "passed": 27,
+      "failed": 0,
+      "ignored": 0,
+      "elapsed_seconds": 21.79
+    },
+    "native_configuration": {
+      "passed": 27,
+      "failed": 0,
+      "read_parity_vectors": 91,
+      "write_parity_vectors": 1724
+    },
+    "daemon_route": {
+      "passed": 10,
+      "failed": 0
+    },
+    "python_transport_and_projection": {
+      "passed": 9,
+      "failed": 0,
+      "python": "3.12.13"
+    },
+    "pinned_rust_clippy": {
+      "toolchain": "1.88.0",
+      "warnings_denied": true,
+      "status": "passed"
+    }
+  },
+  "source_gates": {
+    "semantic": "passed",
+    "privacy": "passed",
+    "capability": "passed",
+    "io": "passed",
+    "reachable_io_semantic_remainder": 0
+  },
+  "qualification_limits": [
+    "Private local candidate enrollment is not a public installer or release signature qualification.",
+    "Actual control test uses resident protocol/library; installed HTTP socket and desktop qualification remain pending.",
+    "Windows persistent Job Object transport and supported-platform matrix remain pending.",
+    "Native source admission, evidence notifications, scoped product context APIs, UI, MCP, sharing, persistence and handoff remain incomplete.",
+    "No hook SLO/RSS or maximum efficiency claim is established by these control tests.",
+    "Pinned frontend npm ci failed ENOTFOUND registry.npmjs.org; no locked frontend build is claimed.",
+    "Rust 1.92 native Clippy encounters the unchanged guard-scanner secret_detection.rs:648 lifetime warning; pinned 1.88 passes.",
+    "Three unchanged macOS hardened contained-process tests fail launch step 6 PermissionDenied on this host, reproduced from e71cb3e7 in an isolated source archive."
+  ],
+  "cleanup": {
+    "removed": "Only the two task-owned temporary incremental build directories",
+    "cigar_source_checkout_changed": false,
+    "live_guard_changed": false
+  }
+}

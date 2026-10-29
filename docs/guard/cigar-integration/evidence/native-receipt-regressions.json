@@ -1,0 +1,221 @@
+{
+  "schema": "guard-cigar-native-receipt-regressions.v1",
+  "status": "partial",
+  "context_flow_status": "passed",
+  "qualification": "local-development-darwin-arm64-only",
+  "toolchain": "Rust 1.88.0 aarch64-apple-darwin, dev profile with no incremental/debuginfo",
+  "final_context_command": [
+    "cargo",
+    "test",
+    "-p",
+    "hol-guard-runtime",
+    "--lib",
+    "context_assistance",
+    "--locked",
+    "--offline",
+    "--",
+    "--include-ignored",
+    "--test-threads=1",
+    "--nocapture"
+  ],
+  "final_context_result": "test result: ok. 39 passed; 0 failed; 0 ignored; 0 measured; 3910 filtered out; finished in 38.86s",
+  "native_receipt_test": {
+    "brief": {
+      "citations": [
+        {
+          "document_digest": "310d6074f328d0b16f6c6d6d9e0a9b562d05309df3e980d2d4509754f51e24a0",
+          "end_line": 1,
+          "node_id": "guard-policy-facts",
+          "source": "guard:policy",
+          "start_line": 1
+        },
+        {
+          "document_digest": "1a56175e0165c64c9f05710e03e459e8f4bc7cb32c5cbede42a92a7e5111ea30",
+          "end_line": 1,
+          "node_id": "receipt:dc4d70bfd051d32bd35f12df225770d1439df346d27176e7af02ba69ea760bec",
+          "source": "guard:receipts",
+          "start_line": 1
+        }
+      ],
+      "data_role": true,
+      "excerpts": [
+        {
+          "citations": [
+            {
+              "document_digest": "310d6074f328d0b16f6c6d6d9e0a9b562d05309df3e980d2d4509754f51e24a0",
+              "end_line": 1,
+              "node_id": "guard-policy-facts",
+              "source": "guard:policy",
+              "start_line": 1
+            }
+          ],
+          "text": "Guard provides Allow once and Always allow for supported executable reviews. Context assistance supplies data and grants no command approval."
+        },
+        {
+          "citations": [
+            {
+              "document_digest": "1a56175e0165c64c9f05710e03e459e8f4bc7cb32c5cbede42a92a7e5111ea30",
+              "end_line": 1,
+              "node_id": "receipt:dc4d70bfd051d32bd35f12df225770d1439df346d27176e7af02ba69ea760bec",
+              "source": "guard:receipts",
+              "start_line": 1
+            }
+          ],
+          "text": "Guard recorded decision 'allow' for PreToolUse in codex at policy generation 1. Recorded policy action: warn; observed policy action: not recorded; observe mode: false. Native receipt dc4d70bfd051d32bd35f12df225770d1439df346d27176e7af02ba69ea760bec. This is a recorded decision, not execution confirmation or an approval grant."
+        }
+      ],
+      "graph_revision": 2,
+      "policy_revision": "38a10e0673fc90d2998bd076f05fd2b783f760b9321366fa33cca672bd6ac4ab",
+      "rendered": "{\"sources\":[[\"guard-policy-facts\",\"guard:policy\",1,1]],\"text\":\"Guard provides Allow once and Always allow for supported executable reviews. Context assistance supplies data and grants no command approval.\"}\n{\"sources\":[[\"receipt:dc4d70bfd051d32bd35f12df225770d1439df346d27176e7af02ba69ea760bec\",\"guard:receipts\",1,1]],\"text\":\"Guard recorded decision 'allow' for PreToolUse in codex at policy generation 1. Recorded policy action: warn; observed policy action: not recorded; observe mode: false. Native receipt dc4d70bfd051d32bd35f12df225770d1439df346d27176e7af02ba69ea760bec. This is a recorded decision, not execution confirmation or an approval grant.\"}",
+      "rendered_tokens": 181,
+      "schema": "guard-cigar-context-brief.v1",
+      "snapshot_id": "3f2df0cbd58fbbac324ae431a82a7d25b8a94c4fd9e1e01ae51a5f23995e5644"
+    },
+    "checks": [
+      "real_native_hook_origin",
+      "failed_store_no_notification",
+      "post_commit_notification",
+      "stale_snapshot_refusal",
+      "actual_sdk_receipt_citation",
+      "private_input_exclusion",
+      "exact_workspace_isolation",
+      "loss_invalidates_actual_sdk_source",
+      "duplicate_ack_preserved",
+      "opt_out_evidence_independence"
+    ],
+    "qualification": "local-development-darwin-arm64-only",
+    "schema": "guard-cigar-receipt-verification.v1",
+    "status": "passed"
+  },
+  "selected_runtime": {
+    "active": true,
+    "compile_verified": true,
+    "features": [
+      "answer_review.v1",
+      "context_graph.v1",
+      "context_views.v1",
+      "document_boundaries.v1",
+      "selection_explanation.v1",
+      "snapshot_integrity.v1",
+      "source_replace.v1"
+    ],
+    "interpreter": {
+      "abi": "cpython-314-darwin",
+      "debug_build": false,
+      "free_threaded": false,
+      "implementation": "cpython",
+      "platform": "darwin-arm64",
+      "release_level": "final",
+      "schema": "guard-cigar-interpreter.v1",
+      "version": [
+        3,
+        14,
+        7
+      ]
+    },
+    "package_fingerprint": "bd4d27349f01c4403a3e469e29d3785c4c8073e12c32744dfaa2304dcaf78a95",
+    "package_version": "0.14.1",
+    "protocol": "cigar.context-worker.v1",
+    "schema": "guard-cigar-runtime-status.v1",
+    "worker_fingerprint": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112"
+  },
+  "regression_selections": [
+    {
+      "name": "assistance_library",
+      "result": "test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 22.51s",
+      "log_sha256": "29c1579ff9c8b62f4a0ba0f828db1dce6debc8715c6beacfcb8648d493a17c08"
+    },
+    {
+      "name": "config_parity",
+      "result": "test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 3920 filtered out; finished in 0.38s",
+      "log_sha256": "b60d7a87022053a3ae3f8fb2de050666316642c3336b5bf07f14a48362780fc9"
+    },
+    {
+      "name": "context",
+      "result": "test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 3910 filtered out; finished in 40.74s",
+      "log_sha256": "e1ca00e5e0ee5f0d34775f48642fbde88e0f521e6a7dbe6762969d5433def055"
+    },
+    {
+      "name": "direct_evidence",
+      "result": "test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 3941 filtered out; finished in 0.06s",
+      "log_sha256": "e5b7064f1fa2fcc6531c98ccd11f0d5914d61265613d56dfd43af89808c9c0e0"
+    },
+    {
+      "name": "edge",
+      "result": "test result: ok. 36 passed; 0 failed; 0 ignored; 0 measured; 3911 filtered out; finished in 0.21s",
+      "log_sha256": "44aaff95d95d84e5e83b182e8006f06043829baf13a8265bf0bb1af89074839f"
+    },
+    {
+      "name": "evidence_ordering",
+      "result": "test result: ok. 63 passed; 0 failed; 0 ignored; 0 measured; 2562 filtered out; finished in 17.05s",
+      "log_sha256": "d247395effdc0b87d4ffbfc01545af7a77e36aad5934e25d54610a91aada7e78"
+    },
+    {
+      "name": "exact_action",
+      "result": "test result: FAILED. 168 passed; 4 failed; 1 ignored; 0 measured; 3774 filtered out; finished in 37.25s",
+      "log_sha256": "49352e4247d52dd315e35a6239940db4328fe1fd34df5142184f0f6f907a84d8"
+    },
+    {
+      "name": "saved_approvals",
+      "result": "test result: ok. 62 passed; 0 failed; 0 ignored; 0 measured; 3885 filtered out; finished in 2.96s",
+      "log_sha256": "c219986f76e9e0aac1591e4717498537ab3abef3afa72fe7a8768cb5540f2e98"
+    },
+    {
+      "name": "writer",
+      "result": "test result: ok. 68 passed; 0 failed; 0 ignored; 0 measured; 3879 filtered out; finished in 0.80s",
+      "log_sha256": "1e500a0219cdc9b11df9b6d6879c6528f8e510812b36f93171586d42586b8dee"
+    }
+  ],
+  "baseline_reproduction": {
+    "source_commit": "e71cb3e7",
+    "source_archive": "/private/tmp/hol-guard-cigar-core-baseline.tar",
+    "command": [
+      "cargo",
+      "test",
+      "-p",
+      "hol-guard-runtime",
+      "--lib",
+      "native_exact_action_op::bash_capture::platform::launch_tests",
+      "--locked",
+      "--offline",
+      "--",
+      "--test-threads=1",
+      "--nocapture"
+    ],
+    "result": "test result: FAILED. 5 passed; 4 failed; 0 ignored; 0 measured; 3914 filtered out; finished in 2.67s",
+    "test_binary_sha256": "444025a9c1557aebcac849883c3b91cb7e92a3258f6c95e76e170ea1ecee748b",
+    "test_binary_bytes": 326564560,
+    "failed_tests": [
+      "native_exact_action_op::bash_capture::platform::launch_tests::bash_broker_preserves_binary_pipeline_input",
+      "native_exact_action_op::bash_capture::platform::launch_tests::bash_broker_preserves_output_into_a_modeled_pipeline_consumer",
+      "native_exact_action_op::bash_capture::platform::launch_tests::bash_broker_routes_compiled_cli_output_only_through_the_held_report",
+      "native_exact_action_op::bash_capture::platform::launch_tests::bash_broker_runs_the_captured_hardened_image_after_source_mutation"
+    ],
+    "unchanged_source_check": "git diff e71cb3e7 -- rust/crates/guard-runtime/src/native_exact_action_op rust/crates/guard-runtime/src/bash_launch.rs rust/crates/guard-contained-process rust/crates/guard-seatbelt returned no changes.",
+    "observed_failures": [
+      "Two child statuses were 134 instead of expected completion codes.",
+      "One pipeline returned empty output.",
+      "One compiled report route returned UnexpectedEof."
+    ],
+    "qualification_limit": "The same failures reproduce without these integration changes. Their underlying host/helper failure remains unresolved; the complete exact-action/installed-executor qualification is not passed."
+  },
+  "limits": {
+    "pending_origins": 128,
+    "post_commit_notifications": 64,
+    "per_scope_recent_receipts": 16
+  },
+  "frontend": {
+    "context_tests": 5,
+    "existing_home_tests": 4,
+    "production_build_modules": 450,
+    "production_build_seconds": 1.66,
+    "production_types_baseline_errors": 18,
+    "production_types_current_errors": 18,
+    "introduced_type_diagnostics": 0,
+    "full_project_typecheck_passed": false,
+    "home_browser_qualification": "pending fresh provenance-bound package"
+  },
+  "scope": "Actual native evaluator/evidence store and approved SDK/worker. This source/library receipt does not qualify a new installed Guard binary, Home browser interaction, frozen Desktop, other platforms, MCP/broker/persistence/executor handoff or performance/RSS.",
+  "final_context_log_sha256": "030db2d00db357580938208d4623e69406811f1646c1eae7d7e1915922b9439f",
+  "currentness_test": "Pending native receipts affect only matching workspace/app reads; aggregate loss invalidates all affected scopes conservatively."
+}

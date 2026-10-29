@@ -1,0 +1,143 @@
+{
+  "schema": "guard-cigar-paired-mcp-verification.v1",
+  "status": "passed",
+  "qualification": "darwin-arm64-source-development-native-resident-and-installed-cigar-only",
+  "native": {
+    "native_result": "test result: ok. 45 passed; 0 failed; 0 ignored; 0 measured; 3910 filtered out; finished in 51.26s",
+    "native_agent": {
+      "checks": [
+        "native_private_session_issuance",
+        "human_pairing_required",
+        "read_route_cannot_authorize",
+        "access_reduction_route_cannot_authorize",
+        "dashboard_scope_not_agent_authority",
+        "host_bound_app_scope",
+        "credential_excluded_from_operator_metadata_and_sdk_context",
+        "actual_cited_agent_context",
+        "actual_selection_explanation",
+        "foreign_unapproved_connection_refused",
+        "session_snapshot_isolation",
+        "revoked_cached_call_refused",
+        "disabled_cached_call_refused"
+      ],
+      "qualification": "native-library-and-actual-sdk-only",
+      "schema": "guard-cigar-agent-verification.v1",
+      "status": "passed"
+    },
+    "native_log_sha256": "c1371614d79ade54f2386e9182a8d410e5cad819d3be59554fe31c6fb82dc7c9",
+    "python_reports": [
+      {
+        "path": "/private/tmp/hol-guard-cigar-agent-process-results.xml",
+        "suites": [
+          {
+            "name": "pytest",
+            "errors": "0",
+            "failures": "1",
+            "skipped": "0",
+            "tests": "37",
+            "time": "23.627",
+            "timestamp": "2026-10-23T14:36:07.185768-07:00",
+            "hostname": "constructs-Mac-Studio.local"
+          }
+        ],
+        "sha256": "c9e8179c171ba3605ca39b99fab8665c758646965e6ff7e82f6275524d962d3d"
+      },
+      {
+        "path": "/private/tmp/hol-guard-cigar-agent-process-v2-results.xml",
+        "suites": [
+          {
+            "name": "pytest",
+            "errors": "0",
+            "failures": "0",
+            "skipped": "0",
+            "tests": "5",
+            "time": "12.636",
+            "timestamp": "2026-10-23T14:38:32.129899-07:00",
+            "hostname": "constructs-Mac-Studio.local"
+          }
+        ],
+        "sha256": "f04a88e0195a805165690d6a237a1634a90214678aa07aa9956d8e97b668e9be"
+      }
+    ]
+  },
+  "development_artifact": {
+    "bytes": 110772208,
+    "sha256": "6918dd928a219ea734ef2d880c38b8bc34ca541f0a4abab6602b3b7e1bbdc10a",
+    "build_sha": "unknown",
+    "version": "3.55.1",
+    "rule_digest": "623ead303f4fc53ed83b38d5104366d1c786728fdec50c8693beae6c6367fac9"
+  },
+  "artifact_path": "/private/tmp/hol-guard-cigar-agent-native-validation/hol-guard-runtime",
+  "signature": "codesign --verify --strict passed",
+  "native_size_cap_unchanged": true,
+  "guard_host_python": "3.12.13",
+  "cigar_runtime": {
+    "implementation": "cpython",
+    "version": [
+      3,
+      14,
+      7
+    ],
+    "sdk": "0.14.1",
+    "sdk_source": "b47380e5a5cbeaaad5a61cab3372e9e67368732f",
+    "worker_sha256": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112"
+  },
+  "mcp": {
+    "sdk": "1.28.1",
+    "official_source": "https://github.com/modelcontextprotocol/python-sdk/blob/v1.28.1/src/mcp/server/fastmcp/server.py",
+    "actual_stdio": true,
+    "transport_or_sdk_mocked": false,
+    "checks": [
+      "private_mcp_process_pairing",
+      "initial_scope_restriction",
+      "operator_grant_required",
+      "native_source_citations",
+      "selection_explanation",
+      "complete_arguments_preserved_for_native_validation",
+      "tool_list_change_capability",
+      "fresh_discovery_after_pairing",
+      "disabled_tool_withdrawal",
+      "disabled_cached_call_refused"
+    ],
+    "original_mcp_and_store_selection_passed": 36,
+    "real_protocol_plus_framing_passed": 5,
+    "real_protocol_plus_framing_seconds": 12.64,
+    "scope_identity": "human_paired_mcp_process",
+    "app_executable_attestation": "not_established"
+  },
+  "limits": {
+    "max_sessions": 8,
+    "pending_lease_seconds": 300,
+    "active_lease_seconds": 3600,
+    "active_connections_per_scope": 1,
+    "retained_snapshot_ids_per_session": 8
+  },
+  "source_checks": {
+    "clippy": "both crates lib/tests, -D warnings passed",
+    "ruff": "passed",
+    "semantic_callgraph": "passed",
+    "python_capability_cleanup": "passed",
+    "io_ownership": "passed",
+    "reachable_io_semantic_remainder": 0,
+    "privacy": "passed"
+  },
+  "frontend": {
+    "contract_tests": 5,
+    "build_modules": 451,
+    "build_seconds": 1.81,
+    "production_source_types": {
+      "baseline": 18,
+      "current": 18,
+      "introduced": 0,
+      "full_project_typecheck_passed": false
+    }
+  },
+  "remaining": [
+    "Fresh provenance-bound Guard package and browser pairing/proof acceptance with actual MCP client.",
+    "Installed harness/app executable routes; current proof covers generic MCP stdio only.",
+    "Current native action/policy context, pending-action/history/repair surfaces.",
+    "Context scheduling isolation and hook contention/SLO/RSS measurement.",
+    "Broker sharing, persistence and execution handoff.",
+    "Existing four baseline-reproduced hardened-helper launch failures remain unresolved."
+  ]
+}

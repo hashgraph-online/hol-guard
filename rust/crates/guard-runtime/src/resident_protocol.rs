@@ -193,6 +193,8 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
 #[derive(Debug, Deserialize)]
 #[serde(tag = "operation", content = "request", rename_all = "snake_case")]
 pub(crate) enum ResidentOperationV1 {
+    ContextAssistance(crate::context_assistance_op::Request),
+    ContextAgent(crate::context_assistance_agent_op::Request),
     ArchiveAcquisition(guard_contracts::ArchiveAcquisitionRequestV1),
     CommandModel(CommandModelRequestV1),
     RichCommandModel(crate::rich_command_model_op::RichCommandModelRequest),

@@ -1,0 +1,60 @@
+{
+  "schema": "guard-cigar-late-execution-lease-verification.v1",
+  "status": "passed",
+  "source_commit": "f55e119e0f79adba17bb7bf5fb59de9de402f99a",
+  "product": {
+    "source_sha": "83d62bf72ea2fbde46b2d41a32fa2ba1a9b4a92d",
+    "mode": "auto",
+    "native_available": true,
+    "native_compatible": true,
+    "path_override": false,
+    "CIGAR_imported_in_Guard": false,
+    "Guard_python": [
+      3,
+      12,
+      13
+    ],
+    "binary_bytes": 112624128,
+    "binary_sha256": "7f451d549ab9291d62507d44ca7726d2e2661faea82f8e9abcfdde89106cde90",
+    "wheel_bytes": 40318744,
+    "wheel_sha256": "b43227eadece5f0bf564afdced7506f3fad0326dddd39d25663fe8e921b71c38",
+    "static_files_verified": 33,
+    "corrected_retention_disclosure": true,
+    "manifest_target": "aarch64-apple-darwin"
+  },
+  "qualification": "installed macOS/OMP captured native Bash owning-sink fixture; saved Always allow; real 310-second interval",
+  "report": {
+    "path": "/private/tmp/hol-guard-cigar-late-lease-20261024/results.xml",
+    "sha256": "cdb7e5b55d08c40f778e893e37639f817a402c0673518f4d668c14f18f5250be",
+    "tests": 1,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 363.788
+  },
+  "source_hashes": {
+    "tests/test_context_execution_sink_installed.py": "1e6c3cfe05dfd74a21d9f8a0fdf5e1e61963e8c95087585b396a9008779d985a",
+    "tests/test_context_execution_lease_installed.py": "d2944c19afcb7d17757006fea6f701ab3f2ccf305600c22b9e678c8ab321101b"
+  },
+  "checks": [
+    "initial real execution context applied",
+    "only status observations for at least 310 real seconds",
+    "same native service generation",
+    "no compile activation scope grant or execution during interval",
+    "late physical Bash effect completes",
+    "fresh completed association and native dispatch acknowledgement",
+    "saved Always allow remains valid",
+    "no additional approval or atomic-send authority",
+    "original completed-operation replay and resident restart checks",
+    "fresh verification restores no old scope",
+    "Stop preserves native approval semantics"
+  ],
+  "limits": [
+    "not a five-minute interactive external SDK application",
+    "not abrupt crash or ambiguous in-flight effect recovery",
+    "no speedup memory or other platform qualification"
+  ],
+  "sdk_source_unchanged": true,
+  "sdk_revision": "b47380e5a5cbeaaad5a61cab3372e9e67368732f",
+  "sdk_worker_sha256": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112"
+}

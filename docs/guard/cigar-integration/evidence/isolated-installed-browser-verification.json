@@ -1,0 +1,149 @@
+{
+  "schema": "guard-cigar-isolated-installed-browser-verification.v1",
+  "status": "passed",
+  "qualification": "private-development-package-darwin-arm64-with-locked-runtime-dependencies",
+  "source_commit": "bcbc5a32328217ccd083d6467acd697c9b4b0cad",
+  "package_version": "3.55.1",
+  "native_runtime": {
+    "bytes": 111020704,
+    "sha256": "34f408ace2a0b7afd33cfbd6cda1aabbb0f293bf5133962e7077aec2fe3ff9ce",
+    "strict_macos_signature_verification": "passed",
+    "unchanged_128_mib_cap": "passed",
+    "automatic_installed_discovery": "native_ready",
+    "source_sha": "bcbc5a32328217ccd083d6467acd697c9b4b0cad",
+    "rule_digest": "623ead303f4fc53ed83b38d5104366d1c786728fdec50c8693beae6c6367fac9",
+    "implementation_digest": "131c80bccfe3719e535fa6bf780eca46ddef008a8d63c8f1afae36d21d083035",
+    "base_program_digest": "489b75f13ee16cef56cb12ccd0716bb1af7ff8b437a3403b3cffc51cfa1cafd7",
+    "narrow_decoder_source_sha256": "b2118a5ed422c906e703c5c15a1b688da441dc9e6a7560df28a7759cbbe6ceb8"
+  },
+  "native_wheel": {
+    "filename": "hol_guard-3.55.1-py3-none-macosx_11_0_arm64.whl",
+    "bytes": 40301773,
+    "sha256": "ca6d0bb59037b1c3f9979ba7462005ae25168a01b62124f52f40578c04eb048f",
+    "build": "maintained Hatchling projections and native wheel assembler",
+    "installed_root": "/private/tmp/hol-guard-cigar-package-build/bounded-isolation-checkpoint/installed",
+    "publicly_published": false
+  },
+  "binary_size_comparison": {
+    "profile": "same development profile Rust 1.88 target and stripping procedure",
+    "full_operation_decoder_source_commit": "0ee90934c438ef596f48973b75109488aa544791",
+    "full_operation_decoder_bytes": 117520016,
+    "full_operation_decoder_sha256": "89d29bf7b379c424428385996c909b0fffabbec7b7e56b50166efa012c964a25",
+    "narrow_context_decoder_bytes": 111020704,
+    "reduction_bytes": 6499312,
+    "preceding_agent_checkpoint_bytes": 110772208,
+    "net_increase_over_preceding_agent_checkpoint_bytes": 248496,
+    "runtime_speed_rss_or_usefulness_measurement": false
+  },
+  "runtime_dependencies": {
+    "manager": "uv 0.12.3",
+    "flow": "uv sync --frozen --no-dev --no-install-project",
+    "lock_sha256": "1eaa8ab681a9e52dd16aa4573ca7d1d0eb8a35a2e352553863eeff261ca7c1ef",
+    "private_environment": "/private/tmp/hol-guard-cigar-locked-runtime",
+    "python": "3.12.13",
+    "runtime_packages_installed": 60,
+    "applicable_guard_base_requirements_checked": 13,
+    "unsatisfied_guard_base_requirements": 0,
+    "mcp_version": "1.30.0",
+    "mcp_declared_floor_satisfied": true,
+    "mcp_locked_wheel_sha256": "666edb5009503e1047c9d60346a756f94b261f05cc2625f23d41c728ffc484d0",
+    "mcp_primary_metadata": "https://pypi.org/pypi/mcp/1.30.0/json",
+    "mcp_tagged_source": "https://github.com/modelcontextprotocol/python-sdk/blob/v1.30.0/src/mcp/server/fastmcp/server.py",
+    "actual_installed_public_signatures_checked": true,
+    "optional_transport_shared_health_exclusion_checked": true,
+    "repository_lock_modified": false,
+    "ci_test_group_added_after_browser": 11,
+    "pytest_version": "9.0.3",
+    "ruff_version": "0.15.17"
+  },
+  "actual_sdk": {
+    "python": "3.14.7",
+    "version": "0.14.1",
+    "source_commit": "b47380e5a5cbeaaad5a61cab3372e9e67368732f",
+    "worker_sha256": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112"
+  },
+  "locked_browser": {
+    "spec": "dashboard/e2e/integration/context-assistance.mutating.spec.ts",
+    "sdk_or_daemon_mocked": false,
+    "mcp_transport": "actual stdio ClientSession and installed GuardMCPServer",
+    "mcp_version": "1.30.0",
+    "passed": 1,
+    "failed": 0,
+    "skipped": 0,
+    "test_duration_ms": 31539,
+    "total_duration_ms": 54948.488,
+    "private_report": "/private/tmp/hol-guard-cigar-isolation-browser-locked-proof-v1/results.json",
+    "report_sha256": "3b75524eafa03656448af4b3e11df97de75eae4488c34d8bff7d77e53644cb3b",
+    "checks": [
+      "keyboard_opt_in_and_proof_backed_save",
+      "real_separate_cpython_314_activation",
+      "proof_backed_source_grant_citations_and_digests",
+      "changed_source_stale_refusal_refresh_and_historical_comparison",
+      "source_withdrawal_and_workspace_revocation",
+      "restricted_pending_mcp_discovery_and_public_connection_code",
+      "separate_app_source_and_connection_approval_proofs",
+      "exact_app_workspace_and_code_in_confirmation",
+      "real_cited_agent_context_and_selection_explanation",
+      "forged_app_scope_and_unproved_authorization_refused",
+      "revoked_cached_call_refused",
+      "unrelated_save_and_reload",
+      "home_opt_out_tool_withdrawal_and_disabled_cached_refusal",
+      "runtime_reselection_restart_and_mobile_opt_out",
+      "forged_browser_runtime_assertions_refused"
+    ]
+  },
+  "locked_test_profiles": {
+    "installed_mcp_lifecycle_and_framing": {
+      "passed": 51,
+      "failures": 0,
+      "skipped": 0,
+      "duration_seconds": 25.86,
+      "actual_sdk_stdio_case_included": true,
+      "report_sha256": "2566580d648e063eeb9a223977fa42c3ed2c06196b40cf9b387ddbd710ef7e5c"
+    },
+    "source_transport_and_resilience": {
+      "passed": 42,
+      "failures": 0,
+      "skipped": 0,
+      "duration_seconds": 4.81,
+      "report_sha256": "f28a8342a04d329368eede5edfd01c310eeae612a497a68cb1589ca2ea5c6d0b"
+    },
+    "initial_mixed_profile_attempt": {
+      "passed": 92,
+      "failures": 1,
+      "report_sha256": "0710daed0afea6258f85e002b132c2c8a17e2a10b50f2fd00e79e17652424a5a",
+      "failure": "test_native_off_after_a_native_answer_fails_closed assumes an unbundled source checkout; legacy off falls back to automatic native discovery in the installed package",
+      "pre_isolation_package_reproduction": "904e3818dc365efe563f8977de5c3c840ac3ea8d",
+      "reproduction_failures": 1,
+      "reproduction_report_sha256": "693bf840ee1c6a65716e7399941409e690486454347aaf47ef2b1dede4d69f88",
+      "native_mode_and_test_files_unchanged_from_release_base": true,
+      "test_or_production_authority_behavior_relaxed": false
+    }
+  },
+  "earlier_development_host_observation": {
+    "mcp_version": "1.28.1",
+    "declared_mcp_floor_satisfied": false,
+    "browser_passed": 1,
+    "test_duration_ms": 46840,
+    "report_sha256": "031e0eb9c067dfa2efac8afa325061f03922c03c05155c40097e61e988121a8e",
+    "qualification": "below-floor development host only; superseded by locked browser evidence"
+  },
+  "static_checks": {
+    "native_authority_against_release_base": "passed",
+    "changed_files_checked": 178,
+    "narrow_decoder_native_transport_tests_passed": 22,
+    "narrow_decoder_native_transport_duration_seconds": 1.15,
+    "rust_clippy_both_crates_library_and_tests_warnings_denied": "passed",
+    "clippy_duration_seconds": 45.75,
+    "changed_python_locked_ruff": "passed"
+  },
+  "limitations": [
+    "This is a local development package, not public release or frozen Desktop qualification.",
+    "The paired MCP process is not app executable attestation or actual Codex Claude Code or Cursor harness qualification.",
+    "Selection explanation is not current-action explanation or execution handoff.",
+    "The monolithic mixed-profile test attempt did not pass; its baseline profile assumption is retained above.",
+    "Four independently baseline-reproduced hardened-helper launch failures remain unresolved.",
+    "Hook SLOs all process RSS useful reuse sharing persistence other platforms and remaining P2 P3 P4 P5 work remain required.",
+    "No exponential efficiency or full integration completion is claimed."
+  ]
+}

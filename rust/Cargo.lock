@@ -654,8 +654,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "300e883d756b2e4ec94e02791f39b04b522276138852cfc41d9fb7e904106099"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "r-efi 6.0.0",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -691,6 +693,45 @@ dependencies = [
  "sha2",
  "tar",
  "unicode-normalization",
+]
+
+[[package]]
+name = "guard-cigar-artifacts"
+version = "0.1.0"
+dependencies = [
+ "guard-cigar-release",
+ "guard-secure-fs",
+ "nix",
+ "sha2",
+]
+
+[[package]]
+name = "guard-cigar-install"
+version = "0.1.0"
+dependencies = [
+ "flate2",
+ "guard-cigar-artifacts",
+ "guard-cigar-release",
+ "guard-context-assistance",
+ "guard-secure-fs",
+ "nix",
+ "ring",
+ "serde_json",
+ "sha2",
+ "tar",
+ "tempfile",
+ "zip",
+]
+
+[[package]]
+name = "guard-cigar-release"
+version = "0.1.0"
+dependencies = [
+ "pep440_rs",
+ "ring",
+ "serde",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]
@@ -808,6 +849,21 @@ dependencies = [
  "sha2",
  "tempfile",
  "winapi",
+]
+
+[[package]]
+name = "guard-context-assistance"
+version = "0.1.0"
+dependencies = [
+ "guard-cigar-artifacts",
+ "guard-cigar-release",
+ "guard-scanner",
+ "guard-secure-fs",
+ "nix",
+ "ring",
+ "serde",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]
@@ -1050,8 +1106,11 @@ dependencies = [
  "getrandom 0.3.4",
  "guard-adapter-detection",
  "guard-archive",
+ "guard-cigar-install",
+ "guard-cigar-release",
  "guard-command",
  "guard-contained-process",
+ "guard-context-assistance",
  "guard-contracts",
  "guard-google-identity",
  "guard-hook-core",
@@ -1078,6 +1137,7 @@ dependencies = [
  "roxmltree 0.21.1",
  "rsa",
  "rusqlite",
+ "rustix",
  "saphyr-parser",
  "scrypt",
  "seccompiler",
@@ -2574,6 +2634,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c4013970217383f67b18aef68f6fb2e8d409bc5755227092d32efb0422ba24b8"
 
 [[package]]
+name = "typed-path"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ce898823d8cd0f028662d2f349694b1af0a5cc9be83f1d213a00d3147445e1e"
+
+[[package]]
 name = "typenum"
 version = "1.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3141,6 +3207,22 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.6",
+]
+
+[[package]]
+name = "zip"
+version = "9.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec2e3161de27091f18a831d9494e9c53378a34833af5c1dda35ad85849da18d6"
+dependencies = [
+ "crc32fast",
+ "flate2",
+ "getrandom 0.4.3",
+ "indexmap",
+ "memchr",
+ "nix",
+ "typed-path",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

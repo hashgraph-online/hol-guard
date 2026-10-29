@@ -1,0 +1,233 @@
+{
+  "schema": "guard-cigar-history-installed-browser-evidence.v1",
+  "qualification": "local_candidate_macos_arm64_installed_guard_and_actual_sdk_worker",
+  "source_sha": "2a9d72db4f82f3a70533da586cb226591e8115a1",
+  "native_implementation_commit": "eb3b79174bd66f00e869c895ac62b453e0804360",
+  "native_and_context_transport_diff_between_commits": "empty_verified_with_git_diff_exit_zero",
+  "native": {
+    "bytes": 111277232,
+    "sha256": "20064c94877c494e402291bb6adcbd1b10f2f7fc0408fd3ed43c6716de50119e",
+    "capabilities": {
+      "protocol_version": 1,
+      "runtime_version": "3.55.1",
+      "rule_digest": "9433dece9c6a512de915392ee5f58fb70e0156bcdd7d2ca86930af8b687678b0",
+      "build_sha": "2a9d72db4f82f3a70533da586cb226591e8115a1",
+      "target": "aarch64-macos",
+      "program_digest": "489b75f13ee16cef56cb12ccd0716bb1af7ff8b437a3403b3cffc51cfa1cafd7",
+      "catalog_digest": "540fe5015ed273d6fa94da91085b2a987e3b5eb5c7ae95d0fe3c30a3cecfa39b",
+      "trust_digest": "aa437eec9b2a68fd3cac25c033ccbf5c9612fa2c4244bf83bc7b3df414f5e07d"
+    },
+    "implementation_digest": "131c80bccfe3719e535fa6bf780eca46ddef008a8d63c8f1afae36d21d083035",
+    "history_feature": true
+  },
+  "strict_macos_signature": "passed",
+  "native_size_limit_bytes": 134217728,
+  "native_delta_from_previous_native_decision_artifact_bytes": 144720,
+  "native_wheel": {
+    "path": "/private/tmp/hol-guard-cigar-package-build/history-projection-checkpoint/native-wheels/hol_guard-3.55.1-py3-none-macosx_11_0_arm64.whl",
+    "bytes": 40387633,
+    "sha256": "1320e01f0a35e68f0f3d3d7d9e4cf195fb24873ea98fb21d5ba72a26d55a2404"
+  },
+  "runtime": {
+    "guard_python": "3.12.13",
+    "guard_dependency_lock": "uv.lock",
+    "guard_lock": {
+      "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/uv.lock",
+      "bytes": 1005968,
+      "sha256": "1eaa8ab681a9e52dd16aa4573ca7d1d0eb8a35a2e352553863eeff261ca7c1ef"
+    },
+    "mcp": "1.30.0",
+    "base_requirements_satisfied": 13,
+    "automatic_bundled_discovery": "compatible_native_ready_exact_source_sha",
+    "sdk": "0.14.1",
+    "selected_cigar_python": "3.14.7",
+    "sdk_source_sha": "b47380e5a5cbeaaad5a61cab3372e9e67368732f",
+    "sdk_source_worktree": "unchanged_clean_verified",
+    "worker": {
+      "path": "/private/tmp/hol-guard-cigar-sdk-target/debug/cigar-context-worker",
+      "bytes": 22708072,
+      "sha256": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112"
+    },
+    "package_fingerprint": "bd4d27349f01c4403a3e469e29d3785c4c8073e12c32744dfaa2304dcaf78a95"
+  },
+  "browser": {
+    "report": {
+      "path": "/private/tmp/hol-guard-cigar-history-browser-proof-v3/results.json",
+      "bytes": 4179,
+      "sha256": "84338f0580556d408fc80188aa31fe1d09c17d0b5f1c8c8246616111a1aa62a1"
+    },
+    "stats": {
+      "startTime": "2026-10-24T00:58:00.529Z",
+      "duration": 60143.716,
+      "expected": 1,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "cases": [
+      {
+        "status": "passed",
+        "duration_ms": 40486
+      }
+    ]
+  },
+  "acceptance_sources": [
+    {
+      "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/dashboard/e2e/integration/context-assistance.mutating.spec.ts",
+      "bytes": 16311,
+      "sha256": "253b688d5ac2af7e7b468fe46a1a8febd01ee3a037255678ec4e91c6c5546d37"
+    },
+    {
+      "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/dashboard/e2e/integration/context-history-flow.ts",
+      "bytes": 6126,
+      "sha256": "f5797129492b7c826e4abaab82b1914c3eb629f80ea16acf74a94f7db42834f8"
+    },
+    {
+      "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/scripts/ci/dashboard_context_native_review.py",
+      "bytes": 4549,
+      "sha256": "18c78cffba713f3674fae16341423618d3c2e32d4bcf4bea60765ea9604102b7"
+    }
+  ],
+  "test_only_change_after_source_commit": "Relevant fixture guidance is refreshed and its actual citation is asserted before testing file changes; product bytes remain exactly the source commit.",
+  "checks": [
+    "optional_default_off_and_explicit_runtime_selection",
+    "actual_selected_final_cpython_314_and_matching_candidate_worker",
+    "separate_native_source_and_connection_proofs",
+    "real_scoped_mcp_context_action_and_retained_selection",
+    "injected_fields_and_disabled_cached_tools_refused",
+    "real_native_evaluation_queued_review_and_native_derived_evidence_fixture",
+    "independent_review_context_and_both_existing_approval_choices_enabled",
+    "receipt_native_decision_filtered_history",
+    "relevant_cited_file_fixture_verified_before_history_source_assertions",
+    "historical_source_change_marked",
+    "refresh_retains_historical_snapshots_and_comparison",
+    "unsafe_current_source_withholds_retained_text_and_comparison",
+    "diagnostic_download_omits_workspace_home_and_source_text",
+    "clear_history_preserves_paired_connection_authorization",
+    "clear_all_context_data_revokes_context_access",
+    "unrelated_settings_save_preserves_consent_and_generation",
+    "home_opt_out_and_mobile_protection_opt_out",
+    "restart_does_not_restore_source_grants",
+    "forged_runtime_browser_assertions_refused"
+  ],
+  "backend_regression": {
+    "source_sha": "eb3b79174bd66f00e869c895ac62b453e0804360",
+    "qualification": "fresh_first_history_package_native_and_transport_code_unchanged_in_final_package",
+    "passed": 49,
+    "failed": 0,
+    "skipped": 0,
+    "seconds": 25.266,
+    "report": {
+      "path": "/private/tmp/hol-guard-cigar-history-installed-results.xml",
+      "bytes": 6982,
+      "sha256": "40ae495b7007ed66e04a62b3bb600a997db32156d21d43a14773769062deeb14"
+    },
+    "files": [
+      "tests/test_context_agent_mcp.py",
+      "tests/test_context_agent_installed.py",
+      "tests/test_native_context_assistance.py",
+      "tests/test_guard_mcp_contract.py"
+    ]
+  },
+  "source_verification": {
+    "final_rust_formatting": "passed; four whitespace-only method-chain line collapses in three native files after installed qualification; identical non-whitespace content verified against the packaged source",
+    "native_tests_with_actual_sdk": {
+      "passed": 55,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 80.6
+    },
+    "clippy": "both_native_crates_lib_and_tests_warnings_denied_passed",
+    "ownership_privacy_gates": "all_five_passed_authority_rechecked_after_source_commit",
+    "ruff_changed_ci_helper": "passed",
+    "context_frontend_test_files": 7,
+    "existing_evidence_detail_story_settings_ia_and_receipt_filter_tests": "passed",
+    "vite": {
+      "modules": 460,
+      "seconds": 1.68,
+      "status": "passed_existing_mixed_import_warnings"
+    },
+    "production_type_diagnostics": {
+      "baseline": 18,
+      "current": 18,
+      "introduced": 0
+    },
+    "full_typecheck": "failed_existing_diagnostics"
+  },
+  "failed_attempts": [
+    {
+      "browser": {
+        "report": {
+          "path": "/private/tmp/hol-guard-cigar-history-browser-proof-v1/results.json",
+          "bytes": 10347,
+          "sha256": "827beeec9195946cdb07bd08a37069995d2c33e38db1d0575b25a4fef6edd3ed"
+        },
+        "stats": {
+          "startTime": "2026-10-24T00:50:31.211Z",
+          "duration": 59100.206,
+          "expected": 0,
+          "skipped": 0,
+          "unexpected": 1,
+          "flaky": 0
+        },
+        "cases": [
+          {
+            "status": "failed",
+            "duration_ms": 37243
+          }
+        ]
+      },
+      "source_sha": "eb3b79174bd66f00e869c895ac62b453e0804360",
+      "native_wheel": {
+        "path": "/private/tmp/hol-guard-cigar-package-build/history-checkpoint/native-wheels/hol_guard-3.55.1-py3-none-macosx_11_0_arm64.whl",
+        "bytes": 40387577,
+        "sha256": "ebb8e4a84300658d2935b413e7d413acdb3a5b5159307765f7e55a272699ff9f"
+      },
+      "cause": "Evidence receipt workspace is privacy redacted to ~; the new UI incorrectly used it as an exact native workspace filter.",
+      "resolution": "Select from authenticated native grants and decision-associated history; preserve receipt path redaction."
+    },
+    {
+      "browser": {
+        "report": {
+          "path": "/private/tmp/hol-guard-cigar-history-browser-proof-v2/results.json",
+          "bytes": 10558,
+          "sha256": "aa7fd20c2238af0bdb182c44abc7dc53a1311b0b86b82c1bac2c7dc4f06b2795"
+        },
+        "stats": {
+          "startTime": "2026-10-24T00:55:48.957Z",
+          "duration": 58142.718,
+          "expected": 0,
+          "skipped": 0,
+          "unexpected": 1,
+          "flaky": 0
+        },
+        "cases": [
+          {
+            "status": "failed",
+            "duration_ms": 37132
+          }
+        ]
+      },
+      "source_sha": "2a9d72db4f82f3a70533da586cb226591e8115a1",
+      "cause": "The fixture incorrectly assumed an authorized release document would be selected for a native package-decision query. Its historical context correctly contained only mandatory native facts.",
+      "resolution": "Test-only fixture now supplies relevant guidance and proves its citation before checking changed/unsafe source behavior. No SDK ranking or product validation was weakened."
+    }
+  ],
+  "limits": {
+    "history_entries_per_scope": 8,
+    "history_encoded_bytes_per_scope": 524288,
+    "history_encoded_bytes_per_entry": 262144,
+    "storage": "memory",
+    "history_role": "prepared_not_delivery_or_execution",
+    "execution_binding": "unqualified"
+  },
+  "limitations": [
+    "Native-derived Evidence fixture records evaluation only; no command was executed and no executor acknowledgement is claimed.",
+    "Artifact sizes and encoded history counts are not process RSS, hook SLO, speedup or task-efficacy measurements.",
+    "The 49-test backend run used the first history package. Native and context transport code are unchanged in the final package; the expanded actual browser flow uses the final package.",
+    "Full project typecheck still has 18 existing production-source diagnostics.",
+    "Four unchanged baseline hardened-helper launch failures and one mixed installed/source profile assertion remain unresolved as previously recorded.",
+    "P4 broker sharing/private persistence, P5 exact current-action/byte executor handoff, app/harness/Desktop/platform/setup and measured performance acceptance remain open.",
+    "This is a local candidate qualification, not public SDK or Guard release qualification; the full goal remains active."
+  ]
+}

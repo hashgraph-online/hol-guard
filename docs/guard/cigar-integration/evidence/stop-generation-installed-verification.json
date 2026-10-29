@@ -1,0 +1,2924 @@
+{
+  "schema": "guard-cigar-stop-generation-installed-verification.v1",
+  "source_commit": "6c4c8468867a90c22c8a5cc382e615ef6386d67b",
+  "source_regression_evidence": "stop-generation-verification.json",
+  "status": "Local installed native Stop correction qualified by unchanged complete off/on SLO and approval/execution regression suite. Full integration goal remains active.",
+  "product": {
+    "mode": "auto",
+    "target": "aarch64-macos",
+    "runtime_version": "3.55.1",
+    "protocol_version": 1,
+    "package_origin": "installed",
+    "artifact_sha256": "ed67f14f60235aace5de42f7a0aded074d9c0979f576ce43deb2eb22b62594b6",
+    "artifact_size": 113583104,
+    "build_sha": "6c4c8468867a90c22c8a5cc382e615ef6386d67b",
+    "rule_digest": "54e38cc15fe1e4bb231214e15876422e5c0f872d2d3d5bae85b6c02e43ac7111",
+    "platform_tag": "macosx_11_0_arm64",
+    "platform_tag_target_verified": true,
+    "host_platform": "darwin",
+    "host_arch": "arm64",
+    "python_version": "3.12.13",
+    "CIGAR_imported": false,
+    "path_override": false,
+    "static_files_verified": 33,
+    "compiler_manifest_verified": true,
+    "wheel_bytes": 41332164,
+    "wheel_sha256": "70812685d71bf31e5d38bd9ce39eb8b0903f1413f912b64069cd6e2937aa5517"
+  },
+  "native_metadata": {
+    "binary_bytes": 113583104,
+    "binary_sha256": "ed67f14f60235aace5de42f7a0aded074d9c0979f576ce43deb2eb22b62594b6",
+    "capabilities": {
+      "protocol_version": 1,
+      "runtime_version": "3.55.1",
+      "rule_digest": "54e38cc15fe1e4bb231214e15876422e5c0f872d2d3d5bae85b6c02e43ac7111",
+      "build_sha": "6c4c8468867a90c22c8a5cc382e615ef6386d67b",
+      "target": "aarch64-macos",
+      "features": [
+        "post-tool-inline-v1",
+        "post-tool-source-read-v1",
+        "oneshot-v1",
+        "framed-serve-v1",
+        "resident-protocol-v2",
+        "bounded-admission-v2",
+        "overload-signal-v1",
+        "panic-containment-v1",
+        "rule-contract-v2",
+        "pre-tool-command-model-shadow-v1",
+        "resident-command-model-shadow-v1",
+        "rich-command-model-v1",
+        "pre-tool-command-authority-v1",
+        "pre-tool-path-context-v1",
+        "pre-tool-execution-environment-v1",
+        "pre-tool-generic-authority-v1",
+        "native-command-program-v1",
+        "native-command-control-fence-v1",
+        "policy-snapshot-v3",
+        "policy-snapshot-push-v1",
+        "policy-snapshot-resident-generation-v1",
+        "policy-snapshot-direct-lane-v1",
+        "hook-direct-v1",
+        "hook-direct-contained-route-v1",
+        "hook-direct-permission-notice-v1",
+        "hook-direct-saved-decision-v1",
+        "hook-direct-structured-output-v1",
+        "hook-direct-review-facts-v1",
+        "hook-direct-evidence-v1",
+        "directory-trust-v1",
+        "hook-path-rules-v1",
+        "mcp-relay-decide-v2",
+        "mcp-relay-server-report-v1",
+        "native-approval-artifact-v3",
+        "native-approval-challenge-v3",
+        "native-approval-validation-v3",
+        "native-approval-consume-v3",
+        "native-approval-webauthn-v4",
+        "native-approval-challenge-v4",
+        "native-approval-validation-v4",
+        "native-approval-consume-v4",
+        "native-approval-replay-memory-v1",
+        "native-workspace-review-authority-v1",
+        "native-workspace-review-enrollment-resident-v1",
+        "native-workspace-review-context-v1",
+        "native-local-business-review-summary-v1",
+        "native-local-business-review-queue-v1",
+        "native-workspace-review-decision-v1",
+        "native-policy-in-memory-v1",
+        "native-policy-snapshot-build-v1",
+        "native-policy-snapshot-inspect-v1",
+        "native-business-policy-retained-floor-v1",
+        "native-business-policy-document-compile-v1",
+        "native-guard-config-load-v1",
+        "native-guard-config-update-v1",
+        "native-policy-effective-v1",
+        "native-business-source-codec-v1",
+        "native-business-source-anchor-codec-v1",
+        "native-business-source-current-fence-v2",
+        "hook-envelope-v2",
+        "hook-harness-response-v1",
+        "git-execution-context-v1",
+        "native-resident-client-v1",
+        "shell-helpers-v1",
+        "native-resident-lifecycle-v1",
+        "secrets-cli-v1",
+        "context-assistance-control-v2",
+        "context-assistance-workspaces-v1",
+        "context-assistance-native-decisions-v1",
+        "context-assistance-history-v1",
+        "context-assistance-agents-v1",
+        "archive-inspection-v1",
+        "archive-acquisition-v1",
+        "context-digest-v1",
+        "native-bash-reply-validation-v1",
+        "command-effect-v1",
+        "command-effect-batch-v1",
+        "approval-reuse-v1",
+        "composio-role-v1",
+        "extension-control-v1",
+        "extension-allow-hint-v1",
+        "pre-tool-extension-evidence-v1",
+        "approval-extension-recommendation-v1",
+        "github-cli-classify-v1",
+        "protect-request-v1",
+        "claim-approval-reuse-v1",
+        "approval-reuse-diagnostic-v1",
+        "approval-reuse-diagnostic-reuse-v1",
+        "approval-bulk-eligibility-v1",
+        "codex-request-resume-v1",
+        "approval-queue-identity-v1",
+        "approval-resolution-plan-v1",
+        "approval-scope-v1",
+        "approval-scope-select-v1",
+        "approval-resolution-eligibility-v1",
+        "approval-persist-select-v1",
+        "policy-document-decision-v1",
+        "command-policy-decision-v1",
+        "command-expression-validation-v1",
+        "reviewed-invocation-bindings-v1",
+        "hook-render-v2",
+        "guard-store-v1",
+        "approval-gate-v2",
+        "package-authority-v1",
+        "package-evaluation-compose-v1",
+        "package-approval-hash-v1",
+        "verified-npm-v1",
+        "package-policy-resolve-v1",
+        "package-protect-finalize-v1",
+        "package-posture-v1",
+        "package-audit-projection-v1",
+        "workspace-inventory-v1",
+        "supply-chain-eval-v1",
+        "shim-admin-v4",
+        "package-context-build-v1",
+        "mcp-stdio-probe-v1",
+        "mcp-classification-v1",
+        "prompt-analyze-v2",
+        "data-flow-analyze-v2",
+        "tool-action-request-identity-v1",
+        "runtime-artifact-identity-v1",
+        "verified-read-decision-v1",
+        "policy-decision-lookup-v1",
+        "runtime-saved-reuse-v1",
+        "policy-decision-lookup-memory-v1",
+        "policy-decision-lookup-local-tool-grant-v1",
+        "policy-decision-lookup-portable-composition-v1",
+        "catalog-read-model-v1",
+        "catalog-read-discovery-v2",
+        "catalog-prepare-v1",
+        "catalog-prepare-batch-v1",
+        "cloud-catalog-producer-v2",
+        "discovery-placement-projection-v1",
+        "release-feed-projection-v1",
+        "git-execution-safety-v1",
+        "compound-git-inspection-v1",
+        "codex-tool-output-v1",
+        "policy-bundle-authority-v1",
+        "mcp-runtime-evidence-v1",
+        "runtime-detector-run-v1",
+        "runner-authority-v1",
+        "local-cli-grant-v1",
+        "local-cli-hook-v1",
+        "connector-setup-context-v1",
+        "artifact-risk-v1",
+        "local-tool-eligibility-v1",
+        "approval-proof-v1",
+        "approval-proof-claim-row-v1",
+        "cursor-observer-proof-v1",
+        "hook-authority-state-v1",
+        "extension-control-authority-v1",
+        "hook-authority-state-session-ops-v1",
+        "policy-integrity-rows-v1",
+        "policy-integrity-generation-v1",
+        "hook-decision-v1",
+        "hook-decision-post-claim-compose-v1",
+        "hook-decision-artifact-directive-v1",
+        "hook-decision-native-permission-persist-plan-v1",
+        "hook-decision-artifact-review-route-v1",
+        "hook-decision-json-exit-code-v1",
+        "hook-decision-native-edge-reason-v1",
+        "hook-decision-artifact-finalize-v1",
+        "hook-decision-artifact-reuse-step-v1",
+        "hook-decision-hook-route-v1",
+        "hook-decision-pretool-floor-v1",
+        "hook-decision-containment-route-v1",
+        "hook-decision-claude-permission-verdict-v1",
+        "daemon-route-v1",
+        "daemon-handler-v1",
+        "hook-artifact-compose-v1",
+        "hook-artifact-facts-v1",
+        "hook-artifact-facts-content-hash-v1",
+        "artifact-content-hash-v1",
+        "hook-artifact-compose-package-firewall-access-v1",
+        "hook-artifact-compose-prompt-reason-v1",
+        "hook-artifact-compose-remembered-rule-v1",
+        "hook-artifact-compose-package-firewall-entitlement-v1",
+        "hook-artifact-compose-package-reuse-v1",
+        "hook-artifact-compose-policy-lookup-v1",
+        "hook-artifact-compose-signal-composition-v1",
+        "hook-artifact-compose-policy-tail-v1",
+        "consumer-artifact-compose-v2",
+        "consumer-artifact-project-v1",
+        "hook-adapter-v1",
+        "mcp-tool-evidence-v1",
+        "local-mcp-grant-v1",
+        "mcp-proxy-decision-v1",
+        "mcp-proxy-archive-verify-v1",
+        "mcp-proxy-inline-approval-reply-v1",
+        "mcp-proxy-archive-binding-required-v1",
+        "mcp-sensitive-read-artifact-v1",
+        "cisco-preflight-v2",
+        "daemon-lifecycle-decision-v1",
+        "contributed-mcp-decision-v1",
+        "request-context-v1",
+        "mcp-tool-policy-decide-v1",
+        "mcp-tool-call-identity-v1",
+        "github-workflow-prepare-v1",
+        "native-exact-action-v4",
+        "native-exact-action-v3",
+        "native-exact-action-v2",
+        "native-exact-action-v1",
+        "native-bash-subject-inspection-v1",
+        "native-bash-owner-protocol-v1",
+        "native-bash-package-evidence-v1",
+        "native-bash-review-lineage-v1",
+        "native-bash-review-descriptor-v1",
+        "native-bash-activity-v1",
+        "native-bash-host-liveness-v1",
+        "native-bash-invocation-lifetime-v1",
+        "native-bash-result-policy-v1",
+        "skill-workflow-preflight-v1",
+        "inventory-source-evidence-v1",
+        "command-pack-record-v1",
+        "mcp-stdio-session-v1",
+        "authenticated-unix-resident-v1",
+        "contained-execution-v1",
+        "codex-binding-capture-v1",
+        "mcp-stdio-relay-v1",
+        "hook-evidence-writer-v1",
+        "claude-session-start-v1",
+        "claude-hook-bridge-v1",
+        "codex-hook-bridge-v1",
+        "bounded-hook-bridge-v1",
+        "cursor-hook-bridge-v1",
+        "pi-hook-bridge-v1",
+        "skill-directory-identity-v1"
+      ],
+      "program_digest": "489b75f13ee16cef56cb12ccd0716bb1af7ff8b437a3403b3cffc51cfa1cafd7",
+      "catalog_digest": "540fe5015ed273d6fa94da91085b2a987e3b5eb5c7ae95d0fe3c30a3cecfa39b",
+      "trust_digest": "aa437eec9b2a68fd3cac25c033ccbf5c9612fa2c4244bf83bc7b3df414f5e07d"
+    },
+    "compiler": {
+      "embedded_catalog": true,
+      "implementation_digest": "131c80bccfe3719e535fa6bf780eca46ddef008a8d63c8f1afae36d21d083035",
+      "schema": "guard.source-compiler-capabilities.v1"
+    },
+    "build_profile": "Rust 1.88.0 dev/debug=0, normal macOS strip; unpublished development artifact"
+  },
+  "packaging": {
+    "source_checkout": "/private/tmp/hol-guard-cigar-stop-snapshot-20261024/package-source",
+    "profile": "Rust 1.88.0 dev/debug=0 plus normal macOS strip; unpublished local artifact.",
+    "signature": {
+      "strict_macos_verification": true,
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-stop-snapshot-20261024/installed-signature.stderr.log",
+        "bytes": 287,
+        "sha256": "76e597d74f9aa5a25176d63d23953c7413a980be1b6b9e0ef2dda5af185e0d05"
+      }
+    },
+    "maximum_binary_bytes": 134217728,
+    "verified_source_bundle_engine_and_compiler_binding": true,
+    "static_staging": {
+      "source_commit": "6c4c8468867a90c22c8a5cc382e615ef6386d67b",
+      "unchanged_dashboard_source_since": "95657b30f277604bcd12582e9bbf5d6602c4c433",
+      "verified_asset_sha256": {
+        "src/codex_plugin_scanner/guard/daemon/static/apple-touch-icon.png": "b61ad573476e1f7113834dea9517abf7bd78269461d03198aa9d91a6f5464dd7",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/about-content-BwtrHEyh.js": "b00cc5a0d7e56f8ab370b21c644165a2d366ae7ac412c5d3003941486555da35",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/about-workspace-BPejD30e.js": "fa8a52ab23ac56eb0365648fabb6ed2d7073893cce48cd79b722eadb655dff69",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/app-catalog-CMiFwya1.js": "ebadc4d050b904d56b737ba7936b6a68fdba4905c32d8cfb5c5dfe9c1aef9d5a",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/app-detail-workspace-Bkb30DTE.js": "604e6b90703571491af569f256fc062b7cf94187c7de8ac470569ed73bf2228a",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/audit-workspace-DlRO6m5v.js": "4a6e734fa2a6ed3320248dcaf6a3e50837a7c633f1a5e12e76c95d450a7a3632",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/business-policy-recovery-panel-DUvgw-7G.js": "42f57c4f6c3dd3ad5040c4ff211489c10ecad9c0738e5ccdca9427fc305a3a62",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/confirm-dialog-CE725nAF.js": "28e2980e4414319422cbb8bf9ada7fc47433191b618ed08657360bd94328d294",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/connect-guard-cloud-button-BbTxZ6P3.js": "65fad2f05b7350065af9fa16001b71485721c949700733c85cd65448fa3322a4",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/extensions-workspace-xMXpA97W.js": "f8a41d539a27e1db1bc5b6e41c8eacaaa4d37696517ace435c56c337da7c2ac6",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/feed-health-workspace-DlDiW93E.js": "08a8a3b853b75abe42045e51d30c7773f4cbe7c7e19dcfc21b9a899ad837daad",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/fleet-workspace-C2S-LSG3.js": "50cb32c5100ea063c9e600e9e0282306e6d3b7e18cc34ed5b251c70a4934bee2",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/harness-version-label-4PeauLXZ.js": "2591957702721b3c569d5e1c637034606d38faa08f616737e3d5e2513aeacb6d",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/help-modal-BujMSJ2-.js": "ccaad794338b783becc6ec4b60bb245f31699d691ce7c74a5a8e6c63e494a7f1",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/home-dashboard-b4E-f4N7.js": "82a9386b9ea9875567e02a38c4c3a23fcd8afa28ee82cad3e123a641c25d31fc",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/home-protection-module-BZFaZ7TY.js": "f6227ef4f4cd289470f17e9f9058c87b36d0b1968c2a771c0d40bf3bb06baeb0",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/mcp-policy-request-panel-CaQRzyjh.js": "544dc72a176eaa9294273ca4cf2695af80dd659e62d3e16d080e074c99a93d43",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/policy-workspace-page-C1tdWXy9.js": "e1508276fa62450760b409b56f56b4de6687b356c0d7a2d80d6d74aad783c819",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/protection-repair-page-DA6OjYwM.js": "1cce65409d300694b8f7bb263667b160ab357a01f79e66fa79d2f5356e68eec6",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/releases-workspace-OyIFXX2T.js": "519e4e4aa1c221a8a0ce09d13d590dd321bca5326ebb5a390c4352af1db856de",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/settings-save-proof-modal-DVNLQ9a9.js": "8928a9eefd949728aacca7e401de51e052f4fb349bcf9d69d9a452a2f4be58b2",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/settings-workspace-DsdZp9-Z.js": "914a31ad973c173ca5329d0aac631fc91070b9e92c48f36142c1042d30a39c57",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/supply-chain-hub-workspace-BifnUu1z.js": "a470fbb2a62e677b8ecb8cc7cf1c7fff867a54e8940b3756948c77985de809d1",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/supply-chain-protection-stats-CJkxdP0r.js": "9e54074754d37c993fd24de8fc9f56f0fbcdb2786d637fe2846e50bedb3b9c5d",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/supply-chain-workspace-BsHWdaXm.js": "feacd3a1fe03676d9175d11d9beb44cfaaf1d3df843a63f53eaf6ae8bbf67650",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/guard-dashboard.js": "d32cf0629eab9c979e21ca2fc0cdb43ec2063d6464d5cb972fb2c6bb7915a771",
+        "src/codex_plugin_scanner/guard/daemon/static/assets/index.css": "2d8d72a76e69ad99feb9d20f561a2d0bec76912bfd949f8716f33bab3c9e5bc6",
+        "src/codex_plugin_scanner/guard/daemon/static/brand/Logo_Icon_Dark.png": "f9ef58257cd709dbf75c47fac93504e37b8e8c6eea4cf6958fca07a7ea209ec5",
+        "src/codex_plugin_scanner/guard/daemon/static/brand/Logo_Whole.png": "019346b00ea0eaf9d82a8fe2a162fd6454d1316c28a559430de4ce78861b6b3e",
+        "src/codex_plugin_scanner/guard/daemon/static/favicon-16x16.png": "8dc725296d995ec84e25430b8d8f1192f5ad77b832eb47626e4e207ed1b263c7",
+        "src/codex_plugin_scanner/guard/daemon/static/favicon-32x32.png": "905815177668adf03008273906508be8661aa0f8a509fde6e47e1e9643d47aca",
+        "src/codex_plugin_scanner/guard/daemon/static/favicon.ico": "3721d494202b5cb250258bbbaa94dbf3d239ab87b6954c306bce7c6114af54cd",
+        "src/codex_plugin_scanner/guard/daemon/static/index.html": "afa0b9eae5aa6ab47f111f2f2db04c21d9db2bed08e0b2802c24c92b4f82c894"
+      },
+      "original_checkout_assets_retained": "/private/tmp/hol-guard-cigar-stop-snapshot-20261024/static-source-original"
+    },
+    "initial_assembly_failure": {
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-stop-snapshot-20261024/native-wheel.stderr.log",
+        "bytes": 4141,
+        "sha256": "056dd7a6b289bb547eda251774497b64d8c56bb91146655230195f1907955316"
+      },
+      "reason": "Source checkout compiler was not configured; no wheel was written.",
+      "resolution": "Supported HOL_GUARD_NATIVE_SOURCE_COMPILER points to the exact verified new native binary for assembly only. Installed proof clears overrides."
+    },
+    "build_stdout": {
+      "path": "/private/tmp/hol-guard-cigar-stop-snapshot-20261024/pure-wheel.stdout.log",
+      "bytes": 1203,
+      "sha256": "c172dce6a8e047e8f27e88bd082279029e9f3fdd9096454692516f5f4403492a"
+    }
+  },
+  "complete_installed_slo": [
+    {
+      "mode": "off",
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-stop-snapshot-20261024/installed-off/result.json",
+        "bytes": 32225,
+        "sha256": "1e1004ccc03f03597f11eb06482289fe7e61fb03f7c8fc833a57200b53960142"
+      },
+      "report": {
+        "schema": "guard-cigar-full-installed-slo.v1",
+        "completed": true,
+        "mode": "off",
+        "runtime": {
+          "mode": "auto",
+          "target": "aarch64-macos",
+          "runtime_version": "3.55.1",
+          "protocol_version": 1,
+          "package_origin": "installed",
+          "artifact_sha256": "ed67f14f60235aace5de42f7a0aded074d9c0979f576ce43deb2eb22b62594b6",
+          "artifact_size": 113583104,
+          "build_sha": "6c4c8468867a90c22c8a5cc382e615ef6386d67b",
+          "rule_digest": "54e38cc15fe1e4bb231214e15876422e5c0f872d2d3d5bae85b6c02e43ac7111",
+          "platform_tag": "macosx_11_0_arm64",
+          "platform_tag_target_verified": true,
+          "host_platform": "darwin",
+          "host_arch": "arm64",
+          "python_version": "3.12.13"
+        },
+        "qualification": "local installed fixture; platform bound to runtime identity",
+        "client_topology": "driver, authenticated hook clients and daemon share one Python process",
+        "stop_helper_diagnostic": false,
+        "tooling_source_sha256": {
+          "ci/native_runtime/installed_hook_client.py": "384efc4b4830b5c49c1d1177a76944378514e8d00d47fded1ca35dc0bdb665fd",
+          "ci/native_runtime/probe_native_default_auto.py": "0f9fb592f05e275eba9928ced3a70787a3c6a52eb5a56925a212cd6bf153d6ef",
+          "scripts/bench_guard_cigar_full_slo.py": "0804cc883214b9db1663ca67d385cd8267ef8fa3513b39c792f33bb76044df62",
+          "scripts/bench_guard_native_installed_slo.py": "81e47599eb05d3582430deeae2ca385c4ad63f4ee599c7daf507a223ad6c45bb",
+          "scripts/bench_guard_native_installed_slo_runtime.py": "0e6c5fb1c0ec1f3eaf6ee5e16e355521ec5d5984ea82767385470d8225e8001c",
+          "scripts/cigar_benchmark_processes.py": "e6d76990b4b9cd57c46fa6ca0de8d7f07952327f53a59894adff374c5f785258",
+          "scripts/cigar_benchmark_workload.py": "6f3b86e52ccec7108f2af8e5fa34a238d72261ec4250543cbebcb363f54fc2cd",
+          "scripts/cigar_slo_activity.py": "2f5d94533f18516abd0258925d37e97534d72192a09f2af395f74a933bb56101",
+          "scripts/native_installed_hook_corpus.py": "6402731f18b55b596b9e999658a45ea752f0be22b222181f801f31419bf30bfb",
+          "scripts/native_probe_receipts.py": "deef72aee9b5171d9898d04fc6a8ed393a142464b1a333383511e4c0c4169562",
+          "scripts/native_slo_activity.py": "50e30dffc7831273787f1388a265b52eb29d205de3d2f2a839bd0c09a5fcae13",
+          "scripts/native_slo_adapter.py": "ad4e3013eb1e6eafde9da829f08787d85ff38748d708e9963526e57ad4053bbc",
+          "scripts/native_slo_baseline.py": "606fa4739ca517dd2d230261a3967a49854bce20a5ed48d4a388ee3a366c1513",
+          "scripts/native_slo_benchmark_stages.py": "ebc898d1cea59e22513a292913f6e4e6a66648ff1063aecb047d1b714ed14c78",
+          "scripts/native_slo_capacity.py": "0c6dfcecb24d72a03c56f2107e0e8d2323606ed2220c7e80f2d55a289f576779",
+          "scripts/native_slo_capacity_support.py": "bb8f9177f2f12bafa010957cbe40178fdb16d14cb131aa9479c17e92d4ed708d",
+          "scripts/native_slo_contract.py": "ff1b1cc2c35fe6a532b7a62bddeb595ac6e3fec9438b3af970b5a79a9095d101",
+          "scripts/native_slo_diagnostics.py": "c29435bd270cff224c20f80b9c12c4aae1d5d310d35d74e13c0b12c1d119a32f",
+          "scripts/native_slo_failure_details.py": "e022fd74c54ea7d6aa580ee581793f647e53aa7a9988ab666c1269b975237c13",
+          "scripts/native_slo_failure_reason.py": "82da8b3871f52d25f4b7d1cf0e26e3514c629716bf14676b59bf5e04972a7b1d",
+          "scripts/native_slo_preflight.py": "56a01dab72bb8ed0d1bcb87d0bd3032b9d3e61f185feb535c2d477597b972b97",
+          "scripts/native_slo_process_tree.py": "d2412bdf0d2e48f2f2d2cf297790142a8b3c316631007bf585f101fcf52a57e1",
+          "scripts/native_slo_progress.py": "7b369f9294a728270f4a4f0878e78420f00d562ee35e1ea23e20f8d7ca847ca5",
+          "scripts/native_slo_recovery_cleanup.py": "f4c26b33456e2c16980bd34763decef975468be7fecfc02428cf77a51300405c",
+          "scripts/native_slo_reporting.py": "a5c328a12ee4eb3660e4894eaefa238897b5f435ca5f8eaa2eabd2ac62857987",
+          "scripts/native_slo_route_provenance.py": "583e738e7db12e0b31d92b997f1949daafe2af250b44508bfeb91274fd52aa08",
+          "scripts/native_slo_session.py": "374da2b09f48cb35808eb71ab940a92885e31e43cb09eaab565d1b21604292e5",
+          "scripts/native_slo_stop_diagnostics.py": "b361fd56c9ad359624a4c9ce8f804cfc651d38d7e87d9344320a2cbbdb47e367",
+          "scripts/native_slo_stop_trace.py": "fa090c91156ec6e8ce2e4ae136d58c3cc0e4ba18b693b321489466f464da2cc0"
+        },
+        "installed_slo": {
+          "schema": "hol-guard.native-installed-slo.v1",
+          "scope": "installed_adapter_to_decision",
+          "runtime": {
+            "mode": "auto",
+            "target": "aarch64-macos",
+            "runtime_version": "3.55.1",
+            "protocol_version": 1,
+            "package_origin": "installed",
+            "artifact_sha256": "ed67f14f60235aace5de42f7a0aded074d9c0979f576ce43deb2eb22b62594b6",
+            "artifact_size": 113583104,
+            "build_sha": "6c4c8468867a90c22c8a5cc382e615ef6386d67b",
+            "rule_digest": "54e38cc15fe1e4bb231214e15876422e5c0f872d2d3d5bae85b6c02e43ac7111",
+            "platform_tag": "macosx_11_0_arm64",
+            "platform_tag_target_verified": true,
+            "host_platform": "darwin",
+            "host_arch": "arm64",
+            "python_version": "3.12.13"
+          },
+          "corpus": {
+            "harnesses": 14,
+            "routes": 23,
+            "observations": 153,
+            "corpus_origin": "installed_wheel_ownership_contract",
+            "route_corpus": "installed_routes",
+            "warm_failures": 0,
+            "safe_failures": 0,
+            "security_denials": 21,
+            "safe_failure_rate": 0.0,
+            "fail_safe_decisions": 0,
+            "fail_safe_rate": 0.0,
+            "resident_share": 1.0,
+            "python_fallback_decisions": 0,
+            "python_semantic_decisions": 0,
+            "oneshot_decisions": 0,
+            "safe_failures_by_size": {},
+            "security_denials_by_size": {
+              "1m": 7,
+              "250k": 7,
+              "5m": 7
+            },
+            "rss_baseline_bytes": 415989760,
+            "rss_peak_bytes": 416808960,
+            "rss_growth": 0.001969,
+            "installed": {
+              "routes": 23,
+              "resident": 23,
+              "oneshot": 0,
+              "fail_safe": 0,
+              "python_semantic": 0,
+              "python_semantic_decisions": 0
+            },
+            "planned": 153,
+            "submitted": 153,
+            "started": 153,
+            "attempted": 153,
+            "completed": 153,
+            "failed": 0,
+            "cancelled": 0,
+            "missing": 0,
+            "denominators": {
+              "capacity_prewarm": {
+                "planned": 16,
+                "submitted": 16,
+                "started": 16,
+                "attempted": 16,
+                "completed": 16,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "capacity_prewarm_ready": {
+                "planned": 1,
+                "submitted": 1,
+                "started": 1,
+                "attempted": 1,
+                "completed": 1,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "capacity_stabilization": {
+                "planned": 1,
+                "submitted": 1,
+                "started": 1,
+                "attempted": 1,
+                "completed": 1,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "cleanup": {
+                "planned": 1,
+                "submitted": 1,
+                "started": 1,
+                "attempted": 1,
+                "completed": 1,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "cold": {
+                "planned": 3,
+                "submitted": 3,
+                "started": 3,
+                "attempted": 3,
+                "completed": 3,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "concurrent_16": {
+                "planned": 16,
+                "submitted": 16,
+                "started": 16,
+                "attempted": 16,
+                "completed": 16,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "concurrent_64": {
+                "planned": 64,
+                "submitted": 64,
+                "started": 64,
+                "attempted": 64,
+                "completed": 64,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "installed_corpus": {
+                "planned": 1,
+                "submitted": 1,
+                "started": 1,
+                "attempted": 1,
+                "completed": 1,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "installed_corpus_routes": {
+                "planned": 23,
+                "submitted": 23,
+                "started": 23,
+                "attempted": 23,
+                "completed": 23,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "readiness": {
+                "planned": 3,
+                "submitted": 3,
+                "started": 3,
+                "attempted": 3,
+                "completed": 3,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "recovery": {
+                "planned": 3,
+                "submitted": 3,
+                "started": 3,
+                "attempted": 3,
+                "completed": 3,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "recovery_precondition": {
+                "planned": 3,
+                "submitted": 3,
+                "started": 3,
+                "attempted": 3,
+                "completed": 3,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "recovery_stop": {
+                "planned": 3,
+                "submitted": 3,
+                "started": 3,
+                "attempted": 3,
+                "completed": 3,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "routes": {
+                "planned": 1,
+                "submitted": 1,
+                "started": 1,
+                "attempted": 1,
+                "completed": 1,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "rss_baseline": {
+                "planned": 1,
+                "submitted": 1,
+                "started": 1,
+                "attempted": 1,
+                "completed": 1,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "rss_baseline_requests": {
+                "planned": null,
+                "submitted": 112,
+                "started": 112,
+                "attempted": 112,
+                "completed": 112,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": null,
+                "skipped": false
+              },
+              "runtime": {
+                "planned": 1,
+                "submitted": 1,
+                "started": 1,
+                "attempted": 1,
+                "completed": 1,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "serialized_warmup": {
+                "planned": 1,
+                "submitted": 1,
+                "started": 1,
+                "attempted": 1,
+                "completed": 1,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "size_1m": {
+                "planned": 9,
+                "submitted": 9,
+                "started": 9,
+                "attempted": 9,
+                "completed": 9,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "size_250k": {
+                "planned": 9,
+                "submitted": 9,
+                "started": 9,
+                "attempted": 9,
+                "completed": 9,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "size_5m": {
+                "planned": 9,
+                "submitted": 9,
+                "started": 9,
+                "attempted": 9,
+                "completed": 9,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "warm": {
+                "planned": 46,
+                "submitted": 46,
+                "started": 46,
+                "attempted": 46,
+                "completed": 46,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "warm_precondition": {
+                "planned": 23,
+                "submitted": 23,
+                "started": 23,
+                "attempted": 23,
+                "completed": 23,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              }
+            }
+          },
+          "routes": {
+            "native_resident": 153
+          },
+          "python_semantic_decisions": 0,
+          "errors_16": 0,
+          "errors_64": 0,
+          "latency": {
+            "warm_all_harnesses": {
+              "count": 46,
+              "p50_ms": 7.046,
+              "p95_ms": 15.672,
+              "p99_ms": 23.673,
+              "max_ms": 23.673
+            },
+            "warm_by_event": {
+              "PreToolUse": {
+                "count": 28,
+                "p50_ms": 6.714,
+                "p95_ms": 14.718,
+                "p99_ms": 23.673,
+                "max_ms": 23.673
+              },
+              "PostToolUse": {
+                "count": 18,
+                "p50_ms": 7.444,
+                "p95_ms": 16.942,
+                "p99_ms": 16.942,
+                "max_ms": 16.942
+              }
+            },
+            "size_classes": {
+              "1k": {
+                "count": 126,
+                "p50_ms": 33.533,
+                "p95_ms": 145.778,
+                "p99_ms": 167.926,
+                "max_ms": 169.351
+              },
+              "250k": {
+                "count": 9,
+                "p50_ms": 12.72,
+                "p95_ms": 46.998,
+                "p99_ms": 46.998,
+                "max_ms": 46.998
+              },
+              "1m": {
+                "count": 9,
+                "p50_ms": 5.23,
+                "p95_ms": 146.766,
+                "p99_ms": 146.766,
+                "max_ms": 146.766
+              },
+              "5m": {
+                "count": 9,
+                "p50_ms": 12.739,
+                "p95_ms": 683.744,
+                "p99_ms": 683.744,
+                "max_ms": 683.744
+              }
+            },
+            "cold_native_oneshot": {
+              "count": 3,
+              "p50_ms": 20.146,
+              "p95_ms": 22.377,
+              "p99_ms": 22.377,
+              "max_ms": 22.377
+            },
+            "resident_recovery": {
+              "count": 3,
+              "p50_ms": 168.198,
+              "p95_ms": 169.329,
+              "p99_ms": 169.329,
+              "max_ms": 169.329
+            },
+            "readiness": {
+              "count": 3,
+              "p50_ms": 0.459,
+              "p95_ms": 0.64,
+              "p99_ms": 0.64,
+              "max_ms": 0.64
+            }
+          },
+          "timing": {
+            "adapter": {
+              "count": 153,
+              "p50_ms": 27.966,
+              "p95_ms": 146.888,
+              "p99_ms": 673.054,
+              "max_ms": 683.744
+            },
+            "enclosing": {
+              "count": 153,
+              "p50_ms": 28.478,
+              "p95_ms": 148.132,
+              "p99_ms": 673.071,
+              "max_ms": 683.762
+            },
+            "recovery_adapter": {
+              "count": 3,
+              "p50_ms": 168.123,
+              "p95_ms": 169.222,
+              "p99_ms": 169.222,
+              "max_ms": 169.222
+            },
+            "recovery_enclosing": {
+              "count": 3,
+              "p50_ms": 168.198,
+              "p95_ms": 169.329,
+              "p99_ms": 169.329,
+              "max_ms": 169.329
+            }
+          },
+          "thresholds": {
+            "installed_adapter_p95_ms": 1000.0,
+            "installed_adapter_concurrent_p99_ms": 1000.0,
+            "direct_cold_p95_ms": 150.0,
+            "readiness_p95_ms": 400.0
+          },
+          "concurrency": {
+            "sixteen": {
+              "latency": {
+                "count": 16,
+                "p50_ms": 32.385,
+                "p95_ms": 43.647,
+                "p99_ms": 43.647,
+                "max_ms": 43.647
+              },
+              "errors": 0,
+              "overloaded": 0,
+              "deadline_ms": 1000.0,
+              "denominators": {
+                "planned": 16,
+                "submitted": 16,
+                "started": 16,
+                "attempted": 16,
+                "completed": 16,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              }
+            },
+            "sixty_four": {
+              "latency": {
+                "count": 64,
+                "p50_ms": 84.99,
+                "p95_ms": 167.002,
+                "p99_ms": 169.351,
+                "max_ms": 169.351
+              },
+              "errors": 0,
+              "overloaded": 0,
+              "fail_safe": 0,
+              "latency_ceiling_ms": null,
+              "bounded": true,
+              "denominators": {
+                "planned": 64,
+                "submitted": 64,
+                "started": 64,
+                "attempted": 64,
+                "completed": 64,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              }
+            }
+          },
+          "gates": {
+            "resident_share": true,
+            "safe_corpus": true,
+            "warm_latency": true,
+            "250k_latency": true,
+            "1m_latency": true,
+            "5m_latency": true,
+            "cold_latency": true,
+            "readiness": true,
+            "concurrency": true,
+            "rss": true,
+            "python_fallback": true,
+            "recovery_latency": true,
+            "concurrency_64_bounded": true,
+            "installed_corpus": true
+          },
+          "passed": true
+        },
+        "context_activity": {
+          "mode": "off",
+          "settle_seconds_per_load_phase": 5,
+          "cold_and_recovery": "real opt-in active before containment; native timed recovery restores no CIGAR authority",
+          "native_readiness": "measured before explicit SDK activation; SDK activation is separately reported",
+          "activation_ms": [],
+          "phases": [
+            {
+              "phase": "installed_corpus",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 829.253,
+              "successful_overlapping_compiles": 0,
+              "observed_tree_memory": {
+                "samples": 13,
+                "sampling_errors": 0,
+                "median_rss_bytes": 1304248320,
+                "peak_rss_bytes": 1304641536,
+                "at_peak_counts": {
+                  "native_runtime": 5,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 152731648,
+                  "benchmark_daemon_host": 1151909888
+                },
+                "maximum_counts": {
+                  "native_runtime": 5,
+                  "terminated_child": 1,
+                  "benchmark_daemon_host": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "effective_at_end": false
+            },
+            {
+              "phase": "cold_precondition",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 0.003,
+              "successful_overlapping_compiles": 0,
+              "observed_tree_memory": {
+                "samples": 2,
+                "sampling_errors": 0,
+                "median_rss_bytes": 1255948288,
+                "peak_rss_bytes": 1259536384,
+                "at_peak_counts": {
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 3,
+                  "terminated_child": 1,
+                  "other_descendant": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "benchmark_daemon_host": 1155350528,
+                  "native_runtime": 96894976,
+                  "terminated_child": 0,
+                  "other_descendant": 7290880
+                },
+                "maximum_counts": {
+                  "other_descendant": 1,
+                  "native_runtime": 3,
+                  "terminated_child": 1,
+                  "benchmark_daemon_host": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "effective_at_end": false
+            },
+            {
+              "phase": "cold_precondition",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 0.003,
+              "successful_overlapping_compiles": 0,
+              "observed_tree_memory": {
+                "samples": 3,
+                "sampling_errors": 0,
+                "median_rss_bytes": 1259601920,
+                "peak_rss_bytes": 1261092864,
+                "at_peak_counts": {
+                  "native_runtime": 4,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 105742336,
+                  "benchmark_daemon_host": 1155350528
+                },
+                "maximum_counts": {
+                  "native_runtime": 4,
+                  "benchmark_daemon_host": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "effective_at_end": false
+            },
+            {
+              "phase": "cold_precondition",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 0.003,
+              "successful_overlapping_compiles": 0,
+              "observed_tree_memory": {
+                "samples": 2,
+                "sampling_errors": 0,
+                "median_rss_bytes": 1260929024,
+                "peak_rss_bytes": 1260929024,
+                "at_peak_counts": {
+                  "native_runtime": 4,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 105545728,
+                  "benchmark_daemon_host": 1155383296
+                },
+                "maximum_counts": {
+                  "native_runtime": 4,
+                  "terminated_child": 1,
+                  "benchmark_daemon_host": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "effective_at_end": false
+            },
+            {
+              "phase": "warm",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 743.07,
+              "successful_overlapping_compiles": 0,
+              "observed_tree_memory": {
+                "samples": 11,
+                "sampling_errors": 0,
+                "median_rss_bytes": 870809600,
+                "peak_rss_bytes": 873627648,
+                "at_peak_counts": {
+                  "native_runtime": 5,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 153092096,
+                  "benchmark_daemon_host": 720535552
+                },
+                "maximum_counts": {
+                  "native_runtime": 5,
+                  "benchmark_daemon_host": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "effective_at_end": false
+            },
+            {
+              "phase": "sizes",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 1940.057,
+              "successful_overlapping_compiles": 0,
+              "observed_tree_memory": {
+                "samples": 26,
+                "sampling_errors": 0,
+                "median_rss_bytes": 330629120,
+                "peak_rss_bytes": 330661888,
+                "at_peak_counts": {
+                  "native_runtime": 5,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 167510016,
+                  "benchmark_daemon_host": 163151872
+                },
+                "maximum_counts": {
+                  "native_runtime": 5,
+                  "benchmark_daemon_host": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "effective_at_end": false
+            },
+            {
+              "phase": "recovery_precondition",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 13.878,
+              "successful_overlapping_compiles": 0,
+              "observed_tree_memory": {
+                "samples": 3,
+                "sampling_errors": 0,
+                "median_rss_bytes": 330678272,
+                "peak_rss_bytes": 330874880,
+                "at_peak_counts": {
+                  "native_runtime": 5,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 167510016,
+                  "benchmark_daemon_host": 163364864
+                },
+                "maximum_counts": {
+                  "native_runtime": 5,
+                  "benchmark_daemon_host": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "effective_at_end": false
+            },
+            {
+              "phase": "recovery_precondition",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 10.134,
+              "successful_overlapping_compiles": 0,
+              "observed_tree_memory": {
+                "samples": 3,
+                "sampling_errors": 0,
+                "median_rss_bytes": 302530560,
+                "peak_rss_bytes": 302727168,
+                "at_peak_counts": {
+                  "native_runtime": 5,
+                  "benchmark_daemon_host": 1,
+                  "terminated_child": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 139526144,
+                  "benchmark_daemon_host": 163201024,
+                  "terminated_child": 0
+                },
+                "maximum_counts": {
+                  "native_runtime": 5,
+                  "terminated_child": 1,
+                  "benchmark_daemon_host": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "effective_at_end": false
+            },
+            {
+              "phase": "recovery_precondition",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 6.542,
+              "successful_overlapping_compiles": 0,
+              "observed_tree_memory": {
+                "samples": 2,
+                "sampling_errors": 0,
+                "median_rss_bytes": 301080576,
+                "peak_rss_bytes": 302841856,
+                "at_peak_counts": {
+                  "native_runtime": 5,
+                  "benchmark_daemon_host": 1,
+                  "terminated_child": 2
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 139591680,
+                  "benchmark_daemon_host": 163250176,
+                  "terminated_child": 0
+                },
+                "maximum_counts": {
+                  "native_runtime": 5,
+                  "terminated_child": 2,
+                  "benchmark_daemon_host": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "effective_at_end": false
+            },
+            {
+              "phase": "capacity",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 1152.601,
+              "successful_overlapping_compiles": 0,
+              "observed_tree_memory": {
+                "samples": 16,
+                "sampling_errors": 0,
+                "median_rss_bytes": 412917760,
+                "peak_rss_bytes": 417120256,
+                "at_peak_counts": {
+                  "native_runtime": 10,
+                  "terminated_child": 3,
+                  "other_descendant": 2,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 244711424,
+                  "terminated_child": 0,
+                  "other_descendant": 3276800,
+                  "benchmark_daemon_host": 169132032
+                },
+                "maximum_counts": {
+                  "other_descendant": 2,
+                  "native_runtime": 10,
+                  "terminated_child": 3,
+                  "benchmark_daemon_host": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "effective_at_end": false
+            },
+            {
+              "phase": "readiness",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 0.002,
+              "successful_overlapping_compiles": 0,
+              "observed_tree_memory": {
+                "samples": 2,
+                "sampling_errors": 0,
+                "median_rss_bytes": 264863744,
+                "peak_rss_bytes": 265273344,
+                "at_peak_counts": {
+                  "terminated_child": 1,
+                  "native_runtime": 3,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "terminated_child": 0,
+                  "native_runtime": 98516992,
+                  "benchmark_daemon_host": 166756352
+                },
+                "maximum_counts": {
+                  "other_descendant": 1,
+                  "native_runtime": 3,
+                  "terminated_child": 1,
+                  "benchmark_daemon_host": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "effective_at_end": false
+            },
+            {
+              "phase": "readiness",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 0.007,
+              "successful_overlapping_compiles": 0,
+              "observed_tree_memory": {
+                "samples": 3,
+                "sampling_errors": 0,
+                "median_rss_bytes": 265191424,
+                "peak_rss_bytes": 275447808,
+                "at_peak_counts": {
+                  "other_descendant": 1,
+                  "native_runtime": 3,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "other_descendant": 11108352,
+                  "native_runtime": 97337344,
+                  "benchmark_daemon_host": 167002112
+                },
+                "maximum_counts": {
+                  "native_runtime": 3,
+                  "other_descendant": 1,
+                  "terminated_child": 2,
+                  "benchmark_daemon_host": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "effective_at_end": false
+            }
+          ],
+          "restarts": [
+            {
+              "phase": "cold",
+              "runtime_absent": true,
+              "old_scope_refused": true
+            },
+            {
+              "phase": "cold",
+              "runtime_absent": true,
+              "old_scope_refused": true
+            },
+            {
+              "phase": "cold",
+              "runtime_absent": true,
+              "old_scope_refused": true
+            },
+            {
+              "phase": "recovery",
+              "runtime_absent": true,
+              "old_scope_refused": true
+            },
+            {
+              "phase": "recovery",
+              "runtime_absent": true,
+              "old_scope_refused": true
+            },
+            {
+              "phase": "recovery",
+              "runtime_absent": true,
+              "old_scope_refused": true
+            }
+          ],
+          "fixture_containment": [
+            {
+              "fixture": "installed_corpus",
+              "final_contained": true
+            },
+            {
+              "fixture": "session_1",
+              "final_contained": true
+            },
+            {
+              "fixture": "session_2",
+              "final_contained": true
+            },
+            {
+              "fixture": "session_3",
+              "final_contained": true
+            },
+            {
+              "fixture": "session_4",
+              "final_contained": true
+            }
+          ],
+          "canonical_rss_reads": [
+            {
+              "phase": "capacity",
+              "rss_bytes": 414941184,
+              "root_rss_bytes": 169099264,
+              "descendant_rss_bytes": 245841920,
+              "processes": 15
+            },
+            {
+              "phase": "capacity",
+              "rss_bytes": 415875072,
+              "root_rss_bytes": 169132032,
+              "descendant_rss_bytes": 246743040,
+              "processes": 15
+            },
+            {
+              "phase": "capacity",
+              "rss_bytes": 415989760,
+              "root_rss_bytes": 169132032,
+              "descendant_rss_bytes": 246857728,
+              "processes": 15
+            },
+            {
+              "phase": "capacity",
+              "rss_bytes": 416808960,
+              "root_rss_bytes": 169492480,
+              "descendant_rss_bytes": 247316480,
+              "processes": 15
+            },
+            {
+              "phase": "readiness",
+              "rss_bytes": 167002112,
+              "root_rss_bytes": 164970496,
+              "descendant_rss_bytes": 2031616,
+              "processes": 2
+            }
+          ],
+          "gates": {
+            "complete_declared_activity_phases": true,
+            "all_activity_intervals_completed": true,
+            "all_six_restarts_restore_no_optional_authority": true,
+            "process_sampling_complete": true,
+            "canonical_rss_observed_without_root_fallback": true,
+            "optional_worker_coverage": true,
+            "all_five_private_fixtures_finally_contained": true,
+            "observed_workers_contained_at_end": true
+          }
+        },
+        "observed_processes_at_end": {
+          "rss_bytes": 164970496,
+          "counts": {
+            "benchmark_daemon_host": 1
+          },
+          "rss_by_kind": {
+            "benchmark_daemon_host": 164970496
+          }
+        },
+        "all_observed_processes": {
+          "samples": 645,
+          "sampling_errors": 0,
+          "median_rss_bytes": 817627136,
+          "peak_rss_bytes": 1448493056,
+          "at_peak_counts": {
+            "native_runtime": 4,
+            "benchmark_daemon_host": 1,
+            "other_descendant": 2
+          },
+          "at_peak_rss_by_kind": {
+            "native_runtime": 215302144,
+            "benchmark_daemon_host": 1169440768,
+            "other_descendant": 63750144
+          },
+          "maximum_counts": {
+            "other_descendant": 3,
+            "native_runtime": 11,
+            "terminated_child": 3,
+            "benchmark_daemon_host": 1
+          },
+          "includes_observed_reparented_children": true,
+          "shared_pages_may_be_counted_in_multiple_processes": true
+        },
+        "seconds": 51.26,
+        "tooling_unchanged_during_run": true
+      }
+    },
+    {
+      "mode": "on",
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-stop-snapshot-20261024/installed-on/result.json",
+        "bytes": 41316,
+        "sha256": "b81cb912fd659cc488241206ab2aeac287e37911add5a37bb07fa67e323cf613"
+      },
+      "report": {
+        "schema": "guard-cigar-full-installed-slo.v1",
+        "completed": true,
+        "mode": "on",
+        "runtime": {
+          "mode": "auto",
+          "target": "aarch64-macos",
+          "runtime_version": "3.55.1",
+          "protocol_version": 1,
+          "package_origin": "installed",
+          "artifact_sha256": "ed67f14f60235aace5de42f7a0aded074d9c0979f576ce43deb2eb22b62594b6",
+          "artifact_size": 113583104,
+          "build_sha": "6c4c8468867a90c22c8a5cc382e615ef6386d67b",
+          "rule_digest": "54e38cc15fe1e4bb231214e15876422e5c0f872d2d3d5bae85b6c02e43ac7111",
+          "platform_tag": "macosx_11_0_arm64",
+          "platform_tag_target_verified": true,
+          "host_platform": "darwin",
+          "host_arch": "arm64",
+          "python_version": "3.12.13"
+        },
+        "qualification": "local installed fixture; platform bound to runtime identity",
+        "client_topology": "driver, authenticated hook clients and daemon share one Python process",
+        "stop_helper_diagnostic": false,
+        "tooling_source_sha256": {
+          "ci/native_runtime/installed_hook_client.py": "384efc4b4830b5c49c1d1177a76944378514e8d00d47fded1ca35dc0bdb665fd",
+          "ci/native_runtime/probe_native_default_auto.py": "0f9fb592f05e275eba9928ced3a70787a3c6a52eb5a56925a212cd6bf153d6ef",
+          "scripts/bench_guard_cigar_full_slo.py": "0804cc883214b9db1663ca67d385cd8267ef8fa3513b39c792f33bb76044df62",
+          "scripts/bench_guard_native_installed_slo.py": "81e47599eb05d3582430deeae2ca385c4ad63f4ee599c7daf507a223ad6c45bb",
+          "scripts/bench_guard_native_installed_slo_runtime.py": "0e6c5fb1c0ec1f3eaf6ee5e16e355521ec5d5984ea82767385470d8225e8001c",
+          "scripts/cigar_benchmark_processes.py": "e6d76990b4b9cd57c46fa6ca0de8d7f07952327f53a59894adff374c5f785258",
+          "scripts/cigar_benchmark_workload.py": "6f3b86e52ccec7108f2af8e5fa34a238d72261ec4250543cbebcb363f54fc2cd",
+          "scripts/cigar_slo_activity.py": "2f5d94533f18516abd0258925d37e97534d72192a09f2af395f74a933bb56101",
+          "scripts/native_installed_hook_corpus.py": "6402731f18b55b596b9e999658a45ea752f0be22b222181f801f31419bf30bfb",
+          "scripts/native_probe_receipts.py": "deef72aee9b5171d9898d04fc6a8ed393a142464b1a333383511e4c0c4169562",
+          "scripts/native_slo_activity.py": "50e30dffc7831273787f1388a265b52eb29d205de3d2f2a839bd0c09a5fcae13",
+          "scripts/native_slo_adapter.py": "ad4e3013eb1e6eafde9da829f08787d85ff38748d708e9963526e57ad4053bbc",
+          "scripts/native_slo_baseline.py": "606fa4739ca517dd2d230261a3967a49854bce20a5ed48d4a388ee3a366c1513",
+          "scripts/native_slo_benchmark_stages.py": "ebc898d1cea59e22513a292913f6e4e6a66648ff1063aecb047d1b714ed14c78",
+          "scripts/native_slo_capacity.py": "0c6dfcecb24d72a03c56f2107e0e8d2323606ed2220c7e80f2d55a289f576779",
+          "scripts/native_slo_capacity_support.py": "bb8f9177f2f12bafa010957cbe40178fdb16d14cb131aa9479c17e92d4ed708d",
+          "scripts/native_slo_contract.py": "ff1b1cc2c35fe6a532b7a62bddeb595ac6e3fec9438b3af970b5a79a9095d101",
+          "scripts/native_slo_diagnostics.py": "c29435bd270cff224c20f80b9c12c4aae1d5d310d35d74e13c0b12c1d119a32f",
+          "scripts/native_slo_failure_details.py": "e022fd74c54ea7d6aa580ee581793f647e53aa7a9988ab666c1269b975237c13",
+          "scripts/native_slo_failure_reason.py": "82da8b3871f52d25f4b7d1cf0e26e3514c629716bf14676b59bf5e04972a7b1d",
+          "scripts/native_slo_preflight.py": "56a01dab72bb8ed0d1bcb87d0bd3032b9d3e61f185feb535c2d477597b972b97",
+          "scripts/native_slo_process_tree.py": "d2412bdf0d2e48f2f2d2cf297790142a8b3c316631007bf585f101fcf52a57e1",
+          "scripts/native_slo_progress.py": "7b369f9294a728270f4a4f0878e78420f00d562ee35e1ea23e20f8d7ca847ca5",
+          "scripts/native_slo_recovery_cleanup.py": "f4c26b33456e2c16980bd34763decef975468be7fecfc02428cf77a51300405c",
+          "scripts/native_slo_reporting.py": "a5c328a12ee4eb3660e4894eaefa238897b5f435ca5f8eaa2eabd2ac62857987",
+          "scripts/native_slo_route_provenance.py": "583e738e7db12e0b31d92b997f1949daafe2af250b44508bfeb91274fd52aa08",
+          "scripts/native_slo_session.py": "374da2b09f48cb35808eb71ab940a92885e31e43cb09eaab565d1b21604292e5",
+          "scripts/native_slo_stop_diagnostics.py": "b361fd56c9ad359624a4c9ce8f804cfc651d38d7e87d9344320a2cbbdb47e367",
+          "scripts/native_slo_stop_trace.py": "fa090c91156ec6e8ce2e4ae136d58c3cc0e4ba18b693b321489466f464da2cc0"
+        },
+        "installed_slo": {
+          "schema": "hol-guard.native-installed-slo.v1",
+          "scope": "installed_adapter_to_decision",
+          "runtime": {
+            "mode": "auto",
+            "target": "aarch64-macos",
+            "runtime_version": "3.55.1",
+            "protocol_version": 1,
+            "package_origin": "installed",
+            "artifact_sha256": "ed67f14f60235aace5de42f7a0aded074d9c0979f576ce43deb2eb22b62594b6",
+            "artifact_size": 113583104,
+            "build_sha": "6c4c8468867a90c22c8a5cc382e615ef6386d67b",
+            "rule_digest": "54e38cc15fe1e4bb231214e15876422e5c0f872d2d3d5bae85b6c02e43ac7111",
+            "platform_tag": "macosx_11_0_arm64",
+            "platform_tag_target_verified": true,
+            "host_platform": "darwin",
+            "host_arch": "arm64",
+            "python_version": "3.12.13"
+          },
+          "corpus": {
+            "harnesses": 14,
+            "routes": 23,
+            "observations": 153,
+            "corpus_origin": "installed_wheel_ownership_contract",
+            "route_corpus": "installed_routes",
+            "warm_failures": 0,
+            "safe_failures": 0,
+            "security_denials": 21,
+            "safe_failure_rate": 0.0,
+            "fail_safe_decisions": 0,
+            "fail_safe_rate": 0.0,
+            "resident_share": 1.0,
+            "python_fallback_decisions": 0,
+            "python_semantic_decisions": 0,
+            "oneshot_decisions": 0,
+            "safe_failures_by_size": {},
+            "security_denials_by_size": {
+              "1m": 7,
+              "250k": 7,
+              "5m": 7
+            },
+            "rss_baseline_bytes": 661356544,
+            "rss_peak_bytes": 662765568,
+            "rss_growth": 0.002131,
+            "installed": {
+              "routes": 23,
+              "resident": 23,
+              "oneshot": 0,
+              "fail_safe": 0,
+              "python_semantic": 0,
+              "python_semantic_decisions": 0
+            },
+            "planned": 153,
+            "submitted": 153,
+            "started": 153,
+            "attempted": 153,
+            "completed": 153,
+            "failed": 0,
+            "cancelled": 0,
+            "missing": 0,
+            "denominators": {
+              "capacity_prewarm": {
+                "planned": 16,
+                "submitted": 16,
+                "started": 16,
+                "attempted": 16,
+                "completed": 16,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "capacity_prewarm_ready": {
+                "planned": 1,
+                "submitted": 1,
+                "started": 1,
+                "attempted": 1,
+                "completed": 1,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "capacity_stabilization": {
+                "planned": 1,
+                "submitted": 1,
+                "started": 1,
+                "attempted": 1,
+                "completed": 1,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "cleanup": {
+                "planned": 1,
+                "submitted": 1,
+                "started": 1,
+                "attempted": 1,
+                "completed": 1,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "cold": {
+                "planned": 3,
+                "submitted": 3,
+                "started": 3,
+                "attempted": 3,
+                "completed": 3,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "concurrent_16": {
+                "planned": 16,
+                "submitted": 16,
+                "started": 16,
+                "attempted": 16,
+                "completed": 16,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "concurrent_64": {
+                "planned": 64,
+                "submitted": 64,
+                "started": 64,
+                "attempted": 64,
+                "completed": 64,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "installed_corpus": {
+                "planned": 1,
+                "submitted": 1,
+                "started": 1,
+                "attempted": 1,
+                "completed": 1,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "installed_corpus_routes": {
+                "planned": 23,
+                "submitted": 23,
+                "started": 23,
+                "attempted": 23,
+                "completed": 23,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "readiness": {
+                "planned": 3,
+                "submitted": 3,
+                "started": 3,
+                "attempted": 3,
+                "completed": 3,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "recovery": {
+                "planned": 3,
+                "submitted": 3,
+                "started": 3,
+                "attempted": 3,
+                "completed": 3,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "recovery_precondition": {
+                "planned": 3,
+                "submitted": 3,
+                "started": 3,
+                "attempted": 3,
+                "completed": 3,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "recovery_stop": {
+                "planned": 3,
+                "submitted": 3,
+                "started": 3,
+                "attempted": 3,
+                "completed": 3,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "routes": {
+                "planned": 1,
+                "submitted": 1,
+                "started": 1,
+                "attempted": 1,
+                "completed": 1,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "rss_baseline": {
+                "planned": 1,
+                "submitted": 1,
+                "started": 1,
+                "attempted": 1,
+                "completed": 1,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "rss_baseline_requests": {
+                "planned": null,
+                "submitted": 112,
+                "started": 112,
+                "attempted": 112,
+                "completed": 112,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": null,
+                "skipped": false
+              },
+              "runtime": {
+                "planned": 1,
+                "submitted": 1,
+                "started": 1,
+                "attempted": 1,
+                "completed": 1,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "serialized_warmup": {
+                "planned": 1,
+                "submitted": 1,
+                "started": 1,
+                "attempted": 1,
+                "completed": 1,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "size_1m": {
+                "planned": 9,
+                "submitted": 9,
+                "started": 9,
+                "attempted": 9,
+                "completed": 9,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "size_250k": {
+                "planned": 9,
+                "submitted": 9,
+                "started": 9,
+                "attempted": 9,
+                "completed": 9,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "size_5m": {
+                "planned": 9,
+                "submitted": 9,
+                "started": 9,
+                "attempted": 9,
+                "completed": 9,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "warm": {
+                "planned": 46,
+                "submitted": 46,
+                "started": 46,
+                "attempted": 46,
+                "completed": 46,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              },
+              "warm_precondition": {
+                "planned": 23,
+                "submitted": 23,
+                "started": 23,
+                "attempted": 23,
+                "completed": 23,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              }
+            }
+          },
+          "routes": {
+            "native_resident": 153
+          },
+          "python_semantic_decisions": 0,
+          "errors_16": 0,
+          "errors_64": 0,
+          "latency": {
+            "warm_all_harnesses": {
+              "count": 46,
+              "p50_ms": 6.055,
+              "p95_ms": 10.905,
+              "p99_ms": 31.839,
+              "max_ms": 31.839
+            },
+            "warm_by_event": {
+              "PreToolUse": {
+                "count": 28,
+                "p50_ms": 5.984,
+                "p95_ms": 16.862,
+                "p99_ms": 31.839,
+                "max_ms": 31.839
+              },
+              "PostToolUse": {
+                "count": 18,
+                "p50_ms": 6.055,
+                "p95_ms": 10.156,
+                "p99_ms": 10.156,
+                "max_ms": 10.156
+              }
+            },
+            "size_classes": {
+              "1k": {
+                "count": 126,
+                "p50_ms": 37.917,
+                "p95_ms": 180.39,
+                "p99_ms": 184.915,
+                "max_ms": 187.947
+              },
+              "250k": {
+                "count": 9,
+                "p50_ms": 10.382,
+                "p95_ms": 44.926,
+                "p99_ms": 44.926,
+                "max_ms": 44.926
+              },
+              "1m": {
+                "count": 9,
+                "p50_ms": 6.912,
+                "p95_ms": 142.559,
+                "p99_ms": 142.559,
+                "max_ms": 142.559
+              },
+              "5m": {
+                "count": 9,
+                "p50_ms": 6.055,
+                "p95_ms": 681.298,
+                "p99_ms": 681.298,
+                "max_ms": 681.298
+              }
+            },
+            "cold_native_oneshot": {
+              "count": 3,
+              "p50_ms": 21.046,
+              "p95_ms": 22.187,
+              "p99_ms": 22.187,
+              "max_ms": 22.187
+            },
+            "resident_recovery": {
+              "count": 3,
+              "p50_ms": 189.539,
+              "p95_ms": 206.601,
+              "p99_ms": 206.601,
+              "max_ms": 206.601
+            },
+            "readiness": {
+              "count": 3,
+              "p50_ms": 0.915,
+              "p95_ms": 1.762,
+              "p99_ms": 1.762,
+              "max_ms": 1.762
+            }
+          },
+          "timing": {
+            "adapter": {
+              "count": 153,
+              "p50_ms": 31.605,
+              "p95_ms": 180.505,
+              "p99_ms": 677.805,
+              "max_ms": 681.298
+            },
+            "enclosing": {
+              "count": 153,
+              "p50_ms": 31.853,
+              "p95_ms": 180.701,
+              "p99_ms": 677.819,
+              "max_ms": 681.32
+            },
+            "recovery_adapter": {
+              "count": 3,
+              "p50_ms": 189.455,
+              "p95_ms": 206.526,
+              "p99_ms": 206.526,
+              "max_ms": 206.526
+            },
+            "recovery_enclosing": {
+              "count": 3,
+              "p50_ms": 189.539,
+              "p95_ms": 206.601,
+              "p99_ms": 206.601,
+              "max_ms": 206.601
+            }
+          },
+          "thresholds": {
+            "installed_adapter_p95_ms": 1000.0,
+            "installed_adapter_concurrent_p99_ms": 1000.0,
+            "direct_cold_p95_ms": 150.0,
+            "readiness_p95_ms": 400.0
+          },
+          "concurrency": {
+            "sixteen": {
+              "latency": {
+                "count": 16,
+                "p50_ms": 30.701,
+                "p95_ms": 41.031,
+                "p99_ms": 41.031,
+                "max_ms": 41.031
+              },
+              "errors": 0,
+              "overloaded": 0,
+              "deadline_ms": 1000.0,
+              "denominators": {
+                "planned": 16,
+                "submitted": 16,
+                "started": 16,
+                "attempted": 16,
+                "completed": 16,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              }
+            },
+            "sixty_four": {
+              "latency": {
+                "count": 64,
+                "p50_ms": 119.99,
+                "p95_ms": 182.979,
+                "p99_ms": 187.947,
+                "max_ms": 187.947
+              },
+              "errors": 0,
+              "overloaded": 0,
+              "fail_safe": 0,
+              "latency_ceiling_ms": null,
+              "bounded": true,
+              "denominators": {
+                "planned": 64,
+                "submitted": 64,
+                "started": 64,
+                "attempted": 64,
+                "completed": 64,
+                "failed": 0,
+                "cancelled": 0,
+                "missing": 0,
+                "skipped": false
+              }
+            }
+          },
+          "gates": {
+            "resident_share": true,
+            "safe_corpus": true,
+            "warm_latency": true,
+            "250k_latency": true,
+            "1m_latency": true,
+            "5m_latency": true,
+            "cold_latency": true,
+            "readiness": true,
+            "concurrency": true,
+            "rss": true,
+            "python_fallback": true,
+            "recovery_latency": true,
+            "concurrency_64_bounded": true,
+            "installed_corpus": true
+          },
+          "passed": true
+        },
+        "context_activity": {
+          "mode": "on",
+          "settle_seconds_per_load_phase": 5,
+          "cold_and_recovery": "real opt-in active before containment; native timed recovery restores no CIGAR authority",
+          "native_readiness": "measured before explicit SDK activation; SDK activation is separately reported",
+          "activation_ms": [
+            20626.443041022867,
+            20704.87333415076,
+            20593.861875124276,
+            20642.33895810321,
+            20730.255417060107,
+            20634.23650013283,
+            20748.952582944185,
+            20700.46529173851,
+            20637.346874922514,
+            20813.94312530756
+          ],
+          "phases": [
+            {
+              "phase": "installed_corpus",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 868.366,
+              "successful_overlapping_compiles": 40,
+              "observed_tree_memory": {
+                "samples": 12,
+                "sampling_errors": 0,
+                "median_rss_bytes": 522993664,
+                "peak_rss_bytes": 523239424,
+                "at_peak_counts": {
+                  "native_runtime": 6,
+                  "sdk_worker": 2,
+                  "python_bridge": 1,
+                  "other_python_child": 1,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 196263936,
+                  "sdk_worker": 119570432,
+                  "python_bridge": 30310400,
+                  "other_python_child": 27115520,
+                  "benchmark_daemon_host": 149979136
+                },
+                "maximum_counts": {
+                  "sdk_worker": 2,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 6,
+                  "other_python_child": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "context_workload": {
+                "successful_compiles": 294,
+                "latency": {
+                  "count": 37,
+                  "p50_ms": 7.01,
+                  "p95_ms": 9.969,
+                  "p99_ms": 72.176,
+                  "max_ms": 72.176
+                },
+                "latency_sample_every": 8,
+                "refusals": {},
+                "distinct_graph_revisions": 1,
+                "unchanged_graph_revision_reused": true,
+                "internal_tokenization_work_measured": false
+              },
+              "effective_at_end": true
+            },
+            {
+              "phase": "cold_precondition",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 0.004,
+              "successful_overlapping_compiles": 0,
+              "observed_tree_memory": {
+                "samples": 3,
+                "sampling_errors": 0,
+                "median_rss_bytes": 476987392,
+                "peak_rss_bytes": 477118464,
+                "at_peak_counts": {
+                  "sdk_worker": 2,
+                  "native_runtime": 4,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "other_python_child": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "sdk_worker": 120045568,
+                  "native_runtime": 144949248,
+                  "python_bridge": 29229056,
+                  "benchmark_daemon_host": 155598848,
+                  "other_python_child": 27295744
+                },
+                "maximum_counts": {
+                  "sdk_worker": 2,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 4,
+                  "other_python_child": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "context_workload": {
+                "successful_compiles": 5,
+                "latency": {
+                  "count": 1,
+                  "p50_ms": 8.738,
+                  "p95_ms": 8.738,
+                  "p99_ms": 8.738,
+                  "max_ms": 8.738
+                },
+                "latency_sample_every": 8,
+                "refusals": {},
+                "distinct_graph_revisions": 1,
+                "unchanged_graph_revision_reused": true,
+                "internal_tokenization_work_measured": false
+              },
+              "effective_at_end": true
+            },
+            {
+              "phase": "cold_precondition",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 0.005,
+              "successful_overlapping_compiles": 0,
+              "observed_tree_memory": {
+                "samples": 3,
+                "sampling_errors": 0,
+                "median_rss_bytes": 196214784,
+                "peak_rss_bytes": 196214784,
+                "at_peak_counts": {
+                  "native_runtime": 2,
+                  "terminated_child": 1,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 39403520,
+                  "terminated_child": 0,
+                  "benchmark_daemon_host": 156811264
+                },
+                "maximum_counts": {
+                  "native_runtime": 2,
+                  "terminated_child": 1,
+                  "benchmark_daemon_host": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "context_workload": {
+                "successful_compiles": 5,
+                "latency": {
+                  "count": 1,
+                  "p50_ms": 9.329,
+                  "p95_ms": 9.329,
+                  "p99_ms": 9.329,
+                  "max_ms": 9.329
+                },
+                "latency_sample_every": 8,
+                "refusals": {},
+                "distinct_graph_revisions": 1,
+                "unchanged_graph_revision_reused": true,
+                "internal_tokenization_work_measured": false
+              },
+              "effective_at_end": true
+            },
+            {
+              "phase": "cold_precondition",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 0.004,
+              "successful_overlapping_compiles": 0,
+              "observed_tree_memory": {
+                "samples": 2,
+                "sampling_errors": 0,
+                "median_rss_bytes": 476463104,
+                "peak_rss_bytes": 476495872,
+                "at_peak_counts": {
+                  "python_bridge": 1,
+                  "native_runtime": 4,
+                  "sdk_worker": 2,
+                  "terminated_child": 1,
+                  "other_python_child": 1,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "python_bridge": 29130752,
+                  "native_runtime": 143704064,
+                  "sdk_worker": 119275520,
+                  "terminated_child": 0,
+                  "other_python_child": 27115520,
+                  "benchmark_daemon_host": 157270016
+                },
+                "maximum_counts": {
+                  "sdk_worker": 2,
+                  "terminated_child": 1,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 4,
+                  "other_python_child": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "context_workload": {
+                "successful_compiles": 4,
+                "latency": {
+                  "count": 1,
+                  "p50_ms": 8.672,
+                  "p95_ms": 8.672,
+                  "p99_ms": 8.672,
+                  "max_ms": 8.672
+                },
+                "latency_sample_every": 8,
+                "refusals": {},
+                "distinct_graph_revisions": 1,
+                "unchanged_graph_revision_reused": true,
+                "internal_tokenization_work_measured": false
+              },
+              "effective_at_end": true
+            },
+            {
+              "phase": "warm",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 731.533,
+              "successful_overlapping_compiles": 37,
+              "observed_tree_memory": {
+                "samples": 11,
+                "sampling_errors": 0,
+                "median_rss_bytes": 530448384,
+                "peak_rss_bytes": 532348928,
+                "at_peak_counts": {
+                  "native_runtime": 6,
+                  "sdk_worker": 2,
+                  "other_python_child": 1,
+                  "benchmark_daemon_host": 1,
+                  "python_bridge": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 196558848,
+                  "sdk_worker": 119734272,
+                  "other_python_child": 27181056,
+                  "benchmark_daemon_host": 159596544,
+                  "python_bridge": 29278208
+                },
+                "maximum_counts": {
+                  "sdk_worker": 2,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 6,
+                  "other_python_child": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "context_workload": {
+                "successful_compiles": 292,
+                "latency": {
+                  "count": 37,
+                  "p50_ms": 7.311,
+                  "p95_ms": 9.35,
+                  "p99_ms": 9.36,
+                  "max_ms": 9.36
+                },
+                "latency_sample_every": 8,
+                "refusals": {},
+                "distinct_graph_revisions": 1,
+                "unchanged_graph_revision_reused": true,
+                "internal_tokenization_work_measured": false
+              },
+              "effective_at_end": true
+            },
+            {
+              "phase": "sizes",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 1896.411,
+              "successful_overlapping_compiles": 95,
+              "observed_tree_memory": {
+                "samples": 25,
+                "sampling_errors": 0,
+                "median_rss_bytes": 532299776,
+                "peak_rss_bytes": 541818880,
+                "at_peak_counts": {
+                  "native_runtime": 6,
+                  "sdk_worker": 2,
+                  "other_python_child": 1,
+                  "benchmark_daemon_host": 1,
+                  "python_bridge": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 196722688,
+                  "sdk_worker": 119750656,
+                  "other_python_child": 27181056,
+                  "benchmark_daemon_host": 168886272,
+                  "python_bridge": 29278208
+                },
+                "maximum_counts": {
+                  "sdk_worker": 2,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 6,
+                  "other_python_child": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "context_workload": {
+                "successful_compiles": 351,
+                "latency": {
+                  "count": 44,
+                  "p50_ms": 7.165,
+                  "p95_ms": 9.638,
+                  "p99_ms": 11.033,
+                  "max_ms": 11.033
+                },
+                "latency_sample_every": 8,
+                "refusals": {},
+                "distinct_graph_revisions": 1,
+                "unchanged_graph_revision_reused": true,
+                "internal_tokenization_work_measured": false
+              },
+              "effective_at_end": true
+            },
+            {
+              "phase": "recovery_precondition",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 10.488,
+              "successful_overlapping_compiles": 1,
+              "observed_tree_memory": {
+                "samples": 2,
+                "sampling_errors": 0,
+                "median_rss_bytes": 532316160,
+                "peak_rss_bytes": 532316160,
+                "at_peak_counts": {
+                  "native_runtime": 6,
+                  "sdk_worker": 2,
+                  "other_python_child": 1,
+                  "benchmark_daemon_host": 1,
+                  "python_bridge": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 187105280,
+                  "sdk_worker": 119750656,
+                  "other_python_child": 27181056,
+                  "benchmark_daemon_host": 169000960,
+                  "python_bridge": 29278208
+                },
+                "maximum_counts": {
+                  "sdk_worker": 2,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 6,
+                  "other_python_child": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "context_workload": {
+                "successful_compiles": 5,
+                "latency": {
+                  "count": 1,
+                  "p50_ms": 6.468,
+                  "p95_ms": 6.468,
+                  "p99_ms": 6.468,
+                  "max_ms": 6.468
+                },
+                "latency_sample_every": 8,
+                "refusals": {},
+                "distinct_graph_revisions": 1,
+                "unchanged_graph_revision_reused": true,
+                "internal_tokenization_work_measured": false
+              },
+              "effective_at_end": true
+            },
+            {
+              "phase": "recovery_precondition",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 13.71,
+              "successful_overlapping_compiles": 1,
+              "observed_tree_memory": {
+                "samples": 3,
+                "sampling_errors": 0,
+                "median_rss_bytes": 530235392,
+                "peak_rss_bytes": 530513920,
+                "at_peak_counts": {
+                  "native_runtime": 6,
+                  "terminated_child": 1,
+                  "other_python_child": 1,
+                  "sdk_worker": 2,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 185663488,
+                  "terminated_child": 0,
+                  "other_python_child": 27164672,
+                  "sdk_worker": 119160832,
+                  "python_bridge": 29179904,
+                  "benchmark_daemon_host": 169345024
+                },
+                "maximum_counts": {
+                  "sdk_worker": 2,
+                  "terminated_child": 1,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 6,
+                  "other_python_child": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "context_workload": {
+                "successful_compiles": 5,
+                "latency": {
+                  "count": 1,
+                  "p50_ms": 8.394,
+                  "p95_ms": 8.394,
+                  "p99_ms": 8.394,
+                  "max_ms": 8.394
+                },
+                "latency_sample_every": 8,
+                "refusals": {},
+                "distinct_graph_revisions": 1,
+                "unchanged_graph_revision_reused": true,
+                "internal_tokenization_work_measured": false
+              },
+              "effective_at_end": true
+            },
+            {
+              "phase": "recovery_precondition",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 10.386,
+              "successful_overlapping_compiles": 1,
+              "observed_tree_memory": {
+                "samples": 2,
+                "sampling_errors": 0,
+                "median_rss_bytes": 492978176,
+                "peak_rss_bytes": 492978176,
+                "at_peak_counts": {
+                  "native_runtime": 4,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "sdk_worker": 2,
+                  "terminated_child": 1,
+                  "other_python_child": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 146538496,
+                  "python_bridge": 29196288,
+                  "benchmark_daemon_host": 169590784,
+                  "sdk_worker": 120209408,
+                  "terminated_child": 0,
+                  "other_python_child": 27443200
+                },
+                "maximum_counts": {
+                  "sdk_worker": 2,
+                  "terminated_child": 1,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 4,
+                  "other_python_child": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "context_workload": {
+                "successful_compiles": 4,
+                "latency": {
+                  "count": 1,
+                  "p50_ms": 10.015,
+                  "p95_ms": 10.015,
+                  "p99_ms": 10.015,
+                  "max_ms": 10.015
+                },
+                "latency_sample_every": 8,
+                "refusals": {},
+                "distinct_graph_revisions": 1,
+                "unchanged_graph_revision_reused": true,
+                "internal_tokenization_work_measured": false
+              },
+              "effective_at_end": true
+            },
+            {
+              "phase": "capacity",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 1200.442,
+              "successful_overlapping_compiles": 50,
+              "observed_tree_memory": {
+                "samples": 15,
+                "sampling_errors": 0,
+                "median_rss_bytes": 658800640,
+                "peak_rss_bytes": 662716416,
+                "at_peak_counts": {
+                  "terminated_child": 2,
+                  "native_runtime": 12,
+                  "other_python_child": 1,
+                  "other_descendant": 2,
+                  "sdk_worker": 2,
+                  "benchmark_daemon_host": 1,
+                  "python_bridge": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "terminated_child": 0,
+                  "native_runtime": 306446336,
+                  "other_python_child": 27328512,
+                  "other_descendant": 3276800,
+                  "sdk_worker": 120258560,
+                  "benchmark_daemon_host": 176177152,
+                  "python_bridge": 29229056
+                },
+                "maximum_counts": {
+                  "sdk_worker": 2,
+                  "terminated_child": 2,
+                  "other_descendant": 2,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 12,
+                  "other_python_child": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "context_workload": {
+                "successful_compiles": 309,
+                "latency": {
+                  "count": 39,
+                  "p50_ms": 6.889,
+                  "p95_ms": 11.296,
+                  "p99_ms": 31.882,
+                  "max_ms": 31.882
+                },
+                "latency_sample_every": 8,
+                "refusals": {},
+                "distinct_graph_revisions": 1,
+                "unchanged_graph_revision_reused": true,
+                "internal_tokenization_work_measured": false
+              },
+              "effective_at_end": true
+            },
+            {
+              "phase": "readiness",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 0.004,
+              "successful_overlapping_compiles": 0,
+              "observed_tree_memory": {
+                "samples": 2,
+                "sampling_errors": 0,
+                "median_rss_bytes": 495370240,
+                "peak_rss_bytes": 495386624,
+                "at_peak_counts": {
+                  "native_runtime": 4,
+                  "sdk_worker": 2,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "other_python_child": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 144441344,
+                  "sdk_worker": 119177216,
+                  "python_bridge": 30375936,
+                  "benchmark_daemon_host": 174096384,
+                  "other_python_child": 27295744
+                },
+                "maximum_counts": {
+                  "sdk_worker": 2,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 4,
+                  "other_python_child": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "context_workload": {
+                "successful_compiles": 5,
+                "latency": {
+                  "count": 1,
+                  "p50_ms": 10.046,
+                  "p95_ms": 10.046,
+                  "p99_ms": 10.046,
+                  "max_ms": 10.046
+                },
+                "latency_sample_every": 8,
+                "refusals": {},
+                "distinct_graph_revisions": 1,
+                "unchanged_graph_revision_reused": true,
+                "internal_tokenization_work_measured": false
+              },
+              "effective_at_end": true
+            },
+            {
+              "phase": "readiness",
+              "completed": true,
+              "hook_interval_completed": true,
+              "measured_interval_ms": 0.004,
+              "successful_overlapping_compiles": 0,
+              "observed_tree_memory": {
+                "samples": 2,
+                "sampling_errors": 0,
+                "median_rss_bytes": 494657536,
+                "peak_rss_bytes": 494665728,
+                "at_peak_counts": {
+                  "native_runtime": 4,
+                  "sdk_worker": 2,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "other_python_child": 1
+                },
+                "at_peak_rss_by_kind": {
+                  "native_runtime": 144506880,
+                  "sdk_worker": 119242752,
+                  "python_bridge": 29179904,
+                  "benchmark_daemon_host": 174194688,
+                  "other_python_child": 27541504
+                },
+                "maximum_counts": {
+                  "sdk_worker": 2,
+                  "python_bridge": 1,
+                  "benchmark_daemon_host": 1,
+                  "native_runtime": 4,
+                  "other_python_child": 1
+                },
+                "includes_observed_reparented_children": true,
+                "shared_pages_may_be_counted_in_multiple_processes": true
+              },
+              "context_workload": {
+                "successful_compiles": 4,
+                "latency": {
+                  "count": 1,
+                  "p50_ms": 9.068,
+                  "p95_ms": 9.068,
+                  "p99_ms": 9.068,
+                  "max_ms": 9.068
+                },
+                "latency_sample_every": 8,
+                "refusals": {},
+                "distinct_graph_revisions": 1,
+                "unchanged_graph_revision_reused": true,
+                "internal_tokenization_work_measured": false
+              },
+              "effective_at_end": true
+            }
+          ],
+          "restarts": [
+            {
+              "phase": "cold",
+              "runtime_absent": true,
+              "old_scope_refused": true
+            },
+            {
+              "phase": "cold",
+              "runtime_absent": true,
+              "old_scope_refused": true
+            },
+            {
+              "phase": "cold",
+              "runtime_absent": true,
+              "old_scope_refused": true
+            },
+            {
+              "phase": "recovery",
+              "runtime_absent": true,
+              "old_scope_refused": true
+            },
+            {
+              "phase": "recovery",
+              "runtime_absent": true,
+              "old_scope_refused": true
+            },
+            {
+              "phase": "recovery",
+              "runtime_absent": true,
+              "old_scope_refused": true
+            }
+          ],
+          "fixture_containment": [
+            {
+              "fixture": "installed_corpus",
+              "final_contained": true
+            },
+            {
+              "fixture": "session_1",
+              "final_contained": true
+            },
+            {
+              "fixture": "session_2",
+              "final_contained": true
+            },
+            {
+              "fixture": "session_3",
+              "final_contained": true
+            },
+            {
+              "fixture": "session_4",
+              "final_contained": true
+            }
+          ],
+          "canonical_rss_reads": [
+            {
+              "phase": "capacity",
+              "rss_bytes": 659800064,
+              "root_rss_bytes": 176144384,
+              "descendant_rss_bytes": 483655680,
+              "processes": 20
+            },
+            {
+              "phase": "capacity",
+              "rss_bytes": 661241856,
+              "root_rss_bytes": 176177152,
+              "descendant_rss_bytes": 485064704,
+              "processes": 20
+            },
+            {
+              "phase": "capacity",
+              "rss_bytes": 661356544,
+              "root_rss_bytes": 176177152,
+              "descendant_rss_bytes": 485179392,
+              "processes": 20
+            },
+            {
+              "phase": "capacity",
+              "rss_bytes": 662765568,
+              "root_rss_bytes": 176979968,
+              "descendant_rss_bytes": 485785600,
+              "processes": 20
+            },
+            {
+              "phase": "readiness",
+              "rss_bytes": 174145536,
+              "root_rss_bytes": 172113920,
+              "descendant_rss_bytes": 2031616,
+              "processes": 2
+            }
+          ],
+          "gates": {
+            "complete_declared_activity_phases": true,
+            "all_activity_intervals_completed": true,
+            "all_six_restarts_restore_no_optional_authority": true,
+            "process_sampling_complete": true,
+            "canonical_rss_observed_without_root_fallback": true,
+            "optional_worker_coverage": true,
+            "all_five_private_fixtures_finally_contained": true,
+            "observed_workers_contained_at_end": true
+          }
+        },
+        "observed_processes_at_end": {
+          "rss_bytes": 172146688,
+          "counts": {
+            "benchmark_daemon_host": 1
+          },
+          "rss_by_kind": {
+            "benchmark_daemon_host": 172146688
+          }
+        },
+        "all_observed_processes": {
+          "samples": 3747,
+          "sampling_errors": 0,
+          "median_rss_bytes": 404701184,
+          "peak_rss_bytes": 1404485632,
+          "at_peak_counts": {
+            "native_runtime": 5,
+            "sdk_worker": 1,
+            "python_bridge": 1,
+            "benchmark_daemon_host": 1
+          },
+          "at_peak_rss_by_kind": {
+            "native_runtime": 162791424,
+            "sdk_worker": 59441152,
+            "python_bridge": 30146560,
+            "benchmark_daemon_host": 1152106496
+          },
+          "maximum_counts": {
+            "sdk_worker": 2,
+            "terminated_child": 2,
+            "other_descendant": 5,
+            "python_bridge": 1,
+            "benchmark_daemon_host": 1,
+            "native_runtime": 13,
+            "other_python_child": 2,
+            "exiting_host_python_child": 1
+          },
+          "includes_observed_reparented_children": true,
+          "shared_pages_may_be_counted_in_multiple_processes": true
+        },
+        "seconds": 305.316,
+        "tooling_unchanged_during_run": true
+      }
+    }
+  ],
+  "backend_regressions": {
+    "qualified_unique_cases": 69,
+    "initial_broad_attempt": {
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-stop-snapshot-20261024/backend-results.xml",
+        "bytes": 26435,
+        "sha256": "dfb0e3353c6ddcb7d59ff1f598ea25ca48e58d6bc04479b980fc36ff56f34673"
+      },
+      "tests": 97,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 34,
+      "seconds": 127.519
+    },
+    "selected_SDK_cases": {
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-stop-snapshot-20261024/sdk-results.xml",
+        "bytes": 1265,
+        "sha256": "9bb68833c8cd65a4f8f358a5eda7b6fb937b27721aaa13a362611a199501d587"
+      },
+      "tests": 6,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "seconds": 214.195
+    },
+    "attempt_interpretation": "Initial broad invocation included 28 extra existing SDK cases. Missing cached SDK root caused 34 explicit skips. Preserve that receipt; rerun only the six SDK cases in the original 69-case qualification with the verified existing cache and Bun runtime. Those six must all pass without skips. The other 28 existing SDK cases remain outside this scoped qualification.",
+    "source_sha256": {
+      "tests/test_context_agent_installed.py": "04a38158e2e62beccb92e8b7a8b3faebace6ce753cb1e73fb0e6c9651ecd4424",
+      "tests/test_context_agent_mcp.py": "0c78f170bf482d1f42560a0f9250e41f91169d762a3be142fc1ddbc5edcf415f",
+      "tests/test_context_execution_sink_installed.py": "1e6c3cfe05dfd74a21d9f8a0fdf5e1e61963e8c95087585b396a9008779d985a",
+      "tests/test_context_pi_sdk_installed.py": "a58b9cd7463eb41efb87958bf7f71e1b031a903b935551510be33f1bdb030170",
+      "tests/test_guard_mcp_contract.py": "3596af70ea055067c02d028ba92922807bb495d79f27c7e9dad19605807fd0c9",
+      "tests/test_native_context_assistance.py": "2b4ece299120ec2a41140dc0fdecbbd4db0aced36fe7e58dc8bbbda19f955f0b",
+      "tests/test_omp_bound_bash_sdk.py": "019e26ce728666e76c679307ebaae0d0016a4d2a4e77ffcb64538a7683d56e6a",
+      "tests/native_runtime_fixtures.py": "f01580d01ffb6a9c9346d62d76a120396dd2c1eedd1a0a999e57d0143c3cce30",
+      "tests/conftest.py": "f8b7758e6443a926863185b4427a9cd4f77d6fbf833d9a6a1275fcaa649a3ab3"
+    },
+    "source_unchanged_during_run": true,
+    "scope": "Installed package and explicitly selected compiled native authority; pytest fixture seams apply. Separate complete SLO and automatic-discovery proof use product defaults without overrides."
+  },
+  "pinned_SDK_environment": {
+    "root": "/private/tmp/hol-guard-cigar-pi-sdk",
+    "packages": {
+      "@earendil-works/pi-coding-agent": "0.87.1",
+      "@oh-my-pi/pi-coding-agent": "18.11.3"
+    },
+    "manifest": {
+      "path": "/private/tmp/hol-guard-cigar-pi-sdk/package.json",
+      "bytes": 421,
+      "sha256": "5636c7a2493dce67637755889354bf27719b870ceee4bb1bfb55a1b3ab0284fb"
+    },
+    "lock": {
+      "path": "/private/tmp/hol-guard-cigar-pi-sdk/package-lock.json",
+      "bytes": 160007,
+      "sha256": "59b789ccc715926de701889186e382506d37ecd1b50722d2052129c522698d9c"
+    },
+    "Bun": {
+      "path": "/private/tmp/hol-guard-cigar-pi-sdk/bun-runtime/node_modules/@oven/bun-darwin-aarch64/bin/bun",
+      "bytes": 63096576,
+      "sha256": "e0c90ec15d33363e6b70713d56bc3b2c7585c17f40a0fe0f8fd9305901d4e233"
+    },
+    "scope": "Previously qualified cache and Bun 1.3.14; no dependency installation or package lifecycle scripts run in this checkpoint. This is the actual SDK delivery seam, not interactive CLI/model or full continuation CI qualification."
+  },
+  "checks": [
+    {
+      "name": "semantic",
+      "status": "passed",
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-stop-snapshot-20261024/semantic-precommit.json",
+        "bytes": 99,
+        "sha256": "8e3101056186cd4d641add66f9eed89b0289db4e105bdb5885821ae3f0484e46"
+      }
+    },
+    {
+      "name": "capability_source",
+      "status": "passed",
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-stop-snapshot-20261024/capability-precommit.json",
+        "bytes": 38592,
+        "sha256": "d975dee5fe67bdb3f901777eaa0e7a95a5e8ce9e5f310467754474d61c80dc74"
+      }
+    },
+    {
+      "name": "authority_after_source_commit",
+      "status": "passed",
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-stop-snapshot-20261024/authority-postcommit.json",
+        "bytes": 64142,
+        "sha256": "65bdb2aa98f08de5d24af55f3bd0ff1311b9b120d9ce1330aef3585bbcd03a22"
+      }
+    },
+    {
+      "name": "io",
+      "status": "passed",
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-stop-snapshot-20261024/io-precommit.json",
+        "bytes": 78222,
+        "sha256": "bcf901a1c39ebf936483fa5aebdcdb005372d016d67e41b8e46adc6fcbd68472"
+      }
+    },
+    {
+      "name": "privacy",
+      "status": "passed",
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-stop-snapshot-20261024/privacy-precommit.json",
+        "bytes": 620,
+        "sha256": "3f99732114cd01afda57fec9bae91e307310125980da63e8859c1941fbb96b14"
+      }
+    },
+    {
+      "name": "capability_wheel",
+      "status": "passed",
+      "receipt": {
+        "path": "/private/tmp/hol-guard-cigar-stop-snapshot-20261024/capability-wheel.json",
+        "bytes": 38723,
+        "sha256": "952ffc4804e72dd68bfcd8d0cb3c13ef1904fc3accb998b6d233b1156140c194"
+      }
+    }
+  ],
+  "sdk": {
+    "revision": "b47380e5a5cbeaaad5a61cab3372e9e67368732f",
+    "source_unchanged": true,
+    "worker": {
+      "path": "/private/tmp/hol-guard-cigar-sdk-target/debug/cigar-context-worker",
+      "bytes": 22708072,
+      "sha256": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112"
+    }
+  },
+  "interpretation": [
+    "Every strict final Stop passes for all five fixtures in each mode. No failed cleanup was converted into a passing result by the recovery fallback.",
+    "Earlier installed failures and the deterministic native red/green regression remain retained in the linked source evidence.",
+    "Both runs use identical stable tooling with Stop tracing disabled. Two warm iterations per route are the complete canonical absolute gate, not a qualified repeated relative-performance cohort.",
+    "Canonical capacity RSS includes the driver and current descendants with no fallback; additional sampling includes all observed reparented workers. Shared pages can be counted more than once, and interval sampling is not a complete spawn trace.",
+    "The on run observes two SDK workers and a Python bridge, and all workers are absent at the end. Higher on-mode capacity RSS is a real local cost; no memory savings, settled plateau, tokenization or exponential efficiency gain is established.",
+    "The artifact contains unchanged previously verified dashboard assets. Browser tests were not repeated for this native-only lifecycle correction."
+  ],
+  "remaining": [
+    "Complete matched feature-off/on relative-latency and resource cohorts; earlier off RSS and intermittent HTTP/hardened-helper failures remain retained and not explained by this lifecycle correction.",
+    "Actual worker/bridge crash and source/graph eviction; ambiguous in-flight native execution outcomes and remaining exact handoff acceptance.",
+    "Useful review/agent outcomes, interactive external app delivery, Desktop/setup and other-platform acceptance; existing unrelated TypeScript diagnostics remain recorded.",
+    "Full integration goal is active; no publication, live Guard modification or SDK source changes occurred."
+  ]
+}

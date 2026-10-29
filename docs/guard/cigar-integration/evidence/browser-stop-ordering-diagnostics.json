@@ -1,0 +1,590 @@
+{
+  "schema": "guard-cigar-browser-stop-ordering-diagnostics.v1",
+  "product_source_commit": "1e341429b8006beec74c31cf8c0d230793c0be7f",
+  "diagnostic_only": true,
+  "qualified": false,
+  "failed_product_browser_attempts": {
+    "browser-setup-failure": {
+      "controller": {
+        "schema": "guard-cigar-worker-reuse-browser-controller.v1",
+        "command": [
+          "/usr/local/bin/node",
+          "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/dashboard/node_modules/@playwright/test/cli.js",
+          "test",
+          "--config",
+          "/private/tmp/hol-guard-cigar-control-preflight-20261025/browser.config.mts",
+          "--project=mutating",
+          "--no-deps",
+          "--max-failures=1",
+          "context-assistance.mutating.spec.ts",
+          "context-execution.mutating.spec.ts",
+          "context-persistence.mutating.spec.ts"
+        ],
+        "returncode": 1,
+        "seconds": 95.451,
+        "source_commit": "1e341429b8006beec74c31cf8c0d230793c0be7f",
+        "planned_cases": 3,
+        "stats": {
+          "startTime": "2026-10-25T10:39:47.274Z",
+          "duration": 94930.057,
+          "expected": 0,
+          "skipped": 0,
+          "unexpected": 0,
+          "flaky": 0
+        },
+        "inputs_unchanged": true,
+        "fingerprinted_files": 1829,
+        "observed_new_descendants_remaining": 0,
+        "resources": {
+          "samples": 1178,
+          "sampling_errors": 0,
+          "median_rss_bytes": 460980224,
+          "peak_rss_bytes": 1022148608,
+          "at_peak_counts": {
+            "other_descendant": 1,
+            "native_runtime": 4,
+            "guard_python_worker": 1,
+            "benchmark_daemon_host": 1
+          },
+          "at_peak_rss_by_kind": {
+            "other_descendant": 230883328,
+            "native_runtime": 72744960,
+            "guard_python_worker": 245350400,
+            "benchmark_daemon_host": 473169920
+          },
+          "maximum_counts": {
+            "native_runtime": 5,
+            "benchmark_daemon_host": 1,
+            "other_descendant": 2,
+            "guard_python_worker": 1,
+            "other_python_child": 1,
+            "exiting_host_python_child": 1,
+            "terminated_child": 1,
+            "sdk_worker": 1,
+            "python_bridge": 1
+          },
+          "includes_observed_reparented_children": true,
+          "shared_pages_may_be_counted_in_multiple_processes": true
+        },
+        "installed_static_assets": 33,
+        "static_override": false,
+        "traces_and_screenshots": "off",
+        "fixture_only_password_and_session_proofs": true,
+        "real_credentials_or_live_Guard_accessed": false,
+        "scope": "Three existing React/HTTP/installed-native flows with explicit test-native selection; local Chromium headless shell1223/Playwright1.60.0; no Desktop release qualification"
+      },
+      "inputs": {
+        "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/browser-setup-failure/inputs.json",
+        "bytes": 373923,
+        "sha256": "0a4e6e5df29199df618d6d67ad40f850d4a47720669804f2dcf2dd91081ecd60"
+      },
+      "report": {
+        "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/browser-setup-failure/report.json",
+        "bytes": 4058,
+        "sha256": "370940b6be78acd28fc2fd65f74ef2f4d6d79f10cb0f470e487ff5ede19aefbc"
+      }
+    },
+    "browser-stop-reload-failure": {
+      "controller": {
+        "schema": "guard-cigar-worker-reuse-browser-controller.v1",
+        "command": [
+          "/usr/local/bin/node",
+          "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/dashboard/node_modules/@playwright/test/cli.js",
+          "test",
+          "--config",
+          "/private/tmp/hol-guard-cigar-control-preflight-20261025/browser.config.mts",
+          "--project=mutating",
+          "--no-deps",
+          "--max-failures=1",
+          "context-assistance.mutating.spec.ts",
+          "context-execution.mutating.spec.ts",
+          "context-persistence.mutating.spec.ts"
+        ],
+        "returncode": 1,
+        "seconds": 41.057,
+        "source_commit": "1e341429b8006beec74c31cf8c0d230793c0be7f",
+        "planned_cases": 3,
+        "stats": {
+          "startTime": "2026-10-25T10:42:06.220Z",
+          "duration": 39625.707,
+          "expected": 0,
+          "skipped": 2,
+          "unexpected": 1,
+          "flaky": 0
+        },
+        "inputs_unchanged": true,
+        "fingerprinted_files": 1829,
+        "observed_new_descendants_remaining": 0,
+        "resources": {
+          "samples": 512,
+          "sampling_errors": 0,
+          "median_rss_bytes": 1824620544,
+          "peak_rss_bytes": 2433794048,
+          "at_peak_counts": {
+            "benchmark_daemon_host": 1,
+            "other_descendant": 6,
+            "guard_python_worker": 3,
+            "sdk_worker": 2,
+            "native_runtime": 7,
+            "python_bridge": 1
+          },
+          "at_peak_rss_by_kind": {
+            "benchmark_daemon_host": 473022464,
+            "other_descendant": 1050361856,
+            "guard_python_worker": 663044096,
+            "sdk_worker": 88899584,
+            "native_runtime": 130449408,
+            "python_bridge": 28016640
+          },
+          "maximum_counts": {
+            "benchmark_daemon_host": 1,
+            "sdk_worker": 2,
+            "guard_python_worker": 4,
+            "exiting_host_python_child": 1,
+            "terminated_child": 2,
+            "native_runtime": 9,
+            "python_bridge": 1,
+            "other_descendant": 7,
+            "other_python_child": 1
+          },
+          "includes_observed_reparented_children": true,
+          "shared_pages_may_be_counted_in_multiple_processes": true
+        },
+        "installed_static_assets": 33,
+        "static_override": false,
+        "traces_and_screenshots": "off",
+        "fixture_only_password_and_session_proofs": true,
+        "real_credentials_or_live_Guard_accessed": false,
+        "scope": "Three existing React/HTTP/installed-native flows with explicit test-native selection; local Chromium headless shell1223/Playwright1.60.0; no Desktop release qualification"
+      },
+      "inputs": {
+        "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/browser-stop-reload-failure/inputs.json",
+        "bytes": 373923,
+        "sha256": "88deec97b088043590af18dafc9765abb3202d1412ddad9d8bfc2ee73f575339"
+      },
+      "report": {
+        "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/browser-stop-reload-failure/report.json",
+        "bytes": 13038,
+        "sha256": "5141f819019d1ae4bfbc0ce284ee682d8ad854d6d88d60adab66deb4627b2c9a"
+      }
+    }
+  },
+  "diagnostic_plan": {
+    "diagnostic_only": true,
+    "cases": 1,
+    "attempts": 1,
+    "assertions_workload_timeouts_retries_unchanged": true,
+    "observations": "path/method/time/status/enabled only; no bodies, credentials or extra requests",
+    "purpose": "Order Stop HTTP acknowledgement, early native off observation and settings read"
+  },
+  "diagnostic_controller": {
+    "schema": "guard-cigar-worker-reuse-browser-controller.v1",
+    "command": [
+      "/usr/local/bin/node",
+      "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/dashboard/node_modules/@playwright/test/cli.js",
+      "test",
+      "--config",
+      "/private/tmp/hol-guard-cigar-control-preflight-20261025/browser-stop-diagnostic/config.mts",
+      "--project=mutating",
+      "--no-deps",
+      "--max-failures=1",
+      "context-assistance.mutating.spec.ts"
+    ],
+    "returncode": 1,
+    "seconds": 289.62,
+    "source_commit": "1e341429b8006beec74c31cf8c0d230793c0be7f",
+    "planned_cases": 1,
+    "stats": {
+      "startTime": "2026-10-25T10:49:08.958Z",
+      "duration": 288099.617,
+      "expected": 1,
+      "skipped": 0,
+      "unexpected": 1,
+      "flaky": 0
+    },
+    "inputs_unchanged": true,
+    "fingerprinted_files": 1831,
+    "observed_new_descendants_remaining": 0,
+    "resources": {
+      "samples": 3533,
+      "sampling_errors": 0,
+      "median_rss_bytes": 1177468928,
+      "peak_rss_bytes": 2399174656,
+      "at_peak_counts": {
+        "guard_python_worker": 9,
+        "native_runtime": 11,
+        "other_python_child": 2,
+        "other_descendant": 6,
+        "sdk_worker": 1,
+        "benchmark_daemon_host": 1,
+        "python_bridge": 1
+      },
+      "at_peak_rss_by_kind": {
+        "guard_python_worker": 874364928,
+        "native_runtime": 179470336,
+        "other_python_child": 54525952,
+        "other_descendant": 1168424960,
+        "sdk_worker": 59572224,
+        "benchmark_daemon_host": 33734656,
+        "python_bridge": 29081600
+      },
+      "maximum_counts": {
+        "benchmark_daemon_host": 1,
+        "other_python_child": 2,
+        "terminated_child": 1,
+        "sdk_worker": 2,
+        "other_descendant": 7,
+        "guard_python_worker": 9,
+        "exiting_host_python_child": 1,
+        "native_runtime": 11,
+        "python_bridge": 1
+      },
+      "includes_observed_reparented_children": true,
+      "shared_pages_may_be_counted_in_multiple_processes": true
+    },
+    "installed_static_assets": 33,
+    "static_override": false,
+    "traces_and_screenshots": "off",
+    "fixture_only_password_and_session_proofs": true,
+    "real_credentials_or_live_Guard_accessed": false,
+    "scope": "Three existing React/HTTP/installed-native flows with explicit test-native selection; local Chromium headless shell1223/Playwright1.60.0; no Desktop release qualification"
+  },
+  "diagnostic_cases": [
+    {
+      "file": "context-assistance.mutating.spec.ts",
+      "title": "real candidate sources, proof-backed MCP pairing and opt-out survive reload",
+      "status": "expected",
+      "results": [
+        {
+          "status": "passed",
+          "duration": 36648,
+          "errors": []
+        }
+      ]
+    },
+    {
+      "file": "helper-location-failure/context-assistance.mutating.spec.ts",
+      "title": "real candidate sources, proof-backed MCP pairing and opt-out survive reload",
+      "status": "unexpected",
+      "results": [
+        {
+          "status": "timedOut",
+          "duration": 240052,
+          "errors": [
+            "\u001b[31mTest timeout of 240000ms exceeded.\u001b[39m"
+          ]
+        }
+      ]
+    }
+  ],
+  "first_case_observation_subset": {
+    "origin": "Exact public numeric/boolean fields transcribed from the agent tool read of this diagnostic observations.json before the extra archived case overwrote that file. The full first-case array was not retained.",
+    "rows": [
+      {
+        "event": "request",
+        "path": "/v1/context-assistance/stop",
+        "method": "POST",
+        "ms": 1792925378255
+      },
+      {
+        "event": "response",
+        "path": "/v1/context-assistance/stop",
+        "ms": 1792925378267,
+        "status": 200,
+        "enabled": false
+      },
+      {
+        "event": "native_off_observed_before_reload",
+        "ms": 1792925378288
+      },
+      {
+        "event": "request",
+        "path": "/v1/settings",
+        "method": "GET",
+        "ms": 1792925378313
+      },
+      {
+        "event": "response",
+        "path": "/v1/settings",
+        "ms": 1792925378344,
+        "status": 200,
+        "enabled": false
+      }
+    ]
+  },
+  "final_overwritten_observations": {
+    "receipt": {
+      "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/browser-stop-diagnostic/observations.json",
+      "bytes": 764,
+      "sha256": "9bd8038c8a3b11401a8ba092cc26b0abfaa400d31b92ab5a60448303552813d7"
+    },
+    "rows": [
+      {
+        "event": "request",
+        "path": "/v1/settings",
+        "method": "GET",
+        "ms": 1792925397067
+      },
+      {
+        "event": "response",
+        "path": "/v1/settings",
+        "ms": 1792925397094,
+        "status": 200,
+        "enabled": false
+      },
+      {
+        "event": "request",
+        "path": "/v1/settings",
+        "method": "GET",
+        "ms": 1792925397096
+      },
+      {
+        "event": "response",
+        "path": "/v1/settings",
+        "ms": 1792925397115,
+        "status": 200,
+        "enabled": false
+      },
+      {
+        "event": "request",
+        "path": "/v1/settings",
+        "method": "POST",
+        "ms": 1792925397739
+      },
+      {
+        "event": "response",
+        "path": "/v1/settings",
+        "ms": 1792925398443,
+        "status": 200,
+        "enabled": true
+      },
+      {
+        "event": "final_cleanup",
+        "ms": 1792925637025
+      }
+    ]
+  },
+  "observed_order": {
+    "Stop_ack_before_early_status_observation_ms": 21,
+    "settings_response_after_Stop_ack_ms": 77,
+    "reloaded_settings_enabled": false
+  },
+  "diagnostic_inputs": {
+    "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/browser-stop-diagnostic/acceptance/inputs.json",
+    "bytes": 374299,
+    "sha256": "0536db98560a5e9ec8d7fdc88d4e5739191352d3ac21f7fe28459cf557de10f8"
+  },
+  "diagnostic_driver": {
+    "receipt": {
+      "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/browser-stop-diagnostic/run.py",
+      "bytes": 6690,
+      "sha256": "c7a3adb720633b581cb88f122b82457588681cc728ffad692a50552b366c1a2b"
+    },
+    "text": "\"\"\"Three existing real installed-browser flows with private fixture authority.\"\"\"\nfrom pathlib import Path\nimport hashlib\nimport json\nimport os\nimport socket\nimport subprocess\nimport sys\nimport time\n\nROOT=Path('/private/tmp/hol-guard-cigar-control-preflight-20261025')\nREPO=Path('/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration')\nINSTALLED=ROOT/'package/installed'\nRUNTIME=INSTALLED/'codex_plugin_scanner/_native/hol-guard-runtime'\nartifact=json.loads((ROOT/'package/installed-artifact-verification.json').read_text())\nassert artifact['build_sha']=='1e341429b8006beec74c31cf8c0d230793c0be7f'\nassert hashlib.sha256(RUNTIME.read_bytes()).hexdigest()==artifact['artifact_sha256']\njob=ROOT/'browser-stop-diagnostic/acceptance'\njob.mkdir(mode=0o700)\n(job/'profile').mkdir(mode=0o700)\nsys.path.insert(0,str(REPO))\nfrom scripts.bench_guard_cigar_cohort import fingerprints\nfrom scripts.cigar_benchmark_processes import ProcessSampler\nselection=Path('/private/tmp/hol-guard-cigar-runtime-validation/selection.json')\napproval=Path('/private/tmp/hol-guard-cigar-runtime-validation/approval.json')\nos.environ['GUARD_CIGAR_TEST_SELECTION']=str(selection)\nos.environ['GUARD_CIGAR_TEST_APPROVAL']=str(approval)\nselected_python=Path(json.loads(selection.read_text())['python'])\nnode=Path('/usr/local/bin/node')\nmodules=REPO/'dashboard/node_modules'\ncli=modules/'@playwright/test/cli.js'\nassert json.loads((modules/'@playwright/test/package.json').read_text())['version']=='1.60.0'\nbrowsers=json.loads((modules/'playwright-core/browsers.json').read_text())['browsers']\nassert any(value['name']=='chromium-headless-shell' and value['revision']=='1223' for value in browsers)\nwith socket.socket() as listener:\n    listener.bind(('127.0.0.1',0))\n    port=listener.getsockname()[1]\nenvironment={'HOME':str(job/'profile'),'PATH':'/private/tmp/hol-guard-cigar-locked-runtime/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin',\n             'LANG':'en_US.UTF-8','PYTHONNOUSERSITE':'1','PYTHONPATH':os.pathsep.join((str(INSTALLED),str(REPO))),\n             'HOL_GUARD_TEST_USE_INSTALLED':'1','HOL_GUARD_NATIVE':'force','HOL_GUARD_NATIVE_BINARY':str(RUNTIME),\n             'HOL_GUARD_NATIVE_REGRESSION':'1',\n             'HOL_GUARD_TEST_DISABLE_BROWSER_OPEN':'1','GUARD_CIGAR_TEST_SELECTION':str(selection),\n             'GUARD_CIGAR_TEST_APPROVAL':str(approval),'DASHBOARD_E2E_ROOT':str(job/'fixture'),\n             'DASHBOARD_E2E_PORT':str(port),'DASHBOARD_E2E_PYTHON':sys.executable,\n             'SCRG_PROOF_DIR':str(job/'proof'),'PLAYWRIGHT_BROWSERS_PATH':'/private/tmp/hol-guard-cigar-browser-cache'}\npaths={ROOT/'browser-stop-diagnostic/context-assistance.mutating.spec.ts', ROOT/'browser-stop-diagnostic/package.json'}\npaths.update((REPO/'tests').glob('context*.py'))\npaths.update((REPO/'dashboard/e2e').rglob('*.ts'))\npaths.update((REPO/'scripts/ci/dashboard_integration_seeds').rglob('*.py'))\npaths.update([REPO/'scripts/ci/dashboard_integration_server.py',REPO/'scripts/ci/installed_extension_authority_fixture.py',\n              REPO/'dashboard/playwright.integration.config.ts',REPO/'dashboard/package.json',REPO/'dashboard/package-lock.json',\n              ROOT/'browser-stop-diagnostic/config.mts',ROOT/'functional-acceptance-plan.json',ROOT/'package/installed-artifact-verification.json',\n              Path(__file__),node.resolve(),Path('/private/tmp/hol-guard-cigar-sdk-target/debug/cigar-context-worker')])\nfor package in ['@playwright/test','playwright','playwright-core']:\n    paths.update(path for path in (modules/package).rglob('*') if path.is_file() and path.suffix in {'.js','.cjs','.mjs','.json'})\npaths.update(Path('/private/tmp/hol-guard-cigar-browser-cache').rglob('chrome-headless-shell'))\nassets=json.loads((ROOT/'static-staging.json').read_text())['verified_asset_sha256']\nfor name,value in assets.items():\n    path=INSTALLED/Path(name).relative_to('src')\n    assert hashlib.sha256(path.read_bytes()).hexdigest()==value\n    paths.add(path)\nfrozen=fingerprints(RUNTIME,INSTALLED)\nfor path in paths:frozen[str(path)]=hashlib.sha256(path.read_bytes()).hexdigest()\nwith (job/'inputs.json').open('x') as out:json.dump(frozen,out,indent=2)\nspecs=['context-assistance.mutating.spec.ts']\ncommand=[str(node),str(cli),'test','--config',str(ROOT/'browser-stop-diagnostic/config.mts'),'--project=mutating','--no-deps',\n         '--max-failures=1',*specs]\nstarted=time.monotonic()\nwith ProcessSampler(selected_python) as sampler:\n    before,baseline=sampler.sample_with_identities()\n    with (job/'stdout.log').open('x') as out,(job/'stderr.log').open('x') as err:\n        result=subprocess.run(command,cwd=REPO/'dashboard',env=environment,stdout=out,stderr=err,timeout=600)\n    deadline=time.monotonic()+5\n    after,remaining=sampler.sample_with_identities()\n    while remaining.keys()-baseline.keys() and time.monotonic()<deadline:\n        time.sleep(.05)\n        after,remaining=sampler.sample_with_identities()\n    new_descendants=len(remaining.keys()-baseline.keys())\n    resources=sampler.summary()\nreport=json.loads((job/'report.json').read_text()) if (job/'report.json').exists() else {}\nstats=report.get('stats',{})\nreceipt={'schema':'guard-cigar-worker-reuse-browser-controller.v1','command':command,'returncode':result.returncode,\n         'seconds':round(time.monotonic()-started,3),'source_commit':artifact['build_sha'],'planned_cases':1,'stats':stats,\n         'inputs_unchanged':all(hashlib.sha256(Path(path).read_bytes()).hexdigest()==value for path,value in frozen.items()),\n         'fingerprinted_files':len(frozen),'observed_new_descendants_remaining':new_descendants,'resources':resources,\n         'installed_static_assets':len(assets),'static_override':False,'traces_and_screenshots':'off',\n         'fixture_only_password_and_session_proofs':True,'real_credentials_or_live_Guard_accessed':False,\n         'scope':'Three existing React/HTTP/installed-native flows with explicit test-native selection; local Chromium headless shell1223/Playwright1.60.0; no Desktop release qualification'}\nwith (job/'controller.json').open('x') as out:json.dump(receipt,out,indent=2);out.write('\\n')\nprint(json.dumps({key:receipt[key] for key in ['returncode','seconds','planned_cases','stats','inputs_unchanged','fingerprinted_files','observed_new_descendants_remaining']}))\nif result.returncode:\n    print((job/'stderr.log').read_text()[-4000:])\nraise SystemExit(result.returncode or int(not receipt['inputs_unchanged']) or int(stats.get('expected')!=1)\n                 or int(any(stats.get(name,1)!=0 for name in ['skipped','unexpected','flaky']))\n                 or int(new_descendants!=0) or int(resources['sampling_errors']!=0))\n"
+  },
+  "diagnostic_spec": {
+    "receipt": {
+      "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/browser-stop-diagnostic/context-assistance.mutating.spec.ts",
+      "bytes": 18272,
+      "sha256": "66d712cb6ddf556988cb9b51d85d577fadf090245a1dca1a62bb3985cb4304f1"
+    },
+    "text": "import { daemonApi, expect, expectNoErrorBoundary, test, type IntegrationState } from \"/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/dashboard/e2e/integration/fixtures\";\nimport { contextStatus } from \"/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/dashboard/e2e/integration/context-status\";\nimport { writeFileSync } from \"node:fs\";\nimport { resolve } from \"node:path\";\nimport { ContextAgentProbe } from \"/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/dashboard/e2e/integration/context-agent-probe\";\nimport { execFileSync } from \"node:child_process\";\nimport { contextHistoryAndRepairFlow, clearContextFromRepair } from \"/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/dashboard/e2e/integration/context-history-flow\";\nimport { contextSharingFlow } from \"/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/dashboard/e2e/integration/context-sharing-flow\";\n\nasync function saveWithProof(page: import(\"@playwright/test\").Page, state: IntegrationState) {\n  await page.getByRole(\"region\", { name: \"Save settings\" }).getByRole(\"button\", { name: \"Save settings\" }).click();\n  const proof = page.getByRole(\"dialog\");\n  await proof.getByLabel(\"Approval password\").fill(state.approvalPassword);\n  await proof.getByRole(\"button\", { name: \"Save settings\" }).click();\n  await expect(proof).toHaveCount(0);\n  await expect(page.getByText(\"Settings saved successfully.\")).toBeVisible();\n}\n\ntest(\"real candidate sources, proof-backed MCP pairing and opt-out survive reload\", async ({ page, state }) => {\n  test.setTimeout(240_000);\n  const seed = state.seeded.context_assistance;\n  test.skip(seed?.candidateEnrolled !== true, \"requires an explicitly selected and approved installed candidate\");\n  const status = () => contextStatus(state);\n  const observations: Record<string, unknown>[] = [];\n  const pendingObservations: Promise<void>[] = [];\n  const relevant = (url: string) => new URL(url).pathname;\n  page.on(\"request\", (request) => {\n    const path = relevant(request.url());\n    if (path === \"/v1/settings\" || path === \"/v1/context-assistance/stop\") {\n      observations.push({event:\"request\", path, method:request.method(), ms:Date.now()});\n    }\n  });\n  page.on(\"response\", (response) => {\n    const path = relevant(response.url());\n    if (path !== \"/v1/settings\" && path !== \"/v1/context-assistance/stop\") return;\n    const ms = Date.now();\n    pendingObservations.push((async () => {\n      const body = await response.json();\n      observations.push({event:\"response\", path, ms, status:response.status(),\n        enabled:path === \"/v1/settings\" ? body.settings?.context_assistance?.enabled : body.requested_enabled});\n    })().catch(() => { observations.push({event:\"response_unreadable\",path,ms}); }));\n  });\n\n  await page.goto(\"/settings?section=protection\");\n  const toggle = page.getByRole(\"switch\", { name: \"Use CIGAR on this machine\" });\n  await expect(toggle).toHaveAttribute(\"aria-checked\", \"false\");\n  await page.getByRole(\"button\", { name: \"Choose a verified runtime\" }).click();\n  await expect(page.getByLabel(\"Local runtime\", { exact: true })).toHaveValue(String(seed.runtimeId));\n  await expect(toggle).toBeEnabled();\n  await toggle.focus();\n  await page.keyboard.press(\"Space\");\n  await expect(toggle).toHaveAttribute(\"aria-checked\", \"true\");\n  await page.getByRole(\"switch\", { name: \"Context for AI apps\", exact: true }).click();\n  await page.getByText(\"Sources, limits and runtime details\", { exact: true }).click();\n  await page.getByRole(\"switch\", { name: \"Allow selected workspace documents\" }).click();\n  await saveWithProof(page, state);\n  expect((await status()).effective_enabled).toBe(false);\n  let probe: ContextAgentProbe | undefined;\n  try {\n    await page.getByRole(\"button\", { name: \"Start context assistance\" }).click();\n    await expect.poll(async () => (await status()).effective_enabled, { timeout: 30_000 }).toBe(true);\n    const ready = await status();\n    expect(ready.runtime?.interpreter.version.slice(0, 2)).toEqual([3, 14]);\n    expect(ready.runtime?.worker_fingerprint).toBe(seed.workerFingerprint);\n    // Source permission requires a separate native proof, even after global opt-in.\n    const unproved = await page.request.post(`${state.origin}/v1/context-assistance/workspace-grant`, {\n      headers: { \"x-guard-token\": state.daemonToken }, data: { input: { action: \"grant\", workspace: state.workspace, app: \"dashboard\", sources: [\"README.md\"] } },\n    });\n    expect([401, 403, 423]).toContain(unproved.status());\n    await page.getByLabel(\"Workspace folder\", { exact: true }).fill(state.workspace);\n    await page.getByLabel(\"Files relative to the workspace, one per line\").fill(\"README.md\");\n    await page.getByRole(\"button\", { name: \"Grant review source access\" }).click();\n    const sourceProof = page.getByRole(\"dialog\");\n    await sourceProof.getByLabel(\"Approval password\").fill(state.approvalPassword);\n    await sourceProof.getByRole(\"button\", { name: \"Grant source access\", exact: true }).click();\n    await expect(sourceProof).toHaveCount(0);\n    await expect(page.getByText(/Recent native receipt facts: 0 of at most 16 retained/)).toBeVisible();\n    await page.getByLabel(\"What would you like context about?\").fill(\"reviewed release process\");\n    await page.getByRole(\"button\", { name: \"Prepare cited context\" }).click();\n    const prepared = page.getByRole(\"region\", { name: \"Prepared context\", exact: true });\n    await expect(prepared.getByText(\"Integration workspace uses a reviewed release process.\", { exact: true })).toBeVisible();\n    await prepared.getByText(\"Sources and revisions\", { exact: true }).click();\n    await expect(prepared.getByText(/README.md, lines/)).toBeVisible();\n    writeFileSync(resolve(state.workspace, \"README.md\"), \"Updated workspace now uses a different release procedure.\\n\");\n    await page.getByRole(\"button\", { name: \"Prepare cited context\" }).click();\n    await expect(page.getByRole(\"alert\").filter({ hasText: \"Sources or access changed\" })).toBeVisible();\n    await expect(prepared).toHaveCount(0);\n    await page.getByRole(\"button\", { name: \"Refresh selected files\" }).click();\n    await expect(page.getByRole(\"button\", { name: \"Prepare cited context\" })).toBeEnabled();\n    await page.getByRole(\"button\", { name: \"Prepare cited context\" }).click();\n    await expect(prepared.getByText(\"Updated workspace now uses a different release procedure.\", { exact: true })).toBeVisible();\n    await prepared.getByText(\"Compare with earlier context\", { exact: true }).click();\n    await expect(prepared.getByText(\"Integration workspace uses a reviewed release process.\", { exact: true })).toBeVisible();\n    await page.getByRole(\"button\", { name: \"Withdraw README.md\" }).click();\n    await expect(prepared).toHaveCount(0);\n    await expect(page.getByRole(\"button\", { name: \"Withdraw README.md\" })).toHaveCount(0);\n    await page.getByRole(\"button\", { name: \"Revoke workspace access\" }).click();\n    await expect(page.getByText(\"No workspace has context access.\", { exact: true })).toBeVisible();\n    // A real MCP client has no operator authority. Its public code is paired\n    // by the browser only after separate native source and connection proofs.\n    probe = new ContextAgentProbe(String(seed.pythonExecutable), state.guardHome);\n    const initialTools = await probe.request(\"list\");\n    expect(initialTools.list_changed).toBe(true);\n    expect(initialTools.tools).toContain(\"get_context_status\");\n    expect(initialTools.tools).not.toContain(\"get_guard_context\");\n    const pending = await probe.request(\"get_context_status\");\n    expect(pending.data.phase).toBe(\"pending\");\n    expect(JSON.stringify(pending)).not.toContain(\"credential\");\n    expect((await probe.request(\"get_guard_context\", { query: \"release procedure\" })).ok).toBe(false);\n    await page.getByRole(\"combobox\", { name: \"Context consumer\", exact: true }).selectOption(\"codex\");\n    await page.getByLabel(\"Files relative to the workspace, one per line\").fill(\"README.md\");\n    await page.getByRole(\"button\", { name: \"Grant review source access\" }).click();\n    const appSourceProof = page.getByRole(\"dialog\");\n    await appSourceProof.getByLabel(\"Approval password\").fill(state.approvalPassword);\n    await appSourceProof.getByRole(\"button\", { name: \"Grant source access\", exact: true }).click();\n    await expect(appSourceProof).toHaveCount(0);\n    await page.getByRole(\"button\", { name: \"Refresh app connections\", exact: true }).click();\n    const connection = page.getByRole(\"region\", { name: `Context connection ${pending.data.session_id}`, exact: true });\n    await expect(connection.getByText(\"Waiting for your permission\", { exact: false })).toBeVisible();\n    await connection.getByRole(\"combobox\", { name: \"Workspace and app grant\", exact: true }).selectOption({ index: 1 });\n    const unprovedPair = await page.request.post(`${state.origin}/v1/context-assistance/workspace-grant`, {\n      headers: { \"x-guard-token\": state.daemonToken }, data: { input: {\n        action: \"authorize_agent\", session_id: pending.data.session_id,\n        scope_id: await connection.getByRole(\"combobox\", { name: \"Workspace and app grant\", exact: true }).inputValue(),\n      } },\n    });\n    expect([401, 403, 423]).toContain(unprovedPair.status());\n    await connection.getByRole(\"button\", { name: \"Authorize context connection\", exact: true }).click();\n    const pairingProof = page.getByRole(\"dialog\");\n    await expect(pairingProof).toContainText(pending.data.session_id);\n    await expect(pairingProof).toContainText(state.workspace);\n    await expect(pairingProof).toContainText(\"Codex\");\n    await pairingProof.getByLabel(\"Approval password\").fill(state.approvalPassword);\n    await pairingProof.getByRole(\"button\", { name: \"Authorize connection\", exact: true }).click();\n    await expect(pairingProof).toHaveCount(0);\n    await expect(connection.getByText(\"Grant assigned\", { exact: false })).toBeVisible();\n    const authorized = await probe.request(\"get_context_status\");\n    expect(authorized.data.app).toBe(\"codex\");\n    expect(authorized.data.harness_route_qualification).toBe(\"not_established\");\n    const agentContext = await probe.request(\"get_guard_context\", { query: \"release procedure\" });\n    expect(agentContext.ok).toBe(true);\n    const agentBrief = agentContext.data.result.brief;\n    expect(agentBrief.rendered).toContain(\"Updated workspace now uses a different release procedure.\");\n    expect(agentBrief.citations.length).toBeGreaterThanOrEqual(2);\n    expect((await probe.request(\"explain_guard_context\", { snapshot_id: agentBrief.snapshot_id })).ok).toBe(true);\n    expect((await probe.request(\"get_guard_context\", { query: \"release procedure\", scope_id: \"foreign\", app: \"cursor\" })).ok).toBe(false);\n    await page.getByRole(\"combobox\", { name: \"Context consumer\", exact: true }).selectOption(\"dashboard\");\n    await page.getByLabel(\"Files relative to the workspace, one per line\").fill(\"README.md\");\n    await page.getByRole(\"button\", { name: \"Grant review source access\" }).click();\n    const reviewSourceProof = page.getByRole(\"dialog\");\n    await reviewSourceProof.getByLabel(\"Approval password\").fill(state.approvalPassword);\n    await reviewSourceProof.getByRole(\"button\", { name: \"Grant source access\", exact: true }).click();\n    await expect(reviewSourceProof).toHaveCount(0);\n    const nativeReview = JSON.parse(execFileSync(String(seed.pythonExecutable), [\"-B\",\n      \"/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/scripts/ci/dashboard_context_native_review.py\",\n      \"--guard-home\", state.guardHome, \"--workspace\", state.workspace], { encoding: \"utf8\", timeout: 15_000 }));\n    expect((await probe.request(\"list\")).tools).toContain(\"explain_guard_action\");\n    const nativeAgentContext = await probe.request(\"explain_guard_action\", { decision_id: nativeReview.decision_id });\n    expect(nativeAgentContext.ok).toBe(true);\n    expect(nativeAgentContext.data.result.association.binding).toBe(\"authenticated_native_decision\");\n    expect(nativeAgentContext.data.result.association.execution_binding).toBe(\"unqualified\");\n    expect(nativeAgentContext.data.result.brief.citations.some((citation: { source: string }) => citation.source === \"guard:action\")).toBe(true);\n    expect((await probe.request(\"explain_guard_action\", { decision_id: nativeReview.decision_id,\n      snapshot_id: nativeAgentContext.data.result.brief.snapshot_id })).ok).toBe(true);\n    expect((await probe.request(\"explain_guard_action\", { decision_id: nativeReview.decision_id, app: \"cursor\" })).ok).toBe(false);\n    await page.goto(`/requests/${nativeReview.request_id}`);\n    const optionalContext = page.getByRole(\"region\", { name: \"Optional decision context\", exact: true });\n    await expect(optionalContext).toBeVisible();\n    const allowOnce = page.getByRole(\"button\", { name: \"Allow just this once\", exact: true });\n    const alwaysAllow = page.getByRole(\"radio\", { name: /^Always allow exact action/ });\n    await expect(allowOnce).toBeEnabled();\n    await expect(alwaysAllow).toBeEnabled();\n    await optionalContext.getByRole(\"button\", { name: \"Prepare decision context\", exact: true }).click();\n    await expect(allowOnce).toBeEnabled();\n    const actionContext = optionalContext.getByRole(\"region\", { name: \"Native decision context\", exact: true });\n    await expect(actionContext.getByText(/Authenticated native Guard decision/)).toBeVisible();\n    await actionContext.getByText(\"Sources and revisions\", { exact: true }).click();\n    await expect(actionContext.getByText(/Authenticated native decision facts, lines/)).toBeVisible();\n    await optionalContext.getByRole(\"button\", { name: \"Verify context sources\", exact: true }).click();\n    await expect(optionalContext.getByText(\"The retained selection and its sources were verified again.\", { exact: true })).toBeVisible();\n    await expect(allowOnce).toBeEnabled();\n    await expect(alwaysAllow).toBeEnabled();\n    await contextHistoryAndRepairFlow(page, state, nativeReview, probe);\n    await page.goto(\"/settings?section=protection\");\n    await page.getByRole(\"button\", { name: \"Refresh app connections\", exact: true }).click();\n    await connection.getByRole(\"button\", { name: \"Revoke context connection\", exact: true }).click();\n    await expect(connection).toHaveCount(0);\n    const revoked = await probe.request(\"get_guard_context\", { query: \"release procedure\" });\n    expect(revoked.ok).toBe(false);\n    expect(revoked.error.code).toBe(\"native_context_assistance_context_scope_denied\");\n    await clearContextFromRepair(page);\n    await page.goto(\"/settings?section=protection\");\n    // An unrelated settings save must preserve raw local consent and the verified generation.\n    const timeout = page.getByRole(\"spinbutton\", { name: \"How long to wait for your answer\" });\n    await timeout.fill(String(Number(await timeout.inputValue()) + 30));\n    await saveWithProof(page, state);\n    expect((await status()).requested_enabled).toBe(true);\n    expect((await status()).effective_enabled).toBe(true);\n    await page.reload();\n    await expect(toggle).toHaveAttribute(\"aria-checked\", \"true\");\n    await page.goto(\"/\");\n    const overview = page.getByRole(\"region\", { name: \"Context assistance overview\" });\n    await expect(overview.getByRole(\"status\")).toHaveText(\"Ready\");\n    await overview.getByRole(\"button\", { name: \"Turn off context assistance\", exact: true }).click();\n    await expect(overview.getByRole(\"status\")).toHaveText(\"Off\");\n    expect((await status()).requested_enabled).toBe(false);\n    expect((await status()).runtime).toBeNull();\n    expect((await probe.request(\"list\")).tools).not.toContain(\"get_guard_context\");\n    const disabled = await probe.request(\"get_guard_context\", { query: \"release procedure\" });\n    expect(disabled.error.code).toBe(\"native_context_assistance_disabled\");\n    await overview.getByRole(\"button\", { name: \"Manage context assistance\" }).click();\n    await expect(toggle).toHaveAttribute(\"aria-checked\", \"false\");\n    await page.getByRole(\"button\", { name: \"Choose a verified runtime\" }).click();\n    await expect(page.getByLabel(\"Local runtime\", { exact: true })).toHaveValue(String(seed.runtimeId));\n    await expect(toggle).toBeEnabled();\n    await toggle.click();\n    await saveWithProof(page, state);\n    await page.getByRole(\"button\", { name: \"Start context assistance\" }).click();\n    await expect.poll(async () => (await status()).effective_enabled, { timeout: 30_000 }).toBe(true);\n    await page.setViewportSize({ width: 390, height: 844 });\n    await expect(page.getByText(\"No workspace has context access.\", { exact: true })).toBeVisible();\n    const off = page.getByRole(\"button\", { name: \"Turn off now\" });\n    await off.scrollIntoViewIfNeeded();\n    await expect(off).toBeVisible();\n    await off.click();\n    await expect.poll(async () => (await status()).requested_enabled).toBe(false);\n    expect((await status()).runtime).toBeNull();\n    observations.push({event:\"native_off_observed_before_reload\",ms:Date.now()});\n    await page.reload();\n    await expect(toggle).toHaveAttribute(\"aria-checked\", \"false\");\n    await expectNoErrorBoundary(page);\n    // Browser-supplied runtime assertions cannot replace native verification.\n    const forged = await page.request.post(`${state.origin}/v1/context-assistance/activate`, {\n      headers: { \"x-guard-token\": state.daemonToken }, data: { python_version: [3, 14], approved: true },\n    });\n    expect(forged.status()).toBe(400);\n    expect(await forged.json()).toEqual({\n      error: \"context_assistance_unavailable\", code: \"native_context_assistance_control_input_invalid\",\n    });\n    expect((await status()).effective_enabled).toBe(false);\n    await contextSharingFlow(page, state, saveWithProof);\n  } finally {\n    observations.push({event:\"final_cleanup\",ms:Date.now()});\n    await Promise.allSettled(pendingObservations);\n    writeFileSync(\"/private/tmp/hol-guard-cigar-control-preflight-20261025/browser-stop-diagnostic/observations.json\", JSON.stringify(observations, null, 2));\n    await daemonApi(state, \"/v1/context-assistance/stop\", { method: \"POST\", body: \"{}\" });\n    await probe?.close();\n  }\n});\n"
+  },
+  "diagnostic_setup_attempts": {
+    "loader-failure": {
+      "controller": {
+        "schema": "guard-cigar-worker-reuse-browser-controller.v1",
+        "command": [
+          "/usr/local/bin/node",
+          "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/dashboard/node_modules/@playwright/test/cli.js",
+          "test",
+          "--config",
+          "/private/tmp/hol-guard-cigar-control-preflight-20261025/browser-stop-diagnostic/config.mts",
+          "--project=mutating",
+          "--no-deps",
+          "--max-failures=1",
+          "context-assistance.mutating.spec.ts"
+        ],
+        "returncode": 1,
+        "seconds": 10.829,
+        "source_commit": "1e341429b8006beec74c31cf8c0d230793c0be7f",
+        "planned_cases": 1,
+        "stats": {
+          "startTime": "2026-10-25T10:46:40.584Z",
+          "duration": 9284.428,
+          "expected": 0,
+          "skipped": 0,
+          "unexpected": 0,
+          "flaky": 0
+        },
+        "inputs_unchanged": true,
+        "fingerprinted_files": 1830,
+        "observed_new_descendants_remaining": 0,
+        "resources": {
+          "samples": 148,
+          "sampling_errors": 0,
+          "median_rss_bytes": 984350720,
+          "peak_rss_bytes": 1254670336,
+          "at_peak_counts": {
+            "guard_python_worker": 1,
+            "benchmark_daemon_host": 1,
+            "other_descendant": 1,
+            "native_runtime": 4
+          },
+          "at_peak_rss_by_kind": {
+            "guard_python_worker": 449576960,
+            "benchmark_daemon_host": 469942272,
+            "other_descendant": 231309312,
+            "native_runtime": 103841792
+          },
+          "maximum_counts": {
+            "other_python_child": 1,
+            "exiting_host_python_child": 1,
+            "native_runtime": 4,
+            "guard_python_worker": 1,
+            "terminated_child": 1,
+            "python_bridge": 1,
+            "benchmark_daemon_host": 1,
+            "other_descendant": 2,
+            "sdk_worker": 1
+          },
+          "includes_observed_reparented_children": true,
+          "shared_pages_may_be_counted_in_multiple_processes": true
+        },
+        "installed_static_assets": 33,
+        "static_override": false,
+        "traces_and_screenshots": "off",
+        "fixture_only_password_and_session_proofs": true,
+        "real_credentials_or_live_Guard_accessed": false,
+        "scope": "Three existing React/HTTP/installed-native flows with explicit test-native selection; local Chromium headless shell1223/Playwright1.60.0; no Desktop release qualification"
+      },
+      "inputs": {
+        "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/browser-stop-diagnostic/loader-failure/inputs.json",
+        "bytes": 374133,
+        "sha256": "4ec8376a82cb86b9a40c5a5f45342b09268d892477eb3fcb9f4d52df30794aa5"
+      },
+      "report": {
+        "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/browser-stop-diagnostic/loader-failure/report.json",
+        "bytes": 4672,
+        "sha256": "a9abda58caf902e9cd432994181610b7cd10e3a9494375ca3a5127e867f148bc"
+      }
+    },
+    "helper-location-failure": {
+      "controller": {
+        "schema": "guard-cigar-worker-reuse-browser-controller.v1",
+        "command": [
+          "/usr/local/bin/node",
+          "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/dashboard/node_modules/@playwright/test/cli.js",
+          "test",
+          "--config",
+          "/private/tmp/hol-guard-cigar-control-preflight-20261025/browser-stop-diagnostic/config.mts",
+          "--project=mutating",
+          "--no-deps",
+          "--max-failures=1",
+          "context-assistance.mutating.spec.ts"
+        ],
+        "returncode": 1,
+        "seconds": 20.841,
+        "source_commit": "1e341429b8006beec74c31cf8c0d230793c0be7f",
+        "planned_cases": 1,
+        "stats": {
+          "startTime": "2026-10-25T10:47:47.117Z",
+          "duration": 19373.656,
+          "expected": 0,
+          "skipped": 0,
+          "unexpected": 1,
+          "flaky": 0
+        },
+        "inputs_unchanged": true,
+        "fingerprinted_files": 1831,
+        "observed_new_descendants_remaining": 0,
+        "resources": {
+          "samples": 268,
+          "sampling_errors": 0,
+          "median_rss_bytes": 1202552832,
+          "peak_rss_bytes": 2437709824,
+          "at_peak_counts": {
+            "benchmark_daemon_host": 1,
+            "other_descendant": 6,
+            "guard_python_worker": 3,
+            "sdk_worker": 2,
+            "python_bridge": 1,
+            "native_runtime": 7
+          },
+          "at_peak_rss_by_kind": {
+            "benchmark_daemon_host": 473317376,
+            "other_descendant": 1026015232,
+            "guard_python_worker": 661782528,
+            "sdk_worker": 118276096,
+            "python_bridge": 26656768,
+            "native_runtime": 131661824
+          },
+          "maximum_counts": {
+            "other_python_child": 1,
+            "guard_python_worker": 3,
+            "other_descendant": 9,
+            "sdk_worker": 2,
+            "exiting_host_python_child": 1,
+            "terminated_child": 1,
+            "native_runtime": 7,
+            "python_bridge": 1,
+            "benchmark_daemon_host": 1
+          },
+          "includes_observed_reparented_children": true,
+          "shared_pages_may_be_counted_in_multiple_processes": true
+        },
+        "installed_static_assets": 33,
+        "static_override": false,
+        "traces_and_screenshots": "off",
+        "fixture_only_password_and_session_proofs": true,
+        "real_credentials_or_live_Guard_accessed": false,
+        "scope": "Three existing React/HTTP/installed-native flows with explicit test-native selection; local Chromium headless shell1223/Playwright1.60.0; no Desktop release qualification"
+      },
+      "inputs": {
+        "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/browser-stop-diagnostic/helper-location-failure/inputs.json",
+        "bytes": 374299,
+        "sha256": "01149470e80ec08f8498f6b9ac6e2345e94e6ea62cf88e087d262faf2e54e458"
+      },
+      "report": {
+        "path": "/private/tmp/hol-guard-cigar-control-preflight-20261025/browser-stop-diagnostic/helper-location-failure/report.json",
+        "bytes": 9348,
+        "sha256": "8b34e2c6f27a0f643b00afd5fa5114169e6e5a00c4287a262f0f436d788d2503"
+      }
+    }
+  },
+  "source_ordering": {
+    "rust/crates/guard-runtime/src/context_assistance_op.rs": {
+      "receipt": {
+        "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/rust/crates/guard-runtime/src/context_assistance_op.rs",
+        "bytes": 6673,
+        "sha256": "6e0229fe6f71c16cf0445dcc975ed89cb171a6da7ababd8ba3551f2cc2c6cbc3"
+      },
+      "text": "//! Authenticated resident control surface. No caller-provided runtime facts,\n//! executable paths, bundle fingerprints or managed policy are accepted.\nuse crate::context_assistance_service::Check;\nuse crate::guard_config_load::AssistanceSettings;\nuse crate::package_authority_op::request_digest_with_limit;\nuse crate::policy_store::PolicySnapshotStore;\nuse serde::{Deserialize, Serialize};\nuse serde_json::json;\nuse std::path::Path;\n\npub(crate) const FEATURE: &str = \"context-assistance-control-v2\";\npub(crate) const WORKSPACE_FEATURE: &str = \"context-assistance-workspaces-v1\";\npub(crate) const ACTION_FEATURE: &str = \"context-assistance-native-decisions-v1\";\npub(crate) const HISTORY_FEATURE: &str = \"context-assistance-history-v1\";\n\n#[derive(Debug, Deserialize, Serialize)]\n#[serde(deny_unknown_fields)]\npub(crate) struct Request {\n    schema: String,\n    request_id: String,\n    pub(crate) query: Query,\n}\n#[derive(Clone, Copy, Debug, Deserialize, Serialize)]\n#[serde(rename_all = \"snake_case\")]\npub(crate) enum Kind {\n    Status,\n    Installations,\n    Recheck,\n    Activate,\n    Stop,\n    Workspace,\n    WorkspaceAccess,\n    WorkspaceGrant,\n}\nimpl Kind {\n    fn name(self) -> &'static str {\n        match self {\n            Self::Status => \"status\",\n            Self::Installations => \"installations\",\n            Self::Recheck => \"recheck\",\n            Self::Activate => \"activate\",\n            Self::Stop => \"stop\",\n            Self::Workspace => \"workspace\",\n            Self::WorkspaceAccess => \"workspace_access\",\n            Self::WorkspaceGrant => \"workspace_grant\",\n        }\n    }\n}\n\n#[derive(Debug, Deserialize, Serialize)]\n#[serde(deny_unknown_fields)]\npub(crate) struct Query {\n    kind: Kind,\n    pub(crate) guard_home: String,\n    input: serde_json::Value,\n}\n\npub(crate) fn evaluate(request: &Request, store: &PolicySnapshotStore) -> Result<Vec<u8>, String> {\n    let digest = request_digest_with_limit(request, 64 * 1024)\n        .map_err(|_| \"native_context_assistance_request_too_large\")?;\n    let answer = (|| {\n        validate(request, store)?;\n        let home = Path::new(&request.query.guard_home);\n        let service = store.context_assistance();\n        if matches!(request.query.kind, Kind::Stop) {\n            service.stop()?;\n            crate::guard_config_update::disable_context_assistance(home)?;\n        }\n        let generation = service.configuration_generation()?;\n        let settings = match crate::guard_config_load::context_assistance_config(home) {\n            Ok(value) => value,\n            Err(_) => {\n                let repair = matches!(request.query.kind, Kind::Workspace | Kind::WorkspaceAccess)\n                    && matches!(\n                        request.query.input.get(\"action\").and_then(|v| v.as_str()),\n                        Some(\"data\" | \"clear\" | \"forget_history\" | \"forget_saved\")\n                    );\n                if !repair {\n                    service.configure_at(\n                        AssistanceSettings::unavailable(\"configuration_unavailable\"),\n                        generation,\n                    )?;\n                    return Err(\"native_context_assistance_configuration_unavailable\".into());\n                }\n                AssistanceSettings::unavailable(\"configuration_unavailable\")\n            }\n        };\n        service.configure_at(settings, generation)?;\n        service.ensure_housekeeping(home);\n        let data = if matches!(\n            request.query.kind,\n            Kind::Workspace | Kind::WorkspaceAccess | Kind::WorkspaceGrant\n        ) {\n            Some(service.workspace(\n                home,\n                store,\n                request.query.input.clone(),\n                matches!(request.query.kind, Kind::WorkspaceAccess),\n                matches!(request.query.kind, Kind::WorkspaceGrant),\n            )?)\n        } else {\n            None\n        };\n        match request.query.kind {\n            Kind::Activate => service.schedule(Check::Activate, home.into())?,\n            Kind::Recheck => service.schedule(Check::Recheck, home.into())?,\n            Kind::Status\n            | Kind::Installations\n            | Kind::Stop\n            | Kind::Workspace\n            | Kind::WorkspaceAccess\n            | Kind::WorkspaceGrant => {}\n        }\n        let mut state = service.status()?;\n        if matches!(request.query.kind, Kind::Installations) {\n            state[\"installation_options\"] = json!(\n                crate::policy_store::context_assistance_registry::list(home)?\n            );\n        }\n        let mut payload = json!({\"kind\": request.query.kind.name(), \"state\": state});\n        if let Some(data) = data {\n            payload[\"data\"] = data;\n        }\n        Ok(payload)\n    })();\n    response(request, &digest, answer)\n}\n\nfn validate(request: &Request, store: &PolicySnapshotStore) -> Result<(), String> {\n    if request.schema != \"guard-context-assistance-request.v1\"\n        || request.request_id.is_empty()\n        || request.request_id.len() > 128\n        || !Path::new(&request.query.guard_home).is_absolute()\n    {\n        return Err(\"native_context_assistance_request_invalid\".into());\n    }\n    store.require_guard_home(&request.query.guard_home)?;\n    if !matches!(\n        request.query.kind,\n        Kind::Workspace | Kind::WorkspaceAccess | Kind::WorkspaceGrant\n    ) && request\n        .query\n        .input\n        .as_object()\n        .is_none_or(|input| !input.is_empty())\n    {\n        return Err(\"native_context_assistance_control_input_invalid\".into());\n    }\n    Ok(())\n}\n\npub(crate) fn reject_busy(\n    request: &Request,\n    store: &PolicySnapshotStore,\n) -> Result<Vec<u8>, String> {\n    let digest = request_digest_with_limit(request, 64 * 1024)\n        .map_err(|_| \"native_context_assistance_request_too_large\")?;\n    let code = validate(request, store)\n        .err()\n        .unwrap_or_else(|| \"native_context_assistance_busy\".into());\n    response(request, &digest, Err(code))\n}\n\nfn response(\n    request: &Request,\n    digest: &str,\n    answer: Result<serde_json::Value, String>,\n) -> Result<Vec<u8>, String> {\n    let response = match answer {\n        Ok(payload) => {\n            json!({\"schema\":\"guard-context-assistance-result.v1\", \"request_id\":request.request_id,\n            \"request_sha256\":digest, \"status\":\"ok\", \"code\":\"ok\", \"payload\":payload})\n        }\n        Err(code) => {\n            json!({\"schema\":\"guard-context-assistance-result.v1\", \"request_id\":request.request_id,\n            \"request_sha256\":digest, \"status\":\"error\", \"code\":code, \"payload\":null})\n        }\n    };\n    crate::encode_response(&response)\n}\n\n#[cfg(test)]\n#[path = \"context_assistance_op_tests.rs\"]\nmod tests;\n"
+    },
+    "rust/crates/guard-runtime/src/context_assistance_service_lifecycle.rs": {
+      "receipt": {
+        "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/rust/crates/guard-runtime/src/context_assistance_service_lifecycle.rs",
+        "bytes": 5508,
+        "sha256": "4d4da000e5de7302a01c06980d62c722c204792ceb12ecbb6b5e3711b09367a0"
+      },
+      "text": "use super::*;\n\npub(super) fn configure(\n    shared: &Mutex<State>,\n    mut settings: AssistanceSettings,\n    generation: Option<u64>,\n) -> Result<(), String> {\n    let old = {\n        let mut state = lock(shared)?;\n        if state.closed {\n            return Err(\"native_context_assistance_shutdown\".into());\n        }\n        if generation.is_some_and(|generation| generation != state.generation) {\n            return Err(\"native_context_assistance_context_stale\".into());\n        }\n        // Stop revokes authority before waiting for cleanup or disk I/O. A\n        // concurrent read of the older on-disk opt-in must not reverse it.\n        if state.stopping {\n            if !settings.requested.enabled && settings.diagnostic.is_none() {\n                state.stopping = false;\n                // Also invalidate readers that started during Stop and saw\n                // the old disk bytes before opt-out was persisted.\n                state.generation = state\n                    .generation\n                    .checked_add(1)\n                    .ok_or(\"native_context_assistance_generation_exhausted\")?;\n            } else {\n                settings.requested.enabled = false;\n                settings.effective.enabled = false;\n            }\n        }\n        if state.settings == settings {\n            return Ok(());\n        }\n        if let Some(job) = &state.pending {\n            job.cancel.store(true, Ordering::Release);\n        }\n        state.generation = state\n            .generation\n            .checked_add(1)\n            .ok_or(\"native_context_assistance_generation_exhausted\")?;\n        state.settings = settings;\n        state.error = None;\n        state.last_check = None;\n        revoke_runtime(&mut state)\n    };\n    await_cleanup(old);\n    Ok(())\n}\n\npub(super) fn await_cleanup(actor: Option<Arc<RuntimeActor<Engine>>>) -> bool {\n    actor\n        .as_ref()\n        .is_none_or(|actor| actor.close_and_wait(Duration::from_millis(500)))\n}\n\npub(super) fn start_watcher(\n    weak: Weak<Mutex<State>>,\n    generation: u64,\n    home: PathBuf,\n) -> std::io::Result<()> {\n    std::thread::Builder::new()\n        .name(\"guard-cigar-settings\".into())\n        .spawn(move || loop {\n            std::thread::sleep(Duration::from_secs(1));\n            let Some(shared) = weak.upgrade() else {\n                break;\n            };\n            let old = {\n                let Ok(mut state) = lock(&shared) else {\n                    break;\n                };\n                if state.generation != generation || state.runtime.is_none() {\n                    break;\n                }\n                if state.last_used.elapsed()\n                    >= Duration::from_secs(u64::from(\n                        state.settings.effective.limits.idle_shutdown_seconds,\n                    ))\n                {\n                    state.error = Some(\"runtime_idle\".into());\n                    revoke_runtime(&mut state)\n                } else if !state\n                    .runtime\n                    .as_ref()\n                    .expect(\"runtime checked above\")\n                    .status()\n                    .active\n                {\n                    // The actor owns heartbeats/SDK calls. Only atomic liveness is\n                    // read while holding the settings state.\n                    state.error = Some(\"runtime_closed\".into());\n                    revoke_runtime(&mut state)\n                } else {\n                    None\n                }\n            };\n            if old.is_some() {\n                await_cleanup(old);\n                break;\n            }\n            let current = crate::guard_config_load::context_assistance_config(&home)\n                .unwrap_or_else(|_| AssistanceSettings::unavailable(\"configuration_unavailable\"));\n            if configure(&shared, current, Some(generation)).is_err() {\n                break;\n            }\n        })\n        .map(|_| ())\n}\n\nimpl Service {\n    pub(crate) fn stop(&self) -> Result<(), String> {\n        let old = {\n            let mut state = lock(&self.state)?;\n            state.stopping = true;\n            if let Some(job) = &state.pending {\n                job.cancel.store(true, Ordering::Release);\n            }\n            state.generation = state\n                .generation\n                .checked_add(1)\n                .ok_or(\"native_context_assistance_generation_exhausted\")?;\n            state.settings.requested.enabled = false;\n            state.settings.effective.enabled = false;\n            state.error = None;\n            state.last_check = None;\n            revoke_runtime(&mut state)\n        };\n        await_cleanup(old);\n        Ok(())\n    }\n\n    /// Resident teardown only. Reopening settings cannot restart this service.\n    /// No persisted consent is changed, and no authority survives a new service.\n    pub(crate) fn shutdown(&self) {\n        let old = {\n            // Poison recovery is limited to destructive in-memory cancellation.\n            let mut state = self.state.lock().unwrap_or_else(|error| error.into_inner());\n            state.closed = true;\n            if let Some(job) = &state.pending {\n                job.cancel.store(true, Ordering::Release);\n            }\n            state.generation = state.generation.saturating_add(1);\n            state.settings.requested.enabled = false;\n            state.settings.effective.enabled = false;\n            state.last_check = None;\n            revoke_runtime(&mut state)\n        };\n        await_cleanup(old);\n    }\n}\n"
+    },
+    "dashboard/src/context-assistance/settings-panel.tsx": {
+      "receipt": {
+        "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/dashboard/src/context-assistance/settings-panel.tsx",
+        "bytes": 5824,
+        "sha256": "c019eca5a5a088ad8a1b0cfd71463f693623e0e57ded0b2863053af986e6efca"
+      },
+      "text": "import { useCallback, useEffect, useRef, useState } from \"react\";\nimport type { GuardApprovalGatePublicConfig, GuardContextAssistanceConfig } from \"../guard-types\";\nimport { controlContextAssistance, fetchContextAssistance, fetchContextInstallations } from \"./api\";\nimport { ContextSettingsControls } from \"./settings-controls\";\nimport type { ContextAssistanceStatus, ContextControlAction, ContextInstallation } from \"./types\";\nimport { ContextWorkspacesPanel } from \"./workspaces-panel\";\n\ntype Props = {\n  value?: GuardContextAssistanceConfig | null;\n  savedValue?: GuardContextAssistanceConfig | null;\n  gate?: GuardApprovalGatePublicConfig | null;\n  locked: boolean;\n  disabled: boolean;\n  onChange: (value: GuardContextAssistanceConfig) => void;\n  onStopped: (value: GuardContextAssistanceConfig) => void;\n  onBusyChange: (busy: boolean) => void;\n};\n\nexport function ContextAssistanceSettings(props: Props) {\n  const [status, setStatus] = useState<ContextAssistanceStatus | null>(null);\n  const [installations, setInstallations] = useState<ContextInstallation[] | null>(null);\n  const [error, setError] = useState<string | null>(null);\n  const [loading, setLoading] = useState(true);\n  const [busy, setBusy] = useState(false);\n  const request = useRef<AbortController | null>(null);\n  const revision = useRef(0);\n  const pending = useRef(false);\n  const mounted = useRef(false);\n  const savedRevision = JSON.stringify(props.savedValue);\n\n  const refresh = useCallback(async () => {\n    if (pending.current) return;\n    const current = ++revision.current;\n    request.current?.abort();\n    const controller = new AbortController();\n    request.current = controller;\n    try {\n      const result = await fetchContextAssistance(controller.signal);\n      if (current !== revision.current) return;\n      setStatus(result);\n      setError(null);\n    } catch (cause) {\n      if (current !== revision.current) return;\n      setStatus(null);\n      setError(cause instanceof Error ? cause.message : \"Context assistance status is unavailable.\");\n    } finally {\n      if (current === revision.current) setLoading(false);\n    }\n  }, []);\n\n  useEffect(() => {\n    void refresh();\n  }, [refresh, savedRevision]);\n\n  useEffect(() => {\n    const onFocus = () => { if (!document.hidden) void refresh(); };\n    window.addEventListener(\"focus\", onFocus);\n    document.addEventListener(\"visibilitychange\", onFocus);\n    return () => {\n      window.removeEventListener(\"focus\", onFocus);\n      document.removeEventListener(\"visibilitychange\", onFocus);\n    };\n  }, [refresh]);\n\n  useEffect(() => {\n    if (!status?.job && !status?.effective_enabled) return;\n    const timer = window.setTimeout(() => { if (!document.hidden) void refresh(); }, status.job ? 500 : 10_000);\n    return () => window.clearTimeout(timer);\n  }, [status, refresh]);\n\n  const onBusyChange = props.onBusyChange;\n  useEffect(() => {\n    mounted.current = true;\n    return () => {\n      mounted.current = false;\n      revision.current += 1;\n      request.current?.abort();\n      onBusyChange(false);\n    };\n  }, [onBusyChange]);\n\n  async function perform(action: ContextControlAction | \"installations\") {\n    if (pending.current || props.disabled) return;\n    pending.current = true;\n    const current = ++revision.current;\n    request.current?.abort();\n    const controller = new AbortController();\n    request.current = controller;\n    setBusy(true);\n    props.onBusyChange(true);\n    setError(null);\n    // Even an unknown transport outcome must not leave a draft that can\n    // accidentally opt back in at the next ordinary settings save.\n    const value = props.value ?? status?.preferences;\n    if (action === \"stop\" && value) props.onChange({ ...value, enabled: false });\n    try {\n      const result = action === \"installations\"\n        ? await fetchContextInstallations(controller.signal)\n        : await controlContextAssistance(action, controller.signal);\n      if (current !== revision.current) return;\n      setStatus(result);\n      if (action === \"installations\") setInstallations(result.installation_options ?? []);\n      if (action === \"stop\") props.onStopped(result.preferences);\n    } catch (cause) {\n      if (current !== revision.current) return;\n      setStatus(null);\n      setError(cause instanceof Error ? cause.message : \"The context assistance operation did not return a verified result. Refresh its status.\");\n    } finally {\n      pending.current = false;\n      if (mounted.current && current === revision.current) {\n        setBusy(false);\n        setLoading(false);\n        props.onBusyChange(false);\n      }\n    }\n  }\n\n  const value = props.value ?? status?.preferences ?? null;\n  const saved = props.savedValue ?? status?.preferences ?? null;\n  return <><ContextSettingsControls value={value} status={status} installations={installations}\n    loading={loading} busy={busy} disabled={props.disabled} locked={props.locked}\n    dirty={JSON.stringify(value) !== JSON.stringify(saved)} error={error}\n    onChange={props.onChange} onRefresh={() => void refresh()}\n    onChooseRuntime={() => void perform(\"installations\")} onControl={(action) => void perform(action)} />\n    <ContextWorkspacesPanel ready={status?.effective_enabled === true} generation={status?.generation ?? null}\n      dirty={JSON.stringify(value) !== JSON.stringify(saved)} documentsAllowed={status?.effective_preferences.sources.workspace_documents === true}\n      agentsAllowed={status?.effective_preferences.features.agent_context === true}\n      executionAllowed={status?.effective_preferences.features.execution_context === true\n        && status?.capabilities?.execution_context === true}\n      sharingAllowed={status?.effective_preferences.features.shared_agents === true && status?.runtime?.shared_compile_verified === true}\n      gate={props.gate ?? null} /></>;\n}\n"
+    }
+  },
+  "interpretation": [
+    "The first browser setup fails because its private runner supplies a compiler override alongside a packaged compiler. Removing only that runner override permits real product execution; native compiler protection stays intact.",
+    "The next original browser suite fails after Stop reports native off but reload shows an enabled draft. One case fails and two do not run; stable inputs and final containment are retained. That invocation has no request-order trace, so its exact cause remains unproven.",
+    "Native source revokes before cleanup and the settings write. Early read-only native status is not acknowledgement that persistence completed. A persistence test must await the Stop HTTP response before reloading.",
+    "The separately instrumented intended first case passes in 36.648 seconds with unchanged assertions and product bytes. A tool read observes Stop acknowledgement 21 ms before the early off observation, followed by settings enabled=false. This confirms acknowledged persistence in that diagnostic, not the original failed invocation timing.",
+    "The diagnostic overall fails because Playwright recursively discovers a retained archived spec and times it out after the intended case passes. The extra archive is outside the diagnostic driver fingerprint list and later overwrites the shared observation output. Only the printed first-case subset survives; the full array is not retained. The extra run and overall diagnostic are unqualified. No diagnostic is rerun after this outcome.",
+    "Two preceding diagnostic loader/helper-location failures are retained. Every terminal controller records zero remaining descendants. No product source, SDK, deadline, threshold or approval semantics change.",
+    "The original three browser cases now use a test-only helper to await the same Stop response and add status=200/requested=false/effective=false/runtime=null checks. All prior assertions remain. Fresh original-suite acceptance is required."
+  ]
+}

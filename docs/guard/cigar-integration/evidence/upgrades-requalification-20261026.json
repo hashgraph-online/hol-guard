@@ -1,0 +1,552 @@
+{
+  "schema": "guard-cigar-requalification-evidence.v1",
+  "recorded_at_utc": "2026-10-27T06:12:40.558679+00:00",
+  "scope": "Local macOS arm64 source-build exact CIGAR0.14.1 SDK/Python setup and installed receipt refresh. Test-only catalog qualification. Native saved-data inventory/preflight fixtures; no actual data generation migration or runtime switch.",
+  "base_head": "fedfc7a418145ed2f82cb21f9dd38a2dda85e46d",
+  "branch": "feature/integrate-cigar-0.14.1",
+  "uncommitted_source": true,
+  "native_proofs": {
+    "schema": "guard-cigar-native-requalification-all-v3-proofs.v1",
+    "captured_at_utc": "2026-10-27T06:11:40.907435+00:00",
+    "command": [
+      "/usr/bin/env",
+      "PATH=/Users/construct/.rustup/toolchains/stable-aarch64-apple-darwin/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+      "CARGO_TARGET_DIR=/private/tmp/hol-guard-cigar-upgrades-target",
+      "GUARD_CIGAR_INSTALL_TEST_INPUT=/private/tmp/hol-guard-cigar-upgrades-artifacts/install-test-input.json",
+      "GUARD_CIGAR_PRIVATE_PYTHON_TEST_INPUT=/private/tmp/hol-guard-cigar-upgrades-artifacts/managed-python-test-input-v2.json",
+      "/Users/construct/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+      "test",
+      "--offline",
+      "--locked",
+      "-p",
+      "hol-guard-runtime",
+      "--lib",
+      "context_assistance_registry",
+      "--",
+      "--include-ignored",
+      "--nocapture",
+      "--test-threads=1"
+    ],
+    "binary": "/private/tmp/hol-guard-cigar-upgrades-target/debug/deps/hol_guard_runtime-21f7f2b65f344f2a",
+    "binary_sha256": "6ceb66539ec2daef8e4533a539882075ce1b5dc30ff41b34a3ed2dd8b7103d16",
+    "test_log_sha256": "ad4f9eee24391849c4b4aec77e3faa850a63a326d2b543b40a509874bcdabef7",
+    "records": {
+      "CIGAR_PUBLIC_ACQUISITION_PROOF": {
+        "activation_granted": false,
+        "build_id": "cigar-0_14_1-10dd521dec82",
+        "cached_retry_equal": true,
+        "elapsed_ms": 2226,
+        "expanded_bytes": 11454530,
+        "files": 124,
+        "sdk_processes_started": 0,
+        "sdk_version": "0.14.1",
+        "tree_sha256": "5ebfc715f581c40c9fce73209271479a1926d5044543a46c720ba0049c35e1f4",
+        "wheels": 2
+      },
+      "GUARD_CIGAR_MANAGED_INSTALL_VERIFIED": {
+        "build_id": "cigar-0_14_1-10dd521dec82",
+        "elapsed_ms": 22781,
+        "guard_binary_sha256": "6ceb66539ec2daef8e4533a539882075ce1b5dc30ff41b34a3ed2dd8b7103d16",
+        "idempotent": true,
+        "lost_reply_reconciled": true,
+        "off_preserved": true,
+        "python": [
+          3,
+          14,
+          7
+        ],
+        "selection_unchanged": true,
+        "tree": "5ebfc715f581c40c9fce73209271479a1926d5044543a46c720ba0049c35e1f4",
+        "worker": "4650473529f0dc14e596b5cd0ca9d66e2d3bcd8ae11418b87ad971ac51ca78b8"
+      },
+      "GUARD_CIGAR_ACTIVE_INSTALL_CONTINUITY_VERIFIED": {
+        "bounded_cleanup_recovery_required": false,
+        "cancelled_before_publication": true,
+        "elapsed_ms": 20256,
+        "generation_unchanged": true,
+        "guard_binary_sha256": "6ceb66539ec2daef8e4533a539882075ce1b5dc30ff41b34a3ed2dd8b7103d16",
+        "max_status_us": 79,
+        "old_runtime_stayed_ready": true,
+        "partial_slot_removed": true,
+        "preferences_byte_identical": true,
+        "replacement_verified_before_cancel": true
+      },
+      "PRIVATE_PYTHON_INSTALL_PROOF": {
+        "approval_schema": "guard-cigar-bundle-approval.v3",
+        "changed_stdlib_refused_with_same_executable": true,
+        "elapsed_ms": 73692,
+        "features_verified": [
+          "graph",
+          "sharing",
+          "persistence",
+          "execution_context"
+        ],
+        "idempotent_reuse": true,
+        "lost_reply_recovered_without_probe": true,
+        "max_metadata_us": 1290,
+        "off_preserved": true,
+        "private_interpreter_id": "python:af55c1171c22c47c734003acb7293330c3ab12dcee560af5b3bd438c7086359c",
+        "python_build": {
+          "archive_bytes": 26753457,
+          "archive_sha256": "95eb8c87d16af37c54e9765e31d8c56c0d8ffa9968ea0f704f73a9b83f84e9f9",
+          "build_id": "cpython-3_14_10-20261026-darwin-arm64",
+          "executable_sha256": "26b5194d2beb09e648b4676ddc18a1384f182a7ed84f3db73106096aba6febf4",
+          "expanded_bytes": 106491517,
+          "files": 1701,
+          "platform": "darwin-arm64",
+          "python_version": [
+            3,
+            14,
+            10
+          ],
+          "qualification": "guard_qualified",
+          "qualification_receipt_sha256": "e6b416326b45dbf45f5590a35162d02739eac29792f616d4038444bba3ee0c4a",
+          "source_release": "20261026",
+          "source_revision": "fa506e0858ac9f2cc5b289c137b888a2aa24d1ee",
+          "tree_sha256": "1e446c992cf2c8b93f33925a422e5f7f5f7af770536589ec4c065a567bb88375",
+          "withdrawn": false
+        },
+        "python_facts": {
+          "abi": "cpython-314-darwin",
+          "debug_build": false,
+          "free_threaded": false,
+          "implementation": "cpython",
+          "platform": "darwin-arm64",
+          "release_level": "final",
+          "schema": "guard-cigar-interpreter.v1",
+          "version": [
+            3,
+            14,
+            10
+          ]
+        },
+        "runtime_binary_sha256": "6ceb66539ec2daef8e4533a539882075ce1b5dc30ff41b34a3ed2dd8b7103d16",
+        "runtime_id": "cigar:9f4d5b789c102660047853f953eee53cc91da61345c3cb3dbb3fb0eda0f4e1c0",
+        "schema": "guard-cigar-private-python-install-proof.v1",
+        "scope": "local-source-macos-arm64-test-catalog-only",
+        "sdk_build": {
+          "build_id": "cigar-0_14_1-10dd521dec82",
+          "core_version": "0.14.1",
+          "manifest_sha256": "472b722b5029f8dd3c7051c7d7d17a5909d251cf2ba3e0ae20ed9d7cf5b0b7f2",
+          "sdk_version": "0.14.1",
+          "source_revision": "10dd521dec8224d0957365a90111158e43c9d87f"
+        },
+        "selection_unchanged": true
+      },
+      "CIGAR_RECEIPT_REFRESH_PROOF": {
+        "build_id": "cigar-0_14_1-10dd521dec82",
+        "bundle_inodes_modes_mtimes_unchanged": true,
+        "elapsed_ms": 52025,
+        "guard_binary_sha256": "6ceb66539ec2daef8e4533a539882075ce1b5dc30ff41b34a3ed2dd8b7103d16",
+        "historical_slot_reused": true,
+        "lost_reply_reconciled_without_probe": true,
+        "off_preserved": true,
+        "old_sdk_answered_before_and_after_cancel_and_commit": true,
+        "opaque_runtime_id_preserved": true,
+        "qualified_features": [
+          "graph",
+          "sharing",
+          "persistence",
+          "execution_context"
+        ],
+        "schema": "guard-cigar-receipt-refresh-proof.v1",
+        "scope": "local-source-macos-arm64-test-catalog-only",
+        "selection_unchanged": true
+      }
+    },
+    "tests": {
+      "passed": 53,
+      "failed": 0,
+      "ignored": 0
+    }
+  },
+  "checks": {
+    "unit-stable": {
+      "kind": "unit-stable",
+      "command": [
+        "/usr/bin/env",
+        "PATH=/Users/construct/.rustup/toolchains/stable-aarch64-apple-darwin/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+        "CARGO_TARGET_DIR=/private/tmp/hol-guard-cigar-upgrades-target",
+        "/Users/construct/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+        "test",
+        "--offline",
+        "--locked",
+        "-p",
+        "guard-cigar-release",
+        "-p",
+        "guard-cigar-artifacts",
+        "-p",
+        "guard-cigar-install",
+        "-p",
+        "guard-context-assistance",
+        "--lib"
+      ],
+      "completed_at_utc": "2026-10-27T06:07:27.270864+00:00",
+      "exit_code": 0,
+      "log": "/private/tmp/hol-guard-cigar-upgrades-artifacts/requalification-final-v3-unit-stable.log",
+      "log_sha256": "d6d6e1a42ed2f2d85ff285f03717af05f47fbfa15faa541603175e847ee2a614",
+      "test_summaries": [
+        {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 20,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 48,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 59,
+          "failed": 0,
+          "ignored": 11
+        }
+      ],
+      "existing_warnings": [
+        "`guard-context-assistance` (lib test) generated 1 warning (1 duplicate)",
+        "`guard-context-assistance` (lib) generated 1 warning (run `cargo fix --lib -p guard-context-assistance` to apply 1 suggestion)",
+        "`guard-scanner` (lib) generated 1 warning (run `cargo fix --lib -p guard-scanner` to apply 1 suggestion)",
+        "hiding a lifetime that's elided elsewhere is confusing",
+        "use of deprecated method `std::sync::atomic::Atomic::<u64>::fetch_update`: renamed to `try_update` for consistency"
+      ]
+    },
+    "unit-msrv": {
+      "kind": "unit-msrv",
+      "command": [
+        "/usr/bin/env",
+        "PATH=/Users/construct/.rustup/toolchains/1.88.0-aarch64-apple-darwin/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+        "CARGO_TARGET_DIR=/private/tmp/hol-guard-cigar-upgrades-msrv-target",
+        "/Users/construct/.rustup/toolchains/1.88.0-aarch64-apple-darwin/bin/cargo",
+        "test",
+        "--offline",
+        "--locked",
+        "-p",
+        "guard-cigar-release",
+        "-p",
+        "guard-cigar-artifacts",
+        "-p",
+        "guard-cigar-install",
+        "-p",
+        "guard-context-assistance",
+        "--lib"
+      ],
+      "completed_at_utc": "2026-10-27T06:06:31.503046+00:00",
+      "exit_code": 0,
+      "log": "/private/tmp/hol-guard-cigar-upgrades-artifacts/requalification-final-v3-unit-msrv.log",
+      "log_sha256": "0ebc8c08672215e63a74e30f8a1840d746b351c57f443ade0a69ee523bc0083d",
+      "test_summaries": [
+        {
+          "passed": 0,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 20,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 48,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "passed": 59,
+          "failed": 0,
+          "ignored": 11
+        }
+      ],
+      "existing_warnings": []
+    },
+    "native-msrv": {
+      "kind": "native-msrv",
+      "command": [
+        "/usr/bin/env",
+        "PATH=/Users/construct/.rustup/toolchains/1.88.0-aarch64-apple-darwin/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+        "CARGO_TARGET_DIR=/private/tmp/hol-guard-cigar-upgrades-msrv-target",
+        "/Users/construct/.rustup/toolchains/1.88.0-aarch64-apple-darwin/bin/cargo",
+        "check",
+        "--offline",
+        "--locked",
+        "-p",
+        "hol-guard-runtime",
+        "--lib"
+      ],
+      "completed_at_utc": "2026-10-27T06:07:28.149831+00:00",
+      "exit_code": 0,
+      "log": "/private/tmp/hol-guard-cigar-upgrades-artifacts/requalification-final-v3-native-msrv.log",
+      "log_sha256": "fd1c06db5d7bbfe1e411b642e7fb0bfa05ab9ef1451031e561d1b1f63d0615e1",
+      "test_summaries": [],
+      "existing_warnings": []
+    },
+    "clippy": {
+      "kind": "clippy",
+      "command": [
+        "/usr/bin/env",
+        "PATH=/Users/construct/.rustup/toolchains/stable-aarch64-apple-darwin/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+        "CARGO_TARGET_DIR=/private/tmp/hol-guard-cigar-upgrades-target",
+        "/Users/construct/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+        "clippy",
+        "--offline",
+        "--locked",
+        "-p",
+        "guard-cigar-release",
+        "-p",
+        "guard-cigar-artifacts",
+        "-p",
+        "guard-cigar-install",
+        "--lib",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "completed_at_utc": "2026-10-27T06:07:30.310385+00:00",
+      "exit_code": 0,
+      "log": "/private/tmp/hol-guard-cigar-upgrades-artifacts/requalification-final-v3-clippy.log",
+      "log_sha256": "a5f4c585ee974ca44916ac30a98bbc189e067a7e0a6bc6d2e8d6bc525be724af",
+      "test_summaries": [],
+      "existing_warnings": []
+    },
+    "context-clippy": {
+      "command": [
+        "/usr/bin/env",
+        "PATH=/Users/construct/.rustup/toolchains/stable-aarch64-apple-darwin/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+        "CARGO_TARGET_DIR=/private/tmp/hol-guard-cigar-upgrades-target",
+        "/Users/construct/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo",
+        "clippy",
+        "--offline",
+        "--locked",
+        "-p",
+        "guard-context-assistance",
+        "--lib"
+      ],
+      "exit_code": 0,
+      "completed_at_utc": "2026-10-27T06:06:28.632805+00:00",
+      "log_sha256": "cbe7c0eea3d4a8561dedfec092ec890bcc287ebc05211a70917fe82984f3e400",
+      "warnings": [
+        "`guard-context-assistance` (lib) generated 1 warning (run `cargo clippy --fix --lib -p guard-context-assistance -- ` to apply 1 suggestion)",
+        "`guard-scanner` (lib) generated 1 warning (run `cargo clippy --fix --lib -p guard-scanner -- ` to apply 1 suggestion)",
+        "hiding a lifetime that's elided elsewhere is confusing",
+        "use of deprecated method `std::sync::atomic::Atomic::<u64>::fetch_update`: renamed to `try_update` for consistency"
+      ]
+    }
+  },
+  "ownership_gates": {
+    "authority": {
+      "status": "passed",
+      "report_sha256": "eec93c04364933c5cc8fdb69127c095e11620a479ac8e42158e1f8a1a5d55f74"
+    },
+    "io": {
+      "status": "passed",
+      "report_sha256": "76274bb7f9da39ccb58d019dd7f946f07cba147a9604fd8a8c5fc1804a6adbec"
+    },
+    "privacy": {
+      "status": "passed",
+      "report_sha256": "3f99732114cd01afda57fec9bae91e307310125980da63e8859c1941fbb96b14"
+    }
+  },
+  "maintainer_pytest": {
+    "passed": 40,
+    "failed": 0,
+    "sdk_catalog": 27,
+    "interpreter": 13,
+    "command": [
+      "/private/tmp/hol-guard-cigar-upgrades-python/bin/python",
+      "-m",
+      "pytest",
+      "-q",
+      "--noconftest",
+      "-p",
+      "no:cacheprovider",
+      "tests/test_cigar_catalog_entry.py",
+      "tests/test_cigar_interpreter_entry.py"
+    ]
+  },
+  "ruff": {
+    "status": "passed",
+    "cache": "disabled; read-only lint check"
+  },
+  "typescript_release_history_status_contract": {
+    "status": "passed",
+    "build_or_preview_assets_changed": false
+  },
+  "ci_rustfmt": {
+    "status": "passed",
+    "toolchain": "1.88.0",
+    "scope": "full Rust workspace"
+  },
+  "preservation": {
+    "base_head": "fedfc7a418145ed2f82cb21f9dd38a2dda85e46d",
+    "branch": "feature/integrate-cigar-0.14.1",
+    "initial_dirty_paths": 84,
+    "byte_identical": 82,
+    "intentional_changes": [
+      "dashboard/src/context-assistance/status.ts",
+      "docs/guard/cigar-integration/CIGAR_UPGRADE_PLAN.md"
+    ],
+    "diff_check": "passed"
+  },
+  "worker_process_check": {
+    "pattern": "cigar-context-(worker|broker)",
+    "matching_process_ids": []
+  },
+  "source_max_lines": 471,
+  "development_failures": [
+    {
+      "log": "/private/tmp/hol-guard-cigar-upgrades-artifacts/native-requalification-all-v2-test-output.log",
+      "log_sha256": "134dfd0fc92b130b5281d72153ecfead4f2a11f0ede96976d701192fdedbf48c",
+      "reason_and_resolution": "The active-runtime cancellation fixture assumed cleanup always completes immediately. It observed recovery_required/install_cleanup_pending while the old runtime stayed active. That generic code does not identify the original cleanup cause. The fixture now requires successful explicit native recovery when pending, accepts only bounded continuation, and still fails unsafe or unresolved cleanup. The final successful run did not need this continuation; the actual pending-cleanup branch remains a P9 failure-injection qualification item."
+    },
+    {
+      "log": "/private/tmp/hol-guard-cigar-upgrades-artifacts/requalification-final-context-clippy.log",
+      "log_sha256": "71527a1fa7f78c85a0618eef5bd7505a90f4029de986d45a4ba7165bb1c5a4a2",
+      "reason_and_resolution": "Clippy rejected adjacent identical unsupported-schema branches. Consolidated their conditions without suppression; final context Clippy passes with existing dependency warnings."
+    }
+  ],
+  "decisions": [
+    "Core/release tags are exact bounded independent labels; SDK PEP440 previews still require preview consent. Same build ID cannot contradict archived SDK/dependency/worker/tree identity.",
+    "Qualification refresh reuses exact installed files, including historical slot derivations and opaque IDs. An isolated verifier measures qualified features while the old actor remains usable.",
+    "Receipt publication uses a protected registry compare-and-swap and authenticated job marker. It preserves registered paths, selection, enablement and source/app scopes. Feature reductions require a separate transition.",
+    "Recovery distinguishes a committed refresh from a preexisting installation, preserves conflicting receipt updates, and reconciles exact target/checkpoint/provenance without replaying SDK probes.",
+    "Native bounded data inventory renders no note text, source-ID basis or project path. Preflight binds the exact SDK, dependencies and complete Python identity; a matching SQLite label is insufficient.",
+    "Changed producers require fresh broker preparation and Guard-note readmission under current grants. Unsupported, pending, corrupt or over-capacity states preserve old data and refuse switching. No raw SDK database migration is invented."
+  ],
+  "limitations": [
+    "Bundled SDK and interpreter catalog entries remain upstream_only. Test qualification does not establish production signing roots, hosting or release readiness.",
+    "Original b47380 candidate bytes and a genuine approved newer CIGAR release remain unavailable; actual tests use final0.14.1 plus synthetic future labels/identities. No real newer SDK upgrade is claimed.",
+    "P5 durable prepared evidence generations, note readmission/provenance and cleanup/rollback are not implemented. Preflight capacity estimates do not prove free disk space or grant permission to switch.",
+    "Legacy cache namespace mapping and exact-producer generation names must be implemented before cross-producer checkpoint use. A global inventory does not authorize joining evidence across scopes.",
+    "P6 serialized selection commit, actor quiescence, fresh authority, last-good rollback/crash recovery remain incomplete. Existing configure/recheck is not a background upgrade transaction.",
+    "Complete public native/CLI/HTTP/UI/policy/catalog controls, discovery, retention/pruning and remote catalog cache/withdrawal handling remain unfinished.",
+    "Source-only macOS arm64 acceptance does not qualify installed/frozen Guard, other platforms, abrupt owner-loss process containment or broad hook/approval/performance matrices. Eleven context real-runtime cases remain separately gated.",
+    "Native interpreter archive import is exercised; the live Astral Python download path still needs its own qualification.",
+    "The final continuity run completed cleanup directly. The newly conditional pending-cleanup recovery branch has not yet been forced in the actual SDK fixture; generic initial cleanup diagnostics do not prove that the earlier pending cause was time exhaustion.",
+    "Existing scanner lifetime, atomic deprecation and large native-test linker warnings persist. Previously recorded full-runtime Clippy baseline failures in unchanged guard-command remain outside this focused check."
+  ],
+  "source_file_sha256": {
+    "dashboard/src/context-assistance/release-version.test.ts": "30dd18a96ebdf50aef5b5be947281018cbecf29afa1ba62d190e93f24f6cff39",
+    "dashboard/src/context-assistance/release-version.ts": "3be5543f3eee634e365f8c5a226f894552397238ba105a6b07e05fc11786572c",
+    "dashboard/src/context-assistance/status.ts": "ec05c3d8cec2c4d54f3875c8263314c882395f330e9aebb7a56a1641be1a233a",
+    "docs/guard/cigar-integration/CIGAR_EVIDENCE_UPGRADES.md": "d739ee32e5d72458755a903e1159d90bc6f4ca2dd89ce2be7085a4fad147e621",
+    "docs/guard/cigar-integration/CIGAR_MANAGED_PYTHON_SETUP.md": "132a39fde96b90e7fa9486ca1ac4cdccaa4c0889392b729ea8fa57aee436944a",
+    "docs/guard/cigar-integration/CIGAR_RELEASE_REQUALIFICATION.md": "4db136a7a1fa79a3bb834759e84717c58268ec476b226a7d7c65ff2278440c1a",
+    "docs/guard/cigar-integration/CIGAR_UPGRADE_PLAN.md": "9192ddb415be101bac6b70da788aa3311494aa58409c181b0fc08853c4676f3f",
+    "docs/guard/contracts/hook-data-plane-ownership.v2.json": "1e385cefd4a92a68ce9a087b14cabf796c36d10993a1f03491f952a7d45c43d1",
+    "integrations/cigar/release-catalog.v1.json": "5eacb9ae75fe573475e9876499e510bb7736b555d90fa989796d628aa45b6efd",
+    "rust/Cargo.lock": "f06b5a4f17e6a14a70243d41d9fa6733d9262bcbdcbfb13bb1c2a48b6cc8578f",
+    "rust/Cargo.toml": "e1fa143a95e5d2cf33ca3a00292f00e1759e40ce3b75f184300a4e77e3439be6",
+    "rust/crates/guard-cigar-artifacts/Cargo.toml": "521c7d62cb1a9a663e256b077007e3ebaba41ee5f70897fcc8ba2f0f7dd13a2f",
+    "rust/crates/guard-cigar-artifacts/src/lib.rs": "0012e5e62aa0852f20c4b34ca56a52e92c3a5c1182a023f1ac766c33f769cfe3",
+    "rust/crates/guard-cigar-artifacts/src/paths.rs": "a0cc03cef6826e4296794e9c5bbcade98c00f90be10bcbd1e2d5e5bceeb6e0d1",
+    "rust/crates/guard-cigar-artifacts/src/python_snapshot.rs": "25e4a0b60b79bdfa2586bd655add1bcd80b69ae4798bfb38f42f33b90739a726",
+    "rust/crates/guard-cigar-artifacts/src/python_tree.rs": "3f207444db6d14c90835a1b9a2968154406f4a895b21034b1461ec8fe045c710",
+    "rust/crates/guard-cigar-install/Cargo.toml": "c9bef66e809abe621a804d7cba9ae76dec2f9e63186baffbabdb4a123892d57a",
+    "rust/crates/guard-cigar-install/examples/check_python.rs": "4854cf8a364bff0046b3fb6067b4ab61c444e4eb8b88aec0dd737a298b34d7db",
+    "rust/crates/guard-cigar-install/examples/qualify.rs": "f18b4d801d5a4fb45336da4d750a998957648dc9444b196e7cede06cb54b770d",
+    "rust/crates/guard-cigar-install/examples/qualify_python.rs": "5b720c151b302b3ef38d9e512975cbe4068643ad05a7dcb2110da3532c7e6d2a",
+    "rust/crates/guard-cigar-install/src/lib.rs": "630df7923aaa1080a7ce159225f02895df98507a4bc841af82886218f228f9ca",
+    "rust/crates/guard-cigar-install/src/paths.rs": "91a635d94df4d129dd82a3f1030ff23a5b758f814f7809a6acf4f6cad84c9be2",
+    "rust/crates/guard-cigar-install/src/python_bundle.rs": "f923271f900d2446ff425f7c992310dfcce76a760df0ecdc169140a44ca5114d",
+    "rust/crates/guard-cigar-install/src/python_bundle_tests.rs": "41a07fdc1aafc43a89e64086ab883667161074a4480e101c26e1f4c0ce317ec0",
+    "rust/crates/guard-cigar-install/src/python_tar.rs": "d98271d21437b527db5ab093f76f45a4cc074f52af39a4b43a8cb12824ad86a3",
+    "rust/crates/guard-cigar-install/src/python_tree.rs": "fda4a4f1bc5303980666945b96f9f8890faa0782a1fc85ae8dfd008cae29dd17",
+    "rust/crates/guard-cigar-install/src/slot.rs": "55ff206b04113aa1b4db10c23b0231a741ef0b4de8d1f997e8762ee8b7740c78",
+    "rust/crates/guard-cigar-install/src/tests.rs": "f1260cf4c0d306a094c11b5dea585b629e30b93bb8209eef8b92ca546886bf72",
+    "rust/crates/guard-cigar-install/src/wheel.rs": "d4b58e0a4d4600ad94b75bc82f3dd4c5d5bfb6b2a47a6cd1d6671a1eafb728cb",
+    "rust/crates/guard-cigar-install/src/wheel_safety_tests.rs": "e7a0fb5bcabbd0ca8120e5986752ca6e928a94f88f212be1df05790a1d30d6df",
+    "rust/crates/guard-cigar-release/Cargo.toml": "2e9234513ff51659b117fda87eea4d25a0fcbf20c6f65fd18578476f106a15b2",
+    "rust/crates/guard-cigar-release/src/artifact_identity.rs": "9fe24e134cd17e257542e94346fc40c4aeb7e5255ff2a0a4511099306d532a71",
+    "rust/crates/guard-cigar-release/src/artifact_identity_tests.rs": "7310236e30395c6c58788c0ca468798c7573cf6df2d7eda10464810a7e6483ca",
+    "rust/crates/guard-cigar-release/src/binding.rs": "a39a48b9c52820bb43e087c8343fe1fde5892f7267969d60909fa66ab3d598b1",
+    "rust/crates/guard-cigar-release/src/binding_tests.rs": "8f227ec4a8f5c29040e137709e47cec0dece950281d026f38703b3d3091ec003",
+    "rust/crates/guard-cigar-release/src/catalog.rs": "22499612be216aa0eb808f7e619f707249a7eafcc5b74815bd134876755a6e3d",
+    "rust/crates/guard-cigar-release/src/identity.rs": "874b4061dc0da296a1001821e2e575fb89f3257ac72df8e07f40d2be5988cf1e",
+    "rust/crates/guard-cigar-release/src/installation.rs": "a351515c1501e62b04d229b318901c53b505a426e3dfb79e4582706bf25ba405",
+    "rust/crates/guard-cigar-release/src/installation_tests.rs": "081a6cefa3df6966f0abebb18901f9852c9f379ef393ed486aa1aa27ceb3640d",
+    "rust/crates/guard-cigar-release/src/interpreter_binding.rs": "1c0a92e2b030d7c8ecb1f0c4d939fe9127f14957287531b2ba2c3e9f3c87463c",
+    "rust/crates/guard-cigar-release/src/interpreter_build.rs": "6e0b20dc7de2c72a4968f4f7d86840c8b01cfdb503c5151bdff141c109f893e9",
+    "rust/crates/guard-cigar-release/src/interpreter_receipt.rs": "2dea8af84c1cf9e1fc846fad224110875bf1213dbf93711ba40bc9adceea1e67",
+    "rust/crates/guard-cigar-release/src/interpreter_receipt_tests.rs": "74020fd5d7b78dfc63792984a6d87ce3279d597512499decbaf3b7997994064f",
+    "rust/crates/guard-cigar-release/src/label_tests.rs": "28b9c14baf8d91377b3d8ffdb39c84c6e1eca89d5d83785944d648d6ad5bf878",
+    "rust/crates/guard-cigar-release/src/labels.rs": "71a49405eca479e4ecb283e57ac23b387919f855c3cb56c543a50a9a9b193003",
+    "rust/crates/guard-cigar-release/src/lib.rs": "f0d0a463a91a84a11fb27a2a0bc46c1e0cded562564ea2313438b0fd26a4ea1f",
+    "rust/crates/guard-cigar-release/src/lifecycle.rs": "d832c070d76e3ee97e35b6374d1a646ca13b7d577a2397a72e31c851374366a2",
+    "rust/crates/guard-cigar-release/src/lifecycle_tests.rs": "37ed985b6bf1616ec0a27f83637fc99baabbe2a48e2f645519a4ae11ac96252e",
+    "rust/crates/guard-cigar-release/src/python.rs": "3937a14cf5c7c8fe11c3a8eaee1e6884a9d229a980f3c256d02c6847cc58619e",
+    "rust/crates/guard-cigar-release/src/source.rs": "6d7d2ed5ce35c96a438d8fc900c15df1200a0f67f2d75c107450ae5ad15d5c4e",
+    "rust/crates/guard-cigar-release/src/strict_json.rs": "7a3d20f31abf779aa9914ca05bdb4581cc724d7bf18baddc357747ed78a07dc1",
+    "rust/crates/guard-cigar-release/src/tests.rs": "367c8de7f7c23180408d110a080516fbd31ab9a3891caee5223ab28eadaf70fe",
+    "rust/crates/guard-cigar-release/src/types.rs": "c96e00bd3bebe70bfc55fd62fee2d9fc4cc26d58c8f7a5fdee42f797791aa73f",
+    "rust/crates/guard-cigar-release/src/wheel_lock_tests.rs": "f140b364d91819ac6f19358f9d144c8c87d0c91d10a0ee4208353c6a6692a55e",
+    "rust/crates/guard-command/src/restricted_archive_cancel_transport.rs": "148a103fb2f57daa6ba6ba050194f2b73dc9eb9bdbda988ebd0e7b295d234782",
+    "rust/crates/guard-command/src/restricted_archive_https_tests.rs": "691ab82f9a3b68104b88be954dd09ecb36ea3b26d45eda732d1726d6c3b97990",
+    "rust/crates/guard-command/src/restricted_archive_peer.rs": "2b65b8588068bd391f580d10b01be011eb5bc7f8031092ccd436580a59aa317f",
+    "rust/crates/guard-command/src/restricted_archive_transport.rs": "86b9722f23144593a60985f4359dc69f3f50c4b578916311954b1b20d9518b9e",
+    "rust/crates/guard-context-assistance/Cargo.toml": "130b33e0d0ea4b8544b02f5bad0e038809d1da6742ffc08fd8e1648ec3c6a748",
+    "rust/crates/guard-context-assistance/src/artifact_tests.rs": "5a9cf287546d26686a0cd4c90035168b368e857bd2e7e37bf3373748ff43bc65",
+    "rust/crates/guard-context-assistance/src/artifacts.rs": "09d279b9599727b39f17879fc13add7dd9092c5d549266fc0cbc90a5f4d38667",
+    "rust/crates/guard-context-assistance/src/evidence_cache.rs": "191e475483e3ccd5418cbc4b0dbf95ef773b80527bd93c366763ed6207834e2a",
+    "rust/crates/guard-context-assistance/src/evidence_cache_tests.rs": "9ff1bbe011b7998a6c3f0944e02f305e17e4ced2e2b117c1d492020dfb5cf65e",
+    "rust/crates/guard-context-assistance/src/evidence_cache_upgrade.rs": "b6018a5c553b25d7c79d329cae462059eb34abbbc21898879b91bc341b48d81f",
+    "rust/crates/guard-context-assistance/src/evidence_upgrade_plan.rs": "a7ca6a646a34c1d59e430007f258899f6e2fd8b64bcfe6a8712e86653be3d922",
+    "rust/crates/guard-context-assistance/src/evidence_upgrade_producer.rs": "6f8b19d4f96d37e612c0f068890c3992c36ac014c800465480a2e2ab15d4f1cb",
+    "rust/crates/guard-context-assistance/src/evidence_upgrade_tests.rs": "58199e9814e28524d2cf5473fb21ff9cc9f8b6794f94a3be3d5a6544aa2ee5de",
+    "rust/crates/guard-context-assistance/src/interpreter.rs": "e238b2fe3928dc5c94d29b2733f00b107debb338d741655cc2cb45dccf8dce3e",
+    "rust/crates/guard-context-assistance/src/interpreter_probe.rs": "136853259bdb4d9c71506bffcb6b52b47047e74295be4da71ba9375f7eb16897",
+    "rust/crates/guard-context-assistance/src/lib.rs": "cc7ee203be2c34f84ce32bc84963701447cb8f22dca8da17665b6f5d24786c96",
+    "rust/crates/guard-context-assistance/src/private_python.rs": "ed22cff9212718fc4f4bd56392dd11cc3dd3093c060880e973b2b52a1acbb742",
+    "rust/crates/guard-context-assistance/src/private_python_tests.rs": "8872014040327e04bc1357a8934a58f36e1eb1a1c9aae580966e5c1e9a05148b",
+    "rust/crates/guard-context-assistance/src/process.rs": "402ed241729a5a5df85ada5dbfabafde0b5e87f53715a4a5986ff8a619dd88ad",
+    "rust/crates/guard-context-assistance/src/release.rs": "b0aaf0b9c59d10858cda2e90d3f3d57e2bd23fcbd3f746d4691cbec7bb14bddb",
+    "rust/crates/guard-context-assistance/src/release_artifact_tests.rs": "3b1123678c51f7f8d41d28137bb70664fd4dd23b79f2bc81cb41d2d71ed7824a",
+    "rust/crates/guard-context-assistance/src/runtime.rs": "ca04d3e8c5dc709820d35e2c3b24cd45acc49221ea064fbada437ae98f210efb",
+    "rust/crates/guard-context-assistance/src/runtime_tests.rs": "d262b233c8e9bc59fe0c8cfde47ecab66bbd3dc20d09340d0029e37152a7b5bb",
+    "rust/crates/guard-runtime/Cargo.toml": "d210eebc427e5a7381789f16844a05e57e548b25c09ac26b08b7c33a12c744d8",
+    "rust/crates/guard-runtime/src/context_assistance_acquisition.rs": "a1d2b501640b0bff1252674fffee78fee916d4f82d79b99293bbd85d0b9f327e",
+    "rust/crates/guard-runtime/src/context_assistance_acquisition_policy.rs": "70eb3f5a27c49d8e679ed1b79195c046104e83712f6cdc72899c1f56fb597b29",
+    "rust/crates/guard-runtime/src/context_assistance_acquisition_tests.rs": "20270ed94d8ad280eafdcdaa20e99564bc8ba1cd59512dd70e8e729a66cafa3b",
+    "rust/crates/guard-runtime/src/context_assistance_acquisition_transport.rs": "ac2e266c0e159a0e94c8cc0a1b38b028ef38295778ce3c52f92fe180b5518b94",
+    "rust/crates/guard-runtime/src/context_assistance_install_cleanup.rs": "26dd186ebe6c0f5b142a182637c3fe4c7ffaaa3df7309760fa6a9f92af378578",
+    "rust/crates/guard-runtime/src/context_assistance_install_job_store.rs": "3563de92dc44b57198e3773539e8128e48d53da61503c982e9c63b8bb38544ef",
+    "rust/crates/guard-runtime/src/context_assistance_install_jobs.rs": "551cfa321fbc0d034c2b3b7319c46f286db7aab2377b0a75f4c80cdc04de599e",
+    "rust/crates/guard-runtime/src/context_assistance_install_jobs_actual_tests.rs": "1856ecdbc0ad0e0088f7f225eb584229ba3a3f338e04d55323fc6a7aae8c59d1",
+    "rust/crates/guard-runtime/src/context_assistance_install_jobs_tests.rs": "991c9da41a52814f677708d1fa9f47269648a5a9eec1a765dd6e17dca3ac1a5a",
+    "rust/crates/guard-runtime/src/context_assistance_install_operator.rs": "ac77b5c498021c5d4e03277816d74487d5e4c7961342db31ea0ad29fd4a97305",
+    "rust/crates/guard-runtime/src/context_assistance_install_reuse.rs": "8be2884362ea3dd1c2afb9b045131f2dbf2bf767d965836e16a30ae3774e1f41",
+    "rust/crates/guard-runtime/src/context_assistance_install_reuse_actual_tests.rs": "5f5cfe11fc357525b48dfa39fd767543571b8c7a77a8880223c75aada9764588",
+    "rust/crates/guard-runtime/src/context_assistance_install_reuse_tests.rs": "7188fb0fd5be204119320fa1158062cc08dce2ebe76bb88d19ed30b67cb46b3b",
+    "rust/crates/guard-runtime/src/context_assistance_install_reverify.rs": "36c5cf6fbe52d7bbda357835e44362e02fd34c000ebdf1c23e346396e0001775",
+    "rust/crates/guard-runtime/src/context_assistance_install_worker.rs": "5fd969576bdfa037b86b836d94ecb56c6d4cb106775454cac1246ecec2f8374d",
+    "rust/crates/guard-runtime/src/context_assistance_installation_key.rs": "c19ec89a95997fbb9c02220c6841f557e558a5fc4429534672e11ded7871f852",
+    "rust/crates/guard-runtime/src/context_assistance_installation_refresh.rs": "a34201f645fb8235ba8aff0e2884388ae3364646592e98d5ea9ee2b9d4d120db",
+    "rust/crates/guard-runtime/src/context_assistance_installation_v2.rs": "2985e1e5988858247e767844d51d43235baac2ab891ca3d16a05f2a27c60f479",
+    "rust/crates/guard-runtime/src/context_assistance_interpreter_registry.rs": "2c88fa55337c471c06f7b39ca59b1c1c4a5aba61cfbbb1bb60ceca85e4a1c706",
+    "rust/crates/guard-runtime/src/context_assistance_managed_python.rs": "b1f971cee2d927c547944fffffeca516c4fb79fc402e0bedb9f6bd99b29ebb43",
+    "rust/crates/guard-runtime/src/context_assistance_op.rs": "5aea1d4edc608c3974d2d1f25253c853b3fd3a3434c0c32e894f2ea39818e54f",
+    "rust/crates/guard-runtime/src/context_assistance_python_acquisition.rs": "598ea4bfe7091f90ac80b19b44b517f6f10504873cf80df9a3ed5530f94d71b8",
+    "rust/crates/guard-runtime/src/context_assistance_python_cache.rs": "f182c7fbf0576f7c2328cc3bdf840ef0457dd378248b9f69e44b03c4bf43e39d",
+    "rust/crates/guard-runtime/src/context_assistance_python_cleanup.rs": "110d96ea8028e5937cdca1645b3572c7e51deaea94e2cd9d1885d37e87b6373a",
+    "rust/crates/guard-runtime/src/context_assistance_python_job_store.rs": "9a7b92e3d94821102df9933ffdfbbc8d26ab661f269450e6ec87343ecb97a722",
+    "rust/crates/guard-runtime/src/context_assistance_python_jobs.rs": "1c40e769e6b9ef8503484e7c4f481090e29093864f35c0e5db55dfab8073ec5a",
+    "rust/crates/guard-runtime/src/context_assistance_python_jobs_actual_tests.rs": "5f86d720785f47dfad8b239d14cb517c8ac8d6c6b76783a5fcf90d8da823bce1",
+    "rust/crates/guard-runtime/src/context_assistance_python_jobs_tests.rs": "71cd9634f0fe1fbeb584331c81da27e94c18dbe085d6ebdd913c7dc853260bb4",
+    "rust/crates/guard-runtime/src/context_assistance_python_worker.rs": "0343b7842d7be5cf8a3ff21b25afae41399a0e3cb4cc07adb5f8a4ea867d0d1c",
+    "rust/crates/guard-runtime/src/context_assistance_registry.rs": "d3c6c3cf4a4da01f7bd9c2265bdb98d27a288387249fdc8345d2a8cdf5933098",
+    "rust/crates/guard-runtime/src/context_assistance_registry_tests.rs": "8eacacd92b1e004529bac95565de0c6e91da08fdc414cf3196fe42e7237dfbd2",
+    "rust/crates/guard-runtime/src/context_assistance_registry_v2_tests.rs": "7251816b360b406d1165161555f912350ba0b1abd69c03de14943ea5a8fd2e27",
+    "rust/crates/guard-runtime/src/context_assistance_service.rs": "e3c742086f144253191cfd8f0fc204a1d7027355ac7fdd4fb9cd6518e2ce8c8a",
+    "rust/crates/guard-runtime/src/context_assistance_service_lifecycle.rs": "c631f7f6347e06a83a96062504cd455401dfa8bb19a418298e9917d463c9eec7",
+    "rust/crates/guard-runtime/src/context_assistance_service_versions.rs": "eaeb56141511474154670e349d2f40a2784689fcaa5dc67d5000d93ab8945927",
+    "rust/crates/guard-runtime/src/context_assistance_wheel_cache.rs": "ec253b14389b66992bd4d3461e474861256fc6bdc2870f154eb47fff598be53c",
+    "rust/crates/guard-runtime/src/runtime_cli.rs": "bd5114ac57ac0adaf658a6ba1344b618ef709dab358c70801504869d8a05b346",
+    "scripts/cigar_catalog_entry.py": "3245e1c15a91fb115a6f0966315109bdfce9386bbee09acf5a382f7e4bf25dcf",
+    "scripts/cigar_interpreter_entry.py": "d86a8da88621c083f4c3ecce2b680c09e11ead0de2ac3110c9946a15abd6814c",
+    "tests/test_cigar_catalog_entry.py": "5b3c56b9bc851f9b06b9bec593b0ee8d6836547b552509fab00381ef7ddaab8a",
+    "tests/test_cigar_interpreter_entry.py": "a02e8eb06d4f06f1154786c3f023d30a5957c765d2b8a745ea1e7f74190f8a15"
+  }
+}

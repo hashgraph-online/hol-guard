@@ -1,0 +1,127 @@
+{
+  "schema": "guard-cigar-private-persistence-native-evidence.v1",
+  "status": "passed",
+  "source_sha": "501f08f114e677612393802aa1c2594d99c33796",
+  "qualification": "native_library_actual_sdk_sqlite_only",
+  "sdk_source_sha": "b47380e5a5cbeaaad5a61cab3372e9e67368732f",
+  "sdk_source_worktree_clean": true,
+  "sdk_rebuilt": false,
+  "sdk_version": "0.14.1",
+  "sdk_python": [
+    3,
+    14,
+    7
+  ],
+  "worker_sha256": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112",
+  "package_tree_sha256": "bd4d27349f01c4403a3e469e29d3785c4c8073e12c32744dfaa2304dcaf78a95",
+  "tests": {
+    "assistance_library": {
+      "passed": 32,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 40.97
+    },
+    "guard_context": {
+      "passed": 57,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 139.89,
+      "profile": "actual_worker_serial_include_ignored"
+    },
+    "clippy": "both_native_crates_libraries_and_tests_warnings_denied_passed",
+    "rustfmt": "changed_native_files_passed",
+    "ruff": "sdk_transport_passed"
+  },
+  "storage_limits": {
+    "checkpoint_bytes": 12582912,
+    "database_bytes": 33554432,
+    "rollback_journal_bytes": 34603008,
+    "journal_records": 64,
+    "aggregate_product_limit": "not_implemented"
+  },
+  "native_checks": [
+    "native_only_nondeserializable_directory_capability",
+    "canonical_current_user_private_ancestry_and_0700_directory",
+    "single_link_0600_known_database_files",
+    "links_unknown_files_size_and_identity_replacement_refused",
+    "real_sqlite_storage_and_restore_handshake",
+    "admitted_evidence_survives_worker_group_termination",
+    "new_sdk_epoch_and_lossless_preserved_versions",
+    "saved_data_does_not_create_native_source_grants",
+    "fresh_scanned_source_catalog_must_match_saved_native_provenance",
+    "forged_recovery_text_refused",
+    "inherited_note_basis_must_match_current_native_catalog",
+    "new_client_and_retained_context_required",
+    "old_handles_and_proposal_keys_refused",
+    "unadmitted_text_not_restored",
+    "corrupt_database_refuses_activation"
+  ],
+  "source_gates": [
+    {
+      "name": "python_hook_semantic_callgraph_gate",
+      "status": "passed",
+      "exit_code": 0,
+      "report_sha256": "8e3101056186cd4d641add66f9eed89b0289db4e105bdb5885821ae3f0484e46"
+    },
+    {
+      "name": "python_capability_cleanup_gate",
+      "status": "passed",
+      "exit_code": 0,
+      "report_sha256": "d975dee5fe67bdb3f901777eaa0e7a95a5e8ce9e5f310467754474d61c80dc74"
+    },
+    {
+      "name": "rust_io_ownership_gate",
+      "status": "passed",
+      "exit_code": 0,
+      "report_sha256": "bcf901a1c39ebf936483fa5aebdcdb005372d016d67e41b8e46adc6fcbd68472"
+    },
+    {
+      "name": "rust_io_privacy_gate",
+      "status": "passed",
+      "exit_code": 0,
+      "report_sha256": "3f99732114cd01afda57fec9bae91e307310125980da63e8859c1941fbb96b14"
+    },
+    {
+      "name": "rust_authority_ownership_gate",
+      "status": "passed",
+      "exit_code": 0,
+      "report_sha256": "68003af9f365e133176b42c250883e602cf69f0aa7b9e569ae043a193287efc5"
+    }
+  ],
+  "post_commit_authority": {
+    "status": "passed",
+    "changed_files_checked": 248,
+    "report_sha256": "3e3ed7bce168cab0edc1d542e34457499ff8d9578ef1544c99fa7b31515bc6c5"
+  },
+  "source_hashes": {
+    "integrations/cigar/bridge.py": "add9426906a1098412ec405ced36ca6c13f548334c1b76cf59751188a1d8d571",
+    "rust/crates/guard-context-assistance/Cargo.toml": "c8cc73d2b26228328e6ff1f8b4842795b2570ccee646d18f27cc065b79eb082b",
+    "rust/crates/guard-context-assistance/src/broker.rs": "fe820489fd8412087645e5bf4dff1d655207f260e8f28a99cb934efa6c0626af",
+    "rust/crates/guard-context-assistance/src/broker_resume.rs": "8d6cd01ab7d84cce5476668e136f026f79f38c380984797f1b684e5c9ff87434",
+    "rust/crates/guard-context-assistance/src/broker_storage.rs": "54f3c218418236844e2db53a6fba6983c011b29a36009374a30f0fc867bcaa67",
+    "rust/crates/guard-context-assistance/src/broker_storage_tests.rs": "938d0eee2ccddb6c5d602b5f028080019d8a6684c4dbb22a19e6cfc933f96db6",
+    "rust/crates/guard-context-assistance/src/lib.rs": "5cf86bda8561e8da1b81d26cc0027ee5178bee539b46583ac2c9d62f1612a167"
+  },
+  "product_state": {
+    "sqlite_activation": "still_refused_pending_product_coordinator_and_acceptance",
+    "private_persistence_capability": false,
+    "new_installed_package_qualified": false,
+    "latest_qualified_sharing_package_sha": "4925f440f0125e8fe89486312b345f1b3b09f342"
+  },
+  "remaining": [
+    "Guard-home-owned bounded cache coordinator and native metadata",
+    "fresh source grant and catalog integration for private and shared broker modes",
+    "metadata/SDK unknown-outcome reconciliation and repair",
+    "enforced retention and saved-data withdrawal/deletion including inactive scopes",
+    "actual persistence activation doctor and typed projections",
+    "settings and Data & repair UI with installed acceptance",
+    "P5 real executor handoff and exact association",
+    "actual harness/platform/setup and measured SLO/RSS/useful reuse"
+  ],
+  "limitations": [
+    "Evidence is private POSIX-protected local storage; no encryption or hostile-tenant isolation claim.",
+    "This primitive does not restore execution authority or qualify the product persistence workflow.",
+    "No Guard performance or RSS improvement is claimed.",
+    "Previously recorded baseline helper, mixed-profile, parallel-notification and typecheck failures remain unresolved."
+  ]
+}

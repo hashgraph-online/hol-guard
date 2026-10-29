@@ -1,0 +1,96 @@
+{
+  "schema": "guard-cigar-shared-persistence-restart-evidence.v1",
+  "status": "passed",
+  "qualification": "actual_installed_local_darwin_arm64_daemon_resident_and_two_MCP_restart",
+  "test_source_sha": "d3d53e8561fc96db3ae347c97d6cadf2595d3fa9",
+  "product_source_sha": "5fe31cc14f82c7179173507bdc8d5c0246d4c9f2",
+  "product_evidence": "private-persistence-product-verification.json",
+  "product_source_unchanged_by_test_checkpoint": true,
+  "new_product_build_required": false,
+  "binary_sha256": "f9238062be39fc252ff274d8b8e95edbcc77031b3bb994790063d3f773ba6744",
+  "wheel_sha256": "abd4c7d4b6a50b61844350e55fcbcc83860c1d0bc8a0ae63bfdd64930d0fcac6",
+  "guard_python": [
+    3,
+    12,
+    13
+  ],
+  "sdk_python": [
+    3,
+    14,
+    7
+  ],
+  "sdk_version": "0.14.1",
+  "sdk_source_sha": "b47380e5a5cbeaaad5a61cab3372e9e67368732f",
+  "sdk_source_clean": true,
+  "sdk_rebuilt": false,
+  "worker_sha256": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112",
+  "package_tree_sha256": "bd4d27349f01c4403a3e469e29d3785c4c8073e12c32744dfaa2304dcaf78a95",
+  "tests": {
+    "passed": 1,
+    "failed": 0,
+    "skipped": 0,
+    "seconds": 109.969,
+    "total_elapsed_seconds": 112.069,
+    "junit": {
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/installed-shared-restart-first.xml",
+      "sha256": "e0b23f7e4d1ee5c4c86a7e9248e947ffcba18ec5cb1d84f6cae36303a8648d55"
+    },
+    "console": {
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/installed-shared-restart-first.log",
+      "sha256": "f7a1bbbfedb554a870762e54267c399c1f793b5c7341614c029fba665edde343"
+    }
+  },
+  "checks": [
+    "actual_installed_loopback_HTTP_daemon_process",
+    "independent_memory_sharing_and_SQLite_persistence_doctors",
+    "trusted_native_operator_source_and_pairing_controls",
+    "two_independent_real_MCP_server_processes",
+    "proposal_hidden_until_explicit_host_admission",
+    "other_connection_receives_current_cited_reviewed_note",
+    "unadmitted_proposal_pending_before_restart",
+    "old_MCP_connections_kept_open_across_host_stop",
+    "actual_Python_daemon_process_shutdown_and_new_PID",
+    "actual_native_resident_containment_and_new_service",
+    "saved_opt_in_not_active_runtime_or_automatic_activation",
+    "old_cached_context_calls_refused_before_and_after_new_activation",
+    "restart_restores_no_source_scope_or_agent_session",
+    "old_scope_refused_by_actual_HTTP_route",
+    "fresh_protected_source_permission_required",
+    "fresh_MCP_processes_need_new_pairing_and_session_ids",
+    "reviewed_note_recovered_with_citations",
+    "unadmitted_proposal_and_prepared_history_not_restored",
+    "old_snapshot_refused_in_new_connections",
+    "opt_out_refuses_cached_tools",
+    "off_state_saved_removal_completes",
+    "final_native_resident_containment_acknowledged"
+  ],
+  "source_checks": {
+    "ruff": "passed",
+    "ruff_format": "passed",
+    "git_diff_check": "passed",
+    "changed_source_line_counts": [
+      72,
+      138,
+      189
+    ],
+    "authority": {
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/authority-shared-restart-after-commit.log",
+      "sha256": "18e87f268437979bc40190667dd115e0c4f7e1621dbd899e0eef3438a6fe93e1",
+      "status": "passed",
+      "base_ref": "35180b995cb27fdc9f92e1f68307a756c785f154",
+      "changed_files_checked": 273
+    }
+  },
+  "source_hashes": {
+    "scripts/ci/context_persistence_restart_host.py": "d09dbb5f591b2c93be084a2e5e23b4b6ee0ae10652e44f841504c35d4ab1b3bc",
+    "tests/context_persistence_installed_support.py": "2b7134960c401080c2a453daec4cf3d0ddb63c8de2b016076cdcc036065628db",
+    "tests/test_context_persistence_restart_installed.py": "0a0a9975a08c714e1ebef5718c2c865684b6aa1826174b34ac5042347688c901"
+  },
+  "limitations": [
+    "The operator uses the trusted native control surface; native browser/password proofs are qualified by the separate installed browser evidence.",
+    "MCP route qualification remains not_established for actual external harnesses/apps.",
+    "This is functional restart qualification, not a latency, RSS, power-loss, encryption or secure-erasure measurement.",
+    "Retention housekeeping is still armed by a context request; automatic headless startup sweeping remains to improve.",
+    "P5 exact executable-byte/real executor handoff and full measurement/setup/platform/release checks remain active."
+  ]
+}

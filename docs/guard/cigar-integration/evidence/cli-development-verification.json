@@ -1,0 +1,92 @@
+{
+  "schema": "guard-cigar-cli-development-evidence.v1",
+  "observed_date": "2026-10-23",
+  "status": "partial_with_failed_process_qualification",
+  "ui_commit": "81e714ec",
+  "native_control_commit": "4a350799",
+  "native_artifact": {
+    "path": "/private/tmp/hol-guard-cigar-native-validation/hol-guard-runtime",
+    "sha256": "fafc1e55499fd1b022731537ae3a60f42163a1404ef62417c9ae10b343f90c65",
+    "bytes": 109464032,
+    "toolchain": "1.88.0",
+    "profile": "dev, CARGO_PROFILE_DEV_DEBUG=0, CARGO_INCREMENTAL=0",
+    "symbol_tables": "removed using system strip into a separate temporary artifact",
+    "codesign_verify": "passed; no signing key or installed binary changed",
+    "capabilities_unchanged_after_strip": true,
+    "original_128_mib_limit_unchanged": true,
+    "protocol": 1,
+    "runtime_version": "3.16.3"
+  },
+  "source_gates": {
+    "native_authority": {
+      "status": "passed",
+      "implementation_commit": "5c817148",
+      "base_ref": "35180b995cb27fdc9f92e1f68307a756c785f154",
+      "changed_files_checked": 92
+    },
+    "python_semantic": "passed",
+    "python_capability": "passed",
+    "rust_io": "passed",
+    "rust_privacy": "passed",
+    "reachable_io_semantic_remainder": 0
+  },
+  "validation": {
+    "final_focused_selection": {
+      "passed": 26,
+      "failed": 0,
+      "seconds": 1.60
+    },
+    "focused_cli_parser_and_rendering": {
+      "passed": 18,
+      "qualification": "unit; mocked native transport, not installed process proof"
+    },
+    "facade_regression": {
+      "passed": 4
+    },
+    "native_transport": {
+      "passed": 4
+    },
+    "ruff": "passed",
+    "broader_python_regression": {
+      "passed": 62,
+      "failed": 12,
+      "seconds": 121.913,
+      "reason": "native approval authority unavailable",
+      "report": "/private/tmp/hol-guard-cigar-cli-qualified-results.xml"
+    },
+    "public_cli_candidate": {
+      "passed": 0,
+      "failed": 1,
+      "skipped": 0,
+      "seconds": 12.437,
+      "stage": "initial off-state status, before any CIGAR enrollment or SDK work",
+      "cli_code": "native_context_assistance_unavailable",
+      "resident_code": "native_client_timed_out",
+      "phase": "response_wait",
+      "report": "/private/tmp/hol-guard-cigar-cli-qualified-installed-results.xml"
+    },
+    "unchanged_native_baseline": {
+      "source_commit": "e71cb3e7",
+      "archive": "/private/tmp/hol-guard-cigar-core-baseline.tar",
+      "artifact": "/private/tmp/hol-guard-cigar-core-baseline-validation/hol-guard-runtime",
+      "bytes": 108732112,
+      "sha256": "09c6e07ce9bbd1f417e37fb423994e592fe97e0f5e30a3e3e2d50879b0f94241",
+      "source_modified": false,
+      "below_original_limit": true,
+      "codesign_verify": "passed",
+      "test": "test_lifecycle_gate_requires_fresh_password_when_enabled",
+      "passed": 0,
+      "failed": 1,
+      "seconds": 20.7,
+      "observed_failure": "same native approval unavailability and resident response_wait timeout",
+      "report": "/private/tmp/hol-guard-cigar-cli-baseline-results.xml"
+    }
+  },
+  "limits": [
+    "CLI installed/process qualification did not pass; no SDK work occurred in that test.",
+    "The baseline reproduces the first approval failure, not proof that every failing approval case is independent of the branch.",
+    "A runtime size failure in earlier unstripped debug artifacts was corrected by packaging metadata removal; no native limit was relaxed.",
+    "Library/resident-evaluation SDK verification remains distinct from real resident IPC, HTTP or Desktop qualification.",
+    "P0-P5 remain incomplete. Public packaging, raw local intent versus managed restrictions, source/scoped graphs, UI, MCP, sharing, persistence, handoff and performance gates remain outstanding."
+  ]
+}

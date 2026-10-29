@@ -13,6 +13,8 @@ pub(crate) use bash_ack::evaluate as acknowledge_bash_request;
 mod bash_broker;
 mod bash_cancel_route;
 pub(crate) mod bash_capture;
+#[cfg(target_os = "macos")]
+pub(crate) mod bash_context;
 mod bash_delivery;
 pub(crate) use bash_delivery::require_owner as require_bash_owner;
 #[cfg(target_os = "macos")]

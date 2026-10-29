@@ -1,0 +1,306 @@
+{
+  "schema": "guard-cigar-native-executor-verification.v1",
+  "status": "passed",
+  "qualification": "local_native_owning_executor_and_actual_SDK_only",
+  "source_sha": "2799b26d1766c08de3f0a3ea923e134f629460ca",
+  "platform": "darwin-arm64",
+  "native_route": [
+    "pi",
+    "omp"
+  ],
+  "script_profile": "existing_proven_captured_Bash_with_initial_output_preparation_and_builtins",
+  "consent_setup": "trusted_disposable_native_fixture_not_browser_proof",
+  "SDK": {
+    "version": "0.14.1",
+    "python": [
+      3,
+      14,
+      7
+    ],
+    "older_python_negative": [
+      3,
+      12,
+      13
+    ],
+    "source_sha": "b47380e5a5cbeaaad5a61cab3372e9e67368732f",
+    "source_clean": true,
+    "rebuilt": false,
+    "worker_sha256": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112",
+    "package_tree_sha256": "bd4d27349f01c4403a3e469e29d3785c4c8073e12c32744dfaa2304dcaf78a95"
+  },
+  "tests": {
+    "actual_native_executor": {
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/native-execution-adapter-final.log",
+      "sha256": "24561eab1b72368e37b41b04ff76694d79c30ef51ffd6e24be3ce98ed00d888d",
+      "status": "passed",
+      "passed": 4,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 110.91
+    },
+    "full_actual_assistance_library": {
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/native-execution-library-full.log",
+      "sha256": "136eaef0a40e3fa92201d6d27285f789151adb7a8698e18140b99243c4702560",
+      "status": "passed",
+      "passed": 51,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 44.1
+    },
+    "final_private_doctor_and_quotas": {
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/native-execution-private-doctor-final.log",
+      "sha256": "5757415e792970c37aed7df49d01c7a8da72c93fc566702fdcc99b7383c5e4e2",
+      "status": "passed",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 19.67
+    },
+    "existing_native_grant_journal_alias_transport": {
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/native-execution-legacy-grants.log",
+      "sha256": "3270b1b3f34f9ed4650c72ad2fb6dd16e9e2304c04139079e816f60c47773427",
+      "status": "passed",
+      "passed": 40,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 3.36
+    },
+    "native_service": {
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/native-execution-service-regression.log",
+      "sha256": "8e3b2bf93ffc30fb518f44b366e24421f3965e22f3fe61f0f78eaa808c67289d",
+      "status": "passed",
+      "passed": 8,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 0.02
+    },
+    "native_observation_privacy": {
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/native-execution-observation-regression.log",
+      "sha256": "9722c7f18ab638adc9cfd48df9e44ebc0bf17d1ac3825062322159dd42e03171",
+      "status": "passed",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 0.0
+    },
+    "native_config_writer": {
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/native-execution-config-final.log",
+      "sha256": "d4f055aa19ef9552ea049b0e27f3b320f83d73591a1ad3b3a49fc2d40e2107f1",
+      "status": "passed",
+      "passed": 15,
+      "failed": 0,
+      "ignored": 0,
+      "seconds": 0.01
+    },
+    "clippy_all_targets": {
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/clippy-native-execution-adapter-final.log",
+      "sha256": "f77d21b7804fa2fef76978621dadfc69c25ceba67c8f8e0336dd6d972841af51",
+      "status": "passed"
+    },
+    "frontend_eight_files": {
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/execution-frontend-switches-final.log",
+      "sha256": "51a471a3d87f5c77e8432b36c2c6a28629e3bb9ec1f4e2d06a0d65ae7b8b2b4e",
+      "status": "passed"
+    },
+    "python_projection": {
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/execution-projection-python-final.log",
+      "sha256": "729498e5bb74791c449bd81daae53960afaea75639e4957a5f7dd233cc52234e",
+      "status": "passed",
+      "passed": 18,
+      "seconds": 0.18
+    },
+    "ruff": {
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/execution-ruff-final.log",
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "status": "passed"
+    }
+  },
+  "source_gates": [
+    {
+      "name": "python_hook_semantic_callgraph_gate",
+      "status": "passed",
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/python_hook_semantic_callgraph_gate-native-adapter.log",
+      "sha256": "8e3101056186cd4d641add66f9eed89b0289db4e105bdb5885821ae3f0484e46"
+    },
+    {
+      "name": "python_capability_cleanup_gate",
+      "status": "passed",
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/python_capability_cleanup_gate-native-adapter.log",
+      "sha256": "d975dee5fe67bdb3f901777eaa0e7a95a5e8ce9e5f310467754474d61c80dc74"
+    },
+    {
+      "name": "rust_io_ownership_gate",
+      "status": "passed",
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/rust_io_ownership_gate-native-adapter.log",
+      "sha256": "bcf901a1c39ebf936483fa5aebdcdb005372d016d67e41b8e46adc6fcbd68472"
+    },
+    {
+      "name": "rust_io_privacy_gate",
+      "status": "passed",
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/rust_io_privacy_gate-native-adapter.log",
+      "sha256": "3f99732114cd01afda57fec9bae91e307310125980da63e8859c1941fbb96b14"
+    },
+    {
+      "name": "authority_after_commit",
+      "status": "passed",
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/authority-native-execution-adapter-after-commit.log",
+      "sha256": "28c7a0f96e528a5457a2e4530582b1e160d59c9796134ddcc55e5fd0fa18bf65",
+      "changed_files_checked": 301
+    }
+  ],
+  "checks": [
+    "separate_disabled_execution_preference",
+    "strict_actual_runtime_artifact_and_SDK_gates",
+    "no_MCP_or_sharing_or_saved_storage_requirement",
+    "unsupported_app_only_grant_refused",
+    "private_memory_domain_limit_one",
+    "workspace_domain_capacity_preserved",
+    "global_SDK_client_limit_eight_includes_execution",
+    "workspace_token_requests_can_only_narrow",
+    "background_private_client_prewarming",
+    "optional_actor_wait_100ms_including_queue",
+    "queued_timeout_atomic_abandonment_without_poison",
+    "dispatched_timeout_cancels_generation_without_retry",
+    "actual_captured_subject_tool_intent_artifact_policy_commitment",
+    "policy_control_fence_released_before_actor_or_SDK_work",
+    "native_policy_rechecked_before_authorization",
+    "SDK_effect_associated_with_actual_journal_invocation",
+    "no_mandatory_executor_reply_or_approval_payload_change",
+    "unchanged_approval_identity_when_assistance_enabled",
+    "Allow_once_one_real_launch_and_replay_refusal",
+    "Always_allow_single_saved_row_five_real_reuses",
+    "native_fallback_without_scope_after_revoke_and_Stop",
+    "changed_script_refused_even_after_actual_SDK_take",
+    "scope_revoke_after_actual_take_preserves_native_once_launch",
+    "SDK_interruption_after_actual_take_preserves_native_once_launch",
+    "native_epoch_liveness_and_expiry_at_real_launch_barrier",
+    "no_actor_owner_or_cleanup_wait_in_launch_witness",
+    "private_bounded_observations_without_authority_claim",
+    "revoke_and_history_reset_prevent_observation_resurrection"
+  ],
+  "bounds": {
+    "optional_actor_wait_ms": 100,
+    "native_context_lifetime_seconds": 30,
+    "additional_private_execution_domains": 1,
+    "global_SDK_clients": 8,
+    "client_lease_seconds": 300,
+    "background_renew_after_seconds": 240,
+    "observations": 32,
+    "observation_retention_seconds": 300
+  },
+  "source_qualification": {
+    "mutable_workspace_documents_at_launch": false,
+    "shared_notes_at_launch": false,
+    "receipt_stream_at_launch": false,
+    "fixed_native_capture_and_policy_facts_only": true,
+    "atomic_context_check_and_send": false
+  },
+  "typecheck": {
+    "status": "baseline_nonzero",
+    "production_diagnostics": 18,
+    "context_production_diagnostics": 0,
+    "exact_baseline_comparison": true,
+    "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/execution-production-typecheck.log",
+    "sha256": "e168e402cffadeb7c2ef132a3d02dd03f047ff743856948a1ca713b55f5e6e82",
+    "unfiltered_diagnostics": 280,
+    "new_test_node_import_diagnostics": 2
+  },
+  "source_hashes": {
+    "dashboard/package.json": "776cff5a810c48ad3643f26494e09869f671665e1290f455c78c345187e6a411",
+    "dashboard/src/context-assistance/execution-observation.ts": "f4fed8d19725954dea6c85c7a1c17531a3863e743f17af475aa6a0433293233e",
+    "dashboard/src/context-assistance/execution-panel.tsx": "bd338a782e01d9ccf55360b33eda401352d4b423f229fe3c8ac1ed8caacb057d",
+    "dashboard/src/context-assistance/execution.test.tsx": "924dad201583c4b9b36930e2d763103336cb3dade904df0c472f20ed7fe85e7b",
+    "dashboard/src/context-assistance/settings-controls.test.tsx": "e0cc9d8ace9dbd133c8200a550d08e15416c42b18be12b219fcb3c851b3b086e",
+    "dashboard/src/context-assistance/settings-controls.tsx": "d69c0837988722b9efb5ba77547fd6616a6f54a3bca15aac8d77040c9c90b03c",
+    "dashboard/src/context-assistance/settings-panel.tsx": "c019eca5a5a088ad8a1b0cfd71463f693623e0e57ded0b2863053af986e6efca",
+    "dashboard/src/context-assistance/status.ts": "b74380c49bf7ca60b30e3b2192bb6354776d0d2fa37e946725d304cbcab3946d",
+    "dashboard/src/context-assistance/types.ts": "9f24d9203e4450fbde7f9151baeac190f971482edbd35116a724670d937b8425",
+    "dashboard/src/context-assistance/workspaces-panel.tsx": "b4099bf6cece6c2bdc155892ce411d4159deda9371170bbfe6b88085985fcc6f",
+    "dashboard/src/guard-types.ts": "753007cdf14e9750a94183bd54074c5b17a5b391451b82da34036d539b53e079",
+    "docs/guard/cigar-integration/EXECUTION_LOG.md": "4fcc302c85edbc89d7ebe38e34dcdcdfccaf29e18bd3b66a57280a757c00e357",
+    "docs/guard/cigar-integration/architecture.md": "e7beadb0846c64ec3f81217b6978a359464ebbc4a8b38fa4826c08cec01406b0",
+    "docs/guard/cigar-integration/delivery-and-validation.md": "da50d1cfa1957ef517ca8ac63161dd01735a2b7cc1eb3ab4bc9ecad05bd0f75b",
+    "docs/guard/cigar-integration/execution-handoff-design.md": "03660174367b1e02b9a50f29d28fe93223015975ab19c5dfae7f177750ff3ec3",
+    "docs/guard/cigar-integration/native-execution-context.md": "3d84edc10d945c830ec522a0457583834aa219971926c2607592eb4774da5b8d",
+    "docs/guard/cigar-integration/runtime-controls.md": "44faadd93bf33ce508280a810e60a233373258a97160f7022c4515e0fa3ee8bb",
+    "rust/crates/guard-context-assistance/src/actor.rs": "c35bd12a0b8bd5a0a2a9cc5a2b6f6ee8620148ceaf75b515b135723d18f2ce9f",
+    "rust/crates/guard-context-assistance/src/actor_tests.rs": "0bdc20dbcd903d8f5e011936b50e1e494fd2de5c1d31ad61b612c8def370cffe",
+    "rust/crates/guard-context-assistance/src/broker.rs": "6d2753009b97bbc2586a3bae34a67d23b24caa72bd2ca45c7ed9230436c95263",
+    "rust/crates/guard-context-assistance/src/broker_clients.rs": "531bce2c7bdcb43cae6740c4e04536f4363bf26ecc5ad030b612a14aa88fa242",
+    "rust/crates/guard-context-assistance/src/broker_domain.rs": "4930dd4c2ec1a768a4fe9c2750d33370d1b1fb15c673d5b27ccdcb08f415e174",
+    "rust/crates/guard-context-assistance/src/broker_execution_doctor.rs": "d47d4598b4b0a72ff836d207ff3eac6610d0ed3f041ccc0537aa07ab58a4936b",
+    "rust/crates/guard-context-assistance/src/config.rs": "746d027efcd65b4af9e1479f24a559d318bbab7e651f432b442c69efa26a1caa",
+    "rust/crates/guard-context-assistance/src/lib.rs": "8e601396333361d16c81254ca1bb7c17a787120d1dc8f80f5863aee5c1548bfa",
+    "rust/crates/guard-context-assistance/src/restriction_tests.rs": "dd9b01b8cd641c4c427c7569a3eca7cceffe3cca65b970479a8f84f4041af6ed",
+    "rust/crates/guard-context-assistance/src/restrictions.rs": "1b22d7e86e3f1a29d690a9c20d732fd6d765b761900679dd9189c44c9007b2c5",
+    "rust/crates/guard-context-assistance/src/runtime.rs": "bfd700807de9c1df3d768f3f26fdbad34420898fc3e71dfb476fec08f6d2a728",
+    "rust/crates/guard-context-assistance/src/tests.rs": "3c835bdc0584dc69d6f64c763f33142b75c9a5e39921fc06e8d1a58233d9efb0",
+    "rust/crates/guard-runtime/src/context_assistance_engine.rs": "5e07c029c895690e46b778fab4f8203205c5b25567ad65d9c177c7c47bfa7cc9",
+    "rust/crates/guard-runtime/src/context_assistance_engine_execution.rs": "5057fb73e31e0025c6e07b5f5c742e2fbf2adcb75105d44f0319623ad6b788e1",
+    "rust/crates/guard-runtime/src/context_assistance_engine_grants.rs": "a9a79bd337e6232f94757ba9f0361829aff5301f4a80bf3e3c777de04f4b61ed",
+    "rust/crates/guard-runtime/src/context_assistance_execution.rs": "05e50a4651a84ec9c503fd2dddb3c1d444a07ca658c23c939f67762acf04ae8a",
+    "rust/crates/guard-runtime/src/context_assistance_service.rs": "14fdb97b3d21d5b910ea47a4296fedea675350a28e74e151cca852b3e731d991",
+    "rust/crates/guard-runtime/src/context_assistance_service_execution.rs": "a39c95688663bbca3a53176ab8b7a8e401df6cf2c22c9e79cffef17aa77a6740",
+    "rust/crates/guard-runtime/src/context_assistance_service_status.rs": "d254515cbbccf4f72f7874a3c4615ee84027219deeb775cec44a807611ef6a92",
+    "rust/crates/guard-runtime/src/context_assistance_service_workspace.rs": "ab38677072c13ebbe95743afc02ad65627c11b7e94c99c62d2aca2ec8315dabe",
+    "rust/crates/guard-runtime/src/lib.rs": "a8fb7939583fbb843de282f7a03d6bc60d38aa26e4d24ae7e3234a0d0184cf4a",
+    "rust/crates/guard-runtime/src/native_exact_action_op.rs": "b863b98546a26098137e31eb06e8a60ec2872947c6556488f9eb9c50477d2872",
+    "rust/crates/guard-runtime/src/native_exact_action_op/bash_capture.rs": "4f21028e26d74b09bb58a98df3c1985f3cd0952e8210a89d47e6b5c5d357e39c",
+    "rust/crates/guard-runtime/src/native_exact_action_op/bash_context.rs": "9d1436e6de839ec03eef5b09b4ee8860d55c715820aaed818bd6b0e45b5f7e63",
+    "rust/crates/guard-runtime/src/native_exact_action_op/bash_context_tests.rs": "e1f6c44963a8dcf366f860619ad2c3801b6ff2bc84ca80f6b07d145239bd86d2",
+    "rust/crates/guard-runtime/src/native_exact_action_op/bash_grant.rs": "1b7fdc93c460ac11d1c682ae9dd5d1997184b02e52554f56fcbb17c13ee90b24",
+    "rust/crates/guard-runtime/src/native_exact_action_op/bash_grant_tests.rs": "9698e10f41e9aaceb5d629f5ffc4449cb74e4d6ededea8908ac5dc181bc059ea",
+    "src/codex_plugin_scanner/guard/native_context_assistance.py": "aa46af725790551c6531d01c871d7d521030f4db685ba0df62da65101cbb8a61",
+    "tests/test_native_context_assistance.py": "2b4ece299120ec2a41140dc0fdecbbd4db0aced36fe7e58dc8bbbda19f955f0b"
+  },
+  "previous_attempts": {
+    "SDK_test_private_registry_compile_failure": {
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/native-execution-private-doctor-first.log",
+      "sha256": "957d01ee34150c71a9665c1f768d983d7eb9a6a8bd1a79540894b09a5ba54eb5"
+    },
+    "initial_fixture_output_timing_refusal": {
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/native-execution-adapter-actual-first.log",
+      "sha256": "2a822ca8571d630fb0e1cd273976e88f7d8b2d534678580fb9dc826604561f1e"
+    },
+    "two_case_positive_phase": {
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/native-execution-adapter-actual-second.log",
+      "sha256": "52dcc357b71ebbc248235e78a8ada6d1c3e46250ab06f9ee021c560c8c845695"
+    },
+    "four_case_prior_phase": {
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/native-execution-adapter-four.log",
+      "sha256": "05942c544565fcaa2aec66bde10b6a945a9b6bd26c144d78dfca456ebb075b94"
+    },
+    "empty_config_filter_not_validation": {
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/native-execution-config-regression.log",
+      "sha256": "9593cab1dcdfb14a7138e78816e5a831bb8f2c22d7804141958fdb7c8da5eb69"
+    },
+    "test_initializer_clippy_failure": {
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/clippy-native-execution-adapter.log",
+      "sha256": "ffd41ea5ff9789516d946c9f131e9fbf0e05341b79e415148c4be28bb297211d"
+    },
+    "unfiltered_typecheck_nonzero": {
+      "private_path": "/private/tmp/hol-guard-cigar-persistence-product-checkpoint/execution-typecheck.log",
+      "sha256": "8794f6a270044447d5dceb45f9a7192b89da09c9bc9a80cf6bcf3aa9e8706475"
+    }
+  },
+  "product_state": {
+    "actual_native_owning_executor_qualified": true,
+    "new_installed_product_qualified": false,
+    "actual_external_app_delivery_qualified": false,
+    "latest_qualified_installed_source": "8fccb14115c61793584bce069b2a325a92e05f79",
+    "base_Guard_python_requirement_changed": false,
+    "approval_semantics_changed": false,
+    "new_MCP_execution_tool": false,
+    "mandatory_synchronous_hook_SDK_dependency": false,
+    "goal_complete": false
+  },
+  "limitations": [
+    "Owner fixtures are real execution and SDK proof, not installed HTTP/CLI/browser or external app proof.",
+    "The full 51-case library phase preceded test-only quota additions; the final doctor/resource test separately covers those additions.",
+    "Existing 40-case native grant regressions exercise assistance off; four actual SDK cases separately exercise opt-in and after-take faults.",
+    "The original fixture was outside existing output-timing proof; only the disposable script form was corrected without weakening capture or approvals.",
+    "Previous hardened-helper launch failures remain unqualified; this receipt covers the explicitly selected proven script profile.",
+    "Matching package/dashboard, installed and actual harness/Desktop/setup/platform acceptance remains pending.",
+    "Feature-on/off contention/SLO, all-worker RSS, useful reuse and remaining full-goal release checks remain pending; no exponential speedup is claimed."
+  ]
+}

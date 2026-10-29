@@ -1,0 +1,56 @@
+{
+  "schema": "guard-cigar-installed-browser-verification.v1",
+  "observed_date": "2026-10-23",
+  "status": "passed",
+  "qualification": "local-development-darwin-arm64-only",
+  "source_commit": "7714410b98e8f3bd5c7b8fcb92f20b7d430337d5",
+  "guard_version": "3.55.1",
+  "guard_python": "3.12.13",
+  "selected_cigar_python": "3.14.7",
+  "cigar_version": "0.14.1",
+  "worker_sha256": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112",
+  "native_binary": {
+    "bytes": 110181136,
+    "sha256": "2c3a69c1872397320efc6db77fc75c9633e21f083ade3337a9106f246ce23f02",
+    "code_signature_verified": true,
+    "profile": "development; debug metadata stripped"
+  },
+  "wheel": {
+    "bytes": 40100057,
+    "sha256": "eae9e358d8d96b0a7ab08b6acb12d7e55183dad628e89408d35793394e5daa02",
+    "platform": "macosx_11_0_arm64",
+    "installation": "task-private target directory; live Guard unchanged"
+  },
+  "browser": {
+    "engine": "Playwright locked Chromium headless shell 1223",
+    "passed": 1,
+    "test_seconds": 16.4,
+    "total_seconds": 39,
+    "api_mocking": false,
+    "guard_core_selection": "automatic bundled runtime with matching manifests"
+  },
+  "checks": [
+    "off_by_default",
+    "keyboard_opt_in",
+    "proof_backed_settings_save",
+    "actual_selected_314_worker",
+    "separate_source_access_approval",
+    "native_cited_selected_document",
+    "source_digest_drawer",
+    "changed_file_stale_refusal",
+    "explicit_file_refresh",
+    "historical_context_comparison",
+    "source_withdrawal",
+    "workspace_revocation",
+    "unrelated_save_preserves_intent_and_runtime",
+    "reload_preserves_opt_in",
+    "mobile_width_immediate_opt_out",
+    "reload_confirms_opt_out",
+    "forged_runtime_assertions_refused"
+  ],
+  "limits": [
+    "Local development candidate only; no release performance/RSS or frozen Desktop qualification.",
+    "Post-admission evidence notifications, authenticated agent tools and remaining full-goal phases are still pending.",
+    "Traces and private fixture session/proof files are not committed."
+  ]
+}

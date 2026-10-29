@@ -1,0 +1,429 @@
+{
+  "schema": "guard-cigar-upgrade-baseline.v1",
+  "recorded_date": "2026-10-26",
+  "branch": "feature/integrate-cigar-0.14.1",
+  "head": "fedfc7a418145ed2f82cb21f9dd38a2dda85e46d",
+  "existing_changes": [
+    {
+      "path": "dashboard/e2e/integration/context-assistance.mutating.spec.ts",
+      "status": " M",
+      "sha256": "93db099b1c20186e5c7cd0f04178325357f37adb5aa2e8ff2317b8cef4b25f0d"
+    },
+    {
+      "path": "dashboard/e2e/integration/context-execution.mutating.spec.ts",
+      "status": " M",
+      "sha256": "079bd6fbfc0bd23ed7c4a36d26d771341569b302ada34a31d0eb8e3c09668814"
+    },
+    {
+      "path": "dashboard/e2e/integration/context-history-flow.ts",
+      "status": " M",
+      "sha256": "a7a8dd546523cde7eec9046c81b501ad2ed57353a975ff09e35252ff75baa12b"
+    },
+    {
+      "path": "dashboard/e2e/integration/context-persistence.mutating.spec.ts",
+      "status": " M",
+      "sha256": "69a6710bd1acc947c379ad2175de98fbcbfe29dd946c3e57369d814f3541290e"
+    },
+    {
+      "path": "dashboard/e2e/integration/context-sharing-flow.ts",
+      "status": " M",
+      "sha256": "de7781e273c24a24a36cda3e378efcae9fad3dc0256f9226bdb1c80346aa6324"
+    },
+    {
+      "path": "dashboard/e2e/integration/context-stop.ts",
+      "status": " M",
+      "sha256": "7617254a60690d40354667a73f55824ae6523d14a426659231e8fd8275a602a2"
+    },
+    {
+      "path": "dashboard/package.json",
+      "status": " M",
+      "sha256": "b422062db562b12616cf41014795c729d8341a842a9d4cd0c80653bbebacb0b5"
+    },
+    {
+      "path": "dashboard/src/app-routing.test.ts",
+      "status": " M",
+      "sha256": "d1e36bbbb367d8014bb44336387687babbab3b975a5ed167ee5b7e2f7644909c"
+    },
+    {
+      "path": "dashboard/src/app.tsx",
+      "status": " M",
+      "sha256": "0d9f785e5ef06cf66ef4f050e597b48de22fe9509df80acb9ff67cd1ffab63b5"
+    },
+    {
+      "path": "dashboard/src/approval-center-layout.tsx",
+      "status": " M",
+      "sha256": "189e19cd138c53c5ead71addab5452bddd51d9494ffcf9d3a1a9072d7789a58f"
+    },
+    {
+      "path": "dashboard/src/approval-center-primitives.tsx",
+      "status": " M",
+      "sha256": "ad03c3d2d7d66eb6800454f4fd0ac74e12b45a83932b3a5da784e89ffe8dd6b9"
+    },
+    {
+      "path": "dashboard/src/context-assistance/data-repair-panel.tsx",
+      "status": " M",
+      "sha256": "a38a1690996c8f6592629b64035b6596ad2f06263325da7f7675a8809d63a2b1"
+    },
+    {
+      "path": "dashboard/src/context-assistance/history-panel.tsx",
+      "status": " M",
+      "sha256": "74c0e383f1c9bdc2dcac063132b8e2d905216668fa05c9cbc8c05b5fe85116db"
+    },
+    {
+      "path": "dashboard/src/context-assistance/home-status.tsx",
+      "status": " M",
+      "sha256": "1b9f8edb0509f74541024cabc071235e615eda85efaf23316d4d5fb6031f9397"
+    },
+    {
+      "path": "dashboard/src/context-assistance/review-panel.tsx",
+      "status": " M",
+      "sha256": "fbc34ee1d1736be71b5d70ae391512a962d39f0066e27803711dbf31ae8307b0"
+    },
+    {
+      "path": "dashboard/src/context-assistance/settings-controls.test.tsx",
+      "status": " M",
+      "sha256": "92779225d5d5b4d22703e87b4d3097685902d588cce8bc80e48d6fc1f97ff876"
+    },
+    {
+      "path": "dashboard/src/context-assistance/settings-controls.tsx",
+      "status": " M",
+      "sha256": "7347022dd3fef5c9f4f700e0f6ed0ad234df50ee4b4c4a0532d60e59ab3fae80"
+    },
+    {
+      "path": "dashboard/src/context-assistance/settings-panel.tsx",
+      "status": " M",
+      "sha256": "64b23a915b5c916bcf42d45426f0e5ff96f675ba3cba2489145e25273227bc35"
+    },
+    {
+      "path": "dashboard/src/context-assistance/status.test.ts",
+      "status": " M",
+      "sha256": "b0887cbe34a747ce85648e4b635e25d855785ec860cc88c0586de81ec1b3c3e0"
+    },
+    {
+      "path": "dashboard/src/context-assistance/status.ts",
+      "status": " M",
+      "sha256": "39b1fb269fe79486d14bc19c19c3ae4cc288b4a305934b904649b6dc76d592fe"
+    },
+    {
+      "path": "dashboard/src/home-dashboard.tsx",
+      "status": " M",
+      "sha256": "041659b081594ac1f873c5fe0586256e3aa50a286587a4349769fdbde6334714"
+    },
+    {
+      "path": "dashboard/src/main.tsx",
+      "status": " M",
+      "sha256": "36af9df3fb49ec8994e47b3fdadd142d619822cc08af070061c65b4982f848f3"
+    },
+    {
+      "path": "dashboard/src/settings-workspace.tsx",
+      "status": " M",
+      "sha256": "8e66d9cdb61783e25fc80d12b1155dde126272c9b738e6dc7c245b40470e9080"
+    },
+    {
+      "path": "dashboard/src/shell-navigation-model.ts",
+      "status": " M",
+      "sha256": "641dca63ff77e5acf8d1c1544b07a33c012c6236f3b2a70a429a668b9c709270"
+    },
+    {
+      "path": "dashboard/src/shell-navigation.test.tsx",
+      "status": " M",
+      "sha256": "76dc7015758390f8a49dd4a348bfc879b30267b56c521de803c3732e6841e63c"
+    },
+    {
+      "path": "docs/guard/cigar-integration/EXECUTION_LOG.md",
+      "status": " M",
+      "sha256": "efd14750880afc94e994721364e86cb006d4bd35321da5b5df7affca884ec260"
+    },
+    {
+      "path": "docs/guard/cigar-integration/runtime-controls.md",
+      "status": " M",
+      "sha256": "a335750158ac75b9cdfecc710bcc4406a28351f9bd9b7c93be65dc82bab502c0"
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/server_dashboard_support.py",
+      "status": " M",
+      "sha256": "fefd93f9870f4a59eca0f8641e6b4c96ee74dd3772978e0c976b1ec8b8782611"
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/about-workspace-CwAXaY68.js",
+      "status": " D",
+      "sha256": null
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/app-detail-workspace-DuZMRSTN.js",
+      "status": " D",
+      "sha256": null
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/audit-workspace-CIN8COUS.js",
+      "status": " D",
+      "sha256": null
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/confirm-dialog-DmyTDLpJ.js",
+      "status": " D",
+      "sha256": null
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/connect-guard-cloud-button-6cOinrj4.js",
+      "status": " D",
+      "sha256": null
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/extensions-workspace-BZ2FE6aV.js",
+      "status": " D",
+      "sha256": null
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/feed-health-workspace-BiGTZO_a.js",
+      "status": " D",
+      "sha256": null
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/fleet-workspace-CKGqZAvt.js",
+      "status": " D",
+      "sha256": null
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/harness-version-label-BtWky0QK.js",
+      "status": " D",
+      "sha256": null
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/home-dashboard-DxnaEv4t.js",
+      "status": " D",
+      "sha256": null
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/home-protection-module-BKnUcfkF.js",
+      "status": " D",
+      "sha256": null
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/mcp-policy-request-panel-D8ngVaRU.js",
+      "status": " D",
+      "sha256": null
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/policy-workspace-page-BkQZ2cX7.js",
+      "status": " D",
+      "sha256": null
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/protection-repair-page-DutC0-Fg.js",
+      "status": " D",
+      "sha256": null
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/releases-workspace-DbXydEYd.js",
+      "status": " D",
+      "sha256": null
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/settings-save-proof-modal-DC5SmT_y.js",
+      "status": " D",
+      "sha256": null
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/settings-workspace-BFuizqwp.js",
+      "status": " D",
+      "sha256": null
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/supply-chain-hub-workspace-YJbr9bD2.js",
+      "status": " D",
+      "sha256": null
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/supply-chain-workspace-nNClhkky.js",
+      "status": " D",
+      "sha256": null
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/guard-dashboard.js",
+      "status": " M",
+      "sha256": "db4f2bad556892f6bfc6aa6c6a78c1ca83d2ab903970108d2ecf251eb0557666"
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/index.css",
+      "status": " M",
+      "sha256": "7664b70abc1c1b49869be8b6ab09b18a67ef1c6aa62ebbf65cfa2446a3b88f56"
+    },
+    {
+      "path": "dashboard/e2e/cigar-workspace.spec.ts",
+      "status": "??",
+      "sha256": "be7474b1e14bf67363cb515074aaf1f7715e86c1dcf109732ad92da8260a8f39"
+    },
+    {
+      "path": "dashboard/src/context-assistance/tutorial-content.ts",
+      "status": "??",
+      "sha256": "e1e53c9348fbca196db536c938d3da9590c9ce2a55ba44eec85f083b7d2ee5f4"
+    },
+    {
+      "path": "dashboard/src/context-assistance/tutorial-progress.ts",
+      "status": "??",
+      "sha256": "bf428893adf33a102c5cd078ecf35b6fd7dea8aef54fa2c9b8be07881bae1f50"
+    },
+    {
+      "path": "dashboard/src/context-assistance/tutorials.css",
+      "status": "??",
+      "sha256": "9883f3d8323dd3978a6475b489dba3fbc5afc40583eec8ff6d5104cd1d2f920a"
+    },
+    {
+      "path": "dashboard/src/context-assistance/tutorials.test.tsx",
+      "status": "??",
+      "sha256": "640dcffcef1e7f9234c22b1d4c1bf4d9f62f7fed50fbcf49405ac71699442f27"
+    },
+    {
+      "path": "dashboard/src/context-assistance/tutorials.tsx",
+      "status": "??",
+      "sha256": "f114609af51ff11117104ab3eb02560591139413118a9e88661045317887a2d8"
+    },
+    {
+      "path": "dashboard/src/context-assistance/workspace-guide.tsx",
+      "status": "??",
+      "sha256": "1fd23c8aeb66428782a05de3d018dba6ff9195c0bbce58ce1e6446e874fcf13b"
+    },
+    {
+      "path": "dashboard/src/context-assistance/workspace-model.ts",
+      "status": "??",
+      "sha256": "f269480c78698ca84886289253eb4275191e60db3369cc4cd54ff006aae068a5"
+    },
+    {
+      "path": "dashboard/src/context-assistance/workspace-overview.tsx",
+      "status": "??",
+      "sha256": "2795b8573fbeb89e18e77444e614f8d0b0254f88942abd155cbe2c619e30b5ba"
+    },
+    {
+      "path": "dashboard/src/context-assistance/workspace.css",
+      "status": "??",
+      "sha256": "ca062a3998cb42d5b0a541e54e100a188777edeb85454ee96167b2cf01eb0c62"
+    },
+    {
+      "path": "dashboard/src/context-assistance/workspace.test.tsx",
+      "status": "??",
+      "sha256": "27b5c15fa740b7e17d517501a9f01c614b391bf192ec7c8850f5a02b9822d6dd"
+    },
+    {
+      "path": "dashboard/src/context-assistance/workspace.tsx",
+      "status": "??",
+      "sha256": "59fd6ae3829d908734a686817f08ff4b9b777aefbc2c66d4a23810e0c6d96dbe"
+    },
+    {
+      "path": "docs/guard/cigar-integration/CIGAR_UPGRADE_PLAN.md",
+      "status": "??",
+      "sha256": "966d8400aad61cd592d3f78243c5fdba9b7588b1a2672486b4af95c843a2cd24"
+    },
+    {
+      "path": "docs/guard/cigar-integration/evidence/cigar-activation-ux-verification.json",
+      "status": "??",
+      "sha256": "051808aa825acf9c137c12ef275bfc31cc567132298c2e62ccbb4a0a632c3faf"
+    },
+    {
+      "path": "docs/guard/cigar-integration/evidence/cigar-tutorial-ui-verification.json",
+      "status": "??",
+      "sha256": "c260149182e91d2660e5059872f652de8ab24bc9ca01e0ca327565bb4ad2924b"
+    },
+    {
+      "path": "docs/guard/cigar-integration/evidence/cigar-workspace-ui-verification.json",
+      "status": "??",
+      "sha256": "bc67ca37520aeb269d63678e14b8b47e7749897b5f2c53d322e59f83dbe93adb"
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/about-workspace-BJiJ6l9Q.js",
+      "status": "??",
+      "sha256": "cadc70980c276a8ca9bb769747e41a9f8374301e05fe3e659d6dd859eed2902d"
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/app-detail-workspace-CyiIOI9K.js",
+      "status": "??",
+      "sha256": "65032849ac9dabf9335a57981afc4eca89fd609cab180b7cff509d87d198f686"
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/audit-workspace-TIWpPp7N.js",
+      "status": "??",
+      "sha256": "7d2c60aa720d7877b7e3b9fb2f67539fc6e9c5629682e0c9144233481aba6cb7"
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/confirm-dialog-CyZK80Rd.js",
+      "status": "??",
+      "sha256": "a1841778796f536fb133a2b94d1f52750202e7cc5e53e2cf74b811230640a051"
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/connect-guard-cloud-button-DjS2WjgL.js",
+      "status": "??",
+      "sha256": "998efa6e655063b2c2d261b4481bff3c7c4c8d2c4bc44394241ffa05370c7a56"
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/extensions-workspace-DGYV1lGi.js",
+      "status": "??",
+      "sha256": "8d20c1a11bf8b9aee2b1cb57e052681c8f05023d66f9be9053d873ef8329c4eb"
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/feed-health-workspace-Kste62_r.js",
+      "status": "??",
+      "sha256": "19cb24ddc4f7e63306ee0787eee0b422f80c580747fadfeaef06a3211b0d7e2c"
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/fleet-workspace-CYNY9vyn.js",
+      "status": "??",
+      "sha256": "297a3054033b5ff61b739541d0ff900ba5378995ed58ccf66ef2155a438e1ebc"
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/harness-version-label-C5EbLAEt.js",
+      "status": "??",
+      "sha256": "851521e5bbe2c1bf9e512d2606e61c2884a118b0edfdeee297ec50eca7820911"
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/home-dashboard-yCoCPp3N.js",
+      "status": "??",
+      "sha256": "2d430acb2e7385e5df6a4de899f26d5eb93c4865a8775af81aeda41a93e77863"
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/home-protection-module-CYbLiFUn.js",
+      "status": "??",
+      "sha256": "48d3064b94245b8be05e5f52e95536d38886bc60ea5b4d490cf8d128455e6c8a"
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/mcp-policy-request-panel-iFu3fwhN.js",
+      "status": "??",
+      "sha256": "b375147e032d850797ed36d6da61d461ac0bb1d4c189406a52274c50aa6baf48"
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/policy-workspace-page-CUEOdsak.js",
+      "status": "??",
+      "sha256": "acaa4ad933cf4c64d6f5bae827a8e492a4936cbdf760627ba7a58178fe9ab4d3"
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/protection-repair-page-VkRXfnFo.js",
+      "status": "??",
+      "sha256": "1379b05990b010b3b2a324cec590ebec9db5ac034c6d736085b7f914f6b2b437"
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/releases-workspace-BH7dB4DS.js",
+      "status": "??",
+      "sha256": "790abc28d7f07219315011f8e1edb56bd3445f4e551fe484324a40d75dbda66f"
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/settings-save-proof-modal-C9OygXs6.js",
+      "status": "??",
+      "sha256": "7b6003636f9d786a3847677e1014caf68335a45c5d61e8d64b389f1a62038afb"
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/settings-workspace-Bn9uDGHj.js",
+      "status": "??",
+      "sha256": "a96bd95dbd9df3252b29efaa32c8fdfccdbaa0e85454cf0f608dfc5769c4cb84"
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/supply-chain-hub-workspace-ekItFaMH.js",
+      "status": "??",
+      "sha256": "d6a6c2767d5b0309424dda72833a38019f8f8737a02906714206668115348989"
+    },
+    {
+      "path": "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/supply-chain-workspace--KLEaetj.js",
+      "status": "??",
+      "sha256": "4d969a6c162de02f907aa5797987c2b84d9a93f555233d708178719e05901600"
+    }
+  ],
+  "scope": "read and hash only pre-existing tracked/untracked changes; no staging, reset, preview or SDK changes"
+}

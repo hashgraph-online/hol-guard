@@ -1,0 +1,340 @@
+{
+  "schema": "guard-cigar-worker-reuse-installed-functional-verification.v1",
+  "source_commit": "d780af20d775564298c72e0e78616f7afd76e69a",
+  "planned_backend_cases": 13,
+  "passed_backend_cases": 13,
+  "checks": {
+    "core": {
+      "controller": {
+        "schema": "guard-cigar-worker-reuse-functional-controller.v1",
+        "job": "core",
+        "planned_cases": 8,
+        "observed_new_descendants_remaining": 0,
+        "resources": {
+          "samples": 1580,
+          "sampling_errors": 0,
+          "median_rss_bytes": 460095488,
+          "peak_rss_bytes": 1014333440,
+          "at_peak_counts": {
+            "native_runtime": 9,
+            "guard_python_worker": 4,
+            "benchmark_daemon_host": 1,
+            "sdk_worker": 1,
+            "python_bridge": 1,
+            "other_python_child": 2
+          },
+          "at_peak_rss_by_kind": {
+            "native_runtime": 160481280,
+            "guard_python_worker": 614989824,
+            "benchmark_daemon_host": 94142464,
+            "sdk_worker": 61177856,
+            "python_bridge": 29147136,
+            "other_python_child": 54394880
+          },
+          "maximum_counts": {
+            "guard_python_worker": 4,
+            "python_bridge": 1,
+            "benchmark_daemon_host": 1,
+            "other_python_child": 2,
+            "other_descendant": 4,
+            "terminated_child": 1,
+            "native_runtime": 11,
+            "exiting_host_python_child": 1,
+            "sdk_worker": 2
+          },
+          "includes_observed_reparented_children": true,
+          "shared_pages_may_be_counted_in_multiple_processes": true
+        },
+        "source_commit": "d780af20d775564298c72e0e78616f7afd76e69a",
+        "command": [
+          "/private/tmp/hol-guard-cigar-locked-runtime/bin/python",
+          "-m",
+          "pytest",
+          "-x",
+          "-q",
+          "-o",
+          "addopts=",
+          "--basetemp",
+          "/private/tmp/hol-guard-cigar-context-worker-reuse-20261025/acceptance-core/test-state",
+          "--junitxml",
+          "/private/tmp/hol-guard-cigar-context-worker-reuse-20261025/acceptance-core/results.xml",
+          "tests/test_context_assistance_cli_installed.py",
+          "tests/test_context_agent_installed.py",
+          "tests/test_context_persistence_restart_installed.py",
+          "tests/test_context_execution_sink_installed.py",
+          "tests/test_context_useful_docs_installed.py",
+          "tests/test_context_native_authority_loss_installed.py"
+        ],
+        "returncode": 0,
+        "seconds": 130.979,
+        "installed_package_with_explicit_test_native_and_compiler_selection": true,
+        "tests": 8,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "inputs_unchanged": true,
+        "fingerprinted_files": 3878
+      },
+      "inputs": {
+        "path": "/private/tmp/hol-guard-cigar-context-worker-reuse-20261025/acceptance-core/inputs.json",
+        "bytes": 783757,
+        "sha256": "1001156ea2bfddcbf7714b203d5d661014f23059e1d2eae42098b681fb0ae5d1"
+      },
+      "junit": {
+        "path": "/private/tmp/hol-guard-cigar-context-worker-reuse-20261025/acceptance-core/results.xml",
+        "bytes": 1633,
+        "sha256": "c0a4fbf601e5f12de832bdf8a70f34c6c6fb55b5fec79d47ebbe2e2c43bac27b"
+      },
+      "stdout": {
+        "path": "/private/tmp/hol-guard-cigar-context-worker-reuse-20261025/acceptance-core/stdout.log",
+        "bytes": 110,
+        "sha256": "fcb89069ea58ee054e92128c84a881d9b2acd61aa6a4e120a3c5ac210266ad75"
+      },
+      "stderr": {
+        "path": "/private/tmp/hol-guard-cigar-context-worker-reuse-20261025/acceptance-core/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    "sdk": {
+      "controller": {
+        "schema": "guard-cigar-worker-reuse-functional-controller.v1",
+        "job": "sdk",
+        "planned_cases": 4,
+        "observed_new_descendants_remaining": 0,
+        "resources": {
+          "samples": 1311,
+          "sampling_errors": 0,
+          "median_rss_bytes": 709033984,
+          "peak_rss_bytes": 1000669184,
+          "at_peak_counts": {
+            "python_bridge": 1,
+            "other_python_child": 1,
+            "native_runtime": 9,
+            "other_descendant": 1,
+            "sdk_worker": 2,
+            "benchmark_daemon_host": 1,
+            "guard_python_worker": 2
+          },
+          "at_peak_rss_by_kind": {
+            "python_bridge": 29196288,
+            "other_python_child": 27213824,
+            "native_runtime": 167493632,
+            "other_descendant": 359612416,
+            "sdk_worker": 118767616,
+            "benchmark_daemon_host": 32243712,
+            "guard_python_worker": 266141696
+          },
+          "maximum_counts": {
+            "native_runtime": 10,
+            "other_python_child": 1,
+            "exiting_host_python_child": 1,
+            "guard_python_worker": 2,
+            "benchmark_daemon_host": 1,
+            "other_descendant": 6,
+            "python_bridge": 1,
+            "sdk_worker": 2,
+            "terminated_child": 1
+          },
+          "includes_observed_reparented_children": true,
+          "shared_pages_may_be_counted_in_multiple_processes": true
+        },
+        "source_commit": "d780af20d775564298c72e0e78616f7afd76e69a",
+        "command": [
+          "/private/tmp/hol-guard-cigar-locked-runtime/bin/python",
+          "-m",
+          "pytest",
+          "-x",
+          "-q",
+          "-o",
+          "addopts=",
+          "--basetemp",
+          "/private/tmp/hol-guard-cigar-context-worker-reuse-20261025/acceptance-sdk/test-state",
+          "--junitxml",
+          "/private/tmp/hol-guard-cigar-context-worker-reuse-20261025/acceptance-sdk/results.xml",
+          "tests/test_context_pi_sdk_installed.py"
+        ],
+        "returncode": 0,
+        "seconds": 108.916,
+        "installed_package_with_explicit_test_native_and_compiler_selection": true,
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "inputs_unchanged": true,
+        "fingerprinted_files": 3878
+      },
+      "inputs": {
+        "path": "/private/tmp/hol-guard-cigar-context-worker-reuse-20261025/acceptance-sdk/inputs.json",
+        "bytes": 783757,
+        "sha256": "52a49cbb655de5677f7275a0a8aa44bf93771e2214a494b7166a6cb731b6c010"
+      },
+      "junit": {
+        "path": "/private/tmp/hol-guard-cigar-context-worker-reuse-20261025/acceptance-sdk/results.xml",
+        "bytes": 955,
+        "sha256": "bdfd6728f9d3566dbd4e7a9b259a3909f246e7f44bf22223c1383e4864b04658"
+      },
+      "stdout": {
+        "path": "/private/tmp/hol-guard-cigar-context-worker-reuse-20261025/acceptance-sdk/stdout.log",
+        "bytes": 110,
+        "sha256": "baae4e20a8fa7f241858d23a66a9bd4817885f891eed4063006d1b49c52d82da"
+      },
+      "stderr": {
+        "path": "/private/tmp/hol-guard-cigar-context-worker-reuse-20261025/acceptance-sdk/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    "clients": {
+      "controller": {
+        "schema": "guard-cigar-worker-reuse-functional-controller.v1",
+        "job": "clients",
+        "planned_cases": 1,
+        "observed_new_descendants_remaining": 0,
+        "resources": {
+          "samples": 505,
+          "sampling_errors": 0,
+          "median_rss_bytes": 783384576,
+          "peak_rss_bytes": 2332229632,
+          "at_peak_counts": {
+            "native_runtime": 20,
+            "guard_python_worker": 15,
+            "other_python_child": 8,
+            "sdk_worker": 2,
+            "other_descendant": 1,
+            "python_bridge": 1,
+            "benchmark_daemon_host": 1
+          },
+          "at_peak_rss_by_kind": {
+            "native_runtime": 272973824,
+            "guard_python_worker": 1653456896,
+            "other_python_child": 219136000,
+            "sdk_worker": 122290176,
+            "other_descendant": 2392064,
+            "python_bridge": 30228480,
+            "benchmark_daemon_host": 31752192
+          },
+          "maximum_counts": {
+            "python_bridge": 1,
+            "other_python_child": 8,
+            "terminated_child": 1,
+            "guard_python_worker": 15,
+            "benchmark_daemon_host": 1,
+            "native_runtime": 20,
+            "sdk_worker": 2,
+            "exiting_host_python_child": 1,
+            "other_descendant": 4
+          },
+          "includes_observed_reparented_children": true,
+          "shared_pages_may_be_counted_in_multiple_processes": true
+        },
+        "source_commit": "d780af20d775564298c72e0e78616f7afd76e69a",
+        "command": [
+          "/private/tmp/hol-guard-cigar-locked-runtime/bin/python",
+          "-m",
+          "pytest",
+          "-x",
+          "-q",
+          "-o",
+          "addopts=",
+          "--basetemp",
+          "/private/tmp/hol-guard-cigar-context-worker-reuse-20261025/acceptance-clients/test-state",
+          "--junitxml",
+          "/private/tmp/hol-guard-cigar-context-worker-reuse-20261025/acceptance-clients/results.xml",
+          "tests/test_context_concurrency_installed.py"
+        ],
+        "returncode": 0,
+        "seconds": 42.694,
+        "installed_package_with_explicit_test_native_and_compiler_selection": true,
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "inputs_unchanged": true,
+        "fingerprinted_files": 3879
+      },
+      "inputs": {
+        "path": "/private/tmp/hol-guard-cigar-context-worker-reuse-20261025/acceptance-clients/inputs.json",
+        "bytes": 783961,
+        "sha256": "877b221f059a2aba5a9dbf38b71cdcfed5f7067236e42447fd210dd01564d208"
+      },
+      "junit": {
+        "path": "/private/tmp/hol-guard-cigar-context-worker-reuse-20261025/acceptance-clients/results.xml",
+        "bytes": 427,
+        "sha256": "310c71b4ee6e0822186e4b13402cc017003a8ff1a7444b69b0608523000ed5bc"
+      },
+      "stdout": {
+        "path": "/private/tmp/hol-guard-cigar-context-worker-reuse-20261025/acceptance-clients/stdout.log",
+        "bytes": 99,
+        "sha256": "f579fa05ed776753fdeaa47197e8819559ff0dd7f6bbcea3048fd2d68fdaf10d"
+      },
+      "stderr": {
+        "path": "/private/tmp/hol-guard-cigar-context-worker-reuse-20261025/acceptance-clients/stderr.log",
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    }
+  },
+  "plan": {
+    "schema": "guard-cigar-worker-reuse-functional-plan.v1",
+    "source_commit": "d780af20d775564298c72e0e78616f7afd76e69a",
+    "declared_before_matching_artifact_execution": true,
+    "backend_jobs": {
+      "core": 8,
+      "sdk": 4,
+      "clients": 1
+    },
+    "browser_cases": 3,
+    "onefile_cases": 4,
+    "requires": [
+      "Exact verified installed candidate and approved final CPython 3.14.7/CIGAR 0.14.1",
+      "No skipped, failed or missing case; stable input fingerprints",
+      "Both native approval choices, replay uncertainty, opt-out and fresh authority after restart",
+      "Actual Pi/OMP locked SDKs, MCP sharing/source scopes and installed dashboard assets",
+      "Complete process sampling and no observed new descendant after each functional job"
+    ],
+    "limits": [
+      "Functional qualification does not replace original off/on SLO or fixed five-pair relative gates",
+      "No interactive model/account or other platform/public release acceptance follows"
+    ]
+  },
+  "installed_artifact": {
+    "mode": "auto",
+    "target": "aarch64-macos",
+    "runtime_version": "3.55.1",
+    "protocol_version": 1,
+    "package_origin": "installed",
+    "artifact_sha256": "1e0314064f1b1cddf93068bae3d558a88b253eb1cc2ee8cb57470817774629b0",
+    "artifact_size": 36983184,
+    "build_sha": "d780af20d775564298c72e0e78616f7afd76e69a",
+    "rule_digest": "54e38cc15fe1e4bb231214e15876422e5c0f872d2d3d5bae85b6c02e43ac7111",
+    "platform_tag": "macosx_11_0_arm64",
+    "host_platform": "darwin",
+    "host_arch": "arm64",
+    "python_version": "3.12.13",
+    "CIGAR_imported": false,
+    "path_override": false,
+    "installed_prefix_selected_by_bootstrap": true,
+    "platform_tag_target_verified": true,
+    "static_files_verified": 33,
+    "compiler_manifest_verified": true,
+    "production_source_files_verified": 7,
+    "strict_installed_signature_verified": true,
+    "wheel_bytes": 24051211,
+    "wheel_sha256": "1a9bc3fc1ca6f6bd7962521aabe20a0753f05bc85361b8f0f002001111ec0539"
+  },
+  "controller_source": {
+    "receipt": {
+      "path": "/private/tmp/hol-guard-cigar-context-worker-reuse-20261025/run_functional_acceptance.py",
+      "bytes": 6301,
+      "sha256": "151add53b1c775199f53907b0a380f77e91bef62c26c751cb0902967ef160dea"
+    },
+    "text": "\"\"\"One private installed approval/agent/SDK/native-owner acceptance invocation.\"\"\"\nfrom pathlib import Path\nimport hashlib\nimport argparse\nimport json\nimport os\nimport subprocess\nimport sys\nimport time\nfrom xml.etree import ElementTree\n\nROOT = Path('/private/tmp/hol-guard-cigar-context-worker-reuse-20261025')\nREPO = Path('/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration')\nINSTALLED = ROOT/'package/installed'\nRUNTIME = INSTALLED/'codex_plugin_scanner/_native/hol-guard-runtime'\nBUN = Path('/private/tmp/hol-guard-cigar-pi-sdk/bun-runtime/node_modules/@oven/bun-darwin-aarch64/bin/bun')\nassert hashlib.sha256(BUN.read_bytes()).hexdigest() == 'e0c90ec15d33363e6b70713d56bc3b2c7585c17f40a0fe0f8fd9305901d4e233'\nartifact=json.loads((ROOT/'package/installed-artifact-verification.json').read_text())\nassert artifact['build_sha']=='d780af20d775564298c72e0e78616f7afd76e69a'\nassert hashlib.sha256(RUNTIME.read_bytes()).hexdigest()==artifact['artifact_sha256']\nparser=argparse.ArgumentParser()\nparser.add_argument('job',choices=['core','sdk','clients'])\nargs=parser.parse_args()\nsuites={\n 'core':(['tests/test_context_assistance_cli_installed.py','tests/test_context_agent_installed.py',\n          'tests/test_context_persistence_restart_installed.py','tests/test_context_execution_sink_installed.py',\n          'tests/test_context_useful_docs_installed.py','tests/test_context_native_authority_loss_installed.py'],8),\n 'sdk':(['tests/test_context_pi_sdk_installed.py'],4),\n 'clients':(['tests/test_context_concurrency_installed.py'],1),\n}\nselected,planned_cases=suites[args.job]\nroot=ROOT/('acceptance-'+args.job)\nroot.mkdir(mode=0o700)\n(root/'profile').mkdir(mode=0o700)\nsys.path.insert(0, str(REPO))\nfrom scripts.bench_guard_cigar_cohort import fingerprints\nfrom scripts.native_slo_contract import clear_proof_environment\nfrom scripts.cigar_benchmark_processes import ProcessSampler\nos.environ['GUARD_CIGAR_TEST_SELECTION'] = '/private/tmp/hol-guard-cigar-runtime-validation/selection.json'\nos.environ['GUARD_CIGAR_TEST_APPROVAL'] = '/private/tmp/hol-guard-cigar-runtime-validation/approval.json'\nenvironment = {'PATH':'/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin','LANG':'en_US.UTF-8','PYTHONNOUSERSITE':'1'}\nclear_proof_environment(environment)\nfor key in ['HOL_GUARD_HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOME', 'XDG_CACHE_HOME', 'CODEX_HOME']:\n    environment.pop(key, None)\nenvironment.update(HOME=str(root/'profile'), PYTHONPATH=os.pathsep.join((str(INSTALLED), str(REPO))),\n    HOL_GUARD_TEST_USE_INSTALLED='1', HOL_GUARD_NATIVE='force', HOL_GUARD_NATIVE_BINARY=str(RUNTIME),\n    HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER=str(RUNTIME), HOL_GUARD_NATIVE_REGRESSION='1',\n    HOL_GUARD_TEST_DISABLE_BROWSER_OPEN='1', HOL_GUARD_TEST_SDK_ROOT='/private/tmp/hol-guard-cigar-pi-sdk',\n    PATH=str(BUN.parent)+os.pathsep+environment.get('PATH',''))\npaths = set(REPO/path for path in selected)\npaths.update((REPO/'tests').rglob('*.py'))\npaths.add(REPO/'tests/fixtures/script_approvals/pi_family_bound_bash_sdk.ts')\npaths.add(ROOT/'functional-acceptance-plan.json')\npaths.update(REPO/path for path in ['tests/conftest.py','tests/native_runtime_fixtures.py','tests/test_omp_bound_bash_sdk.py'])\npaths.update([BUN, Path('/private/tmp/hol-guard-cigar-pi-sdk/package.json'),\n              Path('/private/tmp/hol-guard-cigar-pi-sdk/package-lock.json'), Path(__file__)])\nfrozen = fingerprints(RUNTIME, INSTALLED)\nfor path in paths:\n    frozen[str(path)] = hashlib.sha256(path.read_bytes()).hexdigest()\nwith (root/'inputs.json').open('x') as output:\n    json.dump(frozen, output, indent=2)\ncommand = [sys.executable, '-m', 'pytest', '-x', '-q', '-o', 'addopts=',\n           '--basetemp', str(root/'test-state'), '--junitxml', str(root/'results.xml'), *selected]\nselected_python=Path(json.loads(Path(environment['GUARD_CIGAR_TEST_SELECTION']).read_text())['python']) if 'GUARD_CIGAR_TEST_SELECTION' in environment else Path(json.loads(Path(os.environ['GUARD_CIGAR_TEST_SELECTION']).read_text())['python'])\nenvironment['GUARD_CIGAR_TEST_SELECTION']=os.environ['GUARD_CIGAR_TEST_SELECTION']\nenvironment['GUARD_CIGAR_TEST_APPROVAL']=os.environ['GUARD_CIGAR_TEST_APPROVAL']\nstarted=time.monotonic()\nwith ProcessSampler(selected_python) as sampler:\n    before,baseline=sampler.sample_with_identities()\n    with (root/'stdout.log').open('x') as out, (root/'stderr.log').open('x') as err:\n        result=subprocess.run(command,cwd=REPO,env=environment,stdout=out,stderr=err,timeout=600)\n    deadline=time.monotonic()+5\n    after,remaining=sampler.sample_with_identities()\n    while remaining.keys()-baseline.keys() and time.monotonic()<deadline:\n        time.sleep(.05)\n        after,remaining=sampler.sample_with_identities()\n    new_descendants=len(remaining.keys()-baseline.keys())\n    resources=sampler.summary()\ncases = list(ElementTree.parse(root/'results.xml').getroot().iter('testcase')) if (root/'results.xml').exists() else []\nreceipt = {'schema':'guard-cigar-worker-reuse-functional-controller.v1','job':args.job,'planned_cases':planned_cases,'observed_new_descendants_remaining':new_descendants,'resources':resources,'source_commit':artifact['build_sha'], 'command': command,\n           'returncode': result.returncode, 'seconds': round(time.monotonic()-started,3),\n           'installed_package_with_explicit_test_native_and_compiler_selection': True,\n           'tests': len(cases), 'failures': sum(case.find('failure') is not None for case in cases),\n           'errors': sum(case.find('error') is not None for case in cases),\n           'skipped': sum(case.find('skipped') is not None for case in cases),\n           'inputs_unchanged': all(hashlib.sha256(Path(p).read_bytes()).hexdigest()==h for p,h in frozen.items()),\n           'fingerprinted_files': len(frozen)}\nwith (root/'controller.json').open('x') as output:\n    json.dump(receipt, output, indent=2)\n    output.write('\\n')\nprint(json.dumps(receipt))\nprint((root/'stdout.log').read_text()[-7000:])\nif result.returncode: print((root/'stderr.log').read_text()[-3000:])\nraise SystemExit(result.returncode or int(not receipt['inputs_unchanged']) or int(receipt['skipped'] > 0) or int(receipt['tests']!=planned_cases) or int(new_descendants!=0) or int(resources['sampling_errors']!=0))\n"
+  },
+  "limits": [
+    "Installed backend qualification with explicit test native/compiler selection; no model call or interactive Desktop acceptance.",
+    "Browser cases in the original plan have not run for d780af20. The four-case onefile suite failed its second case; this evidence does not supersede that failure.",
+    "Cold-control Python changes made afterward are absent from this installed package. Core/SDK froze 3,878 inputs; clients froze 3,879 after addition of a separate source test. Each input set stayed stable within its own invocation.",
+    "No performance, memory, token, user-time or exponential benefit follows. Full SLO and original five-pair relative gates remain separate."
+  ]
+}

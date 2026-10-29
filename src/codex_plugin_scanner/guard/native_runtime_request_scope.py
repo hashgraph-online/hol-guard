@@ -5,8 +5,9 @@ One hook request validates the runtime binary once: review paths probe
 the whole binary.  The request-scoped store shares that single validation.
 Every new hook request still re-validates, and Windows keeps uncached hashing
 across requests (``native_binary_identity._CACHE_ENABLED`` is POSIX-only).
-Candidate discovery — which in force mode scans installed distribution
-metadata — also runs once per request; nothing is reused across requests.
+Fallback candidate discovery, which in force mode scans installed distribution
+metadata, runs at most once when needed. Sharing a verified first choice does
+not populate that fallback list; nothing in this scope survives the request.
 """
 
 from __future__ import annotations
@@ -138,3 +139,13 @@ def scoped_candidates(
     if key not in scope:
         scope[key] = discover()
     return scope[key]
+
+
+def primary_candidates(mode: str, override: str | None, bundled: Path) -> tuple[Path, ...]:
+    """Ordered bootstrap candidates ahead of optional distribution discovery."""
+
+    if mode == "force" and override:
+        candidate = Path(override).expanduser()
+        if candidate.is_absolute() and str(candidate) != str(bundled):
+            return candidate, bundled
+    return (bundled,)

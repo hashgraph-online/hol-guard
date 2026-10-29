@@ -1,0 +1,110 @@
+{
+  "schema": "hol-guard.cigar-runtime-development-evidence.v1",
+  "date": "2026-10-23",
+  "guard_base": "35180b995cb27fdc9f92e1f68307a756c785f154",
+  "cigar_source_commit": "b47380e5a5cbeaaad5a61cab3372e9e67368732f",
+  "wheels": [
+    {
+      "filename": "hol_cigar-0.14.1-py3-none-macosx_11_0_arm64.whl",
+      "sha256": "2c5a50648d0f41126d5e2f65670bb13da836a47cee447184ae5ff88271f47a7d",
+      "bytes": 7176515
+    },
+    {
+      "filename": "protobuf-7.35.1-cp310-abi3-macosx_10_9_universal2.whl",
+      "sha256": "fe243edf6df77ba6bde3526d1e00606c1192a0686f1b70927ee3dc47ca771747",
+      "bytes": 432106
+    }
+  ],
+  "provenance": {
+    "sdk": "Temporary copy of sdk/python, Hatchling 1.32.4, explicitly staged matching debug worker; source candidate unchanged.",
+    "protobuf": "Reconstructed local cached 7.35.1 wheel after validating all 59 RECORD entries. No public wheel provenance or reproducibility claim.",
+    "installation": "Task-private CPython 3.14 venv; offline pip --isolated --no-index --no-deps. No live Guard environment changed."
+  },
+  "verification": {
+    "implementation_commit": "13db2788",
+    "rust_1_88_unit_tests_passed": 20,
+    "rust_1_92_including_installed_tests_passed": 21,
+    "native_configuration_tests_passed": 25,
+    "clippy_warnings_denied": "passed",
+    "bridge_ruff": "passed",
+    "source_ownership_and_privacy_gates": "passed",
+    "post_commit_authority_ownership": "passed",
+    "authority_base": "35180b995cb27fdc9f92e1f68307a756c785f154",
+    "committed_branch_files_checked": 48,
+    "sdist_input_inventory": "passed; artifact build not performed"
+  },
+  "native_test": {
+    "bundle": {
+      "bytes": 38339470,
+      "files": 1094,
+      "package_tree_sha256": "bd4d27349f01c4403a3e469e29d3785c4c8073e12c32744dfaa2304dcaf78a95",
+      "platform": "darwin-arm64",
+      "python_sha256": "81c87d90892fe12428ee3b78a675c57c62d6c479236fb359ad5b2d7f07c38b2c",
+      "schema": "guard-cigar-bundle-approval.v1",
+      "worker_sha256": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112"
+    },
+    "checks": [
+      "actual_isolated_interpreter",
+      "package_fingerprint",
+      "worker_handshake",
+      "synthetic_compile_and_verify",
+      "python_312_refused_before_sdk_import",
+      "wrong_worker_approval_refused",
+      "transport_id_mismatch_closed",
+      "deadline_closed",
+      "persistent_graph",
+      "workspace_limit",
+      "foreign_required_document_refused",
+      "scoped_citations",
+      "exact_large_revision_string",
+      "out_of_scope_update_preserves_context",
+      "readable_unselected_update_invalidates_context",
+      "view_revocation",
+      "empty_view_cannot_read_graph",
+      "reopened_workspace_rejects_old_handle",
+      "explicit_runtime_cleanup"
+    ],
+    "product_activation_wired": false,
+    "qualification": "local-development-darwin-arm64-only",
+    "runtime_after_cleanup": {
+      "active": false,
+      "compile_verified": true,
+      "features": [
+        "answer_review.v1",
+        "context_graph.v1",
+        "context_views.v1",
+        "document_boundaries.v1",
+        "selection_explanation.v1",
+        "snapshot_integrity.v1",
+        "source_replace.v1"
+      ],
+      "interpreter": {
+        "abi": "cpython-314-darwin",
+        "debug_build": false,
+        "free_threaded": false,
+        "implementation": "cpython",
+        "platform": "darwin-arm64",
+        "release_level": "final",
+        "schema": "guard-cigar-interpreter.v1",
+        "version": [
+          3,
+          14,
+          7
+        ]
+      },
+      "package_fingerprint": "bd4d27349f01c4403a3e469e29d3785c4c8073e12c32744dfaa2304dcaf78a95",
+      "package_version": "0.14.1",
+      "protocol": "cigar.context-worker.v1",
+      "schema": "guard-cigar-runtime-status.v1",
+      "worker_fingerprint": "7aa51c67e42829b64b6c2dd9e98695e05ebbcc09c9bea155f163347a08e1d112"
+    },
+    "schema": "guard-cigar-native-verification.v1",
+    "status": "passed"
+  },
+  "limitations": [
+    "Local development artifact only; no public release signing or cross-platform qualification.",
+    "Host-only SDK library API; private installation registry and native control operations not yet wired.",
+    "No production HTTP, MCP, UI, source-admission, evidence-notification, persistence, broker or executor availability claim.",
+    "No performance, RSS, installed-hook parity or supported approval-route qualification claim."
+  ]
+}

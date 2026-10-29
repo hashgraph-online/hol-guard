@@ -1,0 +1,4741 @@
+{
+  "schema": "guard-cigar-distribution-http-diagnostics.v1",
+  "diagnostic_only": true,
+  "product_source_commit": "6f821077fad88d83ce4f3c85f3f9c2281142fa4f",
+  "failed_relative_result": {
+    "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/docs/guard/cigar-integration/evidence/distribution-installed-performance-verification.json",
+    "bytes": 198451,
+    "sha256": "7b544eb0e8bc951ed7935faf93bf1fa257df010f5de1346715fea8bd1a021f75"
+  },
+  "warm_discovery": {
+    "report": {
+      "schema": "guard-cigar-native-discovery-component.v1",
+      "plan": {
+        "schema": "guard-cigar-native-discovery-component-plan.v1",
+        "blocks": 10,
+        "calls_per_mode_per_block": 25,
+        "order": "alternating force/auto; force first in odd-numbered blocks",
+        "timing": "Unmodified warmed status calls; wall/thread CPU separately; counts instrumented afterward",
+        "SDK_or_context_activation_requested": false,
+        "qualification": "component diagnostic only",
+        "inputs": {
+          "/private/tmp/hol-guard-cigar-distribution-20261024/package/installed/codex_plugin_scanner/_native/hol-guard-runtime": "3b2fd52e95b4183d0694e92fbc2dcdc928ab73703dd7ca0df4e15e6df2c12dcf",
+          "/private/tmp/hol-guard-cigar-distribution-20261024/package/installed/codex_plugin_scanner/_native/runtime-manifest.json": "2ad109e5035ed80aac82338d7e2a5c95c2e4472b1d740f598b99de517bb193f8",
+          "/private/tmp/hol-guard-cigar-distribution-20261024/package/installed/codex_plugin_scanner/guard/native_runtime.py": "a1fb44e19d7d2cbb0186c393a4227c6f848d26ecce0fe5a4f324626fbff29a83",
+          "/private/tmp/hol-guard-cigar-distribution-20261024/native_discovery_component.py": "6aa233259c9800810617f24787ecb3f3ecaaf1c1852b2134209edef1b010f5f5"
+        }
+      },
+      "timings": [
+        {
+          "block": 1,
+          "mode": "force",
+          "wall_ns": 86750,
+          "thread_cpu_ns": 85708
+        },
+        {
+          "block": 1,
+          "mode": "force",
+          "wall_ns": 73625,
+          "thread_cpu_ns": 73209
+        },
+        {
+          "block": 1,
+          "mode": "force",
+          "wall_ns": 69375,
+          "thread_cpu_ns": 69042
+        },
+        {
+          "block": 1,
+          "mode": "force",
+          "wall_ns": 73833,
+          "thread_cpu_ns": 73584
+        },
+        {
+          "block": 1,
+          "mode": "force",
+          "wall_ns": 69083,
+          "thread_cpu_ns": 68667
+        },
+        {
+          "block": 1,
+          "mode": "force",
+          "wall_ns": 66916,
+          "thread_cpu_ns": 66666
+        },
+        {
+          "block": 1,
+          "mode": "force",
+          "wall_ns": 64333,
+          "thread_cpu_ns": 64042
+        },
+        {
+          "block": 1,
+          "mode": "force",
+          "wall_ns": 63166,
+          "thread_cpu_ns": 62875
+        },
+        {
+          "block": 1,
+          "mode": "force",
+          "wall_ns": 64750,
+          "thread_cpu_ns": 64500
+        },
+        {
+          "block": 1,
+          "mode": "force",
+          "wall_ns": 64833,
+          "thread_cpu_ns": 64541
+        },
+        {
+          "block": 1,
+          "mode": "force",
+          "wall_ns": 63334,
+          "thread_cpu_ns": 63083
+        },
+        {
+          "block": 1,
+          "mode": "force",
+          "wall_ns": 64166,
+          "thread_cpu_ns": 63916
+        },
+        {
+          "block": 1,
+          "mode": "force",
+          "wall_ns": 64209,
+          "thread_cpu_ns": 64000
+        },
+        {
+          "block": 1,
+          "mode": "force",
+          "wall_ns": 66500,
+          "thread_cpu_ns": 66209
+        },
+        {
+          "block": 1,
+          "mode": "force",
+          "wall_ns": 64958,
+          "thread_cpu_ns": 64708
+        },
+        {
+          "block": 1,
+          "mode": "force",
+          "wall_ns": 63833,
+          "thread_cpu_ns": 63583
+        },
+        {
+          "block": 1,
+          "mode": "force",
+          "wall_ns": 66666,
+          "thread_cpu_ns": 66416
+        },
+        {
+          "block": 1,
+          "mode": "force",
+          "wall_ns": 67042,
+          "thread_cpu_ns": 66709
+        },
+        {
+          "block": 1,
+          "mode": "force",
+          "wall_ns": 66167,
+          "thread_cpu_ns": 65958
+        },
+        {
+          "block": 1,
+          "mode": "force",
+          "wall_ns": 64042,
+          "thread_cpu_ns": 63834
+        },
+        {
+          "block": 1,
+          "mode": "force",
+          "wall_ns": 69000,
+          "thread_cpu_ns": 68791
+        },
+        {
+          "block": 1,
+          "mode": "force",
+          "wall_ns": 66584,
+          "thread_cpu_ns": 66334
+        },
+        {
+          "block": 1,
+          "mode": "force",
+          "wall_ns": 65833,
+          "thread_cpu_ns": 65625
+        },
+        {
+          "block": 1,
+          "mode": "force",
+          "wall_ns": 66583,
+          "thread_cpu_ns": 66291
+        },
+        {
+          "block": 1,
+          "mode": "force",
+          "wall_ns": 65542,
+          "thread_cpu_ns": 65208
+        },
+        {
+          "block": 1,
+          "mode": "auto",
+          "wall_ns": 37084,
+          "thread_cpu_ns": 36875
+        },
+        {
+          "block": 1,
+          "mode": "auto",
+          "wall_ns": 34416,
+          "thread_cpu_ns": 34041
+        },
+        {
+          "block": 1,
+          "mode": "auto",
+          "wall_ns": 33125,
+          "thread_cpu_ns": 32958
+        },
+        {
+          "block": 1,
+          "mode": "auto",
+          "wall_ns": 32958,
+          "thread_cpu_ns": 32792
+        },
+        {
+          "block": 1,
+          "mode": "auto",
+          "wall_ns": 32667,
+          "thread_cpu_ns": 32417
+        },
+        {
+          "block": 1,
+          "mode": "auto",
+          "wall_ns": 32791,
+          "thread_cpu_ns": 32541
+        },
+        {
+          "block": 1,
+          "mode": "auto",
+          "wall_ns": 32291,
+          "thread_cpu_ns": 32083
+        },
+        {
+          "block": 1,
+          "mode": "auto",
+          "wall_ns": 31625,
+          "thread_cpu_ns": 31375
+        },
+        {
+          "block": 1,
+          "mode": "auto",
+          "wall_ns": 31667,
+          "thread_cpu_ns": 31417
+        },
+        {
+          "block": 1,
+          "mode": "auto",
+          "wall_ns": 31625,
+          "thread_cpu_ns": 31417
+        },
+        {
+          "block": 1,
+          "mode": "auto",
+          "wall_ns": 31875,
+          "thread_cpu_ns": 31625
+        },
+        {
+          "block": 1,
+          "mode": "auto",
+          "wall_ns": 31334,
+          "thread_cpu_ns": 31166
+        },
+        {
+          "block": 1,
+          "mode": "auto",
+          "wall_ns": 31208,
+          "thread_cpu_ns": 30958
+        },
+        {
+          "block": 1,
+          "mode": "auto",
+          "wall_ns": 31333,
+          "thread_cpu_ns": 31166
+        },
+        {
+          "block": 1,
+          "mode": "auto",
+          "wall_ns": 30959,
+          "thread_cpu_ns": 30750
+        },
+        {
+          "block": 1,
+          "mode": "auto",
+          "wall_ns": 31291,
+          "thread_cpu_ns": 31041
+        },
+        {
+          "block": 1,
+          "mode": "auto",
+          "wall_ns": 31542,
+          "thread_cpu_ns": 31208
+        },
+        {
+          "block": 1,
+          "mode": "auto",
+          "wall_ns": 31209,
+          "thread_cpu_ns": 31000
+        },
+        {
+          "block": 1,
+          "mode": "auto",
+          "wall_ns": 31708,
+          "thread_cpu_ns": 31375
+        },
+        {
+          "block": 1,
+          "mode": "auto",
+          "wall_ns": 31458,
+          "thread_cpu_ns": 31166
+        },
+        {
+          "block": 1,
+          "mode": "auto",
+          "wall_ns": 31250,
+          "thread_cpu_ns": 31000
+        },
+        {
+          "block": 1,
+          "mode": "auto",
+          "wall_ns": 30958,
+          "thread_cpu_ns": 30708
+        },
+        {
+          "block": 1,
+          "mode": "auto",
+          "wall_ns": 30959,
+          "thread_cpu_ns": 30709
+        },
+        {
+          "block": 1,
+          "mode": "auto",
+          "wall_ns": 31291,
+          "thread_cpu_ns": 31041
+        },
+        {
+          "block": 1,
+          "mode": "auto",
+          "wall_ns": 31291,
+          "thread_cpu_ns": 31083
+        },
+        {
+          "block": 2,
+          "mode": "auto",
+          "wall_ns": 31417,
+          "thread_cpu_ns": 31167
+        },
+        {
+          "block": 2,
+          "mode": "auto",
+          "wall_ns": 31292,
+          "thread_cpu_ns": 31125
+        },
+        {
+          "block": 2,
+          "mode": "auto",
+          "wall_ns": 30583,
+          "thread_cpu_ns": 30375
+        },
+        {
+          "block": 2,
+          "mode": "auto",
+          "wall_ns": 30833,
+          "thread_cpu_ns": 30584
+        },
+        {
+          "block": 2,
+          "mode": "auto",
+          "wall_ns": 31041,
+          "thread_cpu_ns": 30791
+        },
+        {
+          "block": 2,
+          "mode": "auto",
+          "wall_ns": 31000,
+          "thread_cpu_ns": 30750
+        },
+        {
+          "block": 2,
+          "mode": "auto",
+          "wall_ns": 30833,
+          "thread_cpu_ns": 30625
+        },
+        {
+          "block": 2,
+          "mode": "auto",
+          "wall_ns": 30625,
+          "thread_cpu_ns": 30375
+        },
+        {
+          "block": 2,
+          "mode": "auto",
+          "wall_ns": 30667,
+          "thread_cpu_ns": 30500
+        },
+        {
+          "block": 2,
+          "mode": "auto",
+          "wall_ns": 30792,
+          "thread_cpu_ns": 30458
+        },
+        {
+          "block": 2,
+          "mode": "auto",
+          "wall_ns": 30666,
+          "thread_cpu_ns": 30416
+        },
+        {
+          "block": 2,
+          "mode": "auto",
+          "wall_ns": 30875,
+          "thread_cpu_ns": 30667
+        },
+        {
+          "block": 2,
+          "mode": "auto",
+          "wall_ns": 30583,
+          "thread_cpu_ns": 30375
+        },
+        {
+          "block": 2,
+          "mode": "auto",
+          "wall_ns": 30791,
+          "thread_cpu_ns": 30583
+        },
+        {
+          "block": 2,
+          "mode": "auto",
+          "wall_ns": 30625,
+          "thread_cpu_ns": 30375
+        },
+        {
+          "block": 2,
+          "mode": "auto",
+          "wall_ns": 30709,
+          "thread_cpu_ns": 30500
+        },
+        {
+          "block": 2,
+          "mode": "auto",
+          "wall_ns": 30625,
+          "thread_cpu_ns": 30417
+        },
+        {
+          "block": 2,
+          "mode": "auto",
+          "wall_ns": 30667,
+          "thread_cpu_ns": 30458
+        },
+        {
+          "block": 2,
+          "mode": "auto",
+          "wall_ns": 30708,
+          "thread_cpu_ns": 30500
+        },
+        {
+          "block": 2,
+          "mode": "auto",
+          "wall_ns": 31583,
+          "thread_cpu_ns": 31375
+        },
+        {
+          "block": 2,
+          "mode": "auto",
+          "wall_ns": 30958,
+          "thread_cpu_ns": 30708
+        },
+        {
+          "block": 2,
+          "mode": "auto",
+          "wall_ns": 30750,
+          "thread_cpu_ns": 30500
+        },
+        {
+          "block": 2,
+          "mode": "auto",
+          "wall_ns": 30750,
+          "thread_cpu_ns": 30500
+        },
+        {
+          "block": 2,
+          "mode": "auto",
+          "wall_ns": 30959,
+          "thread_cpu_ns": 30709
+        },
+        {
+          "block": 2,
+          "mode": "auto",
+          "wall_ns": 30792,
+          "thread_cpu_ns": 30584
+        },
+        {
+          "block": 2,
+          "mode": "force",
+          "wall_ns": 74875,
+          "thread_cpu_ns": 74667
+        },
+        {
+          "block": 2,
+          "mode": "force",
+          "wall_ns": 65208,
+          "thread_cpu_ns": 64959
+        },
+        {
+          "block": 2,
+          "mode": "force",
+          "wall_ns": 64125,
+          "thread_cpu_ns": 63875
+        },
+        {
+          "block": 2,
+          "mode": "force",
+          "wall_ns": 62041,
+          "thread_cpu_ns": 61792
+        },
+        {
+          "block": 2,
+          "mode": "force",
+          "wall_ns": 61042,
+          "thread_cpu_ns": 60791
+        },
+        {
+          "block": 2,
+          "mode": "force",
+          "wall_ns": 64333,
+          "thread_cpu_ns": 64083
+        },
+        {
+          "block": 2,
+          "mode": "force",
+          "wall_ns": 64417,
+          "thread_cpu_ns": 64167
+        },
+        {
+          "block": 2,
+          "mode": "force",
+          "wall_ns": 63167,
+          "thread_cpu_ns": 62959
+        },
+        {
+          "block": 2,
+          "mode": "force",
+          "wall_ns": 62167,
+          "thread_cpu_ns": 61958
+        },
+        {
+          "block": 2,
+          "mode": "force",
+          "wall_ns": 61209,
+          "thread_cpu_ns": 61000
+        },
+        {
+          "block": 2,
+          "mode": "force",
+          "wall_ns": 66250,
+          "thread_cpu_ns": 66042
+        },
+        {
+          "block": 2,
+          "mode": "force",
+          "wall_ns": 69208,
+          "thread_cpu_ns": 68958
+        },
+        {
+          "block": 2,
+          "mode": "force",
+          "wall_ns": 65333,
+          "thread_cpu_ns": 65041
+        },
+        {
+          "block": 2,
+          "mode": "force",
+          "wall_ns": 64459,
+          "thread_cpu_ns": 64250
+        },
+        {
+          "block": 2,
+          "mode": "force",
+          "wall_ns": 64000,
+          "thread_cpu_ns": 63791
+        },
+        {
+          "block": 2,
+          "mode": "force",
+          "wall_ns": 63083,
+          "thread_cpu_ns": 62875
+        },
+        {
+          "block": 2,
+          "mode": "force",
+          "wall_ns": 64917,
+          "thread_cpu_ns": 64709
+        },
+        {
+          "block": 2,
+          "mode": "force",
+          "wall_ns": 63458,
+          "thread_cpu_ns": 63208
+        },
+        {
+          "block": 2,
+          "mode": "force",
+          "wall_ns": 68833,
+          "thread_cpu_ns": 68625
+        },
+        {
+          "block": 2,
+          "mode": "force",
+          "wall_ns": 74291,
+          "thread_cpu_ns": 74083
+        },
+        {
+          "block": 2,
+          "mode": "force",
+          "wall_ns": 112500,
+          "thread_cpu_ns": 112208
+        },
+        {
+          "block": 2,
+          "mode": "force",
+          "wall_ns": 70250,
+          "thread_cpu_ns": 70000
+        },
+        {
+          "block": 2,
+          "mode": "force",
+          "wall_ns": 65875,
+          "thread_cpu_ns": 65625
+        },
+        {
+          "block": 2,
+          "mode": "force",
+          "wall_ns": 66541,
+          "thread_cpu_ns": 66333
+        },
+        {
+          "block": 2,
+          "mode": "force",
+          "wall_ns": 64250,
+          "thread_cpu_ns": 64042
+        },
+        {
+          "block": 3,
+          "mode": "force",
+          "wall_ns": 64584,
+          "thread_cpu_ns": 64375
+        },
+        {
+          "block": 3,
+          "mode": "force",
+          "wall_ns": 63041,
+          "thread_cpu_ns": 62791
+        },
+        {
+          "block": 3,
+          "mode": "force",
+          "wall_ns": 62042,
+          "thread_cpu_ns": 61833
+        },
+        {
+          "block": 3,
+          "mode": "force",
+          "wall_ns": 62584,
+          "thread_cpu_ns": 62375
+        },
+        {
+          "block": 3,
+          "mode": "force",
+          "wall_ns": 61542,
+          "thread_cpu_ns": 61292
+        },
+        {
+          "block": 3,
+          "mode": "force",
+          "wall_ns": 62167,
+          "thread_cpu_ns": 61959
+        },
+        {
+          "block": 3,
+          "mode": "force",
+          "wall_ns": 60208,
+          "thread_cpu_ns": 60000
+        },
+        {
+          "block": 3,
+          "mode": "force",
+          "wall_ns": 61000,
+          "thread_cpu_ns": 60834
+        },
+        {
+          "block": 3,
+          "mode": "force",
+          "wall_ns": 60708,
+          "thread_cpu_ns": 60500
+        },
+        {
+          "block": 3,
+          "mode": "force",
+          "wall_ns": 64000,
+          "thread_cpu_ns": 63750
+        },
+        {
+          "block": 3,
+          "mode": "force",
+          "wall_ns": 66792,
+          "thread_cpu_ns": 66583
+        },
+        {
+          "block": 3,
+          "mode": "force",
+          "wall_ns": 62958,
+          "thread_cpu_ns": 62750
+        },
+        {
+          "block": 3,
+          "mode": "force",
+          "wall_ns": 61959,
+          "thread_cpu_ns": 61750
+        },
+        {
+          "block": 3,
+          "mode": "force",
+          "wall_ns": 62750,
+          "thread_cpu_ns": 62541
+        },
+        {
+          "block": 3,
+          "mode": "force",
+          "wall_ns": 62541,
+          "thread_cpu_ns": 62291
+        },
+        {
+          "block": 3,
+          "mode": "force",
+          "wall_ns": 62292,
+          "thread_cpu_ns": 62084
+        },
+        {
+          "block": 3,
+          "mode": "force",
+          "wall_ns": 62792,
+          "thread_cpu_ns": 62583
+        },
+        {
+          "block": 3,
+          "mode": "force",
+          "wall_ns": 62625,
+          "thread_cpu_ns": 62416
+        },
+        {
+          "block": 3,
+          "mode": "force",
+          "wall_ns": 61625,
+          "thread_cpu_ns": 61417
+        },
+        {
+          "block": 3,
+          "mode": "force",
+          "wall_ns": 59625,
+          "thread_cpu_ns": 59416
+        },
+        {
+          "block": 3,
+          "mode": "force",
+          "wall_ns": 60417,
+          "thread_cpu_ns": 60208
+        },
+        {
+          "block": 3,
+          "mode": "force",
+          "wall_ns": 59959,
+          "thread_cpu_ns": 59792
+        },
+        {
+          "block": 3,
+          "mode": "force",
+          "wall_ns": 60166,
+          "thread_cpu_ns": 59958
+        },
+        {
+          "block": 3,
+          "mode": "force",
+          "wall_ns": 61292,
+          "thread_cpu_ns": 61083
+        },
+        {
+          "block": 3,
+          "mode": "force",
+          "wall_ns": 66375,
+          "thread_cpu_ns": 66167
+        },
+        {
+          "block": 3,
+          "mode": "auto",
+          "wall_ns": 33500,
+          "thread_cpu_ns": 33250
+        },
+        {
+          "block": 3,
+          "mode": "auto",
+          "wall_ns": 33833,
+          "thread_cpu_ns": 33625
+        },
+        {
+          "block": 3,
+          "mode": "auto",
+          "wall_ns": 32459,
+          "thread_cpu_ns": 32250
+        },
+        {
+          "block": 3,
+          "mode": "auto",
+          "wall_ns": 30500,
+          "thread_cpu_ns": 30292
+        },
+        {
+          "block": 3,
+          "mode": "auto",
+          "wall_ns": 30583,
+          "thread_cpu_ns": 30375
+        },
+        {
+          "block": 3,
+          "mode": "auto",
+          "wall_ns": 30208,
+          "thread_cpu_ns": 30000
+        },
+        {
+          "block": 3,
+          "mode": "auto",
+          "wall_ns": 30167,
+          "thread_cpu_ns": 29958
+        },
+        {
+          "block": 3,
+          "mode": "auto",
+          "wall_ns": 30250,
+          "thread_cpu_ns": 30000
+        },
+        {
+          "block": 3,
+          "mode": "auto",
+          "wall_ns": 30166,
+          "thread_cpu_ns": 29958
+        },
+        {
+          "block": 3,
+          "mode": "auto",
+          "wall_ns": 29875,
+          "thread_cpu_ns": 29709
+        },
+        {
+          "block": 3,
+          "mode": "auto",
+          "wall_ns": 29917,
+          "thread_cpu_ns": 29666
+        },
+        {
+          "block": 3,
+          "mode": "auto",
+          "wall_ns": 30416,
+          "thread_cpu_ns": 30166
+        },
+        {
+          "block": 3,
+          "mode": "auto",
+          "wall_ns": 30125,
+          "thread_cpu_ns": 29917
+        },
+        {
+          "block": 3,
+          "mode": "auto",
+          "wall_ns": 30292,
+          "thread_cpu_ns": 30125
+        },
+        {
+          "block": 3,
+          "mode": "auto",
+          "wall_ns": 32042,
+          "thread_cpu_ns": 31875
+        },
+        {
+          "block": 3,
+          "mode": "auto",
+          "wall_ns": 31208,
+          "thread_cpu_ns": 31000
+        },
+        {
+          "block": 3,
+          "mode": "auto",
+          "wall_ns": 31291,
+          "thread_cpu_ns": 31083
+        },
+        {
+          "block": 3,
+          "mode": "auto",
+          "wall_ns": 33917,
+          "thread_cpu_ns": 33666
+        },
+        {
+          "block": 3,
+          "mode": "auto",
+          "wall_ns": 34250,
+          "thread_cpu_ns": 33916
+        },
+        {
+          "block": 3,
+          "mode": "auto",
+          "wall_ns": 30791,
+          "thread_cpu_ns": 30541
+        },
+        {
+          "block": 3,
+          "mode": "auto",
+          "wall_ns": 30833,
+          "thread_cpu_ns": 30625
+        },
+        {
+          "block": 3,
+          "mode": "auto",
+          "wall_ns": 30541,
+          "thread_cpu_ns": 30291
+        },
+        {
+          "block": 3,
+          "mode": "auto",
+          "wall_ns": 30750,
+          "thread_cpu_ns": 30542
+        },
+        {
+          "block": 3,
+          "mode": "auto",
+          "wall_ns": 30666,
+          "thread_cpu_ns": 30416
+        },
+        {
+          "block": 3,
+          "mode": "auto",
+          "wall_ns": 30916,
+          "thread_cpu_ns": 30708
+        },
+        {
+          "block": 4,
+          "mode": "auto",
+          "wall_ns": 30750,
+          "thread_cpu_ns": 30500
+        },
+        {
+          "block": 4,
+          "mode": "auto",
+          "wall_ns": 30708,
+          "thread_cpu_ns": 30458
+        },
+        {
+          "block": 4,
+          "mode": "auto",
+          "wall_ns": 30583,
+          "thread_cpu_ns": 30375
+        },
+        {
+          "block": 4,
+          "mode": "auto",
+          "wall_ns": 30500,
+          "thread_cpu_ns": 30291
+        },
+        {
+          "block": 4,
+          "mode": "auto",
+          "wall_ns": 31000,
+          "thread_cpu_ns": 30792
+        },
+        {
+          "block": 4,
+          "mode": "auto",
+          "wall_ns": 29958,
+          "thread_cpu_ns": 29750
+        },
+        {
+          "block": 4,
+          "mode": "auto",
+          "wall_ns": 29917,
+          "thread_cpu_ns": 29709
+        },
+        {
+          "block": 4,
+          "mode": "auto",
+          "wall_ns": 30125,
+          "thread_cpu_ns": 29917
+        },
+        {
+          "block": 4,
+          "mode": "auto",
+          "wall_ns": 29750,
+          "thread_cpu_ns": 29583
+        },
+        {
+          "block": 4,
+          "mode": "auto",
+          "wall_ns": 29833,
+          "thread_cpu_ns": 29625
+        },
+        {
+          "block": 4,
+          "mode": "auto",
+          "wall_ns": 29833,
+          "thread_cpu_ns": 29625
+        },
+        {
+          "block": 4,
+          "mode": "auto",
+          "wall_ns": 30042,
+          "thread_cpu_ns": 29834
+        },
+        {
+          "block": 4,
+          "mode": "auto",
+          "wall_ns": 29875,
+          "thread_cpu_ns": 29667
+        },
+        {
+          "block": 4,
+          "mode": "auto",
+          "wall_ns": 34875,
+          "thread_cpu_ns": 34667
+        },
+        {
+          "block": 4,
+          "mode": "auto",
+          "wall_ns": 30792,
+          "thread_cpu_ns": 30583
+        },
+        {
+          "block": 4,
+          "mode": "auto",
+          "wall_ns": 30709,
+          "thread_cpu_ns": 30542
+        },
+        {
+          "block": 4,
+          "mode": "auto",
+          "wall_ns": 30708,
+          "thread_cpu_ns": 30541
+        },
+        {
+          "block": 4,
+          "mode": "auto",
+          "wall_ns": 30667,
+          "thread_cpu_ns": 30459
+        },
+        {
+          "block": 4,
+          "mode": "auto",
+          "wall_ns": 30625,
+          "thread_cpu_ns": 30459
+        },
+        {
+          "block": 4,
+          "mode": "auto",
+          "wall_ns": 30584,
+          "thread_cpu_ns": 30416
+        },
+        {
+          "block": 4,
+          "mode": "auto",
+          "wall_ns": 30750,
+          "thread_cpu_ns": 30542
+        },
+        {
+          "block": 4,
+          "mode": "auto",
+          "wall_ns": 30667,
+          "thread_cpu_ns": 30500
+        },
+        {
+          "block": 4,
+          "mode": "auto",
+          "wall_ns": 30375,
+          "thread_cpu_ns": 30167
+        },
+        {
+          "block": 4,
+          "mode": "auto",
+          "wall_ns": 30833,
+          "thread_cpu_ns": 30625
+        },
+        {
+          "block": 4,
+          "mode": "auto",
+          "wall_ns": 30583,
+          "thread_cpu_ns": 30416
+        },
+        {
+          "block": 4,
+          "mode": "force",
+          "wall_ns": 66500,
+          "thread_cpu_ns": 66250
+        },
+        {
+          "block": 4,
+          "mode": "force",
+          "wall_ns": 62458,
+          "thread_cpu_ns": 62250
+        },
+        {
+          "block": 4,
+          "mode": "force",
+          "wall_ns": 61042,
+          "thread_cpu_ns": 60875
+        },
+        {
+          "block": 4,
+          "mode": "force",
+          "wall_ns": 61584,
+          "thread_cpu_ns": 61417
+        },
+        {
+          "block": 4,
+          "mode": "force",
+          "wall_ns": 60292,
+          "thread_cpu_ns": 60083
+        },
+        {
+          "block": 4,
+          "mode": "force",
+          "wall_ns": 60416,
+          "thread_cpu_ns": 60208
+        },
+        {
+          "block": 4,
+          "mode": "force",
+          "wall_ns": 64125,
+          "thread_cpu_ns": 63916
+        },
+        {
+          "block": 4,
+          "mode": "force",
+          "wall_ns": 61709,
+          "thread_cpu_ns": 61500
+        },
+        {
+          "block": 4,
+          "mode": "force",
+          "wall_ns": 64125,
+          "thread_cpu_ns": 63917
+        },
+        {
+          "block": 4,
+          "mode": "force",
+          "wall_ns": 65417,
+          "thread_cpu_ns": 65209
+        },
+        {
+          "block": 4,
+          "mode": "force",
+          "wall_ns": 62250,
+          "thread_cpu_ns": 62042
+        },
+        {
+          "block": 4,
+          "mode": "force",
+          "wall_ns": 61000,
+          "thread_cpu_ns": 60792
+        },
+        {
+          "block": 4,
+          "mode": "force",
+          "wall_ns": 62125,
+          "thread_cpu_ns": 61917
+        },
+        {
+          "block": 4,
+          "mode": "force",
+          "wall_ns": 61000,
+          "thread_cpu_ns": 60792
+        },
+        {
+          "block": 4,
+          "mode": "force",
+          "wall_ns": 59625,
+          "thread_cpu_ns": 59417
+        },
+        {
+          "block": 4,
+          "mode": "force",
+          "wall_ns": 59875,
+          "thread_cpu_ns": 59667
+        },
+        {
+          "block": 4,
+          "mode": "force",
+          "wall_ns": 61917,
+          "thread_cpu_ns": 61709
+        },
+        {
+          "block": 4,
+          "mode": "force",
+          "wall_ns": 66125,
+          "thread_cpu_ns": 65875
+        },
+        {
+          "block": 4,
+          "mode": "force",
+          "wall_ns": 61917,
+          "thread_cpu_ns": 61708
+        },
+        {
+          "block": 4,
+          "mode": "force",
+          "wall_ns": 63417,
+          "thread_cpu_ns": 63209
+        },
+        {
+          "block": 4,
+          "mode": "force",
+          "wall_ns": 61541,
+          "thread_cpu_ns": 61291
+        },
+        {
+          "block": 4,
+          "mode": "force",
+          "wall_ns": 61458,
+          "thread_cpu_ns": 61250
+        },
+        {
+          "block": 4,
+          "mode": "force",
+          "wall_ns": 60875,
+          "thread_cpu_ns": 60666
+        },
+        {
+          "block": 4,
+          "mode": "force",
+          "wall_ns": 61875,
+          "thread_cpu_ns": 61666
+        },
+        {
+          "block": 4,
+          "mode": "force",
+          "wall_ns": 61792,
+          "thread_cpu_ns": 61584
+        },
+        {
+          "block": 5,
+          "mode": "force",
+          "wall_ns": 62875,
+          "thread_cpu_ns": 62625
+        },
+        {
+          "block": 5,
+          "mode": "force",
+          "wall_ns": 63125,
+          "thread_cpu_ns": 62917
+        },
+        {
+          "block": 5,
+          "mode": "force",
+          "wall_ns": 62000,
+          "thread_cpu_ns": 61792
+        },
+        {
+          "block": 5,
+          "mode": "force",
+          "wall_ns": 63750,
+          "thread_cpu_ns": 63542
+        },
+        {
+          "block": 5,
+          "mode": "force",
+          "wall_ns": 64875,
+          "thread_cpu_ns": 64583
+        },
+        {
+          "block": 5,
+          "mode": "force",
+          "wall_ns": 60958,
+          "thread_cpu_ns": 60750
+        },
+        {
+          "block": 5,
+          "mode": "force",
+          "wall_ns": 64209,
+          "thread_cpu_ns": 64000
+        },
+        {
+          "block": 5,
+          "mode": "force",
+          "wall_ns": 63500,
+          "thread_cpu_ns": 63291
+        },
+        {
+          "block": 5,
+          "mode": "force",
+          "wall_ns": 61709,
+          "thread_cpu_ns": 61500
+        },
+        {
+          "block": 5,
+          "mode": "force",
+          "wall_ns": 62500,
+          "thread_cpu_ns": 62291
+        },
+        {
+          "block": 5,
+          "mode": "force",
+          "wall_ns": 101041,
+          "thread_cpu_ns": 100791
+        },
+        {
+          "block": 5,
+          "mode": "force",
+          "wall_ns": 71125,
+          "thread_cpu_ns": 70917
+        },
+        {
+          "block": 5,
+          "mode": "force",
+          "wall_ns": 72625,
+          "thread_cpu_ns": 72417
+        },
+        {
+          "block": 5,
+          "mode": "force",
+          "wall_ns": 69667,
+          "thread_cpu_ns": 69500
+        },
+        {
+          "block": 5,
+          "mode": "force",
+          "wall_ns": 78458,
+          "thread_cpu_ns": 78208
+        },
+        {
+          "block": 5,
+          "mode": "force",
+          "wall_ns": 72667,
+          "thread_cpu_ns": 72375
+        },
+        {
+          "block": 5,
+          "mode": "force",
+          "wall_ns": 69125,
+          "thread_cpu_ns": 68916
+        },
+        {
+          "block": 5,
+          "mode": "force",
+          "wall_ns": 63500,
+          "thread_cpu_ns": 63291
+        },
+        {
+          "block": 5,
+          "mode": "force",
+          "wall_ns": 62083,
+          "thread_cpu_ns": 61791
+        },
+        {
+          "block": 5,
+          "mode": "force",
+          "wall_ns": 62875,
+          "thread_cpu_ns": 62667
+        },
+        {
+          "block": 5,
+          "mode": "force",
+          "wall_ns": 62500,
+          "thread_cpu_ns": 62208
+        },
+        {
+          "block": 5,
+          "mode": "force",
+          "wall_ns": 62875,
+          "thread_cpu_ns": 62625
+        },
+        {
+          "block": 5,
+          "mode": "force",
+          "wall_ns": 61209,
+          "thread_cpu_ns": 60959
+        },
+        {
+          "block": 5,
+          "mode": "force",
+          "wall_ns": 59584,
+          "thread_cpu_ns": 59417
+        },
+        {
+          "block": 5,
+          "mode": "force",
+          "wall_ns": 59458,
+          "thread_cpu_ns": 59250
+        },
+        {
+          "block": 5,
+          "mode": "auto",
+          "wall_ns": 33292,
+          "thread_cpu_ns": 33084
+        },
+        {
+          "block": 5,
+          "mode": "auto",
+          "wall_ns": 30917,
+          "thread_cpu_ns": 30750
+        },
+        {
+          "block": 5,
+          "mode": "auto",
+          "wall_ns": 34958,
+          "thread_cpu_ns": 34708
+        },
+        {
+          "block": 5,
+          "mode": "auto",
+          "wall_ns": 31041,
+          "thread_cpu_ns": 30791
+        },
+        {
+          "block": 5,
+          "mode": "auto",
+          "wall_ns": 33417,
+          "thread_cpu_ns": 33208
+        },
+        {
+          "block": 5,
+          "mode": "auto",
+          "wall_ns": 31250,
+          "thread_cpu_ns": 31083
+        },
+        {
+          "block": 5,
+          "mode": "auto",
+          "wall_ns": 31167,
+          "thread_cpu_ns": 31000
+        },
+        {
+          "block": 5,
+          "mode": "auto",
+          "wall_ns": 31542,
+          "thread_cpu_ns": 31417
+        },
+        {
+          "block": 5,
+          "mode": "auto",
+          "wall_ns": 31958,
+          "thread_cpu_ns": 31708
+        },
+        {
+          "block": 5,
+          "mode": "auto",
+          "wall_ns": 31708,
+          "thread_cpu_ns": 31458
+        },
+        {
+          "block": 5,
+          "mode": "auto",
+          "wall_ns": 31334,
+          "thread_cpu_ns": 31166
+        },
+        {
+          "block": 5,
+          "mode": "auto",
+          "wall_ns": 31291,
+          "thread_cpu_ns": 31041
+        },
+        {
+          "block": 5,
+          "mode": "auto",
+          "wall_ns": 31208,
+          "thread_cpu_ns": 31000
+        },
+        {
+          "block": 5,
+          "mode": "auto",
+          "wall_ns": 31625,
+          "thread_cpu_ns": 31459
+        },
+        {
+          "block": 5,
+          "mode": "auto",
+          "wall_ns": 31083,
+          "thread_cpu_ns": 30916
+        },
+        {
+          "block": 5,
+          "mode": "auto",
+          "wall_ns": 30750,
+          "thread_cpu_ns": 30542
+        },
+        {
+          "block": 5,
+          "mode": "auto",
+          "wall_ns": 32458,
+          "thread_cpu_ns": 32250
+        },
+        {
+          "block": 5,
+          "mode": "auto",
+          "wall_ns": 31375,
+          "thread_cpu_ns": 31167
+        },
+        {
+          "block": 5,
+          "mode": "auto",
+          "wall_ns": 31125,
+          "thread_cpu_ns": 30916
+        },
+        {
+          "block": 5,
+          "mode": "auto",
+          "wall_ns": 31416,
+          "thread_cpu_ns": 31250
+        },
+        {
+          "block": 5,
+          "mode": "auto",
+          "wall_ns": 30750,
+          "thread_cpu_ns": 30542
+        },
+        {
+          "block": 5,
+          "mode": "auto",
+          "wall_ns": 30958,
+          "thread_cpu_ns": 30750
+        },
+        {
+          "block": 5,
+          "mode": "auto",
+          "wall_ns": 30833,
+          "thread_cpu_ns": 30583
+        },
+        {
+          "block": 5,
+          "mode": "auto",
+          "wall_ns": 30959,
+          "thread_cpu_ns": 30750
+        },
+        {
+          "block": 5,
+          "mode": "auto",
+          "wall_ns": 30708,
+          "thread_cpu_ns": 30542
+        },
+        {
+          "block": 6,
+          "mode": "auto",
+          "wall_ns": 31541,
+          "thread_cpu_ns": 31333
+        },
+        {
+          "block": 6,
+          "mode": "auto",
+          "wall_ns": 30834,
+          "thread_cpu_ns": 30666
+        },
+        {
+          "block": 6,
+          "mode": "auto",
+          "wall_ns": 30833,
+          "thread_cpu_ns": 30625
+        },
+        {
+          "block": 6,
+          "mode": "auto",
+          "wall_ns": 30459,
+          "thread_cpu_ns": 30292
+        },
+        {
+          "block": 6,
+          "mode": "auto",
+          "wall_ns": 30000,
+          "thread_cpu_ns": 29792
+        },
+        {
+          "block": 6,
+          "mode": "auto",
+          "wall_ns": 30333,
+          "thread_cpu_ns": 30125
+        },
+        {
+          "block": 6,
+          "mode": "auto",
+          "wall_ns": 30000,
+          "thread_cpu_ns": 29792
+        },
+        {
+          "block": 6,
+          "mode": "auto",
+          "wall_ns": 29917,
+          "thread_cpu_ns": 29709
+        },
+        {
+          "block": 6,
+          "mode": "auto",
+          "wall_ns": 29958,
+          "thread_cpu_ns": 29791
+        },
+        {
+          "block": 6,
+          "mode": "auto",
+          "wall_ns": 30083,
+          "thread_cpu_ns": 29875
+        },
+        {
+          "block": 6,
+          "mode": "auto",
+          "wall_ns": 30042,
+          "thread_cpu_ns": 29917
+        },
+        {
+          "block": 6,
+          "mode": "auto",
+          "wall_ns": 30000,
+          "thread_cpu_ns": 29791
+        },
+        {
+          "block": 6,
+          "mode": "auto",
+          "wall_ns": 29875,
+          "thread_cpu_ns": 29667
+        },
+        {
+          "block": 6,
+          "mode": "auto",
+          "wall_ns": 30166,
+          "thread_cpu_ns": 30000
+        },
+        {
+          "block": 6,
+          "mode": "auto",
+          "wall_ns": 30416,
+          "thread_cpu_ns": 30250
+        },
+        {
+          "block": 6,
+          "mode": "auto",
+          "wall_ns": 30208,
+          "thread_cpu_ns": 30042
+        },
+        {
+          "block": 6,
+          "mode": "auto",
+          "wall_ns": 30084,
+          "thread_cpu_ns": 29917
+        },
+        {
+          "block": 6,
+          "mode": "auto",
+          "wall_ns": 30167,
+          "thread_cpu_ns": 30000
+        },
+        {
+          "block": 6,
+          "mode": "auto",
+          "wall_ns": 30375,
+          "thread_cpu_ns": 30208
+        },
+        {
+          "block": 6,
+          "mode": "auto",
+          "wall_ns": 30750,
+          "thread_cpu_ns": 30541
+        },
+        {
+          "block": 6,
+          "mode": "auto",
+          "wall_ns": 30542,
+          "thread_cpu_ns": 30375
+        },
+        {
+          "block": 6,
+          "mode": "auto",
+          "wall_ns": 30708,
+          "thread_cpu_ns": 30500
+        },
+        {
+          "block": 6,
+          "mode": "auto",
+          "wall_ns": 30917,
+          "thread_cpu_ns": 30708
+        },
+        {
+          "block": 6,
+          "mode": "auto",
+          "wall_ns": 30500,
+          "thread_cpu_ns": 30375
+        },
+        {
+          "block": 6,
+          "mode": "auto",
+          "wall_ns": 30166,
+          "thread_cpu_ns": 29958
+        },
+        {
+          "block": 6,
+          "mode": "force",
+          "wall_ns": 68083,
+          "thread_cpu_ns": 67875
+        },
+        {
+          "block": 6,
+          "mode": "force",
+          "wall_ns": 62834,
+          "thread_cpu_ns": 62542
+        },
+        {
+          "block": 6,
+          "mode": "force",
+          "wall_ns": 61750,
+          "thread_cpu_ns": 61584
+        },
+        {
+          "block": 6,
+          "mode": "force",
+          "wall_ns": 66792,
+          "thread_cpu_ns": 66583
+        },
+        {
+          "block": 6,
+          "mode": "force",
+          "wall_ns": 62667,
+          "thread_cpu_ns": 62542
+        },
+        {
+          "block": 6,
+          "mode": "force",
+          "wall_ns": 62042,
+          "thread_cpu_ns": 61834
+        },
+        {
+          "block": 6,
+          "mode": "force",
+          "wall_ns": 62708,
+          "thread_cpu_ns": 62500
+        },
+        {
+          "block": 6,
+          "mode": "force",
+          "wall_ns": 62459,
+          "thread_cpu_ns": 62250
+        },
+        {
+          "block": 6,
+          "mode": "force",
+          "wall_ns": 63625,
+          "thread_cpu_ns": 63417
+        },
+        {
+          "block": 6,
+          "mode": "force",
+          "wall_ns": 61583,
+          "thread_cpu_ns": 61375
+        },
+        {
+          "block": 6,
+          "mode": "force",
+          "wall_ns": 61584,
+          "thread_cpu_ns": 61333
+        },
+        {
+          "block": 6,
+          "mode": "force",
+          "wall_ns": 61958,
+          "thread_cpu_ns": 61750
+        },
+        {
+          "block": 6,
+          "mode": "force",
+          "wall_ns": 60333,
+          "thread_cpu_ns": 60167
+        },
+        {
+          "block": 6,
+          "mode": "force",
+          "wall_ns": 60417,
+          "thread_cpu_ns": 60167
+        },
+        {
+          "block": 6,
+          "mode": "force",
+          "wall_ns": 59834,
+          "thread_cpu_ns": 59667
+        },
+        {
+          "block": 6,
+          "mode": "force",
+          "wall_ns": 60000,
+          "thread_cpu_ns": 59791
+        },
+        {
+          "block": 6,
+          "mode": "force",
+          "wall_ns": 59958,
+          "thread_cpu_ns": 59708
+        },
+        {
+          "block": 6,
+          "mode": "force",
+          "wall_ns": 59667,
+          "thread_cpu_ns": 59459
+        },
+        {
+          "block": 6,
+          "mode": "force",
+          "wall_ns": 59625,
+          "thread_cpu_ns": 59417
+        },
+        {
+          "block": 6,
+          "mode": "force",
+          "wall_ns": 59542,
+          "thread_cpu_ns": 59333
+        },
+        {
+          "block": 6,
+          "mode": "force",
+          "wall_ns": 59834,
+          "thread_cpu_ns": 59666
+        },
+        {
+          "block": 6,
+          "mode": "force",
+          "wall_ns": 59250,
+          "thread_cpu_ns": 59042
+        },
+        {
+          "block": 6,
+          "mode": "force",
+          "wall_ns": 61417,
+          "thread_cpu_ns": 61208
+        },
+        {
+          "block": 6,
+          "mode": "force",
+          "wall_ns": 59834,
+          "thread_cpu_ns": 59500
+        },
+        {
+          "block": 6,
+          "mode": "force",
+          "wall_ns": 60042,
+          "thread_cpu_ns": 59666
+        },
+        {
+          "block": 7,
+          "mode": "force",
+          "wall_ns": 61417,
+          "thread_cpu_ns": 61167
+        },
+        {
+          "block": 7,
+          "mode": "force",
+          "wall_ns": 60833,
+          "thread_cpu_ns": 60625
+        },
+        {
+          "block": 7,
+          "mode": "force",
+          "wall_ns": 64875,
+          "thread_cpu_ns": 64667
+        },
+        {
+          "block": 7,
+          "mode": "force",
+          "wall_ns": 64250,
+          "thread_cpu_ns": 64000
+        },
+        {
+          "block": 7,
+          "mode": "force",
+          "wall_ns": 59916,
+          "thread_cpu_ns": 59708
+        },
+        {
+          "block": 7,
+          "mode": "force",
+          "wall_ns": 59875,
+          "thread_cpu_ns": 59625
+        },
+        {
+          "block": 7,
+          "mode": "force",
+          "wall_ns": 60041,
+          "thread_cpu_ns": 59833
+        },
+        {
+          "block": 7,
+          "mode": "force",
+          "wall_ns": 61375,
+          "thread_cpu_ns": 61208
+        },
+        {
+          "block": 7,
+          "mode": "force",
+          "wall_ns": 62083,
+          "thread_cpu_ns": 61833
+        },
+        {
+          "block": 7,
+          "mode": "force",
+          "wall_ns": 62750,
+          "thread_cpu_ns": 62542
+        },
+        {
+          "block": 7,
+          "mode": "force",
+          "wall_ns": 60541,
+          "thread_cpu_ns": 60333
+        },
+        {
+          "block": 7,
+          "mode": "force",
+          "wall_ns": 60542,
+          "thread_cpu_ns": 60292
+        },
+        {
+          "block": 7,
+          "mode": "force",
+          "wall_ns": 60042,
+          "thread_cpu_ns": 59834
+        },
+        {
+          "block": 7,
+          "mode": "force",
+          "wall_ns": 60709,
+          "thread_cpu_ns": 60500
+        },
+        {
+          "block": 7,
+          "mode": "force",
+          "wall_ns": 60250,
+          "thread_cpu_ns": 60083
+        },
+        {
+          "block": 7,
+          "mode": "force",
+          "wall_ns": 61250,
+          "thread_cpu_ns": 61083
+        },
+        {
+          "block": 7,
+          "mode": "force",
+          "wall_ns": 59834,
+          "thread_cpu_ns": 59625
+        },
+        {
+          "block": 7,
+          "mode": "force",
+          "wall_ns": 60292,
+          "thread_cpu_ns": 60083
+        },
+        {
+          "block": 7,
+          "mode": "force",
+          "wall_ns": 61000,
+          "thread_cpu_ns": 60792
+        },
+        {
+          "block": 7,
+          "mode": "force",
+          "wall_ns": 59459,
+          "thread_cpu_ns": 59292
+        },
+        {
+          "block": 7,
+          "mode": "force",
+          "wall_ns": 59541,
+          "thread_cpu_ns": 59291
+        },
+        {
+          "block": 7,
+          "mode": "force",
+          "wall_ns": 59375,
+          "thread_cpu_ns": 59166
+        },
+        {
+          "block": 7,
+          "mode": "force",
+          "wall_ns": 59375,
+          "thread_cpu_ns": 59167
+        },
+        {
+          "block": 7,
+          "mode": "force",
+          "wall_ns": 59708,
+          "thread_cpu_ns": 59500
+        },
+        {
+          "block": 7,
+          "mode": "force",
+          "wall_ns": 61083,
+          "thread_cpu_ns": 60875
+        },
+        {
+          "block": 7,
+          "mode": "auto",
+          "wall_ns": 32542,
+          "thread_cpu_ns": 32292
+        },
+        {
+          "block": 7,
+          "mode": "auto",
+          "wall_ns": 31417,
+          "thread_cpu_ns": 31208
+        },
+        {
+          "block": 7,
+          "mode": "auto",
+          "wall_ns": 35167,
+          "thread_cpu_ns": 34958
+        },
+        {
+          "block": 7,
+          "mode": "auto",
+          "wall_ns": 31083,
+          "thread_cpu_ns": 30916
+        },
+        {
+          "block": 7,
+          "mode": "auto",
+          "wall_ns": 31250,
+          "thread_cpu_ns": 31041
+        },
+        {
+          "block": 7,
+          "mode": "auto",
+          "wall_ns": 30833,
+          "thread_cpu_ns": 30625
+        },
+        {
+          "block": 7,
+          "mode": "auto",
+          "wall_ns": 30500,
+          "thread_cpu_ns": 30334
+        },
+        {
+          "block": 7,
+          "mode": "auto",
+          "wall_ns": 30125,
+          "thread_cpu_ns": 30000
+        },
+        {
+          "block": 7,
+          "mode": "auto",
+          "wall_ns": 30042,
+          "thread_cpu_ns": 29834
+        },
+        {
+          "block": 7,
+          "mode": "auto",
+          "wall_ns": 30375,
+          "thread_cpu_ns": 30167
+        },
+        {
+          "block": 7,
+          "mode": "auto",
+          "wall_ns": 29709,
+          "thread_cpu_ns": 29500
+        },
+        {
+          "block": 7,
+          "mode": "auto",
+          "wall_ns": 30041,
+          "thread_cpu_ns": 29833
+        },
+        {
+          "block": 7,
+          "mode": "auto",
+          "wall_ns": 29916,
+          "thread_cpu_ns": 29708
+        },
+        {
+          "block": 7,
+          "mode": "auto",
+          "wall_ns": 59958,
+          "thread_cpu_ns": 59750
+        },
+        {
+          "block": 7,
+          "mode": "auto",
+          "wall_ns": 30917,
+          "thread_cpu_ns": 30750
+        },
+        {
+          "block": 7,
+          "mode": "auto",
+          "wall_ns": 30584,
+          "thread_cpu_ns": 30416
+        },
+        {
+          "block": 7,
+          "mode": "auto",
+          "wall_ns": 30625,
+          "thread_cpu_ns": 30417
+        },
+        {
+          "block": 7,
+          "mode": "auto",
+          "wall_ns": 30417,
+          "thread_cpu_ns": 30208
+        },
+        {
+          "block": 7,
+          "mode": "auto",
+          "wall_ns": 30125,
+          "thread_cpu_ns": 29875
+        },
+        {
+          "block": 7,
+          "mode": "auto",
+          "wall_ns": 30000,
+          "thread_cpu_ns": 29792
+        },
+        {
+          "block": 7,
+          "mode": "auto",
+          "wall_ns": 29958,
+          "thread_cpu_ns": 29708
+        },
+        {
+          "block": 7,
+          "mode": "auto",
+          "wall_ns": 30041,
+          "thread_cpu_ns": 29791
+        },
+        {
+          "block": 7,
+          "mode": "auto",
+          "wall_ns": 29958,
+          "thread_cpu_ns": 29750
+        },
+        {
+          "block": 7,
+          "mode": "auto",
+          "wall_ns": 30166,
+          "thread_cpu_ns": 29958
+        },
+        {
+          "block": 7,
+          "mode": "auto",
+          "wall_ns": 30125,
+          "thread_cpu_ns": 29917
+        },
+        {
+          "block": 8,
+          "mode": "auto",
+          "wall_ns": 29917,
+          "thread_cpu_ns": 29709
+        },
+        {
+          "block": 8,
+          "mode": "auto",
+          "wall_ns": 29958,
+          "thread_cpu_ns": 29750
+        },
+        {
+          "block": 8,
+          "mode": "auto",
+          "wall_ns": 30000,
+          "thread_cpu_ns": 29792
+        },
+        {
+          "block": 8,
+          "mode": "auto",
+          "wall_ns": 30667,
+          "thread_cpu_ns": 30500
+        },
+        {
+          "block": 8,
+          "mode": "auto",
+          "wall_ns": 30167,
+          "thread_cpu_ns": 29958
+        },
+        {
+          "block": 8,
+          "mode": "auto",
+          "wall_ns": 29875,
+          "thread_cpu_ns": 29666
+        },
+        {
+          "block": 8,
+          "mode": "auto",
+          "wall_ns": 30000,
+          "thread_cpu_ns": 29792
+        },
+        {
+          "block": 8,
+          "mode": "auto",
+          "wall_ns": 30167,
+          "thread_cpu_ns": 29959
+        },
+        {
+          "block": 8,
+          "mode": "auto",
+          "wall_ns": 30000,
+          "thread_cpu_ns": 29833
+        },
+        {
+          "block": 8,
+          "mode": "auto",
+          "wall_ns": 30166,
+          "thread_cpu_ns": 29958
+        },
+        {
+          "block": 8,
+          "mode": "auto",
+          "wall_ns": 30292,
+          "thread_cpu_ns": 30125
+        },
+        {
+          "block": 8,
+          "mode": "auto",
+          "wall_ns": 30375,
+          "thread_cpu_ns": 30166
+        },
+        {
+          "block": 8,
+          "mode": "auto",
+          "wall_ns": 30417,
+          "thread_cpu_ns": 30250
+        },
+        {
+          "block": 8,
+          "mode": "auto",
+          "wall_ns": 30625,
+          "thread_cpu_ns": 30416
+        },
+        {
+          "block": 8,
+          "mode": "auto",
+          "wall_ns": 30791,
+          "thread_cpu_ns": 30583
+        },
+        {
+          "block": 8,
+          "mode": "auto",
+          "wall_ns": 30292,
+          "thread_cpu_ns": 30084
+        },
+        {
+          "block": 8,
+          "mode": "auto",
+          "wall_ns": 30042,
+          "thread_cpu_ns": 29834
+        },
+        {
+          "block": 8,
+          "mode": "auto",
+          "wall_ns": 30000,
+          "thread_cpu_ns": 29834
+        },
+        {
+          "block": 8,
+          "mode": "auto",
+          "wall_ns": 30083,
+          "thread_cpu_ns": 29916
+        },
+        {
+          "block": 8,
+          "mode": "auto",
+          "wall_ns": 29958,
+          "thread_cpu_ns": 29750
+        },
+        {
+          "block": 8,
+          "mode": "auto",
+          "wall_ns": 29750,
+          "thread_cpu_ns": 29583
+        },
+        {
+          "block": 8,
+          "mode": "auto",
+          "wall_ns": 30000,
+          "thread_cpu_ns": 29792
+        },
+        {
+          "block": 8,
+          "mode": "auto",
+          "wall_ns": 29917,
+          "thread_cpu_ns": 29750
+        },
+        {
+          "block": 8,
+          "mode": "auto",
+          "wall_ns": 30250,
+          "thread_cpu_ns": 30041
+        },
+        {
+          "block": 8,
+          "mode": "auto",
+          "wall_ns": 29958,
+          "thread_cpu_ns": 29791
+        },
+        {
+          "block": 8,
+          "mode": "force",
+          "wall_ns": 71125,
+          "thread_cpu_ns": 70875
+        },
+        {
+          "block": 8,
+          "mode": "force",
+          "wall_ns": 64667,
+          "thread_cpu_ns": 64458
+        },
+        {
+          "block": 8,
+          "mode": "force",
+          "wall_ns": 61458,
+          "thread_cpu_ns": 61208
+        },
+        {
+          "block": 8,
+          "mode": "force",
+          "wall_ns": 60250,
+          "thread_cpu_ns": 60000
+        },
+        {
+          "block": 8,
+          "mode": "force",
+          "wall_ns": 61209,
+          "thread_cpu_ns": 61042
+        },
+        {
+          "block": 8,
+          "mode": "force",
+          "wall_ns": 60083,
+          "thread_cpu_ns": 59833
+        },
+        {
+          "block": 8,
+          "mode": "force",
+          "wall_ns": 60333,
+          "thread_cpu_ns": 60083
+        },
+        {
+          "block": 8,
+          "mode": "force",
+          "wall_ns": 59958,
+          "thread_cpu_ns": 59708
+        },
+        {
+          "block": 8,
+          "mode": "force",
+          "wall_ns": 60375,
+          "thread_cpu_ns": 60167
+        },
+        {
+          "block": 8,
+          "mode": "force",
+          "wall_ns": 64250,
+          "thread_cpu_ns": 64042
+        },
+        {
+          "block": 8,
+          "mode": "force",
+          "wall_ns": 61250,
+          "thread_cpu_ns": 61042
+        },
+        {
+          "block": 8,
+          "mode": "force",
+          "wall_ns": 60500,
+          "thread_cpu_ns": 60291
+        },
+        {
+          "block": 8,
+          "mode": "force",
+          "wall_ns": 60417,
+          "thread_cpu_ns": 60208
+        },
+        {
+          "block": 8,
+          "mode": "force",
+          "wall_ns": 59250,
+          "thread_cpu_ns": 59000
+        },
+        {
+          "block": 8,
+          "mode": "force",
+          "wall_ns": 59583,
+          "thread_cpu_ns": 59416
+        },
+        {
+          "block": 8,
+          "mode": "force",
+          "wall_ns": 59750,
+          "thread_cpu_ns": 59542
+        },
+        {
+          "block": 8,
+          "mode": "force",
+          "wall_ns": 59583,
+          "thread_cpu_ns": 59333
+        },
+        {
+          "block": 8,
+          "mode": "force",
+          "wall_ns": 60250,
+          "thread_cpu_ns": 60041
+        },
+        {
+          "block": 8,
+          "mode": "force",
+          "wall_ns": 61750,
+          "thread_cpu_ns": 61500
+        },
+        {
+          "block": 8,
+          "mode": "force",
+          "wall_ns": 60875,
+          "thread_cpu_ns": 60708
+        },
+        {
+          "block": 8,
+          "mode": "force",
+          "wall_ns": 60000,
+          "thread_cpu_ns": 59791
+        },
+        {
+          "block": 8,
+          "mode": "force",
+          "wall_ns": 63625,
+          "thread_cpu_ns": 63375
+        },
+        {
+          "block": 8,
+          "mode": "force",
+          "wall_ns": 62000,
+          "thread_cpu_ns": 61750
+        },
+        {
+          "block": 8,
+          "mode": "force",
+          "wall_ns": 71792,
+          "thread_cpu_ns": 71583
+        },
+        {
+          "block": 8,
+          "mode": "force",
+          "wall_ns": 62917,
+          "thread_cpu_ns": 62709
+        },
+        {
+          "block": 9,
+          "mode": "force",
+          "wall_ns": 66500,
+          "thread_cpu_ns": 66209
+        },
+        {
+          "block": 9,
+          "mode": "force",
+          "wall_ns": 61417,
+          "thread_cpu_ns": 61209
+        },
+        {
+          "block": 9,
+          "mode": "force",
+          "wall_ns": 59708,
+          "thread_cpu_ns": 59500
+        },
+        {
+          "block": 9,
+          "mode": "force",
+          "wall_ns": 60500,
+          "thread_cpu_ns": 60250
+        },
+        {
+          "block": 9,
+          "mode": "force",
+          "wall_ns": 59959,
+          "thread_cpu_ns": 59708
+        },
+        {
+          "block": 9,
+          "mode": "force",
+          "wall_ns": 59916,
+          "thread_cpu_ns": 59708
+        },
+        {
+          "block": 9,
+          "mode": "force",
+          "wall_ns": 59625,
+          "thread_cpu_ns": 59458
+        },
+        {
+          "block": 9,
+          "mode": "force",
+          "wall_ns": 59500,
+          "thread_cpu_ns": 59292
+        },
+        {
+          "block": 9,
+          "mode": "force",
+          "wall_ns": 59917,
+          "thread_cpu_ns": 59709
+        },
+        {
+          "block": 9,
+          "mode": "force",
+          "wall_ns": 59250,
+          "thread_cpu_ns": 59042
+        },
+        {
+          "block": 9,
+          "mode": "force",
+          "wall_ns": 59416,
+          "thread_cpu_ns": 59208
+        },
+        {
+          "block": 9,
+          "mode": "force",
+          "wall_ns": 59625,
+          "thread_cpu_ns": 59417
+        },
+        {
+          "block": 9,
+          "mode": "force",
+          "wall_ns": 58875,
+          "thread_cpu_ns": 58625
+        },
+        {
+          "block": 9,
+          "mode": "force",
+          "wall_ns": 59500,
+          "thread_cpu_ns": 59292
+        },
+        {
+          "block": 9,
+          "mode": "force",
+          "wall_ns": 58958,
+          "thread_cpu_ns": 58750
+        },
+        {
+          "block": 9,
+          "mode": "force",
+          "wall_ns": 59459,
+          "thread_cpu_ns": 59250
+        },
+        {
+          "block": 9,
+          "mode": "force",
+          "wall_ns": 58750,
+          "thread_cpu_ns": 58542
+        },
+        {
+          "block": 9,
+          "mode": "force",
+          "wall_ns": 63500,
+          "thread_cpu_ns": 63250
+        },
+        {
+          "block": 9,
+          "mode": "force",
+          "wall_ns": 65166,
+          "thread_cpu_ns": 64959
+        },
+        {
+          "block": 9,
+          "mode": "force",
+          "wall_ns": 59875,
+          "thread_cpu_ns": 59625
+        },
+        {
+          "block": 9,
+          "mode": "force",
+          "wall_ns": 59292,
+          "thread_cpu_ns": 59042
+        },
+        {
+          "block": 9,
+          "mode": "force",
+          "wall_ns": 59208,
+          "thread_cpu_ns": 59000
+        },
+        {
+          "block": 9,
+          "mode": "force",
+          "wall_ns": 59041,
+          "thread_cpu_ns": 58791
+        },
+        {
+          "block": 9,
+          "mode": "force",
+          "wall_ns": 59166,
+          "thread_cpu_ns": 58958
+        },
+        {
+          "block": 9,
+          "mode": "force",
+          "wall_ns": 63916,
+          "thread_cpu_ns": 63708
+        },
+        {
+          "block": 9,
+          "mode": "auto",
+          "wall_ns": 33958,
+          "thread_cpu_ns": 33667
+        },
+        {
+          "block": 9,
+          "mode": "auto",
+          "wall_ns": 31833,
+          "thread_cpu_ns": 31625
+        },
+        {
+          "block": 9,
+          "mode": "auto",
+          "wall_ns": 30875,
+          "thread_cpu_ns": 30708
+        },
+        {
+          "block": 9,
+          "mode": "auto",
+          "wall_ns": 30625,
+          "thread_cpu_ns": 30417
+        },
+        {
+          "block": 9,
+          "mode": "auto",
+          "wall_ns": 30292,
+          "thread_cpu_ns": 30042
+        },
+        {
+          "block": 9,
+          "mode": "auto",
+          "wall_ns": 30041,
+          "thread_cpu_ns": 29833
+        },
+        {
+          "block": 9,
+          "mode": "auto",
+          "wall_ns": 30208,
+          "thread_cpu_ns": 30042
+        },
+        {
+          "block": 9,
+          "mode": "auto",
+          "wall_ns": 30125,
+          "thread_cpu_ns": 29875
+        },
+        {
+          "block": 9,
+          "mode": "auto",
+          "wall_ns": 29916,
+          "thread_cpu_ns": 29750
+        },
+        {
+          "block": 9,
+          "mode": "auto",
+          "wall_ns": 29875,
+          "thread_cpu_ns": 29667
+        },
+        {
+          "block": 9,
+          "mode": "auto",
+          "wall_ns": 30083,
+          "thread_cpu_ns": 29833
+        },
+        {
+          "block": 9,
+          "mode": "auto",
+          "wall_ns": 30083,
+          "thread_cpu_ns": 29875
+        },
+        {
+          "block": 9,
+          "mode": "auto",
+          "wall_ns": 30292,
+          "thread_cpu_ns": 30083
+        },
+        {
+          "block": 9,
+          "mode": "auto",
+          "wall_ns": 29958,
+          "thread_cpu_ns": 29750
+        },
+        {
+          "block": 9,
+          "mode": "auto",
+          "wall_ns": 30041,
+          "thread_cpu_ns": 29875
+        },
+        {
+          "block": 9,
+          "mode": "auto",
+          "wall_ns": 30375,
+          "thread_cpu_ns": 30167
+        },
+        {
+          "block": 9,
+          "mode": "auto",
+          "wall_ns": 30125,
+          "thread_cpu_ns": 29917
+        },
+        {
+          "block": 9,
+          "mode": "auto",
+          "wall_ns": 29917,
+          "thread_cpu_ns": 29708
+        },
+        {
+          "block": 9,
+          "mode": "auto",
+          "wall_ns": 29875,
+          "thread_cpu_ns": 29667
+        },
+        {
+          "block": 9,
+          "mode": "auto",
+          "wall_ns": 29792,
+          "thread_cpu_ns": 29625
+        },
+        {
+          "block": 9,
+          "mode": "auto",
+          "wall_ns": 30125,
+          "thread_cpu_ns": 29958
+        },
+        {
+          "block": 9,
+          "mode": "auto",
+          "wall_ns": 30000,
+          "thread_cpu_ns": 29792
+        },
+        {
+          "block": 9,
+          "mode": "auto",
+          "wall_ns": 30167,
+          "thread_cpu_ns": 29959
+        },
+        {
+          "block": 9,
+          "mode": "auto",
+          "wall_ns": 30125,
+          "thread_cpu_ns": 29917
+        },
+        {
+          "block": 9,
+          "mode": "auto",
+          "wall_ns": 30166,
+          "thread_cpu_ns": 29958
+        },
+        {
+          "block": 10,
+          "mode": "auto",
+          "wall_ns": 30083,
+          "thread_cpu_ns": 29875
+        },
+        {
+          "block": 10,
+          "mode": "auto",
+          "wall_ns": 30292,
+          "thread_cpu_ns": 30083
+        },
+        {
+          "block": 10,
+          "mode": "auto",
+          "wall_ns": 29917,
+          "thread_cpu_ns": 29708
+        },
+        {
+          "block": 10,
+          "mode": "auto",
+          "wall_ns": 29834,
+          "thread_cpu_ns": 29666
+        },
+        {
+          "block": 10,
+          "mode": "auto",
+          "wall_ns": 30000,
+          "thread_cpu_ns": 29833
+        },
+        {
+          "block": 10,
+          "mode": "auto",
+          "wall_ns": 29917,
+          "thread_cpu_ns": 29709
+        },
+        {
+          "block": 10,
+          "mode": "auto",
+          "wall_ns": 30083,
+          "thread_cpu_ns": 29875
+        },
+        {
+          "block": 10,
+          "mode": "auto",
+          "wall_ns": 30625,
+          "thread_cpu_ns": 30458
+        },
+        {
+          "block": 10,
+          "mode": "auto",
+          "wall_ns": 34583,
+          "thread_cpu_ns": 34375
+        },
+        {
+          "block": 10,
+          "mode": "auto",
+          "wall_ns": 31209,
+          "thread_cpu_ns": 31000
+        },
+        {
+          "block": 10,
+          "mode": "auto",
+          "wall_ns": 29833,
+          "thread_cpu_ns": 29625
+        },
+        {
+          "block": 10,
+          "mode": "auto",
+          "wall_ns": 34583,
+          "thread_cpu_ns": 34375
+        },
+        {
+          "block": 10,
+          "mode": "auto",
+          "wall_ns": 30459,
+          "thread_cpu_ns": 30250
+        },
+        {
+          "block": 10,
+          "mode": "auto",
+          "wall_ns": 29833,
+          "thread_cpu_ns": 29666
+        },
+        {
+          "block": 10,
+          "mode": "auto",
+          "wall_ns": 30000,
+          "thread_cpu_ns": 29792
+        },
+        {
+          "block": 10,
+          "mode": "auto",
+          "wall_ns": 29917,
+          "thread_cpu_ns": 29750
+        },
+        {
+          "block": 10,
+          "mode": "auto",
+          "wall_ns": 29958,
+          "thread_cpu_ns": 29750
+        },
+        {
+          "block": 10,
+          "mode": "auto",
+          "wall_ns": 29750,
+          "thread_cpu_ns": 29583
+        },
+        {
+          "block": 10,
+          "mode": "auto",
+          "wall_ns": 30000,
+          "thread_cpu_ns": 29792
+        },
+        {
+          "block": 10,
+          "mode": "auto",
+          "wall_ns": 29791,
+          "thread_cpu_ns": 29541
+        },
+        {
+          "block": 10,
+          "mode": "auto",
+          "wall_ns": 30292,
+          "thread_cpu_ns": 30084
+        },
+        {
+          "block": 10,
+          "mode": "auto",
+          "wall_ns": 30500,
+          "thread_cpu_ns": 30292
+        },
+        {
+          "block": 10,
+          "mode": "auto",
+          "wall_ns": 32292,
+          "thread_cpu_ns": 32041
+        },
+        {
+          "block": 10,
+          "mode": "auto",
+          "wall_ns": 32459,
+          "thread_cpu_ns": 32250
+        },
+        {
+          "block": 10,
+          "mode": "auto",
+          "wall_ns": 30958,
+          "thread_cpu_ns": 30709
+        },
+        {
+          "block": 10,
+          "mode": "force",
+          "wall_ns": 69375,
+          "thread_cpu_ns": 69167
+        },
+        {
+          "block": 10,
+          "mode": "force",
+          "wall_ns": 62500,
+          "thread_cpu_ns": 62292
+        },
+        {
+          "block": 10,
+          "mode": "force",
+          "wall_ns": 61125,
+          "thread_cpu_ns": 60875
+        },
+        {
+          "block": 10,
+          "mode": "force",
+          "wall_ns": 60792,
+          "thread_cpu_ns": 60625
+        },
+        {
+          "block": 10,
+          "mode": "force",
+          "wall_ns": 60292,
+          "thread_cpu_ns": 60084
+        },
+        {
+          "block": 10,
+          "mode": "force",
+          "wall_ns": 59792,
+          "thread_cpu_ns": 59583
+        },
+        {
+          "block": 10,
+          "mode": "force",
+          "wall_ns": 91250,
+          "thread_cpu_ns": 91000
+        },
+        {
+          "block": 10,
+          "mode": "force",
+          "wall_ns": 61500,
+          "thread_cpu_ns": 61292
+        },
+        {
+          "block": 10,
+          "mode": "force",
+          "wall_ns": 61791,
+          "thread_cpu_ns": 61583
+        },
+        {
+          "block": 10,
+          "mode": "force",
+          "wall_ns": 59625,
+          "thread_cpu_ns": 59417
+        },
+        {
+          "block": 10,
+          "mode": "force",
+          "wall_ns": 59667,
+          "thread_cpu_ns": 59458
+        },
+        {
+          "block": 10,
+          "mode": "force",
+          "wall_ns": 60208,
+          "thread_cpu_ns": 60000
+        },
+        {
+          "block": 10,
+          "mode": "force",
+          "wall_ns": 61042,
+          "thread_cpu_ns": 60833
+        },
+        {
+          "block": 10,
+          "mode": "force",
+          "wall_ns": 60042,
+          "thread_cpu_ns": 59833
+        },
+        {
+          "block": 10,
+          "mode": "force",
+          "wall_ns": 61500,
+          "thread_cpu_ns": 61292
+        },
+        {
+          "block": 10,
+          "mode": "force",
+          "wall_ns": 60583,
+          "thread_cpu_ns": 60417
+        },
+        {
+          "block": 10,
+          "mode": "force",
+          "wall_ns": 60625,
+          "thread_cpu_ns": 60458
+        },
+        {
+          "block": 10,
+          "mode": "force",
+          "wall_ns": 60167,
+          "thread_cpu_ns": 59875
+        },
+        {
+          "block": 10,
+          "mode": "force",
+          "wall_ns": 59750,
+          "thread_cpu_ns": 59541
+        },
+        {
+          "block": 10,
+          "mode": "force",
+          "wall_ns": 59834,
+          "thread_cpu_ns": 59625
+        },
+        {
+          "block": 10,
+          "mode": "force",
+          "wall_ns": 60209,
+          "thread_cpu_ns": 60000
+        },
+        {
+          "block": 10,
+          "mode": "force",
+          "wall_ns": 59375,
+          "thread_cpu_ns": 59167
+        },
+        {
+          "block": 10,
+          "mode": "force",
+          "wall_ns": 63208,
+          "thread_cpu_ns": 62958
+        },
+        {
+          "block": 10,
+          "mode": "force",
+          "wall_ns": 61208,
+          "thread_cpu_ns": 60958
+        },
+        {
+          "block": 10,
+          "mode": "force",
+          "wall_ns": 59375,
+          "thread_cpu_ns": 59167
+        }
+      ],
+      "median_ms": {
+        "force": {
+          "wall_ns": 0.0617705,
+          "thread_cpu_ns": 0.0615835
+        },
+        "auto": {
+          "wall_ns": 0.030625,
+          "thread_cpu_ns": 0.030416
+        }
+      },
+      "separately_instrumented_distribution_counts": {
+        "force": {
+          "status_calls": 20,
+          "native_runtime_distribution": 20,
+          "other_distribution": 0
+        },
+        "auto": {
+          "status_calls": 20,
+          "native_runtime_distribution": 0,
+          "other_distribution": 0
+        }
+      },
+      "inputs_unchanged": true,
+      "SDK_imported_or_activated": false,
+      "scope": "One process, same installed native identity; per-call mode changes occur outside timed operations.",
+      "limitations": [
+        "Component costs do not establish their contribution to HTTP latency.",
+        "Freshly extracted onefile first-use cost and real model/user benefit are not measured.",
+        "Status is warmed; no product cache, scope, deadline or behavior is changed."
+      ]
+    },
+    "original": {
+      "path": "/private/tmp/hol-guard-cigar-distribution-20261024/native-discovery-component.json",
+      "bytes": 55490,
+      "sha256": "61dc4b346390a5293dedf147861e5fcc313da5ff8e03c4f9cd05692d33a5fdd3"
+    }
+  },
+  "thread_profile": {
+    "report": {
+      "schema": "guard-cigar-distribution-context-thread-profile.v1",
+      "diagnostic_only": true,
+      "benchmark_returncode": 0,
+      "plan": {
+        "schema": "guard-cigar-context-thread-profile-plan.v1",
+        "diagnostic_only": true,
+        "sample_every_worker_compiles": 16,
+        "maximum_samples": 32,
+        "owner": "Only ContextWorkload._thread; no main/HTTP/foreign-thread profile hook",
+        "operation_counts_deadlines_limits_and_estimator_changed": false,
+        "qualification": "Instrumented diagnostic, never replaces failed fixed cohort",
+        "inputs": {
+          "/private/tmp/hol-guard-cigar-distribution-20261024/thread_profile_driver.py": "e097000117cedb649cc6ff817dfd0439ff90f6f697faf5a1fed26671e36cf46f",
+          "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/scripts/cigar_benchmark_workload.py": "6f3b86e52ccec7108f2af8e5fa34a238d72261ec4250543cbebcb363f54fc2cd",
+          "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/scripts/cigar_thread_profile.py": "a1a2c2cfda4c5783e7b755711895c9715b041d8b843d06f74a08679cd6d8ebca",
+          "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/scripts/cigar_context_profile.py": "b91b5f40667c4e3988776e9851c44d7709c65e567d090ecad57b644de88d0318",
+          "/private/tmp/hol-guard-cigar-distribution-20261024/package/installed/codex_plugin_scanner/guard/native_runtime.py": "a1fb44e19d7d2cbb0186c393a4227c6f848d26ecce0fe5a4f324626fbff29a83",
+          "/private/tmp/hol-guard-cigar-distribution-20261024/package/installed/codex_plugin_scanner/_native/hol-guard-runtime": "3b2fd52e95b4183d0694e92fbc2dcdc928ab73703dd7ca0df4e15e6df2c12dcf"
+        }
+      },
+      "counters": {
+        "worker_compiles": 294
+      },
+      "profile": {
+        "sampled_compiles": 18,
+        "completed_samples": 18,
+        "profile_complete": true,
+        "errors": [],
+        "unmapped_functions": 2,
+        "unmapped_self_cpu_seconds": 0.000189453,
+        "top_by_self_cpu": [
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_daemon_route.py",
+            "function": "_decide",
+            "line": 156,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.021750542,
+            "total_elapsed_seconds": 0.187881834,
+            "self_cpu_seconds": 0.02161354,
+            "total_cpu_seconds": 0.059271292
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/path_resolution_cache.py",
+            "function": "_marks_unchanged",
+            "line": 58,
+            "call_events": 35,
+            "self_elapsed_seconds": 0.028791707,
+            "total_elapsed_seconds": 0.028791707,
+            "self_cpu_seconds": 0.003022916,
+            "total_cpu_seconds": 0.003022916
+          },
+          {
+            "root": "stdlib",
+            "module": "importlib/metadata/__init__.py",
+            "function": "mtime",
+            "line": 695,
+            "call_events": 144,
+            "self_elapsed_seconds": 0.021335669,
+            "total_elapsed_seconds": 0.021548926,
+            "self_cpu_seconds": 0.002737664,
+            "total_cpu_seconds": 0.002939755
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_runtime.py",
+            "function": "_isolated_environment",
+            "line": 233,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.0012989,
+            "total_elapsed_seconds": 0.003109958,
+            "self_cpu_seconds": 0.001298499,
+            "total_cpu_seconds": 0.00311004
+          },
+          {
+            "root": "stdlib",
+            "module": "<frozen posixpath>",
+            "function": "_joinrealpath",
+            "line": 429,
+            "call_events": 19,
+            "self_elapsed_seconds": 0.002602161,
+            "total_elapsed_seconds": 0.003155375,
+            "self_cpu_seconds": 0.00101067,
+            "total_cpu_seconds": 0.00156075
+          },
+          {
+            "root": "stdlib",
+            "module": "<frozen os>",
+            "function": "__iter__",
+            "line": 732,
+            "call_events": 738,
+            "self_elapsed_seconds": 0.001000564,
+            "total_elapsed_seconds": 0.001447807,
+            "self_cpu_seconds": 0.000998026,
+            "total_cpu_seconds": 0.001448458
+          },
+          {
+            "root": "stdlib",
+            "module": "importlib/metadata/__init__.py",
+            "function": "search",
+            "line": 728,
+            "call_events": 144,
+            "self_elapsed_seconds": 0.000817916,
+            "total_elapsed_seconds": 0.001861337,
+            "self_cpu_seconds": 0.000819477,
+            "total_cpu_seconds": 0.001861466
+          },
+          {
+            "root": "stdlib",
+            "module": "importlib/metadata/_collections.py",
+            "function": "__missing__",
+            "line": 20,
+            "call_events": 288,
+            "self_elapsed_seconds": 0.000750226,
+            "total_elapsed_seconds": 0.00092413,
+            "self_cpu_seconds": 0.000750546,
+            "total_cpu_seconds": 0.000923457
+          },
+          {
+            "root": "stdlib",
+            "module": "pathlib.py",
+            "function": "_parse_path",
+            "line": 387,
+            "call_events": 108,
+            "self_elapsed_seconds": 0.000720925,
+            "total_elapsed_seconds": 0.000849421,
+            "self_cpu_seconds": 0.000721995,
+            "total_cpu_seconds": 0.000849869
+          },
+          {
+            "root": "stdlib",
+            "module": "json/decoder.py",
+            "function": "raw_decode",
+            "line": 344,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.000703292,
+            "total_elapsed_seconds": 0.000703292,
+            "self_cpu_seconds": 0.00070392,
+            "total_cpu_seconds": 0.00070392
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/path_resolution_cache.py",
+            "function": "cached_realpath",
+            "line": 73,
+            "call_events": 36,
+            "self_elapsed_seconds": 0.004353169,
+            "total_elapsed_seconds": 0.034514626,
+            "self_cpu_seconds": 0.000701499,
+            "total_cpu_seconds": 0.003972748
+          },
+          {
+            "root": "stdlib",
+            "module": "pathlib.py",
+            "function": "stat",
+            "line": 835,
+            "call_events": 90,
+            "self_elapsed_seconds": 0.004526413,
+            "total_elapsed_seconds": 0.005158412,
+            "self_cpu_seconds": 0.000688112,
+            "total_cpu_seconds": 0.001314952
+          },
+          {
+            "root": "stdlib",
+            "module": "pathlib.py",
+            "function": "__str__",
+            "line": 437,
+            "call_events": 288,
+            "self_elapsed_seconds": 0.000685828,
+            "total_elapsed_seconds": 0.001670382,
+            "self_cpu_seconds": 0.000687252,
+            "total_cpu_seconds": 0.001664659
+          },
+          {
+            "root": "stdlib",
+            "module": "<frozen posixpath>",
+            "function": "join",
+            "line": 71,
+            "call_events": 225,
+            "self_elapsed_seconds": 0.000672885,
+            "total_elapsed_seconds": 0.000810965,
+            "self_cpu_seconds": 0.000670257,
+            "total_cpu_seconds": 0.000807795
+          },
+          {
+            "root": "stdlib",
+            "module": "<frozen os>",
+            "function": "__getitem__",
+            "line": 709,
+            "call_events": 252,
+            "self_elapsed_seconds": 0.000654472,
+            "total_elapsed_seconds": 0.001000587,
+            "self_cpu_seconds": 0.000657714,
+            "total_cpu_seconds": 0.001002632
+          },
+          {
+            "root": "stdlib",
+            "module": "importlib/metadata/__init__.py",
+            "function": "search",
+            "line": 692,
+            "call_events": 144,
+            "self_elapsed_seconds": 0.000606156,
+            "total_elapsed_seconds": 0.030149503,
+            "self_cpu_seconds": 0.000607158,
+            "total_cpu_seconds": 0.006937295
+          },
+          {
+            "root": "stdlib",
+            "module": "<frozen os>",
+            "function": "decode",
+            "line": 795,
+            "call_events": 900,
+            "self_elapsed_seconds": 0.000568186,
+            "total_elapsed_seconds": 0.000568186,
+            "self_cpu_seconds": 0.000570473,
+            "total_cpu_seconds": 0.000570473
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_resident_decision.py",
+            "function": "resident_decide",
+            "line": 94,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.000552335,
+            "total_elapsed_seconds": 0.166131292,
+            "self_cpu_seconds": 0.00054992,
+            "total_cpu_seconds": 0.037657752
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_resident_decision.py",
+            "function": "shape_fields",
+            "line": 55,
+            "call_events": 72,
+            "self_elapsed_seconds": 0.000528756,
+            "total_elapsed_seconds": 0.000528756,
+            "self_cpu_seconds": 0.000529007,
+            "total_cpu_seconds": 0.000529007
+          },
+          {
+            "root": "stdlib",
+            "module": "threading.py",
+            "function": "wait",
+            "line": 323,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.066645744,
+            "total_elapsed_seconds": 0.066704246,
+            "self_cpu_seconds": 0.000491336,
+            "total_cpu_seconds": 0.000540417
+          },
+          {
+            "root": "stdlib",
+            "module": "importlib/metadata/__init__.py",
+            "function": "<genexpr>",
+            "line": 794,
+            "call_events": 162,
+            "self_elapsed_seconds": 0.000488417,
+            "total_elapsed_seconds": 0.030740463,
+            "self_cpu_seconds": 0.000490411,
+            "total_cpu_seconds": 0.007522874
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_resident_stream.py",
+            "function": "_request_is_current",
+            "line": 470,
+            "call_events": 54,
+            "self_elapsed_seconds": 0.000470409,
+            "total_elapsed_seconds": 0.001550829,
+            "self_cpu_seconds": 0.000469415,
+            "total_cpu_seconds": 0.001550501
+          },
+          {
+            "root": "stdlib",
+            "module": "importlib/metadata/__init__.py",
+            "function": "children",
+            "line": 678,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.00258083,
+            "total_elapsed_seconds": 0.005821334,
+            "self_cpu_seconds": 0.000466458,
+            "total_cpu_seconds": 0.001217374
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_resident_stream.py",
+            "function": "request",
+            "line": 390,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.000454743,
+            "total_elapsed_seconds": 0.072936167,
+            "self_cpu_seconds": 0.000454574,
+            "total_cpu_seconds": 0.005310126
+          },
+          {
+            "root": "stdlib",
+            "module": "uuid.py",
+            "function": "uuid4",
+            "line": 723,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.002069414,
+            "total_elapsed_seconds": 0.002165917,
+            "self_cpu_seconds": 0.000441495,
+            "total_cpu_seconds": 0.000535914
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_resident_transport.py",
+            "function": "_write_frame_nonblocking",
+            "line": 13,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.001268916,
+            "total_elapsed_seconds": 0.002632958,
+            "self_cpu_seconds": 0.000416006,
+            "total_cpu_seconds": 0.00117075
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_resident_stream.py",
+            "function": "_hold_until",
+            "line": 57,
+            "call_events": 360,
+            "self_elapsed_seconds": 0.000390583,
+            "total_elapsed_seconds": 0.000390583,
+            "self_cpu_seconds": 0.00038999,
+            "total_cpu_seconds": 0.00038999
+          },
+          {
+            "root": "stdlib",
+            "module": "pathlib.py",
+            "function": "_load_parts",
+            "line": 407,
+            "call_events": 108,
+            "self_elapsed_seconds": 0.000387657,
+            "total_elapsed_seconds": 0.001495538,
+            "self_cpu_seconds": 0.000387127,
+            "total_cpu_seconds": 0.00149546
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_resident_client.py",
+            "function": "request",
+            "line": 247,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.000378539,
+            "total_elapsed_seconds": 0.073686164,
+            "self_cpu_seconds": 0.000378459,
+            "total_cpu_seconds": 0.006060083
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_execution.py",
+            "function": "_resident_request",
+            "line": 70,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.000370756,
+            "total_elapsed_seconds": 0.099460085,
+            "self_cpu_seconds": 0.000373795,
+            "total_cpu_seconds": 0.015300086
+          },
+          {
+            "root": "stdlib",
+            "module": "zipfile/__init__.py",
+            "function": "__init__",
+            "line": 1313,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.002838501,
+            "total_elapsed_seconds": 0.002871584,
+            "self_cpu_seconds": 0.000355541,
+            "total_cpu_seconds": 0.0003855
+          },
+          {
+            "root": "stdlib",
+            "module": "importlib/metadata/__init__.py",
+            "function": "from_name",
+            "line": 383,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.000347869,
+            "total_elapsed_seconds": 0.032028794,
+            "self_cpu_seconds": 0.000348336,
+            "total_cpu_seconds": 0.008811712
+          },
+          {
+            "root": "stdlib",
+            "module": "contextlib.py",
+            "function": "__exit__",
+            "line": 141,
+            "call_events": 180,
+            "self_elapsed_seconds": 0.000342958,
+            "total_elapsed_seconds": 0.000468545,
+            "self_cpu_seconds": 0.000343642,
+            "total_cpu_seconds": 0.000468753
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_runtime.py",
+            "function": "_discover_runtime_candidates",
+            "line": 102,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.000329201,
+            "total_elapsed_seconds": 0.034239583,
+            "self_cpu_seconds": 0.000329592,
+            "total_cpu_seconds": 0.011022246
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_runtime.py",
+            "function": "native_mode",
+            "line": 80,
+            "call_events": 54,
+            "self_elapsed_seconds": 0.000320997,
+            "total_elapsed_seconds": 0.001154668,
+            "self_cpu_seconds": 0.000320834,
+            "total_cpu_seconds": 0.001154497
+          },
+          {
+            "root": "stdlib",
+            "module": "contextlib.py",
+            "function": "__enter__",
+            "line": 132,
+            "call_events": 180,
+            "self_elapsed_seconds": 0.000319509,
+            "total_elapsed_seconds": 0.000584505,
+            "self_cpu_seconds": 0.000320203,
+            "total_cpu_seconds": 0.000585082
+          },
+          {
+            "root": "stdlib",
+            "module": "contextlib.py",
+            "function": "helper",
+            "line": 299,
+            "call_events": 180,
+            "self_elapsed_seconds": 0.000308218,
+            "total_elapsed_seconds": 0.000464082,
+            "self_cpu_seconds": 0.000307848,
+            "total_cpu_seconds": 0.000463675
+          },
+          {
+            "root": "stdlib",
+            "module": "pathlib.py",
+            "function": "__init__",
+            "line": 1157,
+            "call_events": 144,
+            "self_elapsed_seconds": 0.000305545,
+            "total_elapsed_seconds": 0.000595332,
+            "self_cpu_seconds": 0.000305634,
+            "total_cpu_seconds": 0.000595168
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_context_assistance.py",
+            "function": "workspace",
+            "line": 107,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.00028958,
+            "total_elapsed_seconds": 0.188188501,
+            "self_cpu_seconds": 0.000290375,
+            "total_cpu_seconds": 0.059578416
+          },
+          {
+            "root": "stdlib",
+            "module": "pathlib.py",
+            "function": "__init__",
+            "line": 358,
+            "call_events": 144,
+            "self_elapsed_seconds": 0.000289787,
+            "total_elapsed_seconds": 0.000289787,
+            "self_cpu_seconds": 0.000289534,
+            "total_cpu_seconds": 0.000289534
+          },
+          {
+            "root": "stdlib",
+            "module": "pathlib.py",
+            "function": "drive",
+            "line": 551,
+            "call_events": 198,
+            "self_elapsed_seconds": 0.000286459,
+            "total_elapsed_seconds": 0.001781997,
+            "self_cpu_seconds": 0.000286455,
+            "total_cpu_seconds": 0.001781915
+          },
+          {
+            "root": "stdlib",
+            "module": "pathlib.py",
+            "function": "with_segments",
+            "line": 380,
+            "call_events": 90,
+            "self_elapsed_seconds": 0.000271755,
+            "total_elapsed_seconds": 0.000691122,
+            "self_cpu_seconds": 0.000272296,
+            "total_cpu_seconds": 0.000691338
+          },
+          {
+            "root": "stdlib",
+            "module": "<frozen _collections_abc>",
+            "function": "get",
+            "line": 804,
+            "call_events": 162,
+            "self_elapsed_seconds": 0.000271664,
+            "total_elapsed_seconds": 0.000909,
+            "self_cpu_seconds": 0.000269366,
+            "total_cpu_seconds": 0.000908915
+          },
+          {
+            "root": "stdlib",
+            "module": "queue.py",
+            "function": "get",
+            "line": 154,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.000247843,
+            "total_elapsed_seconds": 0.067073917,
+            "self_cpu_seconds": 0.000250165,
+            "total_cpu_seconds": 0.000911836
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/directory_path_authority.py",
+            "function": "canonical_guard_home_path",
+            "line": 16,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.000238962,
+            "total_elapsed_seconds": 0.018553125,
+            "self_cpu_seconds": 0.00023817,
+            "total_cpu_seconds": 0.002942624
+          },
+          {
+            "root": "stdlib",
+            "module": "subprocess.py",
+            "function": "_internal_poll",
+            "line": 1973,
+            "call_events": 72,
+            "self_elapsed_seconds": 0.000235129,
+            "total_elapsed_seconds": 0.000235129,
+            "self_cpu_seconds": 0.000233965,
+            "total_cpu_seconds": 0.000233965
+          },
+          {
+            "root": "stdlib",
+            "module": "pathlib.py",
+            "function": "__fspath__",
+            "line": 447,
+            "call_events": 144,
+            "self_elapsed_seconds": 0.000227534,
+            "total_elapsed_seconds": 0.000884369,
+            "self_cpu_seconds": 0.000227302,
+            "total_cpu_seconds": 0.000878926
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_daemon_route.py",
+            "function": "bounded_request",
+            "line": 186,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.000228955,
+            "total_elapsed_seconds": 0.100004874,
+            "self_cpu_seconds": 0.000225873,
+            "total_cpu_seconds": 0.015844208
+          },
+          {
+            "root": "stdlib",
+            "module": "<frozen os>",
+            "function": "encode",
+            "line": 791,
+            "call_events": 252,
+            "self_elapsed_seconds": 0.000225172,
+            "total_elapsed_seconds": 0.000225172,
+            "self_cpu_seconds": 0.000224877,
+            "total_cpu_seconds": 0.000224877
+          },
+          {
+            "root": "stdlib",
+            "module": "pathlib.py",
+            "function": "expanduser",
+            "line": 1398,
+            "call_events": 72,
+            "self_elapsed_seconds": 0.000214584,
+            "total_elapsed_seconds": 0.001228539,
+            "self_cpu_seconds": 0.000214744,
+            "total_cpu_seconds": 0.001228704
+          },
+          {
+            "root": "stdlib",
+            "module": "json/encoder.py",
+            "function": "iterencode",
+            "line": 205,
+            "call_events": 36,
+            "self_elapsed_seconds": 0.000211583,
+            "total_elapsed_seconds": 0.000211583,
+            "self_cpu_seconds": 0.000212085,
+            "total_cpu_seconds": 0.000212085
+          },
+          {
+            "root": "stdlib",
+            "module": "selectors.py",
+            "function": "select",
+            "line": 558,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.00065425,
+            "total_elapsed_seconds": 0.000666959,
+            "self_cpu_seconds": 0.000209754,
+            "total_cpu_seconds": 0.000219416
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_resident_client.py",
+            "function": "_pinned_state_dir",
+            "line": 415,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.000207705,
+            "total_elapsed_seconds": 0.019569002,
+            "self_cpu_seconds": 0.000207206,
+            "total_cpu_seconds": 0.003265207
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_runtime_process_cache.py",
+            "function": "process_status",
+            "line": 91,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.000199386,
+            "total_elapsed_seconds": 0.007782251,
+            "self_cpu_seconds": 0.000202501,
+            "total_cpu_seconds": 0.003941752
+          },
+          {
+            "root": "tooling",
+            "module": "scripts/cigar_benchmark_workload.py",
+            "function": "compile",
+            "line": 109,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.000210333,
+            "total_elapsed_seconds": 0.188398834,
+            "self_cpu_seconds": 0.000195083,
+            "total_cpu_seconds": 0.059773499
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_runtime_process_cache.py",
+            "function": "_fingerprint",
+            "line": 33,
+            "call_events": 36,
+            "self_elapsed_seconds": 0.000184705,
+            "total_elapsed_seconds": 0.002446078,
+            "self_cpu_seconds": 0.000184329,
+            "total_cpu_seconds": 0.000633746
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_runtime_values.py",
+            "function": "_resolve_native_mode",
+            "line": 69,
+            "call_events": 54,
+            "self_elapsed_seconds": 0.000183253,
+            "total_elapsed_seconds": 0.000202672,
+            "self_cpu_seconds": 0.000183458,
+            "total_cpu_seconds": 0.000202791
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_resident_client.py",
+            "function": "native_resident_client_request",
+            "line": 702,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.00018479,
+            "total_elapsed_seconds": 0.094930789,
+            "self_cpu_seconds": 0.000182749,
+            "total_cpu_seconds": 0.010768376
+          },
+          {
+            "root": "stdlib",
+            "module": "subprocess.py",
+            "function": "poll",
+            "line": 1233,
+            "call_events": 72,
+            "self_elapsed_seconds": 0.00018037,
+            "total_elapsed_seconds": 0.000415499,
+            "self_cpu_seconds": 0.000180163,
+            "total_cpu_seconds": 0.000414128
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_resident_stream.py",
+            "function": "_request_snapshot",
+            "line": 355,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.000179506,
+            "total_elapsed_seconds": 0.000743501,
+            "self_cpu_seconds": 0.000179872,
+            "total_cpu_seconds": 0.000741916
+          },
+          {
+            "root": "stdlib",
+            "module": "<frozen posixpath>",
+            "function": "_get_sep",
+            "line": 41,
+            "call_events": 283,
+            "self_elapsed_seconds": 0.000175415,
+            "total_elapsed_seconds": 0.000175415,
+            "self_cpu_seconds": 0.000174619,
+            "total_cpu_seconds": 0.000174619
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_runtime.py",
+            "function": "native_runtime_status",
+            "line": 379,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.000171789,
+            "total_elapsed_seconds": 0.043468292,
+            "self_cpu_seconds": 0.00017162,
+            "total_cpu_seconds": 0.016410334
+          },
+          {
+            "root": "stdlib",
+            "module": "importlib/metadata/__init__.py",
+            "function": "<genexpr>",
+            "line": 415,
+            "call_events": 36,
+            "self_elapsed_seconds": 0.000159085,
+            "total_elapsed_seconds": 0.000777294,
+            "self_cpu_seconds": 0.000159041,
+            "total_cpu_seconds": 0.000777377
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_resident_client.py",
+            "function": "_client_pool_for",
+            "line": 380,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.00015775,
+            "total_elapsed_seconds": 0.020846042,
+            "self_cpu_seconds": 0.000157669,
+            "total_cpu_seconds": 0.004311793
+          },
+          {
+            "root": "stdlib",
+            "module": "importlib/metadata/__init__.py",
+            "function": "__init__",
+            "line": 707,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.000157122,
+            "total_elapsed_seconds": 0.006076667,
+            "self_cpu_seconds": 0.000157004,
+            "total_cpu_seconds": 0.001472627
+          },
+          {
+            "root": "stdlib",
+            "module": "contextlib.py",
+            "function": "__init__",
+            "line": 104,
+            "call_events": 180,
+            "self_elapsed_seconds": 0.000155864,
+            "total_elapsed_seconds": 0.000155864,
+            "self_cpu_seconds": 0.000155827,
+            "total_cpu_seconds": 0.000155827
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_context_assistance.py",
+            "function": "_validate_state",
+            "line": 62,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.000144289,
+            "total_elapsed_seconds": 0.000516207,
+            "self_cpu_seconds": 0.000138203,
+            "total_cpu_seconds": 0.000510331
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_resident_client.py",
+            "function": "_track_resident",
+            "line": 503,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.000132545,
+            "total_elapsed_seconds": 0.000730375,
+            "self_cpu_seconds": 0.000132295,
+            "total_cpu_seconds": 0.000500167
+          },
+          {
+            "root": "stdlib",
+            "module": "contextlib.py",
+            "function": "__exit__",
+            "line": 446,
+            "call_events": 180,
+            "self_elapsed_seconds": 0.000143043,
+            "total_elapsed_seconds": 0.000143043,
+            "self_cpu_seconds": 0.000130545,
+            "total_cpu_seconds": 0.000130545
+          },
+          {
+            "root": "stdlib",
+            "module": "threading.py",
+            "function": "acquire",
+            "line": 468,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.000123583,
+            "total_elapsed_seconds": 0.000161543,
+            "self_cpu_seconds": 0.000128369,
+            "total_cpu_seconds": 0.000164165
+          },
+          {
+            "root": "stdlib",
+            "module": "pathlib.py",
+            "function": "with_name",
+            "line": 628,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.000128459,
+            "total_elapsed_seconds": 0.000376875,
+            "self_cpu_seconds": 0.000128164,
+            "total_cpu_seconds": 0.000376749
+          },
+          {
+            "root": "stdlib",
+            "module": "<frozen posixpath>",
+            "function": "splitroot",
+            "line": 138,
+            "call_events": 108,
+            "self_elapsed_seconds": 0.000128496,
+            "total_elapsed_seconds": 0.000128496,
+            "self_cpu_seconds": 0.000127874,
+            "total_cpu_seconds": 0.000127874
+          },
+          {
+            "root": "stdlib",
+            "module": "pathlib.py",
+            "function": "_format_parsed_parts",
+            "line": 429,
+            "call_events": 126,
+            "self_elapsed_seconds": 0.000135004,
+            "total_elapsed_seconds": 0.000135004,
+            "self_cpu_seconds": 0.000127707,
+            "total_cpu_seconds": 0.000127707
+          },
+          {
+            "root": "stdlib",
+            "module": "json/encoder.py",
+            "function": "encode",
+            "line": 183,
+            "call_events": 36,
+            "self_elapsed_seconds": 0.000126293,
+            "total_elapsed_seconds": 0.000337876,
+            "self_cpu_seconds": 0.000126167,
+            "total_cpu_seconds": 0.000338252
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_context_assistance.py",
+            "function": "validate",
+            "line": 114,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.000125126,
+            "total_elapsed_seconds": 0.000709668,
+            "self_cpu_seconds": 0.00012496,
+            "total_cpu_seconds": 0.000703627
+          },
+          {
+            "root": "stdlib",
+            "module": "json/__init__.py",
+            "function": "dumps",
+            "line": 183,
+            "call_events": 36,
+            "self_elapsed_seconds": 0.000124328,
+            "total_elapsed_seconds": 0.000473538,
+            "self_cpu_seconds": 0.000123701,
+            "total_cpu_seconds": 0.000473206
+          },
+          {
+            "root": "stdlib",
+            "module": "<frozen posixpath>",
+            "function": "realpath",
+            "line": 420,
+            "call_events": 19,
+            "self_elapsed_seconds": 0.000121295,
+            "total_elapsed_seconds": 0.003405083,
+            "self_cpu_seconds": 0.000120998,
+            "total_cpu_seconds": 0.001810122
+          },
+          {
+            "root": "stdlib",
+            "module": "pathlib.py",
+            "function": "__new__",
+            "line": 1164,
+            "call_events": 144,
+            "self_elapsed_seconds": 0.000120875,
+            "total_elapsed_seconds": 0.000120875,
+            "self_cpu_seconds": 0.000120744,
+            "total_cpu_seconds": 0.000120744
+          },
+          {
+            "root": "stdlib",
+            "module": "importlib/metadata/__init__.py",
+            "function": "discover",
+            "line": 401,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.00011463,
+            "total_elapsed_seconds": 0.000163168,
+            "self_cpu_seconds": 0.000120125,
+            "total_cpu_seconds": 0.000163125
+          },
+          {
+            "root": "stdlib",
+            "module": "importlib/metadata/__init__.py",
+            "function": "__bool__",
+            "line": 772,
+            "call_events": 288,
+            "self_elapsed_seconds": 0.000119291,
+            "total_elapsed_seconds": 0.000119291,
+            "self_cpu_seconds": 0.000118532,
+            "total_cpu_seconds": 0.000118532
+          },
+          {
+            "root": "stdlib",
+            "module": "selectors.py",
+            "function": "close",
+            "line": 583,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.000279962,
+            "total_elapsed_seconds": 0.000302208,
+            "self_cpu_seconds": 0.000118331,
+            "total_cpu_seconds": 0.000140457
+          },
+          {
+            "root": "stdlib",
+            "module": "pathlib.py",
+            "function": "__eq__",
+            "line": 519,
+            "call_events": 36,
+            "self_elapsed_seconds": 0.000118667,
+            "total_elapsed_seconds": 0.000191581,
+            "self_cpu_seconds": 0.000116624,
+            "total_cpu_seconds": 0.000189209
+          },
+          {
+            "root": "stdlib",
+            "module": "selectors.py",
+            "function": "register",
+            "line": 517,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.000111373,
+            "total_elapsed_seconds": 0.000254582,
+            "self_cpu_seconds": 0.000111411,
+            "total_cpu_seconds": 0.000254664
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_context.py",
+            "function": "_canonical_request_sha256",
+            "line": 357,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.000116332,
+            "total_elapsed_seconds": 0.000388539,
+            "self_cpu_seconds": 0.000110878,
+            "total_cpu_seconds": 0.000383001
+          },
+          {
+            "root": "stdlib",
+            "module": "<frozen importlib._bootstrap_external>",
+            "function": "find_distributions",
+            "line": 1548,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.000108537,
+            "total_elapsed_seconds": 0.000554083,
+            "self_cpu_seconds": 0.000108579,
+            "total_cpu_seconds": 0.000554083
+          },
+          {
+            "root": "stdlib",
+            "module": "pathlib.py",
+            "function": "_str_normcase",
+            "line": 484,
+            "call_events": 90,
+            "self_elapsed_seconds": 0.00010841,
+            "total_elapsed_seconds": 0.00012104,
+            "self_cpu_seconds": 0.00010842,
+            "total_cpu_seconds": 0.000120879
+          },
+          {
+            "root": "stdlib",
+            "module": "zipfile/_path/__init__.py",
+            "function": "__init__",
+            "line": 87,
+            "call_events": 18,
+            "self_elapsed_seconds": 0.000108833,
+            "total_elapsed_seconds": 0.002980417,
+            "self_cpu_seconds": 0.000107375,
+            "total_cpu_seconds": 0.000492875
+          },
+          {
+            "root": "stdlib",
+            "module": "pathlib.py",
+            "function": "is_dir",
+            "line": 870,
+            "call_events": 36,
+            "self_elapsed_seconds": 0.000104213,
+            "total_elapsed_seconds": 0.002229544,
+            "self_cpu_seconds": 9.992e-05,
+            "total_cpu_seconds": 0.000626083
+          },
+          {
+            "root": "stdlib",
+            "module": "pathlib.py",
+            "function": "joinpath",
+            "line": 711,
+            "call_events": 54,
+            "self_elapsed_seconds": 9.8084e-05,
+            "total_elapsed_seconds": 0.000515875,
+            "self_cpu_seconds": 9.8741e-05,
+            "total_cpu_seconds": 0.000516456
+          },
+          {
+            "root": "stdlib",
+            "module": "pathlib.py",
+            "function": "resolve",
+            "line": 1228,
+            "call_events": 18,
+            "self_elapsed_seconds": 9.5629e-05,
+            "total_elapsed_seconds": 0.004475875,
+            "self_cpu_seconds": 9.5584e-05,
+            "total_cpu_seconds": 0.002447497
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_runtime.py",
+            "function": "_runtime_candidates",
+            "line": 95,
+            "call_events": 18,
+            "self_elapsed_seconds": 9.5207e-05,
+            "total_elapsed_seconds": 0.034994125,
+            "self_cpu_seconds": 9.5213e-05,
+            "total_cpu_seconds": 0.011776835
+          },
+          {
+            "root": "stdlib",
+            "module": "importlib/metadata/__init__.py",
+            "function": "__init__",
+            "line": 672,
+            "call_events": 144,
+            "self_elapsed_seconds": 0.000102543,
+            "total_elapsed_seconds": 0.000102543,
+            "self_cpu_seconds": 9.5168e-05,
+            "total_cpu_seconds": 9.5168e-05
+          },
+          {
+            "root": "stdlib",
+            "module": "uuid.py",
+            "function": "__init__",
+            "line": 139,
+            "call_events": 18,
+            "self_elapsed_seconds": 9.6503e-05,
+            "total_elapsed_seconds": 9.6503e-05,
+            "self_cpu_seconds": 9.4419e-05,
+            "total_cpu_seconds": 9.4419e-05
+          },
+          {
+            "root": "stdlib",
+            "module": "re/__init__.py",
+            "function": "sub",
+            "line": 179,
+            "call_events": 18,
+            "self_elapsed_seconds": 9.2873e-05,
+            "total_elapsed_seconds": 0.000144333,
+            "self_cpu_seconds": 9.2917e-05,
+            "total_cpu_seconds": 0.000144416
+          },
+          {
+            "root": "stdlib",
+            "module": "selectors.py",
+            "function": "__init__",
+            "line": 509,
+            "call_events": 18,
+            "self_elapsed_seconds": 9.7249e-05,
+            "total_elapsed_seconds": 0.000140293,
+            "self_cpu_seconds": 9.2459e-05,
+            "total_cpu_seconds": 0.000140207
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_daemon_route.py",
+            "function": "check",
+            "line": 178,
+            "call_events": 18,
+            "self_elapsed_seconds": 9.2911e-05,
+            "total_elapsed_seconds": 0.000891082,
+            "self_cpu_seconds": 9.2413e-05,
+            "total_cpu_seconds": 0.000884583
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/file_identity.py",
+            "function": "full_stat_identity",
+            "line": 8,
+            "call_events": 36,
+            "self_elapsed_seconds": 9.2372e-05,
+            "total_elapsed_seconds": 9.2372e-05,
+            "self_cpu_seconds": 9.2082e-05,
+            "total_cpu_seconds": 9.2082e-05
+          },
+          {
+            "root": "stdlib",
+            "module": "json/decoder.py",
+            "function": "decode",
+            "line": 333,
+            "call_events": 18,
+            "self_elapsed_seconds": 9.1251e-05,
+            "total_elapsed_seconds": 0.000794543,
+            "self_cpu_seconds": 9.108e-05,
+            "total_cpu_seconds": 0.000795
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_resident_client.py",
+            "function": "_lease",
+            "line": 217,
+            "call_events": 18,
+            "self_elapsed_seconds": 9.0212e-05,
+            "total_elapsed_seconds": 0.000120209,
+            "self_cpu_seconds": 9.05e-05,
+            "total_cpu_seconds": 0.0001205
+          },
+          {
+            "root": "stdlib",
+            "module": "pathlib.py",
+            "function": "__truediv__",
+            "line": 719,
+            "call_events": 54,
+            "self_elapsed_seconds": 8.9958e-05,
+            "total_elapsed_seconds": 0.000605833,
+            "self_cpu_seconds": 8.9337e-05,
+            "total_cpu_seconds": 0.000605793
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_runtime.py",
+            "function": "_status_request_key",
+            "line": 375,
+            "call_events": 18,
+            "self_elapsed_seconds": 8.6419e-05,
+            "total_elapsed_seconds": 0.000489626,
+            "self_cpu_seconds": 8.696e-05,
+            "total_cpu_seconds": 0.000489502
+          },
+          {
+            "root": "stdlib",
+            "module": "threading.py",
+            "function": "__enter__",
+            "line": 299,
+            "call_events": 90,
+            "self_elapsed_seconds": 8.4247e-05,
+            "total_elapsed_seconds": 8.4247e-05,
+            "self_cpu_seconds": 8.3882e-05,
+            "total_cpu_seconds": 8.3882e-05
+          },
+          {
+            "root": "stdlib",
+            "module": "<frozen posixpath>",
+            "function": "isabs",
+            "line": 60,
+            "call_events": 40,
+            "self_elapsed_seconds": 8.4077e-05,
+            "total_elapsed_seconds": 0.000107913,
+            "self_cpu_seconds": 8.3707e-05,
+            "total_cpu_seconds": 0.000107579
+          },
+          {
+            "root": "stdlib",
+            "module": "threading.py",
+            "function": "release",
+            "line": 558,
+            "call_events": 18,
+            "self_elapsed_seconds": 8.1752e-05,
+            "total_elapsed_seconds": 0.000154291,
+            "self_cpu_seconds": 8.1584e-05,
+            "total_cpu_seconds": 0.000154084
+          },
+          {
+            "root": "stdlib",
+            "module": "threading.py",
+            "function": "notify",
+            "line": 394,
+            "call_events": 54,
+            "self_elapsed_seconds": 7.9001e-05,
+            "total_elapsed_seconds": 0.000105999,
+            "self_cpu_seconds": 7.9422e-05,
+            "total_cpu_seconds": 0.000106086
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_context.py",
+            "function": "ensure_resident_prerequisite",
+            "line": 289,
+            "call_events": 18,
+            "self_elapsed_seconds": 7.8126e-05,
+            "total_elapsed_seconds": 0.018631251,
+            "self_cpu_seconds": 7.8126e-05,
+            "total_cpu_seconds": 0.00302075
+          },
+          {
+            "root": "stdlib",
+            "module": "selectors.py",
+            "function": "register",
+            "line": 234,
+            "call_events": 18,
+            "self_elapsed_seconds": 7.7957e-05,
+            "total_elapsed_seconds": 0.000143209,
+            "self_cpu_seconds": 7.7835e-05,
+            "total_cpu_seconds": 0.000143253
+          },
+          {
+            "root": "stdlib",
+            "module": "pathlib.py",
+            "function": "root",
+            "line": 560,
+            "call_events": 198,
+            "self_elapsed_seconds": 7.1504e-05,
+            "total_elapsed_seconds": 7.1504e-05,
+            "self_cpu_seconds": 7.1789e-05,
+            "total_cpu_seconds": 7.1789e-05
+          },
+          {
+            "root": "stdlib",
+            "module": "threading.py",
+            "function": "__exit__",
+            "line": 302,
+            "call_events": 90,
+            "self_elapsed_seconds": 7.1501e-05,
+            "total_elapsed_seconds": 7.1501e-05,
+            "self_cpu_seconds": 6.9455e-05,
+            "total_cpu_seconds": 6.9455e-05
+          },
+          {
+            "root": "stdlib",
+            "module": "importlib/metadata/__init__.py",
+            "function": "find_distributions",
+            "line": 777,
+            "call_events": 18,
+            "self_elapsed_seconds": 6.8333e-05,
+            "total_elapsed_seconds": 0.000421128,
+            "self_cpu_seconds": 6.8086e-05,
+            "total_cpu_seconds": 0.000421045
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/path_resolution_cache.py",
+            "function": "_component_marks",
+            "line": 43,
+            "call_events": 1,
+            "self_elapsed_seconds": 0.001189291,
+            "total_elapsed_seconds": 0.001238333,
+            "self_cpu_seconds": 6.8e-05,
+            "total_cpu_seconds": 0.000117
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_resident_transport.py",
+            "function": "write_frame",
+            "line": 120,
+            "call_events": 18,
+            "self_elapsed_seconds": 6.4958e-05,
+            "total_elapsed_seconds": 0.002697916,
+            "self_cpu_seconds": 6.7041e-05,
+            "total_cpu_seconds": 0.001237791
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_runtime_request_scope.py",
+            "function": "scoped_candidates",
+            "line": 129,
+            "call_events": 18,
+            "self_elapsed_seconds": 6.6543e-05,
+            "total_elapsed_seconds": 0.034306126,
+            "self_cpu_seconds": 6.667e-05,
+            "total_cpu_seconds": 0.011088916
+          },
+          {
+            "root": "stdlib",
+            "module": "importlib/metadata/__init__.py",
+            "function": "<genexpr>",
+            "line": 431,
+            "call_events": 90,
+            "self_elapsed_seconds": 6.4126e-05,
+            "total_elapsed_seconds": 6.4126e-05,
+            "self_cpu_seconds": 6.4253e-05,
+            "total_cpu_seconds": 6.4253e-05
+          },
+          {
+            "root": "stdlib",
+            "module": "contextlib.py",
+            "function": "__init__",
+            "line": 440,
+            "call_events": 180,
+            "self_elapsed_seconds": 6.4205e-05,
+            "total_elapsed_seconds": 6.4205e-05,
+            "self_cpu_seconds": 6.3753e-05,
+            "total_cpu_seconds": 6.3753e-05
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_runtime.py",
+            "function": "_bundled_runtime_candidate",
+            "line": 90,
+            "call_events": 18,
+            "self_elapsed_seconds": 6.3167e-05,
+            "total_elapsed_seconds": 0.000455207,
+            "self_cpu_seconds": 6.3331e-05,
+            "total_cpu_seconds": 0.000455373
+          },
+          {
+            "root": "installed",
+            "module": "codex_plugin_scanner/guard/native_runtime_request_scope.py",
+            "function": "_resolved_candidate_path",
+            "line": 100,
+            "call_events": 18,
+            "self_elapsed_seconds": 6.296e-05,
+            "total_elapsed_seconds": 0.004598333,
+            "self_cpu_seconds": 6.2714e-05,
+            "total_cpu_seconds": 0.002569626
+          },
+          {
+            "root": "stdlib",
+            "module": "importlib/metadata/__init__.py",
+            "function": "__init__",
+            "line": 750,
+            "call_events": 18,
+            "self_elapsed_seconds": 5.9664e-05,
+            "total_elapsed_seconds": 0.000284375,
+            "self_cpu_seconds": 6.2583e-05,
+            "total_cpu_seconds": 0.000284333
+          },
+          {
+            "root": "stdlib",
+            "module": "contextlib.py",
+            "function": "__enter__",
+            "line": 443,
+            "call_events": 180,
+            "self_elapsed_seconds": 6.147e-05,
+            "total_elapsed_seconds": 6.147e-05,
+            "self_cpu_seconds": 6.1628e-05,
+            "total_cpu_seconds": 6.1628e-05
+          },
+          {
+            "root": "stdlib",
+            "module": "zipfile/_path/__init__.py",
+            "function": "make",
+            "line": 145,
+            "call_events": 18,
+            "self_elapsed_seconds": 6.0751e-05,
+            "total_elapsed_seconds": 0.003041168,
+            "self_cpu_seconds": 6.0295e-05,
+            "total_cpu_seconds": 0.00055317
+          }
+        ]
+      },
+      "inputs_unchanged": true,
+      "privacy": "Fixed code labels and aggregate clocks/counts only; no frames, locals, arguments or callers retained.",
+      "original_failed_cohort_is_still_unqualified": true
+    },
+    "original": {
+      "path": "/private/tmp/hol-guard-cigar-distribution-20261024/http-thread-diagnostic/profile.json",
+      "bytes": 44021,
+      "sha256": "2e1b16c107e08fb8f6494ebd7328bd21512240f84e1a1282fa0f71f36881d307"
+    },
+    "benchmark": {
+      "schema": "guard-cigar-installed-contention.v1",
+      "mode": "on",
+      "build_sha": "6f821077fad88d83ce4f3c85f3f9c2281142fa4f",
+      "full_installed_SLO": false,
+      "diagnostic_transport_observer": false,
+      "client_topology": "driver, authenticated hook clients and daemon share one Python process",
+      "root_python": [
+        3,
+        12,
+        13
+      ],
+      "completed": true,
+      "active_stage": "completed",
+      "stages": {
+        "1": {
+          "latency": {
+            "count": 200,
+            "p50_ms": 6.259,
+            "p95_ms": 13.203,
+            "p99_ms": 31.06,
+            "max_ms": 32.856
+          },
+          "routes": {
+            "native_resident": 200
+          },
+          "errors": 0,
+          "allowed": 200,
+          "explicit_capacity": 0,
+          "unclassified_refusals": 0,
+          "successful_overlapping_compiles": 86,
+          "memory": {
+            "samples": 20,
+            "sampling_errors": 0,
+            "median_rss_bytes": 787357696,
+            "peak_rss_bytes": 806256640,
+            "at_peak_counts": {
+              "benchmark_daemon_host": 1,
+              "sdk_worker": 2,
+              "python_bridge": 1,
+              "other_python_child": 1,
+              "native_runtime": 9
+            },
+            "at_peak_rss_by_kind": {
+              "benchmark_daemon_host": 483803136,
+              "sdk_worker": 119570432,
+              "python_bridge": 29229056,
+              "other_python_child": 27213824,
+              "native_runtime": 146440192
+            },
+            "maximum_counts": {
+              "other_python_child": 1,
+              "benchmark_daemon_host": 1,
+              "sdk_worker": 2,
+              "native_runtime": 9,
+              "python_bridge": 1
+            },
+            "includes_observed_reparented_children": true,
+            "shared_pages_may_be_counted_in_multiple_processes": true
+          }
+        },
+        "16": {
+          "latency": {
+            "count": 80,
+            "p50_ms": 61.639,
+            "p95_ms": 89.794,
+            "p99_ms": 92.105,
+            "max_ms": 92.105
+          },
+          "routes": {
+            "native_resident": 80
+          },
+          "errors": 0,
+          "allowed": 80,
+          "explicit_capacity": 0,
+          "unclassified_refusals": 0,
+          "successful_overlapping_compiles": 21,
+          "memory": {
+            "samples": 6,
+            "sampling_errors": 0,
+            "median_rss_bytes": 806715392,
+            "peak_rss_bytes": 807092224,
+            "at_peak_counts": {
+              "benchmark_daemon_host": 1,
+              "sdk_worker": 2,
+              "python_bridge": 1,
+              "other_python_child": 1,
+              "native_runtime": 9
+            },
+            "at_peak_rss_by_kind": {
+              "benchmark_daemon_host": 484589568,
+              "sdk_worker": 119570432,
+              "python_bridge": 29229056,
+              "other_python_child": 27213824,
+              "native_runtime": 146489344
+            },
+            "maximum_counts": {
+              "other_python_child": 1,
+              "benchmark_daemon_host": 1,
+              "sdk_worker": 2,
+              "native_runtime": 9,
+              "python_bridge": 1
+            },
+            "includes_observed_reparented_children": true,
+            "shared_pages_may_be_counted_in_multiple_processes": true
+          }
+        },
+        "64": {
+          "latency": {
+            "count": 320,
+            "p50_ms": 195.891,
+            "p95_ms": 312.88,
+            "p99_ms": 343.148,
+            "max_ms": 352.331
+          },
+          "routes": {
+            "native_resident": 320
+          },
+          "errors": 0,
+          "allowed": 320,
+          "explicit_capacity": 0,
+          "unclassified_refusals": 0,
+          "successful_overlapping_compiles": 72,
+          "memory": {
+            "samples": 19,
+            "sampling_errors": 0,
+            "median_rss_bytes": 808812544,
+            "peak_rss_bytes": 810172416,
+            "at_peak_counts": {
+              "benchmark_daemon_host": 1,
+              "sdk_worker": 2,
+              "python_bridge": 1,
+              "other_python_child": 1,
+              "native_runtime": 9
+            },
+            "at_peak_rss_by_kind": {
+              "benchmark_daemon_host": 487538688,
+              "sdk_worker": 119570432,
+              "python_bridge": 29229056,
+              "other_python_child": 27213824,
+              "native_runtime": 146620416
+            },
+            "maximum_counts": {
+              "other_python_child": 1,
+              "benchmark_daemon_host": 1,
+              "sdk_worker": 2,
+              "native_runtime": 9,
+              "python_bridge": 1
+            },
+            "includes_observed_reparented_children": true,
+            "shared_pages_may_be_counted_in_multiple_processes": true
+          }
+        }
+      },
+      "native_readiness_ms": 0.4281247965991497,
+      "candidate_activation_ms": 6984.726165886968,
+      "rss_baseline": {
+        "samples": 12,
+        "sampling_errors": 0,
+        "median_rss_bytes": 786726912,
+        "peak_rss_bytes": 787120128,
+        "at_peak_counts": {
+          "benchmark_daemon_host": 1,
+          "sdk_worker": 2,
+          "python_bridge": 1,
+          "other_python_child": 1,
+          "native_runtime": 9
+        },
+        "at_peak_rss_by_kind": {
+          "benchmark_daemon_host": 464814080,
+          "sdk_worker": 119521280,
+          "python_bridge": 29229056,
+          "other_python_child": 27213824,
+          "native_runtime": 146341888
+        },
+        "maximum_counts": {
+          "other_python_child": 1,
+          "benchmark_daemon_host": 1,
+          "sdk_worker": 2,
+          "native_runtime": 9,
+          "python_bridge": 1
+        },
+        "includes_observed_reparented_children": true,
+        "shared_pages_may_be_counted_in_multiple_processes": true
+      },
+      "direct_adapter_warm": {
+        "p50_ms": 1.359,
+        "p95_ms": 2.886,
+        "p99_ms": 5.201,
+        "max_ms": 23.326
+      },
+      "successful_direct_overlapping_compiles": 18,
+      "context_workload": {
+        "successful_compiles": 295,
+        "latency": {
+          "count": 295,
+          "p50_ms": 5.604,
+          "p95_ms": 15.734,
+          "p99_ms": 24.122,
+          "max_ms": 36.16
+        },
+        "latency_sample_every": 1,
+        "refusals": {},
+        "distinct_graph_revisions": 1,
+        "unchanged_graph_revision_reused": true,
+        "internal_tokenization_work_measured": false
+      },
+      "all_observed_processes": {
+        "samples": 228,
+        "sampling_errors": 0,
+        "median_rss_bytes": 638173184,
+        "peak_rss_bytes": 810172416,
+        "at_peak_counts": {
+          "benchmark_daemon_host": 1,
+          "sdk_worker": 2,
+          "python_bridge": 1,
+          "other_python_child": 1,
+          "native_runtime": 9
+        },
+        "at_peak_rss_by_kind": {
+          "benchmark_daemon_host": 487538688,
+          "sdk_worker": 119570432,
+          "python_bridge": 29229056,
+          "other_python_child": 27213824,
+          "native_runtime": 146620416
+        },
+        "maximum_counts": {
+          "other_python_child": 2,
+          "benchmark_daemon_host": 1,
+          "other_descendant": 8,
+          "sdk_worker": 2,
+          "native_runtime": 9,
+          "python_bridge": 1,
+          "terminated_child": 1
+        },
+        "includes_observed_reparented_children": true,
+        "shared_pages_may_be_counted_in_multiple_processes": true
+      },
+      "steady_rss_growth": 0.0298013245033113,
+      "gates": {
+        "direct_warm_p95_20ms": true,
+        "installed_warm_p95_1000ms": true,
+        "installed_c16_p99_1000ms": true,
+        "no_request_errors_or_unclassified_refusals": true,
+        "complete_observed_tree_rss_growth_12_percent": true,
+        "process_sampling_complete": true,
+        "optional_worker_coverage": true,
+        "real_compile_overlap": true,
+        "no_unexpected_context_refusals": true,
+        "unchanged_graph_revision_reused": true,
+        "strict_final_stop": true,
+        "all_observed_live_descendants_contained": true,
+        "daemon_shutdown_contained": true
+      },
+      "cleanup": {
+        "final_stop_status": "already-stopped",
+        "retained_stop_status": "already-stopped",
+        "recovery_used": false,
+        "daemon_stop_contained": true,
+        "observed_at_end": {
+          "rss_bytes": 484360192,
+          "counts": {
+            "benchmark_daemon_host": 1
+          },
+          "rss_by_kind": {
+            "benchmark_daemon_host": 484360192
+          }
+        },
+        "live_descendants_remaining": 0
+      }
+    },
+    "original_benchmark": {
+      "path": "/private/tmp/hol-guard-cigar-distribution-20261024/http-thread-diagnostic/run/result.json",
+      "bytes": 7631,
+      "sha256": "7be71597ad7838f928d23930c32c53252ea503a3e6b62f10ccfdc56b0b4f76df"
+    }
+  },
+  "observer_sources": {
+    "/private/tmp/hol-guard-cigar-distribution-20261024/native_discovery_component.py": {
+      "path": "/private/tmp/hol-guard-cigar-distribution-20261024/native_discovery_component.py",
+      "bytes": 4891,
+      "sha256": "6aa233259c9800810617f24787ecb3f3ecaaf1c1852b2134209edef1b010f5f5"
+    },
+    "/private/tmp/hol-guard-cigar-distribution-20261024/thread_profile_driver.py": {
+      "path": "/private/tmp/hol-guard-cigar-distribution-20261024/thread_profile_driver.py",
+      "bytes": 4061,
+      "sha256": "e097000117cedb649cc6ff817dfd0439ff90f6f697faf5a1fed26671e36cf46f"
+    },
+    "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/scripts/cigar_thread_profile.py": {
+      "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/scripts/cigar_thread_profile.py",
+      "bytes": 4548,
+      "sha256": "a1a2c2cfda4c5783e7b755711895c9715b041d8b843d06f74a08679cd6d8ebca"
+    },
+    "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/scripts/cigar_context_profile.py": {
+      "path": "/Users/construct/Documents/projects/cigar-project/CIGAR/hol-guard-cigar-integration/scripts/cigar_context_profile.py",
+      "bytes": 3867,
+      "sha256": "b91b5f40667c4e3988776e9851c44d7709c65e567d090ecad57b644de88d0318"
+    }
+  },
+  "interpretation": [
+    "Five hundred unmodified warmed status calls alternate ten blocks of 25 calls per mode against the same installed native identity. Median wall cost is about 0.062 ms force and 0.031 ms auto; thread CPU closely matches wall time in that isolated check.",
+    "A separate counting phase, outside timing, observes twenty distribution lookups in twenty force-mode calls and none in twenty automatic-mode calls. This verifies repeated force-only discovery but does not establish its contribution to the 1.366 ms failed HTTP comparison. No product cache change follows.",
+    "The new complete on-workload diagnostic retains the original 200 warm requests, five c16/c64 waves and all thirteen gates. It samples every sixteenth background worker compile, capped at 32. Exactly eighteen samples complete without profiling error across 294 worker compiles; all thirteen diagnostic benchmark gates and final containment pass.",
+    "Only the selected context-load thread installs the existing thread-specific sys.setprofile helper; no profiler is installed on HTTP/main/foreign threads. Reports retain fixed source labels and numeric clocks/counts, without frames, locals, arguments or callers.",
+    "Instrumented self CPU is largest in native_daemon_route._decide; path identity checks, force-only metadata and environment projection also appear. Callback overhead and possible C-level collection are included in self attribution. These rankings do not prove uninstrumented hot-path cost or justify changing validation.",
+    "The driver freezes six explicitly listed observer/native inputs, not the complete benchmark/helper tree. The normal fixed cohort has its separate complete frozen inputs. The diagnostic is never a replacement qualification run.",
+    "No product code, deadline, lease, estimator, priority, SDK or approval behavior changes. The original distribution relative HTTP result remains failed. Next use sparse function-boundary/collection observations to separate actual Python CPU from profile overhead and native waits before choosing a correction."
+  ],
+  "performance_qualified": false,
+  "full_goal_remains_active": true
+}
