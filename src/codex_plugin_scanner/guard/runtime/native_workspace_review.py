@@ -18,6 +18,7 @@ from ..durable_io import fsync_directory
 from ..native_resident_client import (
     native_resident_client_failure_code,
     native_resident_client_request,
+    record_native_resident_client_failure_code,
 )
 from ..native_runtime import _isolated_environment, native_runtime_status
 from ..store_native_workspace_review import NATIVE_WORKSPACE_REVIEW_RECEIPT_STATE_PREFIX
@@ -31,6 +32,18 @@ _MAX_REQUEST_STATE_BYTES = 64 * 1024
 _MAX_DECISION_BYTES = 16 * 1024
 _NATIVE_RESIDENT_FEATURE = "resident-protocol-v2"
 _NATIVE_REVIEW_FEATURE = "native-workspace-review-decision-v1"
+_DECISION_TIMEOUT_SECONDS = 10.0
+# A resident that was just restarted, or is busy with a sibling request, can
+# start serving after the request's budget has lapsed and answer with a
+# deadline code. Asking once more is safe: the resident replays a decision it
+# already claimed instead of applying it twice. Without the retry, a reviewer's
+# queued decision fails right after a daemon restart and waits for a manual
+# retry. One retry at most: every failed attempt counts toward the shared
+# native circuit breaker.
+_TRANSIENT_DEADLINE_CODES = frozenset(
+    {"native_client_deadline_exceeded", "native_request_deadline_exceeded", "native_client_timed_out"}
+)
+_MAX_DECISION_ATTEMPTS = 2
 
 
 class NativeWorkspaceReviewError(ValueError):
@@ -337,17 +350,23 @@ def _native_response(
     )
     if len(payload) > _MAX_DECISION_BYTES:
         raise NativeWorkspaceReviewError("native_workspace_review_decision_invalid")
-    encoded = native_resident_client_request(
-        executable=identity.path,
-        guard_home=guard_home,
-        environment=_isolated_environment(),
-        payload=payload,
-        timeout_seconds=10.0,
-    )
-    if encoded is None:
-        raise NativeWorkspaceReviewError(
-            native_resident_client_failure_code() or "native_workspace_review_transport_failed"
+    attempt = 0
+    while True:
+        attempt += 1
+        # A stale code from an earlier attempt must not be read as this attempt's failure.
+        record_native_resident_client_failure_code(None)
+        encoded = native_resident_client_request(
+            executable=identity.path,
+            guard_home=guard_home,
+            environment=_isolated_environment(),
+            payload=payload,
+            timeout_seconds=_DECISION_TIMEOUT_SECONDS,
         )
+        if encoded is not None:
+            break
+        failure_code = native_resident_client_failure_code()
+        if failure_code not in _TRANSIENT_DEADLINE_CODES or attempt >= _MAX_DECISION_ATTEMPTS:
+            raise NativeWorkspaceReviewError(failure_code or "native_workspace_review_transport_failed")
     try:
         decoded: object = json.loads(encoded.decode("utf-8"))
     except (UnicodeDecodeError, ValueError) as error:
