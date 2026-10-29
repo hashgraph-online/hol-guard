@@ -6,7 +6,7 @@
 //! without a second, partial copy of the table.
 
 /// `(harness id, install aliases)` of every registered harness contract.
-const HARNESS_ALIASES: [(&str, &[&str]); 17] = [
+const HARNESS_ALIASES: [(&str, &[&str]); 18] = [
     ("codex", &["codex"]),
     ("claude-code", &["claude-code", "claude"]),
     ("opencode", &["opencode"]),
@@ -26,6 +26,7 @@ const HARNESS_ALIASES: [(&str, &[&str]); 17] = [
     ("omp", &["omp", "oh-my-pi"]),
     ("zcode", &["zcode", "zai", "z-code", "zai-zcode"]),
     ("devin", &["devin", "devin-cli", "cognition-devin"]),
+    ("muse", &["muse", "muse-code"]),
     ("paseo", &["paseo"]),
 ];
 

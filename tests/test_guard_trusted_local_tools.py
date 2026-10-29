@@ -8,8 +8,11 @@ from typing import cast
 import pytest
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard import trusted_local_tools
 from codex_plugin_scanner.guard.trusted_local_tools import (
+    LocalToolGrantUnavailableError,
     local_tool_approval_eligibility,
+    local_tool_approval_payload,
     parse_local_tool_grant_selection,
 )
 
@@ -158,19 +161,24 @@ def test_impeccable_local_scan_can_receive_conditional_package_trust(tmp_path: P
     assert eligibility.tool_name == "impeccable"
     assert eligibility.capability == "scan"
     assert eligibility.trust_basis == "package-profile"
-    assert eligibility.to_payload()["allowed_durations"] == [
+    offered = local_tool_approval_payload({"scanner_evidence": [eligibility.to_evidence()]})
+    assert offered is not None
+    assert offered["allowed_durations"] == [
         "once",
         "15m",
         "1h",
         "5h",
     ]
+    assert offered["allowed_targets"] == ["capability"]
     pinned = local_tool_approval_eligibility(
         command.replace("npx impeccable", "npx impeccable@3.3.1"),
         cwd=tmp_path,
         home_dir=tmp_path,
     )
     assert pinned is not None
-    assert "always" in cast(list[object], pinned.to_payload()["allowed_durations"])
+    pinned_offer = local_tool_approval_payload({"scanner_evidence": [pinned.to_evidence()]})
+    assert pinned_offer is not None
+    assert "always" in cast(list[object], pinned_offer["allowed_durations"])
     latest = local_tool_approval_eligibility(
         command.replace("npx impeccable ", "npx impeccable@latest "),
         cwd=tmp_path,
@@ -229,6 +237,8 @@ def test_indefinite_trust_is_limited_to_package_profiles(
             target="capability",
             duration="always",
             now="2026-08-02T12:00:00+00:00",
+            harness="codex",
+            reason=None,
         )
 
 
@@ -277,3 +287,57 @@ def test_local_tool_trust_rejects_jq_file_inputs(
         )
         is None
     )
+
+
+def test_a_request_the_scanner_never_filed_asks_the_resident_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Evidence that never names the local-tool source carries no grant.
+
+    Every row of an approval queue passes through this call, so a request that
+    cannot possibly hold a grant must not cost a round-trip to say so.
+    """
+
+    def unreachable(*_args: object, **_kwargs: object) -> dict[str, object] | None:
+        raise AssertionError("the resident was asked about evidence it could not grant")
+
+    monkeypatch.setattr(trusted_local_tools, "_grant_payload", unreachable)
+
+    assert local_tool_approval_payload({"scanner_evidence": [{"source": "package_profile"}]}) is None
+    assert local_tool_approval_payload({"scanner_evidence": []}) is None
+    assert local_tool_approval_payload({}) is None
+
+
+def test_a_malformed_filed_row_is_refused_before_anything_is_written(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A reply whose policy row is unusable fails at the pick, not at the write.
+
+    Left until the resolution files it, the approval gate would already have
+    been required and a policy row may already exist while the request stayed
+    pending.
+    """
+
+    def half_formed(*_args: object, **_kwargs: object) -> dict[str, object]:
+        return {
+            "selection": {
+                "target": "capability",
+                "duration": "15m",
+                "expires_at": "2026-08-02T12:15:00+00:00",
+                # Neither an artifact scope nor an allow, so no policy row.
+                "decision": {"scope": "command", "action": "ask"},
+            },
+            "approval": {"tool_name": "xads", "capability": "read-only HTTP GET"},
+        }
+
+    monkeypatch.setattr(trusted_local_tools, "_grant_payload", half_formed)
+
+    with pytest.raises(LocalToolGrantUnavailableError):
+        _ = parse_local_tool_grant_selection(
+            {"scanner_evidence": [{"source": "trusted_local_tool"}]},
+            target="capability",
+            duration="15m",
+            now="2026-08-02T12:00:00+00:00",
+            harness="codex",
+            reason=None,
+        )

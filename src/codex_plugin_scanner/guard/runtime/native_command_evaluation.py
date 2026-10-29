@@ -27,11 +27,6 @@ class NativeCommandEvaluation:
     payload: dict[str, object]
     snapshot: ExtensionControlRuntimeSnapshot
 
-    @property
-    def native_minimum_action(self) -> str:
-        """Native classification before authenticated host policy proofs."""
-        return str(self.payload["minimum_action"])
-
 
 @dataclass(frozen=True, slots=True, repr=False)
 class NativeCommandReview:

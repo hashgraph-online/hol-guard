@@ -179,9 +179,13 @@ def test_the_emit_render_ships_a_large_answer_under_its_own_budget(monkeypatch: 
     answer = {"policy_action": "block", "reason": '"x"' * (render._MAX_REQUEST_BYTES // 2)}
     assert render.native_cli_hook_emit("cursor", answer, event_name="PreToolUse", guard_home=tmp_path) is None
     assert render.native_render_cli("cli_document", "cursor", {}, guard_home=tmp_path) is None
+    # The Cursor route sends the edge result the daemon already produced, which
+    # the ordinary budget is too small to hold, so that kind asks for its own.
+    assert render.native_render_cli("cursor_shell_route", "cursor", {}, guard_home=tmp_path) is None
     assert budgets == {
         "cli_hook_emit": render._CLI_HOOK_EMIT_MAX_REQUEST_BYTES,
         "cli_document": render._MAX_REQUEST_BYTES,
+        "cursor_shell_route": render._CURSOR_ROUTE_MAX_REQUEST_BYTES,
     }
 
 

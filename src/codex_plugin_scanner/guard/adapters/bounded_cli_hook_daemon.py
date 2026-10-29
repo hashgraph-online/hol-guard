@@ -54,6 +54,15 @@ def _daemon_hook_endpoint(guard_home: Path, harness: str) -> str | None:
     )
     if raw_state is None:
         return None
+    origin = daemon_state_origin(raw_state)
+    return None if origin is None else f"{origin}/v1/hooks/{harness}"
+
+
+def daemon_state_origin(raw_state: str) -> str | None:
+    """The loopback origin a published daemon state names, or None.
+
+    A cleared (``{}``) or malformed state names no daemon.
+    """
     try:
         state = json.loads(raw_state)
     except json.JSONDecodeError:
@@ -71,7 +80,7 @@ def _daemon_hook_endpoint(guard_home: Path, harness: str) -> str | None:
     ):
         return None
     rendered_host = f"[{host}]" if host == "::1" else host
-    return f"http://{rendered_host}:{port}/v1/hooks/{harness}"
+    return f"http://{rendered_host}:{port}"
 
 
 def _rendered_bridge_answer(
@@ -87,6 +96,27 @@ def _rendered_bridge_answer(
     A resident that cannot render it leaves the fixed fail-closed payload for
     this harness and event, as an unreachable daemon would.
     """
+    if harness.strip().lower().replace("_", "-") == "muse":
+        from .muse_hook_render import apply_muse_pretool_approval_wait, muse_bridge_response
+
+        answer: dict[str, object] = dict(parsed)
+        try:
+            from ..config import load_guard_config
+            from ..store import GuardStore
+
+            remaining = max(0, int(deadline - time.monotonic()))
+            configured = load_guard_config(guard_home).approval_wait_timeout_seconds
+            wait_seconds = min(configured, remaining)
+            if wait_seconds > 0:
+                answer = apply_muse_pretool_approval_wait(
+                    answer,
+                    event_name=event_name,
+                    store=GuardStore(guard_home),
+                    timeout_seconds=wait_seconds,
+                )
+        except (OSError, RuntimeError, TypeError, ValueError, KeyError, sqlite3.Error):
+            answer = dict(parsed)
+        return muse_bridge_response(answer, event_name=event_name, guard_home=guard_home, deadline=deadline)
     from ..native_hook_render import native_cli_hook_emit
 
     rendered = native_cli_hook_emit(
@@ -233,4 +263,4 @@ def try_daemon_hook(
     )
 
 
-__all__ = ["try_daemon_hook"]
+__all__ = ["daemon_state_origin", "try_daemon_hook"]

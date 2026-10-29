@@ -1,0 +1,1 @@
+{"command":[],"value":"vitest run --config ../outside/vitest.config.ts","node":true}

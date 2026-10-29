@@ -461,3 +461,128 @@ fn an_older_run_cannot_clear_a_newer_windows_crash_circuit() {
 
     std::fs::remove_dir_all(scope).unwrap();
 }
+
+/// A state base laid out the way a spawn sees it: the verifier key beside the
+/// scope directory, because `consume_for_spawn` refuses to charge an install
+/// whose policy key is missing before it looks at the budget at all.
+fn spawn_state_base(label: &str) -> PathBuf {
+    let state_base = std::env::temp_dir().join(format!(
+        "hol-guard-restart-spawn-{label}-{}-{}",
+        std::process::id(),
+        now_ms().unwrap()
+    ));
+    fs::create_dir(&state_base).unwrap();
+    fs::write(
+        state_base.join(crate::policy_store::VERIFIER_KEY_FILE_NAME),
+        [0_u8; crate::policy_store::VERIFIER_KEY_BYTES],
+    )
+    .unwrap();
+    fs::create_dir(state_base.join("scope")).unwrap();
+    state_base
+}
+
+#[test]
+fn a_charge_the_spawn_never_completes_is_not_reported_as_a_start() {
+    let state_base = spawn_state_base("charge");
+    let scope = state_base.join("scope");
+    let deadline = Instant::now() + Duration::from_secs(5);
+
+    // Three charges the caller never turns into a running resident: the budget
+    // has spent its window, but nothing was ever started, so a support request
+    // must not read this install as three healthy runs.
+    consume_for_spawn(&state_base, &scope, deadline).unwrap();
+    consume_for_spawn(&state_base, &scope, deadline).unwrap();
+    consume_for_spawn(&state_base, &scope, deadline).unwrap();
+
+    assert!(super::super::lifecycle_journal::health(&scope)
+        .unwrap()
+        .is_none());
+
+    fs::remove_dir_all(state_base).unwrap();
+}
+
+#[test]
+fn a_start_the_budget_refuses_is_the_one_event_a_failed_spawn_leaves() {
+    let state_base = spawn_state_base("refused");
+    let scope = state_base.join("scope");
+    let deadline = Instant::now() + Duration::from_secs(5);
+
+    for _ in 0..MAX_RESTARTS_PER_WINDOW {
+        consume_for_spawn(&state_base, &scope, deadline).unwrap();
+    }
+    assert_eq!(
+        consume_for_spawn(&state_base, &scope, deadline).unwrap_err(),
+        "native_resident_restart_circuit_open"
+    );
+
+    let health = super::super::lifecycle_journal::health(&scope)
+        .unwrap()
+        .unwrap();
+    assert_eq!(health.state, "critical");
+    assert_eq!(health.refused_starts, 1);
+    assert_eq!(health.starts, 0);
+    assert_eq!(health.last_event, "start_refused");
+
+    fs::remove_dir_all(state_base).unwrap();
+}
+
+#[test]
+fn a_spawn_refused_for_its_policy_key_never_reaches_the_budget_or_the_journal() {
+    let state_base = spawn_state_base("nokey");
+    let scope = state_base.join("scope");
+    fs::remove_file(state_base.join(crate::policy_store::VERIFIER_KEY_FILE_NAME)).unwrap();
+
+    assert_eq!(
+        consume_for_spawn(&state_base, &scope, Instant::now() + Duration::from_secs(5))
+            .unwrap_err(),
+        "native_policy_verifier_key_missing"
+    );
+    assert!(super::super::lifecycle_journal::health(&scope)
+        .unwrap()
+        .is_none());
+    assert!(!scope.join("restart-budget.json").exists());
+
+    fs::remove_dir_all(state_base).unwrap();
+}
+
+#[test]
+fn a_refused_start_is_recorded_even_while_the_journal_is_busy() {
+    let state_base = spawn_state_base("busy");
+    let scope = state_base.join("scope");
+    let deadline = Instant::now() + Duration::from_secs(5);
+
+    for _ in 0..MAX_RESTARTS_PER_WINDOW {
+        consume_for_spawn(&state_base, &scope, deadline).unwrap();
+    }
+
+    // The contended case this refusal path actually meets: a supervisor is
+    // recording an exit while the circuit that exit opened refuses a client.
+    // The refusal is the only event that makes the journal read `critical`, so
+    // losing it here would report a crash loop as merely degraded.
+    let (held, release) = std::sync::mpsc::channel();
+    let holder = {
+        let scope = scope.clone();
+        std::thread::spawn(move || {
+            let lock = super::super::lifecycle_journal::lock_for_test(&scope);
+            held.send(()).unwrap();
+            std::thread::sleep(Duration::from_millis(60));
+            drop(lock);
+        })
+    };
+    release.recv().unwrap();
+
+    assert_eq!(
+        consume_for_spawn(&state_base, &scope, deadline).unwrap_err(),
+        "native_resident_restart_circuit_open"
+    );
+    holder.join().unwrap();
+
+    let health = super::super::lifecycle_journal::health(&scope)
+        .unwrap()
+        .unwrap();
+    assert_eq!(health.state, "critical");
+    assert_eq!(health.refused_starts, 1);
+    assert_eq!(health.last_event, "start_refused");
+
+    fs::remove_dir_all(state_base).unwrap();
+}

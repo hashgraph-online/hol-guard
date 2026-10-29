@@ -236,12 +236,12 @@ def terminal(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(runner, "stdin_is_terminal", lambda: True)
 
 
-def _run(argv: list[str], stdin: str = "") -> tuple[int, str, str]:
+def _run(argv: list[str], stdin: str = "", argv0: str = "hol-guard") -> tuple[int, str, str]:
     output = io.StringIO()
     error = io.StringIO()
     original_argv, original_stdin = guard_cli.sys.argv, guard_cli.sys.stdin
     try:
-        guard_cli.sys.argv = ["hol-guard"]
+        guard_cli.sys.argv = [argv0]
         guard_cli.sys.stdin = io.StringIO(stdin)
         with contextlib.redirect_stdout(output), contextlib.redirect_stderr(error):
             exit_code = guard_cli.main(argv)
@@ -252,6 +252,15 @@ def _run(argv: list[str], stdin: str = "") -> tuple[int, str, str]:
 
 def _install(spec_path: Path, *flags: str, target: str = "acme/toolgate", stdin: str = "") -> tuple[int, str, str]:
     return _run(["plugin", "install", target, "--spec-file", str(spec_path), *flags], stdin=stdin)
+
+
+def test_windows_launcher_name_prints_as_hol_guard(spec_file: Path, runtimes: FakeRuntimes) -> None:
+    exit_code, output, _error = _run(
+        ["plugin", "install", "acme/toolgate", "--spec-file", str(spec_file)], argv0="hol-guard.EXE"
+    )
+    assert exit_code == 0
+    assert "Undo: hol-guard plugin uninstall acme/toolgate --apply --runtime claude-code" in output
+    assert ".EXE" not in output
 
 
 def test_install_prints_the_plan_security_first_and_runs_nothing(spec_file: Path, runtimes: FakeRuntimes) -> None:
@@ -1491,3 +1500,39 @@ def test_a_catalog_entry_that_is_not_an_object_does_not_stop_a_repeat_install(
     exit_code, output, error = _install(spec_file, *base)
     assert exit_code == 0, error
     assert "already installed" in output + error
+
+
+class _Stream(io.StringIO):
+    def __init__(self, tty: bool) -> None:
+        super().__init__()
+        self._tty = tty
+
+    def isatty(self) -> bool:
+        return self._tty
+
+    def fileno(self) -> int:
+        return 0
+
+
+def test_stream_is_terminal_trusts_isatty_off_windows(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(runner, "_ON_WINDOWS", False)
+    monkeypatch.setattr(runner, "_windows_console", lambda descriptor: pytest.fail("console mode is Windows only"))
+    assert runner.stream_is_terminal(_Stream(True))
+    assert not runner.stream_is_terminal(_Stream(False))
+    assert not runner.stream_is_terminal(None)
+
+
+def test_stream_is_terminal_refuses_windows_nul_device(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`< NUL` passes isatty() on Windows; only a console has a console mode."""
+
+    monkeypatch.setattr(runner, "_ON_WINDOWS", True)
+    monkeypatch.setattr(runner, "_windows_console", lambda descriptor: False)
+    assert not runner.stream_is_terminal(_Stream(True))
+    monkeypatch.setattr(runner, "_windows_console", lambda descriptor: True)
+    assert runner.stream_is_terminal(_Stream(True))
+
+
+@pytest.mark.skipif(os.name != "nt", reason="the NUL device is Windows only")
+def test_windows_nul_device_is_not_a_terminal() -> None:
+    with open(os.devnull) as nul:
+        assert not runner.stream_is_terminal(nul)

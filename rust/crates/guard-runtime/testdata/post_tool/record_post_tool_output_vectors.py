@@ -27,14 +27,39 @@ import tempfile
 from itertools import product
 from pathlib import Path
 
-from codex_plugin_scanner.guard.cli import commands as _commands  # noqa: F401 - binds the helper modules
-from codex_plugin_scanner.guard.cli import commands_support_runtime_artifacts as artifacts
 from codex_plugin_scanner.guard.cli.commands_support_codex_commands import (
     _codex_post_tool_command_is_read_only_source_inspection as read_only_inspection,
 )
-from codex_plugin_scanner.guard.cli.commands_support_codex_paths import _collect_codex_tool_response_text
+
+from codex_plugin_scanner.guard.cli import commands as _commands  # noqa: F401 - binds the helper modules
+from codex_plugin_scanner.guard.cli import commands_support_runtime_artifacts as artifacts
 from codex_plugin_scanner.guard.cli.commands_support_hook_payload import _coalesce_string
 from codex_plugin_scanner.guard.native_context import bound_context_digest_home
+
+_CODEX_TOOL_RESPONSE_MAX_DEPTH = 5
+_CODEX_TOOL_RESPONSE_TEXT_LIMIT = 5 * 1024 * 1024
+
+
+def _collect_codex_tool_response_text(value: object, *, depth: int = 0) -> str:
+    if depth > _CODEX_TOOL_RESPONSE_MAX_DEPTH:
+        return ""
+    if isinstance(value, str):
+        return value[:_CODEX_TOOL_RESPONSE_TEXT_LIMIT]
+    if isinstance(value, dict):
+        parts: list[str] = []
+        for key, child in value.items():
+            key_text = str(key).lower()
+            if key_text in {"stdout", "stderr", "output", "text", "content", "result", "message"} or depth > 0:
+                text = _collect_codex_tool_response_text(child, depth=depth + 1)
+                if text:
+                    parts.append(text)
+        return "\n".join(parts)[:_CODEX_TOOL_RESPONSE_TEXT_LIMIT]
+    if isinstance(value, list):
+        return "\n".join(_collect_codex_tool_response_text(item, depth=depth + 1) for item in value)[
+            :_CODEX_TOOL_RESPONSE_TEXT_LIMIT
+        ]
+    return ""
+
 
 # Secret-shaped fixture text is assembled at run time and stored in the vector
 # file as placeholders, so no literal key material lands in the repository.

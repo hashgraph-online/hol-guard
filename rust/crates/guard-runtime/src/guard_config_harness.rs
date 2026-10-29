@@ -35,7 +35,7 @@ pub(crate) fn normalize_posture(value: &Value) -> Option<&'static str> {
     }
 }
 
-/// `coerce_loaded_harness_postures`: malformed entries are dropped.
+/// Stored per-harness postures; malformed entries are dropped.
 pub(crate) fn loaded_postures(value: Option<&Value>) -> BTreeMap<String, String> {
     let mut postures = BTreeMap::new();
     let Some(Value::Object(map)) = value else {
@@ -53,7 +53,7 @@ pub(crate) fn loaded_postures(value: Option<&Value>) -> BTreeMap<String, String>
     postures
 }
 
-/// `coerce_loaded_harness_watch_entered_at`: only watch overrides carry a stamp.
+/// Stored watch stamps; only watch overrides carry a stamp.
 pub(crate) fn loaded_watch_stamps(
     value: Option<&Value>,
     postures: &BTreeMap<String, String>,

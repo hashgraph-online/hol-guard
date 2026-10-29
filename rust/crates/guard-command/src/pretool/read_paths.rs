@@ -12,7 +12,7 @@ pub(super) mod harness_notes;
 mod missing;
 use missing::missing_absolute_read_allowed;
 #[path = "hidden_listing.rs"]
-mod hidden_listing;
+pub(super) mod hidden_listing;
 #[path = "omp_json_query.rs"]
 mod omp_json_query;
 #[path = "omp_read_targets.rs"]
@@ -24,6 +24,7 @@ pub(super) use hidden_listing::{
 use hidden_listing::{resolved_home_hidden_content_read, resolved_home_hidden_listing};
 #[path = "private_temporary_workspace.rs"]
 mod private_temporary;
+pub(super) use private_temporary::inside_private_temporary_directory;
 #[path = "workspace_scratch_reads.rs"]
 mod scratch;
 use allowances::{
@@ -517,7 +518,7 @@ fn location_allowed(
             .any(|prefix| lowered == *prefix || lowered.starts_with(&format!("{prefix}/"))))
         || foreign_user_home(canonical, home_dir, cwd)
         || guard_secure_fs::sensitive_path_family(canonical).is_some()
-        || (credential_names && guard_secure_fs::credential_named_path(canonical)))
+        || (credential_names && super::search_scope_tracked::names::unproven(canonical, cwd)))
 }
 
 pub(super) fn foreign_user_home(

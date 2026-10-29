@@ -390,35 +390,3 @@ def test_framed_resident_refusal_keeps_its_finite_code(transport, tmp_path, fram
     assert response is None
     assert native_resident_client_failure_code() == expected
     transport.failed.assert_called_once_with("a" * 64, tmp_path, reason="native_daemon_lifecycle_decide_schema")
-
-
-def test_contained_execute_reply_reaches_the_caller(transport, tmp_path):
-    """The contained execute op answers with a status-free versioned reply."""
-    result = {"exit_code": 0, "enforcement": "bubblewrap"}
-    transport.client.return_value = json.dumps(
-        {"schema": "guard-contained-execute-result.v1", "result": result}
-    ).encode()
-    request = {
-        "schema_version": "containment-contract-v1",
-        "kind": "probe",
-        "argv": ["/bin/true"],
-        "cwd": str(tmp_path),
-        "env_allowlist": [],
-        "timeout_seconds": 60,
-        "max_output_bytes": 1024,
-        "additional_read_paths": [],
-        "allow_outbound_network": False,
-    }
-    policy = {"schema_version": "containment-contract-v1", "action": "run"}
-    assert bridge.contained_execute_native(request, policy, guard_home=tmp_path, run_id="probe-1") == result
-    envelope = json.loads(transport.client.call_args.kwargs["payload"])
-    # The resident clamps this operation at the contract's one-hour request
-    # timeout plus the client's transport slack, so a minute-long contained run
-    # keeps the budget its own timeout earns.
-    assert envelope["deadline_budget_ms"] == 90_000
-    assert transport.client.call_args.kwargs["timeout_seconds"] == 90.0
-    # A reply carrying an outer status is not this operation's shape.
-    transport.client.return_value = json.dumps(
-        {"schema": "guard-contained-execute-result.v1", "result": result, "status": "ok"}
-    ).encode()
-    assert bridge.contained_execute_native(request, policy, guard_home=tmp_path, run_id="probe-1") is None

@@ -100,7 +100,13 @@ fn restarted_route(
     failure_kind: &str,
     miss: DirectMiss,
 ) -> Option<Route> {
-    if !start_daemon(&config.start_command, failure_kind, deadline) {
+    let home = guard_home(&config.state_path);
+    if !start_daemon(
+        &config.start_command,
+        failure_kind,
+        deadline,
+        home.as_deref(),
+    ) {
         return None;
     }
     let text = await_daemon(deadline, || {

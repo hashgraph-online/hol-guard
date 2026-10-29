@@ -579,17 +579,15 @@ def _progress_stream(args: argparse.Namespace) -> TextIO | None:
 
     if args.json:
         return None
-    try:
-        return sys.stderr if sys.stderr.isatty() else None
-    except (AttributeError, ValueError):
-        return None
+    from .runner import stream_is_terminal
+
+    return sys.stderr if stream_is_terminal(sys.stderr) else None
 
 
 def _stdout_is_terminal() -> bool:
-    try:
-        return sys.stdout.isatty()
-    except (AttributeError, ValueError):
-        return False
+    from .runner import stream_is_terminal
+
+    return stream_is_terminal(sys.stdout)
 
 
 def _first_install_tip(args: argparse.Namespace, slug: str, installed: list[str], guard_home: Path) -> str:

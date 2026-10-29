@@ -7,17 +7,15 @@ from __future__ import annotations
 
 import importlib
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
-from ..runtime.data_flow_sink import data_flow_sink_type
 from ..runtime.package_request_evaluation import strip_review_evidence_tail as _strip_review_evidence_tail
 
 if TYPE_CHECKING:
     from ._commands_shared import _now
 
 
-from ..store import runtime_tool_action_exact_match_context
 from ..text import ensure_terminal_punctuation as _ensure_terminal_punctuation
 from ._commands_shared import *
 from .commands_parser_helpers import *
@@ -64,30 +62,12 @@ def _runtime_request_summary(artifact: GuardArtifact) -> str | None:
     return _runtime_resolution_module()._runtime_request_summary(artifact)
 
 
-def _claude_notification_tool_name(payload: dict[str, object]) -> str | None:
-    direct_name = _optional_string(payload.get("tool_name"))
-    if direct_name is not None:
-        return direct_name
-    for key in ("message", "title"):
-        value = _optional_string(payload.get(key))
-        if value is None:
-            continue
-        match = re.search(r"\buse\s+([A-Za-z][A-Za-z0-9_]*)\b", value)
-        if match is not None:
-            return match.group(1)
-    return None
-
 def _approval_delivery_payload(
     harness: str,
     *,
     managed_install: dict[str, object] | None = None,
 ) -> dict[str, object]:
     return approval_delivery_payload(approval_prompt_flow(harness, managed_install=managed_install))
-
-def _native_hook_reason(*values: object | None) -> str:
-    from ..approval_hook_copy import join_native_hook_reason
-
-    return join_native_hook_reason(*values)
 
 def _native_approval_center_context(response_payload: dict[str, object], *, harness: str) -> str | None:
     review_url = _preferred_approval_review_url(response_payload, harness=harness)
@@ -104,6 +84,7 @@ def _native_approval_center_context(response_payload: dict[str, object], *, harn
         "copilot": "Copilot",
         "cursor": "Cursor",
         "devin": "Devin",
+        "muse": "Muse",
         "guard-cli": "package install",
         "opencode": "OpenCode",
         "kimi": "Kimi",
@@ -215,26 +196,6 @@ def _strip_cloud_inbox_urls(message: str) -> str:
 def _is_cloud_inbox_url(value: str) -> bool:
     parsed = urllib.parse.urlparse(value)
     return parsed.scheme in {"http", "https"} and parsed.path.rstrip("/") == "/guard/inbox"
-
-def _runtime_artifact_exact_match_context(artifact: GuardArtifact) -> str | None:
-    if artifact.artifact_type != "tool_action_request":
-        return None
-    raw_command_text = artifact.metadata.get("raw_command_text")
-    if not isinstance(raw_command_text, str) or not raw_command_text:
-        raw_command_text = artifact.command
-    wrapper_chain = artifact.metadata.get("wrapper_chain")
-    normalized_wrapper_chain = (
-        wrapper_chain if isinstance(wrapper_chain, Sequence) and not isinstance(wrapper_chain, str) else None
-    )
-    return runtime_tool_action_exact_match_context(
-        config_path=artifact.config_path,
-        source_scope=artifact.source_scope,
-        raw_command_text=raw_command_text if isinstance(raw_command_text, str) else None,
-        wrapper_chain=normalized_wrapper_chain,
-    )
-
-
-_runtime_data_flow_sink_type = data_flow_sink_type
 
 def _guard_settings_payload(config: GuardConfig) -> dict[str, object]:
     return {
@@ -378,12 +339,12 @@ def _runtime_detector_perf_payload(config: GuardConfig) -> list[dict[str, object
 
 __all__ = [
     "_approval_center_routed_message", "_approval_delivery_payload",
-    "_claude_notification_tool_name", "_ensure_terminal_punctuation",
+    "_ensure_terminal_punctuation",
     "_guard_cli_settings_payload", "_guard_settings_doctor_payload", "_guard_settings_explain_payload",
     "_guard_settings_payload", "_is_cloud_inbox_url", "_localize_decision_v2_review_copy",
-    "_localize_pending_approval_copy", "_native_approval_center_context", "_native_hook_reason",
+    "_localize_pending_approval_copy", "_native_approval_center_context",
     "_runtime_artifact_command_action_floor", "_runtime_artifact_policy_action",
-    "_runtime_data_flow_sink_type", "_runtime_detector_perf_payload",
+    "_runtime_detector_perf_payload",
     "_runtime_detector_registry_payload", "_strip_cloud_inbox_urls",
     "_strip_legacy_approval_center_sentence", "_strip_review_evidence_tail",
 ]

@@ -88,8 +88,11 @@ def admit_workspace(
     return {"codebase_key": keys.codebase_key, "worktree_key": keys.worktree_key, "run_id": run_id}
 
 
-def withdraw_unregistered_admissions(store: Any) -> list[str]:
-    """End admissions whose registering install is gone; return the roots still registered."""
+def withdraw_unregistered_admissions(store: Any, *, clock: Callable[[], int] = now_ms) -> list[str]:
+    """End admissions whose registering install is gone; return the roots still registered.
+
+    An ended admission keeps the worktree's runs and fix proposals.
+    """
 
     registered = [
         workspace
@@ -98,7 +101,9 @@ def withdraw_unregistered_admissions(store: Any) -> list[str]:
         and isinstance(workspace := install.get("workspace"), str)
         and Path(workspace).is_absolute()
     ]
-    end_unregistered_install_admissions(store, {os.path.realpath(workspace) for workspace in registered})
+    end_unregistered_install_admissions(
+        store, {os.path.realpath(workspace) for workspace in registered}, now_ms=clock()
+    )
     return registered
 
 
@@ -109,14 +114,15 @@ def admit_registered_workspaces(
 
     Registering an install for a workspace is the authorization, and removing
     the install withdraws it: an admission made here ends once no active install
-    registers its root. A root whose admitted worktree is still there is skipped
-    without a snapshot; one last observed unavailable is admitted again, since
-    the path may now name another worktree. ``attempted`` holds roots that could
-    not be admitted until they may be tried again, so a rejected root is not
-    walked on every poll; a root that is missing is retried once it exists.
+    registers its root; the worktree's runs and fix proposals are kept. A root
+    whose admitted worktree is still there is skipped without a snapshot; one
+    last observed unavailable is admitted again, since the path may now name
+    another worktree. ``attempted`` holds roots that could not be admitted until
+    they may be tried again, so a rejected root is not walked on every poll; a
+    root that is missing is retried once it exists.
     """
 
-    registered = withdraw_unregistered_admissions(store)
+    registered = withdraw_unregistered_admissions(store, clock=clock)
     known = watched_roots(store, unavailable_digest=UNAVAILABLE_STAT_DIGEST)
     admitted = 0
     for workspace in registered:
@@ -223,6 +229,22 @@ def poll_once(
     return ran
 
 
+def workspace_assessment_enabled(guard_home: Path) -> bool:
+    """Whether the ``workspace_assessment_enabled`` setting leaves the worker on.
+
+    The setting defaults to on; a configuration that cannot be read leaves the
+    worker as it was rather than silently switching it off. Turning it off only
+    stops the worker: stored runs, findings, admissions and proposals stay.
+    """
+
+    from .config import load_guard_config
+
+    try:
+        return load_guard_config(guard_home, create_home=False).workspace_assessment_enabled
+    except Exception:
+        return True
+
+
 def start_workspace_assessment_worker(
     store: Any,
     *,
@@ -230,13 +252,20 @@ def start_workspace_assessment_worker(
     on_error: Callable[[str], object],
     interval: float = POLL_INTERVAL_SECONDS,
 ) -> threading.Thread:
-    """Poll admitted worktrees on a daemon thread until ``stop`` is set."""
+    """Poll admitted worktrees on a daemon thread until ``stop`` is set.
+
+    The thread skips each poll while ``workspace_assessment_enabled`` is off, so
+    switching the setting either way takes effect within one interval, without
+    a restart, and keeps everything already stored.
+    """
 
     owner = f"daemon:{os.getpid()}:{uuid.uuid4().hex[:12]}"
     attempted: dict[str, int] = {}
 
     def loop() -> None:
         while not stop.wait(interval):
+            if not workspace_assessment_enabled(store.guard_home):
+                continue
             try:
                 poll_once(store, owner=owner, stop=stop, attempted=attempted)
             except Exception:
@@ -258,4 +287,5 @@ __all__ = [
     "poll_once",
     "queue_manual_run",
     "start_workspace_assessment_worker",
+    "workspace_assessment_enabled",
 ]

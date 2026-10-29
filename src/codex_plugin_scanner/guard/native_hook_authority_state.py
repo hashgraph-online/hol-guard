@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 HOOK_AUTHORITY_STATE_FEATURE = "hook-authority-state-v1"
 HOOK_AUTHORITY_STATE_SESSION_OPS_FEATURE = "hook-authority-state-session-ops-v1"
 HOOK_AUTHORITY_STATE_QUESTION_SETTLE_FEATURE = "hook-authority-state-question-settle-v1"
+HOOK_AUTHORITY_STATE_CLAUDE_LIFECYCLE_FEATURE = "hook-authority-state-claude-lifecycle-v1"
 _REQUEST_SCHEMA = "guard-hook-authority-state-request.v1"
 _RESULT_SCHEMA = "guard-hook-authority-state-result.v1"
 _TIMEOUT_SECONDS = 5.0
@@ -101,12 +102,3 @@ def object_field(payload: dict[str, object] | None, name: str) -> dict[str, obje
 
     value = payload.get(name) if payload is not None else None
     return value if isinstance(value, dict) else None
-
-
-def keys_field(payload: dict[str, object] | None, name: str) -> list[str]:
-    """A list-of-strings reply field; anything else is no keys."""
-
-    value = payload.get(name) if payload is not None else None
-    if isinstance(value, list) and all(isinstance(item, str) for item in value):
-        return list(value)
-    return []

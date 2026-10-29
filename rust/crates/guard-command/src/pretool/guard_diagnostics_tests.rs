@@ -169,7 +169,7 @@ fn admits_only_exact_read_only_diagnostics() {
         "a b c --help",
         "command ../test --help",
         "command -x --help",
-        "command test extra --help",
+        "command test extra more --help",
         "npm test --help",
         "command",
         "command test",
@@ -291,6 +291,79 @@ fn admits_only_exact_read_only_diagnostics() {
         "package-shims --manager npm",
         "package-shims --approval-password x",
         "package-shims --json --json",
+    ] {
+        assert!(!safe_hol_guard_arguments(&arguments(command)), "{command}");
+    }
+}
+
+#[test]
+fn runtime_posture_reads_quietly_and_help_follows_the_parser_down() {
+    for command in [
+        // `runtime` prints the executables configured MCP servers would launch
+        // and the advisory coverage Guard already holds; `posture` reads the
+        // same way.
+        "runtime",
+        "runtime --json",
+        "runtime posture",
+        "runtime posture --json",
+        "runtime --help",
+        "runtime posture --help",
+        "help runtime posture",
+        // A help path nests as deep as the parser itself does.
+        "command controls patterns --help",
+        "command controls patterns -h",
+        "help command controls patterns",
+        "guard command controls patterns --help",
+        "settings set fleet-posture --help",
+    ] {
+        assert!(safe_hol_guard_arguments(&arguments(command)), "{command}");
+    }
+    for command in [
+        // Nothing beyond the two read-only shapes, and no root override.
+        // `--instances` enumerates running processes and writes what it saw
+        // into the Guard home, so it is reviewed like any other command that
+        // reads more than its own subject.
+        "runtime --instances",
+        "runtime --json --instances",
+        "runtime posture --instances",
+        "runtime posture --json --instances",
+        "runtime posture extra",
+        "runtime posture --json --json",
+        "runtime --home /tmp",
+        "runtime posture --guard-home /tmp",
+        "runtime posture --workspace /tmp",
+        "runtime list",
+        // The leading word still has to name a known subcommand, and a help
+        // path cannot run past the parser's depth or carry a value.
+        "pnpm controls patterns --help",
+        "command controls patterns extensions --help",
+        "command controls --severity high --help",
+        "command controls ../escape --help",
+    ] {
+        assert!(!safe_hol_guard_arguments(&arguments(command)), "{command}");
+    }
+}
+
+#[test]
+fn a_help_path_stops_above_a_verb_that_swallows_it() {
+    for command in [
+        // `verified-read` and the verbs that parse their own options print
+        // usage for `--help` like every other subcommand.
+        "verified-read --help",
+        "verified-read -h",
+        "verified-read github-pr --help",
+        "help verified-read github-pr",
+    ] {
+        assert!(safe_hol_guard_arguments(&arguments(command)), "{command}");
+    }
+    for command in [
+        // `verified-read local` takes the rest of the line as the read to run,
+        // so `--help` lands in that remainder and the read happens instead of
+        // usage printing.
+        "verified-read local --help",
+        "verified-read local -h",
+        "verified-read local cat --help",
+        "help verified-read local",
     ] {
         assert!(!safe_hol_guard_arguments(&arguments(command)), "{command}");
     }

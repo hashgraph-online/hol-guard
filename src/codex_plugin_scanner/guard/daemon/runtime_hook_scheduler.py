@@ -214,27 +214,6 @@ class RuntimeHookScheduler:
             self._retained_bytes -= payload_bytes
             self._condition.notify_all()
 
-    def grow_reserved_bytes(
-        self,
-        *,
-        current_bytes: int,
-        payload_bytes: int,
-        deadline: float,
-    ) -> RuntimeHookAdmissionReason | None:
-        with self._condition:
-            if payload_bytes > self._retained_bytes_limit:
-                return self._reject("daemon_hook_queue_bytes").reason_code
-            additional_bytes = payload_bytes - current_bytes
-            if additional_bytes < 0:
-                raise ValueError("runtime hook byte growth cannot be negative")
-            while self._retained_bytes + additional_bytes > self._retained_bytes_limit:
-                remaining = deadline - self._monotonic()
-                if remaining <= 0:
-                    return self._reject("daemon_hook_deadline_exhausted").reason_code
-                _ = self._condition.wait(timeout=remaining)
-            self._retained_bytes += additional_bytes
-            return None
-
     def stats(self) -> RuntimeHookSchedulerStats:
         with self._condition:
             now = self._monotonic()
@@ -278,13 +257,6 @@ class RuntimeHookScheduler:
     def record_retry(self) -> None:
         with self._condition:
             self._retries += 1
-
-    def set_active_limit(self, active_limit: int) -> None:
-        if active_limit < 0:
-            raise ValueError("runtime hook scheduler active limit must not be negative")
-        with self._condition:
-            self._active_limit = active_limit
-            self._dispatch()
 
     def _reject(self, reason_code: RuntimeHookAdmissionReason) -> RuntimeHookAdmission:
         self._rejected[reason_code] = self._rejected.get(reason_code, 0) + 1

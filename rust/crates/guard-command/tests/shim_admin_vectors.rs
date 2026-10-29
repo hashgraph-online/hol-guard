@@ -262,7 +262,26 @@ const LOGIN_PATH_COVERAGE_SCENARIOS: [&str; 3] = [
     "dashboard-projection-fish",
 ];
 
+// The recorder gave a probe child that outlived its share of the batch budget
+// the same `probe_failed` reason as one that could not be started or waited on.
+// The resident separates the two, so this scenario's sleeping npm shim is now
+// reported as a timeout rather than a damaged shim.
+const PROBE_TIMEOUT_SCENARIOS: [&str; 1] = ["probe-timeout"];
+
 fn expected_result(name: &str, subop: &Value, recorded: &Value) -> Value {
+    if subop == "probe_intercepts" && PROBE_TIMEOUT_SCENARIOS.contains(&name) {
+        let mut result = recorded.clone();
+        for manager in result["manager_results"]
+            .as_array_mut()
+            .into_iter()
+            .flatten()
+        {
+            if manager["skipped_reason"] == "probe_failed" {
+                manager["skipped_reason"] = json!("probe_timed_out");
+            }
+        }
+        return result;
+    }
     if subop != "cloud_coverage" || !LOGIN_PATH_COVERAGE_SCENARIOS.contains(&name) {
         return recorded.clone();
     }

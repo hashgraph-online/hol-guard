@@ -17,6 +17,7 @@ from ..models import GuardArtifact
 from ._modules.cursor.cursor_hook_command_line import cursor_hook_command_tokens, split_cursor_hook_command
 from ._modules.cursor.cursor_hook_events import (
     CURSOR_FILE_MUTATION_TOOL_MATCHER,
+    CURSOR_SHELL_ROUTE_TOOL_MATCHER,
     cursor_entry_guards_file_mutations,
     unsupported_cursor_hook_events,
 )
@@ -186,7 +187,9 @@ def _managed_hook_entry(
         "failClosed": event_name in _BLOCKING_MANAGED_HOOK_EVENTS,
     }
     if event_name == "preToolUse":
-        entry["matcher"] = CURSOR_FILE_MUTATION_TOOL_MATCHER
+        entry["matcher"] = (
+            CURSOR_FILE_MUTATION_TOOL_MATCHER if sys.platform == "win32" else CURSOR_SHELL_ROUTE_TOOL_MATCHER
+        )
     return entry
 
 

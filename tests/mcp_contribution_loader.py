@@ -146,5 +146,9 @@ def catalog_id_for_mcp_id(mcp_id: str) -> str:
 
 
 def remote_mcp_endpoint_identity(value: object) -> str | None:
-    """Identify the launch endpoint a configured remote MCP URL points at."""
+    """Identify the launch endpoint a configured remote MCP URL points at.
+
+    Only tests ask the resident's grammar for this on its own; the runtime
+    reads it inside the native MCP decision.
+    """
     return _bound_grammar("remote_endpoint_identity", value)

@@ -8,6 +8,14 @@ fn lifecycle(name: &str) -> Value {
 #[test]
 fn a_claude_code_stop_is_answered_with_the_daemon_constant() {
     let lane = lane("lifecycle-stop", json!({}));
+    rusqlite::Connection::open(lane.fixture.root.join("guard.db"))
+        .unwrap()
+        .execute_batch(
+            "create table guard_events (
+                 event_name text not null, payload_json text not null, occurred_at text not null
+             );",
+        )
+        .unwrap();
     let result = run_as(&lane, "claude-code", Some(HOME), lifecycle(" Stop "));
     assert_eq!(result["outcome"], "answer", "{result}");
     assert_eq!(
@@ -482,3 +490,6 @@ fn a_busy_store_leaves_the_notice_to_the_daemon() {
 
 #[path = "hook_direct_lifecycle_notification_tests.rs"]
 mod notification;
+
+#[path = "hook_direct_lifecycle_stop_tests.rs"]
+mod stop;

@@ -19,7 +19,7 @@ from codex_plugin_scanner.guard.adapters.cline_plugin import _plugin_source, cli
 from codex_plugin_scanner.guard.adapters.contracts import contract_for
 from codex_plugin_scanner.guard.cli.commands_support_interaction import _apps_disconnect_confirm_command
 from codex_plugin_scanner.guard.cli.install_commands import build_harness_verification
-from codex_plugin_scanner.guard.product_model import CANONICAL_HARNESS_VALUES, SUPPORTED_HARNESS_VALUES
+from codex_plugin_scanner.guard.product_model import SUPPORTED_HARNESS_VALUES
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
@@ -97,7 +97,6 @@ def test_cline_is_in_static_supported_contracts() -> None:
     assert contract_for("cline-cli") is contract
     assert contract_for("cline-vscode") is contract
     assert contract.surface_capabilities == ("auto", "hooks", "plugin", "cli", "all")
-    assert "cline" in CANONICAL_HARNESS_VALUES
     assert "cline" in SUPPORTED_HARNESS_VALUES
 
 

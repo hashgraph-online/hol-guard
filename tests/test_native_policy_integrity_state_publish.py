@@ -60,7 +60,10 @@ def _published(store: GuardStore) -> dict[str, object]:
 def test_a_fresh_home_binds_the_state_its_store_writes(tmp_path: Path) -> None:
     store = _daemon_store(tmp_path / "guard-home")
     assert _stored(store) is None
-    assert saved.with_saved_decision_state({}, store=store, features=FEATURES) == {}
+    # The environment binds without the state: the resident needs it to resolve
+    # a local CLI, and a saved decision still waits for the state and its key.
+    unrefreshed = saved.with_saved_decision_state({}, store=store, features=FEATURES)
+    assert unrefreshed == {"exact_action_environment": {"HOME": "/home/dev", "PATH": "/usr/bin"}}
 
     bound = _published(store)
 

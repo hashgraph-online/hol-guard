@@ -9,7 +9,6 @@ import pytest
 
 import codex_plugin_scanner.guard.local_supply_chain as local_supply_chain_module
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.consumer import artifact_hash
 from codex_plugin_scanner.guard.local_supply_chain import (
     apply_stored_package_policy_override,
     package_request_policy_hash,
@@ -29,9 +28,6 @@ from codex_plugin_scanner.guard.runtime.package_intent_common import PackageInte
 from codex_plugin_scanner.guard.runtime.package_request_evaluation import (
     PackageRequestEvaluation,
     SupplyChainUserCopy,
-)
-from codex_plugin_scanner.guard.runtime.secret_file_requests import (
-    extract_sensitive_file_read_request_artifact,
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -982,16 +978,3 @@ def test_tool_call_resolved_executable_change_invalidates_review_approval(tmp_pa
 
     assert decision.action == "review"
     assert decision.approval_reuse_reason_code == "approval_reuse_identity_changed"
-
-
-def _sensitive_read_artifact(workspace: Path) -> tuple[GuardArtifact, str]:
-    _request, artifact = extract_sensitive_file_read_request_artifact(
-        "read_file",
-        {"path": ".env"},
-        cwd=workspace,
-        harness="codex",
-        config_path=str(workspace / ".mcp.json"),
-        source_scope="project",
-    )
-    assert artifact is not None
-    return artifact, artifact_hash(artifact)

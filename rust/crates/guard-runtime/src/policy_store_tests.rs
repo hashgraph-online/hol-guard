@@ -51,7 +51,7 @@ pub(super) fn policy_with_default(default_action: &str) -> EffectiveNativePolicy
     value
 }
 
-fn fixture_directory(path: &Path) {
+pub(super) fn fixture_directory(path: &Path) {
     #[cfg(windows)]
     {
         crate::resident_state::ensure_private_directory(path, true).unwrap();
@@ -136,6 +136,42 @@ pub(super) fn install_test_key(root: &Path, value: u8) -> [u8; VERIFIER_KEY_BYTE
     #[cfg(unix)]
     fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
     key
+}
+
+fn workspace_source(root: &Path) -> GuardHookSourceMetadataV2 {
+    GuardHookSourceMetadataV2 {
+        cwd: Some("/workspace".into()),
+        home_dir: "/home/test".into(),
+        guard_home: root.to_string_lossy().into_owned(),
+        source_ref_external_allowed: false,
+        execution_environment: None,
+    }
+}
+
+/// A `PreToolUse` envelope bound to generation 1 of `snapshot`.
+fn pre_tool_envelope(
+    request_id: &str,
+    raw_payload: Value,
+    snapshot: &PolicySnapshotV3,
+    root: &Path,
+) -> GuardHookEnvelopeV2 {
+    GuardHookEnvelopeV2 {
+        schema: GUARD_HOOK_ENVELOPE_V2_SCHEMA.to_owned(),
+        request_id: Some(request_id.into()),
+        harness: "claude-code".into(),
+        event: "PreToolUse".into(),
+        raw_payload,
+        deadline_budget_ms: Some(750),
+        policy_generation: 1,
+        policy_snapshot: serde_json::to_value(snapshot).unwrap(),
+        source: workspace_source(root),
+        recording_only: false,
+        local_cli_rules: None,
+        observe_local_cli: false,
+        record_receipt: false,
+        structured_output_config: None,
+        containment_sink: None,
+    }
 }
 
 #[cfg(windows)]
@@ -327,28 +363,16 @@ fn restarted_resident_applies_installed_policy_without_request_time_io() {
         }))
         .unwrap();
     let restarted = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
-    let envelope = GuardHookEnvelopeV2 {
-        schema: GUARD_HOOK_ENVELOPE_V2_SCHEMA.to_owned(),
-        request_id: Some("resident-policy-test".into()),
-        harness: "claude-code".into(),
-        event: "PreToolUse".into(),
-        raw_payload: serde_json::json!({
+    let envelope = pre_tool_envelope(
+        "resident-policy-test",
+        serde_json::json!({
             "hook_event_name": "PreToolUse",
             "tool_name": "read_file",
             "tool_input": {"file_path": "README.md"}
         }),
-        deadline_budget_ms: Some(750),
-        policy_generation: 1,
-        policy_snapshot: serde_json::to_value(&snapshot).unwrap(),
-        source: GuardHookSourceMetadataV2 {
-            cwd: Some("/workspace".into()),
-            home_dir: "/home/test".into(),
-            guard_home: root.to_string_lossy().into_owned(),
-            source_ref_external_allowed: false,
-            execution_environment: None,
-        },
-        recording_only: false,
-    };
+        &snapshot,
+        &root,
+    );
     let result = crate::edge::evaluate_envelope_with_store(envelope, &restarted).unwrap();
     let result: GuardHookEdgeResultV2 = serde_json::from_slice(&result).unwrap();
     assert_eq!(result.result["minimum_action"], "block");
@@ -370,27 +394,15 @@ fn authenticated_edge_preserves_clean_default_warning() {
             "snapshot": snapshot,
         }))
         .unwrap();
-    let envelope = GuardHookEnvelopeV2 {
-        schema: GUARD_HOOK_ENVELOPE_V2_SCHEMA.to_owned(),
-        request_id: Some("warning-edge-test".into()),
-        harness: "claude-code".into(),
-        event: "PreToolUse".into(),
-        raw_payload: serde_json::json!({
+    let envelope = pre_tool_envelope(
+        "warning-edge-test",
+        serde_json::json!({
             "hook_event_name": "PreToolUse",
             "tool_input": {"command": "pwd"}
         }),
-        deadline_budget_ms: Some(750),
-        policy_generation: 1,
-        policy_snapshot: serde_json::to_value(&snapshot).unwrap(),
-        source: GuardHookSourceMetadataV2 {
-            cwd: Some("/workspace".into()),
-            home_dir: "/home/test".into(),
-            guard_home: root.to_string_lossy().into_owned(),
-            source_ref_external_allowed: false,
-            execution_environment: None,
-        },
-        recording_only: false,
-    };
+        &snapshot,
+        &root,
+    );
     let result = crate::edge::evaluate_envelope_with_store(envelope, &store).unwrap();
     let result: GuardHookEdgeResultV2 = serde_json::from_slice(&result).unwrap();
     assert_eq!(result.result["minimum_action"], "warn");
@@ -414,28 +426,16 @@ fn authenticated_observe_edge_preserves_intrinsic_pretool_floor() {
             "snapshot": snapshot,
         }))
         .unwrap();
-    let envelope = GuardHookEnvelopeV2 {
-        schema: GUARD_HOOK_ENVELOPE_V2_SCHEMA.to_owned(),
-        request_id: Some("observe-edge-test".into()),
-        harness: "claude-code".into(),
-        event: "PreToolUse".into(),
-        raw_payload: serde_json::json!({
+    let envelope = pre_tool_envelope(
+        "observe-edge-test",
+        serde_json::json!({
             "hook_event_name": "PreToolUse",
             "tool_name": "Bash",
             "tool_input": {"command": "rm -rf /"}
         }),
-        deadline_budget_ms: Some(750),
-        policy_generation: 1,
-        policy_snapshot: serde_json::to_value(&snapshot).unwrap(),
-        source: GuardHookSourceMetadataV2 {
-            cwd: Some("/workspace".into()),
-            home_dir: "/home/test".into(),
-            guard_home: root.to_string_lossy().into_owned(),
-            source_ref_external_allowed: false,
-            execution_environment: None,
-        },
-        recording_only: false,
-    };
+        &snapshot,
+        &root,
+    );
     let result = crate::edge::evaluate_envelope_with_store(envelope, &store).unwrap();
     let result: GuardHookEdgeResultV2 = serde_json::from_slice(&result).unwrap();
     assert_eq!(result.result["minimum_action"], "block");
@@ -492,7 +492,6 @@ fn authority_fingerprint_detects_same_size_in_place_rewrite() {
     file.seek(SeekFrom::Start(offset as u64)).unwrap();
     file.write_all(&[replacement]).unwrap();
     file.sync_all().unwrap();
-
     let after = authority_fingerprint(&path).unwrap();
     assert_ne!(before, after);
     assert!(!store.test_authorities_unchanged());

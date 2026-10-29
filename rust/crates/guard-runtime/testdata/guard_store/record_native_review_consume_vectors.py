@@ -24,7 +24,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-os.environ["HOL_GUARD_NATIVE"] = "off"
+os.environ["HOL_GUARD_NATIVE"] = "auto"
 os.environ.pop("HOL_GUARD_NATIVE_BINARY", None)
 
 from codex_plugin_scanner.guard import store_native_review_approvals

@@ -133,12 +133,14 @@ export function PermissionPolicyRow(props: {
 }) {
   const managed = managedPermissionState(props.effective, props.permission.permission_id);
   const provenance = controlProvenance(props.effective, "permission", props.permission.permission_id);
-  const example = props.permission.example_command ?? (props.extension.executables[0]?.trim() || props.permission.label);
+  const example = props.permission.example_command ?? props.extension.executables[0]?.trim();
   return (
     <article id={`pattern-${props.permission.permission_id}`} className="guard-pattern-row" data-permission-id={props.permission.permission_id}>
       <div className="min-w-0">
         <h3 className="text-sm font-semibold text-brand-dark">{props.permission.label}</h3>
-        <p className="guard-pattern-example mt-1">{example}</p>
+        {props.permission.description ? <p className="mt-1 text-xs leading-5 text-brand-dark/80">{props.permission.description}</p> : null}
+        {/* The catalog's sample command, not a package or command this device has allowed. */}
+        {example ? <p className="mt-1 text-xs text-brand-dark/70">Example: <code className="guard-pattern-example">{example}</code></p> : null}
         {!props.permission.configurable ? (
           <p className="mt-2 text-xs leading-5 text-brand-dark">
             Why this cannot be changed: {props.permission.fixed_reason ?? "Guard marks this safety permission as immutable."}

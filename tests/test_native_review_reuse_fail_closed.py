@@ -15,7 +15,7 @@ import pytest
 from codex_plugin_scanner.guard import native_guard_store, native_store_policy, store_policy
 from codex_plugin_scanner.guard.daemon.hook_native_review_binding import (
     native_review_claimed_allow,
-    native_review_matching_allow,
+    native_review_settle,
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -69,8 +69,27 @@ def test_consume_refuses_and_spends_nothing_without_the_resident(
             workspace=str(tmp_path),
             now=datetime.now(timezone.utc).isoformat(),
         )
-    assert native_review_matching_allow(store, **kwargs) is False
+    assert native_review_settle(store, **kwargs, spend=True) is None
     assert _effects(store) == 0
+
+
+def test_settle_spends_an_approve_once_only_when_asked(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
+    _resolved_allow(store, str(tmp_path))
+    kwargs = {
+        "harness": "claude-code",
+        "artifact_id": _ARTIFACT,
+        "tool_name": "Bash",
+        "launch_target": "cat .env",
+        "workspace": tmp_path,
+        "identity": _IDENTITY,
+    }
+
+    assert native_review_settle(store, **kwargs, spend=False) is None
+    assert _effects(store) == 0
+    assert native_review_settle(store, **kwargs, spend=True) == "allowed"
+    assert native_review_settle(store, **kwargs, spend=True) is None
+    assert _effects(store) == 1
 
 
 def _claimed(store: GuardStore, tmp_path: Path, *, claim: bool) -> bool:

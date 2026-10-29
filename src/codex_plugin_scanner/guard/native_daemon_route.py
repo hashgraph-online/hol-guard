@@ -147,10 +147,6 @@ _OPERATION = ResidentOperation(
 # ask with no time left fails closed without reaching the resident.
 _MAX_CONCURRENT_ASKS = 8
 _ASK_SLOTS = threading.BoundedSemaphore(_MAX_CONCURRENT_ASKS)
-# Exact-action asks can run longer than the millisecond route asks, so they
-# queue on their own slots instead of starving every other daemon request.
-_MAX_CONCURRENT_EXACT_ACTION_ASKS = 4
-EXACT_ACTION_ASK_SLOTS = threading.BoundedSemaphore(_MAX_CONCURRENT_EXACT_ACTION_ASKS)
 
 
 def _decide(

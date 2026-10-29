@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import copy
+import sys
 from datetime import timedelta
+from pathlib import Path
 
 import pytest
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
 
-from codex_plugin_scanner.guard.mdm.cloud_control import (
+LAB = Path(__file__).parents[1] / "scripts" / "mdm" / "cloud-lab"
+sys.path.insert(0, str(LAB))
+
+from cloud_control import (  # noqa: E402
     ACK_SCHEMA,
     HEALTH_SCHEMA,
     REMEDIATION_SCHEMA,

@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 
 from codex_plugin_scanner.guard import native_github_workflow as bridge
+from codex_plugin_scanner.guard import native_resident_decision as resident
 from codex_plugin_scanner.guard.native_context import _canonical_request_sha256
 from tests.github_workflow_test_support import approval_record
 
@@ -34,19 +35,19 @@ class _Harness:
         self.requests: list[dict[str, Any]] = []
         self.reply: Any = None
         self.status = _status()
-        monkeypatch.setattr(bridge, "native_runtime_status", lambda **_kw: self.status)
-        monkeypatch.setattr(bridge, "_resolve_digest_home", lambda _home: Path("/guard-home"))
-        monkeypatch.setattr(bridge, "ensure_resident_prerequisite", lambda _home: True)
+        monkeypatch.setattr(resident, "native_runtime_status", lambda **_kw: self.status)
+        monkeypatch.setattr(resident, "_resolve_digest_home", lambda _home: Path("/guard-home"))
+        monkeypatch.setattr(resident, "ensure_resident_prerequisite", lambda _home: True)
         monkeypatch.setattr(
-            bridge, "native_runtime_health_snapshot", lambda *_a, **_kw: SimpleNamespace(circuit_open=False)
+            resident, "native_runtime_health_snapshot", lambda *_a, **_kw: SimpleNamespace(circuit_open=False)
         )
-        monkeypatch.setattr(bridge, "_isolated_environment", lambda: {})
-        monkeypatch.setattr(bridge, "native_resident_client_request", self._request)
+        monkeypatch.setattr(resident, "_isolated_environment", lambda: {})
+        monkeypatch.setattr(resident, "native_resident_client_request", self._request)
         monkeypatch.setattr(
-            bridge, "native_record_resident_failure", lambda _i, _h, *, reason: self.failures.append(reason)
+            resident, "native_record_resident_failure", lambda _i, _h, *, reason: self.failures.append(reason)
         )
-        monkeypatch.setattr(bridge, "native_record_overload", lambda _i, _h: None)
-        monkeypatch.setattr(bridge, "native_record_resident_success", lambda _i, _h: None)
+        monkeypatch.setattr(resident, "native_record_overload", lambda _i, _h: None)
+        monkeypatch.setattr(resident, "native_record_resident_success", lambda _i, _h: None)
 
     def _request(self, *, payload: bytes, **_kwargs: object) -> bytes | None:
         request = json.loads(payload)["request"]

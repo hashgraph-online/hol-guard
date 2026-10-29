@@ -16,7 +16,6 @@ from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.policy_bundle_trusted_keys import (
     PolicyBundleVerificationKey,
-    policy_bundle_verification_key_from_public_key,
     validate_synced_policy_bundle,
 )
 from codex_plugin_scanner.guard.policy_bundle_v2 import (
@@ -28,6 +27,7 @@ from codex_plugin_scanner.guard.policy_bundle_v2 import (
 from codex_plugin_scanner.guard.policy_document import canonical_json_bytes, canonical_policy_document_bytes
 from codex_plugin_scanner.guard.policy_document_yaml import parse_policy_document_yaml
 from codex_plugin_scanner.guard.runtime import runner as guard_runner
+from tests.policy_bundle_signing_helpers import policy_bundle_verification_key_from_public_key
 from tests.policy_bundle_v2_support import (
     canonical_policy_bundle_v2_payload,
     computed_policy_bundle_v2_hash,
@@ -515,6 +515,78 @@ def test_runtime_canonical_enforcement_compiles_signed_v2_payload() -> None:
             "expires_at": None,
         }
     ]
+
+
+def _device_scoped_bundle() -> dict[str, object]:
+    def rule(identifier: str, artifact: str, devices: list[str]) -> dict[str, object]:
+        return {
+            "id": identifier,
+            "enabled": True,
+            "effect": "block",
+            "match": {
+                "artifacts": [artifact],
+                "harnesses": ["codex"],
+                "devices": devices,
+            },
+            "lifetime": {"mode": "permanent", "expiresAt": None},
+            "provenance": {
+                "source": "local",
+                "createdAt": "2026-07-15T12:00:00Z",
+            },
+        }
+
+    return {
+        "contractVersion": POLICY_BUNDLE_V2_CONTRACT,
+        "payload": {
+            "apiVersion": "guard.hashgraphonline.com/v1alpha1",
+            "kind": "GuardPolicy",
+            "metadata": {
+                "id": "policy.devices",
+                "name": "Device policy",
+                "revision": 1,
+            },
+            "spec": {
+                "defaults": {"mode": "prompt", "defaultAction": "warn"},
+                "rules": [
+                    rule("rule.every-device", "command:npm-audit", []),
+                    rule("rule.by-id", "command:npm-test", ["device-1"]),
+                    rule("rule.by-name", "command:npm-run", ["Mac"]),
+                    rule("rule.another-device", "command:npm-ci", ["device-2"]),
+                ],
+            },
+        },
+    }
+
+
+def test_runtime_canonical_enforcement_keeps_only_this_devices_rules() -> None:
+    decisions = guard_runner._build_policy_bundle_decisions(
+        _device_scoped_bundle(),
+        device_id="device-1",
+        device_name="Mac",
+        canonical_enforcement=True,
+    )
+
+    assert [decision.owner for decision in decisions] == [
+        "rule.every-device",
+        "rule.by-id",
+        "rule.by-name",
+    ]
+    assert [decision.artifact_id for decision in decisions] == [
+        "command:npm-audit",
+        "command:npm-test",
+        "command:npm-run",
+    ]
+
+
+def test_runtime_canonical_enforcement_compiles_a_rule_no_device_claims() -> None:
+    decisions = guard_runner._build_policy_bundle_decisions(
+        _device_scoped_bundle(),
+        device_id="device-9",
+        device_name="Spare",
+        canonical_enforcement=True,
+    )
+
+    assert [decision.owner for decision in decisions] == ["rule.every-device"]
 
 
 @pytest.mark.usefixtures("native_approval_reuse_runtime")

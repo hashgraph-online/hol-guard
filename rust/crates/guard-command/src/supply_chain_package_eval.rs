@@ -95,6 +95,9 @@ pub use contracts::{
 mod result_models;
 
 pub use result_models::{PackageEvalResult, SupplyChainUserCopy};
+#[path = "supply_chain_package_eval/review_settlement.rs"]
+mod review_settlement;
+pub use review_settlement::REVIEW_SETTLEMENT_KEY;
 #[path = "supply_chain_package_eval/service_contracts.rs"]
 mod service_contracts;
 pub use service_contracts::{

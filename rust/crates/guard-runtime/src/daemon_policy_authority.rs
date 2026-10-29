@@ -44,6 +44,7 @@ use std::time::Duration;
 #[cfg(unix)]
 use std::time::Instant;
 
+use hmac::{Hmac, Mac};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
@@ -496,28 +497,9 @@ fn write_json_string(s: &str, out: &mut Vec<u8>) {
 /// Raw HMAC-SHA256 over an arbitrary message (single-shot; the crate's
 /// `hmac_sha256` is label+nonce shaped for the resident protocol).
 pub(crate) fn hmac_sha256_raw(key: &[u8], message: &[u8]) -> Vec<u8> {
-    const BLOCK: usize = 64;
-    let mut key_block = [0u8; BLOCK];
-    if key.len() > BLOCK {
-        let digest = Sha256::digest(key);
-        key_block[..digest.len()].copy_from_slice(&digest);
-    } else {
-        key_block[..key.len()].copy_from_slice(key);
-    }
-    let mut inner_pad = [0x36u8; BLOCK];
-    let mut outer_pad = [0x5cu8; BLOCK];
-    for index in 0..BLOCK {
-        inner_pad[index] ^= key_block[index];
-        outer_pad[index] ^= key_block[index];
-    }
-    let mut inner = Sha256::new();
-    inner.update(inner_pad);
-    inner.update(message);
-    let inner_digest = inner.finalize();
-    let mut outer = Sha256::new();
-    outer.update(outer_pad);
-    outer.update(inner_digest);
-    outer.finalize().to_vec()
+    let mut mac = <Hmac<Sha256>>::new_from_slice(key).expect("hmac accepts any key length");
+    mac.update(message);
+    mac.finalize().into_bytes().to_vec()
 }
 
 /// `daemon_state_matches_current_runtime` (runtime_peer.py:105-:135):
@@ -1316,3 +1298,7 @@ mod tests {
         assert!(!healthz_payload_is_current(&outdated_compatibility));
     }
 }
+
+#[cfg(test)]
+#[path = "daemon_policy_authority_hmac_vectors_tests.rs"]
+mod hmac_vectors_tests;

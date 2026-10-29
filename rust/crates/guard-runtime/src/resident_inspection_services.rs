@@ -11,13 +11,13 @@ use guard_contracts::{
     GitExecutionSafetyCheckV1, COMPOUND_GIT_INSPECTION_REQUEST_SCHEMA,
 };
 
-use crate::codex_tool_output_op::ResidentInspectionHost;
 use crate::compound_git_facts::ResidentGitFacts;
 use crate::compound_git_inspection_op::decide;
 use crate::git_execution_safety_binary::{
     binary_path_is_trusted, resolve_trusted_git, which_for_cwd,
 };
 use crate::git_execution_safety_probe::Prober;
+use crate::resident_inspection_host::ResidentInspectionHost;
 
 const MAX_TEXT_BYTES: usize = 16 * 1024;
 

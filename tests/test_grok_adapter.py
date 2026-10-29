@@ -6,6 +6,7 @@ import argparse
 import io
 import json
 import re
+import sys
 from contextlib import redirect_stderr
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter, _remove_managed_block
 from codex_plugin_scanner.guard.adapters.grok_hooks import (
+    grok_hook_process_exit,
     grok_hook_response_from_guard,
 )
 from codex_plugin_scanner.guard.runtime.actions import normalize_grok_hook_payload
@@ -145,6 +147,37 @@ class TestGrokHookResponses:
     def test_unsatisfied_review_response_is_denied(self) -> None:
         payload = grok_hook_response_from_guard(policy_action="review", reason="Review in HOL Guard.")
         assert payload == {"decision": "deny", "reason": "Review in HOL Guard."}
+
+    def test_an_action_outside_the_lattice_is_denied(self) -> None:
+        # The action arrives as a bare string from the resident's response, so
+        # a newer, truncated or corrupted value must not render the
+        # allow-shaped reply the deny tiers used to fall through to.
+        for action in ("quarantine-required", "", "BLOCK", "deny", "0"):
+            payload = grok_hook_response_from_guard(policy_action=action, reason="Review in HOL Guard.")
+            assert payload == {"decision": "deny", "reason": "Review in HOL Guard."}, action
+
+    def test_a_non_string_action_is_denied(self) -> None:
+        for action in (None, 7, ["allow"]):
+            payload = grok_hook_response_from_guard(policy_action=action, reason="")
+            assert payload == {"decision": "deny", "reason": "Blocked by HOL Guard."}, action
+
+    def test_an_unknown_action_blocks_a_prompt(self) -> None:
+        # UserPromptSubmit honours ``decision: block``; only allow and warn
+        # may return the empty "nothing to say" response.
+        payload = grok_hook_response_from_guard(
+            policy_action="quarantine-required",
+            reason="Review in HOL Guard.",
+            event_name="UserPromptSubmit",
+        )
+        assert payload == {"decision": "block", "reason": "Review in HOL Guard."}
+
+    def test_an_unknown_action_exits_blocking(self, monkeypatch) -> None:
+        monkeypatch.delenv("HOL_GUARD_HOME", raising=False)
+        monkeypatch.setattr(sys, "argv", ["hol-guard"])
+        for action in ("quarantine-required", "", "ask", None, 7):
+            assert grok_hook_process_exit(action) == 2, action
+        assert grok_hook_process_exit("allow") == 0
+        assert grok_hook_process_exit("warn") == 0
 
     def test_prompt_hook_preserves_native_policy_block(self, tmp_path: Path, native_hook_force: Path) -> None:
         import json as _json

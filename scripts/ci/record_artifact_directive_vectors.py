@@ -35,12 +35,13 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from codex_plugin_scanner.guard.cli.commands_support_prompts import (
-    _claude_prompt_system_message,
-    _codex_prompt_block_system_message,
-)
 from codex_plugin_scanner.guard.cli.commands_support_runtime_resolution import _canonical_harness_name
 from codex_plugin_scanner.guard.cli.native_hook_exit_code import native_hook_verdict_exit_code
+
+if __package__ is None:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from scripts.ci.claude_prompt_oracle import _claude_prompt_system_message, _codex_prompt_block_system_message
 
 OUTPUT = Path("rust/crates/guard-runtime/tests/fixtures/artifact_directive_vectors.json.gz")
 

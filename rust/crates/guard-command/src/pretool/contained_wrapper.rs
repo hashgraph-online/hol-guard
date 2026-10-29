@@ -121,8 +121,9 @@ fn resolved_spelling(target: &std::path::Path) -> Option<std::path::PathBuf> {
 }
 
 /// The repository holding a `cd` target outside the hook workspace: the
-/// nearest ancestor with a `.git` entry, strictly below home or the system
-/// temporary directory, and owned by the agent's user. Agents step into a
+/// nearest ancestor with a `.git` entry, strictly below home, the system
+/// temporary directory or the user's private macOS one, and owned by the
+/// agent's user. Agents step into a
 /// sibling checkout or worktree this way; the execution sink rebases its
 /// approved root to the same directory, so the run is contained to that
 /// repository exactly as it would be from a session started there.
@@ -147,6 +148,7 @@ pub(super) fn sibling_project_root(
     [std::path::Path::new(home), std::path::Path::new("/tmp")]
         .iter()
         .filter_map(|base| std::fs::canonicalize(base).ok())
+        .chain(super::git_routes::private_temporary_base(&resolved, uid))
         .find(|base| resolved.starts_with(base) && resolved != *base)
         .and_then(|base| {
             target

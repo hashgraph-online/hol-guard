@@ -140,7 +140,7 @@ def test_enabled_digline_writes_and_spending_reach_review(tmp_path: Path) -> Non
         assert rule_id in matched, command
         assert evaluation.evaluation.controlling_rule_id == rule_id, command
         assert any(item.match.action_class == action_class for item in evaluation.evaluation.matches), command
-        assert evaluation.native_minimum_action == "review", command
+        assert evaluation.payload["minimum_action"] == "review", command
 
 
 def test_enabled_digline_module_invocations_require_review(tmp_path: Path) -> None:
@@ -158,7 +158,7 @@ def test_enabled_digline_module_invocations_require_review(tmp_path: Path) -> No
         }
         assert rule_id in matched, command
         assert any(item.match.action_class == action_class for item in evaluation.evaluation.matches), command
-        assert evaluation.native_minimum_action == "review", command
+        assert evaluation.payload["minimum_action"] == "review", command
 
 
 def test_enabled_digline_declared_uncertain_forms_stay_uncertain(tmp_path: Path) -> None:

@@ -37,7 +37,7 @@ fn a_search_tool_query_is_not_typed_as_a_prompt() {
             result.reason
         );
         assert!(
-            !result.reason.contains("override trusted instructions"),
+            !result.reason.contains("trusted instructions"),
             "{query}: {}",
             result.reason
         );
@@ -281,4 +281,54 @@ fn a_result_read_with_no_arguments_at_all_keeps_its_review() {
         "{} {}",
         result.reason_code, result.reason
     );
+}
+
+/// Bun runs a script entry the way `node` does. Typing that run as a package
+/// action put it under the installed policy's package-script setting, so an
+/// ordinary read-only test run asked for fresh approval instead of reaching
+/// the workspace sandbox the same run under `node` already reaches.
+#[test]
+fn a_bun_script_entry_is_not_a_package_action() {
+    for command in [
+        "bun node_modules/vitest/vitest.mjs run tests/unit.test.ts",
+        "bun node_modules/vitest/dist/cli.js run tests/unit.test.ts",
+        "bun scripts/report.ts",
+        "bun ./tools/check.mts --quiet",
+    ] {
+        let result = evaluate(serde_json::json!({
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+        }));
+        assert_ne!(
+            result.action.action_type,
+            PreToolActionTypeV1::Package,
+            "{command}: {} {}",
+            result.reason_code,
+            result.reason
+        );
+        assert_ne!(
+            result.reason_code, "native_package_review",
+            "{command}: {}",
+            result.reason
+        );
+    }
+}
+
+/// Bun's own verbs are still package work: reading a script suffix must not
+/// take an install out of the package path.
+#[test]
+fn a_bun_verb_is_still_a_package_action() {
+    for command in ["bun install", "bun add left-pad", "bun add ./vendor/lib.js"] {
+        let result = evaluate(serde_json::json!({
+            "tool_name": "Bash",
+            "tool_input": {"command": command},
+        }));
+        assert_eq!(
+            result.action.action_type,
+            PreToolActionTypeV1::Package,
+            "{command}: {} {}",
+            result.reason_code,
+            result.reason
+        );
+    }
 }

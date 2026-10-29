@@ -122,10 +122,27 @@ pub(super) fn bounded_total_sleep(model: &crate::CanonicalCommandV1) -> bool {
 /// `pgrep` only lists matching process ids and names; admit read-only display
 /// and matching flags plus exactly one literal pattern. `-l` and `-a` print
 /// the matched process names or command lines, the same view `ps aux` gives.
+/// `-P 4120` keeps only the children of a parent id, and with it the pattern
+/// may be left out, as `pgrep -P 4120` lists every child.
 pub(super) fn safe_pgrep_arguments(arguments: &[String]) -> bool {
     let mut patterns = 0_usize;
-    for argument in arguments {
-        if let Some(flags) = argument.strip_prefix('-') {
+    let mut parents = false;
+    let mut index = 0;
+    while index < arguments.len() {
+        let argument = &arguments[index];
+        index += 1;
+        if let Some(value) = argument.strip_prefix("-P") {
+            let value = if value.is_empty() {
+                index += 1;
+                arguments.get(index - 1).map_or("", String::as_str)
+            } else {
+                value
+            };
+            if !process_id_list(value) {
+                return false;
+            }
+            parents = true;
+        } else if let Some(flags) = argument.strip_prefix('-') {
             if flags.is_empty()
                 || !flags.bytes().all(|flag| {
                     matches!(flag, b'f' | b'i' | b'x' | b'n' | b'o' | b'c' | b'l' | b'a')
@@ -133,14 +150,23 @@ pub(super) fn safe_pgrep_arguments(arguments: &[String]) -> bool {
             {
                 return false;
             }
+        } else if argument.len() > 256 || index != arguments.len() {
+            // The pattern is the last word, so no flag follows it.
+            return false;
         } else {
             patterns += 1;
         }
     }
-    patterns == 1
-        && arguments
-            .last()
-            .is_some_and(|pattern| !pattern.starts_with('-') && pattern.len() <= 256)
+    patterns == 1 || (patterns == 0 && parents)
+}
+
+/// `4120` or `4120,4121`: process ids, as `pgrep -P` and `ps -p` take them.
+fn process_id_list(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 256
+        && value
+            .split(',')
+            .all(|id| !id.is_empty() && id.bytes().all(|byte| byte.is_ascii_digit()))
 }
 
 /// `ps` lists processes and their arguments, the same view `pgrep -f`
@@ -193,7 +219,10 @@ fn ps_option_value(option: char, value: &str) -> bool {
         && value.len() <= 256
         && value.bytes().all(|byte| match option {
             'p' | 'q' => byte.is_ascii_digit() || byte == b',',
-            'o' | 'O' => byte.is_ascii_alphanumeric() || matches!(byte, b',' | b'_' | b'%' | b'='),
+            // `wchan:30` sets a column width, as procps `ps` reads it.
+            'o' | 'O' => {
+                byte.is_ascii_alphanumeric() || matches!(byte, b',' | b'_' | b'%' | b'=' | b':')
+            }
             _ => byte.is_ascii_alphanumeric() || matches!(byte, b',' | b'_' | b'-' | b'.'),
         })
 }
@@ -328,6 +357,56 @@ mod exit_tests {
 }
 
 #[cfg(test)]
+mod process_listing_tests {
+    fn arguments(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| (*value).to_owned()).collect()
+    }
+
+    #[test]
+    fn pgrep_reads_the_children_of_a_parent_id() {
+        for values in [
+            &["-P", "4120", "-fl", "."][..],
+            &["-P", "4120"],
+            &["-l", "-P4120,4121"],
+            &["-fl", "node"],
+        ] {
+            assert!(
+                super::safe_pgrep_arguments(&arguments(values)),
+                "{values:?}"
+            );
+        }
+        for values in [
+            &["-P"][..],
+            &["-P", "$PID"],
+            &["-P", "4120,"],
+            &["-Pf", "node"],
+            &["-F", "app.pid"],
+            &["-P", "4120", "node", "-l"],
+            &["node", "python"],
+            &[],
+        ] {
+            assert!(
+                !super::safe_pgrep_arguments(&arguments(values)),
+                "{values:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn ps_reads_a_column_width() {
+        assert!(super::safe_ps_arguments(&arguments(&[
+            "-o",
+            "pid,etime,wchan:30,state",
+            "-p",
+            "4120",
+        ])));
+        assert!(!super::safe_ps_arguments(&arguments(&[
+            "-o", "pid;id", "-p", "4120",
+        ])));
+    }
+}
+
+#[cfg(test)]
 mod psql_environment_tests {
     fn stamped(names: &[&str]) -> guard_contracts::GuardExecutionEnvironmentV1 {
         guard_contracts::GuardExecutionEnvironmentV1 {
@@ -339,7 +418,7 @@ mod psql_environment_tests {
             pager_disabled: false,
             xdg_config_home: None,
             git_config_no_system: true,
-            library_search_paths: Default::default(),
+            ..Default::default()
         }
     }
 

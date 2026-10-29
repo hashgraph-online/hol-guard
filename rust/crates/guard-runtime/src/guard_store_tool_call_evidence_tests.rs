@@ -15,14 +15,14 @@ const RECEIPTS: &str = include_str!("../testdata/guard_store/receipts_vectors.js
 const INVENTORY: &str = include_str!("../testdata/guard_store/inventory_vectors.json");
 const EVENT_PAYLOAD: &str = "{\"artifact_id\": \"artifact-1\", \"signals\": []}";
 
-fn vectors() -> (Value, Value) {
+pub(crate) fn vectors() -> (Value, Value) {
     (
         serde_json::from_str(RECEIPTS).unwrap(),
         serde_json::from_str(INVENTORY).unwrap(),
     )
 }
 
-fn build_database(path: &Path, receipts: &Value, inventory: &Value) {
+pub(crate) fn build_database(path: &Path, receipts: &Value, inventory: &Value) {
     let connection = Connection::open(path).unwrap();
     connection.execute_batch("pragma journal_mode=wal").ok();
     connection
@@ -90,7 +90,7 @@ fn run(home: &Path, args: Map<String, Value>) -> Value {
     serde_json::from_slice(&evaluate_guard_store_request(&request).unwrap()).unwrap()
 }
 
-fn count(home: &Path, table: &str) -> i64 {
+pub(crate) fn count(home: &Path, table: &str) -> i64 {
     Connection::open(home.join("guard.db"))
         .unwrap()
         .query_row(&format!("select count(*) from {table}"), [], |row| {

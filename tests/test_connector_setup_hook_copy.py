@@ -13,22 +13,13 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.approval_hook_copy import (
-    join_native_hook_reason,
-    with_approval_review_url,
-)
 from codex_plugin_scanner.guard.blocked_request_mode import (
     SAFE_ALTERNATIVE_GUIDANCE,
     connector_setup_reason,
-    is_unlinked_connector_setup_reason,
 )
 
 _TESTDATA = Path(__file__).resolve().parents[1] / "rust" / "crates" / "guard-runtime" / "testdata"
-_URL = "https://guard.example.test/approvals/0123456789abcdef"
-_LINK = f"Open HOL Guard to approve or keep this blocked: {_URL}."
 _DEFAULT = connector_setup_reason("echo-mcp", "mcp", ask=False)
-_ASK = connector_setup_reason("echo-mcp", "mcp", ask=True)
-_LOCAL = connector_setup_reason("lanectl", "cli", ask=False)
 
 
 def _vectors(name: str) -> list[dict[str, object]]:
@@ -47,7 +38,6 @@ def test_reason_matches_the_rust_vectors(case: dict[str, object]) -> None:
         approvable=bool(case["approvable"]),
     )
     assert text == case["text"]
-    assert is_unlinked_connector_setup_reason(text) is case["unlinked"]
 
 
 def test_default_mode_names_only_computed_redirects() -> None:
@@ -65,25 +55,8 @@ def test_a_local_tool_is_an_ordinary_review_offering_the_users_choice(surface: s
     assert "hol-guard approvals" in text
     assert SAFE_ALTERNATIVE_GUIDANCE not in text
     assert "seek permission" not in text
-    assert not is_unlinked_connector_setup_reason(text)
 
 
 def test_a_local_tool_no_approval_can_release_stays_a_plain_block() -> None:
     text = connector_setup_reason("lanectl", "cli", ask=False, approvable=False)
     assert text.endswith(SAFE_ALTERNATIVE_GUIDANCE)
-    assert is_unlinked_connector_setup_reason(text)
-
-
-def test_a_local_tool_gets_the_shared_hook_link_in_the_default_mode() -> None:
-    assert with_approval_review_url(_LOCAL, {"approval_url": _URL}) == f"{_LOCAL} {_LINK}"
-    assert join_native_hook_reason(_LOCAL, _LINK) == f"{_LOCAL} {_LINK}"
-
-
-def test_default_mode_gets_no_link_from_the_shared_hook_copy() -> None:
-    assert with_approval_review_url(_DEFAULT, {"approval_url": _URL}) == _DEFAULT
-    assert join_native_hook_reason(_DEFAULT, _LINK) == _DEFAULT
-
-
-def test_ask_mode_keeps_the_link_in_the_shared_hook_copy() -> None:
-    assert with_approval_review_url(_ASK, {"approval_url": _URL}) == f"{_ASK} {_LINK}"
-    assert join_native_hook_reason(_ASK, _LINK) == f"{_ASK} {_LINK}"

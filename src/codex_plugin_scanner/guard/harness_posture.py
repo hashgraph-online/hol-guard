@@ -26,7 +26,6 @@ from .native_guard_config import resolve_native_guard_config
 from .protection_posture import (
     VALID_PROTECTION_POSTURES,
     coerce_protection_posture,
-    normalize_protection_posture,
 )
 
 if TYPE_CHECKING:
@@ -41,7 +40,6 @@ HARNESS_POSTURE_INHERIT = "inherit"
 HARNESS_POSTURE_LOCK_KEYS = frozenset({"protection_posture", "mode", "security_level", HARNESS_POSTURES_KEY})
 # The fields `config_for_harness` reads off one harness's resolved posture.
 _VIEW_FIELDS = ("posture", "mode", "security_level")
-_MAX_HARNESS_POSTURES = len(HARNESS_CONTRACTS) * 2
 
 
 def known_harness_ids() -> tuple[str, ...]:
@@ -68,36 +66,6 @@ def runtime_harness_key(value: object) -> str | None:
         return None
     contract = contract_for(key)
     return contract.harness if contract is not None else key
-
-
-def coerce_loaded_harness_postures(value: object) -> dict[str, str]:
-    """Read stored overrides; anything malformed is dropped (inherits baseline)."""
-
-    if not isinstance(value, Mapping):
-        return {}
-    postures: dict[str, str] = {}
-    for key, raw in value.items():
-        harness = canonical_harness_id(key)
-        posture = normalize_protection_posture(raw)
-        if harness is not None and posture is not None and len(postures) < _MAX_HARNESS_POSTURES:
-            postures[harness] = posture
-    return postures
-
-
-def coerce_loaded_harness_watch_entered_at(value: object, postures: Mapping[str, str]) -> dict[str, str]:
-    if not isinstance(value, Mapping):
-        return {}
-    stamps: dict[str, str] = {}
-    for key, raw in value.items():
-        harness = canonical_harness_id(key)
-        if harness is None or postures.get(harness) != "watch" or not isinstance(raw, str) or not raw.strip():
-            continue
-        try:
-            datetime.fromisoformat(raw.replace("Z", "+00:00"))
-        except ValueError:
-            continue
-        stamps[harness] = raw.strip()
-    return stamps
 
 
 def protection_settings_payload(posture: object, *, harness: object, inherit: bool) -> dict[str, object]:
@@ -313,8 +281,6 @@ __all__ = [
     "HARNESS_WATCH_ENTERED_AT_KEY",
     "VALID_PROTECTION_POSTURES",
     "canonical_harness_id",
-    "coerce_loaded_harness_postures",
-    "coerce_loaded_harness_watch_entered_at",
     "config_for_harness",
     "effective_harness_posture",
     "effective_harness_postures",

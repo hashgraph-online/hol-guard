@@ -51,13 +51,6 @@ def _hook_event_name(payload: dict[str, object]) -> str | None:
     return resolve_hook_event_name(payload)
 
 
-def _write_json_line(payload: dict[str, object], *, output_stream: TextIO | None = None) -> None:
-    """Resolve hook output lazily without reintroducing the prompt import cycle."""
-
-    from .commands_support_prompts import _write_json_line as resolve_write_json_line
-
-    resolve_write_json_line(payload, output_stream=output_stream)
-
 if TYPE_CHECKING:
     from ..store import GuardStore
     from ._commands_shared import _GUARD_CLIENT_VERSION, _now

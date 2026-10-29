@@ -331,3 +331,115 @@ fn native_bash_reply_owned_client_binds_large_completion_without_an_extra_rpc() 
         assert!(!bound_execution(&changed, &request), "{pointer}");
     }
 }
+
+/// A prepared reply queued for review, carrying a receipt the edge wrote for
+/// an `omp` Bash call, and the request that names the same review.
+fn queued_review_reply() -> (Value, Value) {
+    use guard_contracts::GuardHookEdgeResultV2;
+    let mut envelope = crate::edge::tests::envelope(
+        "PreToolUse",
+        json!({"tool_name": "Bash", "tool_input": {"command": "pwd"}}),
+    );
+    envelope.harness = "omp".into();
+    let bytes = crate::edge::tests::evaluate_isolated(envelope).unwrap();
+    let edge: GuardHookEdgeResultV2 = serde_json::from_slice(&bytes).unwrap();
+    let receipt = serde_json::to_value(&edge.receipt).unwrap();
+    let mut reply = prepared_reply();
+    reply["review"] = json!({"decision": edge.result, "receipt": receipt});
+    reply["review_lineage"] = json!({"schema":"guard-native-bash-review-lineage.v1",
+        "lineage_id":"c".repeat(64),"operation_id":"stable-operation-1",
+        "artifact_hash":"guard-approval-context:v1:fixture",
+        "created_at_ms":100,"expires_at_ms":86_400_100});
+    let request = json!({"harness":"omp",
+        "exact_token":"guard-approval-context:v1:fixture",
+        "review_binding":"guard-approval-context:v1:fixture",
+        "decision": edge.result, "native_receipt": receipt});
+    (reply, request)
+}
+
+#[test]
+fn native_bash_reply_queued_review_binds_token_lineage_host_and_receipt() {
+    let (reply, request) = queued_review_reply();
+    assert!(validate("review", &reply, &request));
+    let mut pi = reply.clone();
+    pi["subject"]["context"]["host"] = json!("pi-input-mutation-v1");
+    let mut pi_request = request.clone();
+    pi_request["harness"] = json!("pi");
+    assert!(!validate("review", &pi, &request));
+    assert!(!validate("review", &reply, &pi_request));
+
+    let other = "guard-approval-context:v1:other";
+    for (pointer, invalid) in [
+        ("/artifact_hash", json!(other)),
+        ("/artifact_id", json!("package-request")),
+        ("/review_lineage/artifact_hash", json!(other)),
+        (
+            "/review_lineage/schema",
+            json!("guard-native-bash-review-lineage.v0"),
+        ),
+        ("/review_lineage", Value::Null),
+        ("/review", json!([])),
+        ("/review/decision", json!({})),
+        ("/review/receipt", json!({})),
+        ("/subject", json!("subject")),
+        ("/subject/schema", json!("guard.bash-subject.v0")),
+        ("/subject/execution_assurance", json!("hash-only")),
+        ("/subject/context", Value::Null),
+        ("/subject/context/host", json!("pi-input-mutation-v1")),
+    ] {
+        let mut forged = reply.clone();
+        *forged.pointer_mut(pointer).unwrap() = invalid;
+        assert!(!validate("review", &forged, &request), "{pointer}");
+    }
+    for (field, invalid) in [
+        ("harness", json!("codex")),
+        ("harness", json!("claude-code")),
+        ("exact_token", json!(other)),
+        ("exact_token", json!("fixture")),
+        ("review_binding", json!(other)),
+        ("decision", json!({})),
+        ("native_receipt", json!({})),
+    ] {
+        let mut forged = request.clone();
+        forged[field] = invalid;
+        assert!(!validate("review", &reply, &forged), "{field}");
+    }
+
+    let mut tampered = reply.clone();
+    tampered["review"]["receipt"]["reason_code"] = json!("some_other_reason");
+    let mut tampered_request = request.clone();
+    tampered_request["native_receipt"] = tampered["review"]["receipt"].clone();
+    assert!(!validate("review", &tampered, &tampered_request));
+
+    let mut renamed = reply.clone();
+    renamed["review"]["decision"]["reason_code"] = json!("some_other_reason");
+    let mut renamed_request = request.clone();
+    renamed_request["decision"] = renamed["review"]["decision"].clone();
+    assert!(!validate("review", &renamed, &renamed_request));
+}
+
+#[test]
+fn native_bash_reply_context_transport_answers_queued_reviews() {
+    use guard_contracts::{
+        ContextDigestKindV1, ContextDigestRequestV1, ContextDigestResultV1,
+        CONTEXT_DIGEST_REQUEST_SCHEMA,
+    };
+    let (reply, request) = queued_review_reply();
+    let mut forged = request.clone();
+    forged["review_binding"] = json!("guard-approval-context:v1:other");
+    for (request, expected) in [(request, true), (forged, false)] {
+        let digest = ContextDigestRequestV1 {
+            schema: CONTEXT_DIGEST_REQUEST_SCHEMA.into(),
+            request_id: "review-validation".into(),
+            kind: ContextDigestKindV1::NativeBashReplyValidation {
+                reply_kind: "review".into(),
+                material: reply.clone(),
+                request,
+            },
+        };
+        let bytes = crate::context_digest::evaluate_context_digest_request(&digest).unwrap();
+        let result: ContextDigestResultV1 = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(result.status, "ok");
+        assert_eq!(result.native_bash_reply_valid, Some(expected));
+    }
+}

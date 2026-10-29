@@ -45,10 +45,6 @@ class Metadata:
     def catalog_id(self) -> str:
         return f"command.{'mcp-' if self.kind == 'mcp' else ''}{self.slug}"
 
-    @property
-    def module_leaf(self) -> str:
-        return f"command_{self.slug.replace('-', '_')}_extensions"
-
     def to_dict(self) -> dict[str, object]:
         return {
             "kind": self.kind,

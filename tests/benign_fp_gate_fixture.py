@@ -52,12 +52,13 @@ from ci.gauntlet.fixtures import BENCH_CHECKOUT, BENCH_FILES, HOME_TOOLCHAIN_INI
 from ci.gauntlet.realism_fixtures import REVIEW_NOTES, SESSION_SOURCE
 from ci.gauntlet.source_output_fixtures import SOURCES as TOKEN_SOURCES
 from tests import codex_containment_route
-from tests.benign_fp_gate_configs import KUBECONFIG, LFS_GITCONFIG
+from tests.benign_fp_gate_configs import KUBECONFIG, LFS_GITCONFIG, write_parent_documents, write_sibling_documents
 from tests.benign_fp_gate_connectors import write_connectors
+from tests.benign_fp_gate_cursor_project import cursor_project_path, write_cursor_projects
 from tests.benign_fp_gate_developer_checkout import head_commit, write_developer_checkout
 from tests.benign_fp_gate_feature_app import build_feature_app, feature_app_path
 from tests.benign_fp_gate_git import _git, _session_worktree, _signed_checkout, _stopped_rebase
-from tests.benign_fp_gate_hooked_clone import hooked_worktree_path, write_hooked_clone
+from tests.benign_fp_gate_hooked_clone import hooked_cwds, write_hooked_clone
 from tests.benign_fp_gate_long_lived_clone import write_long_lived_clones
 from tests.benign_fp_gate_paths import materialise
 from tests.benign_fp_gate_projects import (
@@ -94,12 +95,16 @@ class BenignFixture:
     # The same worktree named through a linked ancestor, as a macOS host spells
     # any `/tmp` checkout: `/tmp` resolves to `/private/tmp`.
     linked_worktree: Path
+    # A linked worktree in the per-user temporary directory ``$TMPDIR`` names:
+    # below ``/private/var/folders`` on macOS, ``/tmp`` elsewhere.
+    user_tmp_worktree: Path
 
     def cleanup(self) -> None:
         """Remove the directories this fixture created outside its own root."""
         shutil.rmtree(self.private_tmp, ignore_errors=True)
         shutil.rmtree(self.contained_requests, ignore_errors=True)
         shutil.rmtree(self.tmp_worktree.parent, ignore_errors=True)
+        shutil.rmtree(self.user_tmp_worktree.parent, ignore_errors=True)
         shutil.rmtree(self.tmp_org.parent, ignore_errors=True)
         shutil.rmtree(self.scratch, ignore_errors=True)
         shutil.rmtree(self.stage, ignore_errors=True)
@@ -134,6 +139,11 @@ class BenignFixture:
             "${ORG_CLONE}": str(self.org.parent / "app-portal-clone"),
             "${PORTAL_WEB_HEAD}": head_commit(self.org),
             "${TMP_ORG}": str(self.tmp_org),
+            "${USER_TMP_WORKTREE}": str(self.user_tmp_worktree),
+            # A linked worktree of the home sibling checkout in the same directory, and
+            # the same path as `$TMPDIR` spells it on macOS, through the `/var` root link.
+            "${USER_TMP_SIBLING}": str(self.user_tmp_worktree.parent / "sibling"),
+            "${USER_TMP_SIBLING_LINK}": str(_root_link_spelling(self.user_tmp_worktree.parent / "sibling")),
             "${TMP_ORG_WT}": str(self.tmp_org.parent / "app-followup"),
             "${TMP_REMOTE}": str(self.tmp_org.parent / "remote" / "app.git"),
             # The live Gauntlet's fixture root and its fresh scratch leaf directly in /tmp.
@@ -144,6 +154,8 @@ class BenignFixture:
             "${STAGE}": str(self.stage),
             # Left unresolved on purpose: the link is what the case is about.
             "${LINKED_WORKTREE}": str(self.linked_worktree),
+            # Cursor's working-file directory for the session workspace.
+            "${CURSOR_PROJECT}": str(cursor_project_path(self.home, self.worktree)),
         }
 
     def cwd(self, name: str) -> Path:
@@ -153,13 +165,16 @@ class BenignFixture:
             "parent": self.parent,
             "nested": self.nested,
             "tmp_worktree": self.tmp_worktree,
+            "user_tmp_worktree": self.user_tmp_worktree,
             "gitlink_repo": self.gitlink_repo,
             "org": self.org,
             "edge_clone": self.home / "edge-clone",
+            "home_project": self.home / "project",
+            "home_sibling": self.home / "other-project",
             "org_app": self.org / "app-portal",
             "org_wt": self.org.parent / "app-portal-fix",
             "org_clone": self.org.parent / "app-portal-clone",
-            "org_hooked": hooked_worktree_path(self.org),
+            **hooked_cwds(self.org),
             "tmp_org": self.tmp_org,
             "org_rebase": self.org.parent / "app-portal-rebase",
             "org_rebase_exec": self.org.parent / "app-portal-rebase-exec",
@@ -174,6 +189,12 @@ class BenignFixture:
 def _system_tmp() -> str:
     """Use /tmp itself where it exists, the place real agents create scratch directories."""
     return "/tmp" if Path("/tmp").is_dir() else tempfile.gettempdir()
+
+
+def _root_link_spelling(path: Path) -> Path:
+    """`path` written through the macOS `/var` root link, as `$TMPDIR` names it; unchanged elsewhere."""
+    private_var = Path("/private/var")
+    return Path("/var") / path.relative_to(private_var) if path.is_relative_to(private_var) else path
 
 
 def build_fixture(root: Path) -> BenignFixture:
@@ -239,7 +260,7 @@ def build_fixture(root: Path) -> BenignFixture:
     _write(home / "other-project" / "notes.md", "Notes kept outside the project.\nretry policy: three attempts.\n")
     _write(home / "other-project" / "src" / "report.ts", "export const reportWindow = 'report-window-marker';\n")
     _write(home / "other-project" / "package.json", '{\n  "name": "@acme/app",\n  "version": "1.0.0"\n}\n')
-    _write(home / "other-project" / ".keep", "")
+    write_sibling_documents(home / "other-project")
     # Sibling checkout's committed lockfile: the probe that globs for one has to
     # find it, or the read is allowed for naming nothing rather than for being safe.
     _write(
@@ -256,30 +277,25 @@ def build_fixture(root: Path) -> BenignFixture:
     _git(home / "other-project", "init", "--quiet", "--initial-branch=main", home=home)
     _git(home / "other-project", "add", "-A", home=home)
     _git(home / "other-project", "commit", "--quiet", "-m", "sibling base", home=home)
-    _git(
-        home / "other-project",
-        "worktree",
-        "add",
-        "--quiet",
-        "-b",
-        "fix/report-window",
-        str(home / "other-project-wt"),
-        home=home,
-    )
+    sibling_wt = str(home / "other-project-wt")
+    _git(home / "other-project", "worktree", "add", "--quiet", "-b", "fix/report-window", sibling_wt, home=home)
     # Installed after the baseline commit, as an untracked `npm install` leaves it.
     _sibling_test_runner(home / "other-project")
 
     parent.mkdir(parents=True)
     _git(parent, "init", "--quiet", "--initial-branch=main", home=home)
-    _write(parent / "README.md", "# Parent\n")
+    write_parent_documents(parent)
     _write(parent / "src" / "one.ts", "export const one = 1;\n")
     # The one committed file long enough for a range-limited read of its history.
     _write(parent / "src" / "report-window.ts", COMMITTED_SOURCE)
     _write(parent / "src" / "password-reset-email.tsx", "export const Email = () => null;\n")
     _write(parent / "app" / "registry" / "[slug]" / "page.tsx", "export default function Page() { return null; }\n")
+    # Larger than the 32 KiB command bound, as many READMEs are. Cursor sends
+    # the whole file body with each read of it.
+    _write(parent / "docs" / "large-guide.md", "# Guide\n" + "Plain guide paragraph text.\n" * 1600)
     _write(parent / ".agents" / "skills" / "x" / "SKILL.md", "---\nname: x\n---\nSynthetic skill body.\n")
-    # Git treats a link as a file, so `node_modules/` alone leaves the borrowed
-    # `dashboard/node_modules` link below unignored.
+    _write(parent / "integrations" / "app" / ".claude-plugin" / "plugin.json", '{"author": "Example"}\n')
+    # Git treats a link as a file: `node_modules/` alone leaves the `dashboard/node_modules` link unignored.
     _write(parent / ".gitignore", "node_modules/\ndashboard/node_modules\n")
     _git(parent, "add", "-A", home=home)
     _git(parent, "commit", "--quiet", "-m", "fixture base", home=home)
@@ -307,6 +323,12 @@ def build_fixture(root: Path) -> BenignFixture:
     # The live Gauntlet's token-handling sources (redirect route, link worker, HMAC helper).
     for relative, text in TOKEN_SOURCES.items():
         _write(worktree / relative, text)
+    # The test beside that source: a project file whose name reads like a
+    # credential, named by the runner a session runs over it.
+    _write(
+        worktree / "portal" / "src" / "lib" / "attribution-token.test.ts",
+        "import { expect, test } from 'vitest';\n\ntest('signs', () => expect(1).toBe(1));\n",
+    )
     # The live Gauntlet's sign-in folder and the held data files beside it, in a repository of their own.
     build_feature_app(home, os.environ.get("PATH", ""))
     # The live Gauntlet's clone with local configuration files beside its code.
@@ -359,6 +381,19 @@ def build_fixture(root: Path) -> BenignFixture:
     # Workspace as a linked worktree under the system temp area whose registered siblings are outside cwd.
     tmp_worktree = Path(tempfile.mkdtemp(prefix="wt.", dir=_system_tmp())).resolve() / "workspace"
     _git(parent, "worktree", "add", "--quiet", "-b", "tmp-feature", str(tmp_worktree), home=home)
+    user_tmp_worktree = Path(tempfile.mkdtemp(prefix="wt.", dir=tempfile.gettempdir())).resolve() / "workspace"
+    _git(parent, "worktree", "add", "--quiet", "-b", "user-tmp-feature", str(user_tmp_worktree), home=home)
+    # A hidden tool directory inside it, which never takes a dependency link.
+    (user_tmp_worktree / ".cache").mkdir()
+    # A linked worktree of the home sibling checkout beside it, freshly added: a package in a subfolder that
+    # builds with its own script and nothing installed, a crate, and a plugin manifest in a hidden folder.
+    user_tmp_sibling = user_tmp_worktree.parent / "sibling"
+    _git(home / "other-project", "worktree", "add", "--quiet", "-b", "user-tmp-sibling", str(user_tmp_sibling), home=home)
+    scripts = {"build": "node scripts/build.mjs", "test": "node --test"}
+    _write(user_tmp_sibling / "dashboard" / "package.json", json.dumps({"private": True, "scripts": scripts}) + "\n")
+    _write(user_tmp_sibling / "dashboard" / "scripts" / "build.mjs", "console.log('built');\n")
+    _write(user_tmp_sibling / "plugins" / "app" / ".codex-plugin" / "plugin.json", '{"author": "Example"}\n')
+    _write(user_tmp_sibling / "rust" / "Cargo.toml", '[package]\nname = "sibling"\nversion = "0.1.0"\nedition = "2021"\n')
 
     # Tracked gitlink plus a filter attribute: must remain reviewable.
     gitlink_repo.mkdir(parents=True)
@@ -505,6 +540,7 @@ def build_fixture(root: Path) -> BenignFixture:
     scratch = Path(_system_tmp()) / f"hg-fp-scratch-{os.getpid()}-{secrets.token_hex(4)}"
     # Paths the mined cases name under the scrubbed project stand-ins, derived from the cases themselves.
     materialise({"HOME": home, "PRIVATE_TMP": private_tmp, "WORKTREE": worktree})
+    write_cursor_projects(home, worktree)
     # Sources the mined cases search by pattern. ``materialise`` builds the
     # directory a glob names but not a file inside it, and a pattern that
     # matches nothing makes the case measure an empty expansion instead of the
@@ -538,6 +574,7 @@ def build_fixture(root: Path) -> BenignFixture:
         scratch,
         stage,
         linked_worktree,
+        user_tmp_worktree,
     )
     _write(fixture.scratch_copy, "export const reportWindow = 'report-window-marker';\n")
     _write(

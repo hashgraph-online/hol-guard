@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import replace
 from pathlib import Path
 
@@ -13,23 +15,33 @@ from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.runtime.approval_context import (
     APPROVAL_CONTEXT_TOKEN_PREFIX,
 )
-from codex_plugin_scanner.guard.runtime.secret_file_requests import (
-    extract_sensitive_file_read_request_artifact,
-)
 from tests.guard_sensitive_read_support import sensitive_read_current_action, sensitive_read_token
 
 
 def _sensitive_read_artifact(workspace: Path, *, publisher: str | None = None) -> GuardArtifact:
-    _request, artifact = extract_sensitive_file_read_request_artifact(
-        "read_file",
-        {"path": ".env"},
-        cwd=workspace,
+    """The review the resident builds for ``read_file .env`` in ``workspace``."""
+
+    path = str(workspace / ".env")
+    fingerprint = hashlib.sha256(
+        json.dumps({"harness": "codex", "normalized_path": path, "tool_name": "read_file"}, sort_keys=True).encode()
+    ).hexdigest()
+    return GuardArtifact(
+        artifact_id=f"codex:project:file-read:{fingerprint}",
+        name="read_file .env",
         harness="codex",
-        config_path=str(workspace / ".mcp.json"),
+        artifact_type="file_read_request",
         source_scope="project",
+        config_path=str(workspace / ".mcp.json"),
+        publisher=publisher,
+        metadata={
+            "tool_name": "read_file",
+            "normalized_path": path,
+            "path_class": "local .env file",
+            "request_summary": f"Requested `read_file` access to `{path}` (local .env file).",
+            "runtime_request_signals": ["requests access to a sensitive local file"],
+            "runtime_request_summary": "Requests access to a sensitive local file: local .env file.",
+        },
     )
-    assert artifact is not None
-    return replace(artifact, publisher=publisher) if publisher is not None else artifact
 
 
 @pytest.mark.parametrize("override_scope", ["artifact", "harness", "publisher"])

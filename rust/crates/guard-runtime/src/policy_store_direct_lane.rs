@@ -231,6 +231,18 @@ impl PolicySnapshotStore {
         })
     }
 
+    /// Whether the bound daemon drains the direct lane's evidence queue.
+    /// A lane that was never published, or one whose daemon does not drain
+    /// it, leaves anything queued unrecorded.
+    pub(crate) fn direct_lane_evidence_drain(&self) -> bool {
+        self.direct_lane.lock().is_ok_and(|binding| {
+            binding
+                .as_ref()
+                .and_then(|binding| binding.evidence_drain)
+                .unwrap_or(false)
+        })
+    }
+
     /// Admission of a settled workspace alone, with its binding.
     #[cfg(all(test, unix))]
     pub(crate) fn admit_direct_hook(

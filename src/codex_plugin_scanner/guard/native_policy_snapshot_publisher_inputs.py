@@ -20,7 +20,6 @@ from .native_policy_snapshot_constants import (
     NativePolicySnapshotError,
 )
 from .native_policy_snapshot_direct_lane import NativePolicySnapshotDirectLaneAck
-from .native_policy_snapshot_policy import _stricter_action
 
 if TYPE_CHECKING:
     from .runtime.extension_control_runtime import ExtensionControlRuntime
@@ -248,7 +247,6 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
         from .native_policy_snapshot_direct_lane_mcp_relay import uniform_harness_views
         from .native_policy_snapshot_direct_lane_review import uniform_blocked_request_mode
         from .native_policy_snapshot_direct_lane_structured import uniform_structured_output_view
-        from .runtime.observed_mcp_tools import bound_native_mcp_tool_actions, native_observed_mcp_tool_actions
 
         with self._condition:
             selected = self._workspace_paths if workspaces is None else self._workspace_paths & workspaces
@@ -260,45 +258,24 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
         self._compiled_mcp_relay_harnesses = None
         configs = [load_guard_config(self.guard_home)]
         configs.extend(load_guard_config(self.guard_home, workspace=workspace) for workspace in selected_workspaces)
-        policy = compose_effective_native_policies(tuple(configs))
-        self._compiled_blocked_request_mode = uniform_blocked_request_mode(configs)
-        self._compiled_structured_output_view = uniform_structured_output_view(configs)
-        self._compiled_mcp_relay_harnesses = uniform_harness_views(configs)
+        # The composer lays the operator's MCP choices over the configured
+        # policy; this side only reads them from the store.
         try:
-            mcp_actions = native_observed_mcp_tool_actions(self.store)
+            observed: dict[str, object] = {"mcp_tool_actions": self.store.read_observed_mcp_tool_actions()}
+            provider_reader = getattr(self.store, "read_mcp_provider_choices", None)
+            if callable(provider_reader):
+                observed["mcp_provider_actions"] = provider_reader()
         except sqlite3.Error as error:
             raise NativePolicySnapshotError("native_policy_snapshot_policy_unavailable") from error
-        if mcp_actions:
-            existing = cast(dict[str, str], policy.get("mcp_tool_actions", {}))
-            merged = dict(existing)
-            required_blocks = frozenset(key for key, action in existing.items() if action == "block")
-            namespace_blocks = tuple(key[:-1] for key in required_blocks if key.endswith("*"))
-            for key, action in mcp_actions.items():
-                # An exact local allow cannot create an exception to a configured
-                # namespace block. Existing configured restrictions remain floors.
-                if action == "allow" and key.startswith(namespace_blocks):
-                    continue
-                merged[key] = _stricter_action(merged.get(key, "allow"), action)
-            policy["mcp_tool_actions"] = bound_native_mcp_tool_actions(merged, required_blocks=required_blocks)
-        from .native_policy_snapshot_policy import _provider_action_map
-
-        provider_reader = getattr(self.store, "read_mcp_provider_choices", None)
-        if callable(provider_reader):
-            try:
-                provider_choices = _provider_action_map(provider_reader())
-            except sqlite3.Error as error:
-                raise NativePolicySnapshotError("native_policy_snapshot_policy_unavailable") from error
-            if provider_choices:
-                existing_provider = cast(dict[str, str], policy.get("mcp_provider_actions", {}))
-                merged_provider = dict(existing_provider)
-                for key, action in provider_choices.items():
-                    merged_provider[key] = _stricter_action(merged_provider.get(key, "review"), action)
-                policy["mcp_provider_actions"] = _provider_action_map(merged_provider)
         provider_authority_reader = getattr(self.store, "read_mcp_provider_authority_hash", None)
         if callable(provider_authority_reader):
             provider_hash = provider_authority_reader()
             if provider_hash is not None:
-                policy["mcp_provider_catalog_hash"] = provider_hash
+                observed["mcp_provider_catalog_hash"] = provider_hash
+        policy = compose_effective_native_policies(tuple(configs), observed=observed)
+        self._compiled_blocked_request_mode = uniform_blocked_request_mode(configs)
+        self._compiled_structured_output_view = uniform_structured_output_view(configs)
+        self._compiled_mcp_relay_harnesses = uniform_harness_views(configs)
         return policy
 
     def _compiled_command_extensions(self) -> dict[str, object]:

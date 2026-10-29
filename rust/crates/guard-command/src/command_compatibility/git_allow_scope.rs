@@ -103,6 +103,7 @@ const SETTLEABLE_SUBCOMMANDS: &[&str] = &[
     "ls-files",
     "ls-remote",
     "merge",
+    "merge-base",
     "mv",
     "notes",
     "pull",

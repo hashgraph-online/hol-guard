@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
@@ -16,6 +17,7 @@ from codex_plugin_scanner.guard.cli.commands import add_guard_root_parser, run_g
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.conftest import guard_commands_module
 from tests.guard_signed_approval_fixtures import write_synthetic_daemon_auth_token
+from tests.package_review_settings import review_package_signals
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
@@ -620,9 +622,26 @@ def test_gr089_copilot_autopilot_shell_exfil_returns_terminal_stop(tmp_path: Pat
     assert "network" in str(hook_output["permissionDecisionReason"]).lower()
 
 
-def test_gr097_hook_reason_deduplicates_duplicate_copy() -> None:
-    from codex_plugin_scanner.guard.cli.commands import _native_hook_reason
-
-    reason = _native_hook_reason("HOL Guard blocked this action.", "HOL Guard blocked this action.", "Retry.")
-
-    assert reason == "HOL Guard blocked this action. Retry."
+@pytest.mark.usefixtures("native_hook_force")
+def test_codex_json_pretool_package_install_names_its_request(tmp_path: Path) -> None:
+    review_package_signals(tmp_path / "guard-home")
+    exit_code, output = _run_hook(
+        tmp_path,
+        harness="codex",
+        json_output=True,
+        payload={
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "npm install is-even@1.0.0"},
+        },
+    )
+    payload = _json_line(output)
+    request_id = payload["guardApprovalRequestId"]
+    approval_url = payload["guardApprovalUrl"]
+    assert exit_code == 0
+    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert isinstance(request_id, str)
+    assert re.fullmatch(r"[A-Za-z0-9_-]{8,128}", request_id)
+    assert isinstance(approval_url, str)
+    assert re.match(r"https?://", approval_url)
+    assert request_id in approval_url

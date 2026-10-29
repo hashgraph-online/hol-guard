@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+from pathlib import Path
 
 import pytest
 
@@ -113,7 +114,7 @@ def test_zcode_prompt_blocks_keep_blocking_exit(_translate) -> None:
     assert code == 2
 
 
-def test_zcode_native_review_renderer_asks_and_exits_zero(_translate) -> None:
+def test_zcode_native_review_renderer_asks_and_exits_zero(_translate, native_approval_reuse_runtime: Path) -> None:
     # The daemon worker renders review-tier PreToolUse responses through
     # the pre-tool review renderer; for zcode that envelope must
     # ask and the bridge must exit 0 so zcode opens its permission prompt.
@@ -121,6 +122,7 @@ def test_zcode_native_review_renderer_asks_and_exits_zero(_translate) -> None:
         "zcode",
         {"policy_action": "review", "reason": "Approval required.", "reason_code": "native_pre_tool_review"},
         approval=None,
+        guard_home=native_approval_reuse_runtime,
     )
     payload, stderr, code = _translate(rendered, harness="zcode")
 

@@ -139,6 +139,8 @@ const legacyAllowed: LocalCliItem = {
   commands: [],
 };
 assert.equal(customExtensionStateLabel(legacyAllowed), "Matching commands from this file are allowed.");
+assert.match(customExtensionStateLabel({ ...legacyAllowed, stale: true }), /allowed an earlier version of this file/);
+assert.equal(customExtensionStateLabel({ ...legacyAllowed, state: "blocked", stale: true }), "This file changed. Review the extension again.");
 assert.match(
   customExtensionStateLabel({
     ...legacyAllowed,

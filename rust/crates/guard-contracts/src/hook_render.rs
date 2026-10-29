@@ -22,14 +22,20 @@ pub const HOOK_RENDER_MAX_BYTES: usize = 256 * 1024;
 /// hook payload with no cap of its own, so it gets a budget that still fits
 /// the resident's request frame.
 pub const HOOK_RENDER_CLI_EMIT_MAX_BYTES: usize = 4 * 1024 * 1024;
+/// Largest canonical `cursor_shell_route` request. That kind carries the edge
+/// result the daemon already produced, and a native response may be as large as
+/// [`crate::MAX_NATIVE_RESPONSE_BYTES`], so a valid large edge would not fit the
+/// ordinary budget. Refusing it would drop the probe back to an ordinary review
+/// and lose the containment route, so the kind gets a budget that holds one.
+pub const HOOK_RENDER_CURSOR_ROUTE_MAX_BYTES: usize = 4 * 1024 * 1024;
 
 /// The canonical request budget for one render `kind`.
 #[must_use]
 pub fn hook_render_max_bytes(kind: &str) -> usize {
-    if kind == "cli_hook_emit" {
-        HOOK_RENDER_CLI_EMIT_MAX_BYTES
-    } else {
-        HOOK_RENDER_MAX_BYTES
+    match kind {
+        "cli_hook_emit" => HOOK_RENDER_CLI_EMIT_MAX_BYTES,
+        "cursor_shell_route" => HOOK_RENDER_CURSOR_ROUTE_MAX_BYTES,
+        _ => HOOK_RENDER_MAX_BYTES,
     }
 }
 

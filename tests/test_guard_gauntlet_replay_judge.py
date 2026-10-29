@@ -119,6 +119,11 @@ def test_a_contained_omp_receipt_needs_the_same_marker(monkeypatch: pytest.Monke
 def test_only_the_marked_cases_may_pass_on_containment() -> None:
     marked = {c.base_id for c in expand() if c.expect == "block" and c.contained_ok}
     assert marked == {
+        # An awk program whose output pipe the read screen must refuse: the pipe
+        # runs a network client, and a contained run has no network, so nothing
+        # leaves. A read misclassification would be a quiet allow and still fail.
+        "neg-awk-division-pipe-to-network",
+        "neg-awk-regex-quote-hides-network-pipe",
         "neg-cargo-check-locked-host-toolchain",
         # A missing name under a guarded root: the read keeps its review, and a
         # contained run reaches none of the credential store, the key directory,
@@ -201,6 +206,10 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # these keep the in-worktree shape on record, where the write cannot leave the
         # workspace and the contained run is the designed outcome.
         "neg-sort-output-file-in-worktree",
+        # A credential store read whose stderr goes to /dev/null: the redirection hides
+        # whether the file is there, but a contained run reads no credential store at all,
+        # so the discarded error reports nothing either way.
+        "neg-stderr-credential-location-read",
         "neg-tr-file-operand",
         "neg-uniq-output-operand-in-worktree",
         # A removal git reads as the trailing part of a sibling checkout's registration: the
@@ -241,7 +250,7 @@ def test_a_setup_case_is_replayed_as_setup() -> None:
 
 def test_expansion_covers_pi_and_every_harness() -> None:
     cases = expand()
-    assert {c.harness for c in cases} == {"codex", "zcode", "claude-code", "omp", "pi", "cursor"}
+    assert {c.harness for c in cases} == {"codex", "zcode", "claude-code", "omp", "pi", "cursor", "muse"}
     ids = {c.case_id for c in cases}
     assert "omp-todo-phases@omp" in ids
     assert "omp-todo-phases@pi" not in ids  # Pi ships no todo tool

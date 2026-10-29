@@ -216,14 +216,33 @@ def test_approval_made_elsewhere_while_answering_still_runs_the_install(
     assert result is not None and result["resolved"] is True
 
 
+def _approved_payload() -> dict[str, object]:
+    return {
+        "policy_action": "allow",
+        "request": {"command": ["bun", "install", "-g", "@openai/codex"]},
+        "verdict": {"action": "allow", "blocking": False, "reason": "Approved for this install."},
+        "approval_requests": [],
+    }
+
+
 def _run_shim_protect(
-    tmp_path: Path, terminal: _Terminal, monkeypatch: pytest.MonkeyPatch, *, timeout_seconds: int
+    tmp_path: Path,
+    terminal: _Terminal,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    timeout_seconds: int,
+    resident_lifts_the_pause: bool = True,
 ) -> tuple[int, int]:
     builds: list[int] = []
 
     def build(**_kwargs: object) -> tuple[dict[str, object], int]:
         builds.append(1)
-        return _paused_payload(), 1
+        # The first call is the paused install.  The approval writes a decision
+        # row, so the resident answers the re-evaluation with an allow of its
+        # own - the shim never rewrites a verdict to get there.
+        if len(builds) == 1 or not resident_lifts_the_pause:
+            return _paused_payload(), 1
+        return _approved_payload(), 0
 
     for name, value in {
         "build_protect_payload": build,
@@ -264,6 +283,19 @@ def test_package_shim_runs_the_install_after_an_approval_at_the_terminal(
 ) -> None:
     assert _run_shim_protect(tmp_path, terminal, monkeypatch, timeout_seconds=120) == (0, 2)
     assert [item.request_id for item in approvals] == [_REQUEST_ID]
+
+
+def test_a_resident_that_still_pauses_the_install_is_not_talked_out_of_it(
+    tmp_path: Path,
+    terminal: _Terminal,
+    approvals: list[argparse.Namespace],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only the resident lifts a pause; an approval alone never rewrites its verdict."""
+
+    assert _run_shim_protect(
+        tmp_path, terminal, monkeypatch, timeout_seconds=120, resident_lifts_the_pause=False
+    ) == (1, 2)
 
 
 def test_a_zero_approval_wait_never_holds_the_install_at_a_prompt(

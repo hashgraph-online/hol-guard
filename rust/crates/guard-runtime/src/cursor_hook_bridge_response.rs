@@ -139,7 +139,8 @@ fn now_micros() -> Option<i64> {
 /// `_cursor_reason`, with a loopback review link signed as
 /// `live_approval_review_url` signs it from `guard_home`'s daemon auth
 /// token. A link this bridge does not reproduce is shown unsigned, unless
-/// the client would sign it: then `None`, and the bridge does not answer.
+/// the client would sign it: then `None`, and the bridge does not answer. A
+/// reason that already carries the signed link is shown as it is.
 fn reason(response: &OMap, guard_home: &Path) -> Option<String> {
     let hook_output = response.get("hookSpecificOutput").and_then(OValue::as_map);
     let decision = response.get("decision_v2_json").and_then(OValue::as_map);
@@ -156,6 +157,12 @@ fn reason(response: &OMap, guard_home: &Path) -> Option<String> {
     let Some(review_url) = review_url(response) else {
         return Some(reason.unwrap_or(DEFAULT_BLOCK_REASON).to_owned());
     };
+    // The daemon and the resident already link a paused review with a signed
+    // link; signing its raw prefix again would stack a second token fragment.
+    let signed_prefix = format!("{review_url}#guard-token=");
+    if let Some(reason) = reason.filter(|reason| reason.contains(&signed_prefix)) {
+        return Some(reason.to_owned());
+    }
     let token = load_guard_daemon_auth_token(guard_home);
     let live_url = match now_micros() {
         Some(now) => live_review_url(review_url, token.as_deref(), now)?,

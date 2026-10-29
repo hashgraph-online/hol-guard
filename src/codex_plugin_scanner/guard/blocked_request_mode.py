@@ -5,6 +5,10 @@ from __future__ import annotations
 from collections.abc import Sequence
 from pathlib import Path
 
+# The deny text for a native result that carries no reason of its own.
+# `blocked_request_mode::BLOCKED_REASON` in Rust is the same string.
+BLOCKED_REASON = "HOL Guard blocked this action."
+
 SAFE_ALTERNATIVE_GUIDANCE = (
     "This action remains blocked. Continue with a safe, permitted alternative that respects "
     "the same protection. Do not retry an equivalent command, bypass Guard, or seek permission "
@@ -95,14 +99,6 @@ def connector_setup_reason(
     names = ", ".join(f"`{item}`" for item in permitted if item)
     redirect = f"Permitted on this device: {names}." if names else ""
     return " ".join(part for part in (reason, redirect, SAFE_ALTERNATIVE_GUIDANCE) if part)
-
-
-def is_unlinked_connector_setup_reason(text: object) -> bool:
-    """Whether ``text`` carries a default-mode connector setup reason.
-
-    Harness renderers add no approval link and no approval step to it.
-    """
-    return isinstance(text, str) and CONNECTOR_SETUP_REASON_PREFIX in text and SAFE_ALTERNATIVE_GUIDANCE in text
 
 
 # Plain-language next steps keyed by the reason code Rust already returned.

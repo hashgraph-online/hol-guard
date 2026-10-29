@@ -173,3 +173,131 @@ fn a_masked_stored_target_still_answers_the_raw_retry() {
     assert_eq!(reply["payload"], true);
     std::fs::remove_dir_all(home).unwrap();
 }
+
+/// `settle_native_review_reuse` answers every recorded retry exactly as the
+/// separate block check followed by the spend does, and leaves the same
+/// effects behind, with the spend allowed or not.
+#[test]
+fn settling_matches_the_separate_block_check_and_spend() {
+    let vectors: Value = serde_json::from_str(VECTORS).unwrap();
+    let mut blocked = 0;
+    let mut allowed = 0;
+    for scenario in vectors["scenarios"].as_array().unwrap() {
+        let name = scenario["name"].as_str().unwrap();
+        for (flip, spend) in [(false, true), (false, false), (true, true)] {
+            let label = format!("{name} flip={flip} spend={spend}");
+            let mut rows = scenario["rows"].clone();
+            if flip {
+                for row in rows.as_array_mut().unwrap() {
+                    row["resolution_action"] = match row["resolution_action"].as_str() {
+                        Some("allow") => Value::from("block"),
+                        Some("block") => Value::from("allow"),
+                        _ => row["resolution_action"].clone(),
+                    };
+                }
+            }
+            let mut homes = Vec::new();
+            for side in ["separate", "settled"] {
+                let home = temp_home(&format!("settle-{side}-{name}-{flip}-{spend}"));
+                seed(&home.join("guard.db"), &vectors);
+                insert_rows(
+                    &Connection::open(home.join("guard.db")).unwrap(),
+                    "approval_requests",
+                    &rows,
+                );
+                homes.push(home);
+            }
+            let args = &scenario["calls"][0]["args"];
+            let expected =
+                if call(&homes[0], args, "matching_native_review_block")["payload"] == true {
+                    Value::from("blocked")
+                } else if spend && consume(&homes[0], args)["payload"] == true {
+                    Value::from("allowed")
+                } else {
+                    Value::Null
+                };
+            let mut settle_args = args.clone();
+            settle_args["spend"] = Value::Bool(spend);
+            let reply = call(&homes[1], &settle_args, "settle_native_review_reuse");
+            assert_eq!(reply["status"], "ok", "{label}: {reply}");
+            assert_eq!(reply["payload"], expected, "{label}");
+            let [separate, settled] = [&homes[0], &homes[1]].map(|home| {
+                dump(
+                    &Connection::open(home.join("guard.db")).unwrap(),
+                    "guard_continuation_effects",
+                    "effect_key",
+                )
+            });
+            assert_eq!(settled, separate, "{label}: effects");
+            blocked += usize::from(expected == "blocked");
+            allowed += usize::from(expected == "allowed");
+            for home in homes {
+                let _ = std::fs::remove_dir_all(home);
+            }
+        }
+    }
+    assert!(
+        blocked > 0 && allowed > 0,
+        "{blocked} blocked, {allowed} allowed"
+    );
+}
+
+/// The first recorded scenario's rows, with its matching allow turned into a
+/// matching block when `block` is set.
+fn settle_home(label: &str, block: bool) -> (std::path::PathBuf, Value) {
+    let vectors: Value = serde_json::from_str(VECTORS).unwrap();
+    let scenario = &vectors["scenarios"][0];
+    let mut rows = scenario["rows"].clone();
+    if block {
+        for row in rows.as_array_mut().unwrap() {
+            if row["resolution_action"] == "allow" {
+                row["resolution_action"] = Value::from("block");
+            }
+        }
+    }
+    let home = temp_home(label);
+    seed(&home.join("guard.db"), &vectors);
+    insert_rows(
+        &Connection::open(home.join("guard.db")).unwrap(),
+        "approval_requests",
+        &rows,
+    );
+    (home, scenario["calls"][0]["args"].clone())
+}
+
+/// A spend flag that is not a boolean refuses the call rather than guessing,
+/// whether the retry would match an allow or a block.
+#[test]
+fn a_malformed_spend_flag_is_refused() {
+    for block in [false, true] {
+        let (home, mut args) = settle_home(&format!("settle-malformed-spend-{block}"), block);
+        args["spend"] = Value::from("yes");
+        let reply = call(&home, &args, "settle_native_review_reuse");
+        assert_ne!(reply["status"], "ok", "block={block}: {reply}");
+        assert_eq!(
+            dump(
+                &Connection::open(home.join("guard.db")).unwrap(),
+                "guard_continuation_effects",
+                "effect_key"
+            ),
+            serde_json::json!([])
+        );
+        std::fs::remove_dir_all(home).unwrap();
+    }
+}
+
+/// Without a spend the settle only checks for a block, so a writer holding
+/// the store does not hold it up.
+#[test]
+fn a_block_check_without_a_spend_takes_no_write_lock() {
+    let (home, mut args) = settle_home("settle-block-check-lock-free", true);
+    args["spend"] = Value::Bool(false);
+    let writer = Connection::open(home.join("guard.db")).unwrap();
+    writer.execute_batch("BEGIN IMMEDIATE").unwrap();
+    let reply = call(&home, &args, "settle_native_review_reuse");
+    writer.execute_batch("ROLLBACK").unwrap();
+    assert_eq!(reply["status"], "ok", "{reply}");
+    assert_eq!(reply["payload"], "blocked", "{reply}");
+    drop(writer);
+    std::fs::remove_dir_all(home).unwrap();
+}

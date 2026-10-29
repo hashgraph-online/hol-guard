@@ -106,50 +106,38 @@ def test_a_block_only_review_still_downloading_stays_queued(tmp_path: Path, monk
     assert _respond(tmp_path) is None
 
 
-SCRIPT_FREE = {"name": "zod", "scriptFreeRegistryInstall": True}
-
-
 @pytest.mark.parametrize(
-    ("decision", "reasons", "packages", "expected"),
+    ("settlement", "expected"),
     [
-        ("allow", (), (), {"rendered": "allow"}),
-        ("monitor", (), (SCRIPT_FREE,), {"rendered": "allow"}),
-        ("monitor", (), (SCRIPT_FREE, {"name": "left-pad"}), None),
-        ("monitor", (), ({"name": "zod", "scriptFreeRegistryInstall": "true"},), None),
-        ("monitor", (), (), None),
+        (("allow", None), {"rendered": "allow"}),
         (
-            "ask",
-            ({"code": "package_lifecycle_scripts_enabled", "message": "Rerun with the flags."},),
-            (),
+            ("guide", "Rerun with the flags."),
             {"rendered": "deny", "reason": "Rerun with the flags.", "prompted": False},
         ),
         (
-            "block",
-            ({"code": "package_known_malicious", "message": "zod@9.9.9 is malicious."},),
-            (SCRIPT_FREE,),
+            ("block", "zod@9.9.9 is malicious."),
             {"rendered": "deny", "reason": "zod@9.9.9 is malicious.", "prompted": False},
         ),
-        ("ask", ({"code": "unidentified_package", "message": "Unknown package."},), (), None),
+        (("review", None), None),
     ],
 )
 @pytest.mark.parametrize("may_allow", [True, False])
-def test_evaluator_verdict_settles_the_review(
+def test_the_resident_settlement_settles_the_review(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    decision: str,
-    reasons: tuple,
-    packages: tuple,
+    settlement: tuple[str, str | None],
     expected: dict | None,
     may_allow: bool,
 ) -> None:
+    """Which verdict settles a review is the resident's call; the Rust tests cover it."""
+
     evaluated: list[object] = []
     monkeypatch.setattr(package_review, "package_review_plan", _plan((ARTIFACT, may_allow)))
     monkeypatch.setattr(
         package_review,
         "_evaluate",
         lambda _store, *, artifact, workspace: (
-            evaluated.append((artifact, workspace))
-            or SimpleNamespace(decision=decision, reasons=reasons, packages=packages)
+            evaluated.append((artifact, workspace)) or SimpleNamespace(review_settlement=settlement)
         ),
     )
     monkeypatch.setattr(
@@ -166,7 +154,7 @@ def test_evaluator_verdict_settles_the_review(
     assert evaluated == [(ARTIFACT, tmp_path)]
     # Without the resident's npm proof only a block applies; stopping a
     # command runs nothing.
-    assert response == (expected if may_allow or decision == "block" else None)
+    assert response == (expected if may_allow or settlement[0] == "block" else None)
 
 
 class TestEvaluatorRule:
@@ -200,6 +188,7 @@ class TestEvaluatorRule:
         # Watched, not trusted: the request is still recorded as evidence.
         assert evaluation.decision == "monitor", evaluation.reasons
         assert [package.get("scriptFreeRegistryInstall") for package in evaluation.packages] == [True]
+        assert evaluation.review_settlement == ("allow", None)
 
     def test_missing_flags_get_rerun_guidance(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         review_package_signals(tmp_path / "home")
@@ -209,6 +198,9 @@ class TestEvaluatorRule:
 
         assert evaluation.decision == "ask"
         assert "package_lifecycle_scripts_enabled" in self._codes(evaluation)
+        action, guidance = evaluation.review_settlement
+        assert action == "guide"
+        assert guidance in {str(reason.get("message")) for reason in evaluation.reasons}
 
     @pytest.mark.parametrize("npm_version", [None, "11.6.2", "11.8.9"])
     def test_npm_without_allow_git_keeps_review_without_guidance(
@@ -219,6 +211,7 @@ class TestEvaluatorRule:
 
         assert evaluation.decision == "ask"
         assert "package_lifecycle_scripts_enabled" not in self._codes(evaluation)
+        assert evaluation.review_settlement == ("review", None)
 
     @staticmethod
     def _project(tmp_path: Path, manifest: dict[str, object]) -> None:
@@ -235,6 +228,7 @@ class TestEvaluatorRule:
 
         assert evaluation.decision == "monitor", evaluation.reasons
         assert [package.get("scriptFreeRegistryInstall") for package in evaluation.packages] == [True]
+        assert evaluation.review_settlement == ("allow", None)
 
     @pytest.mark.parametrize("npm_version", ["10.9.9", "11.9.0"])
     @pytest.mark.parametrize("dependency", ["github:someone/left", "file:../left", "npm:zod@3"])
@@ -247,6 +241,7 @@ class TestEvaluatorRule:
 
         assert evaluation.decision == "ask"
         assert not any(package.get("scriptFreeRegistryInstall") for package in evaluation.packages)
+        assert evaluation.review_settlement[0] != "allow"
 
     def test_older_npm_guidance_asks_only_for_ignore_scripts(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -276,6 +271,7 @@ class TestEvaluatorRule:
 
         assert evaluation.decision != "allow"
         assert not any(package.get("scriptFreeRegistryInstall") for package in evaluation.packages)
+        assert evaluation.review_settlement[0] != "allow"
 
     def test_project_npmrc_registry_keeps_review(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         workspace = tmp_path / "workspace"
@@ -286,3 +282,44 @@ class TestEvaluatorRule:
 
         assert evaluation.decision != "allow"
         assert not any(package.get("scriptFreeRegistryInstall") for package in evaluation.packages)
+        assert evaluation.review_settlement[0] != "allow"
+
+
+@pytest.mark.parametrize(
+    "settlement",
+    [
+        None,
+        "allow",
+        {},
+        {"action": "allow"},
+        {"action": "allow", "reason": []},
+        {"action": "allow", "reason": "unexpected"},
+        {"action": ["allow"], "reason": None},
+        {"action": {"allow": True}, "reason": None},
+        {"action": "block", "reason": ""},
+        {"action": "guide", "reason": None},
+        {"action": "settle", "reason": None},
+    ],
+)
+def test_an_unreadable_settlement_leaves_the_review_standing(settlement: object) -> None:
+    assert native_supply_chain_eval._review_settlement(settlement, "monitor") == ("review", None)
+
+
+@pytest.mark.parametrize("settlement", [None, {"action": "allow"}, {"action": ["block"], "reason": "x"}])
+def test_an_unreadable_settlement_never_weakens_a_block(settlement: object) -> None:
+    action, reason = native_supply_chain_eval._review_settlement(settlement, "block")
+    assert action == "block"
+    assert reason
+
+
+@pytest.mark.parametrize(
+    ("settlement", "expected"),
+    [
+        ({"action": "allow", "reason": None}, ("allow", None)),
+        ({"action": "review", "reason": None}, ("review", None)),
+        ({"action": "block", "reason": "stop"}, ("block", "stop")),
+        ({"action": "guide", "reason": "rerun"}, ("guide", "rerun")),
+    ],
+)
+def test_a_well_formed_settlement_is_read_as_sent(settlement: object, expected: tuple[str, str | None]) -> None:
+    assert native_supply_chain_eval._review_settlement(settlement, "monitor") == expected

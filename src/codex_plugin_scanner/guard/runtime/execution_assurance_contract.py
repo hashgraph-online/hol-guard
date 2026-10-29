@@ -22,10 +22,9 @@ import math
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import Enum
-from typing import Final, TypeVar, cast
+from typing import Final, cast
 
 EXECUTION_ASSURANCE_SCHEMA_VERSION: Final = "1.0.0-alpha.1"
-_T = TypeVar("_T")
 
 _SHA256_HEX_LENGTH: Final = 64
 _MAX_FIELD_LENGTH: Final = 512
@@ -50,12 +49,6 @@ def _require_sha256(value: object, label: str) -> str:
 def _require_enum(value: object, enum_type: type[Enum], label: str) -> None:
     if not isinstance(value, enum_type):
         raise ValueError(f"{label} must be a {enum_type.__name__}")
-
-
-def _require_instance(value: object, expected_type: type[_T], label: str) -> _T:
-    if not isinstance(value, expected_type):
-        raise ValueError(f"{label} must be a {expected_type.__name__}")
-    return value
 
 
 def _require_bool(value: object, label: str) -> bool:

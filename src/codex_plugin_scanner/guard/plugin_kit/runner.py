@@ -267,8 +267,35 @@ def run(
     return Completed(completed.returncode, output)
 
 
-def stdin_is_terminal() -> bool:
+_ON_WINDOWS = os.name == "nt"
+
+
+def stream_is_terminal(stream: TextIO | None) -> bool:
+    """True when a person can see or type into `stream`.
+
+    On Windows `isatty()` is also true for the NUL device, which is what CI
+    and `< NUL` give a program, so Guard also asks for the console mode."""
+
     try:
-        return sys.stdin.isatty()
-    except (AttributeError, ValueError):
+        if stream is None or not stream.isatty():
+            return False
+        return not _ON_WINDOWS or _windows_console(stream.fileno())
+    except (AttributeError, ValueError, OSError):
         return False
+
+
+def _windows_console(descriptor: int) -> bool:
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    get_console_mode = kernel.GetConsoleMode
+    get_console_mode.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+    get_console_mode.restype = wintypes.BOOL
+    mode = wintypes.DWORD()
+    return bool(get_console_mode(msvcrt.get_osfhandle(descriptor), ctypes.byref(mode)))
+
+
+def stdin_is_terminal() -> bool:
+    return stream_is_terminal(sys.stdin)

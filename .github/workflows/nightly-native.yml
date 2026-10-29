@@ -198,7 +198,6 @@ jobs:
           HOL_GUARD_NATIVE_BINARY: ${{ env.RUNTIME_BINARY }}
         run: >-
           uv run --no-sync pytest
-          ci/native_runtime/test_command_model_resident.py
           ci/native_runtime/test_guard_native_runtime_binary.py
           --tb=short
       - name: Compare Python and Rust decisions

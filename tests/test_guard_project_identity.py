@@ -1,22 +1,36 @@
 from __future__ import annotations
 
+import dataclasses
 import subprocess
 from pathlib import Path
 
-from pytest import MonkeyPatch
+import pytest
 
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.policy_bundle_decisions import build_policy_bundle_decisions
 from codex_plugin_scanner.guard.policy_bundle_parser import policy_bundle_acceptance_checkpoint
 from codex_plugin_scanner.guard.project_identity import (
+    ProjectIdentityError,
     enrich_project_identity_metadata,
     is_portable_project_identity,
     resolve_portable_project_identity,
     resolve_project_identity_from_metadata,
 )
+from codex_plugin_scanner.guard.review_contracts import (
+    GuardReviewContractError,
+    build_local_review_request_claim,
+)
+from codex_plugin_scanner.guard.runtime.exact_cloud_review import _oauth_metadata
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.guard_exact_cloud_review_support import (
+    add_review_request,
+    connected_exact_review_store,
+    review_request,
+)
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
 from tests.policy_store_support import resolve_policy
+
+pytestmark = pytest.mark.usefixtures("native_approval_reuse_runtime")
 
 _NOW = "2026-08-07T20:00:00+00:00"
 _WORKSPACE_ID = "workspace-solo-project-memory"
@@ -179,10 +193,7 @@ def _activate_project_memory_bundle(
     assert applied is not None
 
 
-def test_portable_project_identity_matches_across_clone_locations(
-    tmp_path: Path,
-    monkeypatch: MonkeyPatch,
-) -> None:
+def test_portable_project_identity_matches_across_clone_locations(tmp_path: Path) -> None:
     first = tmp_path / "first" / "repo"
     second = tmp_path / "second" / "repo"
     other_port = tmp_path / "other-port" / "repo"
@@ -195,11 +206,6 @@ def test_portable_project_identity_matches_across_clone_locations(
     _init_repository(implicit_default, "https://github.com/Owner/Repository.git")
     _init_repository(explicit_default, "https://github.com:443/owner/repository.GIT")
 
-    def reject_subprocess(*args: object, **kwargs: object) -> None:
-        del args, kwargs
-        raise AssertionError("Portable project identity must not launch a subprocess")
-
-    monkeypatch.setattr(subprocess, "run", reject_subprocess)
     first_identity = resolve_portable_project_identity(first)
     second_identity = resolve_portable_project_identity(second)
     other_port_identity = resolve_portable_project_identity(other_port)
@@ -472,3 +478,130 @@ def test_direct_portable_selector_does_not_apply_one_shot_permission(tmp_path: P
     assert first is None
     assert second is None
     assert third is None
+
+
+def _unsettled_workspace(tmp_path: Path) -> Path:
+    """A workspace name no reader can settle: a link that names itself.
+
+    Resolving it answers ``ELOOP`` rather than plain absence, so the resident
+    reports that it could not read the workspace instead of reporting that
+    the workspace belongs to no project.
+    """
+    workspace = tmp_path / "loop"
+    workspace.symlink_to(workspace)
+    return workspace
+
+
+def test_unsettled_workspace_is_not_read_as_a_workspace_without_a_project(tmp_path: Path) -> None:
+    workspace = _unsettled_workspace(tmp_path)
+    plain = tmp_path / "plain"
+    plain.mkdir()
+
+    with pytest.raises(ProjectIdentityError):
+        resolve_portable_project_identity(workspace)
+    assert resolve_portable_project_identity(plain) is None
+
+
+def test_missing_workspace_directory_still_reads_the_repository_above_it(tmp_path: Path) -> None:
+    repository = tmp_path / "repo"
+    _init_repository(repository, "https://example.invalid/owner/repository.git")
+    removed = repository / "apps" / "removed"
+
+    identity = resolve_portable_project_identity(removed)
+
+    assert identity is not None
+    assert identity != resolve_portable_project_identity(repository)
+
+
+def test_relative_workspace_resolves_against_the_calling_process_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repository = tmp_path / "repo"
+    _init_repository(repository, "https://example.invalid/owner/repository.git")
+    monkeypatch.chdir(repository)
+
+    relative = resolve_portable_project_identity("subproject")
+
+    assert relative is not None
+    assert relative == resolve_portable_project_identity(repository / "subproject")
+    assert relative != resolve_portable_project_identity(repository)
+
+
+def test_nested_relative_workspace_resolves_under_the_calling_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repository = tmp_path / "repo"
+    _init_repository(repository, "https://example.invalid/owner/repository.git")
+    nested = repository / "apps" / "first"
+    nested.mkdir(parents=True)
+    monkeypatch.chdir(repository)
+
+    relative = resolve_portable_project_identity("apps/first")
+
+    assert relative is not None
+    assert relative == resolve_portable_project_identity(nested)
+    assert relative != resolve_portable_project_identity(repository)
+
+
+def test_unsettled_workspace_keeps_a_saved_block_and_drops_a_saved_allow(tmp_path: Path) -> None:
+    workspace = _unsettled_workspace(tmp_path)
+
+    allowing = GuardStore(tmp_path / "guard-allow")
+    _activate_project_memory_bundle(
+        allowing,
+        _signed_project_memory_bundle(("local-allow", "allow", str(workspace))),
+    )
+    blocking = GuardStore(tmp_path / "guard-block")
+    _activate_project_memory_bundle(
+        blocking,
+        _signed_project_memory_bundle(("local-block", "block", str(workspace))),
+    )
+
+    # A lookup that could not read the workspace's portable half composed the
+    # local half alone, so only a decision that holds the caller back survives.
+    assert (
+        resolve_policy(
+            allowing,
+            "codex",
+            "tool:read",
+            workspace=str(workspace),
+            now=_NOW,
+            consume_one_shot=False,
+        )
+        is None
+    )
+    assert (
+        resolve_policy(
+            blocking,
+            "codex",
+            "tool:read",
+            workspace=str(workspace),
+            now=_NOW,
+            consume_one_shot=False,
+        )
+        == "block"
+    )
+
+
+def test_review_claim_refuses_a_workspace_nothing_settles(tmp_path: Path) -> None:
+    workspace = _unsettled_workspace(tmp_path)
+    repository = tmp_path / "repo"
+    _init_repository(repository, "https://example.invalid/owner/repository.git")
+    store = connected_exact_review_store(tmp_path)
+    settled = dataclasses.replace(review_request("settled-workspace"), workspace=str(repository))
+    unsettled = dataclasses.replace(review_request("unsettled-workspace"), workspace=str(workspace))
+    add_review_request(store, settled)
+    add_review_request(store, unsettled)
+    oauth = _oauth_metadata(store)
+
+    settled_row = store.get_approval_request("settled-workspace")
+    unsettled_row = store.get_approval_request("unsettled-workspace")
+    assert isinstance(settled_row, dict)
+    assert isinstance(unsettled_row, dict)
+
+    # Creation and validation hash the same claim, so a claim built without
+    # the identity one of them would have carried rejects a sound approval.
+    claim = build_local_review_request_claim(request_row=settled_row, oauth=oauth, store=store)
+    assert claim["projectIdentity"] == resolve_portable_project_identity(repository)
+    with pytest.raises(GuardReviewContractError):
+        build_local_review_request_claim(request_row=unsettled_row, oauth=oauth, store=store)

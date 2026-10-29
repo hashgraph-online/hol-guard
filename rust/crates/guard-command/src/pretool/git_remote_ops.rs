@@ -380,6 +380,34 @@ pub(super) fn verified_refresh(
     .unwrap_or(false)
 }
 
+/// Whether a later read routed by `later` takes no configuration from the
+/// work tree, so an earlier step that rewrote tracked files (a checkout, a
+/// reset, a stash) cannot have changed what the read obeys. It is the proof a
+/// pull's fast-forward needs in [`verified_refresh`], asked of any step.
+pub(super) fn work_tree_outside_configuration(
+    later: &CommandSegmentV1,
+    context: super::PathContext<'_>,
+    deadline: Option<Instant>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> bool {
+    let (Some(executable), Some(route)) = (later.executable.as_deref(), read_route(later, context))
+    else {
+        return false;
+    };
+    let key = (
+        format!("\0tree-configuration:{executable}"),
+        vec![route.to_string_lossy().into_owned()],
+        context.home_dir.map(str::to_owned),
+        context.cwd.map(str::to_owned),
+        false,
+    );
+    super::git_probe::memoized(key, || {
+        let probe = Probe::new(executable, &[], context, deadline, execution_environment)?;
+        Some(work_tree_settles(&probe, &route))
+    })
+    .unwrap_or(false)
+}
+
 /// The directory the later read runs Git in: the segment's working directory
 /// folded through its leading `-C` routes, as Git folds them. `None` when a
 /// leading option could send the read somewhere this cannot name, which

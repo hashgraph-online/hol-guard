@@ -1,15 +1,33 @@
 # HOL Guard native runtime hardening TODO
 
-Status: canonical follow-up backlog for `release/3.0`.
+Status: canonical follow-up backlog, tracked on `main`. Reconciled 2026-10-29
+against `main` at `6a319266c3`. 3.58.0 is the shipped release; 3.59.0 is open in
+its release PR.
+
+The program was originally planned on a `release/3.0` branch. It did not land
+that way: every item below that is marked done shipped through ordinary PRs on
+`main`. `release/3.0` is now 3,629 commits behind `main` and holds 8 commits
+that were never merged; it is historical, not a working branch.
 
 ## Execution rules
 
-- Work from the latest `release/3.0`; never merge it into `main` here.
-- Eligible PostToolUse uses verified bundled Rust in source-default `auto`; explicit `off` and pure-Python fallback remain rollback paths, while PreToolUse stays Python-authoritative.
-- Every task needs code, tests, installed-artifact evidence, and matching documentation.
+- Work from `main`. `release/3.0` is frozen history, not a base.
+- PreToolUse is native-authoritative. `runtime_transition_admission.py` admits a
+  native runtime only after the native edge answers a known-allow and a
+  known-deny probe and its own receipts reconcile against the runtime identity,
+  policy generation and policy digest. Python checks receipts; it never
+  recomputes a verdict.
+- Rust owns authority. Retained Python is control, transport, presentation or
+  non-authoritative persistence, never a second evaluator.
+- Native unavailability fails closed. `hook_bridge_fallback.rs` records every
+  hand-off to Python so the remaining count is visible and can be driven to zero.
+- Every task needs code, tests, installed-artifact evidence, and matching
+  documentation.
 - Any security-lowering Python/Rust mismatch blocks authority.
-- Never persist raw commands, prompts, output, paths, endpoints, database strings, environment values, secrets, tokens, or proofs.
-- Delete replaced dead Python code; retain only named supported Python control/reference paths exercised in CI.
+- Never persist raw commands, prompts, output, paths, endpoints, database
+  strings, environment values, secrets, tokens, or proofs.
+- Delete replaced dead Python code; retain only named supported Python
+  control/reference paths exercised in CI.
 
 ## PR 1: Source of truth and executable contracts
 
@@ -26,40 +44,40 @@ Status: canonical follow-up backlog for `release/3.0`.
 
 ## PR 2: Protocol v2, authentication, and bounded admission
 
-- [ ] NRH-T020 define request envelope with protocol, request ID/digest, operation, size, deadline, runtime/rule/policy identities;
-- [ ] NRH-T021 define request-bound response envelope and fixed overload response;
-- [ ] NRH-T022 reject duplicate/trailing/invalid UTF-8/deep/wide/overlong/unsupported structures before evaluation;
-- [ ] NRH-T023 enforce operation-specific frame caps before allocation;
-- [ ] NRH-T024 enforce authentication/header/payload/evaluation/write deadlines;
-- [ ] NRH-T025 add cross-language golden vectors and strict Python response binding;
-- [ ] NRH-T026 add POSIX mutual authentication while preserving `0700` directory and `0600` socket defenses;
-- [ ] NRH-T027 replace handwritten first-party HMAC with an audited minimal crate;
-- [ ] NRH-T028 rotate/clear per-process auth material and prove it never reaches argv/env/files/logs/payloads;
-- [ ] NRH-T029 separate small handshake and authentication-failure budgets;
-- [ ] NRH-T030 remove blocking permit wait from accept loop;
-- [ ] NRH-T031 use fixed workers and bounded queue/executor;
-- [ ] NRH-T032 reserve lifecycle capacity, use deadline-aware admission and RAII release;
-- [ ] NRH-T033 handle transient accept errors with bounded backoff and fatal corruption with explicit exit;
-- [ ] NRH-T034 reject poisoned socket paths and remove only verified stale sockets;
-- [ ] NRH-T035 add malformed frame, slowloris, auth flood, low-descriptor, panic, capacity, and no-busy-spin tests.
+- [x] NRH-T020 define request envelope with protocol, request ID/digest, operation, size, deadline, runtime/rule/policy identities — `resident_protocol.rs` (`ResidentRequestV1`, `ResidentOperationV1`, `capabilities()`);
+- [x] NRH-T021 define request-bound response envelope and fixed overload response — `resident_protocol.rs` (`encode_response`, `error_response`, `safe_error_response`), `resident_transport.rs::write_overload` answering the fixed `native_overloaded`;
+- [x] NRH-T022 reject duplicate/trailing/invalid UTF-8/deep/wide/overlong/unsupported structures before evaluation — `strict_json.rs`, `strict_json_value.rs`, reached through `resident_protocol::strict_json_value`;
+- [x] NRH-T023 enforce operation-specific frame caps before allocation — `lib.rs` (`AUTHENTICATED_PREFETCH_BYTES`, per-operation caps) read before the payload is accepted;
+- [x] NRH-T024 enforce authentication/header/payload/evaluation/write deadlines — `lib.rs` (`AUTH_TIMEOUT`, `HEADER_TIMEOUT`, `PAYLOAD_TIMEOUT`, `RESPONSE_TIMEOUT`), applied in `resident_transport.rs`; `hardening.rs::TOTAL_REQUEST_BUDGET` bounds the whole request;
+- [x] NRH-T025 add cross-language golden vectors and strict Python response binding — `edge.rs::REQUEST_BINDING_FEATURE` (`edge-request-binding-v1`, published by `resident_protocol.rs`) promises that the edge echoes the envelope's request id on the result and on the receipt alike, so `native_hook_edge.py` mints an id for every review a caller gave none and reads an answer as this review's verdict only when both ids name it; anything else is recorded as `native_hook_edge_invalid_response` and fails closed. `tests/fixtures/edge-request-binding.v1.json` carries the vectors both languages read: `edge_request_binding_tests.rs` pins that every one of them is a well-formed edge answer, so shape alone cannot tell them apart, and `tests/test_edge_request_binding.py` pins which ones a review accepts;
+- [x] NRH-T026 add POSIX mutual authentication while preserving `0700` directory and `0600` socket defenses — `resident_peer_identity.rs` reads the peer uid/gid from the kernel (`SO_PEERCRED` on Linux, `getpeereid` elsewhere); `resident_endpoint.rs` keeps the `0700` directory and proves cleanup does not follow a replacement symlink;
+- [x] NRH-T027 replace handwritten first-party HMAC with an audited minimal crate — `resident_auth_crypto.rs`, `daemon_policy_authority.rs`, `package_intent_parser.rs` and `local_supply_chain.rs` compute their tags with the RustCrypto `hmac` crate, each pinned to RFC 4231 or Python-computed vectors. `guard-policy-snapshot/src/policy_snapshot_crypto.rs` deliberately keeps its own implementation: it zeroizes its key block, pads and intermediate digest, which the crate does not;
+- [x] NRH-T028 rotate/clear per-process auth material and prove it never reaches argv/env/files/logs/payloads — `managed_resident_client_request.rs` mints a fresh token for every generation and hands it to the child over stdin, never through an argument or an environment entry; `managed_resident_containment.rs::hex_token` and `managed_resident_supervisor.rs::hex_token` clear the rendering each handoff writes, and `resident_transport_service.rs::read_resident_auth_token` and `resident_state.rs::token_from_state` clear what the child reads back; every one of those buffers is given its full size before the key is written into it, so none of them grows and frees a partly filled copy that the `Zeroizing` wrapper never owned; `ResidentState` renders `token_hex` as `<redacted>` so a formatted state cannot disclose the key. The published state file is the one file that carries the token, by design, written through `private_file` so only its owner can read it;
+- [x] NRH-T029 separate small handshake and authentication-failure budgets — `lib.rs` sizes the handshake lane (`AUTH_WORKERS`, `AUTH_QUEUE_CAPACITY`, `AUTH_QUEUE_CAPACITY_MAX`) apart from the evaluation lane (`EVALUATION_WORKERS`, `EVALUATION_QUEUE_CAPACITY`);
+- [x] NRH-T030 remove blocking permit wait from accept loop — `resident_transport_service.rs` accepts and hands off; `resident_transport.rs` answers `native_overloaded` on `TrySendError::Full` rather than blocking an auth worker;
+- [x] NRH-T031 use fixed workers and bounded queue/executor — `resident_worker_pool.rs` (`spawn_workers`, `drain`) over the clamped counts in `lib.rs`;
+- [x] NRH-T032 reserve lifecycle capacity, use deadline-aware admission and RAII release — `native_runtime_admission.rs`, `policy_enforcement_admission.rs`, `hardening.rs::request_expired`;
+- [x] NRH-T033 handle transient accept errors with bounded backoff and fatal corruption with explicit exit — `hardening.rs` (`classify_io_error`, `accept_retry_delay` between 5 ms and 1 s); any unclassified error exits with `native_socket_accept_failed`;
+- [x] NRH-T034 reject poisoned socket paths and remove only verified stale sockets — `resident_endpoint.rs::remove_if_same`, with tests that a replacement socket survives and a replacement symlink is not followed;
+- [x] NRH-T035 add malformed frame, slowloris, auth flood, low-descriptor, panic, capacity, and no-busy-spin tests — descriptor pressure, interrupted accept, idle-poll and capacity/overload cases live in `hardening.rs` and `resident_transport_continuation_tests.rs`; `resident_transport_hardening_tests.rs` adds the malformed-frame, stalled-client, drip-fed-header, drip-fed-payload and auth-flood cases; `resident_worker_pool.rs` pins the panic case, that a job which panics loses its answer and not the worker serving the queue;
 
 ## PR 3: Supervision, fallback budgeting, and daemon fail-safe
 
-- [ ] NRH-T040 add explicit native health states and child-generation identity;
-- [ ] NRH-T041 retain child handle and detect exit without waiting for another hook;
-- [ ] NRH-T042 prewarm outside the first hook;
-- [ ] NRH-T043 add authenticated health operation outside normal evaluation capacity;
-- [ ] NRH-T044 restart asynchronously with single-flight, exponential backoff, jitter, bounded budget, and half-open probe;
-- [ ] NRH-T045 add crash-loop circuit and zero-downtime rotation;
-- [ ] NRH-T046 bind in-flight responses to their serving generation;
-- [ ] NRH-T047 add global one-shot semaphore/rate-limit/cooldown and bounded Python fallback queue;
-- [ ] NRH-T048 distinguish overload/unavailable/incompatible/auth/timeout/invalid/crash categories;
-- [ ] NRH-T049 prove 64 failures cannot create 64 processes;
-- [ ] NRH-T050 implement deterministic fail-safe behavior for every hook when daemon is unavailable;
-- [ ] NRH-T051 allow only authenticated current emergency-safe profile during daemon failure;
-- [ ] NRH-T052 add bounded daemon restart reservation and preserve approval/receipt/activity ordering;
-- [ ] NRH-T053 add panic/kill/hang/stale endpoint/port/socket/binary/manifest/policy/disk/permission/crash-loop tests;
-- [ ] NRH-T054 add privacy-safe aggregate lifecycle journal and critical health state.
+- [x] NRH-T040 add explicit native health states and child-generation identity — `native_runtime_resilience.rs` (`NativeRuntimeHealthSnapshot`, the `native_record_*` transitions), `policy_integrity_generation.rs`, `managed_resident_lease_identity.rs`;
+- [x] NRH-T041 retain child handle and detect exit without waiting for another hook — `managed_resident_supervisor.rs`, `managed_resident_exit.rs`;
+- [x] NRH-T042 prewarm outside the first hook — `claude_session_start.rs` spawns this same runtime as a detached `resident-prewarm --state-dir <home>/native-runtime` before the lane answers, so the start happens while the user is still reading their prompt and both the fast path and the Python hand-off warm; `managed_resident_prewarm.rs` leaves a resident another client already holds alone, otherwise takes a client lease of its own, sends the `health` operation, which decides nothing, and holds that lease for `PREWARM_HOLD` so `spawn_owner_lease_watcher` does not retire the resident a second later, ending the hold early once this runtime is no longer installed;
+- [x] NRH-T043 add authenticated health operation outside normal evaluation capacity — `resident_health_op.rs` answers `resident_health` on the reserved control lane (`resident_control_dispatch.rs`), after the frame digest is verified, with the lane shape from `resident_transport::lane_shape` and a process-wide overload counter; `native_resident_health.py` forwards it and `cli/doctor_native_runtime.py` asks a resident that is already serving;
+- [x] NRH-T044 restart asynchronously with single-flight, exponential backoff, jitter, bounded budget, and half-open probe — `resident_restart_budget.rs` (`RESTART_BACKOFF_BASE_MS`, `RESTART_BACKOFF_MAX_MS`, `MAX_RESTARTS_PER_WINDOW`, the budget lock for single flight), half-open probe in `native_runtime_resilience.rs`;
+- [x] NRH-T045 add crash-loop circuit and zero-downtime rotation — the restart window above opens the circuit (`circuit_open` on the health snapshot); `managed_resident_handoff.rs` rotates under `HANDOFF_SHUTDOWN_TIMEOUT` while client heartbeats stay fresh;
+- [x] NRH-T046 bind in-flight responses to their serving generation — `resident_state_supersession.rs`, `managed_resident_lease_retirement.rs`;
+- [x] NRH-T047 add global one-shot semaphore/rate-limit/cooldown and bounded Python fallback queue — `native_runtime_resilience.rs` (`OneshotLease`, `native_oneshot_lease_acquire`);
+- [x] NRH-T048 distinguish overload/unavailable/incompatible/auth/timeout/invalid/crash categories — the `native_record_*` family separates overload, resident failure, one-shot failure and integrity failure, each with its own reason label;
+- [x] NRH-T049 prove 64 failures cannot create 64 processes — `resident_restart_budget_flood_tests.rs` charges the budget the way a spawn does and proves the three shapes a crash loop takes: 64 failures in a tight retry loop start three residents and retrying faster buys nothing back, a loop patient enough to wait out every backoff is held to a rate (against a simulated clock that rolls the restart window the way real time does, 64 failures buy 38 residents over five minutes rather than 64 processes), and 64 clients that miss the resident at once are charged one at a time under the budget lock;
+- [x] NRH-T050 implement deterministic fail-safe behavior for every hook when daemon is unavailable — `hook_bridge_fallback.rs` settles the hook and records the hand-off with harness and fixed reason only;
+- [x] NRH-T051 allow only authenticated current emergency-safe profile during daemon failure — `hook_direct_emergency_safe.rs` answers the profile from the resident, against the current published snapshot under its own guard home, and continues only the two ratified read-only Guard commands; `bounded_hook_bridge.rs` asks for it once its daemon has failed and it is about to pause the call, with `emergency_safe_only` on the `hook_direct` request, and writes what the resident continued with or pauses the hook as before;
+- [x] NRH-T052 add bounded daemon restart reservation and preserve approval/receipt/activity ordering — `hook_bridge_daemon_reservation.rs` bounds a burst of hooks that meet one dead daemon to a single start command, and every hook that does not own the reservation waits for that daemon with its whole budget; ordering was already preserved by `hook_direct_evidence.rs`, which hands approvals, receipts and activity to the harness in queue order behind a cursor the harness acknowledges;
+- [ ] NRH-T053 add panic/kill/hang/stale endpoint/port/socket/binary/manifest/policy/disk/permission/crash-loop tests — stale endpoint, owner lock, retry and live failure cases exist (`managed_resident_live_failure_tests.rs`, `managed_resident_owner_lock_tests.rs`, `resident_state_discovery_tests.rs`), the crash-loop case landed with T049 in `resident_restart_budget_flood_tests.rs`, and the dead-port and silent-handshake cases are in `managed_resident_live_failure_tests.rs`; the kill case and the unwritable-scope permission case joined them there, and the unix socket cases (absent, replaced by a regular file, an address longer than `sun_path`, and an owner whose start marker moved) are in `resident_client_tests.rs`; panic, binary, manifest, policy and disk-exhaustion are open;
+- [x] NRH-T054 add privacy-safe aggregate lifecycle journal and critical health state — `resident_lifecycle_journal.rs` keeps the last day of counts (starts, the three ways a run ends, starts the restart budget refused) in hourly buckets under its own lock, so an hour leaves the day on its own rather than taking a recent failure with it, with a derived `healthy`/`degraded`/`critical` state. Written best effort from the completed spawn and the supervised exit, read by `hol-guard-runtime resident-health --state-dir`. The shareable artifact is that command's snapshot: counts, a fixed event code read back as a closed enum, and ages in seconds, so it can be shown to a user or carried in a support bundle unredacted. The file behind it keeps the same counts against hourly keys and stays in the private state directory.
 
 ## PR 4: Cross-platform installed-wheel and resource gates
 
@@ -72,6 +90,11 @@ Status: canonical follow-up backlog for `release/3.0`.
 - [ ] NRH-T066 add Linux static, path walk, bind/overlay, namespace/container, FD/cgroup/noexec/read-only/stale socket cases;
 - [ ] NRH-T067 make explicit Linux arm64 and musl support decisions;
 - [ ] NRH-T068 emit aggregate-only evidence and scan artifacts for prohibited data.
+
+Partial coverage exists today in `nightly-native.yml`, `release-native-wheel.yml`,
+`release-native-determinism.yml`, `mcp-amd64-native-validation.yml` and
+`platform-arm-inventory.yml`. None of them is yet the equivalent-suite matrix
+these items ask for.
 
 ## PR 5: Catastrophic-risk effect and detector parity
 
@@ -88,53 +111,62 @@ Status: canonical follow-up backlog for `release/3.0`.
 - [ ] NRH-T090 add destructive production DB, migration, backup, cloud DB, cluster/namespace/bucket/IAM/secret/resource-group effects;
 - [ ] NRH-T091 add Guard tampering and flood-then-retry effects;
 - [ ] NRH-T092 require 100% pause/deny on approved catastrophic corpora, zero unsafe downgrade, and safe-corpus false-pause <0.5%;
-- [ ] NRH-T093 keep uncertain dangerous commands paused and native PreToolUse allow authority disabled.
+- [x] NRH-T093 retired. It asked to keep native PreToolUse allow authority disabled. The hot path moved to Rust and PreToolUse is native-authoritative; `runtime_transition_admission.py` proves a candidate runtime against a known-allow and a known-deny probe before admitting it. The Gauntlet and the benign gate, not this item, now hold the line on false pauses.
+
+The command-effect side of this section is largely live in `guard-command`
+(`local_supply_chain.rs`, `package_intent_parser.rs`, the `pretool/` route
+modules). What is open is the versioned effect DTO, the corpus and the
+measured parity gate, not the detection itself.
 
 ## PR 6: DX, observability, repair, and dead-code cleanup
 
-- [ ] NRH-T100 add stable native status model for CLI/dashboard/Desktop/MDM;
-- [ ] NRH-T101 add `hol-guard doctor --native` and `hol-guard runtime status --json`;
-- [ ] NRH-T102 add idempotent native lifecycle repair and clear diagnosis for noexec/wrong wheel/unsupported/manifest/permission/stale endpoint/circuit/daemon;
-- [ ] NRH-T103 add bounded aggregate metrics for latency/size/cost/queue/overload/auth/fallback/timeout/crash/restart/circuit/mismatch;
-- [ ] NRH-T104 add support-bundle redaction and privacy tests;
+- [x] NRH-T100 add stable native status model for CLI/dashboard/Desktop/MDM — `native_runtime_resilience.rs::NativeRuntimeHealthSnapshot`, surfaced through `native_runtime.py::native_runtime_health`;
+- [x] NRH-T101 add `hol-guard doctor --native` and `hol-guard runtime status --json` — `doctor_native_runtime.py::native_runtime_section` builds the report from a passive availability probe, the on-disk resident presence every install on the account shares, and this process's counters; `commands_parser_policy.py` carries the `--native` flag (mutually exclusive with `--repair`, which would change local state), and `runtime_posture_command.py` adds the `status` subcommand with `--json`;
+- [x] NRH-T102 add idempotent native lifecycle repair and clear diagnosis for noexec/wrong wheel/unsupported/manifest/permission/stale endpoint/circuit/daemon — `codex_hook_repair_native.py` and the protection repair page cover part of this. The diagnosis half is done: `doctor_native_diagnosis.py::native_runtime_diagnosis` turns every reason code `native_runtime.py` can report, and the state of each install slot, into a summary and one repair action, `doctor_native_runtime.py::native_runtime_section` carries it as `diagnosis`, and `runtime_posture_command.py::_render_diagnosis` prints it under the reason it explains. Slots are named by role, never by path, so a report can be pasted into an issue. The repair half is narrower than this item reads: clearing a stale endpoint already shipped, in `repair_engine.py::repair_native_runtime`, which prunes dead resident directories and sockets through `hol-guard repair`. `runtime_install_repair.py::repair_native_runtime_install` now adds the one install fault the runtime cannot fix for itself -- a bundled binary that lost its owner execute bit cannot run the code that would restore it -- and `hol-guard repair` runs it as the `native_install` step. A wheel that disagrees with the package calling it is reported with the reinstall that clears it and left to the user by design; replacing an installed binary unasked is not something a repair pass should do. The circuit-breaker half is done too, and it needed the shared signal rather than the process-local one: `native_runtime_resilience.py` holds its states in a module-level map, so a fresh `hol-guard` process reading it would always report `unknown`. The circuit a user actually hits is the restart budget the runtime keeps on disk (`resident_restart_budget.rs`), which refuses a respawn with `native_resident_restart_circuit_open` while its backoff runs and fails every waiting hook closed. `doctor_native_runtime.py::native_resident_restart` reads that budget without taking its lock and carries the answer as `restart`, `native_runtime_diagnosis` explains a paused one -- last, because the install fault a crash loop grew out of is what clears it -- and `_render_restart` prints it. `hol-guard repair` already clears the pause, though not by pruning: `commands_lifecycle_gate.py` calls `revive_native_resident` before the repair runs, which resets the budget through `resident-reset-restart-budget`, because a repair has to work on exactly the host whose respawns are being refused. Pruning removes only directories it can prove are dead, so it cannot be what lifts a pause a live install is sitting in.
+- [x] NRH-T103 add bounded aggregate metrics for latency/size/cost/queue/overload/auth/fallback/timeout/crash/restart/circuit/mismatch -- `resident_health_counters.rs` keeps a fixed table of process-wide atomics the resident raises as it serves: `served_requests` with `service_micros_total`/`_max` for latency, `request_bytes_total`/`_max` for size and cost, `auth_failures`, `frame_errors`, `deadline_exceeded` for timeout, `digest_mismatches` for mismatch, and `panics` for crash. Queue depth is per lane, as `queued` beside the `queued_max` a drained lane still reports, so a caller reading a quiet resident can tell it from one that was never loaded; overload keeps the `overloaded_requests` total it already had. `resident_health_op.rs` answers all of it on the reserved control lane, which is what makes the numbers readable from a resident whose evaluation queue is full. The table is fixed at compile time and nothing in it is keyed by a command, a path, a caller or an operation, so the reply cannot describe the work the machine ran; totals saturate rather than wrap. Three of the names above are measured outside this process and stay there: falling back to the daemon is a decision the client makes when the resident does not answer, and restart and circuit are the on-disk restart budget T102 already surfaces as `restart`. `native_resident_health.py` reads the reply by the fields it needs rather than by an exact field list, so a Python and a runtime that ship ahead of one another still answer each other;
+- [ ] NRH-T104 add support-bundle redaction and privacy tests — the support bundle is the `native_runtime` payload `hol-guard doctor --native` and `hol-guard runtime status --json` print; its `bundled.manual_install` command no longer spells out the account name (`tests/test_doctor_report_privacy.py` holds the whole payload to that), and the Windows spelling stays literal because no one form of the home directory expands in PowerShell, cmd.exe and Git Bash alike; the install-surface diagnostics `hol-guard trust --json` prints (`binary_diagnostics.resolved_hol_guard` and the script directories beside it) still carry resolved paths and are open;
 - [ ] NRH-T105 add plain-language pause copy and exact approve-once/target/pattern/contained/narrow/dry-run/edit/cancel options;
 - [ ] NRH-T106 keep healthy safe operations silent and approval scope consistent across surfaces;
-- [ ] NRH-T107 add local and managed native kill switches plus rollback playbook;
+- [ ] NRH-T107 add local and managed native kill switches plus rollback playbook — nothing of this exists today and the shape of it is a product decision, not an implementation detail: a kill switch that re-enables a Python evaluator is forbidden by this document's own invariant, so the only switch that could be built disables supported review altogether. The retired `off` value is not that switch;
 - [x] NRH-T108 generate static import/call graph and runtime import coverage for migration candidates;
-- [ ] NRH-T109 delete dead duplicate Python implementations, including the unused `choose_post_tool_response` selector, plus its tests, imports, dependencies, package entries, flags, and shims;
+- [ ] NRH-T109 delete dead duplicate Python implementations plus their tests, imports, dependencies, package entries, flags, and shims — the selector T112 names is gone, and the wave continues on `main`: `python-capability-ownership.v1.json` now records 123 retired modules and 34 retired test paths with no deletion candidate left outstanding, the dead grant containment route took `daemon/hook_contained_grant.py` with it, and retiring the unused sensitive file read and write request clients removed most of `runtime/secret_file_request_services`. What remains is the command parsing and catastrophic-risk source T114 names;
 - [x] NRH-T110 move reusable cases to language-neutral fixtures and add package-content/import-removal tests;
 - [x] NRH-T111 publish Python LOC/dependency delta and require every retained reference backend to run in named CI.
 - [x] NRH-T112 delete `choose_post_tool_response` after repository-wide static and dynamic caller proof;
-- [ ] NRH-T113 delete replaced PostToolUse traversal, scanning, secure-read, hashing, and path-validation Python implementations in the same authority-cutover wave;
-- [ ] NRH-T114 delete replaced command parsing and catastrophic-risk Python implementations only after cross-shell native authority gates pass;
-- [ ] NRH-T115 remove dependencies and build/package metadata used only by deleted implementations;
+- [x] NRH-T113 delete replaced PostToolUse traversal, scanning, secure-read, hashing, and path-validation Python implementations in the same authority-cutover wave — `runtime/hook_content_scanner.py`, `runtime/hook_source_read.py`, `runtime/hook_review_engine.py`, `runtime/hook_output_text.py`, `runtime/workspace_path_guard.py`, `runtime/source_paths.py` and `runtime/skill_paths.py` are absent from `src/` and recorded among `python-capability-ownership.v1.json`'s retired modules, and `scripts/ci/python_runtime_retirement.py` reddens CI if any of those paths, their tests, their bodies or their symbols reappear. The traversal and hashing still in Python belong to the plugin scanner and the release/evidence tooling, not the PostToolUse path;
+- [ ] NRH-T114 delete replaced command parsing and catastrophic-risk Python implementations only after cross-shell native authority gates pass — the action-class risk table is the first of these to go: `runtime/command_action_risk_metadata.py` is absent from `src/`, recorded among the retired modules, and `guard-command`'s `command_action_risk_classes.rs` is now the only copy. The assertions the Python tests made about that table moved to `command_action_risk_classes_tests.rs`, including the catalog-consistency invariant, which now reads the packaged catalog instead of the Python registry. `benign_requests.py`'s native-unavailable branch no longer names risk classes from an action-class label: a request discovered before an authenticated evaluation exists reports an empty list, and the resident still adds that action class's risks from the Rust table when it reads the artifact (`hook_artifact_facts_op.rs`, pinned by `a_secret_read_request_keeps_its_risk_class_without_an_evaluated_list`). `scripts/ci/record_config_action_vectors.py` writes the one rule its frozen corpus exercises inline (599 recorded `tool_action_request` vectors checked, 0 mismatches) rather than importing a live table into a recorder that exists to freeze the pre-migration answer. The command parsing sources remain;
+- [ ] NRH-T115 remove dependencies and build/package metadata used only by deleted implementations — #6506 retires `regex` (the Python command-pattern expressions, taken over by the resident in #5087) and moves `idna` and its exact `==3.15` pin to the `ci-test` group beside the test-support network policy model, and adds `tests/test_runtime_dependency_use.py`, which fails on a `[project.dependencies]` entry nothing under `src/` imports while still resolving the module names reached through `importlib.import_module`; the build and package metadata audit is open;
 - [x] NRH-T116 add installed-wheel tests proving removed private modules are absent and intentionally non-importable;
-- [ ] NRH-T117 audit dynamic imports, entry points, plugin references, and string-based module loading before every deletion;
-- [ ] NRH-T118 treat every unreachable or untested fallback as dead code rather than dormant rollback;
+- [x] NRH-T117 audit dynamic imports, entry points, plugin references, and string-based module loading before every deletion — `scripts/ci/python_capability_cleanup_static.py` follows importlib destinations and rejects unbounded provenance, and `python_runtime_retirement.py` now screens the three remaining string surfaces as well: every `[project.scripts]` and `[project.entry-points]` target against the retired modules and against the named attribute's definition, every `-m` or `-c` launch sequence under `src/` against the packages the wheel ships — in a `-c` payload the screen reads the `import` and `from ... import ...` statements, both the package and the name each `from` clause binds, and the literal argument of an `importlib.import_module` or `__import__` call, which is as far as reading one file can follow a name — and every `python-module` detector a contribution manifest declares, so a deletion that strands a console script, a relaunch shim or an extension reddens CI instead of shipping a command that fails when a user runs it. Shipped source may no longer name a retired module in a plain string at all; tests, `ci/` and `scripts/` keep naming them, because those files assert the absence and the wheel never installs them. No contribution declares a `python-module` detector today, so that screen is forward protection for the surface whose schema pattern points straight at `codex_plugin_scanner.guard.runtime`, where most retired modules lived;
+- [ ] NRH-T118 treat every unreachable or untested fallback as dead code rather than dormant rollback — the native-mode half is done: `HOL_GUARD_NATIVE=off` and `=shadow` are accepted, warned about once and ignored, `tests/test_native_legacy_modes.py` pins that, and the PRD, ADR 0006, ADR 0010 and `native-hook-data-plane-ownership.md` no longer describe either one as a disablement or a diagnostic mode. The vector recorders under `rust/crates/guard-runtime/testdata/` ask for `auto`, the value `off` already resolved to, instead of a setting that reads as a kill switch. They still drop `HOL_GUARD_NATIVE_BINARY`, though in `auto` that override is read by nothing: what leaves native unavailable in a recorder run is the absence of a bundled runtime beside the imported package. Fallbacks elsewhere in the tree are open;
 - [x] NRH-T119 prove dead-code package exclusion preserves the named pure-Python unsupported-platform and rollback configurations.
 
 ## PR 7: Supply chain, fuzz, chaos, soak, and opt-in gate
 
-- [ ] NRH-T120 add Cargo advisory, source, license, duplication, and banned-crate gates;
-- [ ] NRH-T121 generate Rust SBOM/provenance bound to every native wheel and verify staged/published wheel bytes;
-- [ ] NRH-T122 add persistent frame/envelope/output/scanner/prompt/command/path/response fuzz targets and deterministic PR seeds;
+- [x] NRH-T120 add Cargo advisory, source, license, duplication, and banned-crate gates — `deny.toml` pins the allowed licences, sources and duplicate exceptions, and the `Cargo supply chain` job runs `cargo deny check` on every pull request;
+- [x] NRH-T121 generate Rust SBOM/provenance bound to every native wheel and verify staged/published wheel bytes — `publish.yml` writes the release toolchain SBOM and refuses to publish a wheel whose bytes do not verify against the release's `intoto.jsonl` provenance bundle;
+- [x] NRH-T122 add persistent frame/envelope/output/scanner/prompt/command/path/response fuzz targets and deterministic PR seeds — `rust/fuzz` holds eight cargo-fuzz targets over `guard-runtime`'s `fuzz_entry` parsers (resident request frame, command request envelope, shell command, scanner text, Python-flavoured tool output, prompt text, the containment argument screens, and a package registry's response body); the committed corpus replays on the stable toolchain in every pull request, and the campaign runs weekly and on demand in the `rust` job of `fuzz.yml`;
 - [ ] NRH-T123 add 10,000 malformed frames, auth floods, 16 slow clients, 64 mixed clients, fallback saturation, daemon kills, disk/read-only/stale/low-FD chaos;
 - [ ] NRH-T124 add 100,000-request soak, rotation, memory/handle/thread/process/socket leak gate;
-- [ ] NRH-T125 measure installed adapter-to-decision p50/p95/p99/max, throughput, CPU, RSS, threads, handles, FDs, sockets, processes, queue, and fallback;
+- [ ] NRH-T125 measure installed adapter-to-decision p50/p95/p99/max, throughput, CPU, RSS, threads, handles, FDs, sockets, processes, queue, and fallback — `warm-path-latency.yml` and `rust-runtime-performance.yml` measure part of this;
 - [ ] NRH-T126 enforce PR no-regression and documented-hardware absolute SLOs without weakening security;
 - [ ] NRH-T127 complete independent security review and resolve all unsafe/unexplained mismatches;
-- [x] NRH-T128 enable eligible PostToolUse `auto` by default only for verified bundled wheels, retaining explicit `off` and Python fallback;
-- [ ] NRH-T129 retain pure-Python/reference rollback and do not enable PreToolUse allow authority.
+- [x] NRH-T128 enable eligible PostToolUse `auto` by default only for verified bundled wheels; `off` no longer disables anything and there is no Python semantic fallback, so a supported hook with no usable native runtime fails closed, as T129 records;
+- [x] NRH-T129 retired. It asked to keep PreToolUse allow authority disabled and retain the pure-Python rollback. PreToolUse is native-authoritative now. The pure-Python wheel stays installable on unsupported platforms, but it is a distribution fallback and not a semantic one: a supported hook entrypoint with no usable native runtime fails closed rather than reviewing in Python. And `off` is no longer a rollback of any kind: `native_runtime_values._resolve_native_mode` accepts it for an existing install, warns once and resolves to the product default, which is what T119, T128 and `tests/test_native_legacy_modes.py` pin.
 
 ## Final release gate
 
-NHD-091–095 completes the ownership/graph/package proof for the cleanup
-surface. `native_runtime_resident.py` remains a recorded deletion candidate,
-not a deleted file; T109, T113, T114, T115, T117, and T118 remain open until a
-separate authorized deletion wave removes source and any newly proven-dead
-implementation dependencies.
+NHD-091–095 completed the ownership/graph/package proof for the cleanup
+surface. Every module it recorded as a deletion candidate is gone:
+`python-capability-ownership.v1.json` carries an empty `deletion_candidates`
+list, an empty `package_excluded_candidates` list and `retained_source: false`,
+so no replaced Python implementation is held back as dormant rollback. T113
+closed with the PostToolUse traversal, scanning, secure-read, hashing and
+path-validation modules. T109, T114, T115, T117, and T118 remain open until a
+separate authorized deletion wave removes the remaining replaced source and any
+newly proven-dead implementation dependencies.
 
 - [ ] all transport, overload, fallback, supervision, daemon-failure, privacy, cross-platform, catastrophic-risk, safe-autonomy, performance, fuzz, chaos, soak, artifact, review, and rollback gates pass;
 - [ ] dead replaced Python code is removed and retained Python ownership is explicit;
 - [x] a dedicated PR changes eligible PostToolUse source default to `auto` with installed-wheel and rollback evidence;
-- [ ] `release/3.0` remains unmerged to `main` during this program.
+- [x] the program ships from `main`. The original "`release/3.0` remains unmerged to `main`" rule is retired: the work landed on `main` through ordinary PRs and `release/3.0` is historical.

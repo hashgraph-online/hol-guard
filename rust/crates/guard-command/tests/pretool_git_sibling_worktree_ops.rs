@@ -131,13 +131,20 @@ fn sibling_worktree_add_stays_reviewed_with_repository_programs() {
         ("core.fsmonitor", "/bin/true"),
         ("filter.fixture.smudge", "cat"),
         ("filter.lfs.process", "git-lfs filter-process"),
-        ("credential.helper", "osxkeychain"),
     ] {
         session.config(&[key, value]);
         assert_reviewed(&session, &add);
         assert_reviewed(&session, &chain);
         session.config(&["--unset-all", key]);
     }
+    // A credential helper names a program, but Git runs it only when it needs
+    // a credential, and this checkout resolves `origin/main` out of the refs
+    // the repository already holds. The chain's fetch does authenticate, and
+    // the transport proof keeps refusing a repository helper there.
+    session.config(&["credential.helper", "osxkeychain"]);
+    assert_allow_at(&session, &session.org, &add, WORKTREE_ADD);
+    assert_reviewed(&session, &chain);
+    session.config(&["--unset-all", "credential.helper"]);
     // A display pager names how another command prints, not anything
     // `worktree add` runs.
     session.config(&["core.pager", "cat"]);
@@ -345,7 +352,6 @@ fn worktree_add_directly_in_the_temporary_root_keeps_its_protections() {
     );
     for (key, value) in [
         ("core.fsmonitor", "/bin/true"),
-        ("credential.helper", "!/bin/sh -c true"),
         ("filter.fixture.smudge", "cat"),
     ] {
         session.config(&[key, value]);
@@ -353,6 +359,25 @@ fn worktree_add_directly_in_the_temporary_root_keeps_its_protections() {
         assert_reviewed(&session, &chain);
         session.config(&["--unset-all", key]);
     }
+    // The helper runs only where Git asks for a credential, which this
+    // checkout never does, so it leaves the destination's own verdict alone.
+    // The chain's fetch authenticates and stays reviewed.
+    let without_helper = session.evaluate_at(&add, &session.org);
+    session.config(&["credential.helper", "!/bin/sh -c true"]);
+    let with_helper = session.evaluate_at(&add, &session.org);
+    assert_eq!(
+        (
+            with_helper.minimum_action.as_str(),
+            with_helper.reason_code.as_str()
+        ),
+        (
+            without_helper.minimum_action.as_str(),
+            without_helper.reason_code.as_str()
+        ),
+        "{add}"
+    );
+    assert_reviewed(&session, &chain);
+    session.config(&["--unset-all", "credential.helper"]);
     let hook = session.primary.join(".git/hooks/post-checkout");
     executable_hook(&hook);
     assert_reviewed(&session, &add);

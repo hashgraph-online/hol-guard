@@ -438,7 +438,7 @@ fn relative_workspace_cd_stays_on_the_workspace_sandbox() {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: false,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     let decide = |harness: &str, command: &str| {
         guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(

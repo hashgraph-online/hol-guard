@@ -38,11 +38,12 @@ def _forget_remembered_directories() -> None:
     case asking the runtime for itself.
     """
 
-    from codex_plugin_scanner.guard.path_resolution_cache import clear_cached_realpaths
+    from codex_plugin_scanner.guard import path_resolution_cache
     from tests.resident_probe_support import clear_remembered_directory_trust
 
     clear_remembered_directory_trust()
-    clear_cached_realpaths()
+    with path_resolution_cache._lock:
+        path_resolution_cache._remembered.clear()
 
 
 _GUARD_POST_TOOL_DIAGNOSTIC_TEST = (

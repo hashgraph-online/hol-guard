@@ -26,9 +26,11 @@ _REQUEST_SCHEMA = "guard-hook-render-request.v1"
 _RESULT_SCHEMA = "guard-hook-render-result.v1"
 _TIMEOUT_SECONDS = 5.0
 _MAX_REQUEST_BYTES = 256 * 1024
-# ``cli_hook_emit`` carries a whole daemon answer as escaped JSON text; the
-# resident gives that kind the larger budget too (``hook_render_max_bytes``).
+# ``cli_hook_emit`` carries a whole daemon answer as escaped JSON text and
+# ``cursor_shell_route`` carries the edge result the daemon already produced;
+# the resident gives both kinds the larger budget (``hook_render_max_bytes``).
 _CLI_HOOK_EMIT_MAX_REQUEST_BYTES = 4 * 1024 * 1024
+_CURSOR_ROUTE_MAX_REQUEST_BYTES = 4 * 1024 * 1024
 
 
 def _render_payload(
@@ -86,8 +88,13 @@ def native_render_cli(
     """
 
     wire: dict[str, object] = {"kind": kind, "harness": harness, "cli": dict(params)}
+    # Each kind names its own bound here rather than reading one out of a
+    # table, so the scan that compares every bound against the transport's
+    # ceiling can still read what this call offers.
     if kind == "cli_hook_emit":
         payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_CLI_HOOK_EMIT_MAX_REQUEST_BYTES)
+    elif kind == "cursor_shell_route":
+        payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_CURSOR_ROUTE_MAX_REQUEST_BYTES)
     else:
         payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_MAX_REQUEST_BYTES)
     outcome = payload.get("outcome") if payload is not None else None
@@ -165,41 +172,6 @@ def native_cli_hook_emit(
     return rendered[1] if rendered is not None else None
 
 
-# The payload fields ``claude_approval_copy`` reads to name the tool.
-_CLAUDE_COPY_PAYLOAD_FIELDS = ("tool_name", "message", "title")
-
-
-def native_claude_approval_copy(
-    which: str,
-    *,
-    payload: Mapping[str, object] | None = None,
-    notice: Mapping[str, object] | None = None,
-    reason: str = "",
-    guard_home: Path | None = None,
-) -> object | None:
-    """Render one named piece of Claude approval copy; ``None`` when unavailable.
-
-    The daemon path already renders this text; this ships the same pending
-    notice and the payload fields that name the tool, so the CLI path reads
-    the copy from the same place. Only those fields travel: the rest of a hook
-    payload carries the tool's own input, which this copy never reads and
-    which would push the request toward the op's size limit.
-    """
-
-    fields = payload or {}
-    params: dict[str, object] = {
-        "which": which,
-        "payload": {key: fields[key] for key in _CLAUDE_COPY_PAYLOAD_FIELDS if key in fields},
-        "reason": reason,
-    }
-    if notice is not None:
-        params["notice"] = dict(notice)
-    rendered = native_render_cli("claude_approval_copy", "claude-code", params, guard_home=guard_home)
-    if rendered is None or rendered[1] is None:
-        return None
-    return rendered[1].get("value")
-
-
 def native_evaluation_has_terminal_policy_action(
     harness: str,
     evaluation: Mapping[str, object],
@@ -230,57 +202,12 @@ _OBSERVER_EVENT_PAYLOAD_FIELDS = (
 )
 
 
-# The payload fields the after-shell rule reads to judge a Cursor report.
-_AFTER_SHELL_PAYLOAD_FIELDS = (
-    "duration",
-    "event",
-    "hook_event_name",
-    "hookEventName",
-    "hook_name",
-    "output",
-    "result_json",
-)
-
-
-# The payload fields the artifact-id rule reads to name an event.
-_ARTIFACT_ID_PAYLOAD_FIELDS = (
-    "source_scope",
-    "tool_name",
-    "event",
-    "hook_event_name",
-    "hookEventName",
-    "hook_name",
-)
-
-
 def native_render_pre_tool(
     harness: str, verdict: Mapping[str, object], *, guard_home: Path | None = None, deadline: float | None = None
 ) -> dict[str, object] | None:
     """Render a PreToolUse verdict the daemon adjusted after the edge decision."""
 
     return _render({"kind": "pre_tool", "harness": harness, "verdict": dict(verdict)}, guard_home, deadline)
-
-
-def native_render_pre_tool_review(
-    harness: str,
-    verdict: Mapping[str, object],
-    *,
-    approval: Mapping[str, object] | None,
-    linked_reason: str | None,
-    guard_home: Path | None = None,
-    deadline: float | None = None,
-) -> dict[str, object] | None:
-    """Render a paused review; ``linked_reason`` already carries the signed approval link."""
-
-    request: dict[str, object] = {"kind": "pre_tool_review", "harness": harness, "verdict": dict(verdict)}
-    if approval is not None:
-        # The renderer reads only the link and the request id; the stored row can be large.
-        request["approval"] = {
-            key: approval[key] for key in ("approval_url", "request_id") if isinstance(approval.get(key), str)
-        }
-    if linked_reason is not None:
-        request["linked_reason"] = linked_reason
-    return _render(request, guard_home, deadline)
 
 
 def native_render_recording_only_pre_tool(
@@ -297,11 +224,9 @@ def native_render_recording_only_pre_tool(
 
 __all__ = [
     "HOOK_RENDER_FEATURE",
-    "native_claude_approval_copy",
     "native_cli_hook_emit",
     "native_evaluation_has_terminal_policy_action",
     "native_render_cli",
     "native_render_pre_tool",
-    "native_render_pre_tool_review",
     "native_render_recording_only_pre_tool",
 ]

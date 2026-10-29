@@ -8,6 +8,8 @@ pub(crate) use discovery::{git_route_without_repository, reads_without_repositor
 use temporary::owned_below;
 pub(in crate::pretool) use temporary::owned_temporary_directory;
 pub(in crate::pretool) use temporary::owned_temporary_roots;
+#[cfg(unix)]
+pub(in crate::pretool) use temporary::private_temporary_base;
 pub(in crate::pretool) use temporary::private_temporary_parent;
 pub(in crate::pretool) use temporary::temporary_checkout_parent;
 

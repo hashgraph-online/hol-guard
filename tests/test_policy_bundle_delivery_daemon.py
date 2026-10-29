@@ -15,9 +15,6 @@ from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.managed_controls_policy_bundle import (
     signed_cloud_extension_projection_digest,
 )
-from codex_plugin_scanner.guard.policy_bundle_trusted_keys import (
-    policy_bundle_verification_key_from_public_key,
-)
 from codex_plugin_scanner.guard.runtime import runner
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_catalog_sync import (
@@ -27,6 +24,7 @@ from codex_plugin_scanner.guard.runtime.extension_catalog_sync import (
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.managed_controls_activation_support import parse_managed_bundle
+from tests.policy_bundle_signing_helpers import policy_bundle_verification_key_from_public_key
 from tests.test_guard_headless_daemon_api import (
     _dashboard_token_for,
     _read_json_response,

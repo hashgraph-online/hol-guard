@@ -198,17 +198,30 @@ fn a_literal_interpreter_name_in_an_exec_body_is_an_argument() {
     // `find src -exec echo sh {} \;`, which runs nothing but `echo`.
     let (root, _cleanup) = workspace("literal-argument");
     let controls = git_github_controls("default", "default");
+    let plain = evaluate(&root, &controls, "find src -exec echo {} \\;");
     for command in [
         "find src -exec echo sh {} \\;",
         "find src -exec echo bash python3 {} \\;",
     ] {
         let result = evaluate(&root, &controls, command);
         assert_ne!(result.reason_code, EVALUATION_FAILED, "{command}");
-        assert_ne!(
-            result.reason_code, "native_command_review_required",
+        // An interpreter name in `echo`'s argv decides nothing: the command
+        // reads exactly as `find src -exec echo {} \;` does on every host.
+        assert_eq!(
+            (&result.reason_code, &result.minimum_action),
+            (&plain.reason_code, &plain.minimum_action),
             "{command}: {}",
             result.reason
         );
+        // Windows reviews the plain command itself, so only the comparison
+        // above holds on every host.
+        if cfg!(unix) {
+            assert_ne!(
+                result.reason_code, "native_command_review_required",
+                "{command}: {}",
+                result.reason
+            );
+        }
         assert_ne!(
             result.minimum_action, "block",
             "{command}: {}",

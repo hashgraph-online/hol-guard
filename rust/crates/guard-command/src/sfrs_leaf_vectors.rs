@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
-use crate::codex_output_env::{Ctx, GitCheck, GitRun, InspectionHost};
+use crate::codex_output_env::{Ctx, GitCheck, InspectionHost};
 use crate::codex_output_py::PyPath;
 use crate::sfrs_git_audit::is_read_only_git_ancestry_audit;
 use crate::sfrs_git_fetch::{
@@ -52,9 +52,6 @@ impl InspectionHost for Host {
     }
     fn git_binary_trusted(&self, _git: &str, cwd: &str) -> bool {
         !cwd.contains("untrusted")
-    }
-    fn run_git(&self, _: &str, _: &[String], _: &str) -> GitRun {
-        GitRun::Failed("unavailable")
     }
     fn git_log_execution_free_config(&self, cwd: &str, _git: &str) -> bool {
         !cwd.contains("badconfig")

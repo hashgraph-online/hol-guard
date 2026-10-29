@@ -1,5 +1,4 @@
-//! The native Codex bridge's browser approval wait: a port of
-//! `apply_browser_approval_wait` in `codex_daemon_hook_resume.py`.
+//! The native Codex bridge's browser approval wait.
 //!
 //! A `PreToolUse` deny that names a pending approval request is held while
 //! the bridge opens the signed approval link, polls the daemon until the
@@ -22,7 +21,7 @@ use crate::codex_hook_response::{codex_hook_response, PRE_TOOL_USE};
 use crate::hook_env_stamp::{dumps, json_string};
 use crate::pyjson::PyVal;
 
-/// `GUARD_APPROVAL_REQUEST_ID_KEY` in `codex_daemon_hook_resume.py`.
+/// Hook output key naming the pending approval request.
 const APPROVAL_REQUEST_ID_KEY: &str = "guardApprovalRequestId";
 /// `GUARD_APPROVAL_URL_KEY`.
 const APPROVAL_URL_KEY: &str = "guardApprovalUrl";

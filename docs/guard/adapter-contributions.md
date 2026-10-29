@@ -45,7 +45,7 @@ Begin with [Gemini](../../src/codex_plugin_scanner/guard/adapters/gemini.py) or 
 4. Add a `HarnessProtectionContract` to `adapters/contract_registry.py`: installation aliases, observed config paths, event surfaces, smoke command, and **specific** known blind spots. Declare real event capabilities in the relevant `contract_hook_capabilities.py` or `contract_agent_capabilities.py`. An aspirational hook is not a supported capability.
 5. Update [harness support](harness-support.md) with tested behavior and limits. If the host has version-specific coverage, follow [version coverage](harness-version-coverage.md) rather than claiming support for untested versions.
 
-Public adapter entrypoints are stable. When relocating an internal helper, update its imports and callers, source-path references, and ownership manifests together. Files bound by authenticated manifests, including `codex_daemon_hook_resume.py`, stay at their established paths unless the complete identity and upgrade contract is migrated.
+Public adapter entrypoints are stable. When relocating an internal helper, update its imports and callers, source-path references, and ownership manifests together. Files bound by authenticated manifests, including `codex_daemon_hook_bridge.py`, stay at their established paths unless the complete identity and upgrade contract is migrated.
 
 ## 4. Implement protection safely
 

@@ -1,6 +1,6 @@
 # HOL Guard native runtime hardening PRD
 
-Status: accepted follow-up for `release/3.0`.
+Status: accepted follow-up, tracked on `main`. Reconciled 2026-10-29 against `main` at `6a319266c3`, with 3.58.0 shipped and 3.59.0 open in its release PR. The program was planned on a `release/3.0` branch and did not land that way: the work merged to `main` through ordinary PRs, and `release/3.0` is now historical.
 
 ## Objective
 
@@ -8,7 +8,7 @@ Make the bundled Rust runtime a cross-platform, low-latency safety kernel for ca
 
 The native kernel must reliably pause or block secret exfiltration, prompt injection, broad deletion, destructive production database or infrastructure actions, supply-chain compromise, and Guard tampering. Routine reads, tests, builds, linting, bounded workspace edits, and exact low-impact cleanup must remain quiet and autonomous.
 
-Eligible PostToolUse and supported PreToolUse review use the verified bundled Rust runtime in `auto` mode by default. Python remains the control plane and explicit differential-test oracle; it is never a production semantic fallback. `HOL_GUARD_NATIVE=off` is an explicit fail-safe disablement, and shadow comparison is diagnostic-only.
+Eligible PostToolUse and supported PreToolUse review use the verified bundled Rust runtime in `auto` mode by default. Python remains the control plane and explicit differential-test oracle; it is never a production semantic fallback. There is no local switch that turns native authority off: `HOL_GUARD_NATIVE` accepts `auto` and `force`, and the retired `off` and `shadow` values are accepted for existing installs, warned about once and ignored. `HOL_GUARD_NATIVE_DIAGNOSTIC=1` on a declared non-production surface turns on bounded transport and timeout diagnostics; it starts no Python evaluator and compares no decisions. The differential-test oracle is a test fixture, not a runtime surface a flag can reach.
 
 ## Security invariants
 
@@ -110,7 +110,7 @@ Corpora must cover:
 - destructive SQL, migrations, schema resets, backups, cloud databases, clusters, namespaces, buckets, IAM, secrets, and broad resource groups;
 - binary, policy, approval, hook, socket, daemon, and evidence tampering.
 
-An uncertain dangerous command pauses. Native PreToolUse may first contribute tightening-only signals. Native low-risk allow authority is a later gate requiring POSIX, PowerShell, CMD, wrapper, redirect, substitution, effect, and policy parity.
+An uncertain dangerous command pauses. Native PreToolUse allow authority has shipped: `runtime_transition_admission.py` admits a native runtime only after the native edge answers a known-allow and a known-deny probe and its receipts reconcile against runtime identity, policy generation, and policy digest. Python checks those receipts and never recomputes a verdict. Parity across POSIX, PowerShell, CMD, wrappers, redirects, substitutions, effects, and policy is now held by the Gauntlet release gate and the benign false-pause gate rather than by withholding authority.
 
 ## Cross-platform release matrix
 
@@ -186,10 +186,15 @@ dormant rollback. NHD-091–095 makes the first package boundary explicit:
 `docs/guard/contracts/python-capability-ownership.v1.json` classifies the full
 hook/runtime scope, `scripts/ci/python_capability_cleanup_gate.py` proves
 source/runtime reachability and package content, and the six-case parity
-fixture is language-neutral. The superseded Python resident source is retained
-but excluded from wheels/sdists and recorded as the sole deletion candidate;
-source deletion, tests/imports/dependencies/flags/shims removal, and any other
-category-3 cleanup remain separate until their rollback boundary is reviewed.
+fixture is language-neutral. The superseded Python resident source is no
+longer retained: it went with the rest of the replaced hook and runtime
+surface, 122 modules and 34 test paths, which
+`python-capability-ownership.v1.json` records under `retired_modules` and
+`retired_test_paths` with an empty `deletion_candidates` list, an empty
+`package_excluded_candidates` list and `retained_source: false`. Nothing
+replaced is held back inside the package as dormant rollback; the reviewed
+release reverts as a unit instead. Remaining category-3 cleanup still lands in
+separately authorized deletion changes once each rollback boundary is reviewed.
 Record Python LOC/dependency deltas for each authorized removal.
 
 Do not remove the active Python differential-test oracle while this PRD requires it. A production semantic fallback is forbidden; an untested oracle is dead code and must be removed.
@@ -204,9 +209,9 @@ Do not remove the active Python differential-test oracle while this PRD requires
 6. DX, diagnostics, privacy, repair, and rollout controls.
 7. Dedicated eligible PostToolUse default-`auto` PR with installed-wheel and rollback evidence.
 8. Separate future expansion of native authority only after the remaining independent security and catastrophic-risk gates pass.
-9. Separate future PreToolUse authority PR.
+9. PreToolUse authority. Shipped; the admission probe above is the gate that keeps it honest.
 
-`release/3.0` must not be merged into `main` as part of this work.
+The program ships from `main`. The earlier rule that `release/3.0` must not be merged into `main` is retired, because the work landed on `main` directly.
 
 ## Definition of done
 
@@ -219,4 +224,4 @@ Do not remove the active Python differential-test oracle while this PRD requires
 - Native doctor/status/repair are accurate and privacy safe.
 - Dead replaced Python code is deleted; active Python control/reference code is explicitly retained and tested.
 - Cargo lock/fmt/Clippy/tests/audit/deny/SBOM/provenance, CodeQL, Security Gates, fuzz, differential, chaos, soak, CI, and review gates pass.
-- Eligible supported-hook source default is `auto`; explicit `off` is a fail-safe disablement, shadow is diagnostic-only, and Python control/oracle ownership remains covered by differential tests.
+- Eligible supported-hook source default is `auto`; the retired `off` and `shadow` values resolve to that default and warn once rather than selecting a surface of their own, and Python control ownership remains covered by differential tests.

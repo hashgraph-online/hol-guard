@@ -141,9 +141,47 @@ fn decide(
         }
         // A connector names the review it waits on; without it there is none.
         (Some(_), None) => None,
-        (None, Some(paused)) => queued(store, query, paused, deadline),
+        (None, Some(paused)) => queued(
+            store,
+            &query.payload,
+            &query.workspace,
+            &query.home_dir,
+            paused,
+            deadline,
+        ),
         (None, None) => live(store, query, deadline),
     })
+}
+
+/// The hint `queue_native_review` stores with a paused review: what this op
+/// answers for the same pause, decided inside that store call instead of a
+/// round trip of its own. A review with no extension evidence and no
+/// connector has nothing to hint.
+pub(crate) fn queued_hint(
+    store: Option<&PolicySnapshotStore>,
+    payload: &Map<String, Value>,
+    workspace: &str,
+    home_dir: &str,
+    paused: &Map<String, Value>,
+    connector: Option<&Value>,
+    budget_ms: u32,
+) -> Option<Value> {
+    match connector {
+        Some(connector) => {
+            super::super::review_queue::connector::queued_setup_hint(connector, paused)
+        }
+        None if !paused
+            .get("command_extensions")
+            .is_some_and(Value::is_object) =>
+        {
+            None
+        }
+        None => {
+            let budget = Duration::from_millis(u64::from(budget_ms.min(MAX_BUDGET_MS)));
+            let deadline = Instant::now() + budget;
+            queued(store, payload, workspace, home_dir, paused, deadline)
+        }
+    }
 }
 
 /// `native_review_hint` for a review the daemon queues: the coverage hint the
@@ -151,7 +189,9 @@ fn decide(
 /// settle exactly this pause.
 fn queued(
     store: Option<&PolicySnapshotStore>,
-    query: &ReviewHintQueryV1,
+    payload: &Map<String, Value>,
+    workspace: &str,
+    home_dir: &str,
     paused: &Map<String, Value>,
     deadline: Instant,
 ) -> Option<Value> {
@@ -162,9 +202,9 @@ fn queued(
                 policy_store,
                 deadline,
             }),
-            &query.payload,
-            &query.workspace,
-            &query.home_dir,
+            payload,
+            workspace,
+            home_dir,
             paused,
             request,
         ),

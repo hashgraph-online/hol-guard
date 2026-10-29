@@ -24,6 +24,12 @@
 //! the notice, when there is one, is verified and marked seen, and the event
 //! the daemon records for every such prompt is written in that transaction.
 //! Every other Claude notification gets the constant.
+//!
+//! Claude Code's `Stop` gets the constant too, after the daemon's
+//! `claude_turn_stop`: the session's unanswered prompts are dropped and the
+//! turn's end is recorded, so the next turn cannot inherit a block nobody
+//! chose. Only the bound key verifies the pending index, so a session that
+//! has one keeps the daemon path when the key is not bound.
 
 use std::path::Path;
 
@@ -39,7 +45,7 @@ use super::{
     TRANSITION_PROBE_FIELD,
 };
 use crate::hook_authority_state_op::{
-    claude_permission_notice_direct, claude_permission_prompt_direct,
+    claude_permission_notice_direct, claude_permission_prompt_direct, claude_turn_stop_direct,
 };
 use crate::policy_bundle_time::micros_to_utc_isoformat;
 use crate::policy_store::PolicySnapshotStore;
@@ -59,6 +65,8 @@ const DAEMON_EVENTS: [&str; 3] = [
 /// exact spelling reaches the daemon's permission prompt handler.
 const NOTIFICATION: &str = "Notification";
 const PERMISSION_PROMPT: &str = "permission_prompt";
+/// The Claude event the daemon ends a turn on.
+const STOP: &str = "Stop";
 /// Harnesses whose `PermissionRequest` the daemon passes through.
 const PASSTHROUGH_PERMISSION_HARNESSES: [&str; 4] = ["codex", "copilot", "devin", "zcode"];
 /// The events `runtime_hook_event_name` names `PermissionRequest`.
@@ -171,6 +179,9 @@ pub(super) fn answer(
     {
         return claude_permission_prompt_answer(guard_home, payload, policy_store);
     }
+    if harness == CLAUDE_CODE && event == STOP {
+        claude_turn_stop_answer(guard_home, payload, policy_store)?;
+    }
     Ok(json!({ "harness_response": constant_response(harness, event) }))
 }
 
@@ -272,6 +283,38 @@ fn claude_permission_prompt_answer(
     Ok(json!({
         "harness_response": permission_prompt_notification_response(payload, notice.as_ref()),
     }))
+}
+
+/// `claude_turn_stop`, which the daemon runs before it answers `Stop` with
+/// its constant.
+fn claude_turn_stop_answer(
+    guard_home: &str,
+    payload: &Map<String, Value>,
+    policy_store: &PolicySnapshotStore,
+) -> Result<(), HookDirectDefer> {
+    // The event records the session as the daemon parsed it, and Python may
+    // spell a number differently, so only text and null are recorded here.
+    if matches!(
+        payload.get("session_id"),
+        Some(Value::Number(_) | Value::Array(_) | Value::Object(_))
+    ) {
+        return Err(HookDirectDefer::PayloadUnsupported);
+    }
+    let session_id = match payload.get("session_id").and_then(Value::as_str) {
+        Some(value) => python_strip(value).map_err(|_| HookDirectDefer::EventUnsupported)?,
+        None => None,
+    };
+    let binding = policy_store
+        .admit_direct_binding()
+        .map_err(|_| HookDirectDefer::PermissionNotice)?;
+    let key = binding
+        .integrity_key
+        .as_ref()
+        .map(|integrity_key| (&integrity_key.key[..], integrity_key.key_id.as_str()));
+    let store_path = Path::new(guard_home).join("guard.db");
+    let now = utc_now_isoformat().ok_or(HookDirectDefer::PermissionNotice)?;
+    claude_turn_stop_direct(&store_path, key, &now, session_id, payload)
+        .map_err(|_| HookDirectDefer::PermissionNotice)
 }
 
 pub(super) fn utc_now_isoformat() -> Option<String> {

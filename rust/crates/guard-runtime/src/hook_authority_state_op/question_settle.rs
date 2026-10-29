@@ -43,8 +43,8 @@ fn reason(action: &str) -> &'static str {
 impl Env<'_> {
     /// `question` is the hook's projection (`event`, `tool_name`,
     /// `tool_input`, `tool_response` and the ordered `response_answers`);
-    /// without one the call is not a question, but the pending permission is
-    /// still loaded, as every Claude post-tool hook does.
+    /// without one the call is not a question. The daemon asks only about an
+    /// `AskUserQuestion` call, so other post-tool hooks never reach this op.
     pub(super) fn claude_question_settle(
         &self,
         session_id: &str,

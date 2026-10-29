@@ -122,7 +122,10 @@
   "src/codex_plugin_scanner/guard/runtime/executable_resolution.py",
   "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/constants_patterns.py",
   "src/codex_plugin_scanner/guard/runtime/github_capability_contract.py",
-  "src/codex_plugin_scanner/guard/runtime/github_capability_interaction.py"
+  "src/codex_plugin_scanner/guard/runtime/github_capability_interaction.py",
+  "src/codex_plugin_scanner/guard/runtime/structured_data_sensitivity.py",
+  "src/codex_plugin_scanner/guard/runtime/structured_output_mediation.py",
+  "src/codex_plugin_scanner/guard/runtime/command_action_risk_metadata.py"
  ],
  "retired_tests": [
   {
@@ -7420,6 +7423,323 @@
    ],
    "status": "native_behavior_ported_requires_ci",
    "rationale": "Argument validation for the filter stage is the classifier's, not the sink's: a grep naming a file or reading patterns, and a ripgrep spelling its own valued options, never reach the filter chain at all, so the native tests replace the ValueError the Python sink used to raise."
+  },
+  {
+   "old_node": "tests/test_prompt_system_message_lazy_reason.py::test_claude_asks_for_no_reason_it_will_not_show",
+   "source_sha256": "b1644e0ce525c79bfe740ab3290f5fa7cffd2a7fd7d2eec9d2ef792fce9551a6",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python prompt system-message composers, which read the resident's reason only when they showed one. The resident composes the prompt notice itself now, so no Python caller reads a reason it does not show."
+  },
+  {
+   "old_node": "tests/test_prompt_system_message_lazy_reason.py::test_codex_asks_for_no_reason_a_running_prompt_will_not_show",
+   "source_sha256": "b1644e0ce525c79bfe740ab3290f5fa7cffd2a7fd7d2eec9d2ef792fce9551a6",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python prompt system-message composers, which read the resident's reason only when they showed one. The resident composes the prompt notice itself now, so no Python caller reads a reason it does not show."
+  },
+  {
+   "old_node": "tests/test_prompt_system_message_lazy_reason.py::test_a_paused_codex_prompt_still_reads_the_residents_reason",
+   "source_sha256": "b1644e0ce525c79bfe740ab3290f5fa7cffd2a7fd7d2eec9d2ef792fce9551a6",
+   "replacement_nodes": [],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python prompt system-message composers, which read the resident's reason only when they showed one. The resident composes the prompt notice itself now, so no Python caller reads a reason it does not show."
+  },
+  {
+   "old_node": "tests/test_claude_prompt_notice_vectors.py::test_claude_prompt_notice_vectors_are_current",
+   "source_sha256": "a20c6c1dc48d0cf4edcce8aecfc6d9a2ef7180afea26d2e4416b86f1dca0a138",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/hook_direct_claude_prompt_text_tests.rs::the_notice_matches_the_daemon",
+    "rust/crates/guard-runtime/src/hook_direct_claude_prompt_text_tests.rs::a_reason_the_daemon_would_stringify_defers"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Re-ran the retired Python prompt notice against its recorded vectors. The recorded vectors stay and the native prompt-notice suite replays them."
+  },
+  {
+   "old_node": "tests/test_codex_bridge_early_proxy.py::test_codex_bridge_proxy_answers_allow_before_guard_imports",
+   "source_sha256": "b1df34010bc2c39140830a6d0185783ebb7b9e431b4f9c73e7aa2c416c0c9234",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::an_authenticated_answer_is_rendered"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired stdlib fast path in the frozen Guard entrypoint, which repeated the Codex daemon round trip the native bridge owns. Codex hooks launch the native bridge, which authenticates the daemon, sends the hook and renders the answer."
+  },
+  {
+   "old_node": "tests/test_codex_bridge_early_proxy.py::test_codex_bridge_proxy_preserves_deny",
+   "source_sha256": "b1df34010bc2c39140830a6d0185783ebb7b9e431b4f9c73e7aa2c416c0c9234",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::clean_answers_are_rendered_natively"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired stdlib fast path in the frozen Guard entrypoint, which repeated the Codex daemon round trip the native bridge owns. Codex hooks launch the native bridge, which authenticates the daemon, sends the hook and renders the answer."
+  },
+  {
+   "old_node": "tests/test_codex_bridge_early_proxy.py::test_codex_bridge_proxy_falls_through_when_daemon_unreachable",
+   "source_sha256": "b1df34010bc2c39140830a6d0185783ebb7b9e431b4f9c73e7aa2c416c0c9234",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::a_started_daemon_answers_the_hook",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::a_failed_start_fails_closed"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired stdlib fast path in the frozen Guard entrypoint, which repeated the Codex daemon round trip the native bridge owns. Codex hooks launch the native bridge, which authenticates the daemon, sends the hook and renders the answer."
+  },
+  {
+   "old_node": "tests/test_codex_bridge_early_proxy.py::test_codex_bridge_proxy_ignores_unauthenticated_state",
+   "source_sha256": "b1df34010bc2c39140830a6d0185783ebb7b9e431b4f9c73e7aa2c416c0c9234",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::a_mismatched_token_fails_closed_before_the_hook_is_sent"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired stdlib fast path in the frozen Guard entrypoint, which repeated the Codex daemon round trip the native bridge owns. Codex hooks launch the native bridge, which authenticates the daemon, sends the hook and renders the answer."
+  },
+  {
+   "old_node": "tests/test_codex_bridge_early_proxy.py::test_codex_bridge_proxy_falls_through_on_pending_approval",
+   "source_sha256": "b1df34010bc2c39140830a6d0185783ebb7b9e431b4f9c73e7aa2c416c0c9234",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_handoff_tests.rs::a_deny_naming_a_pending_approval_waits_for_the_browser"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired stdlib fast path in the frozen Guard entrypoint, which repeated the Codex daemon round trip the native bridge owns. Codex hooks launch the native bridge, which authenticates the daemon, sends the hook and renders the answer."
+  },
+  {
+   "old_node": "tests/test_codex_bridge_early_proxy.py::test_codex_bridge_proxy_fails_closed_on_oversized_input",
+   "source_sha256": "b1df34010bc2c39140830a6d0185783ebb7b9e431b4f9c73e7aa2c416c0c9234",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::hook_input_is_bounded_and_normalized"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired stdlib fast path in the frozen Guard entrypoint, which repeated the Codex daemon round trip the native bridge owns. Codex hooks launch the native bridge, which authenticates the daemon, sends the hook and renders the answer."
+  },
+  {
+   "old_node": "tests/test_codex_bridge_early_proxy.py::test_codex_bridge_proxy_normalizes_post_tool_use",
+   "source_sha256": "b1df34010bc2c39140830a6d0185783ebb7b9e431b4f9c73e7aa2c416c0c9234",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::other_events_forward_their_own_input"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired stdlib fast path in the frozen Guard entrypoint, which repeated the Codex daemon round trip the native bridge owns. Codex hooks launch the native bridge, which authenticates the daemon, sends the hook and renders the answer."
+  },
+  {
+   "old_node": "tests/test_codex_bridge_early_proxy.py::test_codex_bridge_proxy_falls_through_on_worker_failure",
+   "source_sha256": "b1df34010bc2c39140830a6d0185783ebb7b9e431b4f9c73e7aa2c416c0c9234",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::a_process_failure_restarts_the_daemon_and_asks_once_more"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired stdlib fast path in the frozen Guard entrypoint, which repeated the Codex daemon round trip the native bridge owns. Codex hooks launch the native bridge, which authenticates the daemon, sends the hook and renders the answer."
+  },
+  {
+   "old_node": "tests/test_codex_bridge_early_proxy.py::test_codex_bridge_proxy_execution_environment_matches_guard_collector",
+   "source_sha256": "b1df34010bc2c39140830a6d0185783ebb7b9e431b4f9c73e7aa2c416c0c9234",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/hook_env_stamp_tests.rs::stamp_matches_python"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired stdlib fast path in the frozen Guard entrypoint, which repeated the Codex daemon round trip the native bridge owns. Codex hooks launch the native bridge, which authenticates the daemon, sends the hook and renders the answer."
+  },
+  {
+   "old_node": "tests/test_codex_bridge_early_proxy.py::test_codex_bridge_omits_surrogate_loader_values_and_keeps_the_name",
+   "source_sha256": "b1df34010bc2c39140830a6d0185783ebb7b9e431b4f9c73e7aa2c416c0c9234",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::lone_surrogates_are_forwarded_as_python_escapes_them",
+    "rust/crates/guard-runtime/src/hook_env_stamp_tests.rs::stamp_matches_python"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired stdlib fast path in the frozen Guard entrypoint, which repeated the Codex daemon round trip the native bridge owns. Codex hooks launch the native bridge, which authenticates the daemon, sends the hook and renders the answer."
+  },
+  {
+   "old_node": "tests/test_codex_signed_approval_handoff.py::test_pending_approval_prints_the_authenticated_browser_url",
+   "source_sha256": "a9acc74f6c7248d37bc246b30ce6b346cd3080b76c35e41dfd4a265087ab4664",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/native_review_link_tests.rs::a_loopback_approval_link_opens_only_once_it_is_signed"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python approval-link opener. The native bridge opens a loopback approval link only once it carries the signed session token."
+  },
+  {
+   "old_node": "tests/test_codex_signed_approval_handoff.py::test_pending_approval_does_not_open_unsigned_url_when_auth_token_load_fails",
+   "source_sha256": "a9acc74f6c7248d37bc246b30ce6b346cd3080b76c35e41dfd4a265087ab4664",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/native_review_link_tests.rs::a_loopback_approval_link_opens_only_once_it_is_signed",
+    "rust/crates/guard-runtime/src/native_review_link_tests.rs::loopback_links_the_client_would_sign_are_never_shown_unsigned"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python approval-link opener. The native bridge opens a loopback approval link only once it carries the signed session token."
+  },
+  {
+   "old_node": "tests/test_codex_live_completion_transport.py::test_slow_authenticated_completion_reaches_original_hook",
+   "source_sha256": "6304a1ef4eded11ffa3352611e5457d58969de82745038569ee5357af8b81c05",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_approval_tests.rs::a_browser_allow_recorded_by_the_daemon_is_approved"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python Codex approval wait. The native bridge parses the pending request, waits for the browser decision and asks the daemon to record it."
+  },
+  {
+   "old_node": "tests/test_codex_live_completion_transport.py::test_lost_completion_retries_same_bound_action",
+   "source_sha256": "6304a1ef4eded11ffa3352611e5457d58969de82745038569ee5357af8b81c05",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_approval_tests.rs::a_lost_completion_is_replayed_for_the_same_hook"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python Codex approval wait. The native bridge parses the pending request, waits for the browser decision and asks the daemon to record it."
+  },
+  {
+   "old_node": "tests/test_codex_live_completion_transport.py::test_unproven_or_changed_decision_does_not_retry_or_allow",
+   "source_sha256": "6304a1ef4eded11ffa3352611e5457d58969de82745038569ee5357af8b81c05",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_approval_tests.rs::an_allow_the_daemon_does_not_record_keeps_the_deny"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python Codex approval wait. The native bridge parses the pending request, waits for the browser decision and asks the daemon to record it."
+  },
+  {
+   "old_node": "tests/test_codex_live_completion_transport.py::test_authentication_failure_is_not_retried",
+   "source_sha256": "6304a1ef4eded11ffa3352611e5457d58969de82745038569ee5357af8b81c05",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_approval_tests.rs::a_refused_completion_is_not_replayed"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python Codex approval wait. The native bridge parses the pending request, waits for the browser decision and asks the daemon to record it."
+  },
+  {
+   "old_node": "tests/test_codex_live_completion_transport.py::test_transport_failure_is_bounded_by_attempts_and_deadline",
+   "source_sha256": "6304a1ef4eded11ffa3352611e5457d58969de82745038569ee5357af8b81c05",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_approval_tests.rs::completion_stops_after_three_lost_replies",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_approval_tests.rs::an_unresolved_request_keeps_the_deny_at_the_deadline"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python Codex approval wait. The native bridge parses the pending request, waits for the browser decision and asks the daemon to record it."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_hook_resume.py::test_pending_pretool_approval_requires_safe_request_id",
+   "source_sha256": "9abf0835eb3d0a08cae68e7f94630b3581630e380cc37a54730f447ea80001a2",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_approval_tests.rs::pending_requests_match_python"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python Codex approval wait. The native bridge parses the pending request, waits for the browser decision and asks the daemon to record it."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_hook_resume.py::test_resolution_action_rejects_terminal_or_unknown_policy",
+   "source_sha256": "9abf0835eb3d0a08cae68e7f94630b3581630e380cc37a54730f447ea80001a2",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_approval_tests.rs::resolutions_map_as_python_maps_them"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python Codex approval wait. The native bridge parses the pending request, waits for the browser decision and asks the daemon to record it."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_hook_resume.py::test_pending_pretool_parses_request_binding_from_reason",
+   "source_sha256": "9abf0835eb3d0a08cae68e7f94630b3581630e380cc37a54730f447ea80001a2",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_approval_tests.rs::pending_requests_match_python"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python Codex approval wait. The native bridge parses the pending request, waits for the browser decision and asks the daemon to record it."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_hook_resume.py::test_poll_resolution_treats_http_exception_as_transient",
+   "source_sha256": "9abf0835eb3d0a08cae68e7f94630b3581630e380cc37a54730f447ea80001a2",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_approval_tests.rs::a_lost_poll_reply_is_asked_again"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python Codex approval wait. The native bridge parses the pending request, waits for the browser decision and asks the daemon to record it."
+  },
+  {
+   "old_node": "tests/test_hook_pager_default_equivalence.py::test_frozen_bridge_drops_context_rather_than_exceed_request_limit",
+   "source_sha256": "2e5284272237e54b2dccf7dfcecefa5c2806a33974647a6d0668693b14c1d915",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/hook_env_stamp_tests.rs::oversized_stamp_and_hint_forward_input_unchanged"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired frozen-entry copy of the hook context stamp. The native bridge stamps and bounds the hook input."
+  },
+  {
+   "old_node": "tests/test_hook_pager_default_equivalence.py::test_frozen_bridge_forwards_original_input_when_hints_leave_no_room",
+   "source_sha256": "2e5284272237e54b2dccf7dfcecefa5c2806a33974647a6d0668693b14c1d915",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/hook_env_stamp_tests.rs::oversized_stamp_and_hint_forward_input_unchanged"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired frozen-entry copy of the hook context stamp. The native bridge stamps and bounds the hook input."
+  },
+  {
+   "old_node": "tests/test_structured_output_mediation_routes.py::test_required_authority_failure_withholds_after_native_receipt",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/content_sensitivity_tests.rs::mediation_withholds_content_it_cannot_prove_clean",
+    "rust/crates/guard-runtime/src/edge_structured_tests.rs::a_view_the_edge_cannot_resolve_withholds_as_an_unavailable_authority"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_structured_output_mediation_routes.py::test_binding_recheck_failure_withholds_without_logging_callback_details",
+   "replacement_nodes": [
+    "tests/test_structured_output_mediation_routes.py::test_a_forward_is_withheld_when_the_config_cannot_be_read_again",
+    "tests/test_structured_output_mediation.py::test_a_forward_is_withheld_when_the_view_changed_or_cannot_be_confirmed",
+    "rust/crates/guard-command/src/content_sensitivity_tests.rs::mediation_forwards_only_under_the_binding_the_scan_ran_under"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_structured_output_mediation_routes.py::test_match_unsupported_deadline_missing_receipt_and_native_deny_withhold",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/content_sensitivity_tests.rs::mediation_withholds_content_it_cannot_prove_clean",
+    "rust/crates/guard-command/src/content_sensitivity_tests.rs::mediation_withholds_once_its_deadline_has_passed",
+    "rust/crates/guard-runtime/src/edge_structured_tests.rs::only_an_allowed_pi_post_tool_use_is_mediated"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_structured_output_mediation_routes.py::test_native_route_attaches_adapter_field_after_receipt_without_mutating_native_result",
+   "replacement_nodes": [
+    "tests/test_structured_output_mediation_routes.py::test_the_edge_is_sent_the_managed_policy_view_and_its_answer_passes_through",
+    "rust/crates/guard-runtime/src/edge_structured_tests.rs::the_edge_answers_the_mediation_the_daemon_asked_for"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercised the Python adapter attaching the mediation after the native receipt. The native edge now answers the mediation itself and the daemon passes it through."
+  },
+  {
+   "old_node": "tests/test_structured_output_mediation_routes.py::test_native_route_load_error_attaches_fail_closed_mediation",
+   "replacement_nodes": [
+    "tests/test_structured_output_mediation_routes.py::test_native_route_load_error_sends_an_unreadable_view_the_edge_withholds_under",
+    "rust/crates/guard-runtime/src/edge_structured_tests.rs::a_view_the_edge_cannot_resolve_withholds_as_an_unavailable_authority"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_structured_output_mediation_routes.py::test_recording_only_cannot_bypass_real_managed_structured_policy",
+   "replacement_nodes": [
+    "tests/test_structured_output_mediation_routes.py::test_recording_only_hands_the_edge_the_real_managed_policy",
+    "rust/crates/guard-runtime/src/edge_structured_tests.rs::a_covered_policy_withholds_content_it_cannot_prove_clean"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_structured_output_mediation_routes.py::test_mediation_early_exits_preserve_native_authority",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/content_sensitivity_tests.rs::mediation_leaves_what_it_does_not_cover_to_the_native_verdict",
+    "rust/crates/guard-runtime/src/edge_structured_tests.rs::only_an_allowed_pi_post_tool_use_is_mediated",
+    "rust/crates/guard-runtime/src/edge_structured_tests.rs::a_policy_that_requires_no_mediation_adds_nothing"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_structured_output_mediation_routes.py::test_mediation_withholds_unproved_or_cancelled_content_without_native_rewrite",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/content_sensitivity_tests.rs::mediation_withholds_content_it_cannot_prove_clean"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_structured_output_mediation.py::test_native_route_does_not_skip_configured_authority_failures",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/edge_structured_tests.rs::a_managed_policy_that_cannot_be_trusted_withholds_naming_why",
+    "tests/test_structured_output_mediation.py::test_the_view_sent_for_a_configured_policy_carries_its_failure"
+   ],
+   "status": "native_behavior_ported_requires_ci"
   }
  ],
  "preserved_tests": [
@@ -7732,6 +8052,76 @@
    "old_node": "tests/test_npm_source_spec.py::test_git_approval_fingerprint_uses_canonical_repository_and_exact_commit",
    "new_node": "tests/test_guard_package_intent.py::test_git_approval_fingerprint_uses_canonical_repository_and_exact_commit",
    "reason": "Approval-fingerprint equivalence exercises the native package-intent artifact path, not the retired Python source parser, so it moves to the package-intent suite unchanged."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_hook_resume.py::test_codex_json_pretool_package_install_reason_includes_request",
+   "new_node": "tests/test_guard_phase04_harness_ux.py::test_codex_json_pretool_package_install_names_its_request",
+   "reason": "The hook's package-install denial still names its approval request; the check reads the request id and approval link carried in the hook output fields now that the Python reason parser is gone."
+  },
+  {
+   "old_node": "tests/test_guard_kubernetes_runtime.py::test_pi_post_tool_output_labels_kubernetes_secret_source",
+   "new_node": "tests/test_guard_kubernetes_runtime.py::test_pi_post_tool_output_holds_secret_from_kubernetes_read",
+   "reason": "The live hook answer for this payload shape still withholds the credential output; the Kubernetes source label it carries is checked by the native post-tool review's payload-shape test."
+  },
+  {
+   "old_node": "tests/test_guard_kubernetes_runtime.py::test_pi_post_tool_output_labels_argv_wrapped_kubernetes_secret_source",
+   "new_node": "tests/test_guard_kubernetes_runtime.py::test_pi_post_tool_output_holds_secret_from_argv_wrapped_kubernetes_read",
+   "reason": "The live hook answer for this payload shape still withholds the credential output; the Kubernetes source label it carries is checked by the native post-tool review's payload-shape test."
+  },
+  {
+   "old_node": "tests/test_guard_kubernetes_runtime.py::test_pi_post_tool_output_labels_single_item_command_args_kubernetes_secret_source",
+   "new_node": "tests/test_guard_kubernetes_runtime.py::test_pi_post_tool_output_holds_secret_from_single_item_command_args_kubernetes_read",
+   "reason": "The live hook answer for this payload shape still withholds the credential output; the Kubernetes source label it carries is checked by the native post-tool review's payload-shape test."
+  },
+  {
+   "old_node": "tests/test_guard_kubernetes_runtime.py::test_pi_post_tool_output_labels_commands_payload_kubernetes_secret_source",
+   "new_node": "tests/test_guard_kubernetes_runtime.py::test_pi_post_tool_output_holds_secret_from_commands_payload_kubernetes_read",
+   "reason": "The live hook answer for this payload shape still withholds the credential output; the Kubernetes source label it carries is checked by the native post-tool review's payload-shape test."
+  },
+  {
+   "old_node": "tests/test_guard_kubernetes_runtime.py::test_pi_post_tool_output_labels_later_commands_payload_kubernetes_secret_source",
+   "new_node": "tests/test_guard_kubernetes_runtime.py::test_pi_post_tool_output_holds_secret_from_later_commands_payload_kubernetes_read",
+   "reason": "The live hook answer for this payload shape still withholds the credential output; the Kubernetes source label it carries is checked by the native post-tool review's payload-shape test."
+  },
+  {
+   "old_node": "tests/test_guard_kubernetes_runtime.py::test_pi_post_tool_output_labels_wrapped_kubernetes_secret_source",
+   "new_node": "tests/test_guard_kubernetes_runtime.py::test_pi_post_tool_output_holds_secret_from_wrapped_kubernetes_read",
+   "reason": "The live hook answer for this payload shape still withholds the credential output; the Kubernetes source label it carries is checked by the native post-tool review's payload-shape test."
+  },
+  {
+   "old_node": "tests/test_guard_kubernetes_runtime.py::test_pi_post_tool_output_preserves_kubernetes_secret_volume_source",
+   "new_node": "tests/test_guard_kubernetes_runtime.py::test_pi_post_tool_output_holds_secret_from_kubernetes_secret_volume_read",
+   "reason": "The live hook answer for this payload shape still withholds the credential output; the Kubernetes source label it carries is checked by the native post-tool review's payload-shape test."
+  },
+  {
+   "old_node": "tests/test_guard_command_extensions.py::test_runtime_risk_class_mapping_remains_compatible",
+   "new_node": "rust/crates/guard-command/src/command_action_risk_classes_tests.rs::the_shell_and_github_actions_carry_their_risk_classes",
+   "reason": "The same action-class labels and risk classes are pinned where the table now lives."
+  },
+  {
+   "old_node": "tests/test_guard_command_extensions.py::test_every_extension_declares_its_actions_runtime_risk_classes",
+   "new_node": "rust/crates/guard-command/src/command_action_risk_classes_tests.rs::no_action_class_carries_a_risk_its_extension_does_not_publish",
+   "reason": "The catalog-consistency invariant reads the packaged catalog from Rust instead of the Python registry."
+  },
+  {
+   "old_node": "tests/test_guard_command_remote_extensions.py::test_remote_execution_actions_publish_risk_classes",
+   "new_node": "rust/crates/guard-command/src/command_action_risk_classes_tests.rs::the_remote_execution_actions_carry_their_risk_classes",
+   "reason": "The SSH, rsync and essh labels keep the same risk classes against the Rust table."
+  },
+  {
+   "old_node": "tests/test_guard_command_blitcp_extensions.py::test_blitcp_actions_publish_risk_classes",
+   "new_node": "rust/crates/guard-command/src/command_action_risk_classes_tests.rs::the_third_party_tool_actions_carry_their_risk_classes",
+   "reason": "The Blitcp labels moved into the Rust file's third-party pins."
+  },
+  {
+   "old_node": "tests/test_guard_command_skill_sunset_extensions.py::test_skill_sunset_audit_action_publishes_runtime_risk_class",
+   "new_node": "rust/crates/guard-command/src/command_action_risk_classes_tests.rs::the_third_party_tool_actions_carry_their_risk_classes",
+   "reason": "The Skill Sunset audit label moved into the Rust file's third-party pins."
+  },
+  {
+   "old_node": "tests/test_guard_command_tui_runner_extensions.py::test_tui_runner_action_publishes_risk_classes",
+   "new_node": "rust/crates/guard-command/src/command_action_risk_classes_tests.rs::the_third_party_tool_actions_carry_their_risk_classes",
+   "reason": "The tui-runner reconfiguration label moved into the Rust file's third-party pins."
   }
  ],
  "unchanged_regression_suites": [
@@ -7840,7 +8230,7 @@
    "path": "src/codex_plugin_scanner/guard/decision_projection_boundaries.py",
    "base_commit": "55e051a711550e55d0dad5991c5bc63918946bfa",
    "source_sha256": "7882c11404caa5388afbf8f2262b6fa1804b76ad824a59f8f823387f80cad8cd",
-   "remaining_role": "Immutable public approval DTO and resident transport; native owner validates and canonicalizes action, signals and presentation fields.",
+   "remaining_role": "Retired: module deleted; native owner validates and canonicalizes action, signals and presentation fields.",
    "native_replacements": [
     "rust/crates/guard-runtime/src/signal_projection_approval.rs"
    ],
@@ -7850,7 +8240,7 @@
    "path": "src/codex_plugin_scanner/guard/decision_boundaries.py",
    "base_commit": "55e051a711550e55d0dad5991c5bc63918946bfa",
    "source_sha256": "411d6e1e3a400955c466de1338c3725c60fb8458d321342c7f448cd3c64eca2f",
-   "remaining_role": "Immutable receipt/approval DTOs and bounded batch framing; Rust validates aliases, preserves Watch observations and synchronizes canonical surfaces.",
+   "remaining_role": "Approval-surface DTO and bounded batch framing; receipt DTOs retired. Rust validates aliases, preserves Watch observations and synchronizes canonical surfaces.",
    "native_replacements": [
     "rust/crates/guard-runtime/src/signal_projection_receipt.rs",
     "rust/crates/guard-runtime/src/signal_projection_op.rs"
@@ -8288,26 +8678,27 @@
    ],
    "base_commit": "6bf9f88edec5328884d18b3e9afbe1ef8342aada",
    "remaining_role": "Evaluates the request artifact the resident's package_review_plan op builds and applies the verdict: a block always, an allow only when the resident proved the npm that runs. The command lookup (Copilot toolArgs included), shape check, intent parse and artifact build run in the resident."
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/daemon/hook_native_package_review.py",
+   "source_sha256": "9b6c33d181442a4681ea6522448ff8d0c154ac6690d1284313a6c911f9032040",
+   "forbidden_symbols": [
+    "_script_free_watch",
+    "_first_message",
+    "LIFECYCLE_SCRIPTS_ENABLED_CODE"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/supply_chain_package_eval/review_settlement.rs",
+    "rust/crates/guard-runtime/src/supply_chain_eval_op.rs"
+   ],
+   "base_commit": "647fb01f6455b97b6fb15ebc296ecc1fd363cb3c",
+   "remaining_role": "Applies the resident's review settlement to the native verdict and renders it; which evaluator verdict lets a planned install continue, stops it with guidance, or blocks it is decided in Rust."
   }
  ],
  "retired_bodies": [
   {
    "path": "src/codex_plugin_scanner/guard/runtime/secret_sensitivity.py",
    "source_sha256": "2f692c209f962b918c70a38b30235a8284d2889daa4df07e885dc584754a114b",
-   "replacement_nodes": [
-    "rust/crates/guard-command/src/content_sensitivity_tests.rs::original_python_sensitivity_and_mediation_vectors_replay"
-   ]
-  },
-  {
-   "path": "src/codex_plugin_scanner/guard/runtime/structured_data_sensitivity.py",
-   "source_sha256": "923a670b3e9a8500fb980bd7583354d9fd8c8a4db19ef1228313319a874a9c02",
-   "replacement_nodes": [
-    "rust/crates/guard-command/src/content_sensitivity_tests.rs::original_python_sensitivity_and_mediation_vectors_replay"
-   ]
-  },
-  {
-   "path": "src/codex_plugin_scanner/guard/runtime/structured_output_mediation.py",
-   "source_sha256": "f75a612d86365e85f4e37c0ef395d92622414c29e9d552667b54b6a9c19fce20",
    "replacement_nodes": [
     "rust/crates/guard-command/src/content_sensitivity_tests.rs::original_python_sensitivity_and_mediation_vectors_replay"
    ]

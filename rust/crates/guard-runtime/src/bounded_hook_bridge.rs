@@ -29,8 +29,8 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 use crate::bounded_hook_bridge_render::{
-    daemon_response_to_native, event_name, failure_output, failure_output_for, Rendered,
-    FAILURE_REASON,
+    daemon_response_to_native, emergency_safe_output, event_name, event_pauses_when_unavailable,
+    failure_output, failure_output_for, Rendered, FAILURE_REASON,
 };
 use crate::claude_hook_bridge_http::remaining;
 use crate::codex_hook_bridge_direct_resident::DirectMiss;
@@ -251,9 +251,14 @@ fn restarted_route(
 ) -> Route {
     // An empty command (no home to start the daemon for) fails closed.
     if config.start_command.is_empty()
-        || !start_daemon(&config.start_command, TRANSPORT_FAILURE, deadline)
+        || !start_daemon(
+            &config.start_command,
+            TRANSPORT_FAILURE,
+            deadline,
+            Some(&config.guard_home),
+        )
     {
-        return prepared.failed();
+        return paused_route(config, &prepared, deadline, budget);
     }
     let started = await_daemon(deadline, || {
         match daemon_target(&config.guard_home, &config.harness) {
@@ -274,10 +279,82 @@ fn restarted_route(
         )
     });
     let Some(answer) = answer else {
-        return prepared.failed();
+        return paused_route(config, &prepared, deadline, budget);
     };
     let rendered = prepared.render(&config.harness, &answer, &config.guard_home);
     answered_route(rendered, &prepared, deadline)
+}
+
+/// The route for a hook no daemon answered: the pause, unless a live
+/// resident continues the call under the ratified emergency-safe profile.
+///
+/// The pause is the right default, and it stays the default: the resident is
+/// asked only here, once the daemon has failed and the bridge is about to
+/// write the fail-closed payload, and only about a hook that payload would
+/// pause. The resident holds the proofs the profile requires and continues
+/// nothing outside it, so anything else comes back a defer and the hook
+/// pauses as it did before this ask existed.
+fn paused_route(
+    config: &BridgeConfig,
+    prepared: &Prepared,
+    deadline: Instant,
+    budget: Duration,
+) -> Route {
+    emergency_safe_route(config, prepared, deadline, budget).unwrap_or_else(|| prepared.failed())
+}
+
+/// The continue a live resident answered under the emergency-safe profile,
+/// or `None` to pause the hook.
+///
+/// The resident answers the finished harness payload, so it is written as it
+/// stands. Half the time left bounds the ask, which leaves the pause its own
+/// room: a resident that does not answer in that time costs the hook nothing
+/// but the wait.
+fn emergency_safe_route(
+    config: &BridgeConfig,
+    prepared: &Prepared,
+    deadline: Instant,
+    budget: Duration,
+) -> Option<Route> {
+    if !event_pauses_when_unavailable(&prepared.event_name) {
+        return None;
+    }
+    let rpc_deadline = deadline.min(Instant::now() + (remaining(deadline) / 2).min(budget));
+    let answer = crate::codex_hook_bridge_direct::bounded_emergency_safe_answer(
+        &config.harness,
+        &config.guard_home,
+        &prepared.event_name,
+        &prepared.data,
+        rpc_deadline,
+    )
+    .ok()?;
+    emergency_safe_response(prepared, &answer, deadline)
+}
+
+/// The route for what the resident continued with, or `None` to pause.
+///
+/// A resident that answered something other than a mapping, or a lone
+/// surrogate this bridge cannot write back as Python does, is read as no
+/// answer at all. So is one that answered after the deadline: the hook is
+/// out of time either way, and the pause is what the caller writes.
+fn emergency_safe_response(prepared: &Prepared, answer: &str, deadline: Instant) -> Option<Route> {
+    let parsed = pyjson::parse_mapping_lone_surrogates(answer).ok()?;
+    let PyVal::Dict(response) = &parsed.value else {
+        return None;
+    };
+    let unmap = prepared.mapped || parsed.mapped;
+    if unmap && (prepared.collision || parsed.collision) {
+        return None;
+    }
+    if Instant::now() >= deadline {
+        return None;
+    }
+    let rendered = emergency_safe_output(response, unmap);
+    Some(Route::Respond {
+        stdout: rendered.stdout,
+        stderr: rendered.stderr,
+        exit_code: rendered.exit_code,
+    })
 }
 
 /// The route for an answer the daemon or its resident gave. An answer the

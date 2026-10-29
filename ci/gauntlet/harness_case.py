@@ -23,7 +23,14 @@ from .case_helpers import add_credential_redactions, fixture_system_context
 from .catalog import WATCH_COMMAND, WATCH_PROMPT, Scenario
 from .cleanup import cleanup_case_resources
 from .codex_contained import request_proofs as codex_request_proofs
-from .connector_fixtures import CONNECTOR_PROFILE, connector_checks, stage_connector_case, state_digest
+from .connector_fixtures import (
+    CONNECTOR_PROFILE,
+    GRANTED_SCRIPT_CASES,
+    allow_custom_script,
+    connector_checks,
+    stage_connector_case,
+    state_digest,
+)
 from .evidence import sha256_bytes
 from .extension_adapters import configure_extension_permission_denial, extension_adapter
 from .fixtures import (
@@ -43,7 +50,7 @@ from .host_process import clean_environment, realistic_environment, run_process
 from .input_evidence import redact_value
 from .provider import LoopbackCollector
 from .review_fixtures import (
-    GITHUB_REVIEW_CASE,
+    GITHUB_ENABLED_CASES,
     GITHUB_STUB_CASES,
     configure_github_review_controls,
     seed_protected_codex_hooks,
@@ -227,7 +234,7 @@ def run_harness_case(
                 case["extension_control"] = configure_extension_permission_denial(
                     daemon, guard_home, extension_adapter(scenario.commands[0])
                 )
-            if scenario.id == GITHUB_REVIEW_CASE:
+            if scenario.id in GITHUB_ENABLED_CASES:
                 case["extension_control"] = configure_github_review_controls(daemon, guard_home)
             if scenario.id in GIT_ALLOW_CASES:
                 case["extension_control"] = configure_git_allow_controls(daemon, guard_home)
@@ -241,6 +248,10 @@ def run_harness_case(
                 publisher = daemon._server.hook_worker.policy_snapshot_publisher
                 case["business_policy"] = bind_business_snapshot(
                     case["business_policy"], publisher.current_snapshot(), policy_snapshot
+                )
+            if connector is not None and scenario.id in GRANTED_SCRIPT_CASES:
+                case["custom_extension"] = allow_custom_script(
+                    daemon._server.store, connector.approve_script, fixture.home
                 )
             worker = daemon._server.hook_worker
             if scenario.oracle == "watch-command":

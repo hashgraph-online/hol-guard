@@ -30,7 +30,7 @@ from codex_plugin_scanner.guard.store_local_cli_schema import (
 
 _ROOT = Path(__file__).resolve().parents[1]
 _VECTORS = _ROOT / "rust/crates/guard-runtime/testdata/connector_setup/connector_group_vectors.json"
-_UNRECOGNISED, _OUTSIDE_ROOTS = NON_RECOGNITION_RISK_SUMMARIES
+_UNRECOGNISED, _UNRECOGNISED_STEP, _OUTSIDE_ROOTS = NON_RECOGNITION_RISK_SUMMARIES
 _HASH = "a" * 64
 _OTHER_HASH = "b" * 64
 
@@ -382,6 +382,7 @@ def test_the_regroup_reasons_are_the_texts_the_resident_stores() -> None:
     fragments = re.findall(r'"([^"\n]*)"', contained[contained.index("concat!(") :][:200])
 
     assert _UNRECOGNISED in pretool
+    assert f'"{_UNRECOGNISED_STEP}"' in pretool
     assert "".join(fragments[:2]).replace("\\'", "'") == _OUTSIDE_ROOTS
 
 

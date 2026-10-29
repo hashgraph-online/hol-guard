@@ -18,29 +18,26 @@ like any other, so the retry it would have authorized is refused.
 from __future__ import annotations
 
 import itertools
-import json
-import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from .native_context import _canonical_request_sha256, _resolve_digest_home, ensure_resident_prerequisite
-from .native_resident_client import native_resident_client_request
-from .native_runtime import _isolated_environment, _native_error, native_runtime_status
-from .native_runtime_resilience import (
-    native_record_overload,
-    native_record_resident_failure,
-    native_record_resident_success,
-    native_runtime_health_snapshot,
-)
+from .native_resident_decision import BoundCall, ResidentCallError, bound_resident_call
 from .runtime.github_workflow_approval_record import GitHubWorkflowApprovalRecord
 
-_MAX_REQUEST_BYTES = 1024 * 1024
-_RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
-_FEATURE = "github-workflow-prepare-v1"
 _REQUEST_SCHEMA = "guard-github-workflow-prepare-request.v1"
 _RESULT_SCHEMA = "guard-github-workflow-prepare-result.v1"
 _REQUEST_IDS = itertools.count()
 _DEFAULT_TIMEOUT_SECONDS = 9.0
+_CALL = BoundCall(
+    operation="github_workflow_prepare",
+    feature="github-workflow-prepare-v1",
+    prefix="native_github_workflow_prepare",
+    result_schema=_RESULT_SCHEMA,
+    max_request_bytes=1024 * 1024,
+    timeout_seconds=_DEFAULT_TIMEOUT_SECONDS,
+    check_circuit=True,
+    transport_failure="unavailable",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,75 +116,17 @@ def github_workflow_validated_lineage(
 
 
 def _resident_envelope(fields: dict[str, object], *, timeout_seconds: float) -> dict[str, object] | None:
-    effective_deadline = time.monotonic() + timeout_seconds
-    status = native_runtime_status(deadline_monotonic=effective_deadline)
-    if (
-        not status.available
-        or not status.compatible
-        or status.identity is None
-        or status.capabilities is None
-        or _RESIDENT_PROTOCOL_FEATURE not in status.capabilities.features
-        or _FEATURE not in status.capabilities.features
-    ):
-        return None
-    guard_home = _resolve_digest_home(None)
-    if not ensure_resident_prerequisite(guard_home):
-        return None
-    if native_runtime_health_snapshot(status.identity.sha256, guard_home).circuit_open:
-        return None
     request: dict[str, object] = {
         "schema": _REQUEST_SCHEMA,
         "request_id": f"ghwf-{next(_REQUEST_IDS)}",
         **fields,
     }
-    remaining_seconds = effective_deadline - time.monotonic()
-    if remaining_seconds <= 0:
-        return None
     try:
-        request_sha256 = "sha256:" + _canonical_request_sha256(request)
-        resident = json.dumps(
-            {
-                "operation": "github_workflow_prepare",
-                "deadline_budget_ms": max(1, min(9_000, int(remaining_seconds * 1_000))),
-                "request": request,
-            },
-            separators=(",", ":"),
-            ensure_ascii=False,
-            allow_nan=False,
-        ).encode("utf-8")
-    except (TypeError, ValueError):
+        reply = bound_resident_call(_CALL, request, timeout_seconds=timeout_seconds)
+    except ResidentCallError:
         return None
-    if len(resident) > _MAX_REQUEST_BYTES:
+    if reply.envelope.get("status") != "ok":
+        reply.fail()
         return None
-    output = native_resident_client_request(
-        executable=status.identity.path,
-        guard_home=guard_home,
-        environment=_isolated_environment(),
-        payload=resident,
-        deadline_monotonic=effective_deadline,
-    )
-    identity = status.identity.sha256
-    if output is None:
-        native_record_resident_failure(identity, guard_home, reason="native_github_workflow_prepare_unavailable")
-        return None
-    try:
-        envelope = json.loads(output)
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        native_record_resident_failure(identity, guard_home, reason="native_github_workflow_prepare_decode_failed")
-        return None
-    if _native_error(envelope) == "native_overloaded":
-        native_record_overload(identity, guard_home)
-        return None
-    if (
-        not isinstance(envelope, dict)
-        or envelope.get("schema") != _RESULT_SCHEMA
-        or envelope.get("request_id") != request["request_id"]
-        or envelope.get("request_sha256") != request_sha256
-    ):
-        native_record_resident_failure(identity, guard_home, reason="native_github_workflow_prepare_schema_mismatch")
-        return None
-    if envelope.get("status") != "ok":
-        native_record_resident_failure(identity, guard_home, reason="native_github_workflow_prepare_bad_result")
-        return None
-    native_record_resident_success(identity, guard_home)
-    return envelope
+    reply.healthy()
+    return reply.envelope

@@ -16,8 +16,8 @@ from codex_plugin_scanner.guard import native_codex_binding_capture as capture
 from codex_plugin_scanner.guard.daemon import hook_worker_native_review
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.native_codex_binding_capture import CodexBindingCaptureWriter
-from codex_plugin_scanner.guard.native_decision_receipt import canonical_receipt_bytes
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_pretool_edge_fixtures import canonical_receipt_bytes
 
 
 def _enable(guard_home: Path) -> None:
@@ -403,9 +403,7 @@ def test_unicode_payload_is_bounded_by_utf8_bytes(tmp_path: Path, monkeypatch: p
     assert len(payload.encode("utf-8")) <= capture._MAX_TEXT_BYTES
 
 
-def test_join_serializes_only_enough_records_to_show_the_limit(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_join_serializes_only_enough_records_to_show_the_limit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     seen: list[dict[str, object]] = []
 
     def answer(_home: Path, command: dict[str, object]) -> object:
@@ -420,9 +418,7 @@ def test_join_serializes_only_enough_records_to_show_the_limit(
     assert len(encoded) == capture._JOIN_PROBE_RECORDS
 
 
-def test_join_forwards_a_record_over_the_capture_ceiling(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_join_forwards_a_record_over_the_capture_ceiling(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     seen: list[dict[str, object]] = []
 
     def answer(_home: Path, command: dict[str, object]) -> object:
@@ -438,9 +434,7 @@ def test_join_forwards_a_record_over_the_capture_ceiling(
     assert len(encoded[0].encode("utf-8")) > capture._MAX_TEXT_BYTES
 
 
-def test_join_rejects_a_record_that_cannot_fit_the_request(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_join_rejects_a_record_that_cannot_fit_the_request(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[object] = []
     _patch_exchange(monkeypatch, lambda *args: calls.append(args))
     huge = {"text": "b" * capture._JOIN_RECORD_BYTES}
@@ -448,9 +442,7 @@ def test_join_rejects_a_record_that_cannot_fit_the_request(
     assert calls == []
 
 
-def test_capture_timeouts_do_not_touch_enforcement_resilience(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_capture_timeouts_do_not_touch_enforcement_resilience(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from types import SimpleNamespace
 
     from codex_plugin_scanner.guard import native_execution

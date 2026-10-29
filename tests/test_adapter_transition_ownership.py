@@ -101,6 +101,7 @@ def test_install_preparation_is_complete_or_explicitly_unavailable(tmp_path: Pat
         "omp",
         "devin",
         "opencode",
+        "muse",
     }
     if harness in supported:
         prepared = adapter.prepare_install(ctx)
@@ -114,6 +115,7 @@ def test_install_preparation_is_complete_or_explicitly_unavailable(tmp_path: Pat
             "omp": 4,
             "devin": 5,
             "opencode": 9,
+            "muse": 5,
         }.get(harness, 2)
         assert len(prepared.files) == expected
         assert prepared.manifest["harness"] == harness

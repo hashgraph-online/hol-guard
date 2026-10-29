@@ -8,6 +8,7 @@ use sha2::{Digest, Sha256};
 
 use super::editor_tasks::EditorTaskScan;
 use super::hooks::HookScan;
+use super::instructions::InstructionScan;
 use super::plugins::PluginScan;
 use super::secrets::SecretScan;
 use super::skills::SkillScan;
@@ -102,6 +103,8 @@ pub(super) struct Walk {
     pub(super) workflows: Option<WorkflowScan>,
     /// Present when the caller asked for the editor task check.
     pub(super) editor_tasks: Option<EditorTaskScan>,
+    /// Present when the caller asked for the agent instruction file check.
+    pub(super) instructions: Option<InstructionScan>,
 }
 
 #[derive(Default)]
@@ -149,6 +152,11 @@ impl Walk {
                 editor_tasks.left_unread();
             }
         }
+        if let Some(instructions) = self.instructions.as_mut() {
+            if instructions.admits(relative) {
+                instructions.left_unread();
+            }
+        }
     }
 
     /// Record a special file the walk did not follow, which the skill, hook,
@@ -170,6 +178,9 @@ impl Walk {
         if let Some(editor_tasks) = self.editor_tasks.as_mut() {
             editor_tasks.left_special(relative);
         }
+        if let Some(instructions) = self.instructions.as_mut() {
+            instructions.left_special(relative);
+        }
     }
 
     /// Record a symlink the walk did not follow, which the skill, hook,
@@ -190,6 +201,9 @@ impl Walk {
         }
         if let Some(editor_tasks) = self.editor_tasks.as_mut() {
             editor_tasks.left_link(relative);
+        }
+        if let Some(instructions) = self.instructions.as_mut() {
+            instructions.left_link(relative, target);
         }
     }
 
@@ -372,12 +386,17 @@ fn admit_file(
         .editor_tasks
         .as_mut()
         .is_some_and(|editor_tasks| editor_tasks.admits(child));
+    let scan_instruction = walk
+        .instructions
+        .as_mut()
+        .is_some_and(|instructions| instructions.admits(child));
     let capture = (scan_content
         || scan_skill
         || scan_hooks
         || scan_plugin
         || scan_workflow
-        || scan_editor_task)
+        || scan_editor_task
+        || scan_instruction)
         .then_some(&mut captured);
     match hash_stable(file, node, limits.file_bytes, capture) {
         Ok((digest, read)) => {
@@ -411,6 +430,11 @@ fn admit_file(
             if scan_editor_task {
                 if let Some(editor_tasks) = walk.editor_tasks.as_mut() {
                     editor_tasks.observe(child, &captured);
+                }
+            }
+            if scan_instruction {
+                if let Some(instructions) = walk.instructions.as_mut() {
+                    instructions.observe(child, &captured);
                 }
             }
         }

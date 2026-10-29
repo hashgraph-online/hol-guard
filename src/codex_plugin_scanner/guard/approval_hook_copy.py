@@ -2,38 +2,17 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping
 from pathlib import Path
 from urllib.parse import urlparse
 
-from .blocked_request_mode import is_unlinked_connector_setup_reason
 from .daemon.auth_token import load_guard_daemon_auth_token
 from .local_dashboard_session import build_approval_browser_url
 
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
-_OPEN_GUARD_MARKER = "open hol guard to approve"
-_DEFAULT_HOOK_REASON = "HOL Guard flagged this tool call for review."
-_GUARD_TOKEN_FRAGMENT = re.compile(
-    r"#guard-token=[A-Za-z0-9_~%+-]+(?:\.[A-Za-z0-9_~%+-]+)*",
-    re.IGNORECASE,
-)
 _SIGNED_APPROVAL_LINK_UNAVAILABLE = (
     "HOL Guard could not create a signed approval link; open Inbox from Guard on this device, then retry."
 )
-
-
-def _without_guard_token_fragment(text: str) -> str:
-    return _GUARD_TOKEN_FRAGMENT.sub("", text)
-
-
-def _without_raw_approval_url(message: str, review_url: str) -> str:
-    without_raw_url = message.replace(review_url, "").strip()
-    without_raw_url = re.sub(r":\s*\.(?=\s|$)", ".", without_raw_url)
-    trimmed = without_raw_url.rstrip()
-    if trimmed.endswith("."):
-        trimmed = trimmed[:-1].rstrip(" \t\r\n:;,") + "."
-    return trimmed.rstrip(" :;,")
 
 
 def approval_review_url_from_payload(payload: Mapping[str, object]) -> str | None:
@@ -86,27 +65,6 @@ def authenticated_approval_review_url(
         return None
 
 
-def with_approval_review_url(
-    reason: str,
-    payload: Mapping[str, object],
-    *,
-    guard_home: Path | None = None,
-) -> str:
-    """Keep the pause reason and always include the approval URL when Guard queued one."""
-
-    review_url = approval_review_url_from_payload(payload)
-    stripped = reason.strip()
-    if review_url is None or is_unlinked_connector_setup_reason(stripped):
-        # A default-mode connector setup reason never carries a link.
-        return stripped
-    live_url = live_approval_review_url(review_url, guard_home=guard_home)
-    if live_url != review_url and review_url in stripped:
-        return stripped.replace(review_url, live_url, 1)
-    if live_url in stripped:
-        return stripped
-    return f"{stripped} Open HOL Guard to approve or keep this blocked: {live_url}."
-
-
 def is_loopback_approval_url(url: str) -> bool:
     try:
         parsed = urlparse(url)
@@ -116,47 +74,3 @@ def is_loopback_approval_url(url: str) -> bool:
     if host.startswith("[") and host.endswith("]"):
         host = host[1:-1]
     return parsed.scheme in {"http", "https"} and host in _LOOPBACK_HOSTS
-
-
-def join_native_hook_reason(*values: object | None) -> str:
-    """Join hook reason parts, keeping the tokenized Open-HOL-Guard copy when both exist.
-
-    Next to a default-mode connector setup reason, parts that offer approval are dropped.
-    """
-
-    if any(is_unlinked_connector_setup_reason(value) for value in values):
-        values = tuple(
-            value for value in values if not (isinstance(value, str) and _OPEN_GUARD_MARKER in value.lower())
-        )
-    messages: list[str] = []
-    for value in values:
-        if isinstance(value, str) and value.strip():
-            candidate = value.strip()
-            if candidate not in messages:
-                messages.append(candidate)
-    tokenized = [
-        message for message in messages if "guard-token=" in message.lower() and _OPEN_GUARD_MARKER in message.lower()
-    ]
-    if tokenized:
-        replacement = tokenized[0]
-        untokenized = _without_guard_token_fragment(replacement)
-        merged: list[str] = []
-        used_replacement = False
-        for message in messages:
-            if message == replacement:
-                if not used_replacement:
-                    merged.append(message)
-                    used_replacement = True
-                continue
-            if untokenized and untokenized in message:
-                merged.append(message.replace(untokenized, replacement, 1))
-                used_replacement = True
-                continue
-            merged.append(message)
-        messages = []
-        for candidate in merged:
-            if candidate not in messages:
-                messages.append(candidate)
-    if messages:
-        return " ".join(messages)
-    return _DEFAULT_HOOK_REASON

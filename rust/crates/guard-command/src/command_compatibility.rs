@@ -28,6 +28,7 @@ pub(crate) use environment::{
     code_or_redirect_environment_name, credential_routing_environment_name, plain_printed_name,
 };
 pub(crate) use git::{
+    command_index as git_command_index,
     repository_routes_verified as git_repository_routes_verified,
     rooted_hooks_inert as git_rooted_hooks_inert,
     runs_configured_program as git_runs_configured_program,

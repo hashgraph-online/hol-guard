@@ -283,7 +283,10 @@ def test_network_check_reports_the_saved_bundle_decision(tmp_path, monkeypatch: 
 
     guard_home = tmp_path / "guard-home"
     store = GuardStore(guard_home)
-    store.set_sync_payload(NETWORK_PROTECTION_SYNC_STATE_KEY, _saved(), "2026-10-21T00:00:00Z")
+    # Indicators older than a week stop applying and this check reads the real
+    # clock, so the bundle is current.
+    now = datetime.now(timezone.utc)
+    store.set_sync_payload(NETWORK_PROTECTION_SYNC_STATE_KEY, _saved(generated_at=now), _iso(now))
     emitted: list[dict[str, object]] = []
     monkeypatch.setattr(
         commands_dispatch_local,

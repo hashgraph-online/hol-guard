@@ -47,6 +47,7 @@ use crate::mcp_relay_package_eval::{evaluate_package_request, PackageEvalFacts};
 use crate::mcp_relay_pending::COMMIT_RESULT_SCHEMA;
 use crate::resident_state::ResidentState;
 use crate::supply_chain_eval_transport::ResidentEvalTransport;
+use zeroize::Zeroizing;
 
 const STATE_DIRECTORY: &str = "native-runtime";
 const RESULT_SCHEMA: &str = "guard-mcp-relay-decide-result.v1";
@@ -99,7 +100,7 @@ impl ProcessFacts {
 /// A resident this relay reached, kept for the next call.
 struct Resident {
     state: ResidentState,
-    token: Vec<u8>,
+    token: Zeroizing<Vec<u8>>,
     /// The digest this relay's own durable copy is published under, when it
     /// runs as one.
     durable_digest: Option<String>,

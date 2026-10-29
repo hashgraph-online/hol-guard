@@ -8,6 +8,10 @@ pub(crate) mod chain_literals;
 mod command_rewrite;
 #[path = "contained_publish.rs"]
 pub(crate) mod contained_publish;
+#[path = "generic_cursor_compaction_writes.rs"]
+mod cursor_compaction_writes;
+#[path = "generic_cursor_project_reads.rs"]
+mod cursor_project_reads;
 #[path = "env_prefix_projection.rs"]
 mod env_prefix_projection;
 pub use env_prefix_projection::bindable_setting;
@@ -44,6 +48,8 @@ pub fn omp_bash_execution_directory(
 mod omp_bash_cwd_tests;
 #[path = "open_quote.rs"]
 mod open_quote;
+#[path = "process_substitution.rs"]
+mod process_substitution;
 #[path = "generic_pure_eval.rs"]
 mod pure_eval;
 #[path = "generic_read_note.rs"]
@@ -90,7 +96,36 @@ pub fn venv_activation_target(command: &str, context: super::PathContext<'_>) ->
 pub fn contained_target(command: &str, context: super::PathContext<'_>) -> Option<String> {
     let ungrouped = super::runnable_ungrouped_command_list(command);
     let text = ungrouped.as_deref().unwrap_or(command);
-    venv_activation_target(text, context).or(ungrouped)
+    let projected = venv_activation_target(text, context).or(ungrouped);
+    let text = projected.as_deref().unwrap_or(command);
+    home_launcher_target(text, context).or(projected)
+}
+
+/// The launcher the pre-tool pass answered for, spelled as the path it names.
+///
+/// The sandbox seeds its own private HOME, so the `/bin/sh` it runs the text
+/// through would expand `~/<dir>/<program>` below a directory holding nothing
+/// and report the launcher missing. The pass admits that spelling only as the
+/// absolute path it expands to, from the declared home, and the sink runs the
+/// text the pass answered for.
+///
+/// The shell proof is set here, as the sink's own peel expands a leading
+/// `cd ~/<dir>` from the declared home without one: that proof was made
+/// before the call was admitted, under the environment the agent ran in, and
+/// only a command it admitted reaches a sink at all.
+fn home_launcher_target(command: &str, context: super::PathContext<'_>) -> Option<String> {
+    let model = crate::parse_command(&crate::CommandModelRequestV1 {
+        command: command.to_owned(),
+        dialect: "posix".into(),
+        transport: "shell_string".into(),
+        extraction_provenance: "pre-tool-generic".into(),
+    })
+    .ok()?;
+    let context = super::PathContext {
+        shell_home_matches: true,
+        ..context
+    };
+    Some(super::workspace_contained::home_exec::as_absolute_program(&model, context)?.text)
 }
 
 /// Bounded caller-supplied context, never authenticated provider facts.
@@ -406,20 +441,29 @@ fn evaluate_envelope(
         Ok(value) => value,
         Err(error) => return generic_error_result(harness, event, error),
     };
+    signals.mirrored_input_unproven = harness == "grok"
+        && !payload
+            .as_object()
+            .is_some_and(super::search_scope::mirrored_input_matches);
     signals.github_read_only = harness == "omp"
         && event == "PreToolUse"
         && omp::strict_tool_input(payload)
             .is_some_and(|input| github::read_only_call(input, signals.tool_name.as_deref()));
-    // A search pattern is data, not a command: a proven Claude `Grep` scope
-    // skips the command authority but still passes the command controls below.
+    // A search pattern is data, not a command: a proven Claude or Grok `Grep`
+    // scope skips the command authority but still passes the command controls
+    // below.
     let search_scope_proven = event == "PreToolUse"
-        && harness == "claude-code"
         && signals.url_values.is_empty()
-        && match signals.tool_name.as_deref() {
-            Some("Grep") => {
+        && match (harness, signals.tool_name.as_deref()) {
+            ("claude-code", Some("Grep")) => {
                 super::search_scope::claude_grep_directory_scope_proven(payload, home_dir, cwd)
             }
-            Some("Glob") => super::search_scope::claude_glob_scope_proven(payload, home_dir, cwd),
+            ("claude-code", Some("Glob")) => {
+                super::search_scope::claude_glob_scope_proven(payload, home_dir, cwd)
+            }
+            ("grok", Some("Grep")) => {
+                super::search_scope::grok_grep_directory_scope_proven(payload, home_dir, cwd)
+            }
             _ => false,
         };
     // Codex sends an edit as `apply_patch` with the patch body in `command`.
@@ -632,13 +676,53 @@ fn evaluate_envelope(
                     &reviewed.command,
                     context,
                     execution_environment,
-                    harness,
-                    event,
+                    super::workspace_contained::host_eligible(harness, event, payload),
                 )
             {
                 return projected;
             }
             return env_prefix_projection::join_reviewed(projected, raw, &reviewed);
+        }
+    }
+
+    // `diff <(sort a.txt) b.txt` hands `diff` a pipe to read. Prove the inner
+    // commands and the command around them separately, and keep the projected
+    // answer only when every one of them settles on its own.
+    if let Some(substitution) = signals
+        .command
+        .as_deref()
+        .filter(|_| project_redirects && !search_scope_proven && !apply_patch_proven)
+        .and_then(process_substitution::project)
+    {
+        let raw_text = signals.command.as_deref().unwrap_or_default();
+        let inner_reads = substitution.inner.iter().all(|inner| {
+            let inner_payload = payload_with_command(payload, raw_text, inner);
+            process_substitution::reads_only(&evaluate_envelope(
+                harness,
+                event,
+                &inner_payload,
+                controls,
+                deadline,
+                context,
+                execution_environment,
+                project_redirects,
+            ))
+        });
+        if inner_reads {
+            let projected_payload = payload_with_command(payload, raw_text, &substitution.command);
+            let projected = evaluate_envelope(
+                harness,
+                event,
+                &projected_payload,
+                controls,
+                deadline,
+                context,
+                execution_environment,
+                project_redirects,
+            );
+            if process_substitution::reads_only(&projected) {
+                return projected;
+            }
         }
     }
 
@@ -730,9 +814,8 @@ fn evaluate_envelope(
     }) {
         signals.sensitive_target = signals.independent_sensitive_target;
     }
-    // A link to a secret file is that secret under another name.
-    signals.sensitive_target |=
-        super::secret_aliases::decision_names_secret_alias(command_decision.as_ref(), context);
+    // A tracked document named for a secret is not one; a link to a secret is.
+    signals.settle_tracked_names(command_decision.as_ref(), context);
     let hashline_edit_proven = omp_hashline_edit.is_some();
     let mut result = if search_scope_proven {
         generic_result(
@@ -812,6 +895,14 @@ fn evaluate_envelope(
         omp_result
     } else if let Some(pure_result) = pure_eval::evaluate(harness, event, payload, &signals) {
         pure_result
+    } else if let Some(cursor_read) =
+        cursor_project_reads::evaluate(harness, event, payload, &signals, home_dir, cwd)
+    {
+        cursor_read
+    } else if let Some(cursor_note) =
+        cursor_compaction_writes::evaluate(harness, event, payload, &signals, home_dir, cwd)
+    {
+        cursor_note
     } else if task_metadata {
         generic_result(
             generic_action(harness, event, PreToolActionTypeV1::Harness,
@@ -974,10 +1065,10 @@ fn evaluate_envelope(
         ) && matches!(harness, "claude-code" | "codex" | "omp" | "oh-my-pi" | "pi");
     if (cfg!(target_os = "macos") || (cfg!(windows) && windows_contained))
         && event == "PreToolUse"
-        && matches!(
+        && (matches!(
             harness,
             "omp" | "oh-my-pi" | "pi" | "zcode" | "claude-code" | "codex"
-        )
+        ) || super::workspace_contained::cursor_shell_route(harness, payload))
         && cwd.is_some()
         && (result.action.action_type == PreToolActionTypeV1::Command
             || (matches!(
@@ -1081,6 +1172,7 @@ fn evaluate_envelope(
         execution_environment,
         harness,
         event,
+        payload,
         signals.command.as_deref(),
     );
     super::git_local_writes::settle(
@@ -1153,17 +1245,30 @@ fn git_read_order_settled_by_allow(
     else {
         return false;
     };
-    result.minimum_action == "allow"
-        && result.action.bounded
-        && !result.action.sensitive_target
-        && super::git_read_floor::unsettled_steps_before_reads(
+    if result.minimum_action != "allow" || !result.action.bounded || result.action.sensitive_target
+    {
+        return false;
+    }
+    super::git_read_floor::unsettled_steps_before_reads(
+        model,
+        context,
+        deadline,
+        execution_environment,
+    )
+    .is_some_and(|steps| {
+        super::git_read_after_allow::allow_settles_read_order(
             model,
+            &steps,
             context,
             deadline,
             execution_environment,
         )
-        .is_some()
-        && controls.explicit_allow_covers_command(model, observations, context)
+    }) && controls.explicit_allow_covers_command(
+        model,
+        observations,
+        context,
+        execution_environment,
+    )
 }
 
 /// The Git floor's reason when every Git read was proven helper-free on its

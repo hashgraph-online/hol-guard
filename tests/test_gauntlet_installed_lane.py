@@ -428,11 +428,26 @@ def test_a_hook_that_falls_over_on_an_attack_payload_is_not_a_denial(tmp_path: P
     assert any("never answered an attack payload" in failure for failure in result["failures"])
 
 
+_MUSE_EVENTS = ("PreToolUse", "PermissionRequest", "UserPromptSubmit", "PostToolUse", "SessionStart", "Stop")
+
+
 def test_the_contract_is_the_lanes_own_and_covers_every_claude_event() -> None:
     """Asserting against the product's contract would let an emptied one pass."""
 
     contract = load_contract()
     assert set(contract["harnesses"]["claude-code"]["required_events"]) == set(_CLAUDE_EVENTS)
+
+
+def test_the_contract_covers_every_muse_event() -> None:
+    """Muse registers the same hook family under its own config home."""
+
+    contract = load_contract()
+    muse = contract["harnesses"]["muse"]
+    assert muse["config"] == ".config/muse/settings.json"
+    assert set(muse["required_events"]) == set(_MUSE_EVENTS)
+    assert muse["replay"] is True
+    assert muse["replay_event"] == "PreToolUse"
+    assert muse["replay_events"] == ["UserPromptSubmit"]
     assert contract["harnesses"]["omp"]["replay"] is False
     assert contract["harnesses"]["omp"]["replay_gap"]
     expectations = [case["expect"] for case in contract["replay_cases"]]
@@ -769,6 +784,7 @@ def test_a_harness_with_no_prompt_hook_skips_the_prompt_cases_rather_than_failin
     assert [entry["id"] for entry in replay["skipped"]] == [
         "benign-prompt-submit",
         "benign-prompt-submit-names-a-file",
+        "benign-prompt-submit-wire-encoding",
     ]
     assert all("prompt" not in failure for failure in evidence["failures"])
 

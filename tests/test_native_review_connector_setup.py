@@ -1,11 +1,16 @@
-"""A review held only because Guard was never set up for a local CLI is grouped and worded as setup."""
+"""A review held only because Guard was never set up for a local CLI is grouped and worded as setup.
+
+The resident looks up the connector inside the queue call and answers its
+setup wording (`guard_store_native_review_queue_tests.rs`); these tests cover
+what the hook sends and how it reads the answer.
+"""
 
 from __future__ import annotations
 
 import json
-from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -13,16 +18,13 @@ from codex_plugin_scanner.guard import config as guard_config
 from codex_plugin_scanner.guard.blocked_request_mode import SAFE_ALTERNATIVE_GUIDANCE, connector_setup_reason
 from codex_plugin_scanner.guard.daemon import hook_native_review_approval as review
 from codex_plugin_scanner.guard.daemon import native_review_connector
-from codex_plugin_scanner.guard.local_cli_hook import SetupConnector
 
-_CONNECTOR = SetupConnector(
-    cli_id="local-cli.lanectl-0123abcd",
-    identity_hash="a" * 64,
-    name="lanectl",
-    surface="cli",
-    queue_group_id="connector:" + "a" * 64 + ":0123456789abcdef",
-)
 _URL = "http://127.0.0.1:4781/requests/abc"
+_SETUP = {
+    "name": "lanectl",
+    "is_local": True,
+    "setup_reason": connector_setup_reason("lanectl", "cli", ask=False),
+}
 
 
 def _native_review() -> dict[str, object]:
@@ -36,40 +38,53 @@ def _native_review() -> dict[str, object]:
     }
 
 
+def _payload(tmp_path: Path, **extra: object) -> dict[str, object]:
+    return {"tool_name": "Bash", "tool_input": {"command": "lanectl status"}, "cwd": str(tmp_path), **extra}
+
+
 def _pause(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     *,
     ask: bool,
-    connector: SetupConnector | None,
+    setup: dict[str, object] | None,
     binding: str | None = "binding",
     token: str | None = None,
     queue_fails: bool = False,
-) -> tuple[str, list[dict[str, object]]]:
+    rendered: dict[str, object] | None = None,
+    reason_code: str = "native_command_review_required",
+) -> tuple[str, list[dict[str, object]], dict[str, object]]:
     queued: list[dict[str, object]] = []
+    silent: dict[str, object] = {}
+
+    def silent_block(_harness: str, inputs: dict[str, Any], **_kwargs: object) -> dict[str, object]:
+        # The resident composes the block from these facts; its text is tested in
+        # `hook_decision_review_response_tests.rs`.
+        silent.update(inputs, verdict=inputs["result"])
+        return {"reason": inputs["setup_reason"] or inputs["result"]["reason"]}
 
     def queue(*_args: object, **kwargs: object) -> dict[str, object] | None:
         queued.append(kwargs)
-        return None if queue_fails else {"request_id": "abc", "approval_url": _URL}
+        if queue_fails:
+            return None
+        row: dict[str, object] = {"request_id": "abc", "approval_url": _URL}
+        if setup is not None:
+            row["connector_setup"] = dict(setup)
+        return row if rendered is None else {**row, "hook_response": dict(rendered)}
 
     for name, value in {
-        "native_review_policy_binding": lambda **_k: None,
-        "native_review_evidence": lambda **_k: (binding, token, None),
-        "native_local_cli_grant_response": lambda *_a, **_k: None,
-        "native_saved_review_response": lambda *_a, **_k: None,
-        "native_review_matching_block": lambda *_a, **_k: False,
-        "native_review_matching_allow": lambda *_a, **_k: False,
+        "review_evidence_parts": lambda _evidence: (True, binding, token, None),
+        "native_saved_decision_response": lambda *_a, **_k: None,
+        "native_review_settle": lambda *_a, **_k: None,
         "native_package_review_response": lambda *_a, **_k: None,
         "native_review_approval_center_url": lambda _store: "http://127.0.0.1:4781",
-        "native_review_setup_connector": lambda *_a, **_k: connector,
         "queue_native_pre_tool_review": queue,
-        "record_silent_native_review_event": lambda *_a: None,
         # Rendering is native; the harness shape is tested with the renderers.
         "render_pre_tool": lambda _harness, verdict, **_k: dict(verdict),
         "render_pre_tool_review": lambda _harness, verdict, *, approval, **_k: {
             "reason": f"{verdict['reason']} {approval['approval_url']}"
         },
-        "native_review_reason": lambda _harness, reason, url, **_k: f"{reason} {url}",
+        "render_silent_review_block": silent_block,
     }.items():
         monkeypatch.setattr(review, name, value)
     mode = SimpleNamespace(blocked_request_mode="ask" if ask else "safe-alternative")
@@ -78,95 +93,76 @@ def _pause(
     response = review.pause_native_pre_tool_for_approval(
         object(),
         harness="codex",
-        payload={"tool_name": "Bash", "tool_input": {"command": "lanectl status"}, "cwd": str(tmp_path)},
-        native_result=_native_review(),
+        payload=_payload(tmp_path),
+        native_result={**_native_review(), "reason_code": reason_code},
         native_receipt=None,
         workspace=tmp_path,
         guard_home=tmp_path / "guard",
+        home_dir=tmp_path / "home",
     )
-    return json.dumps(response), queued
+    return json.dumps(response), queued, silent
 
 
 def test_default_mode_waits_for_the_users_approval_with_the_link(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    text, queued = _pause(tmp_path, monkeypatch, ask=False, connector=_CONNECTOR)
+    text, queued, silent = _pause(tmp_path, monkeypatch, ask=False, setup=_SETUP)
 
     assert "HOL Guard has not been set up for `lanectl` (local CLI) on this device." in text
     assert "Allow once or Always allow" in text
-    assert "waiting for the user to approve it" in text
     assert SAFE_ALTERNATIVE_GUIDANCE not in text
-    assert "seek permission" not in text
-    assert _URL in text
-    assert queued[0]["connector"] == _CONNECTOR
+    # A local CLI's setup review is an ordinary approvable one, so the resident links it.
+    assert (silent["queued"], silent["request_id"], silent["approval_url"]) == (True, "abc", _URL)
+    assert (silent["ask"], silent["connector_is_local"], silent["retry_reuses_approval"]) == (False, True, True)
+    lookup: Any = queued[0]["connector_lookup"]
+    assert (lookup["command"], lookup["cwd"], lookup["home_dir"]) == (
+        "lanectl status",
+        str(tmp_path),
+        str(tmp_path / "home"),
+    )
 
 
 def test_a_setup_review_that_could_not_be_queued_never_says_it_is_waiting(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    text, queued = _pause(tmp_path, monkeypatch, ask=False, connector=_CONNECTOR, queue_fails=True)
+    text, queued, silent = _pause(tmp_path, monkeypatch, ask=False, setup=_SETUP, queue_fails=True)
 
     assert queued
-    assert "waiting for the user to approve it" not in text
-    assert "Allow once or Always allow" not in text
-    assert _URL not in text
+    # With no row there is no setup text and no link.
+    assert (silent["queued"], silent["request_id"], silent["approval_url"]) == (False, None, None)
+    assert (silent["setup_reason"], silent["connector_is_local"]) == (None, False)
+    assert "has not been set up" not in text
 
 
-def test_ask_mode_waits_in_the_inbox_with_the_link(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    text, queued = _pause(tmp_path, monkeypatch, ask=True, connector=_CONNECTOR)
-
-    assert "has not been set up for `lanectl`" in text
-    assert "Allow once or Always allow" in text
-    assert "not an approval of this action" not in text
-    assert _URL in text
-    assert queued[0]["connector"] == _CONNECTOR
-
-
-def test_an_mcp_setup_review_keeps_the_silent_default_text(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    mcp = replace(_CONNECTOR, name="echo-mcp", surface="mcp")
-    text, queued = _pause(tmp_path, monkeypatch, ask=False, connector=mcp)
-
-    assert "has not been set up for `echo-mcp` (MCP server)" in text
-    assert SAFE_ALTERNATIVE_GUIDANCE in text
-    assert _URL not in text
-    assert queued[0]["connector"] == mcp
-
-
-def test_a_package_script_is_labelled_as_one(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    scripts = replace(_CONNECTOR, name="build", surface="package-scripts")
-    text, _queued = _pause(tmp_path, monkeypatch, ask=False, connector=scripts)
-
-    assert "has not been set up for `build` (package script)" in text
-    assert "Allow once or Always allow" in text
-    assert _URL in text
-
-
-def test_a_row_only_always_allow_can_release_says_so(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    text, queued = _pause(tmp_path, monkeypatch, ask=False, connector=_CONNECTOR, binding=None, token="exact-token")
-
-    assert "just once will not" in text
-    assert "Always allow exact action" in text
-    assert "Allow once or Always allow" not in text
-    assert _URL in text
-    assert queued[0]["connector"] == _CONNECTOR
-
-
-def test_a_row_approval_cannot_release_gets_no_link(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    text, queued = _pause(tmp_path, monkeypatch, ask=True, connector=_CONNECTOR, binding=None)
+def test_ask_mode_shows_the_setup_text_the_queue_call_answered(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    asked = {**_SETUP, "setup_reason": connector_setup_reason("lanectl", "cli", ask=True)}
+    text, queued, silent = _pause(tmp_path, monkeypatch, ask=True, setup=asked)
 
     assert "has not been set up for `lanectl`" in text
-    assert SAFE_ALTERNATIVE_GUIDANCE in text
-    assert "inbox" not in text.lower()
-    assert _URL not in text
-    assert queued[0]["connector"] == _CONNECTOR
+    assert _URL in text
+    assert not silent
+    assert queued[0]["connector_lookup"] is not None
+
+
+def test_an_answer_without_setup_text_keeps_the_review_text(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # A local row only an exact-action Always can release keeps the ordinary text.
+    exact_only = {**_SETUP, "setup_reason": None}
+    _text, _queued, silent = _pause(
+        tmp_path, monkeypatch, ask=False, setup=exact_only, binding=None, token="exact-token"
+    )
+
+    assert silent["setup_reason"] is None
+    assert (silent["retry_reuses_approval"], silent["exact_action_allowable"]) == (False, True)
+    assert silent["connector_is_local"] is True
 
 
 def test_an_ordinary_review_keeps_its_text(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    text, queued = _pause(tmp_path, monkeypatch, ask=False, connector=None)
+    text, _queued, silent = _pause(tmp_path, monkeypatch, ask=False, setup=None)
 
     assert "has not been set up" not in text
     assert "could not prove this command is read-only" in text
-    assert queued[0]["connector"] is None
+    assert silent["setup_reason"] is None
+    assert silent["verdict"] == _native_review()
 
 
 @pytest.mark.parametrize(
@@ -179,18 +175,10 @@ def test_an_ordinary_review_keeps_its_text(tmp_path: Path, monkeypatch: pytest.M
         None,
     ],
 )
-def test_a_review_with_a_risk_signal_is_never_setup(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, reason_code: str | None
-) -> None:
-    def unexpected(**_kwargs: object) -> SetupConnector:
-        raise AssertionError("risk reviews must not ask for the connector")
-
-    monkeypatch.setattr("codex_plugin_scanner.guard.local_cli_hook.local_cli_setup_connector", unexpected)
-
+def test_a_review_with_a_risk_signal_never_looks_up_a_connector(tmp_path: Path, reason_code: str | None) -> None:
     assert (
-        native_review_connector.native_review_setup_connector(
-            object(),
-            payload={"tool_name": "Bash", "tool_input": {"command": "lanectl status"}, "cwd": str(tmp_path)},
+        native_review_connector.native_review_connector_lookup(
+            payload=_payload(tmp_path),
             native_result={**_native_review(), "reason_code": reason_code},
             workspace=tmp_path,
             home_dir=None,
@@ -202,79 +190,49 @@ def test_a_review_with_a_risk_signal_is_never_setup(
 @pytest.mark.parametrize(
     "reason_code", ["native_command_review_required", "native_workspace_containment_executable_outside_roots"]
 )
-def test_an_unrecognised_command_asks_for_its_connector(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, reason_code: str
-) -> None:
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.local_cli_hook.local_cli_setup_connector", lambda **_kwargs: _CONNECTOR
+def test_an_unrecognised_command_looks_up_its_connector(tmp_path: Path, reason_code: str) -> None:
+    lookup = native_review_connector.native_review_connector_lookup(
+        payload=_payload(tmp_path),
+        native_result={**_native_review(), "reason_code": reason_code},
+        workspace=tmp_path,
+        home_dir=None,
     )
 
-    assert (
-        native_review_connector.native_review_setup_connector(
-            object(),
-            payload={"tool_name": "Bash", "tool_input": {"command": "lanectl status"}, "cwd": str(tmp_path)},
-            native_result={**_native_review(), "reason_code": reason_code},
-            workspace=tmp_path,
-            home_dir=None,
-        )
-        == _CONNECTOR
-    )
+    assert lookup is not None
+    assert (lookup["command"], lookup["cwd"], lookup["home_dir"]) == ("lanectl status", str(tmp_path), None)
+    assert lookup["user_home"] == str(Path.home())
 
 
 def test_the_lookup_uses_the_path_the_agent_runs_with(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PATH", "/daemon/bin")
     seen: list[object] = []
-
-    def lookup(**kwargs: object) -> SetupConnector:
-        seen.append(kwargs["path"])
-        return _CONNECTOR
-
-    monkeypatch.setattr("codex_plugin_scanner.guard.local_cli_hook.local_cli_setup_connector", lookup)
-    payload = {"tool_name": "Bash", "tool_input": {"command": "lanectl status"}, "cwd": str(tmp_path)}
-
     for stamped in ({"path": "/home/dev/.local/bin:/usr/bin"}, {"path": "bad\0path"}, None):
-        native_review_connector.native_review_setup_connector(
-            object(),
-            payload={**payload, "guard_execution_environment": stamped},
+        lookup = native_review_connector.native_review_connector_lookup(
+            payload=_payload(tmp_path, guard_execution_environment=stamped),
             native_result=_native_review(),
             workspace=tmp_path,
             home_dir=None,
         )
+        assert lookup is not None
+        env: Any = lookup["env"]
+        seen.append(env["PATH"])
 
-    assert seen == ["/home/dev/.local/bin:/usr/bin", None, None]
+    assert seen == ["/home/dev/.local/bin:/usr/bin", "/daemon/bin", "/daemon/bin"]
 
 
-def test_a_failed_lookup_leaves_an_ordinary_review(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    def failing(**_kwargs: object) -> SetupConnector:
-        raise TimeoutError("deadline")
-
-    monkeypatch.setattr("codex_plugin_scanner.guard.local_cli_hook.local_cli_setup_connector", failing)
+def test_a_launch_too_large_for_the_queue_call_queues_an_ordinary_review(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The lookup shares the review's store request; a launch that could push it
+    # past the request limit is left out so the review still queues.
+    monkeypatch.setenv("HOL_GUARD_TEST_LARGE_VALUE", "x" * (256 * 1024))
 
     assert (
-        native_review_connector.native_review_setup_connector(
-            object(),
-            payload={"tool_name": "Bash", "tool_input": {"command": "lanectl status"}, "cwd": str(tmp_path)},
-            native_result=_native_review(),
-            workspace=tmp_path,
-            home_dir=None,
+        native_review_connector.native_review_connector_lookup(
+            payload=_payload(tmp_path), native_result=_native_review(), workspace=tmp_path, home_dir=None
         )
         is None
     )
-
-
-@pytest.mark.parametrize(
-    ("name", "shown"),
-    [
-        ("lanectl", "lanectl"),
-        ("@scope/echo-mcp", "@scope/echo-mcp"),
-        ("bad`name", "this local CLI"),
-        ("two\nlines", "this local CLI"),
-        ("x" * 80, "this local CLI"),
-    ],
-)
-def test_agent_text_shows_only_plain_names(name: str, shown: str) -> None:
-    connector = replace(_CONNECTOR, name=name)
-
-    assert native_review_connector.connector_display_name(connector) == shown
 
 
 def test_a_local_tool_setup_text_is_an_approval_wait_and_an_mcp_one_is_not() -> None:
@@ -289,3 +247,32 @@ def test_a_local_tool_setup_text_is_an_approval_wait_and_an_mcp_one_is_not() -> 
     assert "approve" not in mcp.lower()
     assert "one-time decision" in mcp_ask
     assert SAFE_ALTERNATIVE_GUIDANCE not in mcp_ask
+
+
+def test_the_queue_call_renders_the_silent_block_with_its_row(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    text, queued, silent = _pause(
+        tmp_path, monkeypatch, ask=False, setup=_SETUP, rendered={"reason": "rendered with the row"}
+    )
+
+    assert json.loads(text) == {"reason": "rendered with the row"}
+    # The block's facts ride the queue call; no second render is asked for.
+    assert not silent
+    respond: Any = queued[0]["respond"]
+    block = respond["silent_review_block"]
+    assert {key: block[key] for key in ("ask", "home_dir")} == {"ask": False, "home_dir": str(tmp_path / "home")}
+    # An older resident refuses a block without the facts it renders from,
+    # and the review would never reach the inbox.
+    assert (block["setup_reason"], block["connector_is_local"]) == (None, False)
+    assert {type(block[key]) for key in ("retry_reuses_approval", "exact_action_allowable")} == {bool}
+
+
+def test_the_queue_call_renders_the_paused_review_with_its_row(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    text, queued, _silent = _pause(
+        tmp_path, monkeypatch, ask=True, setup=_SETUP, rendered={"reason": "rendered with the row"}
+    )
+
+    response = json.loads(text)
+    assert response["reason"] == "rendered with the row"
+    assert response["prompted"] is True
+    assert response["approval_center_url"] == "http://127.0.0.1:4781"
+    assert queued[0]["respond"] == {"paused_review": {}}

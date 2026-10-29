@@ -7,8 +7,6 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from .decision_projection_boundaries import CanonicalApprovalDecision as CanonicalApprovalDecision
-from .decision_projection_boundaries import canonical_approval_decision as canonical_approval_decision
 from .models import GuardAction
 from .native_signal_projection import NativeSignalProjectionError, signal_projection
 
@@ -27,15 +25,6 @@ _UNREADABLE_ACTION_MAX_LENGTH = 64
 
 
 @dataclass(frozen=True, slots=True)
-class CanonicalReceiptDecision:
-    """One native receipt action and synchronized envelope fields."""
-
-    policy_decision: GuardAction
-    action_envelope_json: dict[str, object] | None
-    contract_error: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
 class CanonicalApprovalSurfaces:
     """Approval fields synchronized by a single native evaluation."""
 
@@ -43,44 +32,6 @@ class CanonicalApprovalSurfaces:
     decision_v2_json: dict[str, object]
     action_envelope_json: dict[str, object] | None
     contract_error: str | None = None
-
-
-def canonical_receipt_decision(
-    policy_decision: object,
-    action_envelope_json: object,
-    *,
-    reject_contradiction: bool,
-    guard_home: Path | None = None,
-) -> CanonicalReceiptDecision:
-    return CanonicalReceiptDecision(
-        **signal_projection(
-            "projection_receipt",
-            {"action": policy_decision, "envelope": action_envelope_json, "reject": reject_contradiction},
-            guard_home=guard_home,
-        )
-    )
-
-
-def canonical_approval_surfaces(
-    policy_action: object,
-    decision_v2_json: object,
-    action_envelope_json: object,
-    *,
-    reject_contradiction: bool,
-    guard_home: Path | None = None,
-) -> CanonicalApprovalSurfaces:
-    return CanonicalApprovalSurfaces(
-        **signal_projection(
-            "projection_surfaces",
-            {
-                "action": policy_action,
-                "decision": decision_v2_json,
-                "envelope": action_envelope_json,
-                "reject": reject_contradiction,
-            },
-            guard_home=guard_home,
-        )
-    )
 
 
 def canonical_approval_surfaces_batch(

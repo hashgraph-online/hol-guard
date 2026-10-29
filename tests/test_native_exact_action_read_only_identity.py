@@ -8,14 +8,12 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.approval_scope_support import request_scope_contract
-from codex_plugin_scanner.guard.daemon.hook_native_exact_action import (
-    native_exact_action as native_exact_action_decision,
-)
 from codex_plugin_scanner.guard.daemon.hook_native_saved_approval import (
     ONCE_ONLY_REASON_KEY,
     native_saved_decision_response,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_launch_evidence_helpers import native_exact_action as native_exact_action_decision
 from tests.test_native_review_exact_action_always import (
     _ARTIFACT_ID,
     _HARNESS,
@@ -386,19 +384,16 @@ def test_a_write_approval_names_the_file_not_the_bytes_going_into_it(
     # which is the capability the user already allowed. The path binds it instead.
     workspace = _wrangler_workspace(tmp_path, monkeypatch)
     (workspace / "app.ts").write_text("one\n")
-    first, reason = _tool_decision(
-        "edit", {"file_path": "app.ts", "old_string": "one", "new_string": "two"}, workspace
-    )
+    first, reason = _tool_decision("edit", {"file_path": "app.ts", "old_string": "one", "new_string": "two"}, workspace)
     assert first is not None and reason is None
     assert (
         first
-        == _tool_decision(
-            "edit", {"file_path": "app.ts", "old_string": "two", "new_string": "three"}, workspace
-        )[0]
+        == _tool_decision("edit", {"file_path": "app.ts", "old_string": "two", "new_string": "three"}, workspace)[0]
     )
-    assert first != _tool_decision(
-        "edit", {"file_path": "other.ts", "old_string": "two", "new_string": "three"}, workspace
-    )[0]
+    assert (
+        first
+        != _tool_decision("edit", {"file_path": "other.ts", "old_string": "two", "new_string": "three"}, workspace)[0]
+    )
     assert first != _tool_decision("write", {"file_path": "app.ts", "content": "two"}, workspace)[0]
     assert _tool_proven("write", {"file_path": "app.ts", "content": "two"}, workspace)
     assert _tool_proven("delete", {"path": "app.ts"}, workspace)

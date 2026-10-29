@@ -364,7 +364,7 @@
       {
         "id": "cli-presentation-and-parsing",
         "category": "cli_only",
-        "reason": "Argparse construction, Rich rendering and onboarding/status presentation for CLI subcommands that are not runtime routes. cli/render.py stays in scope because hook responses are redacted and emitted through it; only the doctor/uninstall renderers are excluded. commands_support_service.py (service login/status/sync, daemon start/stop/status handlers) is imported only by the commands_support facade and the excluded admin, cloud and records dispatchers.",
+        "reason": "Argparse construction, Rich rendering and onboarding/status presentation for CLI subcommands that are not runtime routes. cli/render.py stays in scope because hook responses are redacted and emitted through it; only the doctor/uninstall renderers are excluded. commands_support_service.py (service login/status/sync, daemon start/stop/status handlers) is imported only by the commands_support facade and the excluded admin, cloud and records dispatchers. codebase_commands.py backs `hol-guard codebases add|list`, which admits a folder to the background check queue and lists it; nothing on the hook path imports it.",
         "path": [
           "src/codex_plugin_scanner/guard/cli/commands_parser*.py",
           "src/codex_plugin_scanner/guard/cli/product.py",
@@ -382,7 +382,8 @@
           "src/codex_plugin_scanner/guard/cli/render_*.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_service.py",
           "src/codex_plugin_scanner/guard/cli/approval_commands.py",
-          "src/codex_plugin_scanner/guard/cli/inventory_list_commands.py"
+          "src/codex_plugin_scanner/guard/cli/inventory_list_commands.py",
+          "src/codex_plugin_scanner/guard/cli/codebase_commands.py"
         ]
       },
       {
@@ -390,8 +391,6 @@
         "category": "async_control_plane",
         "reason": "Managed-device health-lease reporting, lifecycle and removal authorization; cadence-driven machine reporting independent of harness activity. Managed-policy loading (mdm.policy, contracts, network, file locks, device-key and integrity helpers) stays in scope because config loading and the daemon invoke it synchronously during hook handling.",
         "path": [
-          "src/codex_plugin_scanner/guard/mdm/adapter_conformance.py",
-          "src/codex_plugin_scanner/guard/mdm/cloud_control.py",
           "src/codex_plugin_scanner/guard/mdm/health_key_registration.py",
           "src/codex_plugin_scanner/guard/mdm/health_lease.py",
           "src/codex_plugin_scanner/guard/mdm/health_lease_ack.py",
@@ -577,6 +576,10 @@
         "reason": "Retained conservatively in runtime scope: installed-upgrade recovery imports the existing authority phase and error contracts from this proof module. Count the complete module, including its proof helpers, rather than exclude code reached by startup recovery. Installed-upgrade authorization remains native."
       },
       {
+        "path": "src/codex_plugin_scanner/guard/stable_digest.py",
+        "reason": "Reviewed shared digest helper: review claim hashing, exact cloud review and package request evaluation import it at module scope; policy bundle key handling no longer imports it at all. Count the complete module in runtime scope; no runtime behavior is excluded."
+      },
+      {
         "path": [
           "src/codex_plugin_scanner/guard/adapters/_modules/pi/__init__.py",
           "src/codex_plugin_scanner/guard/adapters/_modules/zcode/__init__.py"
@@ -612,7 +615,6 @@
           "src/codex_plugin_scanner/guard/runtime/supply_chain*.py",
           "src/codex_plugin_scanner/guard/runtime/package_request_evaluation.py",
           "src/codex_plugin_scanner/guard/runtime/self_approval.py",
-          "src/codex_plugin_scanner/guard/runtime/data_flow_sink.py",
           "src/codex_plugin_scanner/guard/runtime/command_*.py",
           "src/codex_plugin_scanner/guard/runtime/shell_*.py",
           "src/codex_plugin_scanner/guard/runtime/secret_file_request*",
@@ -641,8 +643,6 @@
           "src/codex_plugin_scanner/guard/cli/commands_support.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_claude_approval.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_codex_git_config.py",
-          "src/codex_plugin_scanner/guard/cli/commands_support_codex_paths.py",
-          "src/codex_plugin_scanner/guard/cli/commands_support_codex_prompt_attachments.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_connect.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_permission_store.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_prompts.py",
@@ -659,7 +659,6 @@
       },
       {
         "path": [
-          "src/codex_plugin_scanner/guard/adapters/capability_report.py",
           "src/codex_plugin_scanner/guard/adapters/codex.py",
           "src/codex_plugin_scanner/guard/adapters/codex_detect_sources.py",
           "src/codex_plugin_scanner/guard/adapters/codex_lifecycle_lock.py",
@@ -681,10 +680,9 @@
           "src/codex_plugin_scanner/guard/adapters/mcp_servers.py",
           "src/codex_plugin_scanner/guard/adapters/workspace_overrides.py",
           "src/codex_plugin_scanner/guard/adapters/zcode_config.py",
-          "src/codex_plugin_scanner/guard/adapters/zcode_contained_tests.py",
-          "src/codex_plugin_scanner/guard/windows_powershell_quote.py"
+          "src/codex_plugin_scanner/guard/adapters/zcode_contained_tests.py"
         ],
-        "reason": "Reviewed: adapters: harness registry targets (codex, grok, zcode, mcp_servers and the MCP proxy launcher selection, cursor native approval, hermes file inspection, capability_report, attestation and path helpers). Loaded through the dynamic adapter registry and reached from approvals.py, cursor_hooks, hook workers and launch_command for run/protect. Install/diagnostics methods share the classes with the launch and approval paths, so the files stay whole in scope."
+        "reason": "Reviewed: adapters: harness registry targets (codex, grok, zcode, mcp_servers and the MCP proxy launcher selection, cursor native approval, hermes file inspection, attestation and path helpers). Loaded through the dynamic adapter registry and reached from approvals.py, cursor_hooks, hook workers and launch_command for run/protect. Install/diagnostics methods share the classes with the launch and approval paths, so the files stay whole in scope."
       },
       {
         "path": [
@@ -706,15 +704,15 @@
       },
       {
         "path": [
-          "src/codex_plugin_scanner/guard/daemon/claude_permission_request.py",
           "src/codex_plugin_scanner/guard/daemon/client.py",
+          "src/codex_plugin_scanner/guard/daemon/cursor_shell_route.py",
           "src/codex_plugin_scanner/guard/daemon/live_identity.py",
           "src/codex_plugin_scanner/guard/daemon/policy_authority_client.py",
           "src/codex_plugin_scanner/guard/daemon/recovery_lifecycle.py",
           "src/codex_plugin_scanner/guard/daemon/response_bounds.py",
           "src/codex_plugin_scanner/guard/daemon/runtime_peer.py"
         ],
-        "reason": "Reviewed: daemon client and peer modules: client/response_bounds are the hook-to-daemon transport; runtime_peer/live_identity authenticate the live daemon; recovery_lifecycle is invoked from daemon/manager on hook-failure recovery; policy_authority_client is called from local_supply_chain; claude_permission_request is called from hook_worker."
+        "reason": "Reviewed: daemon client and peer modules: client/response_bounds are the hook-to-daemon transport; runtime_peer/live_identity authenticate the live daemon; recovery_lifecycle is invoked from daemon/manager on hook-failure recovery; policy_authority_client is called from local_supply_chain; cursor_shell_route is called from hook_worker for Cursor's silent shell probe and its sink admission."
       },
       {
         "path": [
@@ -724,9 +722,11 @@
           "src/codex_plugin_scanner/guard/runtime/contained_output_filters.py",
           "src/codex_plugin_scanner/guard/runtime/contained_run_directory.py",
           "src/codex_plugin_scanner/guard/runtime/contained_test_hook.py",
+          "src/codex_plugin_scanner/guard/runtime/contained_worktree_add.py",
           "src/codex_plugin_scanner/guard/runtime/contained_wrapper.py",
           "src/codex_plugin_scanner/guard/runtime/extension_contribution.py",
           "src/codex_plugin_scanner/guard/runtime/extension_trust.py",
+          "src/codex_plugin_scanner/guard/runtime/host_steps.py",
           "src/codex_plugin_scanner/guard/runtime/mcp_connection_identity.py",
           "src/codex_plugin_scanner/guard/runtime/mcp_server_contribution.py",
           "src/codex_plugin_scanner/guard/runtime/oci_isolation_provider.py",
@@ -734,7 +734,7 @@
           "src/codex_plugin_scanner/guard/runtime/package_json_scripts.py",
           "src/codex_plugin_scanner/guard/runtime/skill_protection.py"
         ],
-        "reason": "Reviewed: runtime support modules used by supply-chain evaluation, contained execution, local-CLI/MCP grant decisions and secret-file-request services: js_semver, npm_policy_range, lockfile/manifest evaluation, package_json_scripts, contained_test_hook/wrapper/run_directory/command_prefix/authority, oci isolation, extension and mcp_server contribution, mcp_connection_identity, and skill_protection (skill-content findings for the MCP skill firewall). Each is imported by an in-scope decision, parser or containment module on the hook/run path."
+        "reason": "Reviewed: runtime support modules used by supply-chain evaluation, contained execution, local-CLI/MCP grant decisions and secret-file-request services: js_semver, npm_policy_range, lockfile/manifest evaluation, package_json_scripts, contained_test_hook/wrapper/run_directory/command_prefix/authority/worktree_add, host_steps (the proven Git steps the workspace sink runs outside the sandbox), oci isolation, extension and mcp_server contribution, mcp_connection_identity, and skill_protection (skill-content findings for the MCP skill firewall). Each is imported by an in-scope decision, parser or containment module on the hook/run path."
       },
       {
         "path": [
@@ -744,7 +744,6 @@
           "src/codex_plugin_scanner/guard/store_approval_projection.py",
           "src/codex_plugin_scanner/guard/inventory_item_description.py",
           "src/codex_plugin_scanner/guard/local_cli_hook.py",
-          "src/codex_plugin_scanner/guard/connector_setup_context.py",
           "src/codex_plugin_scanner/guard/local_cli_trust.py",
           "src/codex_plugin_scanner/guard/product_model.py",
           "src/codex_plugin_scanner/guard/runtime_transition_hook_probe.py",
@@ -801,6 +800,8 @@
           "src/codex_plugin_scanner/guard/adapters/hermes.py",
           "src/codex_plugin_scanner/guard/adapters/hermes_state_paths.py",
           "src/codex_plugin_scanner/guard/adapters/kimi.py",
+          "src/codex_plugin_scanner/guard/adapters/muse.py",
+          "src/codex_plugin_scanner/guard/adapters/muse_config.py",
           "src/codex_plugin_scanner/guard/adapters/omp_code_mode.py",
           "src/codex_plugin_scanner/guard/adapters/openclaw.py",
           "src/codex_plugin_scanner/guard/adapters/openclaw_config.py",
@@ -910,17 +911,10 @@
       },
       {
         "path": [
-          "src/codex_plugin_scanner/guard/runtime/direct_vitest.py",
           "src/codex_plugin_scanner/guard/runtime/package_evidence_common.py",
           "src/codex_plugin_scanner/guard/runtime/jsonc.py"
         ],
-        "reason": "Reviewed and retained in runtime scope: the retired Python literal-cd parser imported these at load, so they counted as eager. They are now reached lazily: direct_vitest presents the resident's direct local tool context to the support-artifact command, and package_evidence_common with its bounded JSONC decoder reads lockfile integrity for the contained Node tool lane. They run while Guard prepares a contained run, so they stay counted as runtime."
-      },
-      {
-        "path": [
-          "src/codex_plugin_scanner/guard/daemon/claude_turn_events.py"
-        ],
-        "reason": "Reviewed and retained in runtime scope: the resident hook worker reaches this lazily for Claude Code PostToolUse and Stop. It records the user's answer to the HOL Guard approval question and discards a session's unanswered prompts when the turn ends; the native edge still decides every verdict."
+        "reason": "Reviewed and retained in runtime scope: the retired Python literal-cd parser imported these at load, so they counted as eager. They are now reached lazily: package_evidence_common with its bounded JSONC decoder reads lockfile integrity for the contained Node tool lane. They run while Guard prepares a contained run, so they stay counted as runtime."
       }
     ],
     "tests": {
@@ -1452,6 +1446,24 @@
         "entry_points": [],
         "reason": "Kimi adapter hook install and uninstall and the managed block builder used only to write the install.",
         "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
+      },
+      {
+        "id": "adapter-muse-setup",
+        "category": "install_config",
+        "path": "src/codex_plugin_scanner/guard/adapters/muse.py",
+        "symbols": [
+          "MuseHarnessAdapter.prepare_install",
+          "MuseHarnessAdapter.install",
+          "MuseHarnessAdapter.uninstall",
+          "MuseHarnessAdapter._hook_command_parts",
+          "MuseHarnessAdapter._managed_state_paths",
+          "MuseHarnessAdapter._sync_managed_hook_groups",
+          "_adapter_result",
+          "_write_json_atomic"
+        ],
+        "entry_points": [],
+        "reason": "Muse adapter hook install and uninstall, the managed hook group writer they share, and the settings helpers used only to write or remove that install.",
+        "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. _hook_command_parts, _managed_state_paths, _sync_managed_hook_groups, _adapter_result and _write_json_atomic are called only from those three methods. _bridge_timeout_seconds and the approval wait it reads stay in scope: the bounded hook refresh recomputes that timeout on every update. detect and policy_path stay in scope with the helpers they call. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
         "id": "approval-continuation-replay",
@@ -2128,63 +2140,7 @@
         "evidence": "discover_shared_workspace_aibom_artifacts is called only from inventory_contract.py, which is outside runtime scope. The role grammar this entry used to cover now lives in the resident's aibom_paths.rs and reaches Python only as the inventory_source_evidence answer. The retained adapter detection, Codex skill discovery and MCP metadata enrichment do not reference it, and the report validates this reference closure on every run."
       }
     ],
-    "dynamic_imports": [
-      {
-        "path": "src/codex_plugin_scanner/guard/adapters/__init__.py",
-        "count": 1,
-        "resolution": "follow",
-        "mode": "lazy",
-        "targets": [
-          ".codex",
-          ".claude_code",
-          ".copilot",
-          ".cursor",
-          ".cline",
-          ".devin",
-          ".antigravity",
-          ".gemini",
-          ".grok",
-          ".hermes",
-          ".kimi",
-          ".pi",
-          ".openclaw",
-          ".opencode",
-          ".zcode",
-          ".paseo"
-        ],
-        "evidence": "Adapter registry: _adapters() imports each module named in the literal _ADAPTER_SPECS table with import_module(module_name, __package__) and instantiates the named class. Targets list every module in that table (.pi holds two classes). Decision: follow. Adapters normalize harness payloads into hook requests and get_adapter(harness).approval_flow() is called from hook handling (commands_hook_native_review), so the registry is on the hook path and hook-path authority is never excluded. The modules listed in the adapter registry reviewed_runtime entry join the scope. Install, setup and config methods keep their reviewed function-level exclusions (install_config, not hook path)."
-      },
-      {
-        "path": "src/codex_plugin_scanner/guard/cli/_commands_shared.py",
-        "count": 1,
-        "resolution": "follow",
-        "mode": "eager",
-        "targets": [
-          "..daemon",
-          "..proxy",
-          ".approval_commands",
-          ".bootstrap"
-        ],
-        "evidence": "_load_lazy_export(module_name, attribute) is only ever called at module level with literal module names: ..daemon (GuardDaemonServer, ensure_guard_daemon and the other daemon exports), ..proxy (the harness MCP proxy classes), .approval_commands (the guard approvals command handlers) and .bootstrap (the guard bootstrap payload builder), so the one non-literal site resolves to those four modules."
-      },
-      {
-        "path": "src/codex_plugin_scanner/guard/codex_config.py",
-        "count": 1,
-        "resolution": "external",
-        "evidence": "Selects the stdlib tomllib module (Python 3.11+) or the third-party tomli backport by interpreter version; both are external to the package, so the call adds no in-package module."
-      },
-      {
-        "path": "src/codex_plugin_scanner/guard/runtime/__init__.py",
-        "count": 1,
-        "resolution": "follow",
-        "mode": "lazy",
-        "targets": [
-          ".wrapper_run",
-          ".runner"
-        ],
-        "evidence": "Package __getattr__ resolves the six names in the literal __all__ to .wrapper_run (guard_run) or .runner (the sync and receipt helpers) with import_module(module_name, __name__). Both targets are real submodules; wrapper_run is the guard run launch path so it is followed, and runner stays in scope as the lazy attribute owner except for the modules excluded by their own entries."
-      }
-    ]
+    "dynamic_imports": []
   },
   "rust": {
     "workspace": "rust",

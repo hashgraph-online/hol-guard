@@ -1,4 +1,4 @@
-use super::safe_filter;
+use super::{safe_filter, variables_bound};
 
 #[test]
 fn admits_projection_and_reshaping_pipelines() {
@@ -140,8 +140,6 @@ fn rejects_environment_input_and_module_access() {
         "(env)",
         ".a // env",
         ".a == env",
-        "select(.a) | @base64",
-        "map(.a | @text)",
         "{a: [env]}",
         "import \"x\"",
         "include \"x\"",
@@ -255,13 +253,14 @@ fn rejects_a_bare_literal_as_a_stage() {
 #[test]
 fn rejects_malformed_and_oversized_pipelines() {
     for filter in [
-        ".a, .b",
         ".a : .b",
         ".a |",
         ".a | | length",
         ". | keys | keys | keys | keys | keys | keys | keys | keys",
-        "{a}",
         "{$ENV}",
+        "{a,}",
+        "{a, .b}",
+        "{@tsv}",
         "{(.a): .b}",
         "{a: env}",
         "{a: input}",
@@ -276,7 +275,169 @@ fn rejects_malformed_and_oversized_pipelines() {
 }
 
 #[test]
+fn admits_bare_rendering_formats_and_shorthand_keys() {
+    for filter in [
+        ".[] | @tsv",
+        ".workflow_runs[] | [.id, .name] | @tsv",
+        "select(.a) | @base64",
+        "map(.a | @text)",
+        ".items | @json",
+        ".[] | [.a, .b] | @csv",
+        ".name | @uri",
+        ".blob | @base64d",
+        "{a}",
+        "{number,title,state}",
+        "{\"a b\", count: .items | length}",
+        ".[] | {number, title}",
+    ] {
+        assert!(safe_filter(filter), "expected admitted: {filter}");
+    }
+}
+
+#[test]
+fn rejects_shell_and_templated_formats() {
+    for filter in [
+        "@sh",
+        ".[] | @sh",
+        "@sh \"rm \\(.a)\"",
+        "@tsv \"x\"",
+        "@text \"\\(env)\"",
+        "@tsvx",
+        "@",
+        "@ tsv",
+        ".a@tsv",
+        "@tsv@csv",
+        "@format(\"tsv\")",
+        "{a: @sh}",
+    ] {
+        assert!(!safe_filter(filter), "expected rejected: {filter}");
+    }
+}
+
+#[test]
 fn rejects_a_filter_longer_than_the_bound() {
     let filter = format!(".{}", "a".repeat(300));
     assert!(!safe_filter(&filter));
+}
+
+#[test]
+fn admits_variables_the_filter_binds_itself() {
+    for filter in [
+        "empty",
+        ".[] | empty",
+        ". as $x | $x",
+        ".[] | select((.conclusion // .state // \"\") as $s | ($s != \"SUCCESS\" and $s != \"SKIPPED\"))",
+        ".items as $items | $items[0]",
+        ".check as $check | {name: $check.name}",
+        ".[] | .name as $name | $name | length",
+    ] {
+        assert!(safe_filter(filter), "expected admitted: {filter}");
+    }
+}
+
+#[test]
+fn rejects_variables_from_outside_the_filter() {
+    for filter in [
+        // Named outside the filter, bound or not.
+        ". as $ENV | $ENV",
+        ". as $__loc__ | $__loc__",
+        "$ENV.HOME",
+        // A `--arg` value, or a name bound by a form this grammar does not read.
+        ".a as $a | $b",
+        ". as [$a] | $a",
+        "{a: $a}",
+        // `as` binds tighter than `//`, so only `.b` is bound here.
+        ".a // .b as $s | $s",
+        // A binding needs a body, and a `$` needs a name.
+        ".a as $s",
+        ".a | $",
+        ". as $1 | $1",
+        // Interpolated text is code, so its names are read too.
+        ". as $x | \"\\($ENV)\"",
+        // A binding reaches the end of its own group, and no earlier.
+        "map(. as $x | .) | $x",
+        "(.a as $x | .b) | $x",
+        "$x | . as $x | $x",
+        // `as $x` written in string text binds nothing.
+        "\"as $x \\(.foo)\" | $x",
+        "\"as $x\" | $x",
+    ] {
+        assert!(!safe_filter(filter), "expected rejected: {filter}");
+    }
+}
+
+/// The `gh --jq` path checks bindings alone, without the read grammar, so the
+/// scope rules hold on their own.
+#[test]
+fn a_binding_is_read_only_inside_its_scope() {
+    for filter in [
+        ". as $x | $x",
+        ".[] | select((.state // \"\") as $s | ($s != \"OPEN\"))",
+        ".a as $x | {b: [$x]}",
+        "\"\\(.a)\" as $x | $x",
+        "\"$x is text\"",
+        "\"#\" as $x | $x",
+    ] {
+        assert!(variables_bound(filter), "expected bound: {filter}");
+    }
+    for filter in [
+        "map(. as $x | .) | $x",
+        "[.[] | . as $x | $x] | $x",
+        "$x | . as $x | $x",
+        "\"as $x \\(.foo)\" | $x",
+        "\"\\(. as $x | $x)\" | $x",
+        "(. as $x | $x",
+        ". as $x | $x)",
+        "\"open",
+        ". # \"\n| $ENV # \"",
+        ". as $x | $x # \"\n| $y # \"",
+    ] {
+        assert!(!variables_bound(filter), "expected unbound: {filter}");
+    }
+}
+
+#[test]
+fn admits_sequences_slices_and_optional_projections() {
+    for filter in [
+        ".number, .title",
+        ".[] | .headBranch, .headSha",
+        ".[] | [.headBranch, .headSha[0:12], .databaseId]",
+        ".a, .b, .c | length",
+        ".headSha[0:12]",
+        ".items[1:]",
+        ".items[:3]",
+        ".items[-2:]",
+        ".items[-2:-1]",
+        ".items[:]",
+        ".name[0:4] | ascii_downcase",
+        ".[]?",
+        ".a?",
+        ".a?.b",
+        ".items[]? | .name",
+        "map(.a)?",
+        "(.a // .b)?",
+        "select(.draft)? | .number",
+        ".[] | select(.a == 1), .b",
+    ] {
+        assert!(safe_filter(filter), "expected admitted: {filter}");
+    }
+}
+
+#[test]
+fn rejects_malformed_sequences_slices_and_optionals() {
+    for filter in [
+        ".a,",
+        ",",
+        ".a, env",
+        ".items[-]",
+        ".items[1:2:3]",
+        ".items[a:1]",
+        ".items[1:b]",
+        ".a ? .b",
+        "?",
+        ".a[0:12]x",
+        "? .a",
+    ] {
+        assert!(!safe_filter(filter), "expected refused: {filter}");
+    }
 }

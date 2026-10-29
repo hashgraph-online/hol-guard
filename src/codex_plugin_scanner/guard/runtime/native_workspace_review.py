@@ -18,6 +18,7 @@ from ..durable_io import fsync_directory
 from ..native_resident_client import (
     native_resident_client_failure_code,
     native_resident_client_request,
+    record_native_resident_client_failure_code,
 )
 from ..native_runtime import _isolated_environment, native_runtime_status
 from ..store_native_workspace_review import NATIVE_WORKSPACE_REVIEW_RECEIPT_STATE_PREFIX
@@ -31,6 +32,22 @@ _MAX_REQUEST_STATE_BYTES = 64 * 1024
 _MAX_DECISION_BYTES = 16 * 1024
 _NATIVE_RESIDENT_FEATURE = "resident-protocol-v2"
 _NATIVE_REVIEW_FEATURE = "native-workspace-review-decision-v1"
+_DECISION_TIMEOUT_SECONDS = 10.0
+# The native client gives an operation without a budget 750 ms, which a
+# resident that is still starting after a daemon restart cannot meet. Ask for
+# the client's 9-second ceiling, inside the 10-second wait above.
+_DECISION_BUDGET_MS = 9_000
+# A resident that was just restarted, or is busy with a sibling request, can
+# still start serving after that budget has lapsed and answer with a deadline
+# code, either as the client's failure code or as an error frame. Asking once
+# more is safe: the resident replays a decision it already claimed instead of
+# applying it twice. Without the retry, a reviewer's queued decision fails
+# right after a daemon restart and waits for a manual retry. One retry at most:
+# every failed attempt counts toward the shared native circuit breaker.
+_TRANSIENT_DEADLINE_CODES = frozenset(
+    {"native_client_deadline_exceeded", "native_request_deadline_exceeded", "native_client_timed_out"}
+)
+_MAX_DECISION_ATTEMPTS = 2
 
 
 class NativeWorkspaceReviewError(ValueError):
@@ -332,32 +349,41 @@ def _native_response(
     payload = _canonical_json_bytes(
         {
             "operation": "workspace_review_decision",
+            "deadline_budget_ms": _DECISION_BUDGET_MS,
             "request": {"request_id": request_id, "decision": decision},
         }
     )
     if len(payload) > _MAX_DECISION_BYTES:
         raise NativeWorkspaceReviewError("native_workspace_review_decision_invalid")
-    encoded = native_resident_client_request(
-        executable=identity.path,
-        guard_home=guard_home,
-        environment=_isolated_environment(),
-        payload=payload,
-        timeout_seconds=10.0,
-    )
-    if encoded is None:
-        raise NativeWorkspaceReviewError(
-            native_resident_client_failure_code() or "native_workspace_review_transport_failed"
+    attempt = 0
+    while True:
+        attempt += 1
+        # A stale code from an earlier attempt must not be read as this attempt's failure.
+        record_native_resident_client_failure_code(None)
+        encoded = native_resident_client_request(
+            executable=identity.path,
+            guard_home=guard_home,
+            environment=_isolated_environment(),
+            payload=payload,
+            timeout_seconds=_DECISION_TIMEOUT_SECONDS,
         )
-    try:
-        decoded: object = json.loads(encoded.decode("utf-8"))
-    except (UnicodeDecodeError, ValueError) as error:
-        raise NativeWorkspaceReviewError("native_workspace_review_response_invalid") from error
-    if not isinstance(decoded, dict):
-        raise NativeWorkspaceReviewError("native_workspace_review_response_invalid")
-    response = cast(dict[str, object], decoded)
-    error = response.get("error")
-    if isinstance(error, str) and error:
-        raise NativeWorkspaceReviewError(error)
+        if encoded is None:
+            failure_code = native_resident_client_failure_code()
+            if failure_code not in _TRANSIENT_DEADLINE_CODES or attempt >= _MAX_DECISION_ATTEMPTS:
+                raise NativeWorkspaceReviewError(failure_code or "native_workspace_review_transport_failed")
+            continue
+        try:
+            decoded: object = json.loads(encoded.decode("utf-8"))
+        except (UnicodeDecodeError, ValueError) as error:
+            raise NativeWorkspaceReviewError("native_workspace_review_response_invalid") from error
+        if not isinstance(decoded, dict):
+            raise NativeWorkspaceReviewError("native_workspace_review_response_invalid")
+        response = cast(dict[str, object], decoded)
+        error = response.get("error")
+        if not isinstance(error, str) or not error:
+            break
+        if error not in _TRANSIENT_DEADLINE_CODES or attempt >= _MAX_DECISION_ATTEMPTS:
+            raise NativeWorkspaceReviewError(error)
     if response.get("request_id") != request_id:
         raise NativeWorkspaceReviewError("native_workspace_review_response_invalid")
     if response.get("status") not in {"verified", "replayed"}:

@@ -1,7 +1,8 @@
 use super::{
-    answered_response, answered_response_reporting, bounded_direct_request, bounded_event,
-    direct_event, direct_request, grok_direct_answer, grok_direct_request, harness_event,
-    parse_hook_query, HookQuery, CLAUDE_CODE, CODEX, CURSOR,
+    answered_response, answered_response_reporting, bounded_direct_request,
+    bounded_emergency_safe_request, bounded_event, direct_event, direct_request,
+    grok_direct_answer, grok_direct_request, harness_event, parse_hook_query, HookQuery,
+    CLAUDE_CODE, CODEX, CURSOR,
 };
 use crate::codex_hook_bridge_direct_resident::DirectMiss;
 use serde_json::{json, Value};
@@ -210,6 +211,55 @@ fn a_bounded_hook_asks_under_the_daemons_own_homes() {
     }
     assert_eq!(
         bounded_direct_request("kimi", &homes.guard_home, "[]", Duration::from_millis(1)),
+        None
+    );
+}
+
+#[test]
+fn a_bounded_hook_whose_daemon_failed_asks_for_the_emergency_safe_profile_alone() {
+    let homes = homes("emergency");
+    let built = |harness: &str, guard_home: &Path| {
+        bounded_emergency_safe_request(harness, guard_home, PAYLOAD, Duration::from_millis(300))
+            .map(|bytes| serde_json::from_slice::<Value>(&bytes).unwrap())
+    };
+    for harness in [
+        "copilot", "kimi", "devin", "zcode", "openclaw", "hermes", "cline", "opencode",
+    ] {
+        assert_eq!(
+            built(harness, &homes.guard_home).unwrap(),
+            json!({
+                "operation": "hook_direct",
+                "deadline_budget_ms": 300,
+                "request": {
+                    "harness": harness,
+                    "guard_home": text(&homes.guard_home),
+                    "deadline_budget_ms": 300,
+                    "emergency_safe_only": true,
+                    "payload": {"hook_event_name": "PreToolUse", "tool_name": "Bash"},
+                },
+            }),
+            "{harness}"
+        );
+    }
+    // The ordinary lane keeps asking for every answer the resident holds, so
+    // a resident that predates the profile still answers it.
+    let ordinary = bounded_direct_request(
+        "kimi",
+        &homes.guard_home,
+        PAYLOAD,
+        Duration::from_millis(300),
+    )
+    .map(|bytes| serde_json::from_slice::<Value>(&bytes).unwrap())
+    .unwrap();
+    assert_eq!(ordinary["request"].get("emergency_safe_only"), None);
+    // The home and harness rules are the ordinary lane's; nothing is widened
+    // for a hook whose daemon has already failed.
+    for harness in ["grok", "codex", "cursor", "unknown"] {
+        assert_eq!(built(harness, &homes.guard_home), None, "{harness}");
+    }
+    assert_eq!(built("kimi", &homes.root.join("missing")), None);
+    assert_eq!(
+        bounded_emergency_safe_request("kimi", &homes.guard_home, "[]", Duration::from_millis(1)),
         None
     );
 }

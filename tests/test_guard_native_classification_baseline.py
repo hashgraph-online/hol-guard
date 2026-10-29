@@ -32,7 +32,7 @@ def test_native_classification_survives_baseline_and_shadow_comparison(
     reviewed = real_native_command_evaluation(command)
     evaluation = reviewed.evaluation
     assert reviewed.payload["command_extensions"]["evaluation_error"] == evaluation_error
-    assert reviewed.native_minimum_action == action
+    assert reviewed.payload["minimum_action"] == action
     assert evaluation.decision_plane.action == action
 
     baseline = _baseline_proposal(evaluation)

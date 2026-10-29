@@ -9,16 +9,11 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.approval_hook_copy import (
-    join_native_hook_reason,
-    live_approval_review_url,
-    with_approval_review_url,
-)
+from codex_plugin_scanner.guard.approval_hook_copy import live_approval_review_url
 from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import (
     _native_approval_center_context,
 )
 from codex_plugin_scanner.guard.config import load_guard_config
-from codex_plugin_scanner.guard.daemon.hook_fail_closed import render_pre_tool_review
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -63,24 +58,6 @@ def test_stored_hook_copy_uses_primary_url_without_approval_center_field() -> No
     assert "Open HOL Guard to approve or keep this blocked:" in stored
 
 
-def test_hook_reason_keeps_policy_copy_with_one_tokenized_url() -> None:
-    policy = (
-        "HOL Guard needs your approval before this action can run. "
-        "Open HOL Guard to approve or keep this blocked: http://127.0.0.1:5474/requests/req-1. "
-        "After you choose, retry the same Codex action."
-    )
-    tokenized = (
-        "Open HOL Guard to approve or keep this blocked: "
-        "http://127.0.0.1:5474/requests/req-1#guard-token=gld1.abc.def. "
-        "After you choose, retry the same Codex action."
-    )
-    joined = join_native_hook_reason(policy, tokenized)
-    assert "needs your approval" in joined.lower()
-    assert joined.count("http://") == 1
-    assert "guard-token=" in joined
-    assert "http://127.0.0.1:5474/requests/req-1." not in joined
-
-
 def test_live_approval_review_url_tokens_loopback(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
     _write_daemon_token(guard_home, "secret-daemon-token")
@@ -90,36 +67,6 @@ def test_live_approval_review_url_tokens_loopback(tmp_path: Path) -> None:
     assert "secret-daemon-token" not in live
     fragment = parse_qs(urlparse(live).fragment)
     assert fragment["guard-token"][0].startswith("gld1.")
-
-
-def test_with_approval_review_url_replaces_untokenized_loopback(tmp_path: Path) -> None:
-    guard_home = tmp_path / "guard-home"
-    _write_daemon_token(guard_home, "secret-daemon-token")
-    review_url = "http://127.0.0.1:5474/requests/req-1"
-    reason = f"HOL Guard paused this action. Open HOL Guard to approve or keep this blocked: {review_url}."
-    live = with_approval_review_url(reason, {"approval_url": review_url}, guard_home=guard_home)
-    assert live.count("http://") == 1
-    assert "guard-token=" in live
-    assert "secret-daemon-token" not in live
-
-
-def test_native_review_reason_uses_signed_loopback_link(tmp_path: Path) -> None:
-    guard_home = tmp_path / "guard-home"
-    _write_daemon_token(guard_home, "secret-daemon-token")
-    review_url = "http://127.0.0.1:5474/requests/req-native-1"
-    rendered = render_pre_tool_review(
-        "codex",
-        {"reason": "HOL Guard paused this action.", "reason_code": "native_pre_tool_review"},
-        approval={"request_id": "req-native-1", "approval_url": review_url},
-        guard_home=guard_home,
-    )
-    reason = str(rendered.get("reason"))
-    assert rendered["approval_url"] == review_url
-    assert "guard-token=" not in str(rendered["approval_url"])
-    assert review_url in reason
-    assert "guard-token=" in reason
-    assert "secret-daemon-token" not in reason
-    assert "Open HOL Guard to approve or keep this blocked:" in reason
 
 
 def test_load_reconciles_watch_posture_when_mode_is_still_prompt(tmp_path: Path) -> None:

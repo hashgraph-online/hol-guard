@@ -1,3 +1,4 @@
+tests/test_native_checkout_destination_permission.py
 tests/test_native_command_evaluation_bridge.py
 tests/test_native_command_evaluation_integration.py
 tests/test_native_command_extension_evidence.py

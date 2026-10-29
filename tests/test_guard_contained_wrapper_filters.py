@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import io
+import subprocess
 import sys
 from pathlib import Path
 
@@ -48,6 +50,12 @@ def _peel_from_the_resident(native_contained_wrapper_runtime: Path) -> None:
         (f"{_RUNNER} 2>&1 | rg -B2 -A6 -i error", (("rg", "-B2", "-A6", "-i", "error"),)),
         (f"{_RUNNER} 2>&1 | rg -NU -e FAIL -e Error", (("rg", "-NU", "-e", "FAIL", "-e", "Error"),)),
         (f"{_RUNNER} 2>&1 | rg -v ok | tail -3", (("rg", "-v", "ok"), ("tail", "3"))),
+        (f"{_RUNNER} 2>&1 | head -c 1500", (("head", "-c", "1500"),)),
+        (f"{_RUNNER} 2>&1 | tail -c 2000", (("tail", "-c", "2000"),)),
+        (
+            f'{_RUNNER} 2>&1 | grep -o "CITE_HTML.*" | head -c 1500',
+            (("grep", "-o", "CITE_HTML.*"), ("head", "-c", "1500")),
+        ),
     ],
 )
 def test_stdin_filter_chains_are_peeled(tmp_path: Path, command: str, stages: tuple[tuple[str, ...], ...]) -> None:
@@ -146,6 +154,78 @@ def test_filter_chain_applies_to_captured_output(capsys: pytest.CaptureFixture[s
         print("axb")
     assert capsys.readouterr().out == ""
     assert missing.status_line(0) == "exit=1\n"
+
+
+def test_byte_bounds_cut_the_captured_output(capsys: pytest.CaptureFixture[str]) -> None:
+    head = OutputFilter("pipe", 0, True, stages=(("head", "-c", "6"),))
+    with bounded_output(head):
+        print("one\ntwo\nthree")
+    assert capsys.readouterr().out == "one\ntw"
+
+    tail = OutputFilter("pipe", 0, True, stages=(("tail", "-c", "6"),))
+    with bounded_output(tail):
+        print("one\ntwo\nthree")
+    assert capsys.readouterr().out == "three\n"
+
+
+def test_a_byte_bound_cuts_where_the_program_would() -> None:
+    """A cut inside a character keeps the bytes `head -c` would have printed."""
+    assert filters.keep_bytes("héllo", "head", 2) == "h\udcc3"
+    assert filters.keep_bytes("héllo", "head", 3) == "hé"
+    assert filters.keep_bytes("héllo", "tail", 3) == "llo"
+    assert filters.keep_bytes("héllo", "tail", 0) == ""
+
+
+def test_a_bound_larger_than_the_output_keeps_all_of_it() -> None:
+    """`head`/`tail` asked for more than there is print everything, as the programs do."""
+    assert filters.keep_bytes("abc", "tail", 5) == "abc"
+    assert filters.keep_bytes("abc", "head", 5) == "abc"
+    assert filters.keep_lines(["one\n", "two\n"], "tail", 3) == ["one\n", "two\n"]
+
+
+def test_a_partial_character_reaches_a_strict_stdout(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A cut inside a character writes its bytes rather than raising on the sink."""
+    stream = io.TextIOWrapper(io.BytesIO(), encoding="utf-8", errors="strict", write_through=True)
+    monkeypatch.setattr(sys, "stdout", stream)
+    head = OutputFilter("pipe", 0, True, stages=(("head", "-c", "2"),))
+    with bounded_output(head):
+        print("héllo", end="")
+    assert stream.buffer.getvalue() == b"h\xc3"
+
+
+def test_a_line_bound_keeps_the_streams_own_encoding(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`head -N` cuts between characters, so its text goes out as the stream encodes it."""
+    stream = io.TextIOWrapper(io.BytesIO(), encoding="latin-1", errors="strict", write_through=True)
+    monkeypatch.setattr(sys, "stdout", stream)
+    head = OutputFilter("head", 1, True)
+    with bounded_output(head):
+        print("héllo")
+    assert stream.buffer.getvalue() == "héllo\n".encode("latin-1")
+
+
+def test_a_line_only_chain_keeps_the_streams_own_encoding(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A chain that cuts only by lines emits the bytes the stream encodes, not UTF-8."""
+    stream = io.TextIOWrapper(io.BytesIO(), encoding="latin-1", errors="strict", write_through=True)
+    monkeypatch.setattr(sys, "stdout", stream)
+    chain = OutputFilter("pipe", 0, True, stages=(("tail", "2"), ("head", "1")))
+    with bounded_output(chain):
+        print("first")
+        print("héllo")
+        print("last")
+    assert stream.buffer.getvalue() == "héllo\n".encode("latin-1")
+
+
+def test_a_matcher_prints_back_the_pipeline_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A matcher fed a partial character returns its bytes, not a replacement one."""
+
+    def _run(*_arguments: object, **_keywords: object) -> subprocess.CompletedProcess[bytes]:
+        return subprocess.CompletedProcess(args=[], returncode=0, stdout=b"h\xc3\n", stderr=b"")
+
+    monkeypatch.setattr(filters.subprocess, "run", _run)
+    monkeypatch.setattr(filters, "_trusted_grep", lambda: "/usr/bin/grep")
+    text, _diagnostics, status = filters.apply_filters("héllo\n", (("head", "-c", "2"), ("grep", "h")))
+    assert text == "h\udcc3\n"
+    assert status == 0
 
 
 def _ripgrep_installed() -> bool:

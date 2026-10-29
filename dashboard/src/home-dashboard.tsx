@@ -41,6 +41,7 @@ import { isConnectableAppHarness } from "./apps/harness-setup-target";
 import { buildHomeRuntimeErrorCopy } from "./home-runtime-error";
 import { ServiceRecoveryPanel } from "./service-recovery-panel";
 import type { RecoveryHandoffResult, RecoveryInstallMode } from "./service-recovery";
+import { RuntimeErrorState } from "./runtime-error-state";
 import type {
   GuardApprovalGatePublicConfig,
   GuardApprovalRequest,
@@ -331,25 +332,13 @@ export function HomeWorkspace(props: {
         />
       );
     }
-    const handlePrimary = () => {
-      if (errorCopy.kind === "session") {
-        void props.onReconnectSession?.();
-        return;
-      }
-      void props.onRefreshRuntime?.();
-    };
-    const handleSecondary = errorCopy.kind === "session" ? props.onOpenInbox : props.onOpenSettings;
     return (
-      <EmptyState
-        title={errorCopy.title}
-        body={errorCopy.body}
-        action={
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <ActionButton onClick={handlePrimary}>{errorCopy.primaryCta}</ActionButton>
-            <ActionButton variant="outline" onClick={handleSecondary}>{errorCopy.secondaryCta}</ActionButton>
-          </div>
-        }
-        tone="teach"
+      <RuntimeErrorState
+        message={props.runtime.message}
+        onReconnectSession={props.onReconnectSession}
+        onRefreshRuntime={props.onRefreshRuntime}
+        onOpenInbox={props.onOpenInbox}
+        onOpenSettings={props.onOpenSettings}
       />
     );
   }

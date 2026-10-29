@@ -100,7 +100,9 @@ def test_every_cdx_061_corpus_case_requires_owned_containment_proof(partition: i
         assert evaluation.minimum_action == "review"
         # Intrinsic Git-context reapproval strengthens, never replaces, the
         # independently required containment proof.
-        expected_floor = "require-reapproval" if reviewed.native_minimum_action == "require-reapproval" else "review"
+        expected_floor = (
+            "require-reapproval" if reviewed.payload["minimum_action"] == "require-reapproval" else "review"
+        )
         assert evaluation.decision_plane.action == expected_floor
         assert evaluation.decision_plane.proof_routes == frozenset()
     adversarial = list(

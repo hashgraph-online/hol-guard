@@ -36,6 +36,7 @@ pub(crate) fn kind_name(kind: &Kind) -> &'static str {
         Kind::OpaqueMaterialDigest { .. } => "opaque_material_digest",
         Kind::McpRedactJson { .. } => "mcp_redact_json",
         Kind::NativeBashReplyValidation { .. } => "native_bash_reply_validation",
+        Kind::NativeDecisionReceiptValidation { .. } => "native_decision_receipt_validation",
         Kind::McpLaunchEnvironment { .. } => "mcp_launch_environment",
         Kind::PackageExecutionContextFromEvidence { .. } => {
             "package_execution_context_from_evidence"
@@ -96,13 +97,18 @@ fn nullable_output(kind: &str) -> Option<&'static str> {
         | "package_execution_context_from_scanner_evidence" => "package_context",
         "local_cli_identify" => "local_cli_identities",
         "native_bash_reply_validation" => "native_bash_reply_valid",
+        "native_decision_receipt_validation" => "native_decision_receipt_valid",
         _ => return None,
     })
 }
 
 /// Fields that only make sense for exactly one request kind.
-const KIND_GATED_FIELDS: [(&str, &str); 10] = [
+const KIND_GATED_FIELDS: [(&str, &str); 11] = [
     ("native_bash_reply_valid", "native_bash_reply_validation"),
+    (
+        "native_decision_receipt_valid",
+        "native_decision_receipt_validation",
+    ),
     (
         "approval_context_token_well_formed",
         "approval_context_token_well_formed",
@@ -175,6 +181,12 @@ fn present<'a>(payload: &'a Map<String, Value>, field: &str) -> Option<&'a Value
 fn fields_valid(kind: &str, payload: &Map<String, Value>) -> bool {
     if payload
         .get("native_bash_reply_valid")
+        .is_some_and(|value| !value.is_boolean())
+    {
+        return false;
+    }
+    if payload
+        .get("native_decision_receipt_valid")
         .is_some_and(|value| !value.is_boolean())
     {
         return false;

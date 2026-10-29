@@ -874,6 +874,12 @@ fn repository_selector_is_safe(selector: &str) -> bool {
 }
 
 fn strip_global_options(args: &[String]) -> Vec<String> {
+    global_options_end(args).map_or_else(Vec::new, |index| args[index..].to_vec())
+}
+
+/// The index of the first argument after `gh`'s global options, or `None`
+/// when a global option is missing its value.
+pub(crate) fn global_options_end(args: &[String]) -> Option<usize> {
     let mut index = 0;
     while index < args.len() {
         let token = &args[index];
@@ -893,11 +899,11 @@ fn strip_global_options(args: &[String]) -> Vec<String> {
             continue;
         }
         if index + 1 >= args.len() {
-            return Vec::new();
+            return None;
         }
         index += 2;
     }
-    args[index..].to_vec()
+    Some(index)
 }
 
 fn group_subcommand(args: &[String]) -> Option<String> {
@@ -1214,6 +1220,7 @@ fn bare_variable_re() -> &'static Regex {
 #[derive(Default)]
 struct ApiArgs {
     endpoint: Option<String>,
+    endpoint_index: Option<usize>,
     method: Option<String>,
     fields: Vec<(String, String)>,
     headers: Vec<String>,
@@ -1249,6 +1256,7 @@ fn field_value_is_external(value: &str, allow_graphql_variables: bool) -> bool {
 /// `_parse_api_arguments` (:214-282).
 fn parse_api_arguments(args: &[String]) -> Result<ApiArgs, GitHubCommandAssessment> {
     let mut endpoint: Option<String> = None;
+    let mut endpoint_index: Option<usize> = None;
     let mut method: Option<String> = None;
     let mut fields: Vec<(String, String)> = Vec::new();
     let mut headers: Vec<String> = Vec::new();
@@ -1263,6 +1271,7 @@ fn parse_api_arguments(args: &[String]) -> Result<ApiArgs, GitHubCommandAssessme
                 return Err(api_parse_failure());
             }
             endpoint = Some(args[index].clone());
+            endpoint_index = Some(index);
             index += 1;
             if index != args.len() {
                 return Err(api_parse_failure());
@@ -1333,6 +1342,7 @@ fn parse_api_arguments(args: &[String]) -> Result<ApiArgs, GitHubCommandAssessme
             return Err(api_parse_failure());
         }
         endpoint = Some(token.clone());
+        endpoint_index = Some(index);
         index += 1;
     }
     if endpoint.is_none() {
@@ -1340,6 +1350,7 @@ fn parse_api_arguments(args: &[String]) -> Result<ApiArgs, GitHubCommandAssessme
     }
     Ok(ApiArgs {
         endpoint,
+        endpoint_index,
         method,
         fields,
         headers,
@@ -1518,6 +1529,12 @@ fn mutation_reason(capabilities: &[Cap]) -> String {
             .replace("_remote", "")
             .replace('_', "-")
     )
+}
+
+/// The position of the endpoint operand in `gh api` arguments (those after
+/// `api`), or `None` when the arguments cannot be parsed statically.
+pub(crate) fn api_endpoint_index(args: &[String]) -> Option<usize> {
+    parse_api_arguments(args).ok()?.endpoint_index
 }
 
 /// `classify_github_api` (:60-121).

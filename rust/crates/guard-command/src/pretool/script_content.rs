@@ -182,7 +182,22 @@ fn text_structure(
 /// of those is answered by dropping it, so only a single trailing one is read
 /// this way.
 pub(crate) fn foreground_job(text: &str) -> Option<&str> {
-    let body = text.trim_end().strip_suffix('&')?.trim_end();
+    let stripped = text.trim_end().strip_suffix('&')?;
+    // `cmd foo\&` passes a literal `&` and runs in the foreground. The
+    // backslashes in front of the `&` have to pair off for it to be the
+    // operator that backgrounds the command, so an odd run of them leaves the
+    // text as it arrived.
+    if stripped
+        .chars()
+        .rev()
+        .take_while(|value| *value == '\\')
+        .count()
+        % 2
+        == 1
+    {
+        return None;
+    }
+    let body = stripped.trim_end();
     (!body.is_empty() && !body.contains('&')).then_some(body)
 }
 

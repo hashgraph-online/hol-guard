@@ -5,24 +5,17 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from hashlib import sha256
 from pathlib import Path
 from typing import Final, Literal, cast
 from uuid import uuid4
 
-from .models import GuardAction, PolicyDecision
+from .models import PolicyDecision
 from .native_context import _canonical_request_sha256, _resolve_existing_digest_home, ensure_resident_prerequisite
 from .native_execution import _resident_request
 
 LocalToolGrantTarget = Literal["capability", "version"]
 LocalToolGrantDuration = Literal["15m", "1h", "5h", "version", "always"]
 
-LOCAL_TOOL_GRANT_TARGETS: Final = ("capability", "version")
-LOCAL_TOOL_GRANT_DURATIONS: Final = ("15m", "1h", "5h", "version", "always")
-_DURATION_SECONDS: Final = {"15m": 900, "1h": 3600, "5h": 18000}
-_SELECTOR_PREFIX: Final = "local-tool-grant:v1"
-_POLICY_SOURCE: Final = "trusted-local-tool"
 LOCAL_TOOL_ELIGIBILITY_FEATURE: Final = "local-tool-eligibility-v1"
 _ELIGIBILITY_REQUEST_SCHEMA: Final = "guard-local-tool-eligibility-request.v1"
 _ELIGIBILITY_RESULT_SCHEMA: Final = "guard-local-tool-eligibility-result.v1"
@@ -32,15 +25,16 @@ _ELIGIBILITY_MAX_REQUEST_BYTES: Final = 2 * 1024 * 1024
 _ELIGIBILITY_PAYLOAD_KEYS: Final = frozenset(
     {"tool_name", "tool_identity_hash", "capability", "read_only_reason", "trust_basis", "indefinite_allowed"}
 )
-_HARD_RISK_EXCLUSIONS: Final = (
-    "shell_chaining",
-    "shell_redirection",
-    "embedded_execution",
-    "environment_override",
-    "unresolved_entrypoint",
-    "mutating_capability",
-    "untrusted_output_processor",
-)
+LOCAL_TOOL_GRANT_FEATURE: Final = "local-tool-grant-v1"
+_GRANT_REQUEST_SCHEMA: Final = "guard-local-tool-grant-request.v1"
+_GRANT_RESULT_SCHEMA: Final = "guard-local-tool-grant-result.v1"
+_GRANT_TIMEOUT_SECONDS: Final = 10.0
+# Filed evidence only; no environment travels with a grant question.
+_GRANT_MAX_REQUEST_BYTES: Final = 1024 * 1024
+
+
+class LocalToolGrantUnavailableError(RuntimeError):
+    """The resident could not say what a grant for this request may be."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,32 +59,17 @@ class LocalToolApprovalEligibility:
             "indefinite_allowed": self.indefinite_allowed,
         }
 
-    def to_payload(self) -> dict[str, object]:
-        package_profile = self.trust_basis == "package-profile"
-        reusable_durations = (
-            ("15m", "1h", "5h", "always")
-            if package_profile and self.indefinite_allowed
-            else ("15m", "1h", "5h")
-            if package_profile
-            else LOCAL_TOOL_GRANT_DURATIONS[:-1]
-        )
-        return {
-            **self.to_evidence(),
-            "allowed_targets": ["capability"] if package_profile else list(LOCAL_TOOL_GRANT_TARGETS),
-            "allowed_durations": [
-                "once",
-                *reusable_durations,
-            ],
-            "hard_risk_exclusions": list(_HARD_RISK_EXCLUSIONS),
-        }
-
 
 @dataclass(frozen=True, slots=True)
 class LocalToolGrantSelection:
+    """One pick the resident accepted, with the policy row it filed for it."""
+
     target: LocalToolGrantTarget
     duration: LocalToolGrantDuration
     expires_at: str | None
-    eligibility: LocalToolApprovalEligibility
+    tool_name: str
+    capability: str
+    decision: Mapping[str, object]
 
 
 def local_tool_approval_eligibility(
@@ -130,16 +109,8 @@ def local_tool_approval_eligibility(
         )
     except Exception:
         return None
-    if (
-        response is None
-        or response.get("schema") != _ELIGIBILITY_RESULT_SCHEMA
-        or response.get("request_id") != request["request_id"]
-        or response.get("request_sha256") != digest
-        or response.get("status") != "ok"
-        or response.get("code") != "ok"
-    ):
-        return None
-    return _eligibility_from_payload(response.get("payload"))
+    answer = _accepted(response, request_id=request["request_id"], digest=digest, schema=_ELIGIBILITY_RESULT_SCHEMA)
+    return None if answer is None else _eligibility_from_payload(answer.get("payload"))
 
 
 def _eligibility_from_payload(payload: object) -> LocalToolApprovalEligibility | None:
@@ -175,8 +146,23 @@ def _eligibility_from_payload(payload: object) -> LocalToolApprovalEligibility |
 
 
 def local_tool_approval_payload(request: Mapping[str, object]) -> dict[str, object] | None:
-    eligibility = _eligibility_from_request(request)
-    return eligibility.to_payload() if eligibility is not None else None
+    """What the approval card may offer for this request's filed evidence.
+
+    A resident that cannot answer offers nothing: the request keeps its
+    once-only choices rather than a grant Python shaped on its own.
+
+    Every row of an approval queue passes through here, and almost none of them
+    were filed by the local-tool scanner. A request whose evidence never names
+    that source can carry no grant whatever the resident says, so it is answered
+    without a round-trip. That is a narrower answer, never a wider one: which of
+    the entries that do name it is eligible stays the resident's to decide.
+    """
+
+    if not _names_a_local_tool(request):
+        return None
+    payload = _grant_payload(request, None)
+    approval = None if payload is None else payload.get("approval")
+    return cast(dict[str, object], approval) if isinstance(approval, dict) else None
 
 
 def parse_local_tool_grant_selection(
@@ -185,99 +171,153 @@ def parse_local_tool_grant_selection(
     target: object,
     duration: object,
     now: str,
-) -> LocalToolGrantSelection:
-    eligibility = _eligibility_from_request(request)
-    if eligibility is None:
-        raise ValueError("local_tool_approval_ineligible")
-    if target not in LOCAL_TOOL_GRANT_TARGETS:
-        raise ValueError("invalid_local_tool_grant_target")
-    allowed_targets = cast(list[object], eligibility.to_payload()["allowed_targets"])
-    if target not in allowed_targets:
-        raise ValueError("invalid_local_tool_grant_target")
-    if duration not in LOCAL_TOOL_GRANT_DURATIONS:
-        raise ValueError("invalid_local_tool_grant_duration")
-    allowed_durations = cast(list[object], eligibility.to_payload()["allowed_durations"])
-    if duration not in allowed_durations:
-        raise ValueError("invalid_local_tool_grant_duration")
-    typed_target: LocalToolGrantTarget = target
-    typed_duration: LocalToolGrantDuration = duration
-    expires_at: str | None = None
-    if typed_duration not in {"version", "always"}:
-        parsed_now = datetime.fromisoformat(now.replace("Z", "+00:00"))
-        if parsed_now.tzinfo is None:
-            parsed_now = parsed_now.replace(tzinfo=timezone.utc)
-        expires_at = (
-            parsed_now.astimezone(timezone.utc) + timedelta(seconds=_DURATION_SECONDS[typed_duration])
-        ).isoformat()
-    return LocalToolGrantSelection(typed_target, typed_duration, expires_at, eligibility)
-
-
-def local_tool_grant_decision(
-    *,
     harness: str,
-    selection: LocalToolGrantSelection,
     reason: str | None,
-) -> PolicyDecision:
+) -> LocalToolGrantSelection:
+    """Have the resident judge one pick against the request's filed evidence.
+
+    A pick the evidence does not allow raises its refusal code, as the local
+    parse did. A resident that cannot answer raises rather than falling back:
+    nothing else may decide what a grant covers or when it runs out.
+    """
+
+    payload = _grant_payload(
+        request,
+        {
+            "harness": harness,
+            "target": target,
+            "duration": duration,
+            "now": now,
+            "reason": reason,
+        },
+    )
+    if payload is None:
+        raise LocalToolGrantUnavailableError("native_local_tool_grant_unavailable")
+    refusal = payload.get("refusal")
+    if isinstance(refusal, str) and refusal:
+        raise ValueError(refusal)
+    selection = payload.get("selection")
+    approval = payload.get("approval")
+    if not isinstance(selection, dict) or not isinstance(approval, dict):
+        raise LocalToolGrantUnavailableError("native_local_tool_grant_unavailable")
+    chosen = cast(dict[str, object], selection)
+    offered = cast(dict[str, object], approval)
+    expires_at = chosen.get("expires_at")
+    decision = chosen.get("decision")
+    if not isinstance(decision, dict) or not (expires_at is None or isinstance(expires_at, str)):
+        raise LocalToolGrantUnavailableError("native_local_tool_grant_unavailable")
+    selected = LocalToolGrantSelection(
+        target=cast(LocalToolGrantTarget, _required_text(chosen.get("target"))),
+        duration=cast(LocalToolGrantDuration, _required_text(chosen.get("duration"))),
+        expires_at=expires_at,
+        tool_name=_required_text(offered.get("tool_name")),
+        capability=_required_text(offered.get("capability")),
+        decision=cast(dict[str, object], decision),
+    )
+    # Read the filed row here, where nothing has been written yet. Left until
+    # the resolution files it, a malformed reply would fail after the approval
+    # gate had already been required and a policy row may already exist.
+    local_tool_grant_decision(selected)
+    return selected
+
+
+def local_tool_grant_decision(selection: LocalToolGrantSelection) -> PolicyDecision:
+    """The policy row the resident filed for an accepted pick."""
+
+    decision = selection.decision
+    if decision.get("scope") != "artifact" or decision.get("action") != "allow":
+        raise LocalToolGrantUnavailableError("native_local_tool_grant_unavailable")
+    reason = decision.get("reason")
     return PolicyDecision(
-        harness=harness,
+        harness=_required_text(decision.get("harness")),
         scope="artifact",
         action="allow",
-        artifact_id=local_tool_grant_selector(
-            selection.eligibility,
-            target=selection.target,
-        ),
-        reason=reason,
-        source=_POLICY_SOURCE,
+        artifact_id=_required_text(decision.get("artifact_id")),
+        reason=reason if isinstance(reason, str) else None,
+        source=_required_text(decision.get("source")),
         expires_at=selection.expires_at,
     )
 
 
-_GRANT_REUSING_ACTIONS: frozenset[GuardAction] = frozenset({"review", "require-reapproval"})
+def _grant_payload(request: Mapping[str, object], selection: dict[str, object] | None) -> dict[str, object] | None:
+    """The resident's answer for this request's evidence, or ``None``."""
+
+    try:
+        native_request: dict[str, object] = {
+            "schema": _GRANT_REQUEST_SCHEMA,
+            "request_id": f"local-tool-grant-{uuid4().hex}",
+            "scanner_evidence": _filed_evidence(request),
+            "selection": selection,
+        }
+        digest = "sha256:" + _canonical_request_sha256(native_request)
+        guard_home = _resolve_existing_digest_home(None)
+        if not ensure_resident_prerequisite(guard_home):
+            return None
+        response = _resident_request(
+            operation="local_tool_grant",
+            request=native_request,
+            guard_home=guard_home,
+            timeout_seconds=_GRANT_TIMEOUT_SECONDS,
+            required_feature=LOCAL_TOOL_GRANT_FEATURE,
+            response_schema=_GRANT_RESULT_SCHEMA,
+            max_request_bytes=_GRANT_MAX_REQUEST_BYTES,
+        )
+    except Exception:
+        return None
+    answer = _accepted(response, request_id=native_request["request_id"], digest=digest, schema=_GRANT_RESULT_SCHEMA)
+    payload = None if answer is None else answer.get("payload")
+    return cast(dict[str, object], payload) if isinstance(payload, dict) else None
 
 
-def local_tool_grant_selector(
-    eligibility: LocalToolApprovalEligibility,
+def _accepted(
+    response: dict[str, object] | None,
     *,
-    target: LocalToolGrantTarget,
-) -> str:
-    capability = eligibility.capability if target == "capability" else "*"
-    capability_hash = sha256(capability.encode("utf-8")).hexdigest()
-    return f"{_SELECTOR_PREFIX}:{eligibility.tool_identity_hash}:{target}:{capability_hash}"
+    request_id: object,
+    digest: str,
+    schema: str,
+) -> dict[str, object] | None:
+    """The reply, when it is this request's, intact and successful."""
+
+    if (
+        response is None
+        or response.get("schema") != schema
+        or response.get("request_id") != request_id
+        or response.get("request_sha256") != digest
+        or response.get("status") != "ok"
+        or response.get("code") != "ok"
+    ):
+        return None
+    return response
 
 
-def _eligibility_from_request(request: Mapping[str, object]) -> LocalToolApprovalEligibility | None:
+def _filed_evidence(request: Mapping[str, object]) -> list[dict[str, object]]:
+    """The request's scanner evidence as plain JSON objects.
+
+    The entries are untrusted; the resident decides which of them, if any,
+    names an eligible trusted local tool.
+    """
+
     evidence = request.get("scanner_evidence")
     if not isinstance(evidence, Sequence) or isinstance(evidence, str):
-        return None
-    for item in evidence:
-        if not isinstance(item, Mapping):
-            continue
-        normalized_item = dict(cast(Mapping[str, object], item))
-        if normalized_item.get("source") != "trusted_local_tool":
-            continue
-        tool_name = _nonempty_string(normalized_item.get("tool_name"))
-        identity_hash = _nonempty_string(normalized_item.get("tool_identity_hash"))
-        capability = _nonempty_string(normalized_item.get("capability"))
-        read_only_reason = _nonempty_string(normalized_item.get("read_only_reason"))
-        trust_basis = normalized_item.get("trust_basis", "verified-files")
-        if (
-            normalized_item.get("eligible") is True
-            and tool_name is not None
-            and identity_hash is not None
-            and _is_sha256(identity_hash)
-            and capability is not None
-            and read_only_reason is not None
-            and trust_basis in {"verified-files", "package-profile"}
-        ):
-            return LocalToolApprovalEligibility(
-                tool_name,
-                identity_hash,
-                capability,
-                read_only_reason,
-                cast(Literal["verified-files", "package-profile"], trust_basis),
-                bool(normalized_item.get("indefinite_allowed", False)),
-            )
-    return None
+        return []
+    items = cast(Sequence[object], evidence)
+    return [dict(cast(Mapping[str, object], item)) for item in items if isinstance(item, Mapping)]
+
+
+def _names_a_local_tool(request: Mapping[str, object]) -> bool:
+    """Whether any filed entry claims the local-tool scanner as its source.
+
+    The claim is untrusted and proves nothing on its own. Its absence is what
+    matters: without it there is no entry a grant could ever rest on.
+    """
+
+    return any(entry.get("source") == "trusted_local_tool" for entry in _filed_evidence(request))
+
+
+def _required_text(value: object) -> str:
+    if not isinstance(value, str) or not value:
+        raise LocalToolGrantUnavailableError("native_local_tool_grant_unavailable")
+    return value
 
 
 def _nonempty_string(value: object) -> str | None:

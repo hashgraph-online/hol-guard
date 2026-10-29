@@ -215,3 +215,97 @@ fn an_unresolved_request_keeps_the_deny_at_the_deadline() {
     assert!(waited >= Duration::from_millis(600), "{waited:?}");
     assert!(waited < Duration::from_secs(5), "{waited:?}");
 }
+
+#[test]
+fn a_lost_completion_is_replayed_for_the_same_hook() {
+    let (home, daemon) = codex_home(
+        "codex-approval-lost-completion",
+        vec![
+            Exchange::Plain(200, RESOLVED_ALLOW.to_owned()),
+            Exchange::Drop,
+            Exchange::Plain(200, r#"{"completed":true,"action":"allow"}"#.to_owned()),
+        ],
+    );
+    let deadline = Instant::now() + Duration::from_secs(20);
+    assert!(approved(&home.state_path, &pending(), HOOK_INPUT, deadline));
+    let requests = daemon.join().unwrap();
+    assert_eq!(requests.len(), 3);
+    assert_eq!(
+        requests[1].target,
+        "/v1/requests/req_12345678/live-decision"
+    );
+    assert_eq!(requests[1].target, requests[2].target);
+    assert_eq!(requests[1].body, requests[2].body);
+}
+
+#[test]
+fn completion_stops_after_three_lost_replies() {
+    // A fourth attempt would be answered with a recorded allow; the deny
+    // stands because the bridge never sends it. The test then takes that
+    // connection itself so the daemon thread finishes and can be joined.
+    let (home, daemon) = codex_home(
+        "codex-approval-lost-every-completion",
+        vec![
+            Exchange::Plain(200, RESOLVED_ALLOW.to_owned()),
+            Exchange::Drop,
+            Exchange::Drop,
+            Exchange::Drop,
+            Exchange::Plain(200, r#"{"completed":true,"action":"allow"}"#.to_owned()),
+        ],
+    );
+    let deadline = Instant::now() + Duration::from_secs(20);
+    assert!(!approved(
+        &home.state_path,
+        &pending(),
+        HOOK_INPUT,
+        deadline
+    ));
+    let state: Value = serde_json::from_slice(&std::fs::read(&home.state_path).unwrap()).unwrap();
+    let port = state["port"].as_u64().unwrap();
+    let mut stream = std::net::TcpStream::connect(("127.0.0.1", port as u16)).unwrap();
+    std::io::Write::write_all(
+        &mut stream,
+        b"GET /never-sent HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Length: 0\r\n\r\n",
+    )
+    .unwrap();
+    std::io::Read::read_to_end(&mut stream, &mut Vec::new()).unwrap();
+    let requests = daemon.join().unwrap();
+    assert_eq!(requests.len(), 5);
+    assert_eq!(requests[4].target, "/never-sent");
+}
+
+#[test]
+fn a_lost_poll_reply_is_asked_again() {
+    let (home, daemon) = codex_home(
+        "codex-approval-lost-poll",
+        vec![
+            Exchange::Drop,
+            Exchange::Plain(200, RESOLVED_ALLOW.to_owned()),
+            Exchange::Plain(200, r#"{"completed":true,"action":"allow"}"#.to_owned()),
+        ],
+    );
+    let deadline = Instant::now() + Duration::from_secs(20);
+    assert!(approved(&home.state_path, &pending(), HOOK_INPUT, deadline));
+    let requests = daemon.join().unwrap();
+    assert_eq!(requests.len(), 3);
+    assert_eq!(requests[0].target, requests[1].target);
+}
+
+#[test]
+fn a_refused_completion_is_not_replayed() {
+    let (home, daemon) = codex_home(
+        "codex-approval-refused-completion",
+        vec![
+            Exchange::Plain(200, RESOLVED_ALLOW.to_owned()),
+            Exchange::Plain(401, r#"{"error":"unauthorized"}"#.to_owned()),
+        ],
+    );
+    let deadline = Instant::now() + Duration::from_secs(20);
+    assert!(!approved(
+        &home.state_path,
+        &pending(),
+        HOOK_INPUT,
+        deadline
+    ));
+    assert_eq!(daemon.join().unwrap().len(), 2);
+}

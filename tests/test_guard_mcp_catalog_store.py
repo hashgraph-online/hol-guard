@@ -9,6 +9,7 @@ from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliComman
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.runtime.local_mcp_stdio import McpCatalogResult
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.local_cli_store_support import upsert_local_cli_command_states
 
 from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
 
@@ -183,7 +184,7 @@ def test_partial_refresh_preserves_known_tools_and_choices(tmp_path: Path) -> No
     store, identity = _store(tmp_path)
     _publish(store, identity, "read", "delete")
     store.upsert_local_cli_grant(identity=identity, state="allowed", expected_revision=0, updated_at=_FIRST)
-    store.upsert_local_cli_command_states(identity.cli_id, {"read": "allow", "delete": "block"})
+    upsert_local_cli_command_states(store, identity.cli_id, {"read": "allow", "delete": "block"})
     before = store.list_local_cli_items()[0]
     store.merge_local_cli_commands(
         identity.cli_id,
@@ -250,7 +251,7 @@ def test_removed_tools_revoke_allow_and_preserve_deny_when_they_return(tmp_path:
     store, identity = _store(tmp_path)
     _publish(store, identity, "read", "delete")
     store.upsert_local_cli_grant(identity=identity, state="allowed", expected_revision=0, updated_at=_FIRST)
-    store.upsert_local_cli_command_states(identity.cli_id, {"read": "allow", "delete": "block"})
+    upsert_local_cli_command_states(store, identity.cli_id, {"read": "allow", "delete": "block"})
     revision = store.read_local_cli_revision()
     _publish(store, identity)
     assert store.read_local_cli_command_catalog(identity.cli_id) == []
@@ -420,7 +421,7 @@ def test_schema_changes_require_review_and_preserve_deny(tmp_path: Path) -> None
     store, identity = _store(tmp_path)
     _publish(store, identity, "read", "delete")
     store.upsert_local_cli_grant(identity=identity, state="allowed", expected_revision=0, updated_at=_FIRST)
-    store.upsert_local_cli_command_states(identity.cli_id, {"read": "allow", "delete": "block"})
+    upsert_local_cli_command_states(store, identity.cli_id, {"read": "allow", "delete": "block"})
     revision = store.read_local_cli_revision()
     changed = replace(
         _catalog("read", "delete"),
@@ -444,7 +445,7 @@ def test_cosmetic_description_does_not_reset_choices(tmp_path: Path) -> None:
     store, identity = _store(tmp_path)
     _publish(store, identity, "read")
     store.upsert_local_cli_grant(identity=identity, state="allowed", expected_revision=0, updated_at=_FIRST)
-    store.upsert_local_cli_command_states(identity.cli_id, {"read": "allow"})
+    upsert_local_cli_command_states(store, identity.cli_id, {"read": "allow"})
     revision = store.read_local_cli_revision()
     changed = replace(
         _catalog("read"),

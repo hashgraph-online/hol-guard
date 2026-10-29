@@ -270,7 +270,7 @@ def test_recovery_command_preserves_custom_home_and_guard_home(tmp_path: Path) -
 
 
 def test_remaining_hint_preserves_unicode_and_omits_itself_when_it_will_not_fit() -> None:
-    from codex_plugin_scanner.guard.adapters._modules.codex.codex_daemon_hook_transport import (
+    from scripts.daemon_hook_client import (
         _MAX_HOOK_REQUEST_BYTES,
         _with_remaining_hint,
     )

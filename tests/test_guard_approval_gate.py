@@ -36,10 +36,8 @@ from codex_plugin_scanner.guard.approval_gate import (
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.cli import prompt as guard_prompt_module
 from codex_plugin_scanner.guard.cli.approval_commands import run_approval_command
-from codex_plugin_scanner.guard.cli.commands import (
-    _persist_claude_native_permission_policy,
-    run_guard_command,
-)
+from codex_plugin_scanner.guard.cli.commands import run_guard_command
+from codex_plugin_scanner.guard.cli.commands_support_permission_store import _write_claude_native_permission_plan
 from codex_plugin_scanner.guard.config import editable_guard_settings, load_guard_config, reset_guard_settings
 from codex_plugin_scanner.guard.consumer.service import record_policy
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
@@ -54,7 +52,7 @@ from codex_plugin_scanner.guard.store import GuardStore
 from tests.claude_native_gate_fallback import queue_claude_native_approval_gate_fallback
 from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
 from tests.guard_totp_support import read_totp_secret, totp_code_at_counter
-from tests.native_permission_plan_stub import answer_persist_plans
+from tests.native_permission_plan_stub import saved_plan
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
 from tests.policy_store_support import replace_remote_policies, resolve_policy
 from tests.support.network import stub_authenticated_urlopen
@@ -2108,30 +2106,34 @@ def test_approval_gate_runtime_mcp_remembered_inline_allow_queues_fallback(
     assert store.list_policy_decisions("codex") == []
 
 
-def test_approval_gate_native_permission_persistence_cannot_bypass(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    answer_persist_plans(monkeypatch)
+def _write_native_allow(store: GuardStore, artifact_id: str) -> bool:
+    inputs = {
+        "artifact_id": artifact_id,
+        "artifact_hash": "hash-native",
+        "action": "allow",
+        "reason": "native approval",
+    }
+    return _write_claude_native_permission_plan(
+        store=store,
+        plan=saved_plan(inputs),
+        artifact_id=artifact_id,
+        reason="native approval",
+        source="claude-native-approval",
+        now="2026-04-11T00:00:00+00:00",
+    )
+
+
+def test_approval_gate_native_permission_persistence_cannot_bypass(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _enable_gate(store)
 
-    saved = _persist_claude_native_permission_policy(
-        store=store,
-        artifact_id="claude:project:tool",
-        artifact_hash="hash-native",
-        action="allow",
-        reason="native approval",
-        now="2026-04-11T00:00:00+00:00",
-    )
+    saved = _write_native_allow(store, "claude:project:tool")
 
     assert saved is False
     assert store.list_policy_decisions("claude-code") == []
 
 
-def test_approval_gate_native_permission_failure_queues_guard_fallback(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    answer_persist_plans(monkeypatch)
+def test_approval_gate_native_permission_failure_queues_guard_fallback(tmp_path: Path) -> None:
     store = _store(tmp_path)
     _enable_gate(store)
     artifact = GuardArtifact(
@@ -2144,14 +2146,7 @@ def test_approval_gate_native_permission_failure_queues_guard_fallback(
         command="echo MALICIOUS > marker",
     )
 
-    saved = _persist_claude_native_permission_policy(
-        store=store,
-        artifact_id=artifact.artifact_id,
-        artifact_hash="hash-native",
-        action="allow",
-        reason="native approval",
-        now="2026-04-11T00:00:00+00:00",
-    )
+    saved = _write_native_allow(store, artifact.artifact_id)
     queued = queue_claude_native_approval_gate_fallback(
         store=store,
         harness="claude-code",

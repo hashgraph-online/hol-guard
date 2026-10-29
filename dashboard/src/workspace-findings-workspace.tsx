@@ -14,12 +14,14 @@ import {
   type WorkspaceWorktree,
 } from "./workspace-findings-api";
 import { createLatestRefresh } from "./workspace-findings-refresh";
+import { sameWorktree, worktreeStatus } from "./workspace-findings-status";
 import {
   CarriedNote,
   Cell,
   EditorTaskFindingsTable,
   EvidenceNote,
   HookFindingsTable,
+  InstructionFindingsTable,
   McpFindingsTable,
   PluginFindingsTable,
   RuntimeFindingsTable,
@@ -27,7 +29,10 @@ import {
   SkillFindingsTable,
   WorkflowFindingsTable,
 } from "./workspace-findings-tables";
+import { ExportPreviewPanel } from "./workspace-export-preview-panel";
 import { FixCell, FixHistory, FixLoadError, FixReview, useWorktreeFixes, type WorktreeFixes } from "./workspace-fix-panel";
+
+export { worktreeStatus, type WorktreeStatus } from "./workspace-findings-status";
 
 const REFRESH_MS = 15_000;
 
@@ -57,17 +62,7 @@ const COVERAGE_REASONS: Record<string, string> = {
   ci_workflow_incomplete: "Some GitHub Actions workflows could not be fully read, so not every workflow was checked.",
   editor_task_incomplete:
     "Some editor task or dev container files could not be fully read, so not every file was checked.",
-};
-
-const FAILURE_REASONS: Record<string, string> = {
-  workspace_snapshot_failed: "Guard could not read this workspace.",
-  workspace_snapshot_native_unavailable: "The Guard runtime needed to read files is unavailable.",
-  workspace_identity_changed: "The folder now points at a different repository. Add it again.",
-  supply_chain_detector_failed: "The dependency check stopped before it finished.",
-  assessment_result_too_large: "The result was too large to store.",
-  lease_expired: "The assessment took too long and was retried.",
-  assessment_timed_out: "The assessment took too long twice and was stopped. It runs again when files change or you choose Assess now.",
-  feed_context_unavailable: "Guard could not read its cached advisories.",
+  instruction_file_incomplete: "Some agent instruction files could not be fully read, so not every file was checked.",
 };
 
 const DETECTOR_LABELS: Record<string, string> = {
@@ -79,31 +74,8 @@ const DETECTOR_LABELS: Record<string, string> = {
   plugin_manifest_v1: "Agent plugin checking",
   ci_workflow_v1: "CI workflow checking",
   editor_task_v1: "Editor task checking",
+  instruction_file_v1: "Instruction file checking",
 };
-
-export type WorktreeStatus = { label: string; tone: TagTone; detail: string | null };
-
-function sameWorktree(left: WorkspaceWorktree, right: { codebaseKey: string; worktreeKey: string }): boolean {
-  return left.codebaseKey === right.codebaseKey && left.worktreeKey === right.worktreeKey;
-}
-
-export function worktreeStatus(
-  worktree: WorkspaceWorktree,
-  newestRun: WorkspaceRun | undefined,
-  assessment: WorkspaceAssessment | undefined,
-): WorktreeStatus {
-  if (worktree.paused) return { label: "Paused", tone: "slate", detail: "Guard is not watching this workspace." };
-  if (newestRun?.state === "running") return { label: "Assessing", tone: "slate", detail: null };
-  if (newestRun?.state === "queued") return { label: "Queued", tone: "slate", detail: null };
-  if (newestRun?.state === "failed" && newestRun.errorCode !== "lease_expired") {
-    const detail = FAILURE_REASONS[newestRun.errorCode ?? ""] ?? "The last assessment did not finish.";
-    return { label: "Assessment failed", tone: "red", detail };
-  }
-  if (assessment === undefined) return { label: "Not assessed yet", tone: "slate", detail: null };
-  if (worktree.stale) return { label: "Out of date", tone: "attention", detail: "Files changed since the last assessment." };
-  if (assessment.partial) return { label: "Partial coverage", tone: "attention", detail: null };
-  return { label: "Up to date", tone: "green", detail: null };
-}
 
 // When the newest run has not produced a result yet, or failed, the findings
 // on screen still come from the last finished assessment, so say when that was.
@@ -351,6 +323,7 @@ function AssessmentFindings(props: { worktree: WorkspaceWorktree; assessment: Wo
       <FindingsSections findings={findings} dependencyFilesFound={dependencyFilesFound} secretsChecked={!notRun.includes("secrets")} fixes={fixes} />
       <FixReview fixes={fixes} findings={findings} />
       <FixHistory fixes={fixes} findings={findings} />
+      <ExportPreviewPanel worktree={props.worktree} findings={findings} />
     </div>
   );
 }
@@ -375,6 +348,7 @@ function FindingsSections(props: FindingsSectionsProps) {
   const plugins = props.findings.filter((finding) => finding.kind === "plugin");
   const workflows = props.findings.filter((finding) => finding.kind === "workflow");
   const editorTasks = props.findings.filter((finding) => finding.kind === "editor_task");
+  const instructions = props.findings.filter((finding) => finding.kind === "instruction");
   if (props.findings.length === 0) {
     return <p className="text-sm text-slate-600">{emptyFindingsCopy(props.dependencyFilesFound, props.secretsChecked)}</p>;
   }
@@ -389,6 +363,7 @@ function FindingsSections(props: FindingsSectionsProps) {
       {plugins.length > 0 && <PluginFindingsTable findings={plugins} />}
       {workflows.length > 0 && <WorkflowFindingsTable findings={workflows} />}
       {editorTasks.length > 0 && <EditorTaskFindingsTable findings={editorTasks} />}
+      {instructions.length > 0 && <InstructionFindingsTable findings={instructions} />}
     </div>
   );
 }

@@ -9,9 +9,9 @@ from unittest.mock import patch
 import pytest
 
 from codex_plugin_scanner.guard import native_command_effect
-from codex_plugin_scanner.guard.native_command_effect import (
+from codex_plugin_scanner.guard.native_command_effect import NativeCommandEffectMalformedError
+from tests.native_command_effect_batch import (
     COMMAND_EFFECT_BATCH_MAX_ITEMS,
-    NativeCommandEffectMalformedError,
     command_effect_decide_batch_native,
 )
 from tests.native_command_test_support import (

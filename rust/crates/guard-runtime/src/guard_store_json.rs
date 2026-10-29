@@ -57,6 +57,21 @@ pub(crate) fn add_micros_aware_isoformat(text: &str, delta_micros: i64) -> Optio
     format_iso(parsed, delta_micros)
 }
 
+/// `datetime.fromisoformat(...)` read as UTC — a naive instant is UTC and an
+/// aware one is converted, as `astimezone(timezone.utc)` does — plus
+/// `+ timedelta(...)` and `.isoformat()`. The grant expiry is spelled this way
+/// so a pick made under any offset is stored as the same instant.
+pub(crate) fn add_seconds_utc_isoformat(text: &str, delta_micros: i64) -> Option<String> {
+    let micros_since_epoch = epoch_micros(text)?;
+    format_iso(
+        Parsed {
+            micros_since_epoch,
+            offset_seconds: Some(0),
+        },
+        delta_micros,
+    )
+}
+
 /// `datetime.fromisoformat(text).timestamp()` in whole microseconds. Instants
 /// without an offset are read as UTC: the transport hands the resident aware
 /// instants only, converting naive input at the boundary.

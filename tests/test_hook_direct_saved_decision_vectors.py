@@ -1,32 +1,26 @@
 """Vectors for the resident's saved exact-action answer to a reviewed PreToolUse.
 
-The resident's direct lane builds the daemon's exact-action query and reads a
-saved decision's verdict as ``native_exact_action`` and
-``native_saved_decision_response`` do. These vectors record both from the
-Python composition; ``hook_direct_saved_query_tests.rs`` and
-``hook_direct_saved_decision_tests.rs`` replay them. Set
-``HOL_GUARD_WRITE_SAVED_DECISION_VECTORS=1`` to rewrite the fixture.
+The resident's direct lane reads a saved decision's verdict as
+``native_saved_decision_response`` does; these vectors record that from the
+Python composition and ``hook_direct_saved_decision_tests.rs`` replays them.
+The ``queries`` half is a frozen record of the exact-action query the daemon
+once built for each reviewed hook request. The resident now derives that query
+itself, and ``hook_direct_saved_query_tests.rs`` and ``hook_review_tests.rs``
+replay the record. Set ``HOL_GUARD_WRITE_SAVED_DECISION_VECTORS=1`` to rewrite
+the verdict half.
 """
 
 from __future__ import annotations
 
 import copy
-import hashlib
 import json
 import os
-import types
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import (
-    hook_fail_closed,
-    hook_native_exact_action,
-    hook_native_saved_approval,
-)
-from codex_plugin_scanner.guard.daemon.hook_native_review_approval import _native_review_tool_name
-from tests.test_native_command_observations import _edge, _observations, _receipt
+from codex_plugin_scanner.guard.daemon import hook_fail_closed, hook_native_saved_approval
 
 _FIXTURE = (
     Path(__file__).parents[1]
@@ -42,168 +36,6 @@ _CONTROL_DIGEST = "e" * 64
 _WORKSPACE = "/work/repo"
 _HOME = "/home/dev"
 _TOKEN = "guard-exact-action:v1:" + "f" * 64
-
-
-def _rehash(receipt: dict[str, Any]) -> dict[str, Any]:
-    identity = {
-        **{
-            key: value
-            for key, value in receipt.items()
-            if key not in {"authority", "decision_id", "review_anchor_digest"}
-        },
-        "schema": "guard-native-hook-decision-identity.v1",
-    }
-    receipt["decision_id"] = hashlib.sha256(
-        json.dumps(identity, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()
-    ).hexdigest()
-    return receipt
-
-
-def _reviewed(**changes: Any) -> tuple[dict[str, Any], dict[str, Any] | None]:
-    observations = _observations()
-    result = {**_edge(observations)["result"], "minimum_action": "review", "action": {"action_type": "shell"}}
-    receipt: dict[str, Any] | None = _receipt(observations, review_anchor=True)
-    for key, value in changes.items():
-        if key == "receipt":
-            receipt = value(receipt)
-        else:
-            result[key] = value
-    return result, receipt
-
-
-def _without_extensions() -> tuple[dict[str, Any], dict[str, Any]]:
-    result, _ = _reviewed()
-    result.pop("command_extensions")
-    return result, _receipt(None, review_anchor=True)
-
-
-def _receipt_with(**fields: Any):
-    def change(receipt: dict[str, Any]) -> dict[str, Any]:
-        changed = copy.deepcopy(receipt)
-        for key, value in fields.items():
-            if key == "uncertainty_count":
-                changed["command_extensions"]["uncertainty_count"] = value
-            else:
-                changed[key] = value
-        return _rehash(changed)
-
-    return change
-
-
-_QUERY_CASES: list[tuple[str, str, dict[str, Any], tuple[dict[str, Any], dict[str, Any] | None]]] = [
-    (
-        "bash-command",
-        "claude-code",
-        {"tool_name": "Bash", "tool_input": {"command": "npm test", "description": "run"}, "cwd": "/work/repo"},
-        _reviewed(),
-    ),
-    (
-        "camel-case-read",
-        "claude-code",
-        {"toolName": " Read ", "toolInput": {"file_path": "src/a.py", "limit": 20}},
-        _reviewed(),
-    ),
-    ("arguments-cmd", "claude-code", {"tool": "shell", "arguments": {"cmd": "ls -la"}}, _reviewed()),
-    (
-        "top-level-command-blank-cwd",
-        "claude-code",
-        {"tool_name": "Bash", "command": "git status", "cwd": "   "},
-        _reviewed(),
-    ),
-    (
-        "blank-tool-name-later-command",
-        "claude-code",
-        {"tool_name": "  ", "tool_input": {"command": "  ", "shell_command": "make"}},
-        _reviewed(),
-    ),
-    (
-        "grep-nested-values",
-        "claude-code",
-        {
-            "tool_name": "Grep",
-            "tool_input": {"pattern": "x", "path": "src", "-n": True, "head_limit": 5, "glob": None, "z": [1, {}]},
-        },
-        _reviewed(),
-    ),
-    ("no-tool-input", "claude-code", {"tool_name": "WebFetch"}, _reviewed()),
-    (
-        "require-reapproval-no-action",
-        "claude-code",
-        {"tool_name": "Bash", "tool_input": {"command": "rm -rf build"}},
-        _reviewed(minimum_action="require-reapproval", action=None),
-    ),
-    (
-        "unbound-legacy-review",
-        "claude-code",
-        {"tool_name": "Bash", "tool_input": {"command": "npm test"}},
-        _without_extensions(),
-    ),
-    (
-        "receipt-decision-mismatch",
-        "claude-code",
-        {"tool_name": "Bash", "tool_input": {"command": "npm test"}},
-        _reviewed(receipt=_receipt_with(decision="allow")),
-    ),
-    (
-        "receipt-observe-mode-mismatch",
-        "claude-code",
-        {"tool_name": "Bash", "tool_input": {"command": "npm test"}},
-        _reviewed(receipt=_receipt_with(observe_mode=True)),
-    ),
-    (
-        "negative-uncertainty",
-        "claude-code",
-        {"tool_name": "Bash", "tool_input": {"command": "npm test"}},
-        _reviewed(receipt=_receipt_with(uncertainty_count=-1)),
-    ),
-    ("harness-mismatch", "codex", {"tool_name": "Bash", "tool_input": {"command": "npm test"}}, _reviewed()),
-    (
-        "prompt-risk-classes",
-        "claude-code",
-        {"tool_name": "Bash", "tool_input": {"command": "npm test"}},
-        _reviewed(prompt_risk_classes=["secrets"]),
-    ),
-    (
-        "missing-receipt",
-        "claude-code",
-        {"tool_name": "Bash", "tool_input": {"command": "npm test"}},
-        _reviewed(receipt=lambda _receipt: None),
-    ),
-]
-
-
-def _query_vector(monkeypatch: pytest.MonkeyPatch, case) -> dict[str, Any]:
-    name, harness, payload, (result, receipt) = case
-    captured: list[dict[str, Any]] = []
-
-    def answer(query: dict[str, Any], _guard_home: object) -> dict[str, Any]:
-        captured.append(json.loads(json.dumps(query)))
-        return {"token": _TOKEN, "once_only_reason": None}
-
-    monkeypatch.setattr(hook_native_exact_action, "_answer", answer)
-    monkeypatch.setattr(hook_native_exact_action, "os", types.SimpleNamespace(environ=dict(_ENVIRONMENT)))
-    monkeypatch.setattr(hook_native_exact_action, "current_extension_control_binding_digest", lambda: _CONTROL_DIGEST)
-    tool_name = _native_review_tool_name(payload)
-    hook_native_exact_action.native_exact_action(
-        harness=harness,
-        tool_name=tool_name,
-        payload=payload,
-        native_result=result,
-        native_receipt=receipt,
-        workspace=Path(_WORKSPACE),
-        home_dir=Path(_HOME),
-    )
-    (query,) = captured
-    bound = query["policy_binding"]["state"] == "bound"
-    return {
-        "name": name,
-        "harness": harness,
-        "payload": payload,
-        "result": result,
-        "receipt": receipt,
-        "artifact_id": f"{harness}:native-pretool:{tool_name}" if bound else None,
-        "query": query if bound else None,
-    }
 
 
 class _Store:
@@ -299,6 +131,10 @@ def _verdict_vector(monkeypatch: pytest.MonkeyPatch, case) -> dict[str, Any]:
     return {"name": name, "result": result, "lookup": lookup, "expected": expected}
 
 
+def _recorded() -> dict[str, Any]:
+    return json.loads(_FIXTURE.read_text(encoding="utf-8"))
+
+
 def _vectors(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     return {
         "schema": "hol-guard.hook-direct-saved-decision-vectors.v1",
@@ -308,7 +144,7 @@ def _vectors(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         "home_dir": _HOME,
         "token": _TOKEN,
         "artifact_id": _ARTIFACT_ID,
-        "queries": [_query_vector(monkeypatch, case) for case in _QUERY_CASES],
+        "queries": _recorded()["queries"],
         "verdicts": [_verdict_vector(monkeypatch, case) for case in _VERDICT_CASES],
     }
 
@@ -317,7 +153,7 @@ def test_recorded_saved_decision_vectors_match_python(monkeypatch: pytest.Monkey
     vectors = _vectors(monkeypatch)
     if os.environ.get("HOL_GUARD_WRITE_SAVED_DECISION_VECTORS") == "1":
         _FIXTURE.write_text(json.dumps(vectors, indent=1, sort_keys=True) + "\n", encoding="utf-8")
-    assert json.loads(_FIXTURE.read_text(encoding="utf-8")) == vectors
+    assert _recorded() == vectors
 
 
 def test_vectors_cover_bound_and_unbound_reviews_and_every_outcome(monkeypatch: pytest.MonkeyPatch) -> None:

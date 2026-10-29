@@ -14,8 +14,8 @@
 //! observed intrinsic action.
 
 use guard_contracts::{
-    GuardHookPayloadKindV2, HookReviewResponseV1, NativeHookRequestV1, PreToolActionTypeV1,
-    PreToolResultV1,
+    GuardHookPayloadKindV2, HookReviewResponseV1, NativeHookRequestV1, NativePromptRiskClassV1,
+    PreToolActionTypeV1, PreToolResultV1,
 };
 use guard_policy_snapshot::PolicySnapshotV3;
 use serde_json::Value;
@@ -68,7 +68,9 @@ use policy_enforcement_helpers::{
     action_rank, join_action, normalized_harness, policy_floor_with_cause, FloorCause, FloorInput,
 };
 use policy_enforcement_policy::CompiledEffectivePolicy;
-use policy_enforcement_reason::{policy_override_reason, NO_SCRIPT_INSTALL_ALTERNATIVE};
+use policy_enforcement_reason::{
+    policy_override_reason, PromptStop, NO_SCRIPT_INSTALL_ALTERNATIVE,
+};
 
 #[path = "policy_enforcement_admission.rs"]
 mod policy_enforcement_admission;
@@ -314,7 +316,15 @@ pub(crate) fn apply_pre_tool_policy(
         let (reason_code, reason) = policy_override_reason(
             &effective,
             Some(floor_cause),
-            output.action.action_type == guard_contracts::PreToolActionTypeV1::Prompt,
+            if output.action.action_type == guard_contracts::PreToolActionTypeV1::Prompt {
+                PromptStop::Prompt {
+                    injection_detected: output
+                        .prompt_risk_classes
+                        .contains(&NativePromptRiskClassV1::PromptInjectionIntent),
+                }
+            } else {
+                PromptStop::NotPrompt
+            },
         );
         output.reason_code = reason_code.to_owned();
         output.reason = reason;

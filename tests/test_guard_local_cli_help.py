@@ -11,6 +11,8 @@ parser in Python.
 from __future__ import annotations
 
 import json
+import os
+import time
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -138,12 +140,12 @@ def _identity(name: str = "wrangler") -> UnlistedCliIdentity:
     )
 
 
-def _row(name: str) -> dict[str, object]:
+def _row(name: str, description: str = "") -> dict[str, object]:
     return {
         "command_id": name,
         "name": name,
         "usage": name,
-        "description": "",
+        "description": description,
         "parent_id": None,
     }
 
@@ -227,11 +229,91 @@ def test_a_resident_that_goes_quiet_stops_the_nested_probes(
         return answers.pop(0) if answers else pytest.fail("probed past the silence")
 
     calls = _stand_in_resident(monkeypatch, _answer)
-    commands, status = discover_local_cli_commands(_identity(), ("wrangler", "--help"), runner=lambda _: WRANGLER_HELP)
+    commands, status = discover_local_cli_commands(
+        _identity(),
+        ("wrangler", "--help"),
+        runner=lambda argv: WRANGLER_HELP if len(argv) == 2 else "Commands:\n  list  List them\n",
+    )
     # The top-level parse stands; only the children are given up on.
     assert status == "ok"
     assert {"docs", "init", "deploy"} <= {command.command_id for command in commands}
     assert len(calls) == 2
+
+
+SCRIPT_HELP = """
+Usage: release.sh <command>
+
+Commands:
+  sync   Sync the release branch
+  push   Push the release tag
+"""
+
+
+def test_a_script_that_echoes_its_help_for_every_command_lists_no_subcommands(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A script reading only --help would otherwise list "sync sync" and "sync push"."""
+
+    calls = _stand_in_resident(monkeypatch, lambda **_: (_row("sync"), _row("push")))
+    probed: list[tuple[str, ...]] = []
+
+    def _probe(argv: Sequence[str]) -> str:
+        probed.append(tuple(argv))
+        # The same text, laid out again, is still the same help.
+        return SCRIPT_HELP if len(argv) == 2 else "  " + SCRIPT_HELP.replace("\n\n", "\n")
+
+    commands, status = discover_local_cli_commands(_identity("release.sh"), ("release.sh", "--help"), runner=_probe)
+    ids = {command.command_id for command in commands}
+    assert status == "ok"
+    assert {"sync", "push"} <= ids
+    assert not any("." in command_id for command_id in ids), ids
+    # Each command was still asked for its own help; the echo never reached the parse.
+    assert ("release.sh", "sync", "--help") in probed
+    assert len(calls) == 1
+
+
+def test_a_command_help_that_lists_the_top_level_commands_again_adds_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A usage line naming the command does not make the same list its own."""
+
+    _stand_in_resident(
+        monkeypatch,
+        lambda **kwargs: (_row("sync"), _row("push")) if len(kwargs["invocation"]) == 1 or kwargs["invocation"][1] == "sync"
+        else (_row("all"),),
+    )
+
+    def _probe(argv: Sequence[str]) -> str:
+        return SCRIPT_HELP if len(argv) == 2 else SCRIPT_HELP.replace("<command>", f"{argv[1]} <command>")
+
+    commands, _ = discover_local_cli_commands(_identity("release.sh"), ("release.sh", "--help"), runner=_probe)
+    ids = {command.command_id for command in commands}
+    assert not {"sync.sync", "sync.push"} & ids
+    # A command whose help lists commands of its own still gets them.
+    assert "push.all" in ids
+
+
+def test_subcommands_named_like_the_top_level_commands_are_kept(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Matching names alone do not make a command's own list a repeat of the top level."""
+
+    def _answer(**kwargs: object) -> tuple[dict[str, object], ...]:
+        invocation = kwargs["invocation"]
+        if len(invocation) == 1:
+            return (_row("server", "Server commands"), _row("client", "Client commands"))
+        if invocation[1] == "server":
+            return (_row("server", "Start the server process"), _row("client", "List clients of this server"))
+        return ()
+
+    _stand_in_resident(monkeypatch, _answer)
+
+    def _probe(argv: Sequence[str]) -> str:
+        return f"Usage: svc {' '.join(argv[1:-1])} <command>".replace("  ", " ")
+
+    commands, _ = discover_local_cli_commands(_identity("svc.sh"), ("svc.sh", "--help"), runner=_probe)
+    ids = {command.command_id for command in commands}
+    assert {"server.server", "server.client"} <= ids
 
 
 def test_discover_yargs_help_has_no_program_named_commands(recorded_resident: None) -> None:
@@ -309,3 +391,37 @@ def test_run_cli_help_stops_after_output_limit(tmp_path: Path) -> None:
     tool.chmod(0o755)
     output = run_cli_help((str(tool), "--help"))
     assert len(output) <= _HELP_OUTPUT_LIMIT
+
+
+def _assert_stopped(pid: int) -> None:
+    deadline = time.monotonic() + 2
+    while time.monotonic() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return
+        time.sleep(0.05)
+    pytest.fail("a process the help program started kept running")
+
+
+@pytest.mark.skipif(os.name == "nt", reason="process groups are POSIX")
+def test_a_timed_out_probe_stops_what_the_program_started(tmp_path: Path) -> None:
+    started = tmp_path / "started"
+    tool = tmp_path / "lingers"
+    tool.write_text(f'#!/bin/sh\nsleep 30 &\necho $! > "{started}"\nwait\n', encoding="utf-8")
+    tool.chmod(0o755)
+    run_cli_help((str(tool), "--help"))
+    _assert_stopped(int(started.read_text(encoding="utf-8")))
+
+
+@pytest.mark.skipif(os.name == "nt", reason="process groups are POSIX")
+def test_a_probe_that_exits_stops_what_it_left_behind(tmp_path: Path) -> None:
+    started = tmp_path / "started"
+    tool = tmp_path / "forks"
+    tool.write_text(
+        f'#!/bin/sh\nsleep 30 >/dev/null 2>&1 &\necho $! > "{started}"\necho "Usage: forks"\n',
+        encoding="utf-8",
+    )
+    tool.chmod(0o755)
+    assert "Usage: forks" in run_cli_help((str(tool), "--help"))
+    _assert_stopped(int(started.read_text(encoding="utf-8")))

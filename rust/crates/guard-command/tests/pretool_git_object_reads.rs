@@ -57,7 +57,7 @@ fn classify(home: &Path, harness: &str, command: &str) -> guard_contracts::PreTo
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     let project = home.join("org/app");
     evaluate_pre_tool_envelope_with_execution_context(

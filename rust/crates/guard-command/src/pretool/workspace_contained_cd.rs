@@ -29,7 +29,20 @@ pub(super) fn below(target: &str, workspace: &Path) -> bool {
         && path
             .components()
             .all(|component| !matches!(component, std::path::Component::ParentDir))
-        && (path.is_relative() || path.starts_with(workspace))
+        && (path.is_relative()
+            || path.starts_with(workspace)
+            || super::reach::through_root_link(path, workspace))
+}
+
+/// An absolute `target` that [`below`] admitted, spelled the way the
+/// workspace is: through `/private` when it was written through the macOS
+/// `/var` or `/tmp` root link, so later checks compare like with like.
+pub(super) fn canonical_below(target: &Path, workspace: &Path) -> PathBuf {
+    if target.starts_with(workspace) {
+        target.to_owned()
+    } else {
+        Path::new("/private").join(target.strip_prefix("/").unwrap_or(target))
+    }
 }
 
 /// The first directory for which `found` holds among the ones a tool's own

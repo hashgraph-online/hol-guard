@@ -9,6 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal, cast
 
+from .cloud_exceptions import lift_cloud_excepted_policy_bundle_identities
 from .managed_controls_policy_bundle import (
     MANAGED_CONTROLS_ACTIVE_STATE_KEY,
     MANAGED_CONTROLS_LAST_GOOD_STATE_KEY,
@@ -69,8 +70,6 @@ _LOGGER = logging.getLogger(__name__)
 APPROVAL_REUSE_DIAGNOSTIC_UNAVAILABLE_REASON = "approval_reuse_integrity_failure"
 
 POLICY_DECISION_LOOKUP_FEATURE = "policy-decision-lookup-v1"
-# The runtime saved-decision lookup also answers the hook's ``saved_reuse``.
-RUNTIME_SAVED_REUSE_FEATURE = "runtime-saved-reuse-v1"
 # The resident expands a probe group's direct id into its exact-command and
 # memory-pattern candidates. A request carrying ``probe_groups.memory`` sends
 # the unexpanded group with it, and the probe-groups contract denies unknown
@@ -96,6 +95,9 @@ class PolicyLookupEvidence:
     local_once_integrity_key_b64: str | None = None
     local_once_integrity_key_id: str | None = None
     policy_bundle_decision_identities: list[list[Any]] | None = None
+    # The workspace id and Cloud exceptions of the bundle those identities came
+    # from, so each lookup lifts Cloud rules only against that same bundle.
+    policy_bundle_cloud_exceptions: dict[str, Any] | None = None
     # The store-resident sources this evidence was gathered against, named
     # before it was derived. Only a lookup that may claim ships one.
     evidence_binding: dict[str, Any] | None = None
@@ -240,19 +242,28 @@ class StorePolicyMixin:
     ) -> frozenset[tuple[object, ...]]:
         """Return only rows derivable from the currently authorized signed bundle."""
 
+        return self._cached_policy_bundle_authority(now=now)[0]
+
+    def _cached_policy_bundle_authority(
+        self,
+        *,
+        now: float | None = None,
+    ) -> tuple[frozenset[tuple[object, ...]], dict[str, Any] | None]:
+        """Return the bundle's decision identities and the Cloud exceptions it carries."""
+
         from .policy_bundle_decisions import build_policy_bundle_decisions
         from .synced_policy import SyncPayloadReader, cached_policy_bundle_validation
 
         policy_bundle = self.get_sync_payload("policy_bundle")
         if not isinstance(policy_bundle, dict) or not policy_bundle:
-            return frozenset()
+            return frozenset(), None
         validated_bundle, _reason = cached_policy_bundle_validation(
             cast(SyncPayloadReader, cast(object, self)),
             policy_bundle,
             now=now,
         )
         if validated_bundle is None:
-            return frozenset()
+            return frozenset(), None
         try:
             device_metadata = self.get_device_metadata()
             decisions = build_policy_bundle_decisions(
@@ -262,7 +273,7 @@ class StorePolicyMixin:
                 device_name=cast("GuardStore", self).device_display_name(str(device_metadata["device_label"])),
             )
         except (KeyError, OSError, RuntimeError, TypeError, ValueError):
-            return frozenset()
+            return frozenset(), None
         identities: set[tuple[object, ...]] = set()
         for decision in decisions:
             artifact_id, artifact_hash, workspace, publisher = self._normalized_policy_keys(decision)
@@ -281,7 +292,11 @@ class StorePolicyMixin:
                     (_canonical_utc_timestamp(decision.expires_at) if decision.expires_at is not None else None),
                 )
             )
-        return frozenset(identities)
+        cloud_exceptions = {
+            "workspaceId": validated_bundle.get("workspaceId"),
+            "cloudExceptions": validated_bundle.get("cloudExceptions"),
+        }
+        return frozenset(identities), cloud_exceptions
 
     def upsert_policy(
         self,
@@ -1088,8 +1103,17 @@ class StorePolicyMixin:
             "local_once_integrity_key_b64": evidence.local_once_integrity_key_b64,
             "local_once_integrity_key_id": evidence.local_once_integrity_key_id,
         }
-        if evidence.policy_bundle_decision_identities:
-            request["policy_bundle_decision_identities"] = evidence.policy_bundle_decision_identities
+        identities = lift_cloud_excepted_policy_bundle_identities(
+            evidence.policy_bundle_decision_identities,
+            evidence.policy_bundle_cloud_exceptions,
+            harness=harness,
+            artifact_id=artifact_id,
+            publisher=publisher,
+            workspace=workspace,
+            now=evidence.now,
+        )
+        if identities:
+            request["policy_bundle_decision_identities"] = identities
         if portable_workspace is not None:
             request["portable_workspace"] = portable_workspace
             # Unset options are omitted, never sent as null: the resident
@@ -1266,6 +1290,7 @@ class StorePolicyMixin:
             # ignored_local_integrity evidence.
             return _degraded_lookup_evidence(current_time, integrity_state, has_saved_rows=has_saved_rows)
 
+        bundle_identities, bundle_cloud_exceptions = self._lookup_bundle_identities(current_time)
         return PolicyLookupEvidence(
             now=current_time,
             integrity_state=integrity_state,
@@ -1281,16 +1306,19 @@ class StorePolicyMixin:
                 else None
             ),
             local_once_integrity_key_id=local_once_key_id,
-            policy_bundle_decision_identities=self._lookup_bundle_identities(current_time),
+            policy_bundle_decision_identities=bundle_identities,
+            policy_bundle_cloud_exceptions=bundle_cloud_exceptions,
             evidence_binding=evidence_binding,
             has_saved_rows=has_saved_rows,
         )
 
-    def _lookup_bundle_identities(self, current_time: str) -> list[list[Any]] | None:
-        identities = self._cached_policy_bundle_decision_identities(
+    def _lookup_bundle_identities(self, current_time: str) -> tuple[list[list[Any]] | None, dict[str, Any] | None]:
+        identities, cloud_exceptions = self._cached_policy_bundle_authority(
             now=_parse_utc_timestamp(current_time).timestamp(),
         )
-        return [[field for field in identity] for identity in identities] if identities else None
+        if not identities:
+            return None, None
+        return [[field for field in identity] for identity in identities], cloud_exceptions
 
     def resolve_policy_decision(
         self,

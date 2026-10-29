@@ -27,16 +27,15 @@ pub(crate) const NON_RECOGNITION_REASON_CODES: [&str; 2] = [
     "native_workspace_containment_executable_outside_roots",
 ];
 
-/// The one review an allowed grant lifts to `allow`: the generic review due
-/// only to non-recognition. The outside-roots review runs in the grant's
-/// sandbox instead, and every other review keeps its risk signal.
-pub(crate) const GRANT_LIFTABLE_REASON_CODE: &str = NON_RECOGNITION_REASON_CODES[0];
-
-/// Whether an allowed grant may lift a review with `reason_code` to `allow`.
-/// The CLI hook names no reason: it settles the grant against the native
-/// floor afterwards, so its review keeps lifting as before.
+/// Whether an allowed grant may lift a review with `reason_code` to `allow`:
+/// a review due only to non-recognition, including the one the workspace
+/// sandbox leaves when the program lives outside its executable roots. The
+/// grant names that program, so it answers the only question either review
+/// asks; every other review keeps its risk signal. The CLI hook names no
+/// reason: it settles the grant against the native floor afterwards, so its
+/// review keeps lifting as before.
 pub(crate) fn grant_lifts(reason_code: Option<&str>) -> bool {
-    reason_code.is_none_or(|code| code == GRANT_LIFTABLE_REASON_CODE)
+    reason_code.is_none_or(|code| NON_RECOGNITION_REASON_CODES.contains(&code))
 }
 
 /// Hex digits of the action digest in a connector group id.
@@ -182,6 +181,26 @@ mod tests {
             assert!(!is_non_recognition(Some(code)), "{code}");
         }
         assert!(!is_non_recognition(None));
+    }
+
+    #[test]
+    fn an_allowed_grant_lifts_only_a_review_due_to_non_recognition() {
+        // The outside-roots review asks the question the grant answers, so
+        // it lifts like the generic review rather than running the allowed
+        // program in a sandbox with no network or home reads.
+        assert!(grant_lifts(Some("native_command_review_required")));
+        assert!(grant_lifts(Some(
+            "native_workspace_containment_executable_outside_roots"
+        )));
+        assert!(grant_lifts(None));
+        for code in [
+            "native_workspace_containment_required",
+            "native_network_review",
+            "native_sensitive_access_review",
+            "",
+        ] {
+            assert!(!grant_lifts(Some(code)), "{code}");
+        }
     }
 
     #[test]

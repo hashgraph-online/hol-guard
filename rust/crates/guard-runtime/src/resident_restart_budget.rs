@@ -110,6 +110,40 @@ fn read_existing_budget(path: &Path, private_root: &Path) -> Result<Option<Resta
     Ok(Some(budget))
 }
 
+/// How many of a window's restarts a speculative spawn may leave behind. A
+/// prewarm is an optimisation: it must never be the reason the spawn a user is
+/// waiting on is refused, so it stops one restart short of the free ones and
+/// leaves that one for a real request.
+const SPECULATIVE_RESTART_CEILING: u32 = MAX_RESTARTS_PER_WINDOW - 1;
+
+/// Whether a spawn nobody is waiting on may run now.
+///
+/// This reads the budget and charges nothing: the spawn it admits is charged
+/// the ordinary way, so a prewarm that crash-loops still opens the circuit.
+/// What it stops is the opposite failure, where a run of failed prewarms
+/// spends the window and the session's first real hook meets a circuit that
+/// no request of its own opened.
+pub(super) fn speculative_spawn_allowed(scope: &Path) -> Result<bool, String> {
+    let private_root = crate::resident_state::private_root_for_scope(scope)?;
+    let _lock = acquire_budget_lock_waiting(scope, None)?;
+    let path = scope.join("restart-budget.json");
+    #[cfg(windows)]
+    recover_interrupted_replace(&path, &private_root)?;
+    let Some(budget) = read_existing_budget(&path, &private_root)? else {
+        return Ok(true);
+    };
+    let now = now_ms()?;
+    if budget.circuit_until_ms > now {
+        return Ok(false);
+    }
+    // A window that has already closed is reset by the next spawn, so its
+    // attempts are not attempts against the restart this would take.
+    if now.saturating_sub(budget.window_start_ms) >= RESTART_WINDOW_MS {
+        return Ok(true);
+    }
+    Ok(budget.attempts < SPECULATIVE_RESTART_CEILING)
+}
+
 pub(super) fn consume_for_spawn(
     state_base: &Path,
     scope: &Path,
@@ -130,7 +164,27 @@ pub(super) fn consume_for_spawn(
         }
         Err(_) => return Err("native_policy_verifier_key_stat_failed".to_owned()),
     }
-    consume_before(scope, Some(deadline))
+    let charged = consume_before(scope, Some(deadline));
+    // Recorded after the charge, so the journal's lock is never held inside
+    // this module's own. A start the budget refused is the one event a
+    // one-shot client would otherwise leave no trace of at all, and the only
+    // one that makes the journal read `critical`, so this waits briefly for a
+    // contended lock rather than dropping it. The wait costs this caller
+    // nothing a spawn needs: it has already been refused and returns an error
+    // the moment this returns. The contended case is exactly the one worth
+    // waiting through, because a supervisor recording an exit holds the lock
+    // while the circuit it just opened is refusing clients.
+    //
+    // A charge is not a start: the caller still has to mint a generation, a
+    // token and a process, and any of those can fail. The started event is
+    // recorded by the spawn path once there is something running, so a failed
+    // spawn never reads back as a healthy one.
+    if let Err(reason) = &charged {
+        if reason.as_str() == "native_resident_restart_circuit_open" {
+            super::lifecycle_journal::record(scope, super::lifecycle_journal::Event::StartRefused);
+        }
+    }
+    charged
 }
 
 #[cfg(test)]
@@ -142,12 +196,28 @@ pub(super) fn consume(scope: &Path) -> Result<(), String> {
 /// lock charges nothing, so a resident is never started for an answer the
 /// client can no longer wait for.
 fn consume_before(scope: &Path, deadline: Option<Instant>) -> Result<(), String> {
+    consume_at(scope, deadline, None)
+}
+
+/// The same charge against a clock the caller names, so a test can play out a
+/// crash loop that takes minutes without waiting for them. `at_ms` is read
+/// where the real clock would be read, after the lock is held, so a simulated
+/// run goes through the same window rollovers and backoff steps a real one does.
+#[cfg(test)]
+fn consume_simulated(scope: &Path, at_ms: u64) -> Result<(), String> {
+    consume_at(scope, None, Some(at_ms))
+}
+
+fn consume_at(scope: &Path, deadline: Option<Instant>, at_ms: Option<u64>) -> Result<(), String> {
     let private_root = crate::resident_state::private_root_for_scope(scope)?;
     let _lock = acquire_budget_lock_waiting(scope, deadline)?;
     let path = scope.join("restart-budget.json");
     #[cfg(windows)]
     recover_interrupted_replace(&path, &private_root)?;
-    let now = now_ms()?;
+    let now = match at_ms {
+        Some(simulated) => simulated,
+        None => now_ms()?,
+    };
     let mut budget = read_existing_budget(&path, &private_root)?.unwrap_or_else(|| RestartBudget {
         schema: BUDGET_SCHEMA.to_owned(),
         window_start_ms: now,
@@ -300,3 +370,7 @@ pub(super) fn clear(scope: &Path) -> Result<(), String> {
 #[cfg(test)]
 #[path = "resident_restart_budget_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "resident_restart_budget_flood_tests.rs"]
+mod flood_tests;

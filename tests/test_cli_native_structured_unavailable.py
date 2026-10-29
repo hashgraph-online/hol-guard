@@ -12,8 +12,9 @@ import pytest
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_hook_native_authority as authority
 from codex_plugin_scanner.guard.daemon.hook_worker_native import HookWorkerNativeMixin
-from codex_plugin_scanner.guard.runtime.structured_output_mediation import STRUCTURED_OUTPUT_SETTING_PATH
 from codex_plugin_scanner.guard.store import GuardStore
+
+STRUCTURED_OUTPUT_SETTING_PATH = "data_control.structured_output"
 
 
 def _structured_policy() -> tuple[dict[str, object], int]:
@@ -100,7 +101,6 @@ def _emit_unavailable(
     output = io.StringIO()
     rc = authority.route_native_hook(
         _Args(harness=harness),  # type: ignore[arg-type]
-        config=None,
         context=context,
         payload={"hook_event_name": event_name},
         runtime_workspace=context.workspace_dir,
@@ -159,7 +159,6 @@ def test_cli_worker_construction_failure_withholds_posttool_destination(
     output = io.StringIO()
     rc = authority.route_native_hook(
         _Args(harness=harness),  # type: ignore[arg-type]
-        config=None,
         context=context,
         payload={"hook_event_name": "PostToolUse"},
         runtime_workspace=context.workspace_dir,

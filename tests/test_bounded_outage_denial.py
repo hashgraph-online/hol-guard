@@ -9,6 +9,7 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge as bridge
 from codex_plugin_scanner.guard.adapters import bounded_cli_hook_daemon as daemon
+from codex_plugin_scanner.guard.adapters import bounded_cli_hook_recovery as recovery
 from codex_plugin_scanner.guard.adapters.bounded_cli_hook_failure import failure_payload
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import BoundedHookProcessResult
 
@@ -40,7 +41,7 @@ def test_bounded_bridge_unavailable_pretool_denies(
     failure: BoundedHookProcessResult,
     action: dict[str, object],
 ) -> None:
-    monkeypatch.setattr(bridge, "run_isolated_hook_process", lambda *_args, **_kwargs: failure)
+    monkeypatch.setattr(recovery, "run_isolated_hook_process", lambda *_args, **_kwargs: failure)
     monkeypatch.setattr(daemon, "try_daemon_hook", lambda **_kwargs: None)
     hook_config = config(tmp_path, harness=harness)
     config_path = Path(str(hook_config["guard_home"])) / "config.toml"

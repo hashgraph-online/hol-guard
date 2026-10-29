@@ -54,6 +54,7 @@ on:
       - "tests/__init__.py"
       - "tests/guard_command_corpus*.py"
       - "tests/harness_attribution_env.py"
+      - "tests/native_command_effect_batch.py"
       - "tests/native_command_test_support.py"
       - "tests/native_guard_home_key.py"
       - "tests/native_github_offline.py"
@@ -128,6 +129,41 @@ jobs:
             echo "Expected source SHA does not match the dispatch source" >&2
             exit 1
           fi
+
+  require-supply-chain-audit:
+    name: Require supply-chain audit
+    # A stable release ships the audited crate graph, so the Cargo supply chain
+    # gate has to have reached a verdict on this exact commit, and that verdict
+    # has to be green, before anything is built. The gate runs in Security Gates,
+    # which no release job can depend on across workflows, so its check run is
+    # read back here instead. Other channels publish nothing to stable PyPI, so
+    # the step reports and exits; the job itself always runs, which keeps the
+    # dependency below a success requirement rather than a skip.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      checks: read
+    steps:
+      - name: Require a green Cargo supply chain run for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_CHANNEL: ${{ github.event.inputs.release_channel }}
+          REPOSITORY: ${{ github.repository }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" != "workflow_dispatch" || "$RELEASE_CHANNEL" != "stable" ]]; then
+            echo "Not a stable release dispatch; the supply-chain audit gate does not apply."
+            exit 0
+          fi
+          conclusion=$(gh api \
+            "repos/${REPOSITORY}/commits/${SOURCE_SHA}/check-runs?check_name=Cargo+supply+chain&per_page=100" \
+            --jq '[.check_runs[] | select(.status == "completed")] | sort_by(.completed_at)[-1].conclusion // empty')
+          if [[ "$conclusion" != "success" ]]; then
+            echo "Cargo supply chain for ${SOURCE_SHA} is ${conclusion:-absent}; refusing to publish a stable release" >&2
+            exit 1
+          fi
+          echo "Cargo supply chain for ${SOURCE_SHA}: success"
 
   resolve-alpha-version:
     name: Resolve main alpha version
@@ -494,16 +530,18 @@ jobs:
     if: >-
       always() && !cancelled() &&
       needs.authorize-release.result == 'success' &&
+      needs.require-supply-chain-audit.result == 'success' &&
       (github.event_name != 'workflow_dispatch' || github.run_attempt == 1) &&
       (github.event_name != 'push' || github.run_attempt == 1) &&
       (github.event_name != 'push' || !contains(github.event.head_commit.message || '', '[skip release publish]')) &&
       (github.event.action != 'labeled' || github.event.label.name == 'publish-testpypi-canary')
-    needs: [authorize-release, resolve-alpha-version, resolve-canary-version]
+    needs: [authorize-release, require-supply-chain-audit, resolve-alpha-version, resolve-canary-version]
     runs-on: ubuntu-latest
     permissions:
       contents: read
       pull-requests: read
       statuses: read
+      checks: read
     outputs:
       version: ${{ steps.version.outputs.version }}
       channel: ${{ steps.version.outputs.channel }}
@@ -822,6 +860,39 @@ jobs:
           echo "base_version=$BASE_VERSION" >> "$GITHUB_OUTPUT"
           echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
           echo "Computed $CHANNEL version: $VERSION"
+      - name: Require a green Cargo supply chain run for the resolved source
+        # A stable repair resolves its source back to the release tag, which can
+        # be an older commit than the one this run was dispatched from. The gate
+        # before the build only saw the dispatch commit, so the audit is read
+        # again here, against the commit the build has actually checked out.
+        #
+        # A tag cut before this gate existed has no such check run and no way to
+        # get one: re-running Security Gates on it runs that commit's own copy of
+        # the workflow, which has no Cargo supply chain job. Refusing there would
+        # strand every already published release whose assets are only half
+        # finished, so the step reads the resolved source's own Security Gates to
+        # tell "the audit never ran here" apart from "the audit did not pass".
+        # A commit that defines the job must still be green.
+        if: steps.version.outputs.channel == 'stable'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          SOURCE_SHA: ${{ steps.version.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          conclusion=$(gh api \
+            "repos/${REPOSITORY}/commits/${SOURCE_SHA}/check-runs?check_name=Cargo+supply+chain&per_page=100" \
+            --jq '[.check_runs[] | select(.status == "completed")] | sort_by(.completed_at)[-1].conclusion // empty')
+          if [[ "$conclusion" != "success" ]]; then
+            if [[ -n "$conclusion" ]] || git show "${SOURCE_SHA}:.github/workflows/security-gates.yml" 2>/dev/null \
+              | grep -q "name: Cargo supply chain"; then
+              echo "Cargo supply chain for ${SOURCE_SHA} is ${conclusion:-absent}; refusing to build a stable release" >&2
+              exit 1
+            fi
+            echo "Security Gates defined no Cargo supply chain job at ${SOURCE_SHA}, so this already published release predates the audit and cannot be given one; finishing its assets."
+            exit 0
+          fi
+          echo "Cargo supply chain for ${SOURCE_SHA}: success"
       - name: Select native wheel platforms
         id: native_wheel_matrix
         env:

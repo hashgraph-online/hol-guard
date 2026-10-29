@@ -51,6 +51,8 @@ mod expansion;
 mod find_exec;
 #[path = "native_command_unmodeled_functions.rs"]
 mod functions;
+#[path = "native_command_unmodeled_heredoc.rs"]
+mod heredoc;
 #[path = "native_command_link_makers.rs"]
 mod link_makers;
 #[path = "native_command_unmodeled_redirections.rs"]
@@ -209,7 +211,7 @@ impl CompiledNativeCommandControls {
         let heredocs = data_heredocs(text);
         let shell = match &heredocs {
             Some((shell, _)) => shell.clone(),
-            None => shell_text(text).to_owned(),
+            None => shell_text(text),
         };
         // A redirection such as `;2>&1` is not a program. It goes before the
         // awk pass, which rejoins words with spaces: `2>&1` became `2 >& 1`,
@@ -700,7 +702,7 @@ fn reviewable_structure(
             // `;2>&1 python3 evil.py` has no segments: the redirect is the
             // uncertainty. Reviewing it would hide the interpreter.
             !glued_redirect_runs_interpreter(&text)
-                && (input_heredoc(&text)
+                && (heredoc::input_heredoc(&text)
                     || literal_redirects_only(&text)
                     || data_heredocs(&text).is_some_and(|(shell, _)| plain_after_heredocs(&shell)))
         }
@@ -854,35 +856,6 @@ fn moves_data(literal: &str) -> bool {
         })
 }
 
-/// One heredoc on the first line, ending the text, whose body cannot run
-/// commands: its delimiter is quoted, or the body expands nothing.
-fn input_heredoc(text: &str) -> bool {
-    let Some((line, rest)) = text.split_once('\n') else {
-        return false;
-    };
-    let Some((before, after)) = line.split_once("<<") else {
-        return false;
-    };
-    let after = after.strip_prefix('-').unwrap_or(after).trim();
-    let quoted = after.starts_with(['\'', '"']);
-    let delimiter = after.trim_matches(['\'', '"']);
-    if delimiter.is_empty()
-        || !delimiter
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '_')
-        || moves_data(&unquoted_literal(before))
-    {
-        return false;
-    }
-    let mut lines: Vec<&str> = rest.lines().collect();
-    if lines.pop().map(str::trim) != Some(delimiter)
-        || lines.iter().any(|body| body.trim() == delimiter)
-    {
-        return false;
-    }
-    quoted || lines.iter().all(|body| !body.contains(['$', '`', '\\']))
-}
-
 /// Every word the shell could read as a program name or keyword token, with
 /// and without quoting, as a full path, a basename and without a Windows
 /// suffix, so `sh -c 'gh …'`, `g""h` and `C:\tools\GH.EXE` all name `gh`.
@@ -959,12 +932,20 @@ fn unquoted_literal(text: &str) -> String {
 }
 
 /// The text the shell runs as commands. An accepted input heredoc contributes
-/// only its command, since `input_heredoc` already keeps its body from
-/// expanding and the body is data on standard input.
-fn shell_text(text: &str) -> &str {
-    match text.split_once('\n') {
-        Some((line, _)) if text.contains("<<") => line.split_once("<<").map_or(line, |(b, _)| b),
-        _ => text,
+/// its command and whatever follows its delimiter, since `input_heredoc`
+/// already keeps the body from expanding and the body is data on standard
+/// input. Dropping the rest of the line with the body would hide the
+/// programs a pipe after the heredoc names from the owners below.
+fn shell_text(text: &str) -> String {
+    let Some((line, _)) = text.split_once('\n').filter(|_| text.contains("<<")) else {
+        return text.to_owned();
+    };
+    match heredoc::first_heredoc(text) {
+        Some(heredoc) => format!("{}{}", heredoc.before, heredoc.trailing),
+        None => line
+            .split_once("<<")
+            .map_or(line, |(before, _)| before)
+            .to_owned(),
     }
 }
 

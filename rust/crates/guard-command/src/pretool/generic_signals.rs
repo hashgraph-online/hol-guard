@@ -17,7 +17,7 @@ pub(crate) const EMBEDDED_ARGUMENT_KEYS: [&str; 12] = [
 ];
 
 /// Every key whose value may name a file the tool reads or writes.
-const PATH_KEYS: [&str; 11] = [
+pub(super) const PATH_KEYS: [&str; 11] = [
     "path",
     "paths",
     "file",
@@ -223,12 +223,12 @@ pub(crate) fn extract_generic_signals(
         && url_values.is_empty()
         && text_values.is_empty()
         && benign_prompt_text(&prompt_values[0]);
-    let independent_sensitive_target = sensitive_text(&path_values)
-        || sensitive_text(&url_values)
+    let non_path_sensitive_target = sensitive_text(&url_values)
         || prompt_values
             .iter()
             .any(|value| prompt_sensitive_text(value))
         || sensitive_text(&text_values);
+    let independent_sensitive_target = sensitive_text(&path_values) || non_path_sensitive_target;
     let content_sensitive = independent_sensitive_target
         || command
             .as_deref()
@@ -248,6 +248,7 @@ pub(crate) fn extract_generic_signals(
         request_body_or_method: request_body_or_method(&maps),
         retrieval_arguments_only: retrieval_arguments_only(&argument_maps(root)),
         github_read_only: false,
+        mirrored_input_unproven: false,
         prompt_present: !prompt_values.is_empty(),
         env_reference,
         benign_prompt,
@@ -259,6 +260,8 @@ pub(crate) fn extract_generic_signals(
         content_sensitive,
         sensitive_target,
         independent_sensitive_target: guard_bypass_intent || independent_sensitive_target,
+        non_path_sensitive_target: guard_bypass_intent || non_path_sensitive_target,
+        declares_secret_object: super::tracked_names::declares_secret_object(payload),
         event_hint,
     })
 }

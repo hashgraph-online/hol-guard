@@ -164,12 +164,12 @@ pub(crate) fn event_name(text: &str, payload: &PyVal) -> String {
     "PreToolUse".to_owned()
 }
 
-fn is_guard_action(value: &str) -> bool {
+pub(crate) fn is_guard_action(value: &str) -> bool {
     GuardAction::from_canonical(value).is_some()
 }
 
 /// `hook_event_pauses_when_unavailable`.
-fn event_pauses_when_unavailable(event_name: &str) -> bool {
+pub(crate) fn event_pauses_when_unavailable(event_name: &str) -> bool {
     let compact = compact_stripped(event_name);
     if compact == "userpromptsubmit" || compact == "userpromptsubmitted" {
         return true;
@@ -356,12 +356,12 @@ fn should_exit_block(harness: &str, event_name: &str, policy_action: &str) -> bo
 }
 
 /// A recognized decision: `value.strip().lower()` within the four words.
-fn decision_word(value: Option<&PyVal>) -> Option<String> {
+pub(crate) fn decision_word(value: Option<&PyVal>) -> Option<String> {
     let lowered = py_strip(value?.as_str()?).to_lowercase();
     DECISIONS.contains(&lowered.as_str()).then_some(lowered)
 }
 
-fn has_key(entries: &[(String, PyVal)], key: &str) -> bool {
+pub(crate) fn has_key(entries: &[(String, PyVal)], key: &str) -> bool {
     entries.iter().any(|(name, _)| name == key)
 }
 
@@ -581,6 +581,29 @@ pub(crate) fn rendered(
         stdout,
         stderr,
         exit_code,
+    }
+}
+
+/// The output for a hook a resident continued under the emergency-safe
+/// profile.
+///
+/// The resident answers the finished harness payload, the same keys and
+/// values [`failure_payload`] writes for an event that does not pause, so
+/// it is written as it stands rather than read as a daemon answer: nothing
+/// reviewed the call, and there is no decision to restyle. The resident
+/// builds that payload through `serde_json`, whose maps this workspace
+/// keeps sorted, so the keys are written sorted rather than in the order
+/// `failure_output_for` lists them. Every harness reads the payload as
+/// JSON, where that order carries no meaning, and the trailing newline is
+/// the one `failure_output_for` writes.
+pub(crate) fn emergency_safe_output(response: &[(String, PyVal)], unmap: bool) -> Rendered {
+    let mut stdout = String::new();
+    dumps(&PyVal::Dict(response.to_vec()), true, unmap, &mut stdout);
+    stdout.push('\n');
+    Rendered {
+        stdout,
+        stderr: String::new(),
+        exit_code: 0,
     }
 }
 

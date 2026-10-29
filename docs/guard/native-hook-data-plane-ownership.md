@@ -32,9 +32,7 @@ harness launcher or managed hook
         -> Rust edge normalization and resident client/supervisor
         -> Rust output traversal, source I/O, hashing, scanning, effective-policy floors, decision
         -> Python harness response rendering
-     -> explicit off: deterministic fail-safe disablement (no semantic fallback)
-     -> explicit shadow diagnostic surface: Rust authority plus non-authoritative comparison
-     -> explicit differential-test oracle: Python reference evaluator only
+     -> retired off/shadow values: resolve to the product default, select nothing
   -> Python bounded asynchronous evidence handoff (non-authoritative)
 ```
 
@@ -56,7 +54,7 @@ Rust raw envelope
 | Harness launchers | Python transport | Minimal launcher and mechanical serialization |
 | Harness event/action normalization | Python semantic | Rust raw-envelope normalization |
 | HTTP ingress | Python transport | Authentication and byte transport only |
-| Hook request projection | Rust semantic for auto/force; fail-safe for production off/shadow | Rust raw-envelope edge |
+| Hook request projection | Rust semantic for every supported production request | Rust raw-envelope edge |
 | CLI hook evaluation | Python semantic | Presentation and orchestration only |
 | Python reference oracle | Python semantic | Differential tests only; never production authority |
 | Resident client and supervisor | Rust transport/lifecycle with a minimal Python process launcher | Rust native edge and launcher |
@@ -91,14 +89,20 @@ or encoding-invalid input is not eligible for an allow result.
 The resident worker has no production import or lazy construction path for the
 Python semantic evaluator, content scanner, or decision cache. Supported
 `PreToolUse` and `PostToolUse` requests enter the Rust edge in `auto` and
-`force`; native failure is fail-closed. `HOL_GUARD_NATIVE=off` is an explicit
-fail-safe disablement, not permission to restore Python authority. `shadow`
-comparison is permitted only when `HOL_GUARD_NATIVE_DIAGNOSTIC=1` is present
-on a declared non-production surface.
+`force`; native failure is fail-closed. `HOL_GUARD_NATIVE=off` and
+`HOL_GUARD_NATIVE=shadow` are retired values: both resolve to the product
+default and warn once, so neither disables native authority nor restores the
+Python one. `HOL_GUARD_NATIVE_DIAGNOSTIC=1` on a declared non-production
+surface adds bounded transport and timeout diagnostics; no flag runs a second
+evaluator or compares its verdict with the native one.
 
-`HOL_GUARD_PYTHON_ORACLE=1` plus the test marker `HOL_GUARD_TEST_MODE=1` is the
-only supported semantic oracle boundary. Absent, invalid, or inherited values
-never select it. The AST/call-graph gate
+`HOL_GUARD_PYTHON_ORACLE` is retired. It is listed under
+`dependency_delta.removed_runtime_flags` in
+`docs/guard/contracts/python-capability-ownership.v1.json`, whose
+`rollback_boundary` records `retained_source: false` and no packaged Python
+oracle fallback, and `scripts/ci/python_runtime_retirement.py` reddens CI if a
+source file reads it again. There is no in-process semantic oracle boundary
+left to select. The AST/call-graph gate
 `scripts/ci/python_hook_semantic_callgraph_gate.py` rejects semantic evaluator
 imports and calls reachable from production hook entrypoints; the
 always-selected ownership workflow runs this gate.
@@ -315,19 +319,25 @@ value that is not a string is refused before the call rather than repaired.
 None of this is an approval or an executable authentication; it selects
 which packaged catalog entry a contribution matches.
 
-Which bounded read an admitted argv names is decided in the resident
-(`verified-read-plan-v1`, `guard-command/src/verified_read_plan.rs` behind
-`verified_read_plan_op.rs`). It owns the whole grammar: that the executable is a
-bare name inside the verified-read cohort, which operation each name spells, the
-head and tail line bound and every spelling of it, the quiet-flag and range form
-`sed` is held to, the thousand-line ceiling both carry, and that a target is a
-static relative path with no dynamic shell character in it. The answer is one
-plan — an operation id, an optional target and a selection naming the lines to
-show — so Python reads the argv nowhere. This side opens the target under the
-repository, where the secret-path, symlink and identity checks live, and slices
-the text the plan selected. A refusal names the rule it broke for the
-diagnostics record; the read ends either way. Without a plan there is no read
-and no Python grammar to fall back on: the command returns to ordinary review.
+A verified workspace read happens in the resident from end to end
+(`verified-read-execute-v1`, `guard-runtime/src/verified_read_execute.rs`
+behind `verified_read_execute_op.rs`). The plan comes from
+`guard-command/src/verified_read_plan.rs`, which owns the whole grammar: that
+the executable is a bare name inside the verified-read cohort, which operation
+each name spells, the head and tail line bound and every spelling of it, the
+quiet-flag and range form `sed` is held to, the thousand-line ceiling both
+carry, and that a target is a static relative path with no dynamic shell
+character in it. The resident then checks that the working directory is a
+canonical directory inside a git checkout, refuses secret paths and symlinked
+components, opens each component beneath the repository by descriptor without
+following a link, reads a regular single-link UTF-8 file under its size bound,
+slices the planned lines, rechecks the workspace and repository identity, binds
+the proof digest over all of it and composes the silent-verified decision.
+Python sends the argv and its working directory and prints the text that comes
+back. Every refusal or failure ends the read and the command returns to
+ordinary review; there is no Python grammar or reader to fall back on. The
+executor needs descriptor-relative opens, so on Windows the op answers
+`unsupported` and the read stays under review.
 
 The AIBOM report summaries now come from the resident.
 `aibom_report_summaries_op` counts an inventory report's layers, its trust
@@ -471,6 +481,28 @@ payload, with its meaning in a separate map, so a config file cannot spell a
 token itself and nothing it contains can pass as a substituted scalar.
 `codex_hook_identity.py` now only names what is being identified;
 `native_codex_hook_identity.py` ships it across and fails closed.
+
+Whether the authenticated Codex hook manifest still describes the live
+installation is decided in the resident (`codex-hook-manifest-verify-v1`, in
+`codex_hook_manifest_verify_op.rs`). Python checked the manifest header, the
+config target, the interpreter and every packaged file, the launch identities
+and the hook registrations in the Codex config. It still authenticates the
+manifest, since the key never leaves it, and supplies the canonical path
+spellings, its package roots, its own command splitting and whether a file's
+group is private to its owner; the resident reads the files and answers with
+the integrity state. An unavailable resident reports the installation as
+unverified. `codex_hook_manifest.py` keeps only that authentication step.
+
+A Codex hook source's inventory is walked there as well
+(`codex-hook-identity-v2`, the `inventory` entry). Python sent one handler and
+one argv question per hook and assembled the records itself; it now sends the
+source's events in the order the file wrote them, with its manifest, legacy and
+self-install bindings, and the resident answers with every record, its
+ownership and identity, and every shape issue, from the same walk native hook
+detection runs. `codex_hook_inventory.py` checks each field of the answer and
+keeps no walk of its own. A resident without the feature, or an answer that is
+not an inventory, leaves the source with one identity issue and no records, so
+install stops before it activates.
 
 What a local CLI's `--help` means is read in the resident
 (`local-cli-help-parse-v1`, in `local_cli_help.rs`). Python ran the prose

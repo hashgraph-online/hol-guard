@@ -13,9 +13,9 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.openclaw import OpenClawHarnessAdapter
 from codex_plugin_scanner.guard.inventory_cisco import CiscoInventoryRun
 from codex_plugin_scanner.guard.inventory_contract import serialize_inventory_snapshot
-from codex_plugin_scanner.guard.risk import artifact_risk_signals
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.models import Finding, Severity
+from tests.artifact_risk_support import artifact_risk_signals
 from tests.openclaw_test_support import mcp_artifact
 
 

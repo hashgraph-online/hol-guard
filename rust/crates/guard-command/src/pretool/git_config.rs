@@ -10,7 +10,7 @@ mod pager;
 #[path = "git_config_textconv.rs"]
 mod textconv;
 
-pub(super) use super::git_config_trust::{clean_environment, trusted_command};
+pub(super) use super::git_config_trust::{clean_environment, trusted_command, trusted_launch};
 
 const CONFIG_LIMIT: u64 = 65_536;
 
@@ -104,6 +104,8 @@ pub(super) fn execution_free_paging(
             | "count-objects"
             | "check-attr"
             | "sparse-checkout"
+            | "rev-parse"
+            | "ls-files"
             | "apply"
             | "bisect"
             | "notes"
@@ -132,7 +134,13 @@ pub(super) fn execution_free_paging(
     }
     if matches!(
         operation,
-        "shortlog" | "check-ignore" | "count-objects" | "check-attr" | "sparse-checkout"
+        "shortlog"
+            | "check-ignore"
+            | "count-objects"
+            | "check-attr"
+            | "sparse-checkout"
+            | "rev-parse"
+            | "ls-files"
     ) && !super::git_listing_reads::read_form(operation, &remaining[1..])
     {
         return None;
@@ -168,22 +176,32 @@ pub(super) fn execution_free_paging(
         context.cwd.map(str::to_owned),
         stdout_piped,
     );
+    // Every other operation reaches this probe because nothing else proves
+    // it, so a probe that cannot answer leaves it unproven and it keeps its
+    // review. `rev-parse` and `ls-files` are plumbing already proven as exact
+    // safe reads without this probe; they run it only to settle what a later
+    // read in the same chain depends on. Collapsing an unanswerable probe
+    // into a refusal for those two would withdraw a proof they already hold,
+    // so it leaves that proof standing and settles nothing instead.
+    let keeps_its_own_proof = matches!(operation, "rev-parse" | "ls-files");
     super::git_probe::memoized(key, || {
-        Some(
-            probe(
-                executable,
-                arguments,
-                remaining,
-                Paging {
-                    operation: &pager_operation,
-                    stdout_piped,
-                },
-                context,
-                deadline,
-                execution_environment,
-            )
-            .unwrap_or(false),
-        )
+        let answer = probe(
+            executable,
+            arguments,
+            remaining,
+            Paging {
+                operation: &pager_operation,
+                stdout_piped,
+            },
+            context,
+            deadline,
+            execution_environment,
+        );
+        match answer {
+            Some(proven) => Some(proven),
+            None if keeps_its_own_proof => None,
+            None => Some(false),
+        }
     })
 }
 
@@ -407,10 +425,11 @@ fn probe(
     // config pages by default only for its listing forms.
     let pages_by_default = match operation {
         // `clean` prints its preview, and `apply` its check report, without
-        // a pager.
+        // a pager. `rev-parse` and `ls-files` are plumbing: Git starts no
+        // pager for either, so only their own `pager.*` key can ask for one.
         "status" | "hash-object" | "merge-base" | "ls-tree" | "cat-file" | "show-ref"
         | "for-each-ref" | "rev-list" | "describe" | "clean" | "apply" | "count-objects"
-        | "check-attr" | "sparse-checkout" | "submodule" => false,
+        | "check-attr" | "sparse-checkout" | "submodule" | "rev-parse" | "ls-files" => false,
         "config" => super::git_config_reads::pages_by_default(&remaining[1..]),
         _ => true,
     };

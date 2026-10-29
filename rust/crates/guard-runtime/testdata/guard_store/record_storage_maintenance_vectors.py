@@ -24,7 +24,7 @@ from dataclasses import asdict
 from datetime import timedelta
 from pathlib import Path
 
-os.environ["HOL_GUARD_NATIVE"] = "off"
+os.environ["HOL_GUARD_NATIVE"] = "auto"
 os.environ.pop("HOL_GUARD_NATIVE_BINARY", None)
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 

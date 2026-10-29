@@ -59,9 +59,9 @@ def ensure_keyed_home(guard_home: Path) -> None:
 
 @pytest.fixture(autouse=True)
 def native_local_cli_grant_resident(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[None]:
-    from codex_plugin_scanner.guard import local_cli_hook
-    from codex_plugin_scanner.guard.daemon import hook_native_local_cli
     from codex_plugin_scanner.guard.native_resident_client import close_native_residents
+
+    from . import runtime_wrapper_support
 
     monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
     monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", str(_resolve_native_hook_runtime()))
@@ -69,20 +69,13 @@ def native_local_cli_grant_resident(monkeypatch: pytest.MonkeyPatch, tmp_path: P
     homes.clear()
     _TEST_GUARD_HOME[:] = [tmp_path / "native-guard-home"]
 
-    native_hook = local_cli_hook.native_local_cli_hook
+    native_hook = runtime_wrapper_support.native_local_cli_hook
 
     def keyed_hook(store: Any, **kwargs: Any) -> Any:
         ensure_keyed_home(store.guard_home)
         return native_hook(store, **kwargs)
 
-    monkeypatch.setattr(local_cli_hook, "native_local_cli_hook", keyed_hook)
-    rule_verdict = hook_native_local_cli._rule_verdict
-
-    def keyed_rule_verdict(store: Any, *args: Any) -> Any:
-        ensure_keyed_home(store.guard_home)
-        return rule_verdict(store, *args)
-
-    monkeypatch.setattr(hook_native_local_cli, "_rule_verdict", keyed_rule_verdict)
+    monkeypatch.setattr(runtime_wrapper_support, "native_local_cli_hook", keyed_hook)
     yield
     for home in tuple(homes):
         close_native_residents(home)
@@ -91,19 +84,30 @@ def native_local_cli_grant_resident(monkeypatch: pytest.MonkeyPatch, tmp_path: P
 
 
 def review_rule_verdict(
-    store: Any, *, command: str, cwd: Path, home_dir: Path, mode: str = "review"
+    store: Any,
+    *,
+    command: str,
+    cwd: Path,
+    home_dir: Path,
+    mode: str = "review",
+    native_result: dict[str, object] | None = None,
+    input_key: str = "tool_input",
 ) -> tuple[str, str | None] | None:
     """The resident's custom-rule verdict for ``command``, or ``None`` when no rule applies.
 
     ``review`` checks a non-recognition review; ``allowed`` checks a command
-    the native runtime allowed.
+    the native runtime allowed. ``native_result`` replaces the mode's default
+    verdict.
     """
 
-    from codex_plugin_scanner.guard.daemon import hook_native_local_cli
+    import os
+    from uuid import uuid4
 
-    if mode == "allowed":
-        native_result: dict[str, object] = {"decision": "allow", "policy_action": "allow", "minimum_action": "allow"}
-    else:
+    from codex_plugin_scanner.guard.native_execution import _resident_request
+
+    if native_result is None and mode == "allowed":
+        native_result = {"decision": "allow", "policy_action": "allow", "minimum_action": "allow"}
+    elif native_result is None:
         native_result = {
             "decision": "ask",
             "policy_action": "review",
@@ -112,6 +116,29 @@ def review_rule_verdict(
             "reason": "Review",
             "action": {"action_type": "shell"},
         }
-    payload = {"tool_input": {"command": command}, "cwd": str(cwd)}
-    answer = hook_native_local_cli._rule_verdict(store, mode, payload, native_result, cwd, home_dir)
-    return None if answer is None or answer[0] == "none" else answer
+    ensure_keyed_home(store.guard_home)
+    request_id = f"hook-local-cli-rule-{uuid4().hex}"
+    response = _resident_request(
+        operation="hook_local_cli_rule",
+        request={
+            "schema": "guard-hook-local-cli-rule-request.v1",
+            "request_id": request_id,
+            "store_path": str(store.path),
+            "guard_home": str(store.guard_home),
+            "mode": mode,
+            "payload": {input_key: {"command": command}, "cwd": str(cwd)},
+            "native_result": native_result,
+            "workspace": str(cwd),
+            "home_dir": str(home_dir),
+            "user_home": str(Path.home()),
+            "env": dict(os.environ),
+        },
+        guard_home=store.guard_home,
+        timeout_seconds=5.0,
+        required_feature="hook-local-cli-rule-v1",
+        response_schema="guard-hook-local-cli-rule-result.v1",
+    )
+    if response is None or response.get("request_id") != request_id or response.get("verdict") == "none":
+        return None
+    name = response.get("name")
+    return str(response["verdict"]), name if isinstance(name, str) else None

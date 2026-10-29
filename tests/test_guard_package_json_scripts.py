@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiService
-from codex_plugin_scanner.guard.local_cli_hook import observe_unlisted_cli
 from codex_plugin_scanner.guard.local_cli_trust import utc_now
 from codex_plugin_scanner.guard.runtime.package_json_script_memory import (
     refresh_package_script_catalogs,
@@ -13,7 +12,7 @@ from codex_plugin_scanner.guard.runtime.package_json_scripts import (
 )
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.local_cli_command_id_client import package_script_command_tokens, resolve_command_id_for_text
-from tests.runtime_wrapper_support import local_cli_grant_action
+from tests.runtime_wrapper_support import local_cli_grant_action, native_local_cli_hook
 
 from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
 
@@ -212,7 +211,7 @@ def test_allowed_nested_script_grant_matches_live_command(tmp_path: Path) -> Non
         )
         == "guard.reddit-targeting.audit"
     )
-    observe_unlisted_cli(store=store, command=live, cwd=project, home_dir=home)
+    native_local_cli_hook(store, command=live, cwd=project, home_dir=home, current_action="allow", grant_allowed=False)
     assert (
         local_cli_grant_action(
             store=store,
@@ -253,11 +252,13 @@ def test_hook_remembers_real_package_json_path(tmp_path: Path) -> None:
     home = tmp_path / "home"
     home.mkdir()
     store = GuardStore(home)
-    observe_unlisted_cli(
-        store=store,
+    native_local_cli_hook(
+        store,
         command="pnpm run guard:audit",
         cwd=project,
         home_dir=home,
+        current_action="allow",
+        grant_allowed=False,
     )
     stored = store.list_local_cli_items()[0]
     assert stored["surface"] == "package-scripts"

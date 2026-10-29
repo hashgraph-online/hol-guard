@@ -9,6 +9,9 @@
 //! grammar refuses. Timestamp spellings outside `YYYY-MM-DD[T ]HH:MM[:SS[.f]]`
 //! plus `Z` or a numeric offset are refused too (fail closed).
 //!
+//! `settle_native_review_reuse` runs the block check and the spend together,
+//! so a retry pays for one store transaction instead of two.
+//!
 //! Parity vectors recorded from the original Python implementation live in
 //! `testdata/guard_store/native_review_consume_vectors.json`.
 
@@ -120,6 +123,24 @@ pub(crate) fn matching_block(connection: &Connection, args: &Args) -> StoreResul
     // A refusal cannot grant execution. Keep it for the retry window so repeated
     // attempts do not re-open the question the user has already answered.
     matching_decision(connection, args, "block", false)
+}
+
+/// `settle_native_review_reuse` — a retry's block check and, when the caller
+/// may spend one, its approve-once spend, in the one write transaction the
+/// `guard_store` op holds: `"blocked"`, `"allowed"` or `null`.
+///
+/// A matching block always wins, so a refusal keeps answering the retry
+/// window before any allow is considered. Without `spend` it only reads, and
+/// the op runs it without the write lock.
+pub(crate) fn settle(connection: &Connection, args: &Args) -> StoreResult<Value> {
+    let spend = args.flag("spend")?;
+    if matching_block(connection, args)? == Value::Bool(true) {
+        return Ok(json!("blocked"));
+    }
+    if spend && consume(connection, args)? == Value::Bool(true) {
+        return Ok(json!("allowed"));
+    }
+    Ok(Value::Null)
 }
 
 fn matching_decision(

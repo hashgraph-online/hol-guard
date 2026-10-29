@@ -1,0 +1,1 @@
+{"command":["node","-e","require('fs').readFileSync('/etc/hosts')"]}

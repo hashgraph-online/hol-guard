@@ -193,7 +193,7 @@ fn valid_binding(value: &PyVal) -> bool {
 
 /// `valid_prompt_risk_classes`: one to six known classes, each once, in
 /// their declared order.
-fn valid_prompt_risk_classes(value: &PyVal) -> bool {
+pub(crate) fn valid_prompt_risk_classes(value: &PyVal) -> bool {
     let Some(items) = value.as_list() else {
         return false;
     };

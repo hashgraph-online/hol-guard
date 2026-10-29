@@ -18,7 +18,6 @@ from codex_plugin_scanner.guard.policy_bundle_trusted_keys import (
     PolicyBundleVerificationKey,
     load_policy_bundle_verification_keys,
     policy_bundle_keyring_payload,
-    policy_bundle_verification_key_from_public_key,
     safe_load_policy_bundle_verification_keys,
     validate_synced_policy_bundle,
 )
@@ -33,6 +32,7 @@ from tests.policy_bundle_signing_helpers import (
     TEST_POLICY_BUNDLE_WORKSPACE_ID,
     policy_bundle_test_keyring,
     policy_bundle_test_verification_key,
+    policy_bundle_verification_key_from_public_key,
     sign_policy_bundle,
 )
 

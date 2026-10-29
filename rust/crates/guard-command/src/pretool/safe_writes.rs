@@ -1,3 +1,5 @@
+#[path = "checkout_destination_floor.rs"]
+mod checkout_floor;
 #[path = "safe_copies.rs"]
 mod copies;
 #[path = "hooks_path_writes.rs"]
@@ -9,6 +11,7 @@ mod screens;
 use super::read_paths::{
     existing_regular_read_target, expand_home_read_path, resolved_location_allowed,
 };
+pub(crate) use checkout_floor::protected_checkout_destination;
 pub(super) use copies::{safe_copy_arguments, safe_copy_arguments_into};
 pub(crate) use plan_notes::plan_note_write_sources;
 pub(super) use plan_notes::plan_note_write_target;
@@ -168,13 +171,25 @@ fn bounded_write_target(
     {
         return false;
     }
-    (canonical.starts_with(&workspace)
-        || super::worktree_writes::same_repository_worktree(&workspace, &canonical)
-        || verified_home.is_some())
-        && resolved_location_allowed(&canonical, home_dir, workspace.to_str(), false)
+    let inside = canonical.starts_with(&workspace);
+    let linked =
+        !inside && super::worktree_writes::same_repository_worktree(&workspace, &canonical);
+    // `git worktree add "$TMPDIR/<name>"` puts a checkout of this repository
+    // in the user's private temporary directory below `/private/var`. That
+    // checkout is the user's own work, not system state; every other location
+    // screen still runs on the path.
+    let temporary_checkout =
+        linked && super::read_paths::inside_private_temporary_directory(&canonical, home_dir);
+    (inside || linked || verified_home.is_some())
+        && resolved_location_allowed(&canonical, home_dir, workspace.to_str(), temporary_checkout)
         && (plan_note
             || guard_secure_fs::hidden_read_parts_allowed(&canonical)
-            || screens::plain_dot_scratch_target(&canonical, home_dir))
+            || screens::plain_dot_scratch_target(&canonical, home_dir)
+            || super::read_paths::hidden_listing::repository_plugin_manifest(
+                &canonical,
+                home_dir,
+                workspace.to_str(),
+            ))
         // A safe pathname can alias a protected inode through a hard link.
         && ((directory && canonical.is_dir()) || single_link_write_target(&canonical))
         && !autostart_write_target(&canonical)

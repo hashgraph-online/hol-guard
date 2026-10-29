@@ -294,6 +294,16 @@ pub(super) fn record_supervised_exit(
         supervised.started,
     );
     let _ = restart_budget::release_after_exit(&scope, orderly, ran_for);
+    super::lifecycle_journal::record(
+        &scope,
+        if !success {
+            super::lifecycle_journal::Event::ExitedFailed
+        } else if orderly {
+            super::lifecycle_journal::Event::ExitedOrderly
+        } else {
+            super::lifecycle_journal::Event::ExitedPremature
+        },
+    );
     // The hold is released last: it is what tells a waiting stop that these
     // writes are over.
     drop(supervised);

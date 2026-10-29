@@ -1,0 +1,78 @@
+# Its own workspace on purpose: `cargo fuzz` builds with a nightly compiler and
+# a sanitizer, and keeping it out of the runtime workspace means a fuzz build
+# never touches `rust/Cargo.lock` or the crates every release is built from.
+[package]
+name = "hol-guard-fuzz"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.88"
+license = "Apache-2.0"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4.13"
+hol-guard-runtime = { path = "../crates/guard-runtime", features = ["fuzzing"] }
+
+[profile.release]
+debug = 1
+
+[[bin]]
+name = "resident_frame"
+path = "fuzz_targets/resident_frame.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "command_request"
+path = "fuzz_targets/command_request.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "shell_command"
+path = "fuzz_targets/shell_command.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "scanner_text"
+path = "fuzz_targets/scanner_text.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "python_json"
+path = "fuzz_targets/python_json.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "prompt_text"
+path = "fuzz_targets/prompt_text.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "contained_path"
+path = "fuzz_targets/contained_path.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "registry_response"
+path = "fuzz_targets/registry_response.rs"
+test = false
+doc = false
+bench = false

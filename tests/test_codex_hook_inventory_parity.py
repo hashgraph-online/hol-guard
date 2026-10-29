@@ -22,15 +22,15 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.codex_hook_inventory import (
+    CODEX_HOOK_INVENTORY_IDENTITY_UNAVAILABLE,
     CodexHookInventory,
     CodexHookInventoryIssue,
     enumerate_codex_hooks,
 )
 
 FIXTURE = Path(__file__).parent / "fixtures" / "codex-hook-inventory.v1.json"
-# The resident owns hook identity, so a source it cannot answer for reports an
-# identity issue of its own. The native walk never raises one, and the shape
-# issues this fixture pins are unaffected by it.
+# The resident walks the source and owns hook identity, so a source it cannot
+# answer for reports one identity issue of its own and nothing else.
 IDENTITY_PREFIX = "native_codex_hook_"
 
 
@@ -61,24 +61,34 @@ def _warnings(inventory: CodexHookInventory) -> list[str]:
     return [_warning(issue) for issue in inventory.issues if not issue.reason_code.startswith(IDENTITY_PREFIX)]
 
 
+def _require_identity(inventory: CodexHookInventory) -> None:
+    """The resident walks the source; without one there is nothing to compare."""
+
+    if any(issue.reason_code == CODEX_HOOK_INVENTORY_IDENTITY_UNAVAILABLE for issue in inventory.issues):
+        pytest.skip("the hook inventory needs a paired native runtime")
+    # Any other identity code is the resident refusing a recorded source.
+    assert not any(issue.reason_code.startswith(IDENTITY_PREFIX) for issue in inventory.issues)
+
+
 @pytest.mark.parametrize("case", _cases(), ids=lambda case: case["name"])
 def test_recorded_shape_issues_still_describe_the_source(case: dict[str, object]) -> None:
-    assert _warnings(_inventory(case)) == case["warnings"]
+    inventory = _inventory(case)
+    _require_identity(inventory)
+    assert _warnings(inventory) == case["warnings"]
 
 
 @pytest.mark.parametrize("case", _cases(), ids=lambda case: case["name"])
 def test_recorded_handlers_keep_their_coordinates_and_execution_flags(case: dict[str, object]) -> None:
     """A valid shape has to keep producing its records, not merely stay quiet.
 
-    The resident owns hook identity, so a run without one hands back no records
+    The resident walks the source, so a run without one hands back no records
     at all and reports that as its own issue. There is nothing to compare then;
     the native side of this fixture still replays the same records with no
     resident in sight.
     """
 
     inventory = _inventory(case)
-    if any(issue.reason_code.startswith(IDENTITY_PREFIX) for issue in inventory.issues):
-        pytest.skip("hook identity needs a paired native runtime")
+    _require_identity(inventory)
     recorded = [
         {"coordinate": record.coordinate, "active": record.active, "executable": record.executable}
         for record in inventory.records

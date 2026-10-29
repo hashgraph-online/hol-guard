@@ -76,6 +76,12 @@ def set_paused(store: Any, keys: WorktreeKeys, *, paused: bool) -> bool:
             "update workspace_assessment_state set paused = ? where codebase_key = ? and worktree_key = ?",
             (1 if paused else 0, keys.codebase_key, keys.worktree_key),
         )
+        if cursor.rowcount == 1 and not paused:
+            # Resuming is a person's choice to watch it, which supersedes an ended admission.
+            connection.execute(
+                "delete from workspace_assessment_ended_admissions where codebase_key = ? and worktree_key = ?",
+                (keys.codebase_key, keys.worktree_key),
+            )
         return cursor.rowcount == 1
 
 

@@ -1,15 +1,19 @@
 """Extension hints for paused native PreToolUse reviews, decided by the resident.
 
-The resident's ``extension_review_hint`` op answers both hints a review carries:
-the coverage hint, read out of the evidence the review paused on, and the allow
-hint, stored only when the command reviewed again under the admitted snapshot
-is exactly the review that paused and enabling the hinted permissions would
-really settle it. Python sends the hook payload and the paused result and
-shape-checks the answer; there is no Python evaluator and no fallback. For a
-review that waits on a local CLI's setup, the same op answers the connector
-setup hint, with the risk classes the paused evidence observed. A reply
-that is not a bound, strictly decoded ``ok`` means no hint, so the dashboard
-never promises an Extensions change that would not work.
+A paused review's hints are decided inside ``queue_native_review``, the store
+call that queues it: the coverage hint, read out of the evidence the review
+paused on, and the allow hint, stored only when the command reviewed again
+under the admitted snapshot is exactly the review that paused and enabling the
+hinted permissions would really settle it. For a review that waits on a local
+CLI's setup, the same call looks the connector up and stores its setup hint
+instead. ``native_review_hint_ask`` only bounds the time the resident may
+spend.
+
+The resident's ``extension_review_hint`` op answers the same extension hints
+for a pending row read back without one. Python shape-checks the answer; there
+is no Python evaluator and no fallback. A reply that is not a bound, strictly
+decoded ``ok`` means no hint, so the dashboard never promises an Extensions
+change that would not work.
 """
 
 from __future__ import annotations
@@ -19,13 +23,12 @@ import time
 from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Final
+from typing import Any, Final
 
 from ..native_daemon_route import _decide
 from ..native_resident_decision import ResidentOperation
 from ..runtime.extension_allow_hint import (
     hint_authority_admitted,
-    validated_connector_setup_hint,
     validated_extension_allow_hint,
 )
 from ..runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
@@ -35,9 +38,6 @@ from ..runtime.extension_coverage_hint import (
 )
 from .hook_native_exact_action import launch_cwd as _launch_cwd
 from .hook_request_parsing import pre_tool_input
-
-if TYPE_CHECKING:
-    from ..local_cli_hook import SetupConnector
 
 EXTENSION_REVIEW_HINT_FEATURE: Final = "extension-review-hint-v1"
 # A hook with no deadline still bounds the hint, as the allow-hint ask does.
@@ -49,7 +49,6 @@ _LIVE_BUDGET_SECONDS: Final = 1.2
 # queue-time ask, and the ask's timeout also covers a slot wait and the round
 # trip the resident's own margin cannot see.
 _SAFETY_MARGIN_SECONDS: Final = 0.35
-_MIN_BUDGET_SECONDS: Final = 0.15
 _MAX_BUDGET_MS: Final = 10_000
 # The resident refuses a canonical request over 1 MiB, so the client never
 # sends a larger envelope.
@@ -135,8 +134,6 @@ def _ask_review_hint(
     workspace: Path | None,
     home_dir: Path | None,
     budget_seconds: float,
-    paused: Mapping[str, object] | None = None,
-    connector: SetupConnector | None = None,
 ) -> dict[str, object] | None:
     """The resident's hints for ``payload``'s command, shape-checked, or None."""
 
@@ -150,16 +147,6 @@ def _ask_review_hint(
         "home_dir": str(home_dir) if home_dir is not None else "",
         "budget_ms": budget_ms,
     }
-    if paused is not None:
-        query["paused"] = dict(paused)
-    if connector is not None:
-        query["connector"] = {
-            "cli_id": connector.cli_id,
-            "identity_hash": connector.identity_hash,
-            "name": connector.name,
-            "surface": connector.surface,
-            "queue_group_id": connector.queue_group_id,
-        }
     parsed: list[dict[str, object] | None] = []
 
     def validate(answer: dict[str, Any]) -> None:
@@ -167,11 +154,7 @@ def _ask_review_hint(
         if hint is None:
             parsed.append(None)
             return
-        checked = (
-            validated_connector_setup_hint(hint)
-            if connector is not None
-            else with_extension_coverage(validated_extension_allow_hint(hint), validated_extension_coverage_hint(hint))
-        )
+        checked = with_extension_coverage(validated_extension_allow_hint(hint), validated_extension_coverage_hint(hint))
         if checked is None:
             raise _OPERATION.fail(_OPERATION.invalid)
         parsed.append(checked)
@@ -192,51 +175,22 @@ def _ask_review_hint(
     return parsed[0]
 
 
-def native_review_hint(
-    store: object,
-    payload: Mapping[str, object],
-    native_result: Mapping[str, object],
-    workspace: Path | None,
-    home_dir: Path | None,
-    deadline: float | None,
-    connector: SetupConnector | None,
-) -> dict[str, object] | None:
-    """The queue-time hint for a paused review: the connector to set up, else the extension hints.
+def native_review_hint_ask(deadline: float | None) -> dict[str, object] | None:
+    """What ``queue_native_review`` needs to decide a paused review's hint, or ``None`` for none.
 
-    A setup review waits on a CLI Guard does not know, so no command extension
-    permission describes it; the connector hint is the only advice it carries.
-
-    Every other paused review also carries the coverage hint, which names the
-    extension that matched each step. The resident reads it out of the evidence
-    it already returned, so it survives the budget, digest and all-or-nothing
-    gates the allow hint has to clear, and most paused commands only ever earn
-    this one.
+    The resident decides the hint inside the queue call: the connector to set
+    up for a review that waits on a local CLI's setup, else the extension
+    hints read out of the evidence the review paused on, and none without
+    that evidence. This only bounds how long it may take, from the hook's
+    deadline. The connector hint is built from a catalog lookup, not a second
+    review, so the resident asks it with whatever time is left; an extension
+    hint needs 150 ms of it. Neither asks into the margin
+    kept for persisting the review and answering the hook.
     """
 
-    guard_home = getattr(store, "guard_home", None)
-    if not isinstance(guard_home, Path):
-        return None
-    # Both extension hints are read out of the extension evidence the review
-    # paused on; without it there is nothing to ask for. The connector hint
-    # needs only the connector, and names no risk class without evidence.
-    if connector is None and not isinstance(native_result.get("command_extensions"), Mapping):
-        return None
     budget = _DEFAULT_BUDGET_SECONDS if deadline is None else deadline - time.monotonic() - _SAFETY_MARGIN_SECONDS
-    # The connector hint is what resolves the row once setup finishes, and the
-    # resident builds it from a catalog lookup, not a second review, so it asks
-    # with whatever time is left below the usual minimum. It never asks into
-    # the margin kept for persisting the review and answering the hook.
-    if budget < _MIN_BUDGET_SECONDS and (connector is None or budget <= 0):
-        return None
-    return _ask_review_hint(
-        payload,
-        guard_home=guard_home,
-        workspace=workspace,
-        home_dir=home_dir,
-        budget_seconds=budget,
-        paused=native_result,
-        connector=connector,
-    )
+    budget_ms = min(_MAX_BUDGET_MS, int(budget * 1000))
+    return {"budget_ms": budget_ms} if budget_ms > 0 else None
 
 
 def _live_reviewed_command(approval: Mapping[str, object]) -> tuple[str, Path | None] | None:
@@ -310,33 +264,6 @@ def live_approval_extension_hint(
     )
 
 
-def reviewed_command_extension_allow_hint(
-    command: str,
-    *,
-    native_result: Mapping[str, object],
-    snapshot: ExtensionControlRuntimeSnapshot,
-    guard_home: Path,
-    cwd: Path | None,
-    home_dir: Path | None,
-) -> dict[str, object] | None:
-    """The allow hint for a command reviewed outside a hook, such as for a support bundle."""
-
-    if not hint_authority_admitted(snapshot):
-        return None
-    payload: dict[str, object] = {"tool_input": {"command": command}}
-    if cwd is not None:
-        payload["cwd"] = str(cwd)
-    hint = _ask_review_hint(
-        payload,
-        guard_home=guard_home,
-        workspace=None,
-        home_dir=home_dir,
-        budget_seconds=_DEFAULT_BUDGET_SECONDS,
-        paused=native_result,
-    )
-    return validated_extension_allow_hint(hint)
-
-
 def recovered_approval_extension_hint(
     stored: object,
     approval: Mapping[str, object],
@@ -373,7 +300,6 @@ def recovered_approval_extension_hint(
 __all__ = [
     "EXTENSION_REVIEW_HINT_FEATURE",
     "live_approval_extension_hint",
-    "native_review_hint",
+    "native_review_hint_ask",
     "recovered_approval_extension_hint",
-    "reviewed_command_extension_allow_hint",
 ]

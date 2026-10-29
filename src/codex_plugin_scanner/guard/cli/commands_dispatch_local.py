@@ -521,7 +521,6 @@ def _run_guard_protect_command(
             if bool(wait_result.get("resolved")) and not any(
                 str(item.get("resolution_action")) == "block" for item in resolved_items
             ):
-                initial_payload = payload
                 try:
                     fresh_payload, fresh_exit_code = build_protect_payload(
                         command=protect_command,
@@ -536,38 +535,14 @@ def _run_guard_protect_command(
                 except NativeProtectRequestError as error:
                     return _emit_protect_resident_failure(error)
                 if fresh_exit_code == 0:
-                    payload, exit_code = fresh_payload, fresh_exit_code
-                elif _package_shim_approval_matches_fresh_request(initial_payload, fresh_payload):
-                    fresh_verdict = fresh_payload.get("verdict")
-                    if isinstance(fresh_verdict, dict):
-                        fresh_verdict["action"] = "allow"
-                        fresh_verdict["blocking"] = False
-                    fresh_payload["policy_action"] = "allow"
                     fresh_payload["approval_wait"] = wait_result
-                    payload, exit_code = fresh_payload, 0
+                    payload, exit_code = fresh_payload, fresh_exit_code
     if not _suppress_package_shim_allow_output(args, payload):
         as_json = bool(getattr(args, "json", False))
         output_payload = payload if as_json else _protect_payload_for_human_output(payload, guard_home=guard_home)
         _emit("protect", output_payload, as_json)
     return exit_code
 
-
-def _package_shim_approval_matches_fresh_request(
-    initial_payload: dict[str, object],
-    fresh_payload: dict[str, object],
-) -> bool:
-    """Resume only when the full package request and execution context are unchanged."""
-    initial_request = initial_payload.get("request")
-    fresh_request = fresh_payload.get("request")
-    fresh_verdict = fresh_payload.get("verdict")
-    if not isinstance(initial_request, dict) or not isinstance(fresh_request, dict):
-        return False
-    if not isinstance(fresh_verdict, dict):
-        return False
-    fresh_action = str(fresh_verdict.get("action") or "")
-    if fresh_action not in {"review", "require-reapproval"}:
-        return False
-    return initial_request == fresh_request
 
 def _run_guard_start_command(
     args: argparse.Namespace,

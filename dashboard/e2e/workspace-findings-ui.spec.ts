@@ -107,3 +107,30 @@ for (const width of [390, 1280]) {
     expect(pageErrors).toEqual([]);
   });
 }
+
+for (const width of [390, 1280]) {
+  test(`audit tab summarizes background workspace checks at ${width}px`, async ({ page }, testInfo) => {
+    const pageErrors: string[] = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+    await page.setViewportSize({ width, height: 900 });
+    await mountWorkspaceFindings(page, []);
+
+    await page.goto(`/audit?${DAEMON}`);
+    const checks = page.getByRole("region", { name: "Background workspace checks" });
+    await expect(checks).toBeVisible();
+    await expect(checks).toContainText("not in the audit list below");
+    await expect(checks.locator("dt", { hasText: "Workspaces" }).locator("+ dd")).toHaveText("3");
+    await expect(checks.locator("dt", { hasText: "Need attention" }).locator("+ dd")).toHaveText("2");
+    await expect(checks.locator("dt", { hasText: "Open findings" }).locator("+ dd")).toHaveText("2");
+    await expect(checks).toContainText("2 workspaces have no finished check yet.");
+
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
+    await checks.screenshot({ path: testInfo.outputPath(`audit-codebase-checks-${width}.png`) });
+
+    await checks.getByRole("button", { name: "Open Workspaces" }).click();
+    await expect(page).toHaveURL(/\/workspaces/);
+    await expect(page.getByRole("listitem", { name: "storefront" })).toBeVisible();
+    expect(pageErrors).toEqual([]);
+  });
+}

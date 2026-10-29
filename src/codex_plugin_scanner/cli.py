@@ -402,6 +402,14 @@ def _frozen_module_argv(argv: list[str]) -> list[str]:
     return argv
 
 
+def _program_name(argv0: str) -> str:
+    """The name users type: Windows launches console scripts as ``hol-guard.EXE``."""
+    name = Path(argv0).name
+    if name.lower().endswith(".exe"):
+        name = name[: -len(".exe")]
+    return name or "plugin-scanner"
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = _frozen_module_argv(sys.argv[1:] if argv is None else argv)
     effective_argv = argv
@@ -413,7 +421,7 @@ def main(argv: list[str] | None = None) -> int:
         from .guard.adapters.cursor_hook_config import run_frozen_cursor_hook
 
         return run_frozen_cursor_hook(effective_argv[1:])
-    program_name = Path(sys.argv[0]).name or "plugin-scanner"
+    program_name = _program_name(sys.argv[0])
     requested_argv = argv
     frozen_exit = _run_frozen_early_dispatch(requested_argv)
     if frozen_exit is not None:

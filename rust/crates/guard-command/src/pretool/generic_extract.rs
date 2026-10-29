@@ -34,6 +34,9 @@ pub(super) struct GenericSignals {
     pub(super) retrieval_arguments_only: bool,
     /// Set after extraction, from the tool's own input; see `generic_github`.
     pub(super) github_read_only: bool,
+    /// Set after extraction: Grok's camel-case copy of the call differs from
+    /// the snake-case one, or Grok marked the input truncated.
+    pub(super) mirrored_input_unproven: bool,
     pub(super) prompt_present: bool,
     pub(super) env_reference: bool,
     pub(super) benign_prompt: bool,
@@ -45,7 +48,33 @@ pub(super) struct GenericSignals {
     pub(super) content_sensitive: bool,
     pub(super) sensitive_target: bool,
     pub(super) independent_sensitive_target: bool,
+    /// Bypass intent or a credential word outside the path values.
+    pub(super) non_path_sensitive_target: bool,
+    /// A string in the call, such as an edit's new text, declares a
+    /// Kubernetes `Secret`.
+    pub(super) declares_secret_object: bool,
     pub(super) event_hint: Option<String>,
+}
+
+/// File bodies a host sends beside the path they belong to. Generic
+/// extraction reads none of these keys and the decision uses the path, so the
+/// command-size bound does not apply to them.
+const FILE_BODY_KEYS: [&str; 6] = [
+    "content",
+    "contents",
+    "old_string",
+    "new_string",
+    "oldString",
+    "newString",
+];
+
+/// A path key names a file when it holds a path or a nonempty list of them.
+fn names_path(value: &Value) -> bool {
+    match value {
+        Value::String(_) => true,
+        Value::Array(items) => !items.is_empty() && items.iter().all(Value::is_string),
+        _ => false,
+    }
 }
 
 fn bounded_payload(
@@ -62,7 +91,13 @@ fn bounded_payload(
             if *keys > MAX_PRE_TOOL_KEYS {
                 return Err(GenericExtractionError::Bounds);
             }
-            for child in record.values() {
+            let names_file = signals::PATH_KEYS
+                .iter()
+                .any(|key| record.get(*key).is_some_and(names_path));
+            for (key, child) in record {
+                if names_file && child.is_string() && FILE_BODY_KEYS.contains(&key.as_str()) {
+                    continue;
+                }
                 bounded_payload(child, depth.saturating_add(1), keys)?;
             }
         }
@@ -337,3 +372,6 @@ pub(super) use nested_json::parse_strict_nested_json;
 #[path = "generic_signals.rs"]
 mod signals;
 pub(super) use signals::{extract_generic_signals, EMBEDDED_ARGUMENT_KEYS};
+
+#[path = "generic_tracked_names.rs"]
+mod tracked_names;

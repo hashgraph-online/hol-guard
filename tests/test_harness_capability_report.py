@@ -9,14 +9,14 @@ import pytest
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 
-from codex_plugin_scanner.guard.adapters.capability_report import (
+from codex_plugin_scanner.guard.adapters.contracts import contract_for
+from scripts.harness_capability_report import (
     CAPABILITY_REPORT_SCHEMA,
     build_capability_report,
     render_capability_report_json,
     render_capability_report_markdown,
     validate_capability_report,
 )
-from codex_plugin_scanner.guard.adapters.contracts import contract_for
 
 
 def _report_payload() -> dict[str, object]:

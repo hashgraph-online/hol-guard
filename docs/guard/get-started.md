@@ -221,6 +221,16 @@ matching receipt; this inspection alone is not proof of active protection.
 
    The first project-local execution through `npx` or `bunx` requires review even when the command uses a local-only flag and the package is declared and locked. Guard shows the resolved package-manager path and binds the saved approval to that manager, the local executable, and the current manifest and lockfile evidence. Retrying an unchanged approved command is prompt-free; changing `PATH`, the executable, the manifest, or the lockfile requires review again. Custom package-manager wrappers should be installed through Guard's managed package-shim flow so their identity is visible and repairable.
 
+13. Check a codebase in the background. Guard reads its manifests, lockfiles, MCP configs, skills, hooks and CI workflows on this machine, then sends a summary to the Codebases page in Guard Cloud on the next sync:
+
+   ```bash
+   cd ~/code/my-app
+   hol-guard codebases add
+   hol-guard codebases list
+   ```
+
+   `add` with no path picks the Git repository holding the current folder. A project-level `hol-guard install <harness> --workspace <folder>` adds that folder for you. Cloud receives a short code for each codebase, never its folder name. To pause a codebase, use Supply Chain, then Workspaces in `hol-guard dashboard`; the CLI only adds.
+
 ## Which command should I use?
 
 | Situation | Command | What it answers |
@@ -240,6 +250,7 @@ matching receipt; this inspection alone is not proof of active protection.
 | I need an exportable evidence artifact | `hol-guard abom` | What local AI-BOM can I attach to an audit or handoff? |
 | I need the chronological log | `hol-guard events` | What happened over time on this machine? |
 | I need supply-chain coverage labels | `hol-guard cloud sync-intel` | Which ecosystems are protected, beta, or monitor-only right now? |
+| I want Guard to keep checking a codebase and report it to Guard Cloud | `hol-guard codebases add` | Which packages, MCP servers, skills, hooks and workflows in this codebase need attention, kept fresh in the background? |
 | I need a workspace install scan or one-package verdict | `hol-guard supply-chain scan` or `hol-guard supply-chain explain <package> --ecosystem <ecosystem>` | Which current dependencies or package versions would Guard warn, review, or block right now? |
 | I need one-click package manager interception | Local dashboard Package Firewall or `hol-guard package-shims install --manager npm --json` | Can Guard intercept npm, pip, pnpm, yarn, bun, uv, poetry, pipenv, pipx, cargo, go, composer, bundle, mvn, and gradle before installs run? |
 | A package manager shim is missing or behind PATH | Local dashboard Repair or `hol-guard package-shims repair --manager npm --json` | Which shell PATH change or shim reinstall restores protection? |
@@ -319,6 +330,19 @@ Optional project override:
 [artifacts."codex:project:workspace_tools"]
 default_action = "block"
 ```
+
+Guard also assesses the workspaces you admit, and the ones a harness install registers, in a background
+worker that the daemon runs. To turn that worker off for the whole device, set this in the home config
+(the default is `true`):
+
+```toml
+workspace_assessment_enabled = false
+```
+
+Turning it off stops the worker from checking or queueing anything, and turning it on again resumes it; a
+running daemon notices either change within about half a minute, without a restart. It never deletes stored runs, findings, fix proposals or admissions, so turning it back on resumes where it left off. Removing
+a harness install ends the automatic admission of its workspace the same way: the worktree stops being
+checked, and its run history and fix proposals stay.
 
 Guard still reads the legacy `.ai-plugin-scanner-guard.toml` file if you already have one, but new local overrides should use `.hol-guard.toml`.
 

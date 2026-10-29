@@ -2,8 +2,8 @@
 
 Covers:
 - Unchanged artifact → stored allow policy → no reapproval triggered
-- Changed artifact hash → require-reapproval via decide_action
-- Changed capability → require-reapproval via decide_action
+- Changed artifact hash → require-reapproval via the resident composition
+- Changed capability → require-reapproval via the resident composition
 - Scope persistence for artifact/workspace/publisher/harness/global scopes
 - Receipt field completeness from build_receipt
 """
@@ -25,7 +25,6 @@ from codex_plugin_scanner.guard.models import (
     PolicyDecision,
 )
 from codex_plugin_scanner.guard.native_memory_pattern import MemoryPattern, memory_pattern_verdict
-from codex_plugin_scanner.guard.policy.engine import decide_action
 from codex_plugin_scanner.guard.policy_bundle_decisions import build_policy_bundle_decisions
 from codex_plugin_scanner.guard.policy_bundle_parser import policy_bundle_acceptance_checkpoint
 from codex_plugin_scanner.guard.receipts.manager import build_receipt
@@ -415,94 +414,6 @@ def test_direct_artifact_policy_precedes_suggested_memory_policy(tmp_path: Path)
         )
         == "block"
     )
-
-
-class TestDecideAction:
-    def test_allow_policy_passes_through_unchanged(self) -> None:
-        config = GuardConfig(guard_home=Path("/tmp/test-guard"), workspace=None)
-        result = decide_action(
-            configured_action="allow",
-            default_action="require-reapproval",
-            config=config,
-            changed=False,
-        )
-        assert result == "allow"
-
-    def test_changed_triggers_changed_hash_action_when_no_configured_policy(self) -> None:
-        config = GuardConfig(
-            guard_home=Path("/tmp/test-guard"),
-            workspace=None,
-            changed_hash_action="require-reapproval",
-        )
-        result = decide_action(
-            configured_action=None,
-            default_action="allow",
-            config=config,
-            changed=True,
-        )
-        assert result == "require-reapproval"
-
-    def test_configured_allow_beats_changed_flag(self) -> None:
-        config = GuardConfig(
-            guard_home=Path("/tmp/test-guard"),
-            workspace=None,
-            changed_hash_action="require-reapproval",
-        )
-        result = decide_action(
-            configured_action="allow",
-            default_action="allow",
-            config=config,
-            changed=True,
-        )
-        assert result == "allow"
-
-    def test_changed_falls_back_to_safe_when_no_changed_hash_action(self) -> None:
-        config = GuardConfig(guard_home=Path("/tmp/test-guard"), workspace=None)
-        result = decide_action(
-            configured_action=None,
-            default_action=None,
-            config=config,
-            changed=True,
-        )
-        assert result == "require-reapproval"
-
-    def test_block_policy_blocks_regardless_of_changed_flag(self) -> None:
-        config = GuardConfig(guard_home=Path("/tmp/test-guard"), workspace=None)
-        result = decide_action(
-            configured_action="block",
-            default_action="allow",
-            config=config,
-            changed=False,
-        )
-        assert result == "block"
-
-    def test_no_policy_uses_config_default(self) -> None:
-        config = GuardConfig(
-            guard_home=Path("/tmp/test-guard"),
-            workspace=None,
-            default_action="warn",
-        )
-        result = decide_action(
-            configured_action=None,
-            default_action=None,
-            config=config,
-            changed=False,
-        )
-        assert result == "warn"
-
-    def test_explicit_default_action_overrides_config(self) -> None:
-        config = GuardConfig(
-            guard_home=Path("/tmp/test-guard"),
-            workspace=None,
-            default_action="warn",
-        )
-        result = decide_action(
-            configured_action=None,
-            default_action="allow",
-            config=config,
-            changed=False,
-        )
-        assert result == "allow"
 
 
 class TestPolicyScopePersistence:

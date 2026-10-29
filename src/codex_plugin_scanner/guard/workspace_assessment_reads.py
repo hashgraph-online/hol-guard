@@ -15,8 +15,12 @@ def list_worktrees(store: Any, *, include_paused: bool = True) -> list[dict[str,
         rows = connection.execute(
             """
             select codebase_key, worktree_key, private_root, dirty_generation, last_completed_generation,
-                   last_scan_at_ms, paused, admitted_at_ms
-            from workspace_assessment_state
+                   last_scan_at_ms, paused, admitted_at_ms,
+                   exists (
+                     select 1 from workspace_assessment_ended_admissions e
+                     where e.codebase_key = s.codebase_key and e.worktree_key = s.worktree_key
+                   )
+            from workspace_assessment_state s
             where ? or paused = 0
             order by admitted_at_ms, worktree_key
             """,
@@ -33,6 +37,8 @@ def list_worktrees(store: Any, *, include_paused: bool = True) -> list[dict[str,
             "last_scan_at_ms": row[5],
             "paused": bool(row[6]),
             "admitted_at_ms": int(row[7]),
+            # The install that admitted it is gone: paused, and kept for its records.
+            "ended": bool(row[8]),
         }
         for row in rows
     ]

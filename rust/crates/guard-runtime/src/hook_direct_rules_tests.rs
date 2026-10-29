@@ -6,9 +6,21 @@ use crate::hook_direct::cursor;
 use serde_json::{json, Value};
 use std::fs;
 
+/// The environment the daemon publishes with the binding, which the lane
+/// identifies a launch with.
+fn published_environment() -> Value {
+    json!({ "HOME": HOME, "PATH": std::env::var("PATH").unwrap() })
+}
+
 #[test]
 fn custom_rules_still_answer_a_command_that_launches_no_local_cli() {
-    let rules = allowing_lane("cli-rules", json!({ "local_cli_block_rules": true }));
+    let rules = allowing_lane(
+        "cli-rules",
+        json!({
+            "local_cli_block_rules": true,
+            "exact_action_environment": published_environment(),
+        }),
+    );
     // `pwd` launches no local CLI, so no custom rule can block it.
     assert_eq!(run(&rules, allowed_payload(&rules))["outcome"], "answer");
     // The edge reviews a launch it cannot prove benign, so the daemon
@@ -24,7 +36,10 @@ fn custom_rules_still_answer_a_command_that_launches_no_local_cli() {
 
 #[test]
 fn a_block_rule_saved_after_the_publish_still_answers_a_command_without_a_cli() {
-    let lane = allowing_lane("stored-rules", json!({}));
+    let lane = allowing_lane(
+        "stored-rules",
+        json!({ "exact_action_environment": published_environment() }),
+    );
     let store = lane.fixture.root.join("guard.db");
     let connection = rusqlite::Connection::open(&store).unwrap();
     connection

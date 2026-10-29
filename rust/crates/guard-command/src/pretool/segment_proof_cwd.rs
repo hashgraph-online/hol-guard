@@ -21,6 +21,45 @@ pub(in crate::pretool) fn verified_cwd_list_context(
     context: PathContext<'_>,
     sequence_after_cd: bool,
 ) -> Option<String> {
+    cwd_list_context(model, context, sequence_after_cd, false)
+}
+
+/// Like [`verified_cwd_compound_context`], but also admits a `cd` that climbs
+/// out of the cwd, such as `cd .. && ls`. Only read-only steps may be proved
+/// against it; see [`directory_targets::verified_climb_target`].
+fn verified_read_cwd_compound_context(
+    model: &CanonicalCommandV1,
+    context: PathContext<'_>,
+) -> Option<String> {
+    cwd_list_context(model, context, false, true)
+}
+
+/// The directory the Git reads of a `cd <dir> && ...` list run in, for the
+/// Git execution-context floor and the helper-configuration probe. Those
+/// inspect a read where it runs; they authorize no step. A `cd` that climbs
+/// out of the cwd, such as `cd ../app && git status`, counts when no later
+/// step carries an effect of its own.
+pub(in crate::pretool) fn git_read_cwd_compound_context(
+    model: &CanonicalCommandV1,
+    context: PathContext<'_>,
+) -> Option<String> {
+    verified_cwd_compound_context(model, context).or_else(|| {
+        model
+            .segments
+            .iter()
+            .skip(1)
+            .all(|segment| !cwd_effectful_segment(segment))
+            .then(|| verified_read_cwd_compound_context(model, context))
+            .flatten()
+    })
+}
+
+fn cwd_list_context(
+    model: &CanonicalCommandV1,
+    context: PathContext<'_>,
+    sequence_after_cd: bool,
+    climb: bool,
+) -> Option<String> {
     let first = model.segments.first()?;
     if model.segments.len() < 2
         || first.executable.as_deref() != Some("cd")
@@ -37,7 +76,11 @@ pub(in crate::pretool) fn verified_cwd_list_context(
     let [target] = first.arguments.as_slice() else {
         return None;
     };
-    let cwd = safe_reads::verified_cwd_target(target, context)?;
+    let cwd = safe_reads::verified_cwd_target(target, context).or_else(|| {
+        climb
+            .then(|| directory_targets::verified_climb_target(target, context))
+            .flatten()
+    })?;
     for (index, pair) in model.segments.windows(2).enumerate() {
         // Parser spans count Unicode characters, not UTF-8 byte offsets.
         let length = pair[1].span.start.checked_sub(pair[0].span.end)?;
@@ -65,15 +108,20 @@ pub(in crate::pretool) fn exact_safe_cwd_compound(
     allow_git_helper_context: bool,
     context: PathContext<'_>,
 ) -> bool {
-    let Some(cwd) = verified_cwd_compound_context(model, context) else {
-        return false;
-    };
-    if model.segments.len() == 2
+    let writes = model.segments.len() == 2
         && matches!(
             model.segments[1].executable.as_deref(),
             Some("cp" | "mkdir" | "touch" | "mv" | "ln" | "rm")
-        )
-    {
+        );
+    let cwd = if writes {
+        verified_cwd_compound_context(model, context)
+    } else {
+        verified_read_cwd_compound_context(model, context)
+    };
+    let Some(cwd) = cwd else {
+        return false;
+    };
+    if writes {
         // `rm` and `ln` delete or publish a path. Re-anchoring them is safe
         // only inside the original workspace or a linked worktree of it.
         // `cd ~` and `cd /tmp` must not become the new write boundary.
@@ -228,6 +276,7 @@ pub(in crate::pretool) fn cwd_read_executable(executable: Option<&str>) -> bool 
                 | "du"
                 | "df"
                 | "diff"
+                | "cmp"
         )
     )
 }

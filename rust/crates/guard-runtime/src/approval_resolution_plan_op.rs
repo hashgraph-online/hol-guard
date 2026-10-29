@@ -444,13 +444,18 @@ fn evaluate(request: &ApprovalResolutionPlanRequestV1) -> Result<Value, String> 
         if allow && request.requires_local_once {
             local_once_row = local_once(&scoped_hash, expires_at)?;
         }
-    } else if (persist == Some(false) || native_bash_operation_only)
-        && scope == "artifact"
-        && exact_context_allow
+    } else if scope == "artifact"
         && !request.temporary_mcp
         && !request.local_tool
+        && (((persist == Some(false) || native_bash_operation_only) && exact_context_allow)
+            || (persist == Some(false)
+                && allow
+                && request.requires_local_once
+                && !native_bash_operation_only))
     {
-        // "Do not remember" still authorizes the exact approved retry once.
+        // "Do not remember" still authorizes the exact approved retry once, and a
+        // request that can only run on a one-shot grant (such as a Codex hook still
+        // waiting on this decision) gets that grant instead of nothing.
         persistence = "exact_once";
         local_once_row = local_once(&scoped_hash, once_expires_at(&request.resolved_at)?)?;
     }

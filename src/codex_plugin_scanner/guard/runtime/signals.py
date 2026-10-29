@@ -6,8 +6,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Literal
 
-from codex_plugin_scanner.guard.types import GuardSignal
-
 from .payload_coercion import optional_string, required_string
 
 RiskSignalCategory = Literal[
@@ -32,17 +30,6 @@ RiskConfidenceLabel = Literal["weak", "likely", "strong"]
 RiskRedactionLevel = Literal["none", "summary", "redacted"]
 RiskSignalSource = Literal["native", "cisco_mcp", "cisco_skill", "threat_intel", "runtime_detector"]
 ScannerStatusLabel = Literal["enabled", "skipped", "unavailable", "failed", "timed_out"]
-
-_FAMILY_CATEGORY: dict[str, RiskSignalCategory] = {
-    "network": "network",
-    "filesystem": "filesystem",
-    "secret": "secret",
-    "execution": "execution",
-    "publisher": "publisher",
-    "prompt": "prompt",
-    "policy": "policy",
-    "provenance": "provenance",
-}
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,23 +80,6 @@ class RiskSignalV2:
             redaction_level=_parse_redaction_level(payload.get("redaction_level")),
             false_positive_hint=optional_string(payload, "false_positive_hint"),
             advisory_id=optional_string(payload, "advisory_id"),
-        )
-
-    @classmethod
-    def from_guard_signal(cls, signal: GuardSignal) -> RiskSignalV2:
-        return cls(
-            signal_id=signal.signal_id,
-            category=_category_from_guard_signal(signal),
-            severity=severity_label_from_score(signal.severity),
-            confidence=confidence_label_from_score(signal.confidence),
-            detector=signal.rule_version,
-            title=_title_from_reason(signal.explanation),
-            plain_reason=signal.explanation,
-            technical_detail=_technical_detail_from_guard_signal(signal),
-            evidence_ref=signal.evidence_source,
-            redaction_level="summary",
-            false_positive_hint=signal.remediation,
-            advisory_id=None,
         )
 
 
@@ -183,48 +153,6 @@ class GuardRiskSignalV3:
             data_sink=optional_string(payload, "data_sink"),
             recommended_action=optional_string(payload, "recommended_action"),
         )
-
-
-def severity_label_from_score(score: int | float) -> RiskSeverityLabel:
-    if score >= 9:
-        return "critical"
-    if score >= 7:
-        return "high"
-    if score >= 5:
-        return "medium"
-    if score >= 3:
-        return "low"
-    return "info"
-
-
-def confidence_label_from_score(score: float) -> RiskConfidenceLabel:
-    if score >= 0.85:
-        return "strong"
-    if score >= 0.5:
-        return "likely"
-    return "weak"
-
-
-def _category_from_guard_signal(signal: GuardSignal) -> RiskSignalCategory:
-    signal_id = signal.signal_id.lower()
-    if ":bypass:" in signal_id or signal_id.startswith("policy:bypass"):
-        return "bypass"
-    if ":encoded:" in signal_id:
-        return "encoded"
-    return _FAMILY_CATEGORY.get(signal.family, "policy")
-
-
-def _technical_detail_from_guard_signal(signal: GuardSignal) -> str | None:
-    if signal.matched_text is None:
-        return None
-    return f"matched {signal.evidence_source} evidence: {signal.matched_text}"
-
-
-def _title_from_reason(reason: str) -> str:
-    stripped = reason.strip()
-    if not stripped:
-        return "Guard risk signal"
-    return f"{stripped[0].upper()}{stripped[1:]}"
 
 
 def _optional_int(payload: Mapping[str, object], key: str) -> int | None:

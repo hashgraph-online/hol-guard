@@ -55,13 +55,9 @@ POLICY_SNAPSHOT_AUTHORITY_MAX_BYTES = POLICY_SNAPSHOT_MAX_BYTES + 16 * 1024
 
 NATIVE_RUNTIME_STATE_DIRECTORY = "native-runtime"
 NATIVE_POLICY_VERIFIER_KEY_NAME = "policy-verifier.key"
-_V3_GENERATION_SCHEMA = "guard-native-policy-snapshot-generation.v3"
-_V3_GENERATION_STATE_NAME = "native-policy-snapshot-generation-v3.json"
-_V3_GENERATION_LOCK_NAME = "native-policy-snapshot-generation-v3.lock"
 _RUST_GENERATION_FLOOR_NAME = "policy-snapshot-generation-floor.json"
 _RUST_SNAPSHOT_STATE_NAME = "policy-snapshot-v3.json"
 NATIVE_POLICY_SNAPSHOT_CACHE_NAME = "policy-snapshot-publisher-v3.json"
-_NATIVE_POLICY_SNAPSHOT_PENDING_NAME = "policy-snapshot-publisher-v3.pending.json"
 _VERIFIER_KEY_BYTES = 32
 _PUBLISH_RETRY_SECONDS = 0.25
 _PUBLISH_TIMEOUT_SECONDS = 8.0 if sys.platform == "win32" else 2.0

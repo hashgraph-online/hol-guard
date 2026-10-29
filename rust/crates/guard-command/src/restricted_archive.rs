@@ -361,6 +361,9 @@ fn open_destination(
 // restricted_archive_download.py — policy, redirect, and entry point
 // ---------------------------------------------------------------------------
 
+/// Refuses a hop's `Content-Encoding` values before any of its body is read.
+pub type ContentEncodingCheck<'a> = &'a dyn Fn(&[String]) -> Result<(), RestrictedDownloadError>;
+
 /// `download_restricted_archive` (restricted_archive_download.py:194).
 pub fn download_restricted_archive(
     source_url: &str,
@@ -371,12 +374,78 @@ pub fn download_restricted_archive(
     resolver: &dyn DnsResolver,
     transport: &dyn PinnedHttpsTransport,
 ) -> RestrictedArchiveDownloadResult {
+    download_restricted(
+        source_url,
+        max_bytes,
+        max_redirects,
+        timeout_seconds,
+        temp_dir,
+        resolver,
+        transport,
+        None,
+    )
+    .0
+}
+
+/// Managed content fetch over the same pinned, per-hop validated transport.
+/// The HTTP stack never decodes: every hop's `Content-Encoding` values go to
+/// `check` before that response's body is touched, so a coding the caller
+/// cannot decode safely refuses the fetch, redirects included. The body is
+/// spooled exactly as sent and returned with the final hop's values for a
+/// contained decoder; nothing here inspects it.
+#[allow(clippy::too_many_arguments)]
+pub fn download_restricted_content(
+    source_url: &str,
+    max_bytes: u64,
+    max_redirects: u32,
+    timeout_seconds: f64,
+    temp_dir: Option<&Path>,
+    resolver: &dyn DnsResolver,
+    transport: &dyn PinnedHttpsTransport,
+    check: ContentEncodingCheck<'_>,
+) -> (RestrictedArchiveDownloadResult, Vec<String>) {
+    download_restricted(
+        source_url,
+        max_bytes,
+        max_redirects,
+        timeout_seconds,
+        temp_dir,
+        resolver,
+        transport,
+        Some(check),
+    )
+}
+
+fn content_encoding_values(response: &dyn ReadableResponse) -> Vec<String> {
+    response
+        .header_items()
+        .into_iter()
+        .filter(|(name, _)| name.eq_ignore_ascii_case("content-encoding"))
+        .map(|(_, value)| value)
+        .collect()
+}
+
+#[allow(clippy::too_many_arguments)]
+fn download_restricted(
+    source_url: &str,
+    max_bytes: u64,
+    max_redirects: u32,
+    timeout_seconds: f64,
+    temp_dir: Option<&Path>,
+    resolver: &dyn DnsResolver,
+    transport: &dyn PinnedHttpsTransport,
+    check: Option<ContentEncodingCheck<'_>>,
+) -> (RestrictedArchiveDownloadResult, Vec<String>) {
     if max_bytes == 0 || !timeout_seconds.is_finite() || timeout_seconds <= 0.0 {
-        return RestrictedArchiveDownloadResult::Failure(RestrictedArchiveFailure {
-            code: "external_archive_download_policy_invalid".to_string(),
-            message: "External archive download policy is invalid.".to_string(),
-        });
+        return (
+            RestrictedArchiveDownloadResult::Failure(RestrictedArchiveFailure {
+                code: "external_archive_download_policy_invalid".to_string(),
+                message: "External archive download policy is invalid.".to_string(),
+            }),
+            Vec::new(),
+        );
     }
+    let mut codings = Vec::new();
     let deadline = monotonic_now() + std::time::Duration::from_secs_f64(timeout_seconds);
     let mut current_url = source_url.to_string();
     let mut response: Option<Box<dyn ReadableResponse>> = None;
@@ -392,6 +461,10 @@ pub fn download_restricted_archive(
                 deadline,
             )?);
             validate_response_headers(response.as_ref().unwrap().as_ref())?;
+            codings = content_encoding_values(response.as_ref().unwrap().as_ref());
+            if let Some(check) = check {
+                check(&codings)?;
+            }
             if REDIRECT_STATUSES.contains(&response.as_ref().unwrap().status()) {
                 let location = response_header(response.as_ref().unwrap().as_ref(), "Location");
                 if let Some(mut opened) = response.take() {
@@ -437,6 +510,7 @@ pub fn download_restricted_archive(
                 deadline,
                 max_bytes,
                 temp_dir,
+                check.is_none(),
             )?;
             if let Some(mut opened) = response.take() {
                 opened.close();
@@ -452,11 +526,14 @@ pub fn download_restricted_archive(
         open.close();
     }
     match outcome {
-        Ok(download) => RestrictedArchiveDownloadResult::Success(download),
-        Err(error) => RestrictedArchiveDownloadResult::Failure(RestrictedArchiveFailure {
-            code: error.code,
-            message: error.message,
-        }),
+        Ok(download) => (RestrictedArchiveDownloadResult::Success(download), codings),
+        Err(error) => (
+            RestrictedArchiveDownloadResult::Failure(RestrictedArchiveFailure {
+                code: error.code,
+                message: error.message,
+            }),
+            Vec::new(),
+        ),
     }
 }
 

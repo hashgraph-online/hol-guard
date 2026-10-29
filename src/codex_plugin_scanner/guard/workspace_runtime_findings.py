@@ -3,7 +3,9 @@
 Reuses the runtime posture: the native probe describes each executable the
 configured MCP servers would launch, without running it, and the native
 assessment matches it against the runtime advisories carried in the cached
-supply-chain bundle. Nothing here reaches Cloud or feeds hooks or approvals.
+supply-chain bundle. Nothing here feeds hooks or approvals. Cloud receives each
+finding's identifiers and a keyed digest of its path, which matches the digest
+fleet posture reports for the same runtime; the path itself stays local.
 Where the native runtime enumerates running processes, a process that kept
 running after its runtime was replaced on disk keeps its finding, as
 ``restart_required``, until it exits: a new build on disk alone is never the
@@ -182,9 +184,10 @@ def assessment_context_digest(feed_digest: str, runtime_digest: str | None) -> s
     v9: runs check GitHub Actions workflows.
     v10: runs check editor tasks and dev container commands.
     v11: runs report processes still running a replaced, affected runtime.
+    v12: runs check agent instruction files.
     """
 
-    encoded = f"guard.workspace-context.v11\0{feed_digest}\0{runtime_digest or 'unknown'}"
+    encoded = f"guard.workspace-context.v12\0{feed_digest}\0{runtime_digest or 'unknown'}"
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 

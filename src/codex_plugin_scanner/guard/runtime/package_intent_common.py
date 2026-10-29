@@ -49,15 +49,6 @@ class PackageIntentTarget:
 
         return asdict(self)
 
-    def to_fingerprint_dict(self) -> dict[str, object]:
-        """Return approval identity fields with canonical Git source spelling."""
-
-        payload = self.to_dict()
-        if self.source_kind == "git" and self.source_identity is not None:
-            for exact_field in ("raw_spec", "raw_spec_hash", "source_url", "source_url_hash"):
-                _ = payload.pop(exact_field, None)
-        return payload
-
 
 @dataclass(frozen=True, slots=True)
 class PackageExecutionFileEvidence:

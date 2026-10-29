@@ -489,6 +489,29 @@ fn spec_shape_is_strict() {
 }
 
 #[test]
+fn listing_url_campaign_parameters_are_printed_unchanged() {
+    // HOL may tag the listing link with campaign parameters so a visit from
+    // the terminal is counted; the plan prints that link byte for byte.
+    let tagged = "https://hol.org/registry/plugins/acme%2Ftoolgate?utm_source=hol_marketplace&utm_medium=plugins_install&utm_campaign=plugins&utm_content=acme%2Ftoolgate";
+    let mut fixture = spec();
+    fixture["listingUrl"] = json!(tagged);
+    let planned = plan("install", fixture, &[], &[]);
+    assert_eq!(planned["ok"], json!(true), "{planned}");
+    assert_eq!(planned["result"]["listing_url"], json!(tagged));
+
+    // The text after the origin stays bounded, query included.
+    let mut long = spec();
+    long["listingUrl"] = json!(format!(
+        "https://hol.org/registry/plugins/acme%2Ftoolgate?utm_content={}",
+        "x".repeat(300)
+    ));
+    assert_eq!(
+        error("install", long, &[]),
+        "plugin_kit_install_spec_invalid"
+    );
+}
+
+#[test]
 fn listing_urls_follow_an_overridden_endpoint_origin_and_nothing_else() {
     let local = "http://127.0.0.1:3000/";
     let mut fixture = spec();

@@ -153,6 +153,7 @@ class GuardConfig:
     runtime_detector_debug_trace: bool = False
     runtime_detector_disabled_ids: tuple[str, ...] = ()
     sandbox_analysis: str = "off"
+    workspace_assessment_enabled: bool = True
     risk_actions: dict[str, GuardAction] | None = None
     harness_risk_actions: dict[str, dict[str, GuardAction]] | None = None
     harness_actions: dict[str, GuardAction] | None = None

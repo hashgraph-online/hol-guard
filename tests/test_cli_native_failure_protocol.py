@@ -45,7 +45,6 @@ def test_native_failure_preserves_codex_wire_response(
     monkeypatch.setattr(cli, "try_native_hook_authority", unavailable)
     result = cli.route_native_hook(
         Mock(harness="codex", json=json_requested),
-        config=None,
         context=context,
         payload=payload,
         runtime_workspace=None,
@@ -85,7 +84,6 @@ def test_native_failure_keeps_copilot_permission_wire_response(
     monkeypatch.setattr(cli, "try_native_hook_authority", unavailable)
     result = cli.route_native_hook(
         Mock(harness="copilot", json=False),
-        config=None,
         context=context,
         payload=payload,
         runtime_workspace=None,

@@ -36,7 +36,7 @@ use super::for_loop_unroll::{ordinary_loop_name, valid_identifier};
 
 /// Enough room for a conditional with a handful of `elif` arms.
 const MAX_ITEMS: usize = 48;
-const MAX_FLATTENED_BYTES: usize = 8192;
+pub(super) const MAX_FLATTENED_BYTES: usize = 8192;
 
 /// The flattened command list for a top-level `if` construct or a bounded
 /// `while read` loop, or `None` when the command is anything else.
@@ -62,6 +62,13 @@ pub(super) fn flatten(command: &str) -> Option<String> {
 
 /// `if LIST; then LIST; [elif LIST; then LIST;]... [else LIST;] fi`.
 fn flatten_conditional(rest: &str) -> Option<String> {
+    let (parts, after) = conditional_parts(rest)?;
+    assemble(&parts, after)
+}
+
+/// The items of every list a conditional holds, in order, and the text after
+/// its `fi`. `rest` starts after the `if` keyword.
+pub(super) fn conditional_parts(rest: &str) -> Option<(Vec<(String, &'static str)>, &str)> {
     let mut parts: Vec<(String, &'static str)> = Vec::new();
     let mut rest = rest;
     loop {
@@ -74,9 +81,9 @@ fn flatten_conditional(rest: &str) -> Option<String> {
             "else" => {
                 let (alternative, _, after_alternative) = body_items(after_branch, "", &["fi"])?;
                 collect(&mut parts, alternative)?;
-                return assemble(&parts, after_alternative);
+                return Some((parts, after_alternative));
             }
-            _ => return assemble(&parts, after_branch),
+            _ => return Some((parts, after_branch)),
         }
     }
 }
@@ -358,7 +365,7 @@ fn assemble(parts: &[(String, &'static str)], tail: &str) -> Option<String> {
 }
 
 /// Consume `keyword` followed by whitespace.
-fn keyword<'a>(text: &'a str, keyword: &str) -> Option<&'a str> {
+pub(super) fn keyword<'a>(text: &'a str, keyword: &str) -> Option<&'a str> {
     let rest = text.strip_prefix(keyword)?;
     rest.starts_with([' ', '\t', '\n'])
         .then(|| rest.trim_start_matches([' ', '\t', '\n']))

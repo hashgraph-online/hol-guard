@@ -34,11 +34,11 @@ use guard_command::supply_chain_package_eval::{
     evaluate_package_request_artifact, CanonicalPackageIdentity as EvalCanonicalPackageIdentity,
     EntitlementRefreshApi, EvalError, EvalResult, GuardSyncRequest, GuardSyncRunnerApi,
     JsSemverApi, LockfileParseApi, LockfileParseResult, ManifestDepsApi, NativeArchiveApi,
-    PackageIdentityApi, RestrictedArchiveApi,
+    PackageEvalResult, PackageIdentityApi, RestrictedArchiveApi,
     RestrictedArchiveDownload as EvalRestrictedArchiveDownload, RestrictedArchiveDownloadResult,
     RestrictedArchiveFailure, RiskDetectApi, SavedPolicyProbe, StoreExtrasApi,
     SupplyChainBundleApi, SupplyChainBundleResponse as EvalBundleResponse, SupplyChainEvalDeps,
-    WorkspaceIoApi,
+    WorkspaceIoApi, REVIEW_SETTLEMENT_KEY,
 };
 use guard_command::supply_chain_package_identity;
 use guard_contracts::{

@@ -1,8 +1,7 @@
-//! The Windows halves of the Codex contained rewrite, ported from
-//! `contained_zcode_response`: the sink command line both of Codex's shells
-//! read (`windows_powershell_quote.py`), the bootstrap's forward-slash package
-//! root (`_sink_command_prefix`), and the request snapshot in the profile's
-//! own temporary directory (`_request_root`).
+//! The Windows halves of the contained rewrite: the sink command line both of
+//! Codex's shells read (`windows_powershell_quote.py`), the bootstrap's
+//! forward-slash package root (`_sink_command_prefix`), and the request
+//! snapshot in the profile's own temporary directory.
 
 use std::io::Write;
 use std::os::windows::fs::MetadataExt;
@@ -243,7 +242,7 @@ pub(super) fn write_snapshot(serialized: &[u8]) -> Option<PathBuf> {
     None
 }
 
-/// `cleanup_stale_zcode_requests` on Windows: a snapshot whose call never
+/// Stale-snapshot cleanup on Windows: a snapshot whose call never
 /// ran is reclaimed after a full day. Only a plain directory holding a plain
 /// request file is removed; a reparse point at either level is left alone.
 fn cleanup_stale_requests(temp: &Path) {

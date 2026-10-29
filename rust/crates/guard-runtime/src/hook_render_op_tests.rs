@@ -535,3 +535,33 @@ fn cli_hook_emit_without_document_answers_as_before() {
     let result = decode(evaluate_hook_render_request(&req).expect("encoded"));
     assert_eq!(result.code, "native_hook_render_unrenderable");
 }
+
+#[test]
+fn a_large_cursor_edge_still_fits_its_route_budget() {
+    // The route sends the edge result the daemon already produced, and a
+    // native response may be far larger than an ordinary render request. A
+    // valid large edge that did not fit would drop the probe back to an
+    // ordinary review and lose its containment route, so the kind carries a
+    // budget of its own.
+    let mut req = request("cursor_shell_route");
+    req.harness = "cursor".to_owned();
+    req.cli = Some(json!({
+        "payload": {"tool_name": "Bash"},
+        "edge": {
+            "harness": "cursor",
+            "event_name": "PreToolUse",
+            "containment_route": "none",
+            "result": {"reason": "x".repeat(guard_contracts::HOOK_RENDER_MAX_BYTES)},
+        },
+    }));
+    crate::package_authority_op::request_digest_with_limit(
+        &req,
+        guard_contracts::HOOK_RENDER_MAX_BYTES,
+    )
+    .expect_err("the ordinary budget is too small for this edge");
+    crate::package_authority_op::request_digest_with_limit(
+        &req,
+        guard_contracts::hook_render_max_bytes("cursor_shell_route"),
+    )
+    .expect("the route's own budget holds it");
+}

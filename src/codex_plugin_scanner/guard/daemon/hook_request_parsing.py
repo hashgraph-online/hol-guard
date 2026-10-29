@@ -138,11 +138,34 @@ def pre_tool_command(payload: Mapping[str, object]) -> str | None:
     return None
 
 
+def native_review_tool_name(payload: Mapping[str, object]) -> str:
+    for key in ("tool_name", "toolName", "tool"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return "tool"
+
+
+def native_review_launch_target(payload: Mapping[str, object]) -> str:
+    command = pre_tool_command(payload)
+    if command is not None:
+        return command
+    tool_input = pre_tool_input(payload)
+    if tool_input is not None:
+        for key in ("url", "path", "file_path", "target"):
+            value = tool_input.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+    return f"tool:{native_review_tool_name(payload)}"
+
+
 __all__ = [
     "HOOK_PAYLOAD_REFERENCE_KEY",
     "MAX_HOOK_PAYLOAD_REFERENCE_BYTES",
     "HookPayloadReferenceError",
     "hook_payload_reference_size",
+    "native_review_launch_target",
+    "native_review_tool_name",
     "pre_tool_command",
     "pre_tool_input",
     "runtime_hook_event_name",

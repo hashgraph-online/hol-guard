@@ -26,6 +26,7 @@ fn request(root: &Path) -> SnapshotRequest {
         plugins: false,
         workflows: false,
         editor_tasks: false,
+        instructions: false,
     }
 }
 
@@ -132,6 +133,61 @@ fn an_ordinary_skill_has_no_findings() {
 
     assert_eq!(skills["status"], "complete");
     assert_eq!(skills["files_scanned"], 1);
+    assert_eq!(skills["findings"], Value::Array(Vec::new()));
+}
+
+// A working skill as people write them: tool permissions in the frontmatter,
+// shell steps that only read the repository, and an example of its output.
+const WORKING_SKILL: &str = "---
+name: changelog-entry
+description: Draft a changelog entry for the current branch from its commits and diff.
+allowed-tools: Bash(git log:*), Bash(git diff:*), Read
+---
+
+# Changelog entry
+
+Use this skill when the user asks for a changelog or release-note line for the
+work on the current branch.
+
+## Steps
+
+1. Collect the commits and the files they touch:
+
+```bash
+git log --oneline origin/main..HEAD
+git diff --stat origin/main...HEAD
+rg -n \"BREAKING\" --glob '*.md' .
+```
+
+2. Group the changes by area (CLI, docs, tests) and skip merge commits.
+3. Write one entry per user-visible change in the past tense, naming the flag
+   or command it affects.
+
+## Output
+
+```markdown
+### Fixed
+
+- `guard scan` no longer stops at the first unreadable file.
+```
+
+Show the draft and ask before editing `CHANGELOG.md`.
+";
+
+#[test]
+fn a_working_skill_with_read_only_shell_steps_has_no_findings() {
+    let root = tempfile::tempdir().unwrap();
+    for path in [
+        ".claude/skills/changelog-entry/SKILL.md",
+        ".agents/skills/changelog-entry/SKILL.md",
+    ] {
+        write(root.path(), path, WORKING_SKILL);
+    }
+
+    let skills = scan(root.path())["skills"].clone();
+
+    assert_eq!(skills["status"], "complete");
+    assert_eq!(skills["files_scanned"], 2);
     assert_eq!(skills["findings"], Value::Array(Vec::new()));
 }
 

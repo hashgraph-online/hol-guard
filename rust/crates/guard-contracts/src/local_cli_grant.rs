@@ -111,6 +111,9 @@ pub const HOOK_LOCAL_CLI_RULE_REQUEST_SCHEMA: &str = "guard-hook-local-cli-rule-
 pub const HOOK_LOCAL_CLI_RULE_RESULT_SCHEMA: &str = "guard-hook-local-cli-rule-result.v1";
 /// Capability advertised by the runtime when `hook_local_cli_rule` is available.
 pub const HOOK_LOCAL_CLI_RULE_FEATURE: &str = "hook-local-cli-rule-v1";
+/// Capability advertised by the runtime when the hook edge reads the daemon's
+/// custom extension rules (`GuardHookEnvelopeV2::local_cli_rules`).
+pub const EDGE_LOCAL_CLI_RULE_FEATURE: &str = "edge-local-cli-rule-v1";
 
 /// The custom extension rule for one native `PreToolUse` the daemon holds:
 /// `allowed` checks a command the edge allowed against the custom block

@@ -1065,6 +1065,7 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
             console.print(_build_supply_chain_posture_panel(supply_chain))
     _print_bundled_runtime_warning(console, payload)
     _print_native_availability_note(console, payload)
+    _print_resident_lifecycle_note(console, payload)
     trust = payload.get("trust")
     if isinstance(trust, dict):
         console.print(_build_trust_doctor_panel(trust))
@@ -1097,6 +1098,76 @@ def _print_bundled_runtime_warning(console: Console, payload: dict[str, object])
     if isinstance(manual, str) and manual:
         lines.append(f"If the download is blocked, install it by hand: {manual}")
     console.print(Panel(Text("\n".join(lines)), title="Native runtime missing", border_style="red"))
+
+
+_LIFECYCLE_TITLE = {
+    "critical": "Native runtime not restarting",
+    "degraded": "Native runtime unhealthy today",
+}
+_LIFECYCLE_BORDER = {"critical": "red", "degraded": "yellow"}
+# What the day's journal establishes, which is not what is running now: the
+# runtime derives these states from the events it recorded over the window,
+# so the panel speaks about the day and sends the reader to `runtime status`
+# for the live answer.
+_LIFECYCLE_LEAD = {
+    "critical": (
+        "Guard's runtime stopped being restarted today: the last thing its journal recorded was "
+        "the restart budget refusing a start, so nothing of this runtime came back up after it."
+    ),
+    "degraded": (
+        "Guard's runtime has not been healthy today: runs have been ending badly and starting "
+        "again, which a report taken at any one moment does not show."
+    ),
+}
+
+
+def _lifecycle_age(seconds: object) -> str:
+    """How long ago, in the coarsest unit that still says something."""
+
+    if not isinstance(seconds, int) or isinstance(seconds, bool) or seconds < 0:
+        return "at an unknown time"
+    if seconds < 60:
+        return f"{seconds}s ago"
+    if seconds < 3600:
+        return f"{seconds // 60}m ago"
+    return f"{seconds // 3600}h ago"
+
+
+def _print_resident_lifecycle_note(console: Console, payload: dict[str, object]) -> None:
+    """Say when this install's day has been worse than this moment looks.
+
+    The counters beside this one describe the process that is running now, so
+    an install that crashes every few minutes and recovers in between reports
+    a clean bill of health between crashes. This is the one place the report
+    can say otherwise, so it prints only when the runtime's own answer is that
+    the day was degraded or that nothing is being restarted at all.
+    """
+
+    native_runtime = payload.get("native_runtime")
+    lifecycle = native_runtime.get("lifecycle") if isinstance(native_runtime, dict) else None
+    if not isinstance(lifecycle, dict):
+        return
+    state = lifecycle.get("state")
+    if state not in _LIFECYCLE_LEAD:
+        return
+    lines = [
+        _LIFECYCLE_LEAD[state],
+        (
+            f"Last 24 hours: {lifecycle.get('starts', 0)} starts, "
+            f"{lifecycle.get('orderly_exits', 0)} ended cleanly, "
+            f"{lifecycle.get('failed_exits', 0)} failed, "
+            f"{lifecycle.get('premature_exits', 0)} stopped early, "
+            f"{lifecycle.get('refused_starts', 0)} starts refused."
+        ),
+    ]
+    last_event = lifecycle.get("last_event")
+    if isinstance(last_event, str) and last_event:
+        lines.append(f"Last event: {last_event}, {_lifecycle_age(lifecycle.get('last_event_age_seconds'))}.")
+    lines.append(
+        "This is the day behind the install, not what is up now: run `hol-guard runtime status` "
+        "for that, or `hol-guard doctor --repair`."
+    )
+    console.print(Panel(Text("\n".join(lines)), title=_LIFECYCLE_TITLE[state], border_style=_LIFECYCLE_BORDER[state]))
 
 
 def _print_native_availability_note(console: Console, payload: dict[str, object]) -> None:

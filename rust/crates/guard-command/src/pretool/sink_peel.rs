@@ -159,7 +159,7 @@ pub(super) fn peel(
         if into_sibling_root {
             // `cd <sibling root> && a && b` is re-authorized whole in that
             // root. A filter after `a && b` would apply to `b` alone, so none
-            // is peeled there.
+            // is peeled there; it stays in the text the root runs.
             if let Some(joined) = joined_list(&tokens) {
                 return Ok(Some(ContainedWrapperCore {
                     core: joined,
@@ -447,8 +447,15 @@ fn filter_chain(tokens: &[Token]) -> Result<Vec<Vec<String>>, &'static str> {
             None => ("", &[] as &[String]),
         };
         if matches!(program, "head" | "tail") {
-            if let Some(count) = bounded_count(arguments) {
-                chain.push(vec![program.to_owned(), count.to_string()]);
+            if let Some((count, bytes)) = output_filters::head_tail_bound(arguments) {
+                // A byte bound carries its flag, so the sink that applies the
+                // stage reads which unit the count is in. A line bound keeps
+                // the two-word spelling the sink has always read.
+                chain.push(if bytes {
+                    vec![program.to_owned(), "-c".to_owned(), count.to_string()]
+                } else {
+                    vec![program.to_owned(), count.to_string()]
+                });
                 continue;
             }
         }
@@ -462,19 +469,6 @@ fn filter_chain(tokens: &[Token]) -> Result<Vec<Vec<String>>, &'static str> {
         return Err("unsupported output filter");
     }
     Ok(chain)
-}
-
-/// The line count of a `head`/`tail` stage: `-N` or `-n N`.
-fn bounded_count(values: &[String]) -> Option<u32> {
-    let digits = match values {
-        [single] => single.strip_prefix('-')?,
-        [flag, count] if flag == "-n" => count.as_str(),
-        _ => return None,
-    };
-    if !output_filters::bounded_count(digits) {
-        return None;
-    }
-    digits.parse().ok()
 }
 
 /// `bun --cwd <dir> build` as `bun build` in `<dir>`, as native authority
@@ -582,34 +576,55 @@ fn lexical(path: &Path) -> PathBuf {
 }
 
 /// `a && b && c` of plain words, rejoined, or `None` for any other shape.
+///
+/// Each command may bound its own output with one `| head` or `| tail` of a
+/// line or byte count, optionally after `2>&1`. The filter stays in the
+/// rejoined text, where the sandbox's shell applies it to that command alone,
+/// as the issued text did.
 fn joined_list(tokens: &[Token]) -> Option<String> {
-    let mut segments: Vec<Vec<&str>> = vec![Vec::new()];
-    for token in tokens {
-        match operator(token) {
-            Some("&&") => segments.push(Vec::new()),
-            Some(_) => return None,
-            None => {
-                if token
-                    .0
-                    .chars()
-                    .any(|character| ARGUMENT_REJECT.contains(character))
-                {
-                    return None;
-                }
-                segments.last_mut()?.push(token.0.as_str());
-            }
-        }
-    }
-    if segments.len() < 2 || segments.iter().any(|segment| segment.is_empty()) {
-        return None;
-    }
-    Some(
-        segments
+    let mut commands = Vec::new();
+    for command in tokens.split(|token| operator(token) == Some("&&")) {
+        let (words, filter) = match command
             .iter()
-            .map(|segment| shlex_join(segment.iter().copied()))
-            .collect::<Vec<_>>()
-            .join(" && "),
-    )
+            .position(|token| operator(token) == Some("|"))
+        {
+            Some(index) => (&command[..index], Some(&command[index + 1..])),
+            None => (command, None),
+        };
+        let (words, merged) = match words.split_last() {
+            Some((last, rest)) if operator(last) == Some("2>&1") => (rest, true),
+            _ => (words, false),
+        };
+        if words.is_empty()
+            || (merged && filter.is_none())
+            || words.iter().any(|token| {
+                token.1
+                    || token
+                        .0
+                        .chars()
+                        .any(|character| ARGUMENT_REJECT.contains(character))
+            })
+        {
+            return None;
+        }
+        let mut text = shlex_join(words.iter().map(|token| token.0.as_str()));
+        if merged {
+            text.push_str(" 2>&1");
+        }
+        if let Some(filter) = filter {
+            let (program, arguments) = filter.split_first()?;
+            let program = word(program);
+            if !matches!(program, "head" | "tail") || arguments.iter().any(|token| token.1) {
+                return None;
+            }
+            let arguments: Vec<String> = arguments.iter().map(|token| token.0.clone()).collect();
+            let (count, bytes) = output_filters::head_tail_bound(&arguments)?;
+            let unit = if bytes { "-c" } else { "-n" };
+            text.push_str(&format!(" | {program} {unit} {count}"));
+        }
+        commands.push(text);
+    }
+    (commands.len() >= 2).then(|| commands.join(" && "))
 }
 
 /// Where a bare `node -e <program>` or `python3 -c <program>` holds its

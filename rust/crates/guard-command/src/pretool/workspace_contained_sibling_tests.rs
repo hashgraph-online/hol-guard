@@ -51,7 +51,7 @@ fn environment(home: &Path) -> guard_contracts::GuardExecutionEnvironmentV1 {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: false,
-        library_search_paths: Default::default(),
+        ..Default::default()
     }
 }
 
@@ -133,7 +133,7 @@ fn evidence(result: &guard_contracts::PreToolResultV1) -> String {
 /// plain directory, all below a private home.
 fn fixture() -> (PathBuf, PathBuf, PathBuf) {
     // `/tmp`, not `$TMPDIR`: macOS puts the latter below `/private/var`,
-    // which no path proof admits outside the working directory.
+    // which the path proofs judge as its own location rather than a home.
     let root = Path::new("/tmp").join(format!(
         "guard-sibling-{}-{}",
         std::process::id(),

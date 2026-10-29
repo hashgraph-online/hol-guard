@@ -93,7 +93,6 @@ def test_outage_mode_requires_authenticated_unexpired_snapshot(
         )
         status = cli.route_native_hook(
             Mock(harness="codex", json=True),
-            config=None,
             context=HarnessContext(home_dir=tmp_path / "home", guard_home=guard_home, workspace_dir=None),
             payload=payload,
             runtime_workspace=None,

@@ -265,3 +265,50 @@ def test_finalize_codex_doctor_warnings_drops_false_uninstalled_copy() -> None:
         )
         == "broken"
     )
+
+
+def test_codex_doctor_reports_leftover_hooks_for_an_uninstalled_codex(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _context(tmp_path)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.codex._command_available",
+        lambda *_args: False,
+    )
+    command = "hol-guard guard hook codex"
+    hook_entry = {
+        "matcher": "*",
+        "hooks": [
+            {
+                "type": "command",
+                "command": command,
+                "statusMessage": "HOL Guard checking tool action",
+            }
+        ],
+    }
+    events = ("PreToolUse", "PermissionRequest", "UserPromptSubmit", "PostToolUse")
+    config_path = context.home_dir / ".codex" / "config.toml"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    config_path.write_text("[features]\nhooks = true\n", encoding="utf-8")
+    (context.home_dir / ".codex" / "hooks.json").write_text(
+        json.dumps({"hooks": {event: [hook_entry] for event in events}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.codex._verify_live_hook_manifest",
+        lambda _context, **_kwargs: {
+            "event_matches": dict.fromkeys(events, True),
+            "integrity_status": "valid",
+            "integrity_reason": None,
+        },
+    )
+
+    from codex_plugin_scanner.guard.adapters import get_adapter
+
+    payload = get_adapter("codex").diagnostics(context)
+
+    # Codex is gone, so its managed hooks cannot run and cannot leave anything
+    # unprotected either. That is leftover configuration, not a broken setup.
+    assert payload["setup_status"] == "not_found"
+    assert any("hol-guard uninstall codex" in warning for warning in payload["warnings"])

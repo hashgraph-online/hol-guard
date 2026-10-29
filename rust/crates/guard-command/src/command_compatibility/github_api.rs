@@ -53,6 +53,53 @@ pub(super) fn jq_is_static(value: &str) -> bool {
         })
 }
 
+/// A `--jq` filter may render with a format string such as `@tsv`; in jq `@`
+/// only names a formatter, never a file the way a typed `-F` value does. A
+/// `$` may only name a variable the filter binds itself.
+fn jq_filter_is_static(value: &str) -> bool {
+    !value.contains(['`', '\0', '\n', '\r'])
+        && (!value.contains('$') || crate::pretool::safe_reads::jq_variables_bound(value))
+        && jq_is_static(value)
+        && jq_formats_are_bare(value)
+}
+
+/// Every `@` names a format the jq read grammar accepts and stands bare, so
+/// `@sh` and a `@text "..."` template stay in review. An `@` inside a plain
+/// string literal is text; once a string interpolates, every `@` is screened.
+pub(super) fn jq_formats_are_bare(value: &str) -> bool {
+    let code = if value.contains("\\(") {
+        value.to_owned()
+    } else {
+        outside_strings(value)
+    };
+    code.split('@').skip(1).all(|tail| {
+        let end = tail
+            .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+            .unwrap_or(tail.len());
+        crate::pretool::safe_reads::jq_rendering_format(&tail[..end])
+            && !tail[end..].trim_start().starts_with('"')
+    })
+}
+
+/// The filter with each string literal's contents removed, quotes kept.
+fn outside_strings(value: &str) -> String {
+    let mut code = String::with_capacity(value.len());
+    let mut in_string = false;
+    let mut characters = value.chars();
+    while let Some(character) = characters.next() {
+        if !in_string {
+            in_string = character == '"';
+            code.push(character);
+        } else if character == '\\' {
+            characters.next();
+        } else if character == '"' {
+            in_string = false;
+            code.push(character);
+        }
+    }
+    code
+}
+
 fn safe_header(value: &str) -> bool {
     let lowered = value.to_ascii_lowercase();
     let Some((name, value)) = lowered.split_once(':') else {
@@ -193,6 +240,10 @@ pub(super) fn classify(arguments: &[String]) -> Capabilities {
                 if !literal_field_is_static(name, value) {
                     return None;
                 }
+            } else if matches!(name, "--jq" | "-q") {
+                if !jq_filter_is_static(value) {
+                    return None;
+                }
             } else if !field_is_static(value) {
                 return None;
             }
@@ -206,7 +257,6 @@ pub(super) fn classify(arguments: &[String]) -> Capabilities {
                     fields.push((key, value));
                 }
                 "--header" | "-H" if !safe_header(value) => return None,
-                "--jq" | "-q" if !jq_is_static(value) => return None,
                 "--input" => return None,
                 _ => {}
             }
@@ -434,7 +484,28 @@ mod encoded_endpoint_tests {
                 "{attached}"
             );
         }
-        for unsafe_filter in [vec!["-q", "env"], vec!["-qenv.HOME"], vec!["-q", "$x"]] {
+        for format in [
+            ".workflow_runs[] | [.id, .name] | @tsv",
+            ".[] | @base64",
+            ".[] | select(.email | endswith(\"@example.com\")) | .login",
+            ".workflow_runs[] | (.conclusion // \"\") as $c | select($c != \"success\") | .id",
+        ] {
+            let arguments = vec![endpoint.to_owned(), "--jq".to_owned(), format.to_owned()];
+            assert_eq!(classify(&arguments), Some(vec!["read_remote"]), "{format}");
+        }
+        for unsafe_filter in [
+            vec!["-q", "env"],
+            vec!["-qenv.HOME"],
+            vec!["-q", "$x"],
+            vec!["-q", "@text \"\\($ENV)\""],
+            vec!["-q", "@sh \"`id`\""],
+            vec!["-q", ".a\n| env"],
+            vec!["-q", ". as $c | $c # \"\n| $ENV"],
+            vec!["-q", ".[] | @sh"],
+            vec!["-q", "@text \"id\""],
+            vec!["--jq", "@json2"],
+            vec!["-q", ".[] | \"\\(@sh \"x\")\""],
+        ] {
             let mut arguments = vec![endpoint.to_owned()];
             arguments.extend(unsafe_filter.iter().map(|value| (*value).to_owned()));
             assert_eq!(classify(&arguments), None, "{arguments:?}");
@@ -444,6 +515,20 @@ mod encoded_endpoint_tests {
             .map(String::from)
             .collect();
         assert_eq!(classify(&write), Some(vec!["delete_remote"]));
+        // A bare format given as the whole filter passes the `gh` argument
+        // screen, which otherwise refuses an argument opening with `@`.
+        for (filter, read) in [("@tsv", true), ("@sh", false)] {
+            let arguments: Vec<String> = ["api", endpoint, "--jq", filter]
+                .into_iter()
+                .map(String::from)
+                .collect();
+            let text = format!("gh api {endpoint} --jq {filter}");
+            assert_eq!(
+                super::super::classify(&arguments, &text).is_some(),
+                read,
+                "{filter}"
+            );
+        }
         let field: Vec<String> = ["-fname=value", endpoint]
             .into_iter()
             .map(String::from)

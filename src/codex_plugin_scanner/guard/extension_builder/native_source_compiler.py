@@ -47,7 +47,9 @@ _MAX_NATIVE_REQUEST_BYTES = 6 * 1024 * 1024
 _REQUEST_TOO_LARGE_CODE = "native_request_too_large"
 _MAX_OUTPUT_BYTES = 64 * 1024 * 1024
 _MAX_MANIFEST_BYTES = 64 * 1024
-_MAX_COMPILER_BYTES = 128 * 1024 * 1024
+# The packaged compiler is the runtime itself, so it takes the runtime's bound,
+# including the larger runtime a Gauntlet development wheel carries.
+_MAX_COMPILER_BYTES = 512 * 1024 * 1024
 _MAX_STDERR_BYTES = 64 * 1024
 _DEFAULT_TIMEOUT_SECONDS = 30.0
 _SHA40 = 40
@@ -112,19 +114,15 @@ def _read_regular(path: Path, *, limit: int, label: str) -> bytes:
         opened = os.fstat(descriptor)
         if not stat.S_ISREG(opened.st_mode) or opened.st_size != before.st_size:
             raise NativeSourceCompilerError(f"{label} changed while being opened")
-        content = bytearray()
+        # One read of a byte past the size the bound already admitted: a file
+        # that grew shows up as too long, and no second copy of a large
+        # executable is built.
         with os.fdopen(descriptor, "rb") as handle:
             descriptor = -1
-            while True:
-                chunk = handle.read(min(64 * 1024, limit + 1 - len(content)))
-                if not chunk:
-                    break
-                content.extend(chunk)
-                if len(content) > limit:
-                    raise NativeSourceCompilerError(f"{label} exceeds the accepted bound")
+            content = handle.read(before.st_size + 1)
         if len(content) != before.st_size:
             raise NativeSourceCompilerError(f"{label} could not be read completely")
-        return bytes(content)
+        return content
     finally:
         if descriptor >= 0:
             os.close(descriptor)
@@ -442,14 +440,14 @@ def run_source_compiler(
         compiler_bytes = _verify_compiler(_NATIVE_PACKAGE / _COMPILER_NAME, manifest)
     else:
         compiler_path = Path(compiler)
-        compiler_bytes = _read_regular(compiler_path, limit=_MAX_COMPILER_BYTES, label="source compiler")
-        compiler_bytes = _verify_compiler(
-            compiler_path,
-            {
-                "compiler_size": len(compiler_bytes),
-                "compiler_sha256": hashlib.sha256(compiler_bytes).hexdigest(),
-            },
-        )
+        first_read = _read_regular(compiler_path, limit=_MAX_COMPILER_BYTES, label="source compiler")
+        expected = {
+            "compiler_size": len(first_read),
+            "compiler_sha256": hashlib.sha256(first_read).hexdigest(),
+        }
+        # Release the first copy before verification reads the file again.
+        del first_read
+        compiler_bytes = _verify_compiler(compiler_path, expected)
     payload = b""
     with (
         _verified_executable(compiler_bytes) as executable,

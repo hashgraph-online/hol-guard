@@ -10,12 +10,15 @@ import pytest
 
 from ci.gauntlet.catalog import load_catalog
 from ci.gauntlet.runtime_cases import (
+    AFFECTED_CASE,
+    ALTERNATE_CASE,
     FINDING_REASON,
     LAUNCH_CHECK,
     LAUNCH_PATHS,
     LAUNCH_RECORD,
     NOT_LAUNCHED_CHECK,
     OUTPUT,
+    PATCHED_CASE,
     QUIET_CASES,
     RUNTIME_CASES,
     STOPPED_CASES,
@@ -116,3 +119,45 @@ def test_patched_and_unknown_launches_stay_quiet(tmp_path: Path, native_hook_for
     assert ran.stdout == OUTPUT
     assert (workspace / LAUNCH_RECORD).is_file()
     assert runtime_case_checks(workspace, scenario_id) == {LAUNCH_CHECK: True}
+
+
+def test_one_workspace_runs_its_patched_runtime_and_stops_its_affected_copy(tmp_path: Path, native_hook_force: Path):
+    """Mixed outcomes: the stop names one launch path, not the whole strict workspace."""
+    home, workspace, guard_home = _stage(tmp_path, ALTERNATE_CASE)
+
+    stopped = _review(home, workspace, guard_home, _command(ALTERNATE_CASE))
+    assert _denied(stopped), stopped
+    assert FINDING_REASON in str(stopped), stopped
+
+    patched = f"./{LAUNCH_PATHS[PATCHED_CASE]} --version"
+    quiet = _review(home, workspace, guard_home, patched)
+    assert FINDING_REASON not in str(quiet), quiet
+    assert not (workspace / LAUNCH_RECORD).exists()
+    if not _SANDBOX_HOST:
+        return
+    assert not _denied(quiet), quiet
+    ran = subprocess.run(["/bin/sh", "-c", patched], cwd=workspace, capture_output=True, text=True, check=True)
+    assert ran.stdout == OUTPUT
+    assert (workspace / LAUNCH_RECORD).is_file()
+
+
+def test_watch_mode_lets_an_affected_launch_finish_and_records_what_strict_would_do(
+    tmp_path: Path, native_hook_force: Path
+):
+    """Watch completes: observe mode never stops the launch; the finding is kept as a warning."""
+    home, workspace, guard_home = _stage(tmp_path, AFFECTED_CASE)
+    (guard_home / "config.toml").write_text(
+        'mode = "observe"\nprotection_posture = "watch"\nsecurity_level = "strict"\n', encoding="utf-8"
+    )
+    command = _command(AFFECTED_CASE)
+    result = _review(home, workspace, guard_home, command)
+    assert not _denied(result), result
+    if not _SANDBOX_HOST:
+        # Without a sandbox the launch is reviewed for that reason first; the
+        # native result keeps that code and records the finding in its text
+        # (covered beside raise() in Rust).
+        return
+    assert f"{FINDING_REASON}_observed" in str(result), result
+    ran = subprocess.run(["/bin/sh", "-c", command], cwd=workspace, capture_output=True, text=True, check=True)
+    assert ran.stdout == OUTPUT
+    assert (workspace / LAUNCH_RECORD).is_file()

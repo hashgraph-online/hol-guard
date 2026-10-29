@@ -136,6 +136,31 @@ pub(super) fn branch_rename(rest: &[&str]) -> bool {
     moved && matches!(names.len(), 1 | 2)
 }
 
+/// `branch NAME` or `branch NAME START`, options first. Creation writes one
+/// new ref and nothing else: Git refuses a name that already exists without
+/// `-f`, leaves `HEAD` and the working tree exactly as they are, and records
+/// an upstream only in the same `branch.NAME.*` configuration that
+/// `checkout -b NAME START` already writes for a remote-tracking start point.
+/// `-f`, `-t`, `--set-upstream-to`, a delete, a copy and every other option
+/// are refused, as is a start point that is not an ordinary reference name.
+pub(super) fn branch_create(rest: &[&str]) -> bool {
+    let mut names: Vec<&str> = Vec::new();
+    for word in rest {
+        match *word {
+            "-q" | "--quiet" | "--no-track" if names.is_empty() => {}
+            value if names.is_empty() => {
+                if !super::super::worktree_add::valid_branch_name(value) {
+                    return false;
+                }
+                names.push(value);
+            }
+            value if names.len() == 1 && super::start::reference(value) => names.push(value),
+            _ => return false,
+        }
+    }
+    !names.is_empty()
+}
+
 /// The two `git stash` spellings that only print are judged by the read
 /// grammar, so a listing proved here and a listing proved as an ordinary
 /// read can never drift apart.

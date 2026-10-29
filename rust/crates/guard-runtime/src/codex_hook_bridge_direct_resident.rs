@@ -68,6 +68,7 @@ impl DirectMiss {
 /// start marker its state records, and the client checks that identity again
 /// around the connect before the token handshake. A Windows resident
 /// publishes a loopback endpoint; a unix resident may publish either.
+#[cfg(unix)]
 pub(crate) fn send_to_live_resident(
     state_base: &Path,
     request: &[u8],

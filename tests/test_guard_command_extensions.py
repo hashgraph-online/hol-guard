@@ -10,7 +10,6 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     CommandSafetyExtensionRegistry,
-    risk_classes_for_command_action,
 )
 from codex_plugin_scanner.guard.runtime.command_inspection import command_extensions_payload
 from codex_plugin_scanner.guard.runtime.extension_control_contract import (
@@ -399,27 +398,6 @@ def test_command_extension_registry_rejects_duplicate_action_ownership() -> None
 
     with pytest.raises(ValueError, match="Duplicate command action class"):
         CommandSafetyExtensionRegistry((extension, duplicate))
-
-
-def test_runtime_risk_class_mapping_remains_compatible() -> None:
-    assert risk_classes_for_command_action("destructive shell command") == ("destructive_shell",)
-    assert risk_classes_for_command_action("GitHub PR body shell substitution") == ("execution",)
-    assert risk_classes_for_command_action("GitHub remote mutation command") == (
-        "destructive_shell",
-        "network_egress",
-    )
-    assert risk_classes_for_command_action("Unverified GitHub command capability") == (
-        "destructive_shell",
-        "network_egress",
-    )
-    assert risk_classes_for_command_action("GitHub local configuration write") == ("destructive_shell",)
-    assert risk_classes_for_command_action("Guard approval self-authorization command") == ("policy_bypass",)
-
-
-def test_every_extension_declares_its_actions_runtime_risk_classes() -> None:
-    for extension in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions:
-        for action_class in extension.action_classes:
-            assert set(risk_classes_for_command_action(action_class)) <= set(extension.risk_classes)
 
 
 def test_command_cli_emits_stable_json_without_creating_guard_state(

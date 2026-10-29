@@ -20,6 +20,8 @@ pub(super) use super::safe_writes::{
 };
 pub(crate) use command_sequences::proven_created_file_removal;
 pub(super) use command_sequences::{exact_safe_sequence, leading_and_cd, leading_semicolon_cd};
+pub(crate) use jq_filter::rendering_format as jq_rendering_format;
+pub(crate) use jq_filter::variables_bound as jq_variables_bound;
 pub(super) use read_globs::glob_file_matches;
 
 pub(super) fn safe_file_predicate_arguments(

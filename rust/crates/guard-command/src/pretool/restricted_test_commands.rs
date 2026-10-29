@@ -4,6 +4,11 @@
 //! Each screen decides whether the command stays inside an already-admitted
 //! containment boundary, so the file is runtime policy, not a test module.
 
+#[cfg(test)]
+#[path = "restricted_test_commands_tests.rs"]
+mod tests;
+
+use crate::contained_argv::{contained_runner_call, jest_contained_call};
 use crate::CanonicalCommandV1;
 
 #[path = "bun_eval_screen.rs"]
@@ -624,7 +629,7 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
     {
         return Some("native_git_readonly_containment_required");
     }
-    let vitest = match super::executable_basename(executable) {
+    let runner = match super::executable_basename(executable) {
         "bun" => {
             let arguments = match arguments {
                 [flag, directory, rest @ ..]
@@ -635,8 +640,8 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
                 [flag, rest @ ..] if flag.starts_with("--cwd=") && flag.len() > 6 => rest,
                 rest => rest,
             };
-            matches!(arguments, [wrapper, tool, run, ..] if wrapper == "x" && tool == "vitest" && run == "run")
-                || matches!(arguments, [wrapper, flag, tool, run, ..] if wrapper == "x" && flag == "--no-install" && tool == "vitest" && run == "run")
+            matches!(arguments, [wrapper, rest @ ..] if wrapper == "x" && contained_runner_call(rest))
+                || matches!(arguments, [wrapper, flag, rest @ ..] if wrapper == "x" && flag == "--no-install" && contained_runner_call(rest))
         }
         "bunx" | "npx" => {
             let arguments = match arguments {
@@ -655,16 +660,18 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
                 }
                 rest => rest,
             };
-            matches!(arguments, [tool, run, ..] if tool == "vitest" && run == "run")
-                || matches!(arguments, [flag, tool, run, ..] if flag == "--no-install" && tool == "vitest" && run == "run")
+            contained_runner_call(arguments)
+                || matches!(arguments, [flag, rest @ ..] if flag == "--no-install" && contained_runner_call(rest))
         }
         "vitest" => arguments.first().is_some_and(|arg| arg == "run"),
+        "jest" => jest_contained_call(arguments),
         "node" | "nodejs" => {
-            matches!(arguments, [entry, run, ..] if entry.replace('\\', "/").contains("/node_modules/vitest/") && entry.ends_with("/vitest.mjs") && run == "run")
+            matches!(arguments, [entry, run, ..] if crate::contained_argv::local_vitest_entry(&entry.replace('\\', "/")) && run == "run")
+                || matches!(arguments, [entry, rest @ ..] if local_package_entry(&entry.replace('\\', "/"), "jest/bin/jest.js") && jest_contained_call(rest))
         }
         _ => false,
     };
-    if vitest {
+    if runner {
         return Some("native_vitest_readonly_containment_required");
     }
     if matches!(super::executable_basename(executable), "node" | "nodejs")

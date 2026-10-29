@@ -115,3 +115,46 @@ fn the_package_a_verb_compiles_moves_with_the_command() {
         }
     }
 }
+
+/// `--manifest-path` names the package outright, so a workspace whose crate
+/// sits in a subdirectory builds from the root. The manifest must be a
+/// `Cargo.toml` the workspace holds; anything else keeps its review.
+#[test]
+fn a_manifest_path_inside_the_workspace_compiles_that_package() {
+    let ws = workspace("cargo-manifest", true);
+    std::fs::create_dir_all(ws.join("rust")).unwrap();
+    std::fs::write(ws.join("rust/Cargo.toml"), MANIFEST).unwrap();
+    std::fs::write(ws.join("rust/notes.toml"), MANIFEST).unwrap();
+    let absolute = format!(
+        "cargo test --manifest-path {} -p app-portal -- --exact",
+        ws.join("rust/Cargo.toml").display()
+    );
+    for command in [
+        "cargo test --manifest-path rust/Cargo.toml -p app-portal",
+        "cargo check --manifest-path=rust/Cargo.toml",
+        absolute.as_str(),
+    ] {
+        for harness in ["codex", "claude-code", "omp"] {
+            let (reason, minimum) = outcome(harness, command, &ws);
+            assert_eq!(reason == CONTAINED, host(), "{reason} {harness}: {command}");
+            if !host() {
+                assert_eq!(minimum, "review", "{reason}: {command}");
+            }
+        }
+    }
+    for command in [
+        "cargo test --manifest-path rust/notes.toml",
+        "cargo test --manifest-path rust/missing/Cargo.toml",
+        "cargo test --manifest-path rust/../rust/Cargo.toml",
+        "cargo test --manifest-path rust/Cargo.toml --manifest-path rust/Cargo.toml",
+        "cargo test --manifest-path=",
+        "cargo test --manifest-path",
+        "cargo install --manifest-path rust/Cargo.toml",
+    ] {
+        for harness in ["codex", "claude-code", "omp"] {
+            let (reason, minimum) = outcome(harness, command, &ws);
+            assert_ne!(reason, CONTAINED, "{harness}: {command}");
+            assert_eq!(minimum, "review", "{harness}: {command} ({reason})");
+        }
+    }
+}

@@ -66,6 +66,7 @@ HARNESS_PROTECTION_CAPABILITIES: tuple[HarnessProtectionCapability, ...] = (
     HarnessProtectionCapability("omp", True, False, False, True),
     HarnessProtectionCapability("zcode", True, False, False, True),
     HarnessProtectionCapability("devin", True, False, False, True),
+    HarnessProtectionCapability("muse", True, True, False, False),
     HarnessProtectionCapability("paseo", True, False, False, True, True),
 )
 

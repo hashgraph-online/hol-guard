@@ -266,3 +266,58 @@ fn an_unverifiable_vite_config_output_does_not_take_the_build_receipt() {
     assert_ne!(through_a_package.reason_code, NODE_BUILD);
     let _ = std::fs::remove_dir_all(root);
 }
+
+/// Bun started on an installed entrypoint runs the same program Node does, so
+/// it takes the receipt Node takes, also when the run names another checkout.
+/// Installs, `bun x` and a refused build output keep Bun's own reading.
+#[test]
+fn bun_on_an_installed_entrypoint_takes_the_node_route() {
+    let root = root();
+    let vitest = "vitest/vitest.mjs";
+    let ws = project(&root, "main", json!({}), &[VITE, vitest]);
+    let tree = project(&root, "tree", json!({}), &[]);
+    let modules = ws.join("node_modules");
+    let builds = [
+        format!("{{}} {} build", modules.join(VITE).display()),
+        format!("{{}} node_modules/{VITE} build --root {}", tree.display()),
+    ];
+    let runs = [
+        format!("{{}} ./node_modules/{vitest} run"),
+        format!(
+            "{{}} {} run --root {}",
+            modules.join(vitest).display(),
+            tree.display()
+        ),
+    ];
+    for harness in HARNESSES {
+        for shape in builds.iter().chain(&runs) {
+            let bun = classify(&ws, harness, &shape.replacen("{}", "bun", 1));
+            let node = classify(&ws, harness, &shape.replacen("{}", "node", 1));
+            assert_ne!(bun.decision, "allow", "{harness}: {shape}");
+            // A run node itself does not contain says nothing about bun.
+            if cfg!(target_os = "macos")
+                && (builds.contains(shape) || node.minimum_action == "sandbox-required")
+            {
+                assert_eq!(
+                    (bun.minimum_action.as_str(), bun.reason_code.as_str()),
+                    (node.minimum_action.as_str(), node.reason_code.as_str()),
+                    "{harness}: {shape}"
+                );
+                if builds.contains(shape) {
+                    assert_eq!(bun.reason_code, NODE_BUILD, "{harness}: {shape}");
+                }
+            }
+        }
+        for command in [
+            "bun install",
+            "bun add left-pad",
+            "bun x vite build --outDir /tmp/out",
+            "bun node_modules/vite/bin/vite.js build --outDir /tmp/out",
+        ] {
+            let result = classify(&ws, harness, command);
+            assert_ne!(result.decision, "allow", "{harness}: {command}");
+            assert_ne!(result.reason_code, NODE_BUILD, "{harness}: {command}");
+        }
+    }
+    let _ = std::fs::remove_dir_all(root);
+}

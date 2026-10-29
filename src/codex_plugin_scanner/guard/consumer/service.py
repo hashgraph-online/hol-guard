@@ -238,14 +238,40 @@ def _consumer_policy_context(
     }
 
 
+def _runtime_detector_state(
+    runtime_detector_context: Mapping[str, object] | None,
+) -> dict[str, object]:
+    """Whether the runtime detectors ran, and which did not finish.
+
+    What detectors and advisories find is not part of an approval: a new
+    finding is reported, and a blocking one still blocks, but it does not void
+    an approval of unchanged content. Whether the checks ran is part of it,
+    because the approval was given while they ran: turning the detector
+    registry off, or a detector that could not finish, asks again.
+    """
+    telemetry = (runtime_detector_context or {}).get("telemetry")
+    if not isinstance(telemetry, list):
+        return {"failures": [], "ran": False}
+    return {
+        "failures": [
+            {
+                "detector_id": item.get("detector_id"),
+                "error_type": item.get("error_type"),
+                "status": item.get("status"),
+            }
+            for item in telemetry
+            if isinstance(item, Mapping) and item.get("status") != "ok"
+        ],
+        "ran": True,
+    }
+
+
 def _consumer_approval_context_token(
     *,
     detection: HarnessDetection,
     artifact: GuardArtifact,
     content_hash: str,
     capability_snapshot: Mapping[str, object],
-    structured_signals: tuple[GuardSignal, ...],
-    provenance: Mapping[str, object],
     config: GuardConfig,
     configured_action: GuardAction | None,
     effective_default_action: GuardAction | None,
@@ -309,10 +335,8 @@ def _consumer_approval_context_token(
             "artifact_capabilities": dict(capability_snapshot),
             "command_available": detection.command_available,
             "installed": detection.installed,
-            "provenance": dict(provenance),
-            "runtime_detector": dict(runtime_detector_context or {}),
+            "runtime_detectors": _runtime_detector_state(runtime_detector_context),
             "scanner_policy_version": _CONSUMER_APPROVAL_POLICY_VERSION,
-            "signals": [signal.to_dict() for signal in structured_signals],
             "transport": artifact.transport,
         },
         policy=_consumer_policy_context(
@@ -369,7 +393,7 @@ def _removed_consumer_approval_context_token(
         content={"artifact_hash": previous_hash, "removed": True, "snapshot": dict(previous)},
         capabilities={
             "removed": True,
-            "runtime_detector": dict(runtime_detector_context or {}),
+            "runtime_detectors": _runtime_detector_state(runtime_detector_context),
             "snapshot": dict(previous),
         },
         policy=_consumer_policy_context(
@@ -711,8 +735,6 @@ def evaluate_detection(
             artifact=artifact,
             content_hash=str(evidence["current_hash"]),
             capability_snapshot=evidence["capability_snapshot"],
-            structured_signals=structured_signals,
-            provenance=evidence["provenance"],
             config=config,
             configured_action=configured_action,
             effective_default_action=effective_default_action,

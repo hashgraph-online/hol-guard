@@ -45,7 +45,7 @@ impl VerifierKeyProvision {
 ///
 /// `Ok(None)` means no key is there yet. Every other failure keeps its own
 /// code: the caller must not rewrite a key it could not read.
-fn existing_key(state_base: &Path) -> Result<Option<[u8; VERIFIER_KEY_BYTES]>, String> {
+pub(crate) fn existing_key(state_base: &Path) -> Result<Option<[u8; VERIFIER_KEY_BYTES]>, String> {
     let mut attempt = 0usize;
     loop {
         match read_verifier_key(state_base) {

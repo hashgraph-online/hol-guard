@@ -54,10 +54,8 @@ def test_gate_inventories_reachable_io_and_passes_current_sources() -> None:
     assert report["inventory"]
     assert all(item["reachable"] for item in report["inventory"])
     categories = {item["category"] for item in report["inventory"]}
-    all_categories = set(report["inventory_by_category"])
     assert "transport_identity" in categories
     assert "asynchronous_policy" in categories
-    assert "compatibility_only" in all_categories
     assert "unclassified_python_io" not in categories
     assert "unclassified_python_content_io" not in categories
 

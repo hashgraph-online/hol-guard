@@ -311,8 +311,9 @@ def test_compilation_and_signing_run_beside_packaging_and_registry_verification(
     assert jobs["resolve-alpha-version"]["needs"] == "authorize-release"
     # Build + Verify adopts the resolved alpha or canary version so it can never differ
     # from the binaries.
-    assert jobs["build"]["needs"] == resolvers
+    assert jobs["build"]["needs"] == [resolvers[0], "require-supply-chain-audit", *resolvers[1:]]
     assert "needs.authorize-release.result == 'success'" in jobs["build"]["if"]
+    assert "needs.require-supply-chain-audit.result == 'success'" in jobs["build"]["if"]
     assert "!cancelled()" in jobs["build"]["if"]
     version_step = next(step for step in jobs["build"]["steps"] if step.get("id") == "version")
     assert version_step["env"]["RESOLVED_ALPHA_VERSION"] == "${{ needs.resolve-alpha-version.outputs.version }}"

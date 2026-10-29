@@ -24,7 +24,6 @@ from codex_plugin_scanner.guard.runtime.effect_contract import (
     ProofRequirement,
     ProofRoute,
     UncertaintyKind,
-    derive_protection_state,
 )
 
 
@@ -149,16 +148,3 @@ def test_proof_route_is_separate_from_canonical_action_floor() -> None:
         DecisionBasis("invalid-action", ProofRoute.VERIFIED)  # type: ignore[arg-type]
     with pytest.raises(ValueError, match="ProofRoute"):
         DecisionBasis("allow", "verified")  # type: ignore[arg-type]
-
-
-@pytest.mark.parametrize(
-    "health",
-    [
-        {"required_hooks": True},
-        "healthy",
-        type("DuckHealth", (), {"required_hooks": True})(),
-    ],
-)
-def test_protection_state_rejects_non_contract_health_objects(health: object) -> None:
-    with pytest.raises(ValueError, match="health must be a ProtectionHealth"):
-        derive_protection_state(health)  # type: ignore[arg-type]

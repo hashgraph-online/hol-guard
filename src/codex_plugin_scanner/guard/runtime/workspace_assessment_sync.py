@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Final
 
+from ..workspace_runtime_findings import RUNTIME_SOURCE_KIND
 from .fleet_posture_common import keyed_digest, load_hash_key
 
 if TYPE_CHECKING:
@@ -61,7 +62,9 @@ def build_workspace_assessment_sync(store: GuardStore, *, now: str) -> Workspace
     from .. import workspace_assessment_reads as reads
     from ..workspace_assessment_store import WorktreeKeys
 
-    worktrees = reads.list_worktrees(store)[:MAX_WORKTREES]
+    # Worktrees whose install admission ended keep their records, but they never
+    # take a summary slot from one Guard still watches.
+    worktrees = sorted(reads.list_worktrees(store), key=lambda item: bool(item["ended"]))[:MAX_WORKTREES]
     if not worktrees:
         return None
     hash_key = load_hash_key(store, now)
@@ -218,6 +221,12 @@ def _finding(item: dict[str, object], hash_key: bytes) -> dict[str, object]:
     for source, target in _FINDING_FIELDS:
         value = item.get(source)
         finding[target] = value[:256] if isinstance(value, str) else None
+    path = item.get("path")
+    if item.get("source_kind") == RUNTIME_SOURCE_KIND and isinstance(path, str) and path:
+        # The digest fleet posture reports for the same runtime path, so Cloud can
+        # match the two. It is keyed like every other identifier here; the path
+        # itself stays on this machine.
+        finding["locationHash"] = keyed_digest(hash_key, path)
     finding["ruleIds"] = [str(value)[:128] for value in _list(item.get("rule_ids"))][:32]
     finding["advisoryIds"] = [str(value)[:256] for value in _list(item.get("advisory_ids"))][:32]
     return finding

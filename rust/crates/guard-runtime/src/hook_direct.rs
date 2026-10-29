@@ -63,7 +63,7 @@ pub(crate) const HOOK_DIRECT_SAVED_DECISION_FEATURE: &str = "hook-direct-saved-d
 pub(crate) const HOOK_DIRECT_CONNECTOR_NOTICE_FEATURE: &str = "hook-direct-connector-notice-v1";
 /// The resident takes the bound managed-policy view, resolves an Oh My Pi
 /// `PostToolUse`'s structured output mediation from it, and answers the hook
-/// with the mediation the daemon would have attached.
+/// with the mediation the edge attaches on the daemon path.
 pub(crate) const HOOK_DIRECT_STRUCTURED_OUTPUT_FEATURE: &str = "hook-direct-structured-output-v1";
 const HOOK_DIRECT_RESULT_SCHEMA: &str = "guard-hook-direct-result.v1";
 /// The harnesses whose allow the daemon returns as the edge rendered it.
@@ -95,7 +95,7 @@ const ENCRYPTED_PAYLOAD_FIELD: &str = "guard_payload_ref";
 const SOURCE_REFERENCE_FIELD: &str = "guard_source_ref";
 /// The model-visible content an Oh My Pi `PostToolUse` carries, which
 /// structured output mediation scans.
-const STRUCTURED_OUTPUT_FIELD: &str = "structured_output_json";
+pub(crate) const STRUCTURED_OUTPUT_FIELD: &str = "structured_output_json";
 const PAYLOAD_REFERENCE_FIELDS: [&str; 2] = [ENCRYPTED_PAYLOAD_FIELD, SOURCE_REFERENCE_FIELD];
 const EVENT_NAME_FIELDS: [&str; 6] = [
     "event",
@@ -132,8 +132,8 @@ const POST_TOOL_EVENT_NAMES: [&str; 7] = [
     "aftermcpexecution",
 ];
 /// The daemon's budget when the caller sends none, and its upper bound.
-const DEFAULT_DEADLINE_BUDGET_MS: u64 = 750;
-const MAX_DEADLINE_BUDGET_MS: u64 = 9_000;
+pub(crate) const DEFAULT_DEADLINE_BUDGET_MS: u64 = 750;
+pub(crate) const MAX_DEADLINE_BUDGET_MS: u64 = 9_000;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -148,6 +148,12 @@ pub(crate) struct HookDirectRequestV1 {
     pub(crate) workspace: Option<String>,
     #[serde(default)]
     pub(crate) deadline_budget_ms: Option<u64>,
+    /// Set by a bridge that has already seen the daemon fail, asking the
+    /// resident to answer only what the emergency-safe profile allows. An
+    /// older bridge sends no such field and is read as `false`, which keeps
+    /// the ordinary lane.
+    #[serde(default)]
+    pub(crate) emergency_safe_only: bool,
     pub(crate) payload: Value,
 }
 
@@ -161,6 +167,7 @@ pub(crate) enum HookDirectDefer {
     WorkspaceMissing,
     WorkspaceInvalid,
     Lane(DirectLaneDefer),
+    Cursor(cursor::CursorDefer),
     BindingIncomplete,
     HomeMismatch,
     LocalCliRules,
@@ -179,6 +186,10 @@ pub(crate) enum HookDirectDefer {
     /// not carry, or does not carry readably: only the daemon can resolve
     /// what its structured output requires.
     StructuredMediation,
+    /// A hook the bridge asked about under the emergency-safe profile that
+    /// the profile does not continue, so the bridge pauses it as it would
+    /// have without asking.
+    EmergencySafeProfile,
 }
 
 impl HookDirectDefer {
@@ -192,6 +203,7 @@ impl HookDirectDefer {
             Self::WorkspaceMissing => "direct_hook_workspace_missing",
             Self::WorkspaceInvalid => "direct_hook_workspace_invalid",
             Self::Lane(defer) => defer.code(),
+            Self::Cursor(defer) => defer.code(),
             Self::BindingIncomplete => "direct_hook_binding_incomplete",
             Self::HomeMismatch => "direct_hook_home_mismatch",
             Self::LocalCliRules => "direct_hook_local_cli_rules",
@@ -207,6 +219,7 @@ impl HookDirectDefer {
             Self::ReviewQueue => "direct_hook_review_queue",
             Self::RuntimeSuperseded => "direct_hook_runtime_superseded",
             Self::StructuredMediation => "direct_hook_structured_mediation",
+            Self::EmergencySafeProfile => "direct_hook_emergency_safe_profile",
         }
     }
 }
@@ -277,6 +290,11 @@ fn answer(
         // A probe carries a request identity only the daemon assigns.
         return Err(HookDirectDefer::TransitionProbe);
     }
+    let cursor_route = if cursor_harness && pre_tool {
+        cursor::route(&payload)?
+    } else {
+        cursor::Route::Review
+    };
     // The edge refuses an encrypted payload reference and reviews a source
     // reference only after a tool ran, reading the file as the daemon does.
     if payload.contains_key(ENCRYPTED_PAYLOAD_FIELD)
@@ -324,12 +342,27 @@ fn answer(
     let candidate = workspace_candidate(&payload, request.workspace.as_deref(), &request_home)?
         .ok_or(HookDirectDefer::WorkspaceMissing)?;
     let workspace = settled_directory(&candidate)?;
+    // A bridge that has seen the daemon fail asks only about the ratified
+    // emergency-safe profile; nothing else is answered on that pass. The
+    // home and workspace are settled first so a call the profile continues
+    // is recorded the way every direct answer is.
+    if request.emergency_safe_only {
+        return emergency_safe::answer(
+            &request.harness,
+            &request.guard_home,
+            &request_home,
+            &workspace,
+            pre_tool,
+            &evidence_payload,
+            policy_store,
+        );
+    }
     let (snapshot, binding) = policy_store
         .admit_direct_hook_or_subdirectory(&workspace)
         .map_err(HookDirectDefer::Lane)?;
-    // The daemon resolves what the managed policy requires of this hook's
-    // structured output from the config it loads. The resident resolves the
-    // same thing from the view the publisher bound, and mediates once the
+    // The edge resolves what the managed policy requires of this hook's
+    // structured output from the view the daemon sends. The resident resolves
+    // the same thing from the view the publisher bound, and mediates once the
     // edge has decided; without a resolvable view it has nothing to mediate
     // against and leaves the hook to the daemon.
     let structured_resolution = structured_mediation
@@ -378,6 +411,26 @@ fn answer(
     if binding.evidence_drain != Some(true) {
         return Err(HookDirectDefer::EvidenceUndrained);
     }
+    // Cursor's route probe and the sink it rewrote a call into are answered
+    // without evidence: the daemon records neither.
+    let cursor_probe = match cursor_route {
+        cursor::Route::Review => None,
+        route => {
+            let scope = cursor::Scope::new(
+                &workspace,
+                &request_home,
+                &request.guard_home,
+                binding.contained_sink_command.as_deref(),
+            )?;
+            if route == cursor::Route::Sink {
+                return cursor::admit_sink(&payload, &scope);
+            }
+            if let Some(allow) = cursor::unreviewed_probe(&payload, &scope, recording_only) {
+                return Ok(allow);
+            }
+            Some(scope)
+        }
+    };
 
     // Only a `PreToolUse` under custom rules reads its payload after the edge.
     let rule_payload = (pre_tool && custom_rules).then(|| payload.clone());
@@ -416,8 +469,16 @@ fn answer(
             execution_environment,
         },
         recording_only,
+        local_cli_rules: None,
+        observe_local_cli: false,
+        record_receipt: false,
+        structured_output_config: None,
+        containment_sink: None,
     };
     let (edge, fence_wait) = fence::evaluate(envelope, policy_store)?;
+    if let Some(scope) = cursor_probe {
+        return Ok(cursor::probe_answer(&edge, &evidence_payload, &scope));
+    }
     // Removed again unless the answer that runs it is returned.
     let mut snapshot = None;
     let mut answered = match event {
@@ -520,6 +581,17 @@ fn answer(
             answered["harness_response"]["structured_content_mediation"] = mediation;
         }
     }
+    // The daemon checks its rules, and observes the command line, against its
+    // own home and environment, which it published with the binding. The
+    // resident's own carry no `PATH`.
+    let daemon_environment = binding
+        .exact_action_environment
+        .as_ref()
+        .map(|environment| &environment.0);
+    let daemon_home = daemon_environment.and_then(saved_decision::review_request::expanded_home);
+    let launch_env = daemon_environment
+        .zip(daemon_home.as_deref())
+        .map(|(env, user_home)| local_cli::LaunchEnv { user_home, env });
     let rule_check = local_cli::RuleCheck {
         payload: rule_payload.as_ref(),
         harness: &request.harness,
@@ -527,7 +599,7 @@ fn answer(
         home_dir: &request_home,
         guard_home: &guard_home,
         recording_only,
-        launch_env: None,
+        launch_env,
     };
     // The daemon's custom block replaces the edge response before it routes
     // a sandbox requirement, so a block also drops any routed snapshot.
@@ -537,6 +609,21 @@ fn answer(
         answered["harness_response"] = blocked;
         snapshot = None;
     }
+    // The daemon observed the command line when it drained this record.
+    let observation = if pre_tool {
+        crate::local_cli_observer::direct_candidate(
+            &evidence_payload,
+            &workspace,
+            &request_home,
+            &guard_home,
+            launch_env.map(|daemon| crate::local_cli_observer::LaunchEnvironment {
+                user_home: daemon.user_home.to_owned(),
+                env: daemon.env.clone(),
+            }),
+        )
+    } else {
+        None
+    };
     let mut evidence = json!({
         "event": event,
         "harness": request.harness,
@@ -549,12 +636,17 @@ fn answer(
         evidence[CONNECTOR_NOTICE_FIELD] = notice;
     }
     let evidence = fence::with_wait(evidence, fence_wait);
-    if !policy_store.direct_evidence().offer(evidence) {
+    if !crate::edge_receipt::offer_direct(
+        policy_store.direct_evidence(),
+        Path::new(&guard_home),
+        evidence,
+    ) {
         return Err(HookDirectDefer::EvidenceFull);
     }
     if let Some(snapshot) = snapshot {
         snapshot.keep();
     }
+    crate::local_cli_observer::offer(observation);
     Ok(answered)
 }
 
@@ -565,9 +657,11 @@ pub(crate) mod claude_prompt_text;
 #[path = "hook_direct_contained.rs"]
 pub(crate) mod contained;
 #[path = "hook_direct_cursor.rs"]
-mod cursor;
+pub(crate) mod cursor;
 #[path = "hook_direct_edge.rs"]
 mod edge;
+#[path = "hook_direct_emergency_safe.rs"]
+mod emergency_safe;
 #[path = "hook_direct_fence.rs"]
 mod fence;
 #[path = "hook_direct_lifecycle.rs"]
@@ -575,7 +669,7 @@ mod lifecycle;
 #[path = "hook_direct_local_cli.rs"]
 pub(crate) mod local_cli;
 #[path = "hook_direct_pi.rs"]
-mod pi;
+pub(crate) mod pi;
 #[path = "hook_direct_saved_decision.rs"]
 pub(crate) mod saved_decision;
 #[path = "hook_direct_workspace.rs"]

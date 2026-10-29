@@ -236,6 +236,30 @@ def test_delivery_drops_a_step_whose_ids_this_build_does_not_carry() -> None:
     assert [segment["index"] for segment in payload["segments"]] == [0]
 
 
+def test_a_package_firewall_match_alone_is_not_offered_as_coverage() -> None:
+    # `npx jest <file>` matched Node package protection only because npx is a
+    # package manager. Offering that extension as "covers this command" sent
+    # people to a single Allow switch that turns the firewall off and still
+    # leaves the paused command paused.
+    handed_off = "command.package.node.permission.package-protection"
+    registry = BUILT_IN_COMMAND_EXTENSION_REGISTRY
+    assert registry.get("command.package.node").delegated_protection == "package-firewall"
+    only_firewall = _coverage(
+        _step(0, "command.package.node", rule_id=None, permission_id=handed_off, executable="npx"), total=1
+    )
+
+    assert build_approval_extension_coverage(_pending(only_firewall), registry=registry) is None
+
+    beside_a_rule = _coverage(
+        _step(0, executable="git"),
+        _step(1, "command.package.node", rule_id=None, permission_id=handed_off, executable="npm"),
+    )
+    payload = build_approval_extension_coverage(_pending(beside_a_rule), registry=registry)
+    assert payload is not None
+    assert [segment["index"] for segment in payload["segments"]] == [0]
+    assert payload["compound"] is True
+
+
 def test_delivery_stays_out_of_resolved_and_unhinted_requests() -> None:
     registry = BUILT_IN_COMMAND_EXTENSION_REGISTRY
     coverage = _coverage(_step(0))

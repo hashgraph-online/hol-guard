@@ -375,7 +375,14 @@ impl CompiledNativeCommandControls {
                 + usize::from(batch.evaluation_error.is_some()),
         };
         let explicit_allow = floor == "allow"
-            && self.explicit_allow(&result, &batch, command, context, enabled_uncertainty);
+            && self.explicit_allow(
+                &result,
+                &batch,
+                command,
+                context,
+                environment,
+                enabled_uncertainty,
+            );
         if enabled_uncertainty && !explicit_allow && rank(floor) < rank("review") {
             floor = "review";
             reason = "native_command_extension_uncertain";
@@ -397,6 +404,10 @@ impl CompiledNativeCommandControls {
         }
         strengthen(&mut result, floor, reason);
         self.enforce_quarantine(command, tool, &mut result);
+        floor::explain_home_redirect(&mut result, command, |probe| {
+            self.observe_command(probe, deadline, context, environment)
+                .is_ok_and(|(batch, _)| batch.evaluation_error.is_none())
+        });
         floor::explain_expired_deadline(&mut result, deadline);
         let global_lockdown = self
             .binding
@@ -417,6 +428,7 @@ impl CompiledNativeCommandControls {
         observations: &[NativeCommandObservationV1],
         permission_observations: &[NativeCommandPermissionObservationV1],
         context: crate::pretool::PathContext<'_>,
+        environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
     ) -> bool {
         if command.confidence != "exact"
             || command.path_overridden
@@ -425,9 +437,10 @@ impl CompiledNativeCommandControls {
         {
             return false;
         }
-        let mut covered: BTreeSet<_> = crate::pretool::benign_command_segments(command, context)
+        let benign: BTreeSet<_> = crate::pretool::benign_command_segments(command, context)
             .into_iter()
             .collect();
+        let mut covered = benign.clone();
         for observation in observations {
             if observation.effective_segment_indexes.is_empty() {
                 continue;
@@ -453,6 +466,18 @@ impl CompiledNativeCommandControls {
         // GitHub permission-only owners run last so they never hide an
         // ungranted rule.
         covered.extend(self.github_granted_segments(permission_observations));
+        // A `cd` into the checkout a `git worktree add` of this command
+        // creates, and the `head`/`tail`/`wc` stages after it, are covered
+        // when the Git and GitHub steps after it are.
+        covered.extend(crate::pretool::entered_checkouts(
+            command,
+            context,
+            environment,
+        ));
+        // A Git ref read after covered steps keeps the proof it has alone.
+        covered.extend(crate::pretool::git_reads_after_allowed_steps(
+            command, context, &benign, &covered,
+        ));
         // Delegated package-firewall ownership is not execution consent. Only
         // verified rule observations or the native benign proof can cover a
         // segment; an extra unclassified command retains its own review.
@@ -468,21 +493,25 @@ impl CompiledNativeCommandControls {
     /// whole command. It reads the observations already recorded on the
     /// result, so it classifies exactly what the controls classified, and it
     /// keeps every fixed floor: a segment that runs a configured Git program
-    /// or names Guard itself fails `fixed_command_floor`, and an evaluation
-    /// error leaves nothing to read.
+    /// or names Guard itself fails `fixed_command_floor`, a Git checkout
+    /// into a protected location fails `protected_checkout_destination`, and
+    /// an evaluation error leaves nothing to read.
     pub(crate) fn explicit_allow_covers_command(
         &self,
         command: &CanonicalCommandV1,
         observations: &NativeCommandObservationsV1,
         context: crate::pretool::PathContext<'_>,
+        environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
     ) -> bool {
         observations.evaluation_error.is_none()
             && !crate::pretool::fixed_command_floor(command)
+            && !crate::pretool::protected_checkout_destination(command, context)
             && self.explicit_permissions_cover_command(
                 command,
                 &observations.observations,
                 &observations.permission_observations,
                 context,
+                environment,
             )
     }
 }

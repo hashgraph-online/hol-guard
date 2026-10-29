@@ -13,9 +13,9 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import native_restricted_pytest as transport
-from codex_plugin_scanner.guard.native_hook_containment_route import native_containment_sink
 from codex_plugin_scanner.guard.runtime import restricted_node_tool
 from codex_plugin_scanner.guard.runtime.restricted_pytest_model import RestrictedPytestError
+from tests.containment_resident import native_containment_sink
 
 NODE = r"C:\Users\tester\tools\node\node.exe"
 RUNTIME = r"C:\Program Files\HOL Guard\hol-guard-runtime.exe"

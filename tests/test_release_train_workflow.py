@@ -226,6 +226,7 @@ def test_release_dispatch_binds_channel_train_version_and_sha() -> None:
     assert '"$EXPECTED_SHA" != "$GITHUB_SHA"' in dispatch_gate["run"]
     assert jobs["build"]["needs"] == [
         "authorize-release",
+        "require-supply-chain-audit",
         "resolve-alpha-version",
         "resolve-canary-version",
     ]

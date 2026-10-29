@@ -212,7 +212,6 @@ def test_detector_registry_preserves_completed_signals_when_detector_exceeds_tim
     assert [signal.signal_id for signal in result.signals] == ["secret:slow"]
     assert result.telemetry[0].status == "timeout"
     assert result.telemetry[0].elapsed_ms == 75
-    assert result.slow_detectors(threshold_ms=50) == result.telemetry
 
 
 def test_detector_registry_preserves_signals_after_cpu_bound_timeout(tmp_path):

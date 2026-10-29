@@ -19,8 +19,6 @@ from urllib.parse import urlencode
 import pytest
 
 from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
-from codex_plugin_scanner.guard.adapters._modules.codex import codex_daemon_hook_auth as hook_auth
-from codex_plugin_scanner.guard.adapters._modules.codex import codex_daemon_hook_transport as hook_transport
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager
@@ -29,6 +27,8 @@ from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.hook_execution_environment import stamp_hook_input_text
 from codex_plugin_scanner.guard.store import GuardStore
+from scripts import daemon_hook_auth as hook_auth
+from scripts import daemon_hook_client as hook_client
 from tests.codex_daemon_hook_bridge_fixtures import (
     _bridge_config,
     _DaemonHandler,
@@ -187,7 +187,7 @@ def _authenticated_daemon_request(
     *,
     timeout_seconds: float = 4.0,
 ) -> dict[str, object] | None:
-    return hook_transport._daemon_response_once(
+    return hook_client._daemon_response_once(
         state_path=guard_home / "daemon-state.json",
         query=f"guard-home={guard_home}",
         data=json.dumps(payload),

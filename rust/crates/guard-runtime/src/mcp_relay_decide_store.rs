@@ -12,15 +12,16 @@
 //! than the published protected one, a newer or unknown schema, and a store it
 //! cannot read all defer the call.
 
+use crate::cloud_exception_lift::{lift_cloud_excepted_identities, LiftTarget};
 use crate::local_store_read::{
     open_read_only_cached, schema_version, table_exists, CachedConnection, STORE_FILE_NAME,
     SUPPORTED_SCHEMA_VERSION,
 };
-use crate::policy_bundle_store_identities::cached_bundle_identities;
+use crate::policy_bundle_store_identities::cached_bundle_authority;
 use crate::policy_store::policy_store_direct_lane::DirectLaneBinding;
 use base64ct::{Base64UrlUnpadded, Encoding};
 use rusqlite::{Connection, OptionalExtension};
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 use std::path::Path;
 use zeroize::Zeroizing;
 
@@ -62,6 +63,9 @@ pub(super) struct Saved<'c> {
     /// The decision identities the cached signed bundle authorizes; empty
     /// when no policy-bundle row can reach this call.
     pub(super) bundle_identities: Vec<Vec<Value>>,
+    /// The validated bundle those identities came from; its Cloud exceptions
+    /// lift its rules per probe.
+    pub(super) bundle: Option<Map<String, Value>>,
 }
 
 /// `None` when the store holds no saved row, so every lookup misses; the
@@ -99,10 +103,10 @@ pub(super) fn saved<'c>(
     // harness: with none of those, the identities change nothing here. They
     // are derived last, so a store the resident cannot verify never pays for
     // the bundle's signature and payload checks.
-    let bundle_identities = if shape.bundle_row_for(harness)? {
-        cached_bundle_identities(connection, &now).ok_or(SAVED_REMOTE)?
+    let (bundle_identities, bundle) = if shape.bundle_row_for(harness)? {
+        cached_bundle_authority(connection, &now).ok_or(SAVED_REMOTE)?
     } else {
-        Vec::new()
+        (Vec::new(), None)
     };
     Ok(Some(Saved {
         connection,
@@ -117,6 +121,7 @@ pub(super) fn saved<'c>(
         key_b64: Zeroizing::new(Base64UrlUnpadded::encode_string(&key.key)),
         key_id: key.key_id.clone(),
         bundle_identities,
+        bundle,
     }))
 }
 
@@ -222,6 +227,17 @@ impl Saved<'_> {
         probe: &Probe<'_>,
     ) -> guard_contracts::PolicyDecisionLookupRequestV1 {
         let policy_key = self.has_local_policy;
+        let identities = lift_cloud_excepted_identities(
+            &self.bundle_identities,
+            self.bundle.as_ref(),
+            &LiftTarget {
+                harness: probe.harness,
+                artifact_id: Some(probe.artifact_id),
+                publisher: probe.publisher,
+                workspace: probe.workspace,
+                now: &self.now,
+            },
+        );
         guard_contracts::PolicyDecisionLookupRequestV1 {
             schema: guard_contracts::POLICY_DECISION_LOOKUP_REQUEST_SCHEMA.to_owned(),
             request_id: String::new(),
@@ -245,8 +261,7 @@ impl Saved<'_> {
             integrity_key_id: policy_key.then(|| self.key_id.clone()),
             local_once_integrity_key_b64: Some(self.key_b64.to_string()),
             local_once_integrity_key_id: Some(self.key_id.clone()),
-            policy_bundle_decision_identities: (!self.bundle_identities.is_empty())
-                .then(|| self.bundle_identities.clone()),
+            policy_bundle_decision_identities: (!identities.is_empty()).then_some(identities),
             probe_groups: None,
             portable_workspace: None,
             evidence_binding: None,

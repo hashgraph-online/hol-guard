@@ -8,7 +8,11 @@ from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge, bounded_cli_hook_daemon
+from codex_plugin_scanner.guard.adapters import (
+    bounded_cli_hook_bridge,
+    bounded_cli_hook_daemon,
+    bounded_cli_hook_recovery,
+)
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import BoundedHookProcessResult
 
 from .bounded_cli_hook_test_support import config as _config
@@ -32,7 +36,7 @@ def test_timeout_denies_when_review_cannot_finish(
     expected: dict[str, str],
 ) -> None:
     monkeypatch.setattr(
-        bounded_cli_hook_bridge,
+        bounded_cli_hook_recovery,
         "run_isolated_hook_process",
         _runner_result(BoundedHookProcessResult(None, "", False, True)),
     )
@@ -54,7 +58,7 @@ def test_prompt_timeout_never_releases_an_unreviewed_protected_prompt(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, harness: str
 ) -> None:
     monkeypatch.setattr(
-        bounded_cli_hook_bridge,
+        bounded_cli_hook_recovery,
         "run_isolated_hook_process",
         _runner_result(BoundedHookProcessResult(None, "", False, True)),
     )
@@ -78,7 +82,7 @@ def test_timeout_denies_unreviewed_read(
     tmp_path: Path,
 ) -> None:
     monkeypatch.setattr(
-        bounded_cli_hook_bridge,
+        bounded_cli_hook_recovery,
         "run_isolated_hook_process",
         _runner_result(BoundedHookProcessResult(None, "", False, True)),
     )
@@ -109,7 +113,7 @@ def test_claude_shaped_timeout_denies_when_review_cannot_finish(
     harness: str,
 ) -> None:
     monkeypatch.setattr(
-        bounded_cli_hook_bridge,
+        bounded_cli_hook_recovery,
         "run_isolated_hook_process",
         _runner_result(BoundedHookProcessResult(None, "", False, True)),
     )
@@ -125,26 +129,6 @@ def test_claude_shaped_timeout_denies_when_review_cannot_finish(
     hook_output = payload["hookSpecificOutput"]
     assert isinstance(hook_output, dict)
     assert hook_output["permissionDecision"] == "deny"
-
-
-def test_success_preserves_child_stdout_and_returncode(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    monkeypatch.setattr(
-        bounded_cli_hook_bridge,
-        "run_isolated_hook_process",
-        _runner_result(BoundedHookProcessResult(2, '{"decision":"deny"}\n', False, False)),
-    )
-    output = io.StringIO()
-    with redirect_stdout(output):
-        returncode = bounded_cli_hook_bridge.run_bounded_cli_hook(
-            _config(tmp_path, harness="grok"),
-            input_text="{}",
-        )
-
-    assert returncode == 2
-    assert output.getvalue() == '{"decision":"deny"}\n'
 
 
 def test_outer_bounded_bridge_stamps_caller_environment_before_dispatch(
@@ -165,7 +149,6 @@ def test_outer_bounded_bridge_stamps_caller_environment_before_dispatch(
         *,
         input_text: str,
         deadline_monotonic: float | None = None,
-        skip_daemon: bool = False,
     ) -> int:
         captured["config"] = config
         captured["input_text"] = input_text
@@ -194,7 +177,7 @@ def test_empty_failed_child_denies_when_review_cannot_finish(
     tmp_path: Path,
 ) -> None:
     monkeypatch.setattr(
-        bounded_cli_hook_bridge,
+        bounded_cli_hook_recovery,
         "run_isolated_hook_process",
         _runner_result(BoundedHookProcessResult(1, "", False, False)),
     )
@@ -214,7 +197,7 @@ def test_malformed_success_denies_when_review_cannot_finish(
     tmp_path: Path,
 ) -> None:
     monkeypatch.setattr(
-        bounded_cli_hook_bridge,
+        bounded_cli_hook_recovery,
         "run_isolated_hook_process",
         _runner_result(BoundedHookProcessResult(0, "not-json\n", False, False)),
     )
@@ -234,7 +217,7 @@ def test_copilot_permission_timeout_uses_permission_request_contract(
     tmp_path: Path,
 ) -> None:
     monkeypatch.setattr(
-        bounded_cli_hook_bridge,
+        bounded_cli_hook_recovery,
         "run_isolated_hook_process",
         _runner_result(BoundedHookProcessResult(None, "", False, True)),
     )
@@ -330,7 +313,7 @@ def test_valid_frozen_args_retain_daemon_fast_path(
         del args, kwargs
         raise AssertionError("valid daemon result must avoid fallback startup")
 
-    monkeypatch.setattr(bounded_cli_hook_bridge, "run_isolated_hook_process", forbidden_runner)
+    monkeypatch.setattr(bounded_cli_hook_recovery, "run_isolated_hook_process", forbidden_runner)
     output = io.StringIO()
     with redirect_stdout(output):
         returncode = bounded_cli_hook_bridge.run_bounded_cli_hook(config, input_text="{}")
@@ -410,7 +393,6 @@ def test_cmd_exe_passes_zcode_marker_comment_as_arguments(
         *,
         input_text: str,
         deadline_monotonic: float | None = None,
-        skip_daemon: bool = False,
     ) -> int:
         calls.append(config)
         return 0

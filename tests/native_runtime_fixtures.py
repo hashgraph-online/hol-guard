@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
+import sys
+import tempfile
 import threading
 from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
@@ -57,6 +60,25 @@ def native_hook_force(monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
     monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", str(runtime))
     return runtime
+
+
+@pytest.fixture
+def live_hook_root(native_hook_force: Path, tmp_path: Path) -> Iterator[Path]:
+    """A resolved temp root for a live hook review, with the native runtime forced.
+
+    macOS pytest temp dirs sit under /private/var/folders, where no real home
+    lives and where Guard reviews reads it allows under a real home. Root the
+    fixture under /tmp there, as a Linux runner and real developer hosts do.
+    """
+
+    if sys.platform != "darwin":
+        yield tmp_path.resolve()
+        return
+    root = Path(tempfile.mkdtemp(prefix="live-hook-", dir="/tmp")).resolve()
+    try:
+        yield root
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
 
 
 @pytest.fixture(scope="session")
@@ -571,22 +593,6 @@ def archive_package_intent_native(
         yield home
     finally:
         close_native_residents(home)
-
-
-@pytest.fixture
-def native_command_artifact_reviews(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Supply actual native command evidence to legacy hook orchestration tests."""
-    from codex_plugin_scanner.guard.cli import commands_support_runtime_artifacts
-    from tests.native_command_test_support import real_native_command_evaluation
-
-    def review(command: str, *, guard_home: Path, cwd: Path | None = None, home_dir: Path | None = None):
-        del guard_home
-        try:
-            return real_native_command_evaluation(command, cwd=cwd, home_dir=home_dir)
-        except Exception as exc:
-            pytest.fail(f"Native command artifact fixture failed: {type(exc).__name__}: {exc}")
-
-    monkeypatch.setattr(commands_support_runtime_artifacts, "review_command_native", review)
 
 
 @pytest.fixture

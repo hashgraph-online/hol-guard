@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..store import GuardStore
-    from .commands_support_runtime_artifacts import _CODEX_PROMPT_SECRET_KEY_MARKERS
 
 
 from ._commands_shared import *
@@ -18,105 +17,10 @@ from .commands_parser_helpers import *
 from ..adapters.mcp_servers import ManagedMcpServer, proxy_process_env, stable_mcp_server_identifier
 from ..synced_policy import synced_policy_payload as _synced_policy_payload
 
-def _redact_codex_prompt_secret_assignments(value: str) -> str:
-    output: list[str] = []
-    index = 0
-    while index < len(value):
-        equals_index = value.find("=", index)
-        if equals_index == -1:
-            output.append(value[index:])
-            break
-        key_start = equals_index - 1
-        while key_start >= index and value[key_start] not in {" ", "\t", "\n", "\r", ",", ";"}:
-            key_start -= 1
-        key_start += 1
-        key = value[key_start:equals_index].strip()
-        key_upper = key.upper()
-        if key and any(marker in key_upper for marker in _CODEX_PROMPT_SECRET_KEY_MARKERS):
-            value_start = equals_index + 1
-            while value_start < len(value) and value[value_start].isspace():
-                value_start += 1
-            value_end = value_start
-            while value_end < len(value) and value[value_end] not in {" ", "\t", "\n", "\r", ",", ";"}:
-                value_end += 1
-            output.append(value[index:value_start])
-            output.append("[redacted]")
-            index = value_end
-            continue
-        output.append(value[index : equals_index + 1])
-        index = equals_index + 1
-    return "".join(output)
-
 def _truncate_codex_display_text(value: str, *, limit: int) -> str:
     if len(value) <= limit:
         return value
     return f"{value[: limit - 1].rstrip()}…"
-
-def _is_copilot_permission_request(payload: dict[str, object]) -> bool:
-    from ..daemon.hook_availability_policy import hook_event_is_permission_request as _perm
-    return any(
-        isinstance(payload.get(key), str) and _perm(str(payload.get(key)))
-        for key in ("hook_name", "hook_event_name", "hookEventName")
-    )
-
-def _validated_pi_runtime_policy_override(
-    home_dir: Path,
-    workspace: Path | None,
-    payload: dict[str, object] | None,
-) -> Path | None:
-    raw_config_path = payload.get("config_path") if isinstance(payload, dict) else None
-    if not isinstance(raw_config_path, str) or not raw_config_path.strip():
-        return None
-    candidate = Path(raw_config_path).expanduser()
-    allowed_paths = {
-        home_dir / ".pi" / "agent" / "settings.json",
-        home_dir / ".omp" / "agent" / "settings.json",
-    }
-    if workspace is not None:
-        allowed_paths.update(
-            {
-                workspace / ".pi" / "settings.json",
-                workspace / ".omp" / "settings.json",
-            }
-        )
-    return candidate if candidate in allowed_paths else None
-
-
-def _runtime_policy_path(
-    harness: str,
-    home_dir: Path,
-    workspace: Path | None,
-    *,
-    payload: dict[str, object] | None = None,
-) -> Path:
-    if harness == "hermes":
-        return home_dir / ".hermes" / "config.yaml"
-    if harness == "cursor":
-        if workspace is not None:
-            return workspace / ".cursor" / "mcp.json"
-        return home_dir / ".cursor" / "mcp.json"
-    if harness == "claude-code":
-        if workspace is not None:
-            return workspace / ".claude" / "settings.local.json"
-        return home_dir / ".claude" / "settings.json"
-    if harness == "codex":
-        if workspace is not None:
-            return workspace / ".codex" / "config.toml"
-        return home_dir / ".codex" / "config.toml"
-    if harness in {"pi", "omp"}:
-        override_path = _validated_pi_runtime_policy_override(home_dir, workspace, payload)
-        if override_path is not None:
-            return override_path
-        if workspace is not None:
-            return workspace / (".omp" if harness == "omp" else ".pi") / "settings.json"
-        return home_dir / (".omp" if harness == "omp" else ".pi") / "agent" / "settings.json"
-    if harness == "copilot":
-        if workspace is not None:
-            return workspace / ".github" / "hooks" / "hol-guard-copilot.json"
-        return home_dir / ".copilot" / "config.json"
-    if workspace is not None:
-        return workspace / ".mcp.json"
-    return home_dir / ".mcp.json"
 
 def _runtime_request_summary(artifact: GuardArtifact) -> str | None:
     summary = artifact.metadata.get("request_summary")
@@ -311,11 +215,9 @@ def _server_command(server: dict[str, object]) -> list[str]:
 
 __all__ = [
     "_canonical_harness_name",
-    "_is_copilot_permission_request",
     "_managed_install_for", "_managed_manifest_server",
-    "_redact_codex_prompt_secret_assignments",
     "_run_hermes_mcp_proxy",
-    "_runtime_policy_path", "_runtime_request_summary",
+    "_runtime_request_summary",
     "_server_command", "_server_env", "_server_headers",
     "_truncate_codex_display_text",
 ]

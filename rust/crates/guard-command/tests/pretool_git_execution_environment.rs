@@ -63,7 +63,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     assert_eq!(evaluate(&context).decision, "allow");
     // The absent HOME field falls back to the verified home spelling. This
@@ -286,7 +286,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             pager_disabled: false,
             xdg_config_home: None,
             git_config_no_system: false,
-            library_search_paths: Default::default(),
+            ..Default::default()
         },
         GuardExecutionEnvironmentV1 {
             path: original_path.clone(),
@@ -297,7 +297,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             pager_disabled: false,
             xdg_config_home: None,
             git_config_no_system: false,
-            library_search_paths: Default::default(),
+            ..Default::default()
         },
         GuardExecutionEnvironmentV1 {
             path: original_path.clone(),
@@ -308,7 +308,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             pager_disabled: false,
             xdg_config_home: None,
             git_config_no_system: false,
-            library_search_paths: Default::default(),
+            ..Default::default()
         },
         GuardExecutionEnvironmentV1 {
             path: original_path.clone(),
@@ -319,7 +319,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             pager_disabled: false,
             xdg_config_home: None,
             git_config_no_system: false,
-            library_search_paths: Default::default(),
+            ..Default::default()
         },
         GuardExecutionEnvironmentV1 {
             path: original_path.clone(),
@@ -330,7 +330,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             pager_disabled: false,
             xdg_config_home: None,
             git_config_no_system: false,
-            library_search_paths: Default::default(),
+            ..Default::default()
         },
         GuardExecutionEnvironmentV1 {
             path: original_path.clone(),
@@ -341,7 +341,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             pager_disabled: false,
             xdg_config_home: Some(xdg.to_string_lossy().into_owned()),
             git_config_no_system: false,
-            library_search_paths: Default::default(),
+            ..Default::default()
         },
         GuardExecutionEnvironmentV1 {
             path: original_path.clone(),
@@ -352,7 +352,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             pager_disabled: false,
             xdg_config_home: None,
             git_config_no_system: false,
-            library_search_paths: Default::default(),
+            ..Default::default()
         },
         GuardExecutionEnvironmentV1 {
             path: "x".repeat(32769),
@@ -363,7 +363,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             pager_disabled: false,
             xdg_config_home: None,
             git_config_no_system: false,
-            library_search_paths: Default::default(),
+            ..Default::default()
         },
     ] {
         assert_eq!(evaluate(&context).decision, "deny");
@@ -388,7 +388,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     assert_eq!(evaluate(&context).decision, "deny");
 }
@@ -429,7 +429,7 @@ fn stamped_git_reads_allow_only_when_no_diff_helper_is_configured() {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     let evaluate = |command: &str, context: Option<&GuardExecutionEnvironmentV1>| {
         evaluate_pre_tool_envelope_with_execution_context(
@@ -482,4 +482,145 @@ fn stamped_git_reads_allow_only_when_no_diff_helper_is_configured() {
     std::fs::write(&config, original).unwrap();
     let assigned = evaluate("GIT_EXTERNAL_DIFF=./x git diff", Some(&stamped));
     assert_eq!(assigned.decision, "deny");
+}
+
+/// A `-C` route to a directory that holds no repository skips the
+/// configuration probe, because Git stops in its own setup there. The probe
+/// was also where the Git binary was checked, so a planted `git` ahead of the
+/// real one on the search path must still keep the review.
+#[test]
+fn a_route_to_no_repository_still_needs_a_trusted_git() {
+    use guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context;
+    use guard_contracts::GuardExecutionEnvironmentV1;
+    // The same layout `pretool_git_absent_repository` proves on every host: a
+    // root below `/tmp` on unix (the read screens refuse the macOS per-user
+    // temporary directory under `/var`) and below the per-user temporary
+    // directory on Windows, spelled without the verbatim prefix. The route
+    // names a plain directory below the declared home, outside a checkout.
+    #[cfg(unix)]
+    let base = std::path::PathBuf::from("/tmp");
+    #[cfg(windows)]
+    let base = std::env::temp_dir();
+    let root = std::fs::canonicalize(base).unwrap().join(format!(
+        "guard-git-no-repository-{}-{}",
+        std::process::id(),
+        crate::unique_nanos::unique_nanos()
+    ));
+    std::fs::create_dir_all(&root).unwrap();
+    let _cleanup = FixtureCleanup(root.clone());
+    let root = fixture::canonical_spelling(root);
+    let home = root.join("home");
+    let workspace = home.join("Code").join("app-portal");
+    std::fs::create_dir_all(&workspace).unwrap();
+    crate::pretool_home_layout_reads::repository(&workspace);
+    let plain = home.join("Code").join("scratch-notes");
+    std::fs::create_dir_all(&plain).unwrap();
+    let original_path = std::env::var("PATH").unwrap();
+    let environment = |path: String| GuardExecutionEnvironmentV1 {
+        path,
+        environment_names: vec!["GIT_CONFIG_NOSYSTEM".into(), "HOME".into(), "PATH".into()],
+        environment_digest: "0".repeat(64),
+        home: home.to_str().map(str::to_owned),
+        git_pager_disabled: false,
+        pager_disabled: false,
+        xdg_config_home: None,
+        git_config_no_system: true,
+        ..Default::default()
+    };
+    let evaluate = |command: &str, context: &GuardExecutionEnvironmentV1| {
+        evaluate_pre_tool_envelope_with_execution_context(
+            "omp",
+            "PreToolUse",
+            &json!({"tool_name":"bash", "tool_input":{"command":command}}),
+            None,
+            None,
+            guard_command::pretool::PathContext {
+                home_dir: home.to_str(),
+                cwd: workspace.to_str(),
+                ..Default::default()
+            },
+            Some(context),
+        )
+    };
+    let route = fixture::shell_word(&plain);
+    let commands = [
+        format!("git -C {route} status --short"),
+        format!("git -C {route} status --short && echo \"---FILES---\""),
+    ];
+    let trusted = environment(original_path.clone());
+    for command in &commands {
+        let result = evaluate(command, &trusted);
+        assert_eq!(
+            result.decision, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+    }
+
+    // The route expands `~` against the declared home. A shell whose own
+    // home is elsewhere sends Git to a directory the route never looked at,
+    // which may hold a repository, so that read keeps the review.
+    let from_home = "git -C ~/Code/scratch-notes status --short";
+    let result = evaluate(from_home, &trusted);
+    assert_eq!(
+        result.decision, "allow",
+        "{from_home}: {}",
+        result.reason_code
+    );
+    let other_home = root.join("other-home");
+    crate::pretool_home_layout_reads::repository(&other_home.join("Code").join("scratch-notes"));
+    let mut elsewhere = environment(original_path.clone());
+    elsewhere.home = other_home.to_str().map(str::to_owned);
+    let result = evaluate(from_home, &elsewhere);
+    assert_ne!(result.decision, "allow", "{from_home}");
+    assert_eq!(result.minimum_action, "require-reapproval", "{from_home}");
+
+    let shadow = home.join("bin");
+    std::fs::create_dir_all(&shadow).unwrap();
+    let shadow_executable = if cfg!(windows) { "git.exe" } else { "git" };
+    std::fs::write(
+        shadow.join(shadow_executable),
+        b"synthetic executable must never run",
+    )
+    .unwrap();
+    let shadow_path =
+        std::env::join_paths(std::iter::once(shadow).chain(std::env::split_paths(&original_path)))
+            .unwrap();
+    let planted = environment(shadow_path.to_string_lossy().into_owned());
+    for command in &commands {
+        let result = evaluate(command, &planted);
+        assert_ne!(result.decision, "allow", "{command}");
+        assert_eq!(result.minimum_action, "require-reapproval", "{command}");
+        assert_eq!(
+            result.reason_code, "native_git_execution_context_review",
+            "{command}"
+        );
+    }
+
+    // The probe screened the environment as well as the binary. A directory
+    // that holds no repository holds one once `GIT_DIR` names it, and that
+    // repository's own `core.fsmonitor` runs on the status read; a loader
+    // variable reaches even the trusted Git. Each keeps the review.
+    for name in [
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_EXEC_PATH",
+        "LD_PRELOAD",
+        "DYLD_INSERT_LIBRARIES",
+    ] {
+        let mut directed = environment(original_path.clone());
+        directed.environment_names.push(name.to_owned());
+        for command in &commands {
+            let result = evaluate(command, &directed);
+            assert_ne!(result.decision, "allow", "{name} {command}");
+            assert_eq!(
+                result.minimum_action, "require-reapproval",
+                "{name} {command}"
+            );
+            assert_eq!(
+                result.reason_code, "native_git_execution_context_review",
+                "{name} {command}"
+            );
+        }
+    }
 }

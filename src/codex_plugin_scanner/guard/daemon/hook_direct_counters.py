@@ -41,6 +41,7 @@ HARNESS_SLOTS: Final = (
     "grok",
     "pi",
     "omp",
+    "muse",
     "other",
 )
 _NAMED_SLOTS: Final = frozenset(HARNESS_SLOTS[:-1])

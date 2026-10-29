@@ -292,3 +292,53 @@ fn transparent_prefix_reports_where_the_parser_reads_the_program() {
         assert_eq!(offset(command), json!({"value": null}), "{command:?}");
     }
 }
+
+#[test]
+fn a_relative_vitest_entry_names_the_same_runner_as_the_absolute_one() {
+    for argument in [
+        "node_modules/vitest/vitest.mjs",
+        "./node_modules/vitest/vitest.mjs",
+        "dashboard/node_modules/vitest/vitest.mjs",
+        "/work/app/node_modules/vitest/vitest.mjs",
+        "node_modules/vitest/dist/cli.js",
+        "./node_modules/vitest/dist/cli.js",
+        "/work/app/node_modules/vitest/dist/cli.js",
+    ] {
+        let command = json!(["node", argument, "run", "src"]);
+        let kind = evaluate("contained_kind", &json!({ "command": command.clone() })).unwrap();
+        assert_eq!(kind["value"]["vitest"], true, "{argument} {kind}");
+        let arguments = evaluate("vitest_arguments", &json!({ "command": command })).unwrap();
+        assert_eq!(arguments["value"], json!(["run", "src"]), "{argument}");
+    }
+}
+
+#[test]
+fn a_relative_jest_entry_names_the_same_runner_as_the_absolute_one() {
+    for argument in [
+        "node_modules/jest/bin/jest.js",
+        "./node_modules/jest/bin/jest.js",
+        "/work/app/node_modules/jest/bin/jest.js",
+    ] {
+        let command = json!(["node", argument, "src"]);
+        let arguments = evaluate("vitest_arguments", &json!({ "command": command })).unwrap();
+        assert_eq!(arguments["value"], json!(["src"]), "{argument}");
+    }
+}
+
+#[test]
+fn a_lookalike_entry_still_names_no_runner() {
+    for argument in [
+        "xnode_modules/vitest/vitest.mjs",
+        "node_modules_evil/vitest/vitest.mjs",
+        "vitest/vitest.mjs",
+        "node_modules/vitest/dist/vitest.mjs",
+        "node_modules/jest/bin/jest.js.bak",
+        "node_modules/vite/dist/cli.js",
+        "node_modules/xvitest/dist/cli.js",
+        "node_modules/vitest/dist/cli.mjs",
+    ] {
+        let command = json!(["node", argument, "run"]);
+        let kind = evaluate("contained_kind", &json!({ "command": command })).unwrap();
+        assert_eq!(kind["value"]["vitest"], false, "{argument} {kind}");
+    }
+}

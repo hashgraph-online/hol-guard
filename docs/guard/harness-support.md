@@ -13,7 +13,7 @@ they do not maintain independent exit-code tables.
 
 | Harness | Blocking verdict | Nonblocking verdict |
 | --- | --- | --- |
-| Codex, Claude Code, Copilot, Pi, OMP | `0` for `PreToolUse`, `UserPromptSubmit`, and `PermissionRequest`; the JSON envelope carries the denial. `1` for other events, including `PostToolUse`. | `0` |
+| Codex, Claude Code, Copilot, Pi, OMP, Muse | `0` for `PreToolUse`, `UserPromptSubmit`, and `PermissionRequest`; the JSON envelope carries the denial. `1` for other events, including `PostToolUse`. | `0` |
 | Cursor, Devin, Kimi, Hermes | `2` | `0` |
 | OpenCode, Superagent | `1` | `0` |
 | Grok, ZCode | Adapter-defined event/recording-mode behavior, through the shared authority. | Adapter-defined |
@@ -148,6 +148,12 @@ Current Guard support in this repo:
   - refuses to install when the user config is JSONC (comments or trailing commas) rather than rewriting it lossy
   - blocks by returning exit code `2` and Devin-native stdout JSON `{"decision":"block","reason":"..."}` with a `hookSpecificOutput.permissionDecision: "deny"` envelope; Guard never emits Devin's `decision: "approve"` auto-approve response
   - fails closed (exit `2` deny) when hook input is malformed or the Guard authority denies for `PreToolUse`, `PermissionRequest`, and `UserPromptSubmit`; a timed-out or crashed review continues the session with an allow envelope so a wedged Guard cannot stall Devin, and `PostToolUse` is observation-only
+- `muse`
+  - detects `~/.config/muse/settings.json` (`$XDG_CONFIG_HOME/muse/settings.json` when set), project `.muse/settings.json`, workspace `.muse-plugin/plugin.json` hook and MCP capabilities, and Muse skill roots
+  - installs Guard-managed `PreToolUse`, `PermissionRequest`, `UserPromptSubmit`, `PostToolUse`, `SessionStart`, and `Stop` hooks in the `hooks` section of the user settings file without touching `provider`, `model`, `skills`, `mcpServers`, or pre-existing hooks; refuses to rewrite a settings file that does not parse as a JSON object
+  - blocks with a `hookSpecificOutput.permissionDecision: "deny"` envelope on exit `0` (Muse reads hook JSON on exit 0 and rejects a bare `permissionDecision: "allow"`, so an allow is empty stdout); prompt blocks use `{"decision":"block","reason":"..."}`
+  - waits inside the pending `PreToolUse` hook for a queued approval and then lets the identical call run, like Oh My Pi's approval resume; `PostToolUse` is observation-only
+  - fails closed when hook input is malformed or the Guard authority denies, so a wedged Guard cannot authorize a protected Muse tool call
 
 ## Reported to Cloud
 
@@ -176,9 +182,10 @@ plugin rows from the same local inventory. `hol-guard mcp list` prints the MCP s
 | `omp` (Oh My Pi) | `plugin`, `package`, `skill` |
 | `zcode` | `mcp_server`, `plugin`, `hook`, `skill` |
 | `devin` | `mcp_server`, `hook`, `skill` |
+| `muse` | `mcp_server`, `hook`, `skill` |
 | `paseo` | none |
 
-For `codex`, `claude-code`, `cursor`, `gemini`, `kimi`, `grok`, `opencode`, `pi`, `omp`, `zcode` and `devin`, `skill`
+For `codex`, `claude-code`, `cursor`, `gemini`, `kimi`, `grok`, `opencode`, `pi`, `omp`, `zcode`, `devin` and `muse`, `skill`
 rows also come from workspace skill discovery, which runs when Guard has a project workspace.
 
 Items are reported only while reporting is on. With `hol-guard settings set fleet-posture off`, Guard sends
@@ -257,6 +264,7 @@ Generated from `src/codex_plugin_scanner/guard/adapters/contracts.py`.
 | `omp` | `omp`, `oh-my-pi` | ✅ | ✅ | ✅ | shell, prompt, mcp_tool, file_read, tool_result |
 | `zcode` | `zcode`, `zai`, `z-code`, `zai-zcode` | ❌ | ✅ | ❌ | shell, prompt, mcp_tool, file_read |
 | `devin` | `devin`, `devin-cli`, `cognition-devin` | ❌ | ✅ | ❌ | shell, prompt, mcp_tool, file_read, file_write, tool_result |
+| `muse` | `muse`, `muse-code` | ✅ | ✅ | ✅ | shell, prompt, mcp_tool, file_read, file_write, tool_result |
 | `paseo` | `paseo` | ❌ | ❌ | ❌ | — |
 
 ## Versioned Event Capability Report

@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
+publish = false
 # Integration tests share one binary (tests/integration.rs) so CI links
 # one test executable instead of a hundred. Files that install process-wide
 # state or that CI runs by name keep their own binary below.
@@ -26,6 +27,7 @@ fancy-regex.workspace = true
 serde.workspace = true
 serde_json = { workspace = true, features = ["raw_value"] }
 sha2.workspace = true
+hmac.workspace = true
 hex.workspace = true
 ruzstd.workspace = true
 idna.workspace = true

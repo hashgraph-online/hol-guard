@@ -301,11 +301,42 @@ fn bundled_scope_after_repository_settings_is_doubt() {
 }
 
 #[test]
-fn repository_credential_helper_and_filter_stay_reviewed() {
-    assert!(matches!(
-        judged(&[("local", "credential.helper", "osxkeychain")]),
-        Some(None)
-    ));
+fn a_repository_credential_helper_is_ordinary_developer_config() {
+    // `worktree add` resolves its starting point against the refs this
+    // repository already holds, so Git never asks for a credential and the
+    // helper never runs. Developers and the tools they run write these into
+    // `.git/config` routinely, and `git clone` never copies that file, so a
+    // repository value is as much the developer's own as a global one.
+    for key in [
+        "credential.helper",
+        "credential.https://example.invalid.helper",
+        "credential.usehttppath",
+    ] {
+        assert!(
+            matches!(judged(&[("local", key, "osxkeychain")]), Some(Some(_))),
+            "{key}"
+        );
+    }
+}
+
+#[test]
+fn an_invocation_scoped_credential_helper_stays_reviewed() {
+    // Git reads `worktree` and `command` scope last, and a `command` value
+    // comes from this very invocation, so neither is the developer's
+    // standing configuration.
+    for scope in ["worktree", "command"] {
+        assert!(
+            matches!(
+                judged(&[(scope, "credential.helper", "osxkeychain")]),
+                Some(None)
+            ),
+            "{scope}"
+        );
+    }
+}
+
+#[test]
+fn repository_filter_and_worktree_hooks_path_stay_reviewed() {
     assert!(matches!(
         judged(&[("local", "filter.lfs.smudge", "git-lfs smudge -- %f")]),
         Some(None)

@@ -7,12 +7,15 @@ suite runs them through the real resident and the Python transport.
 
 from __future__ import annotations
 
+import functools
 import json
 from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.guard import native_hook_decision as decision
+from codex_plugin_scanner.guard.native_execution import _resident_request
+from codex_plugin_scanner.guard.native_resident_decision import resident_decide
 
 _VECTORS = json.loads(
     (
@@ -40,7 +43,13 @@ def test_resident_matches_language_neutral_vectors() -> None:
     failures: list[str] = []
     for vector in _VECTORS:
         try:
-            payload = decision._decide(vector["query"], None, lambda _payload: None)
+            payload = resident_decide(
+                decision._OPERATION,
+                functools.partial(_resident_request, max_request_bytes=decision._MAX_REQUEST_BYTES),
+                vector["query"],
+                None,
+                lambda _payload: None,
+            )
         except decision.NativeHookDecisionError as error:
             # A resident-side rejection never yields a decision; the transport
             # reports it as a failure (the exact code is asserted in Rust).

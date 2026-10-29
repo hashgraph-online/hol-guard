@@ -213,7 +213,7 @@ def _resident_request(
             "command_expression_validate",
             "reviewed_invocation_bindings_validate",
             "tool_action_request_identity",
-            "verified_read_plan",
+            "verified_read_execute",
         }:
             accepted = frozenset({"ok", "error"})
         elif operation == "mcp_tool_policy_decide":
@@ -443,55 +443,6 @@ def contained_workspace_write_execute_native(
         return _contained_workspace_write_result(result)
     except (KeyError, TypeError, ValueError):
         return None
-
-
-# ---------------------------------------------------------------------------
-# Contained execute op
-# ---------------------------------------------------------------------------
-
-# The resident spends time on sandbox setup and on reaping a timed-out child on
-# top of the contained process itself, so the transport waits longer than the
-# request's own timeout and the resident, not this client, reports a timeout.
-_CONTAINED_EXECUTE_TRANSPORT_SLACK_SECONDS = 30.0
-
-
-def contained_execute_native(
-    request: Mapping[str, object],
-    policy: Mapping[str, object],
-    *,
-    guard_home: Path,
-    run_id: str,
-) -> dict[str, object] | None:
-    """Run one contained request in the resident and return its evidence.
-
-    ``request`` and ``policy`` are the canonical containment payloads the
-    resident validates; nothing here interprets or re-derives them. ``None``
-    means the resident did not run the request, which every caller must treat
-    as unavailable rather than as a clean run.
-    """
-
-    timeout_seconds = request.get("timeout_seconds")
-    if not isinstance(timeout_seconds, int) or timeout_seconds <= 0:
-        return None
-    payload: dict[str, object] = {
-        "schema": "guard-contained-execute-request.v1",
-        "request_id": _request_id("contained_execute"),
-        "request": dict(request),
-        "policy": dict(policy),
-        "guard_home": str(guard_home),
-        "run_id": run_id,
-    }
-    decoded = _resident_request(
-        operation="contained_execute",
-        request=payload,
-        guard_home=guard_home,
-        timeout_seconds=float(timeout_seconds) + _CONTAINED_EXECUTE_TRANSPORT_SLACK_SECONDS,
-        required_feature=_CONTAINED_EXECUTION_FEATURE,
-    )
-    if decoded is None:
-        return None
-    result = decoded.get("result")
-    return result if isinstance(result, dict) else None
 
 
 # ---------------------------------------------------------------------------

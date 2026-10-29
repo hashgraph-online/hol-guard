@@ -25,8 +25,9 @@ from pathlib import Path
 from typing import TypeGuard
 
 import codex_plugin_scanner
-from codex_plugin_scanner.guard.adapters.zcode_contained_tests import contained_zcode_response
-from codex_plugin_scanner.guard.native_hook_containment_route import native_containment_sink
+from codex_plugin_scanner.guard.adapters.zcode_contained_tests import contained_sink_command_prefix
+from codex_plugin_scanner.guard.native_hook_containment_route import native_containment_rewrite
+from tests.containment_resident import native_containment_sink
 
 _MIN_VERSION = (0, 131, 0)
 _MAX_ANCESTORS = 6
@@ -80,19 +81,23 @@ def route_codex_containment(
     executable = launching_codex_executable()
     if executable is None or not codex_applies_updated_input(executable, deadline=deadline):
         return _with_update_hint(response)
-    routed = contained_zcode_response(
+    cwd = payload.get("cwd")
+    if not isinstance(cwd, str):
+        return response
+    rewrite = native_containment_rewrite(
         response,
-        input_text=json.dumps(payload),
-        config={
-            "harness": "codex",
-            "guard_home": str(guard_home),
-            "python_executable": sys.executable,
-            "package_root": str(Path(codex_plugin_scanner.__file__).resolve().parents[1]),
-        },
-        cli_args=["--home", str(home_dir)],
-        sink=sink,
+        harness="codex",
+        bridge=True,
+        payload=payload,
+        workspace=Path(cwd),
+        guard_home=guard_home,
+        home_dir=home_dir,
+        sink_command=contained_sink_command_prefix(
+            sys.executable, Path(codex_plugin_scanner.__file__).resolve().parents[1]
+        ),
+        deadline=deadline,
     )
-    return routed if routed is not None else response
+    return rewrite.response if rewrite.response is not None else response
 
 
 def _absolute_hook_home(home_dir: Path | None) -> TypeGuard[Path]:

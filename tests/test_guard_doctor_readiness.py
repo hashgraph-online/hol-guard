@@ -42,7 +42,7 @@ def test_doctor_json_does_not_promote_registration_or_cli_success_to_readiness(
         "evaluation_verified": False,
     }
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.commands_dispatch_admin.doctor_native_availability",
+        "codex_plugin_scanner.guard.cli.doctor_native_runtime.doctor_native_availability",
         lambda _guard_home=None: availability,
     )
     monkeypatch.setattr(
@@ -102,7 +102,8 @@ def test_global_doctor_reports_readiness_for_every_registered_harness(tmp_path, 
     assert {item["harness"] for item in payload["adapters"]} == {item.harness for item in list_adapters()}
     assert all(item["runtime_readiness"]["state"] == "unknown" for item in payload["adapters"])
     assert payload["native_runtime"]["availability"]["reason_code"] == "native_status_probe_skipped"
-    assert payload["native_runtime"]["availability"]["available"] is None
+    # Installation is answered from the files; compatibility needs the binary to run.
+    assert payload["native_runtime"]["availability"]["compatible"] is None
 
 
 @pytest.mark.parametrize("probe", [None, {"ok": True, "return_code": 0}])

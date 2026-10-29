@@ -33,7 +33,7 @@ from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
 
-os.environ["HOL_GUARD_NATIVE"] = "off"
+os.environ["HOL_GUARD_NATIVE"] = "auto"
 os.environ.pop("HOL_GUARD_NATIVE_BINARY", None)
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -175,9 +175,10 @@ def run_scenario(scenario: dict) -> dict[str, object]:
         connection = sqlite3.connect(path)
         for step in scenario["steps"]:
             source = source_for(step["kwargs"]["tool"])
-            if connection.execute(
-                "select 1 from local_cli_observation where cli_id = ?", (source.cli_id,)
-            ).fetchone() is None:
+            if (
+                connection.execute("select 1 from local_cli_observation where cli_id = ?", (source.cli_id,)).fetchone()
+                is None
+            ):
                 statement, params = observation_row(source, step["kwargs"]["seen_at"])
                 connection.execute(statement, params)
         connection.commit()

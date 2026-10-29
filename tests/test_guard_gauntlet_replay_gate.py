@@ -34,6 +34,7 @@ from tests.gauntlet_replay import (
     REPLAY_DOCUMENT,
     ReplayCase,
     cursor_hook_fields,
+    cursor_route_probe,
     environment_overlay,
     expand,
     failure_reasons,
@@ -123,6 +124,8 @@ def _replay(case: ReplayCase, fixture: BenignFixture, worker: HookWorker) -> tup
     if case.source_ref:
         spelled = str(resolved.get("path") or resolved["file_path"])
         payload["guard_source_ref"] = source_ref_payload(spelled, fixture.cwd(case.cwd))
+    if case.harness == "cursor" and case.tool == "shell" and case.event == "PreToolUse":
+        payload = cursor_route_probe(case.case_id, payload, fixture, worker, fixture.cwd(case.cwd))
     if case.harness == "cursor":
         payload.update(cursor_hook_fields(case.tool, payload))
     # Approval baselines stay from before the first attempt, so a retry never hides a row.
@@ -171,7 +174,7 @@ def test_replayed_payload_is_quiet_offers_always_or_blocks(
 
 
 def test_every_harness_and_attack_class_is_covered() -> None:
-    assert {case.harness for case in _CASES} == {"codex", "zcode", "claude-code", "omp", "pi", "cursor"}
+    assert {case.harness for case in _CASES} == {"codex", "zcode", "claude-code", "omp", "pi", "cursor", "muse"}
     attacks = {
         "neg-read-aws-credentials",
         "neg-env-exfil-curl",

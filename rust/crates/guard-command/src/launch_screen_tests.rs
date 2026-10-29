@@ -35,6 +35,11 @@ fn ordinary_scripts_and_launches_are_quiet() {
     assert_eq!(argv(&["env", "-S"]), LaunchRisk::default());
 }
 
+/// The nesting is built with POSIX `'\\''` quoting, which needs an unquoted
+/// backslash to escape the quote. On Windows the classifier keeps that
+/// backslash as a path separator, so the nested text is a different script
+/// there and the budget is not what this case measures.
+#[cfg(unix)]
 #[test]
 fn deep_nesting_stops_at_the_script_budget() {
     let nested = |depth: usize| {
@@ -48,6 +53,7 @@ fn deep_nesting_stops_at_the_script_budget() {
     assert!(!screen_script(&nested(MAX_SCRIPTS)).remote_code);
 }
 
+#[cfg(unix)]
 fn shell_quote(text: &str) -> String {
     format!("'{}'", text.replace('\'', "'\\''"))
 }

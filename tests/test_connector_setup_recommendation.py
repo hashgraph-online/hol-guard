@@ -6,18 +6,16 @@ import json
 import urllib.request
 from collections.abc import Iterable
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon import GuardDaemonServer, native_review_allow_hint
+from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import approval_connector_recommendation as recommendation
 from codex_plugin_scanner.guard.daemon.approval_connector_recommendation import (
     CONNECTOR_RECOMMENDATION_SCHEMA,
     build_approval_connector_recommendation,
     safe_connector_recommendation,
 )
-from codex_plugin_scanner.guard.local_cli_hook import SetupConnector
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_allow_hint import (
@@ -34,7 +32,6 @@ _HASH = "a" * 64
 _OTHER_HASH = "b" * 64
 _CLI_ID = "local-cli.lanectl-0123abcd"
 _GROUP = f"connector:{_HASH}:0123456789abcdef"
-_CONNECTOR = SetupConnector(cli_id=_CLI_ID, identity_hash=_HASH, name="lanectl", surface="cli", queue_group_id=_GROUP)
 
 
 def _hint(**overrides: object) -> dict[str, object]:
@@ -120,8 +117,15 @@ def _resident_caution(monkeypatch: pytest.MonkeyPatch) -> list[tuple[frozenset[s
     return asked
 
 
-def _items(monkeypatch: pytest.MonkeyPatch, *, state: str = "unset", identity_hash: str = _HASH) -> None:
-    item = {"cli_id": _CLI_ID, "identity_hash": identity_hash, "surface": "cli", "state": state}
+def _items(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    state: str = "unset",
+    identity_hash: str = _HASH,
+    stale: bool = False,
+    surface: str = "cli",
+) -> None:
+    item = {"cli_id": _CLI_ID, "identity_hash": identity_hash, "surface": surface, "state": state, "stale": stale}
     monkeypatch.setattr(recommendation, "listed_public_items", lambda _store: [item])
 
 
@@ -165,57 +169,6 @@ def test_malformed_hints_are_dropped(override: dict[str, object]) -> None:
     assert validated_connector_setup_hint(_hint(**override)) is None
 
 
-def test_queue_time_hint_asks_the_resident_for_the_connector(monkeypatch: pytest.MonkeyPatch) -> None:
-    asked: list[dict[str, object]] = []
-
-    def ask(payload: object, **kwargs: object) -> dict[str, object]:
-        asked.append({"payload": payload, **kwargs})
-        return _hint()
-
-    monkeypatch.setattr(native_review_allow_hint, "_ask_review_hint", ask)
-    store = SimpleNamespace(guard_home=Path("guard-home"))
-    paused = {"reason_code": "native_command_review_required"}
-
-    hint = native_review_allow_hint.native_review_hint(store, {}, paused, None, None, None, _CONNECTOR)
-
-    assert hint == _hint()
-    # A setup review carries no extension evidence, yet still asks: the
-    # connector hint names only the connector and what the evidence observed.
-    assert asked[0]["connector"] is _CONNECTOR
-    assert asked[0]["paused"] == paused
-
-
-def test_the_connector_rides_in_the_query_and_its_answer_is_shape_checked(monkeypatch: pytest.MonkeyPatch) -> None:
-    sent: list[dict[str, object]] = []
-
-    def decide(query: dict[str, object], _home: object, _fields: object, validate, **_kwargs: object) -> None:
-        sent.append(query)
-        validate({"hint": _hint()})
-
-    monkeypatch.setattr(native_review_allow_hint, "_decide", decide)
-    store = SimpleNamespace(guard_home=Path("guard-home"))
-
-    hint = native_review_allow_hint.native_review_hint(store, {}, {}, None, None, None, _CONNECTOR)
-
-    assert hint == _hint()
-    assert sent[0]["connector"] == {
-        "cli_id": _CLI_ID,
-        "identity_hash": _HASH,
-        "name": "lanectl",
-        "surface": "cli",
-        "queue_group_id": _GROUP,
-    }
-    assert sent[0]["paused"] == {}
-
-    # An extension hint is not a connector hint, so the answer means none.
-    monkeypatch.setattr(
-        native_review_allow_hint,
-        "_decide",
-        lambda _q, _h, _f, validate, **_k: validate({"hint": {"schema": "guard.extension-allow-hint.v1"}}),
-    )
-    assert native_review_allow_hint.native_review_hint(store, {}, {}, None, None, None, _CONNECTOR) is None
-
-
 def test_a_pending_delete_keeps_caution_through_the_full_path(monkeypatch: pytest.MonkeyPatch) -> None:
     _items(monkeypatch)
     # The resident records ``destructive`` for a destructive shell rule it observed.
@@ -225,17 +178,6 @@ def test_a_pending_delete_keeps_caution_through_the_full_path(monkeypatch: pytes
 
     assert result is not None
     assert result["caution"] is True
-
-
-def test_queue_time_hint_without_a_connector_is_the_extension_hint(monkeypatch: pytest.MonkeyPatch) -> None:
-    sentinel = {"schema": "guard.extension-allow-hint.v1"}
-    monkeypatch.setattr(native_review_allow_hint, "_ask_review_hint", lambda *_a, **_k: sentinel)
-    store = SimpleNamespace(guard_home=Path("guard-home"))
-
-    assert (
-        native_review_allow_hint.native_review_hint(store, {}, {"command_extensions": {}}, None, None, None, None)
-        is sentinel
-    )
 
 
 def test_available_while_the_connector_is_unset(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -255,6 +197,32 @@ def test_gone_once_the_connector_has_a_decision(monkeypatch: pytest.MonkeyPatch,
     _items(monkeypatch, state=state)
 
     assert _build(_approval(_hint())) is None
+
+
+def test_offered_again_when_the_allow_covers_an_earlier_version_of_the_file(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The script was allowed, then edited: the grant names the old file and no
+    # longer applies, so the held calls wait on a setup of this version.
+    _items(monkeypatch, state="allowed", stale=True)
+
+    result = _build(_approval(_hint()))
+
+    assert result is not None
+    assert result["status"] == "available"
+    assert result["setup_request"]["state"] == "allowed"  # type: ignore[index]
+    assert result["setup_request"]["connector_group_request_id"] == "req-1"  # type: ignore[index]
+
+
+def test_an_earlier_block_stays_a_decision(monkeypatch: pytest.MonkeyPatch) -> None:
+    _items(monkeypatch, state="blocked", stale=True)
+
+    assert _build(_approval(_hint())) is None
+
+
+@pytest.mark.parametrize("surface", ["mcp", "package-scripts"])
+def test_a_changed_server_or_package_keeps_its_full_review(monkeypatch: pytest.MonkeyPatch, surface: str) -> None:
+    _items(monkeypatch, state="allowed", stale=True, surface=surface)
+
+    assert _build(_approval(_hint(surface=surface))) is None
 
 
 def test_gone_when_the_stored_identity_changed(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -30,7 +30,10 @@ pub(super) fn inside_private_temporary_workspace(
 /// temporary directory, and that directory is owned by the home owner with no
 /// access for anyone else.
 #[cfg(target_os = "macos")]
-pub(super) fn inside_private_temporary_directory(canonical: &Path, home_dir: Option<&str>) -> bool {
+pub(in super::super) fn inside_private_temporary_directory(
+    canonical: &Path,
+    home_dir: Option<&str>,
+) -> bool {
     use std::os::unix::fs::MetadataExt;
 
     // Below the root: private/var/folders/<a>/<b>/T/<entry>...
@@ -55,7 +58,7 @@ pub(super) fn inside_private_temporary_directory(canonical: &Path, home_dir: Opt
 }
 
 #[cfg(not(target_os = "macos"))]
-pub(super) fn inside_private_temporary_directory(
+pub(in super::super) fn inside_private_temporary_directory(
     _canonical: &Path,
     _home_dir: Option<&str>,
 ) -> bool {

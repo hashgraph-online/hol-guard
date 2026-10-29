@@ -285,17 +285,6 @@ class StoreLocalCliMixin:
                 raise LocalCliCatalogLimitError("local_cli_catalog_limit") from error
             raise
 
-    def upsert_local_cli_command_states(
-        self,
-        cli_id: str,
-        states: Mapping[str, LocalCliCommandState],
-    ) -> None:
-        if not is_local_cli_id(cli_id):
-            raise ValueError("invalid local CLI id")
-        with self._connect() as connection:
-            ensure_local_cli_schema(connection)
-            _write_command_states(connection, cli_id, states)
-
     def read_local_cli_command_catalog(self, cli_id: str) -> list[LocalCliCommand]:
         rows = self._native_store_call("read_local_cli_command_catalog", {"cli_id": cli_id})
         if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):

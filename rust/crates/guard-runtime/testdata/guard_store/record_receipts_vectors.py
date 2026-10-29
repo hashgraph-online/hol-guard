@@ -27,7 +27,7 @@ from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
-os.environ["HOL_GUARD_NATIVE"] = "off"
+os.environ["HOL_GUARD_NATIVE"] = "auto"
 os.environ.pop("HOL_GUARD_NATIVE_BINARY", None)
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 

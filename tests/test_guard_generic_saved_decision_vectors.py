@@ -45,17 +45,14 @@ def test_a_runtime_without_the_expansion_capability_is_never_sent_unexpanded_gro
     monkeypatch.setattr(GuardStore, "_portable_project_workspace", staticmethod(lambda _workspace: None))
 
     with pytest.raises(ValueError, match="native_policy_decision_lookup_unavailable"):
-        GuardStore(tmp_path / "home").peek_saved_decision_groups(
+        GuardStore(tmp_path / "home").resolve_policy_decision_lookup_with_memory_pattern(
             "claude-code",
-            [("artifact", None)],
-            workspace=None,
-            publisher=None,
-            runtime_exact_match_context=None,
+            "artifact",
+            "sha256:" + "a" * 64,
             memory_command="echo",
             memory_artifact_type="unknown-artifact",
             memory_artifact_name="Bash",
-            current_action="review",
-            approval_context_inputs={},
+            consume_one_shot=False,
         )
     assert requested == [POLICY_LOOKUP_MEMORY_FEATURE]
 

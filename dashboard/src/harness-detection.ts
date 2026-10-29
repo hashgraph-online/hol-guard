@@ -9,7 +9,7 @@ import { normalizeVersionCompatibility, type HarnessVersionCompatibility } from 
 export type DetectedAppStatus = "protected" | "partial" | "found_unprotected" | "needs_repair" | "not_found";
 
 export type GuardHarnessSetupItem = GuardHarnessSetupContract & {
-  status: "protected" | "found" | "not_found";
+  status: "protected" | "needs_repair" | "found" | "not_found";
   observed_copy: string;
   installed: boolean;
   command_available: boolean;
@@ -92,14 +92,25 @@ export function resolveDetectedAppStatus(
   hasInventory: boolean,
   hasReceipts: boolean,
   detected: boolean,
+  // The daemon's status already reconciles the install record with the latest setup check, the same one Guard Cloud shows.
+  setupStatus?: GuardHarnessSetupItem["status"],
 ): DetectedAppStatus {
+  if (setupStatus === "needs_repair") return "needs_repair";
   if (install !== undefined) {
     const hookCheck = protectionHealth.checks.find((check) => check.check_id === "harness_hooks");
     if (!install.active || hookCheck?.status !== "pass") return "needs_repair";
     if (protectionHealth.state === "protected") return "protected";
     return "partial";
   }
+  if (setupStatus === "protected") return "protected";
   return hasInventory || hasReceipts || detected ? "found_unprotected" : "not_found";
+}
+
+export function setupStatusFor(
+  state: HarnessDetectionState,
+  harness: string,
+): GuardHarnessSetupItem["status"] | undefined {
+  return state.kind === "ready" ? state.items.find((item) => item.harness === harness)?.status : undefined;
 }
 
 export function versionCompatibilityFor(

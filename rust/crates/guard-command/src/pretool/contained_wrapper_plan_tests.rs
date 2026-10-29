@@ -55,7 +55,10 @@ fn an_absolute_cd_into_the_workspace_is_peeled_on_every_host() {
     let root = workspace("plan-absolute-cd", true);
     std::fs::create_dir_all(root.join("sub")).expect("sub");
     let workspace_path = root.to_str().expect("workspace path");
-    let command = format!("cd {} && pytest -q", root.join("sub").display());
+    // Spelled as a user types it: the fixture root is canonical, which on
+    // Windows carries a `\\?\` prefix whose `?` the peel reads as a glob.
+    let sub = crate::runtime_read_paths::strip_verbatim_prefix(root.join("sub"));
+    let command = format!("cd {} && pytest -q", sub.display());
 
     for peels_relative_inside in [true, false] {
         let answer = wrapper_plan(
@@ -93,4 +96,34 @@ fn an_unmodeled_pipeline_is_refused_rather_than_left_alone() {
         assert_eq!(answer.plan, None);
         assert_eq!(answer.refusal, Some(CONTAINED_WRAPPER_PLAN_UNSUPPORTED));
     }
+}
+
+/// A byte bound is a filter stage like a line bound, and carries its unit to
+/// the sink.
+///
+/// `| head -c 1500` prints part of the core's output and reads nothing else,
+/// so the core is peeled and the stage travels as `head -c 1500` rather than
+/// leaving the whole pipeline for review.
+#[test]
+fn a_byte_bounded_head_is_peeled_as_a_filter_stage() {
+    let root = workspace("plan-byte-head", true);
+    let workspace_path = root.to_str().expect("workspace path");
+    let command = "pytest -q 2>&1 | head -c 1500";
+
+    let peeled = wrapper_plan(
+        command,
+        workspace_path,
+        Some(workspace_path),
+        Some(HOME),
+        true,
+    )
+    .plan
+    .expect("peeled byte bound");
+    assert_eq!(peeled.core, "pytest -q");
+    let output = peeled.output.expect("byte filter");
+    assert_eq!((output.kind, output.merge_stderr), ("pipe", true));
+    assert_eq!(
+        output.stages,
+        vec![vec!["head".to_owned(), "-c".to_owned(), "1500".to_owned()]]
+    );
 }

@@ -278,7 +278,7 @@ impl SecretScan {
     }
 }
 
-fn is_credential_store(relative: &str) -> bool {
+pub(super) fn is_credential_store(relative: &str) -> bool {
     let basename = relative.rsplit('/').next().unwrap_or(relative);
     if let Some((_, extension)) = basename.rsplit_once('.') {
         if KEY_MATERIAL_EXTENSIONS

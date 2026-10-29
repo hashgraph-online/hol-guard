@@ -11,6 +11,7 @@ fallback.
 
 from __future__ import annotations
 
+import json
 import socket
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -62,6 +63,9 @@ _SEVERITIES = frozenset({"critical", "high", "medium", "low", "info", "unknown"}
 _FINDING_DECISIONS = frozenset({"block", "ask", "warn"})
 # Matches PACKAGE_AUDIT_PROJECTION_MAX_BYTES; stays under the resident client frame limit.
 _MAX_REQUEST_BYTES = 5 * 1024 * 1024
+# Packages per alias request are capped well below that, since a large
+# workspace's full package list can outgrow it.
+_ALIAS_BATCH_BYTES = 1024 * 1024
 
 
 class NativePackageAuditProjectionError(RuntimeError):
@@ -128,24 +132,46 @@ def native_audit_receipt_metadata(
 def native_advisory_aliases(packages: Sequence[object], *, store: Any) -> dict[int, list[str]]:
     """Return ``advisoryAliases`` the cached bundle adds, keyed by package index."""
 
-    payload = _send({"query": "aliases", "packages": list(packages), "store_path": str(store.path)}, store)
-    entries = payload.get("aliases")
-    if set(payload) != {"aliases"} or not isinstance(entries, list):
-        raise NativePackageAuditProjectionError("Native advisory aliases invalid")
     aliases: dict[int, list[str]] = {}
-    for entry in entries:
-        index = entry.get("index") if isinstance(entry, dict) else None
-        values = entry.get("aliases") if isinstance(entry, dict) else None
-        if (
-            not isinstance(index, int)
-            or isinstance(index, bool)
-            or not 0 <= index < len(packages)
-            or not isinstance(values, list)
-            or not all(isinstance(value, str) for value in values)
-        ):
+    for start, batch in _alias_batches(packages):
+        payload = _send({"query": "aliases", "packages": batch, "store_path": str(store.path)}, store)
+        entries = payload.get("aliases")
+        if set(payload) != {"aliases"} or not isinstance(entries, list):
             raise NativePackageAuditProjectionError("Native advisory aliases invalid")
-        aliases[index] = values
+        for entry in entries:
+            index = entry.get("index") if isinstance(entry, dict) else None
+            values = entry.get("aliases") if isinstance(entry, dict) else None
+            if (
+                not isinstance(index, int)
+                or isinstance(index, bool)
+                or not 0 <= index < len(batch)
+                or not isinstance(values, list)
+                or not all(isinstance(value, str) for value in values)
+            ):
+                raise NativePackageAuditProjectionError("Native advisory aliases invalid")
+            aliases[start + index] = values
     return aliases
+
+
+def _alias_batches(packages: Sequence[object]) -> list[tuple[int, list[object]]]:
+    """``packages`` in order as ``(first index, batch)`` pairs within ``_ALIAS_BATCH_BYTES``.
+
+    The resident resolves each package on its own, so batching changes only
+    how many requests carry the list. An empty list is still one request.
+    """
+
+    batches: list[tuple[int, list[object]]] = []
+    # ``used`` counts the serialized array: brackets plus a comma per item.
+    start, current, used = 0, [], 2
+    for index, package in enumerate(packages):
+        size = len(json.dumps(package, default=str, separators=(",", ":")).encode("utf-8")) + 1
+        if current and used + size > _ALIAS_BATCH_BYTES:
+            batches.append((start, current))
+            start, current, used = index, [], 2
+        current.append(package)
+        used += size
+    batches.append((start, current))
+    return batches
 
 
 def native_ci_gate_result(evaluation: dict[str, object], *, threshold: str, store: Any) -> dict[str, object]:

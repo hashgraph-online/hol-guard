@@ -31,7 +31,7 @@ def stale_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr(SystemKeyringSecretStore, "_backend_is_available", classmethod(lambda cls: False))
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.runtime.extension_control_proof._require_local_terminal_confirmation",
-        lambda _enrollment: None,
+        lambda _guard_home, _enrollment: None,
     )
     monkeypatch.setattr(cli, "prompt_for_approval_gate", lambda *_args, **_kwargs: ApprovalGateInput(password=PASSWORD))
     update_settings(tmp_path, {"enabled": True, "new_password": PASSWORD, "confirm_password": PASSWORD})
@@ -121,7 +121,7 @@ def test_returning_linux_keyring_does_not_overwrite_the_live_daemon_key(
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.runtime.extension_control_proof._require_local_terminal_confirmation",
-        lambda _enrollment: None,
+        lambda _guard_home, _enrollment: None,
     )
     terminal = GuardStore(tmp_path, prime_policy_integrity=False)
     terminal._extension_control_authority_secret_store = daemon._extension_control_authority_secret_store

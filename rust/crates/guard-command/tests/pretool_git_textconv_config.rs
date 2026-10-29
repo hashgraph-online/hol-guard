@@ -97,7 +97,7 @@ fn textconv_driver_is_reviewed_only_where_git_can_run_it() {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     let evaluate = |command: &str| {
         evaluate_pre_tool_envelope_with_execution_context(

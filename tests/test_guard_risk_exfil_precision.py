@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from codex_plugin_scanner.guard.models import GuardArtifact
-from codex_plugin_scanner.guard.risk import artifact_risk_signals
+from tests.artifact_risk_support import artifact_risk_signals
 
 
 @pytest.mark.parametrize(

@@ -580,7 +580,7 @@ fn recursive_removal_runs_in_the_sandbox_only_for_ignored_or_missing_targets() {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
-        library_search_paths: Default::default(),
+        ..Default::default()
     };
     let controls = controls();
     let reason = |command: &str| {

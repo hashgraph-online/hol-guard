@@ -126,6 +126,7 @@ mod cli_copilot_resolution;
 mod cli_runtime_support_op;
 mod cloud_action_envelope;
 mod cloud_action_envelope_fields;
+mod cloud_exception_lift;
 mod cloud_receipt_payload;
 #[cfg(test)]
 mod cloud_receipt_vectors_tests;
@@ -145,23 +146,20 @@ mod codex_hook_bridge_direct_resident;
 mod codex_hook_bridge_transport;
 mod codex_hook_file_identity_op;
 mod codex_hook_identity;
+mod codex_hook_manifest_iso_time;
+mod codex_hook_manifest_verify_op;
 mod codex_hook_response;
 mod codex_hooks;
 #[cfg(test)]
 mod codex_hooks_parity_tests;
 mod codex_identity;
-#[cfg(all(test, unix))]
-mod codex_post_tool_output_vectors_tests;
+mod codex_live_wait_build;
 mod codex_proxy;
 mod codex_request_resume_busy;
 mod codex_request_resume_op;
 mod codex_request_resume_store;
 mod codex_sources;
 mod codex_thread_continue_op;
-mod codex_tool_output_git;
-mod codex_tool_output_op;
-#[cfg(all(test, unix))]
-mod codex_tool_output_vectors_tests;
 mod codex_value;
 #[cfg(all(test, unix))]
 mod codex_vectors_tests;
@@ -204,6 +202,7 @@ mod contained_workspace_grant_plan;
 #[cfg(unix)]
 mod contained_workspace_sink;
 mod contained_wrapper_plan_op;
+mod content_decode;
 mod content_sensitivity_op;
 mod context_digest;
 mod context_digest_json;
@@ -272,6 +271,9 @@ mod directory_trust;
 mod discovery_placement_op;
 mod edge;
 mod edge_git_push;
+mod edge_receipt;
+mod edge_review_evidence;
+mod edge_structured;
 mod encrypted_secret_store;
 mod extension_allow_hint_op;
 mod extension_control_authority_op;
@@ -280,7 +282,11 @@ mod extension_control_op;
 mod extension_control_prepared_op;
 mod extension_control_preview_op;
 mod extension_control_proof;
+mod extension_control_terminal_op;
 mod extension_coverage_hint;
+/// Parser entry points for `rust/fuzz`; see `fuzz_entry.rs`.
+#[cfg(any(test, feature = "fuzzing"))]
+pub mod fuzz_entry;
 #[path = "adapters/detection/gemini_detect.rs"]
 mod gemini_detect;
 mod git_execution_safety_binary;
@@ -394,6 +400,7 @@ mod guard_store_native_receipts_tests;
 mod guard_store_native_review_consume;
 #[cfg(test)]
 mod guard_store_native_review_consume_tests;
+mod guard_store_native_review_queue;
 mod guard_store_observed_mcp;
 mod guard_store_op;
 mod guard_store_outbox_append;
@@ -412,6 +419,7 @@ mod guard_store_policy_source_context_vectors_tests;
 mod guard_store_policy_source_labels;
 mod guard_store_policy_source_rows;
 mod guard_store_policy_upsert;
+mod guard_store_queue_live_wait;
 mod guard_store_receipt_analytics;
 mod guard_store_receipt_approval;
 mod guard_store_receipt_decision;
@@ -495,6 +503,7 @@ mod hook_decision_artifact_review_route;
 mod hook_decision_benign_tool_action_tests;
 mod hook_decision_claude_permission_verdict;
 mod hook_decision_compose;
+mod hook_decision_containment_rewrite;
 mod hook_decision_containment_route;
 mod hook_decision_directive;
 mod hook_decision_finalize;
@@ -505,6 +514,7 @@ mod hook_decision_native_facts_tests;
 mod hook_decision_native_permission_persist;
 mod hook_decision_op;
 mod hook_decision_pretool_floor;
+mod hook_decision_review_response;
 mod hook_decision_settle;
 mod hook_direct;
 mod hook_direct_counters;
@@ -512,6 +522,8 @@ mod hook_direct_evidence;
 mod hook_env_stamp;
 #[cfg(all(test, unix))]
 mod mcp_config_discovery_tests;
+#[path = "adapters/detection/muse_detect.rs"]
+mod muse_detect;
 mod pack_lifecycle;
 mod pack_preparation;
 // The seams the evidence writer runs on. Each is reached through
@@ -550,12 +562,14 @@ mod local_cli_help;
 mod local_cli_hook_contained;
 mod local_cli_hook_op;
 mod local_cli_identify;
+mod local_cli_observer;
 mod local_mcp_grant_identity;
 mod local_mcp_grant_launcher;
 mod local_mcp_grant_op;
 mod local_once_store;
 mod local_store_read;
 mod local_tool_eligibility_op;
+mod local_tool_grant_op;
 mod managed_controls_policy_fields;
 mod managed_policy;
 mod managed_policy_file_trust;
@@ -603,6 +617,7 @@ mod mcp_relay_order;
 mod mcp_relay_package_eval;
 mod mcp_relay_pending;
 mod mcp_relay_ready;
+mod mcp_relay_receipt;
 mod mcp_relay_resident;
 mod mcp_relay_servers;
 mod mcp_runtime_evidence_op;
@@ -710,8 +725,10 @@ mod policy_store;
 mod policy_verifier_key_provision;
 mod pre_tool_extension_evidence_op;
 mod project_identity;
+mod project_identity_op;
 mod prompt_analyze_op;
 mod protect_request_op;
+mod protection_health_report_op;
 use guard_runtime_pyjson as pyjson;
 #[cfg(test)]
 mod registry_vectors_tests;
@@ -721,6 +738,9 @@ mod request_context_shell;
 mod resident_client;
 mod resident_diagnostics;
 mod resident_endpoint;
+mod resident_health_counters;
+mod resident_health_op;
+mod resident_inspection_host;
 mod resident_inspection_services;
 mod resident_op_features;
 mod resident_ops;
@@ -805,7 +825,11 @@ mod trust_attestation_verify_op;
 #[path = "../../../test_support/unique_nanos.rs"]
 mod unique_nanos;
 mod verified_read_decision_op;
-mod verified_read_plan_op;
+#[cfg(unix)]
+mod verified_read_execute;
+mod verified_read_execute_op;
+#[cfg(unix)]
+mod verified_read_lines;
 #[cfg(windows)]
 mod windows_node_build;
 #[cfg(windows)]

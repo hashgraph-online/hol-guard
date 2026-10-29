@@ -197,7 +197,10 @@ fn output_at_the_source_a_parent_or_root_is_refused_even_with_force() {
         ("skills/pdf-tools/SKILL.md", SKILL),
     ]);
     let parent = root.parent().expect("parent").to_path_buf();
-    for out in [root.clone(), parent.clone(), PathBuf::from("/")] {
+    // The filesystem root of this host: `/` on Unix, the drive root on Windows,
+    // where a bare `/` is not an absolute path.
+    let filesystem_root = root.ancestors().last().expect("root").to_path_buf();
+    for out in [root.clone(), parent.clone(), filesystem_root] {
         for force in [false, true] {
             let code = error(json!({
                 "command": "package", "root": root_str(&root),

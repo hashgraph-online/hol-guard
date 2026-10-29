@@ -215,7 +215,7 @@ fn workspace_below_home(context: super::PathContext<'_>) -> bool {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::screened_source;
 

@@ -3,9 +3,10 @@
 //! The resident side of `matching_local_tool_grant` (`trusted_local_tools.py`).
 //! A grant is an ordinary policy row filed under the grant selector of one
 //! target, so finding one means deriving the selector of every target and
-//! probing each of them non-consuming. The selector is derived here rather
-//! than shipped because the digest in it is what the comparison turns on; a
-//! caller that computed it differently would miss a grant it holds.
+//! probing each of them non-consuming. The selector comes from the same
+//! derivation that files a grant (`local_tool_grant_op`) rather than being
+//! shipped, because the digest in it is what the comparison turns on; a caller
+//! that computed it differently would miss a grant it holds.
 //!
 //! Only an `allow` row written by the grant source answers. A row another
 //! source happens to leave under the same id is not a grant, and an action the
@@ -13,17 +14,10 @@
 
 use guard_contracts::{LocalToolGrantLookupV1, PolicyDecisionLookupRequestV1};
 use serde_json::{json, Value};
-use sha2::{Digest, Sha256};
 
+use crate::local_tool_grant_op::{selector, POLICY_SOURCE, TARGETS};
 use crate::policy_decision_lookup_op::{evaluate_non_consuming, open_lookup_connection};
 
-/// `LOCAL_TOOL_GRANT_TARGETS`, in the order Python probes them: the capability
-/// grant is the narrow one, so it answers before the whole-version grant.
-const TARGETS: [&str; 2] = ["capability", "version"];
-/// `_SELECTOR_PREFIX`.
-const SELECTOR_PREFIX: &str = "local-tool-grant:v1";
-/// `_POLICY_SOURCE` — the only source whose row counts as a grant.
-const POLICY_SOURCE: &str = "trusted-local-tool";
 /// The recomputed actions a saved grant may lift.
 const REVIEWABLE: [&str; 2] = ["review", "require-reapproval"];
 
@@ -44,7 +38,11 @@ pub(crate) fn evaluate(
         // against, so the probe carries none of them.
         let mut probe = request.clone();
         probe.probe_groups = None;
-        probe.artifact_id = Some(selector(grant, target));
+        probe.artifact_id = Some(selector(
+            &grant.tool_identity_hash,
+            &grant.capability,
+            target,
+        ));
         probe.artifact_hash = None;
         probe.workspace = None;
         probe.publisher = None;
@@ -73,22 +71,6 @@ fn no_grant() -> Value {
         "trust_status": json!({}),
         "authority_revision": -1,
     })
-}
-
-/// `local_tool_grant_selector` — the artifact id a grant for `target` is filed
-/// under. The version target is capability-independent, which Python spells as
-/// the digest of `*`.
-fn selector(grant: &LocalToolGrantLookupV1, target: &str) -> String {
-    let capability = if target == "capability" {
-        grant.capability.as_str()
-    } else {
-        "*"
-    };
-    let digest = hex::encode(Sha256::digest(capability.as_bytes()));
-    format!(
-        "{SELECTOR_PREFIX}:{}:{target}:{digest}",
-        grant.tool_identity_hash
-    )
 }
 
 fn is_grant(lookup: &Value) -> bool {

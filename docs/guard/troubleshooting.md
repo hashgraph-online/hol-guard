@@ -57,8 +57,10 @@
 **Check**: Ensure you're running a recent version of HOL Guard whose CLI routes
 complete PreToolUse and PostToolUse envelopes through native hook authority.
 Python source-ref review is retained only as an explicitly injected
-differential-test oracle. Production `off` is fail-safe, while `shadow`
-comparison requires a declared non-production diagnostic surface. Supported
+differential-test oracle. Setting `HOL_GUARD_NATIVE=off` or `=shadow` will not
+move review back to Python or switch native authority off: both values are
+accepted so an existing install keeps starting, and both resolve to the product
+default after one warning. Supported
 file, package, MCP, network, process, browser, config, prompt, and harness
 PreToolUse actions receive a native review or block floor; an unrepresentable
 review is rendered as a conservative deny.

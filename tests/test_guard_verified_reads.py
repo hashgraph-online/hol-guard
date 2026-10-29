@@ -7,13 +7,11 @@ import inspect
 import io
 import os
 from pathlib import Path
-from typing import BinaryIO
 
 import pytest
 
 from codex_plugin_scanner.guard.cli.commands import add_guard_root_parser, run_guard_command
 from codex_plugin_scanner.guard.mdm.contracts import ManagedNetworkPolicy
-from codex_plugin_scanner.guard.native_verified_read_plan import NativeVerifiedReadPlanError
 from codex_plugin_scanner.guard.runtime import verified_github_reads as github_reads
 from codex_plugin_scanner.guard.runtime import verified_read_execution as local_reads
 from codex_plugin_scanner.guard.runtime.effect_contract import ProofRoute
@@ -160,110 +158,28 @@ def test_local_executor_shows_the_slice_the_resident_planned(tmp_path: Path, mon
 
 
 def test_local_executor_has_no_grammar_of_its_own(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Without the resident's plan there is no read, and no Python fallback."""
+    """Without the resident's read there is no read, and no Python fallback."""
 
     _workspace_path, _repository, cwd = _workspace(tmp_path)
     _ = (cwd / "main.py").write_text("print('ok')\n", encoding="utf-8")
     monkeypatch.chdir(cwd)
 
-    def unavailable(_argv: tuple[str, ...]) -> object:
-        raise NativeVerifiedReadPlanError("native_verified_read_plan_unavailable")
+    def unavailable(*_args: object) -> object:
+        raise local_reads.NativeVerifiedReadExecuteError("native_verified_read_execute_unavailable")
 
-    monkeypatch.setattr(local_reads, "verified_read_plan", unavailable)
+    monkeypatch.setattr(local_reads, "resident_decide", unavailable)
 
     assert try_execute_verified_local_read(("head", "-40", "main.py")) is None
     assert try_execute_verified_local_read(("pwd",)) is None
 
 
-def test_local_executor_rejects_untrusted_workspace_and_context_drift(
+def test_local_executor_rejects_a_directory_outside_any_checkout(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    workspace, _repository, cwd = _workspace(tmp_path)
+    _ = _workspace(tmp_path)
     monkeypatch.chdir(tmp_path)
     assert try_execute_verified_local_read(("pwd",)) is None
-    monkeypatch.chdir(cwd)
-    initial = local_reads._current_workspace_context()  # pyright: ignore[reportPrivateUsage]
-    monkeypatch.setattr(local_reads, "_current_workspace_context", lambda: initial)
-    assert try_execute_verified_local_read(("missing-read-tool",)) is None
-    changed = local_reads._WorkspaceContext(  # pyright: ignore[reportPrivateUsage]
-        initial.repository,
-        workspace,
-        "0" * 64,
-        initial.repository_file_identity,
-    )
-    contexts = iter((initial, changed))
-    monkeypatch.setattr(local_reads, "_current_workspace_context", lambda: next(contexts))
-    assert try_execute_verified_local_read(("pwd",)) is None
-
-
-def test_local_executor_fails_closed_on_output_and_time_bounds(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _workspace_path, _repository, cwd = _workspace(tmp_path)
-    monkeypatch.chdir(cwd)
-    monkeypatch.setattr(local_reads, "_MAX_OUTPUT_BYTES", 1)
-    assert try_execute_verified_local_read(("pwd",)) is None
-    assert "timeout_seconds" not in inspect.signature(try_execute_verified_local_read).parameters
-
-
-def test_local_executor_rejects_target_identity_drift(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _workspace_path, _repository, cwd = _workspace(tmp_path)
-    _ = (cwd / "main.py").write_text("line one\nline two\n", encoding="utf-8")
-    monkeypatch.chdir(cwd)
-    actual = local_reads._stable_file_identity  # pyright: ignore[reportPrivateUsage]
-    calls = 0
-
-    def changed(metadata: os.stat_result) -> tuple[int, int, int, int]:
-        nonlocal calls
-        calls += 1
-        identity = actual(metadata)
-        if calls == 2:
-            return identity[0], identity[1], identity[2] + 1, identity[3]
-        return identity
-
-    monkeypatch.setattr(local_reads, "_stable_file_identity", changed)
-    assert try_execute_verified_local_read(("head", "-1", "main.py")) is None
-
-
-def test_local_executor_rejects_parent_directory_swap(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _workspace_path, _repository, cwd = _workspace(tmp_path)
-    safe = cwd / "safe"
-    safe.mkdir()
-    _ = (safe / "main.py").write_text("safe\n", encoding="utf-8")
-    outside = tmp_path / "outside"
-    outside.mkdir()
-    _ = (outside / "main.py").write_text("private\n", encoding="utf-8")
-    monkeypatch.chdir(cwd)
-    resolve_target = local_reads._resolve_target  # pyright: ignore[reportPrivateUsage]
-
-    def swap_parent(
-        value: str,
-        *,
-        context: local_reads._WorkspaceContext,  # pyright: ignore[reportPrivateUsage]
-    ) -> Path:
-        target = resolve_target(value, context=context)
-        _ = safe.rename(cwd / "safe-original")
-        _ = safe.symlink_to(outside, target_is_directory=True)
-        return target
-
-    monkeypatch.setattr(local_reads, "_resolve_target", swap_parent)
-    assert try_execute_verified_local_read(("head", "-1", "safe/main.py")) is None
-
-
-def test_local_executor_rejects_file_growth_after_open(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _workspace_path, _repository, cwd = _workspace(tmp_path)
-    source = cwd / "main.py"
-    _ = source.write_text("safe\n", encoding="utf-8")
-    monkeypatch.chdir(cwd)
-    monkeypatch.setattr(local_reads, "_MAX_FILE_BYTES", 8)
-    bounded_read = local_reads._read_bounded_text  # pyright: ignore[reportPrivateUsage]
-
-    def grow_then_read(stream: BinaryIO) -> str:
-        with source.open("a", encoding="utf-8") as output:
-            _ = output.write("private-data\n")
-        return bounded_read(stream)
-
-    monkeypatch.setattr(local_reads, "_read_bounded_text", grow_then_read)
-    assert try_execute_verified_local_read(("head", "-1", "main.py")) is None
 
 
 def test_verified_read_cli_owns_local_execution(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

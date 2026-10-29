@@ -24,11 +24,13 @@ Status: foundation complete. The canonical hardening and rollout backlog is `doc
 
 ## Canonical remaining work
 
-- [ ] Complete every P0 and P1 item in `docs/guard/rust-runtime-hardening-todo.md`.
-- [ ] Prove protocol v2, authentication-first admission, fixed worker and queue bounds, overload behavior, fallback circuit breaking, and crash supervision.
-- [ ] Prove equivalent installed-wheel parity, performance, DoS, and recovery on all Tier 1 platforms and supported Python/install surfaces.
-- [ ] Expand catastrophic-risk, prompt-injection, exfiltration, destructive filesystem, production database, infrastructure, supply-chain, and Guard-tampering evidence.
-- [ ] Enable native authority only through dedicated release-gate pull requests.
-- [ ] Delete replaced or unreachable Python runtime implementations in the same release wave as authority cutover.
+Reconciled 2026-10-28 against `main` at `1aed1f43fb`, shipping as 3.58.0.
+
+- [x] Prove protocol v2, authentication-first admission, fixed worker and queue bounds, overload behavior, fallback circuit breaking, and crash supervision. Shipped: strict envelopes and caps (`resident_protocol.rs`, `strict_json.rs`), kernel peer identity (`resident_peer_identity.rs`), separated auth and evaluation lanes with bounded queues (`lib.rs`, `resident_worker_pool.rs`), a fixed `native_overloaded` answer instead of blocking (`resident_transport.rs`), bounded accept backoff (`hardening.rs`), the restart budget and crash circuit (`resident_restart_budget.rs`, `native_runtime_resilience.rs`), and recorded Python fallbacks (`hook_bridge_fallback.rs`). Cross-language golden vectors now bind each answer to the request that asked for it (NRH-T025, `edge-request-binding-v1`). Slowloris/auth-flood/malformed-frame tests (NRH-T035) remain open.
+- [x] Move the hot path to native authority. PreToolUse is native-authoritative: `runtime_transition_admission.py` admits a runtime only after the native edge answers a known-allow and a known-deny probe and its receipts reconcile against runtime identity, policy generation, and policy digest. Python checks receipts; it never recomputes a verdict.
+- [ ] Prove equivalent installed-wheel parity, performance, DoS, and recovery on all Tier 1 platforms and supported Python/install surfaces. Partial today through `nightly-native.yml`, `release-native-wheel.yml`, `release-native-determinism.yml`, and `rust-runtime-performance.yml`; the equivalent-suite matrix of NRH-T060 to NRH-T068 does not exist yet.
+- [ ] Expand catastrophic-risk, prompt-injection, exfiltration, destructive filesystem, production database, infrastructure, supply-chain, and Guard-tampering evidence. Detection lives in `guard-command`; the versioned effect DTO, corpus, and measured parity gate (NRH-T080 to NRH-T092) are open.
+- [ ] Delete replaced or unreachable Python runtime implementations. The ownership and package proof landed (NHD-091 to NHD-095, NRH-T108, NRH-T110 to NRH-T112, NRH-T116, NRH-T119) and `native_runtime_resident.py` has been deleted; the deletion wave for the remaining replaced source (NRH-T109, NRH-T113 to NRH-T115, NRH-T117, NRH-T118) is open.
+- [ ] Close the supply-chain and fuzz gaps: no `deny.toml` or `cargo deny`/`cargo audit` job exists (NRH-T120), and `fuzz.yml` fuzzes the Python package only, with no Rust fuzz targets (NRH-T122).
 - [ ] Keep every retained compatibility backend named and exercised in CI.
-- [ ] Do not merge `release/3.0` into `main` as part of this work.
+- [x] Ship from `main`. The earlier rule that `release/3.0` must stay unmerged is retired: the work landed on `main` through ordinary PRs, and `release/3.0` is now 3,629 commits behind with 8 commits that were never merged. Treat it as history, not a base.

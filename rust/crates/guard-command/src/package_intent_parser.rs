@@ -13,6 +13,7 @@ use std::os::windows::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
+use hmac::{Hmac, Mac};
 use regex::Regex;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
@@ -209,30 +210,10 @@ static PACKAGE_SOURCE_ENV_NAMES: LazyLock<HashSet<&'static str>> = LazyLock::new
 // ---------------------------------------------------------------------------
 
 fn hmac_sha256(key: &[u8; 32], message: &[u8]) -> [u8; 32] {
-    const BLOCK: usize = 64;
-    let mut block_key = [0u8; BLOCK];
-    if key.len() > BLOCK {
-        let digest = Sha256::digest(key);
-        block_key[..32].copy_from_slice(&digest);
-    } else {
-        block_key[..key.len()].copy_from_slice(key);
-    }
-    let mut ipad = [0u8; BLOCK];
-    let mut opad = [0u8; BLOCK];
-    for (i, b) in block_key.iter().enumerate() {
-        ipad[i] = b ^ 0x36;
-        opad[i] = b ^ 0x5c;
-    }
-    let mut inner = Sha256::new();
-    inner.update(ipad);
-    inner.update(message);
-    let inner_digest = inner.finalize();
-    let mut outer = Sha256::new();
-    outer.update(opad);
-    outer.update(inner_digest);
-    let result = outer.finalize();
+    let mut mac = <Hmac<Sha256>>::new_from_slice(key).expect("hmac accepts any key length");
+    mac.update(message);
     let mut out = [0u8; 32];
-    out.copy_from_slice(&result);
+    out.copy_from_slice(&mac.finalize().into_bytes());
     out
 }
 

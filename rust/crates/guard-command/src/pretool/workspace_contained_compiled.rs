@@ -78,15 +78,57 @@ pub(super) fn local_go_work(arguments: &[&str], directory: &Path, workspace: &Pa
 /// toolchain, which the run may read. With no manifest anywhere below the
 /// workspace root cargo has nothing to compile and would search upward out of
 /// the workspace, so those commands keep the admission they have.
+///
+/// `--manifest-path` replaces that search with the manifest it names, which
+/// must be a `Cargo.toml` inside the workspace, spelled without a parent step.
 pub(super) fn local_cargo_work(arguments: &[&str], directory: &Path, workspace: &Path) -> bool {
-    arguments
+    let local_verb = arguments
         .iter()
         .find(|argument| !argument.starts_with('+'))
-        .is_some_and(|verb| CARGO_LOCAL_VERBS.contains(&verb.to_ascii_lowercase().as_str()))
-        && super::cd::first_from(directory, workspace, |probe| {
-            probe.join("Cargo.toml").is_file()
+        .is_some_and(|verb| CARGO_LOCAL_VERBS.contains(&verb.to_ascii_lowercase().as_str()));
+    local_verb
+        && match manifest_path(arguments) {
+            Some(Some(manifest)) => manifest_within(&directory.join(manifest), workspace),
+            Some(None) => false,
+            None => super::cd::first_from(directory, workspace, |probe| {
+                probe.join("Cargo.toml").is_file()
+            })
+            .is_some(),
+        }
+}
+
+/// The manifest cargo's `--manifest-path` names, as the next argument or
+/// behind an `=`. `Some(None)` when the flag has no value or appears twice,
+/// which leaves no one manifest to judge.
+pub(super) fn manifest_path<'a>(arguments: &[&'a str]) -> Option<Option<&'a str>> {
+    let mut named = arguments.iter().enumerate().filter(|(_, argument)| {
+        **argument == "--manifest-path" || argument.starts_with("--manifest-path=")
+    });
+    let (index, flag) = named.next()?;
+    if named.next().is_some() {
+        return Some(None);
+    }
+    Some(match flag.split_once('=') {
+        Some((_, value)) => Some(value).filter(|value| !value.is_empty()),
+        None => arguments.get(index + 1).copied(),
+    })
+}
+
+/// Whether `manifest` is an existing `Cargo.toml` that resolves inside
+/// `workspace`.
+fn manifest_within(manifest: &Path, workspace: &Path) -> bool {
+    manifest
+        .file_name()
+        .is_some_and(|name| name == "Cargo.toml")
+        && manifest.is_file()
+        && !manifest
+            .components()
+            .any(|component| matches!(component, std::path::Component::ParentDir))
+        && workspace.canonicalize().is_ok_and(|root| {
+            manifest
+                .canonicalize()
+                .is_ok_and(|manifest| manifest.starts_with(root))
         })
-        .is_some()
 }
 
 /// Whether an argument names one of the flags that send a Go verb to a module

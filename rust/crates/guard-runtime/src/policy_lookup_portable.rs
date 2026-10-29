@@ -9,11 +9,12 @@
 //! lives inside the workspace and can be forged by it — so local-path
 //! authority is the only source allowed to lower enforcement below review.
 //!
-//! Python keeps deriving the portable identity (`_portable_project_workspace`)
-//! and ships it as `portable_workspace`: the resident's own
-//! `project_identity::portable_workspace` can answer
-//! `PortableIdentity::Unknown`, and every caller of that answer defers, which
-//! a store lookup has no way to do.
+//! The caller ships the portable identity as `portable_workspace`, which it
+//! asks the resident's `project_identity` operation for
+//! (`_portable_project_workspace`): that operation answers
+//! `PortableIdentity::Unknown` as no identity, while the in-process callers
+//! of `project_identity::portable_workspace` defer on it, which a store
+//! lookup has no way to do.
 //!
 //! The claim reuses the request's `now`, as the Python wrapper passes the
 //! caller's `now` straight through to `claim_approval_reuse_decision`. It also

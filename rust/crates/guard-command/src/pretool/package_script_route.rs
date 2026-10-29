@@ -29,6 +29,8 @@ use super::super::contained_wrapper::{contained_core, package_dir};
 use super::super::executable_basename;
 use super::super::PathContext;
 
+#[path = "bun_package_entry.rs"]
+mod bun_package_entry;
 #[path = "package_script_vite.rs"]
 mod package_script_vite;
 
@@ -44,6 +46,9 @@ pub(in crate::pretool) fn contained_test_reason(
     model: &CanonicalCommandV1,
     context: PathContext<'_>,
 ) -> Option<&'static str> {
+    // `bun node_modules/<package>/<entry>` is the run `node` names.
+    let spelled = bun_package_entry::node_spelling(model);
+    let model = spelled.as_ref().unwrap_or(model);
     if let Some(reason) = super::readonly_test_reason(model) {
         return resolved(model, reason, context.cwd.map(PathBuf::from), context);
     }
@@ -379,10 +384,20 @@ fn test_script(scripts: &Map<String, Value>, arguments: &[String]) -> bool {
     {
         return false;
     }
+    // The manager appends what follows `--` to the script, so the sink runs
+    // both halves and both are read as one Jest call.
+    let passthrough = trailing.get(1..).unwrap_or_default();
     match tokens.as_slice() {
-        [runner, flag, ..] => {
-            (matches!(executable_basename(runner), "node" | "nodejs") && flag == "--test")
-                || (runner == "vitest" && flag == "run")
+        [runner, rest @ ..] => {
+            let flag = rest.first();
+            (matches!(executable_basename(runner), "node" | "nodejs")
+                && flag.is_some_and(|flag| flag == "--test"))
+                || (runner == "vitest" && flag.is_some_and(|flag| flag == "run"))
+                || (runner == "jest" && {
+                    let call: Vec<String> =
+                        rest.iter().chain(passthrough.iter()).cloned().collect();
+                    crate::contained_argv::jest_contained_call(&call)
+                })
         }
         _ => false,
     }

@@ -12,17 +12,16 @@ import pytest
 
 from codex_plugin_scanner.guard import native_guard_config
 from codex_plugin_scanner.guard.config import ConfigFileTrustError, load_guard_config
-from codex_plugin_scanner.guard.native_guard_config import (
-    clear_native_guard_config_memo,
-    load_native_guard_config,
-)
+from codex_plugin_scanner.guard.native_guard_config import load_native_guard_config
 
 _CASES = json.loads((Path(__file__).parent / "fixtures" / "guard_config_parity.json").read_text(encoding="utf-8"))
 
 
 @pytest.fixture(autouse=True)
 def _fresh_memo() -> None:
-    clear_native_guard_config_memo()
+    with native_guard_config._MEMO_LOCK:
+        native_guard_config._MEMO.clear()
+        native_guard_config._RESOLVE_MEMO.clear()
 
 
 def _prepare(root: Path, case: dict[str, object]) -> tuple[Path, Path | None]:

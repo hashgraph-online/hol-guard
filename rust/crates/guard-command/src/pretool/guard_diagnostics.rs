@@ -33,6 +33,15 @@
 //! queue snapshot also applies a due Watch-posture revert, which only moves a
 //! posture back to protected and never weakens one.
 //!
+//! `hol-guard runtime` and `hol-guard runtime posture` print the executables
+//! the configured MCP servers would launch and the advisory coverage Guard
+//! already holds for them. Nothing is started, no Cloud call is made and no
+//! setting, approval or policy changes; the bare form runs the same read.
+//! These four shapes are exact: `runtime posture --instances`, which asks
+//! which of those runtimes are running here and writes what it saw into the
+//! Guard home, matches none of them and is reviewed like any other command
+//! that reads other processes.
+//!
 //! Like every other bare-name proof here, the inherited `PATH` is a host trust
 //! input: Rust has no resolved executable identity. A launcher sitting in the
 //! working directory is the one shadow this proof can see, so it fails closed
@@ -122,6 +131,10 @@ pub(super) fn safe_hol_guard_arguments(arguments: &[String]) -> bool {
             | ["daemon", "status", "--json"]
             | ["dashboard"]
             | ["dashboard", "--json"]
+            | ["runtime"]
+            | ["runtime", "--json"]
+            | ["runtime", "posture"]
+            | ["runtime", "posture", "--json"]
     ) || help_request(&words)
         || command_inspection(&words)
         || approval_inspection(&words)
@@ -245,15 +258,36 @@ fn help_request(words: &[&str]) -> bool {
 /// the list would go stale every time the CLI grows one, and `hol-guard command
 /// test --help` would ask for approval while `hol-guard command --help` stays
 /// silent. A verb only has to be shaped like one, which keeps out flags, paths
-/// and anything a value could carry.
+/// and anything a value could carry. Nested verbs are read the same way to the
+/// parser's own depth, so `hol-guard command controls patterns --help` prints
+/// its usage as quietly as the shallower paths do.
 fn help_path(words: &[&str]) -> bool {
     match words {
         [] => true,
-        [subcommand] => HELP_SUBCOMMANDS.contains(subcommand),
-        [subcommand, verb] => HELP_SUBCOMMANDS.contains(subcommand) && subcommand_verb(verb),
-        _ => false,
+        [subcommand, verbs @ ..] => {
+            HELP_SUBCOMMANDS.contains(subcommand)
+                && verbs.len() <= MAX_HELP_VERBS
+                && !verbs
+                    .first()
+                    .is_some_and(|verb| VERBS_TAKING_A_REMAINDER.contains(&(*subcommand, *verb)))
+                && verbs.iter().all(|verb| subcommand_verb(verb))
+        }
     }
 }
+
+/// Verbs whose parser takes a trailing `argparse.REMAINDER`, named with the
+/// subcommand that reaches them. `hol-guard verified-read local cat --help`
+/// puts `--help` into that remainder, so the bounded read runs instead of
+/// usage printing. The same reason keeps `protect`, `pytest-contained` and
+/// `run-shim` out of `HELP_SUBCOMMANDS` one level up; here only the verb is
+/// affected, so `verified-read --help` and `verified-read github-pr --help`
+/// still print their usage.
+const VERBS_TAKING_A_REMAINDER: &[(&str, &str)] = &[("verified-read", "local")];
+
+/// How deep a help path may go below its subcommand. Guard's deepest nest is
+/// two verbs below the subcommand (`command controls patterns`), and a path
+/// longer than the parser has is a usage error, not a run.
+const MAX_HELP_VERBS: usize = 2;
 
 fn subcommand_verb(word: &str) -> bool {
     word.starts_with(|first: char| first.is_ascii_alphabetic())
@@ -268,8 +302,8 @@ fn subcommand_verb(word: &str) -> bool {
 /// collects an approval row. Three subcommands are deliberately absent:
 /// `protect`, `pytest-contained` and `run-shim` each take a trailing
 /// `argparse.REMAINDER`, so `hol-guard protect npm --help` would run `npm
-/// --help` rather than print help, and [`help_path`] only shape-checks the
-/// word after the subcommand.
+/// --help` rather than print help. A verb one level down can swallow a help
+/// flag the same way; [`VERBS_TAKING_A_REMAINDER`] names those.
 const HELP_SUBCOMMANDS: &[&str] = &[
     "abom",
     "admin",

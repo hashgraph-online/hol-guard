@@ -201,19 +201,20 @@ fn native_sink(
 }
 
 /// Whether the native sink reproduces this workspace sandbox: a plain
-/// workspace run, not a chain whose Git steps follow the checks, started in
-/// the workspace itself, with no pipe, redirection of stderr, exit-status
-/// read, home expansion or directory change the sink does not yet replay.
+/// workspace run, not a chain with a step Guard runs outside the sandbox,
+/// started in the workspace itself, with no pipe, redirection of stderr,
+/// exit-status read, home expansion or directory change the sink does not yet
+/// replay.
 #[cfg(any(target_os = "macos", all(unix, test)))]
 fn native_shape(response: &Value, original: &Map<String, Value>, workspace: &str) -> bool {
-    use crate::contained_workspace_sink::{PUBLISH_REASON, WORKSPACE_PROFILE, WORKSPACE_REASON};
+    use crate::contained_workspace_sink::{host_split, WORKSPACE_PROFILE, WORKSPACE_REASON};
     let text = |name: &str| response.get(name).and_then(Value::as_str);
     let Some(command) = original.get("command").and_then(Value::as_str) else {
         return false;
     };
     text("reason_code") == Some(WORKSPACE_REASON)
         && text("required_execution_profile") == Some(WORKSPACE_PROFILE)
-        && text("reason") != Some(PUBLISH_REASON)
+        && !host_split(response.get("reason"))
         && !original.contains_key("cwd")
         && (!command.trim_start().starts_with("cd") || inner_directory_change(command, workspace))
         && (!PACKAGE_DIRECTORY_FLAGS

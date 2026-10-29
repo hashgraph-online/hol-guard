@@ -14,6 +14,13 @@ use std::path::PathBuf;
 /// the Python peel's `ValueError` did.
 pub const CONTAINED_WRAPPER_PLAN_UNSUPPORTED: &str = "native_contained_wrapper_plan_unsupported";
 
+/// The reason a `git worktree add <checkout> && cd <checkout> && <checks>`
+/// chain carries when Guard creates the checkout outside the sandbox and then
+/// runs the checks in it contained. A receipt naming it stays with the sink
+/// that plans the same split.
+pub const CONTAINED_WORKTREE_ADD_REASON: &str =
+    super::generic::contained_publish::worktree::REASON_TEXT;
+
 /// How the sink handles the core's output.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ContainedOutput {
@@ -50,6 +57,9 @@ pub struct ContainedWrapperPlan {
     /// The sibling repository holding the directory the caller asked about,
     /// independently of the command.
     pub project_root: Option<PathBuf>,
+    /// For `git worktree add <checkout> && cd <checkout> && <checks>`, the
+    /// add and the `cd <checkout> && <checks>` that follows it.
+    pub worktree_add: Option<(String, String)>,
 }
 
 /// Peel `command` the way the sink runs it.
@@ -68,8 +78,11 @@ pub fn contained_wrapper_plan(
     let project_root = project_root_query.and_then(|directory| {
         contained_wrapper::sibling_project_root(std::path::Path::new(directory), home_dir?)
     });
+    let worktree_add = super::generic::contained_publish::worktree::split(command)
+        .map(|parts| (parts.add, parts.entered));
     ContainedWrapperPlan {
         project_root,
+        worktree_add,
         ..wrapper_plan(
             command,
             workspace,

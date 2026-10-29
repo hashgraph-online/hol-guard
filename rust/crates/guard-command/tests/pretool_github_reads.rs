@@ -114,6 +114,14 @@ fn github_read_capabilities_have_a_benign_floor_but_mutations_do_not() {
             ("git --exec-path=project -C project status", false),
             ("git -C .ssh status", false),
             ("git -C project status; cat .env", false),
+            (
+                "gh pr view 1 --json statusCheckRollup --jq '.statusCheckRollup[] | (.state // \"\") as $s | $s'",
+                true,
+            ),
+            (
+                "gh pr view 1 --json title --jq '. as $t | $t # \"\n| $ENV # \"'",
+                false,
+            ),
             ("gh pr view 1 --json title || echo unavailable", true),
             ("gh api repos/owner/repo/compare/base...main | head -1", true),
             ("gh api repos/owner/repo | jq .name", true),

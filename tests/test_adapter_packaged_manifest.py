@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import codex, codex_daemon_hook_resume
+from codex_plugin_scanner.guard.adapters import codex, codex_daemon_hook_bridge
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.codex_hook_integrity import (
     hook_manifest_path,
@@ -15,10 +15,11 @@ from codex_plugin_scanner.guard.codex_hook_integrity import (
 from codex_plugin_scanner.guard.codex_hook_runtime_trust import verify_captured_launch_generation
 
 
-def test_codex_manifest_files_include_the_real_resume_implementation() -> None:
+def test_codex_manifest_files_include_the_real_bridge_implementation() -> None:
     files = dict(codex._hook_packaged_file_paths())
-    assert files["bridge_resume"] == Path(codex_daemon_hook_resume.__file__).resolve()
-    assert files["bridge_resume"].parent == Path(codex.__file__).resolve().parent
+    assert files["bridge"] == Path(codex_daemon_hook_bridge.__file__).resolve()
+    assert files["bridge"].parent == Path(codex.__file__).resolve().parent
+    assert "bridge_resume" not in files
     assert all(path.is_file() for path in files.values())
 
 
@@ -36,4 +37,4 @@ def test_installed_codex_manifest_verifies_after_adapter_reorganization(
     codex.CodexHarnessAdapter().install(context)
     manifest = load_authenticated_hook_manifest_path(context.guard_home, hook_manifest_path(context.guard_home, config))
     _, packaged = verify_captured_launch_generation(manifest)
-    assert packaged["bridge_resume"]["path"] == str(Path(codex_daemon_hook_resume.__file__).resolve())
+    assert packaged["bridge"]["path"] == str(Path(codex_daemon_hook_bridge.__file__).resolve())

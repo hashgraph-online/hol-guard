@@ -11,6 +11,7 @@ from ...argparse_utils import FriendlyArgumentParser
 from ..models import GUARD_ACTION_VALUES
 from .commands_parser_constants import _SERVICE_RUNTIME_CHOICES, DEFAULT_GUARD_CONNECT_URL, DEFAULT_GUARD_SYNC_URL
 from .commands_parser_helpers import *
+from .codebase_commands import configure_codebases_parser
 from .inventory_list_commands import configure_inventory_list_parser
 
 def _add_cloud_review_connect_consent(parser: argparse.ArgumentParser) -> None:
@@ -342,6 +343,8 @@ def _configure_guard_cloud_parsers(
     )
     _add_guard_common_args(service_status_parser)
     service_status_parser.add_argument("--json", action="store_true")
+
+    configure_codebases_parser(guard_subparsers)
 
     device_parser = guard_subparsers.add_parser("device", help="Manage local Guard installation identity")
     _add_guard_common_args(device_parser)

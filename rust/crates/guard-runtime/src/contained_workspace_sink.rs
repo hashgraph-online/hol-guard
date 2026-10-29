@@ -30,28 +30,22 @@ mod process;
 mod runner;
 #[path = "contained_workspace_sink_request.rs"]
 mod snapshot;
+#[path = "contained_workspace_sink_split.rs"]
+mod split;
 
 use plan_check::{plan_paths, validated_plan};
 use runner::{bootstrap_init, Launch, PrivateRoot};
 use snapshot::read_request;
 
 pub(crate) use process::launch;
+pub(crate) use split::host_split;
+#[cfg(test)]
+pub(crate) use split::PUBLISH_REASON;
 
 pub(crate) const SINK_COMMAND: &str = "contained-workspace-sink";
 pub(crate) const LAUNCH_COMMAND: &str = "contained-workspace-launch";
 pub(crate) const WORKSPACE_REASON: &str = "native_workspace_containment_required";
 pub(crate) const WORKSPACE_PROFILE: &str = "workspace-contained-v1";
-/// The reason a chain carries whose trailing Git steps run after the
-/// contained checks. It must match the command crate's text exactly; that
-/// shape stays with `guard execute-contained-test`.
-pub(crate) const PUBLISH_REASON: &str = concat!(
-    "HOL Guard runs the checks in this command in a protected workspace sandbox ",
-    "(no network, no home access, no PTY or Docker socket), then runs the Git ",
-    "steps that follow directly, outside the sandbox, once it proves them again. ",
-    "Every program the checks start, including children of an interpreter, runs ",
-    "contained and can write only the workspace, $TMPDIR and a private ",
-    "scratch $HOME.",
-);
 const AUTHORIZATION_FAILED: &str = "contained_run_authorization_failed";
 const AUTHORIZATION_MESSAGE: &str = "Guard could not authorize this contained run.";
 const INVALID_COMMAND: &str = "pytest_restricted_invalid_command";
@@ -223,7 +217,7 @@ fn sink(arguments: &Arguments, signals: &process::Signals) -> Outcome<i32> {
     let receipt = authority
         .authorize(&payload)
         .ok_or_else(Failure::unauthorized)?;
-    if !receipt_matches(&receipt) || receipt.get("reason") == Some(&json!(PUBLISH_REASON)) {
+    if !receipt_matches(&receipt) || host_split(receipt.get("reason")) {
         return Err(Failure::unauthorized());
     }
     run_workspace_contained(&payload, &workspace, &authority, &receipt, signals)
@@ -331,7 +325,7 @@ fn run_workspace_contained(
             Failure::invalid("Guard could not re-authorize this workspace sandbox execution.")
         })?;
     if second.get("command_binding_digest") != first_receipt.get("command_binding_digest")
-        || second.get("reason") == Some(&json!(PUBLISH_REASON))
+        || host_split(second.get("reason"))
     {
         return Err(Failure::invalid(
             "The command evidence changed before launch.",

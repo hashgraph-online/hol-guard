@@ -23,7 +23,7 @@ from codex_plugin_scanner.guard.adapters.hermes_file_inspection import (
 )
 from codex_plugin_scanner.guard.consumer import artifact_hash
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
-from codex_plugin_scanner.guard.risk import artifact_risk_signals_typed
+from tests.artifact_risk_support import artifact_risk_signals_typed
 
 
 def _context(tmp_path: Path) -> HarnessContext:

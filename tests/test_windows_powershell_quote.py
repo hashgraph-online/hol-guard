@@ -6,7 +6,7 @@ import re
 
 import pytest
 
-from codex_plugin_scanner.guard.windows_powershell_quote import powershell_join, sink_command_line
+from tests.windows_powershell_quote import powershell_join, sink_command_line
 
 _LITERAL = re.compile(r"'((?:[^'\u2018\u2019\u201a\u201b]|(?P<q>['\u2018\u2019\u201a\u201b])(?P=q))*)'")
 

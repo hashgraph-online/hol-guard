@@ -36,11 +36,12 @@
 
 use super::local_cli::block::ReviewVerdict;
 use super::{reviewed_edge, HookDirectDefer, PRE_TOOL_USE};
+use crate::cloud_exception_lift::{lift_cloud_excepted_identities, LiftTarget};
 use crate::connector_setup::grant_lifts;
 use crate::local_store_read::{
     open_read_only, schema_version, table_exists, STORE_FILE_NAME, SUPPORTED_SCHEMA_VERSION,
 };
-use crate::policy_bundle_store_identities::cached_bundle_identities;
+use crate::policy_bundle_store_identities::{cached_bundle_authority, BundleAuthority};
 use crate::policy_store::policy_store_direct_lane::DirectLaneBinding;
 use crate::policy_store::PolicySnapshotStore;
 use base64ct::{Base64UrlUnpadded, Encoding};
@@ -51,6 +52,7 @@ use guard_contracts::{
 };
 use rusqlite::{Connection, OptionalExtension};
 use serde_json::{json, Map, Value};
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::time::Instant;
 use zeroize::Zeroizing;
@@ -165,7 +167,7 @@ pub(super) fn answer(edge: &[u8], context: &Context<'_>) -> Result<Value, HookDi
         // the daemon reads one only while the store holds a grant row.
         custom = store
             .grants()?
-            .then(|| custom_grant(context, &result))
+            .then(|| custom_grant(context, &result, &environment.0))
             .flatten();
         if let Some(ReviewVerdict::Blocked(name)) = &custom {
             // A custom block wins over any saved decision or approval.
@@ -217,8 +219,14 @@ pub(super) fn answer(edge: &[u8], context: &Context<'_>) -> Result<Value, HookDi
 
 /// `native_local_cli_grant_response` for this review: the custom rule the
 /// daemon reads before any saved decision, or `None` when none applies. The
-/// daemon reads it only for a review it holds at a review action.
-fn custom_grant(context: &Context<'_>, result: &Object) -> Option<ReviewVerdict> {
+/// daemon reads it only for a review it holds at a review action, and
+/// resolves the launch against `Path.home()` and `os.environ`, which it
+/// published as `environment`.
+fn custom_grant(
+    context: &Context<'_>,
+    result: &Object,
+    environment: &BTreeMap<String, String>,
+) -> Option<ReviewVerdict> {
     if !result
         .get("policy_action")
         .and_then(Value::as_str)
@@ -226,6 +234,7 @@ fn custom_grant(context: &Context<'_>, result: &Object) -> Option<ReviewVerdict>
     {
         return None;
     }
+    let user_home = review_request::expanded_home(environment);
     super::local_cli::review_grant(&super::local_cli::RuleCheck {
         payload: Some(context.payload),
         harness: context.harness,
@@ -234,7 +243,12 @@ fn custom_grant(context: &Context<'_>, result: &Object) -> Option<ReviewVerdict>
         guard_home: context.guard_home,
         // The daemon pauses no review in Watch, so this lane never records.
         recording_only: false,
-        launch_env: None,
+        launch_env: user_home
+            .as_deref()
+            .map(|user_home| super::local_cli::LaunchEnv {
+                user_home,
+                env: environment,
+            }),
     })
 }
 
@@ -268,7 +282,20 @@ fn saved_response(
         return Err(HookDirectDefer::SavedDecision);
     };
     let now = super::lifecycle::utc_now_isoformat().ok_or(HookDirectDefer::SavedDecision)?;
-    let bundle_identities = store.bundle_identities(&now)?;
+    let (bundle_identities, bundle) = store.bundle_authority(&now)?;
+    // Lifted once against the evaluated working directory and shared by the
+    // local and portable probes, as `policy_decision_lookup_request` does.
+    let bundle_identities = lift_cloud_excepted_identities(
+        &bundle_identities,
+        bundle.as_ref(),
+        &LiftTarget {
+            harness: context.harness,
+            artifact_id: Some(store.artifact_id),
+            publisher: None,
+            workspace: Some(context.workspace),
+            now: &now,
+        },
+    );
     let composition = portable::composition(context.workspace)?;
     let key_b64 = Zeroizing::new(Base64UrlUnpadded::encode_string(&key.key));
     let store_path = Path::new(context.guard_home).join(STORE_FILE_NAME);
@@ -379,7 +406,7 @@ fn saved_verdict(
 
 /// The rendered verdict marked with its reuse status, or `None` when the
 /// daemon's render request could exceed its size limit.
-fn render(harness: &str, verdict: &Object, status: &str) -> Option<Value> {
+pub(crate) fn render(harness: &str, verdict: &Object, status: &str) -> Option<Value> {
     let encoded = serde_json::to_vec(verdict).ok()?.len() + harness.len();
     if encoded * ESCAPE_FACTOR + ENVELOPE_BYTES > HOOK_RENDER_MAX_BYTES {
         return None;
@@ -508,16 +535,21 @@ impl StoreShape<'_> {
     }
 
     /// The decision identities the cached signed bundle authorizes at `now`,
-    /// which keep or drop a policy-bundle row; empty when the store holds no
-    /// such row. A bundle the resident cannot judge as the daemon would defers.
-    fn bundle_identities(&self, now: &str) -> Result<Vec<Vec<Value>>, HookDirectDefer> {
+    /// which keep or drop a policy-bundle row, and the bundle they came from;
+    /// empty when the store holds no such row. A bundle the resident cannot
+    /// judge as the daemon would defers.
+    fn bundle_authority(&self, now: &str) -> Result<BundleAuthority, HookDirectDefer> {
         if !self.any(
             "select 1 from policy_decisions where source = 'policy-bundle' limit 1",
             &[],
         )? {
-            return Ok(Vec::new());
+            return Ok((Vec::new(), None));
         }
-        cached_bundle_identities(self.connection, now).ok_or(HookDirectDefer::SavedDecision)
+        #[cfg(test)]
+        if let Some(authority) = tests::VALIDATED_BUNDLE.with(|bundle| bundle.borrow().clone()) {
+            return Ok(authority);
+        }
+        cached_bundle_authority(self.connection, now).ok_or(HookDirectDefer::SavedDecision)
     }
 
     fn any(&self, query: &str, values: &[&str]) -> Result<bool, HookDirectDefer> {
@@ -540,7 +572,7 @@ mod portable;
 
 // Read once the direct lane queues a reviewed `PreToolUse` itself.
 #[path = "hook_direct_review_request.rs"]
-mod review_request;
+pub(crate) mod review_request;
 
 #[path = "hook_direct_review_queue.rs"]
 pub(crate) mod review_queue;

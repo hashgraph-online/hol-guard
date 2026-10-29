@@ -6,9 +6,10 @@ answer. No production path calls them.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import _optional_string
 from codex_plugin_scanner.guard.models import GuardArtifact
@@ -19,7 +20,7 @@ from codex_plugin_scanner.guard.native_request_context import (
     _call,
 )
 from codex_plugin_scanner.guard.native_sensitive_request import _ask, _bool
-from codex_plugin_scanner.guard.runtime.approval_context import approval_context_tokens_validation_reason
+from codex_plugin_scanner.guard.runtime import approval_context
 from codex_plugin_scanner.guard.runtime.shell_execution_context import (
     SHELL_CWD_NATIVE_UNAVAILABLE,
     SHELL_CWD_PATH_CHANGED,
@@ -93,6 +94,27 @@ def _runtime_saved_allow_validation_reason(
         return None
     stored_hash = _optional_string(decision.get("artifact_hash"))
     return approval_context_tokens_validation_reason(stored_hash, artifact_hash)
+
+
+def approval_context_tokens_validation_reason(saved_token: object, current_token: object) -> str | None:
+    """Compare opaque saved/current tokens without requiring their raw context.
+
+    Legacy artifact hashes and malformed tokens cannot prove that all context
+    dimensions are unchanged, so they fail closed as changed content.
+    """
+
+    try:
+        json.dumps([saved_token, current_token], ensure_ascii=True, allow_nan=False)
+    except (TypeError, ValueError):
+        return "approval_reuse_content_changed"
+    try:
+        result = approval_context._context_digest_result(
+            "validate_approval_context_tokens",
+            {"saved_token": saved_token, "current_token": current_token},
+        )
+    except (approval_context.NativeContextDigestUnavailableError, TypeError):
+        return "approval_reuse_content_changed"
+    return cast(str | None, result.get("validation_reason"))
 
 
 def native_benign_file_read(tool_name: object, arguments: object, *, cwd: Path | None, home_dir: Path | None) -> bool:

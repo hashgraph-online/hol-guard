@@ -255,6 +255,13 @@ pub enum ContextDigestKindV1 {
         #[serde(default)]
         request: Value,
     },
+    /// Validate a hook decision receipt; with an edge result, also require the
+    /// receipt to record exactly that pre-tool result.
+    NativeDecisionReceiptValidation {
+        receipt: Value,
+        #[serde(default)]
+        edge: Value,
+    },
     McpLaunchEnvironment {
         inherited: BTreeMap<String, String>,
         configured: BTreeMap<String, String>,
@@ -500,6 +507,8 @@ pub struct ContextDigestResultV1 {
     pub mcp_redacted_value: Option<Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub native_bash_reply_valid: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_decision_receipt_valid: Option<bool>,
     /// `build_runtime_executable_identity` / `build_runtime_launch_identity`
     /// output — the full launch-identity object, verbatim Python dict shape.
     /// These kinds always produce it; `Option` keeps it absent on other kinds.

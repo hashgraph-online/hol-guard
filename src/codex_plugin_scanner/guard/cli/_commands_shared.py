@@ -29,6 +29,7 @@ from typing import Protocol, TextIO
 
 from ...argparse_utils import FriendlyArgumentParser
 from ...models import ScanOptions
+from ..action_lattice import guard_action_severity
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..aibom_cli import (
@@ -86,6 +87,7 @@ from ..config import (
     resolve_risk_action,
     update_guard_settings,
 )
+from ..config_constants import VALID_GUARD_ACTIONS
 from ..consumer import (
     artifact_hash,
     detect_all,
@@ -108,7 +110,6 @@ from ..desktop_notifications import (
     ensure_desktop_notification_setup,
     macos_notification_guidance,
 )
-from ..incident import build_incident_context
 from ..local_dashboard_session import build_local_dashboard_session_token
 from ..local_supply_chain import (
     _resolve_guard_sync_auth_context,
@@ -140,7 +141,7 @@ from ..package_firewall_entitlement import (
     PACKAGE_FIREWALL_AUTHORITY_UNAVAILABLE_MESSAGE,
     package_firewall_access,
 )
-from ..policy.engine import VALID_GUARD_ACTIONS, build_decision_v2, guard_action_severity
+from ..policy.engine import build_decision_v2
 from ..protect import build_protect_payload
 from ..receipts import build_receipt
 from ..risk import artifact_risk_profile, artifact_risk_summary
@@ -163,12 +164,6 @@ from ..runtime.runner import (
 )
 from ..runtime.secret_file_requests import (
     build_tool_action_request_artifact,
-    extract_sensitive_file_read_request,
-    extract_sensitive_file_read_request_artifact,
-    extract_sensitive_file_read_request_artifact_from_action,
-    extract_sensitive_file_read_request_from_action,
-    extract_sensitive_file_write_request,
-    extract_sensitive_file_write_request_artifact,
     extract_sensitive_tool_action_request,
 )
 from ..runtime.secret_sensitivity import (

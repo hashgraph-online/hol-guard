@@ -137,10 +137,27 @@ fn verdict(
     // Past this point every Git read is probed in one directory. A later
     // `cd` the read prefixes above did not account for moves the reads after
     // it somewhere this probe never looked.
-    if git_after_later_cd(model) {
+    //
+    // `git worktree add <path> && cd <path> && ...` with only Git and GitHub
+    // after the `cd` is the exception: that Git runs in a linked worktree the
+    // worktree proof showed reads this repository's configuration, so its
+    // reads are probed here, where the checkout's configuration lives now.
+    let entered = super::worktree_add::chain::reads_in_entered_checkout(
+        model,
+        context,
+        deadline,
+        execution_environment,
+    );
+    if !entered && git_after_later_cd(model) {
         return Verdict::Review;
     }
-    let destination = super::segment_proof::verified_cwd_compound_context(model, context);
+    // `cd ../app && git status` runs the read in `../app`, so it is probed
+    // there. The `cd` itself writes nothing a later read could pick up.
+    let destination = if entered {
+        None
+    } else {
+        super::segment_proof::git_read_cwd_compound_context(model, context)
+    };
     let read_context = super::PathContext {
         cwd: destination.as_deref().or(context.cwd),
         ..context
@@ -182,12 +199,18 @@ fn verdict(
                     // repository configuration to read, and the directory
                     // may not be there to probe in at all. Operations that
                     // keep running without a repository, and inline `-c`
-                    // settings, are not such a route and stay probed.
+                    // settings, are not such a route and stay probed. The
+                    // route says nothing about which Git runs, so the binary
+                    // the search path finds must still be a trusted one.
                     if super::git_helper_context::routes_to_no_repository(
                         segments[index],
                         read_context,
                     ) {
-                        return Some(true);
+                        return Some(super::git_config::trusted_launch(
+                            executable,
+                            read_context,
+                            execution_environment,
+                        ));
                     }
                     super::git_config::execution_free(
                         executable,
@@ -233,6 +256,7 @@ fn verdict(
     let settled = |prior: usize, later: &crate::CommandSegmentV1| {
         let segment = segments[prior];
         benign.contains(&prior)
+            || (prior == 0 && destination.is_some())
             || write_free(segment)
             || (link_settles
                 && super::symlink_writes::safe_symlink_arguments(segment, read_context))

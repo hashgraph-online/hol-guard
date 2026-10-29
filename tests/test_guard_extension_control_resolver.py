@@ -125,8 +125,9 @@ def test_composition_is_permutation_independent_and_disable_dominates_enable(hom
     composed = compositions.pop()
     assert composed.global_lockdown is False
     assert composed.failures == ()
-    assert composed.state_for(ControlTargetKind.EXTENSION, extension_id) is ControlState.DISABLED
-    assert composed.state_for(ControlTargetKind.PERMISSION, permission_id) is ControlState.DISABLED
+    states = {control.target: control.state for control in composed.controls}
+    assert states[ControlTarget(ControlTargetKind.EXTENSION, extension_id)] is ControlState.DISABLED
+    assert states[ControlTarget(ControlTargetKind.PERMISSION, permission_id)] is ControlState.DISABLED
 
 
 def test_composition_reports_duplicates_instead_of_choosing_one(home: Path) -> None:

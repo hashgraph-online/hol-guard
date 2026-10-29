@@ -5,11 +5,13 @@
 //! The caller hydrates only facts it alone can read (the configuration fields
 //! the policy view is built from, the Python-built execution context and the
 //! extension-control digest).
-//! The cached feed snapshot hash is still accepted but not bound: a feed
-//! refresh only matters when it changes the matched advisory ids. The runtime
-//! reads the advisory cache and the workspace manifests itself, composes the
-//! action, builds the approval identity and returns the token; callers never
-//! recompute any of it.
+//! The cached feed snapshot hash is still accepted but not bound, and the
+//! matched advisory ids are not bound either: a saved approval outlives a feed
+//! refresh that matches a new advisory. The advisory still reaches the user as
+//! a finding, and a blocking verdict still blocks, because a saved approval
+//! never lowers `block` or `sandbox-required`. The runtime reads the workspace
+//! manifests itself, composes the action, builds the approval identity and
+//! returns the token; callers never recompute any of it.
 
 use guard_command::action_lattice::most_restrictive_guard_action;
 use guard_command::effect_decision::GuardAction;
@@ -28,7 +30,7 @@ use guard_contracts::{
 use serde_json::{json, Map, Value};
 use std::path::Path;
 
-use crate::package_authority_op::{matched_advisory_ids, request_digest};
+use crate::package_authority_op::request_digest;
 
 fn invalid() -> String {
     "native_package_approval_hash_invalid".to_owned()
@@ -191,9 +193,10 @@ const EVIDENCE_SOURCE_REASON_CODES: [&str; 5] = [
 ];
 
 /// Per-package fields that name the package or carry its verdict. Scores, fix
-/// suggestions and reason text are left out: a feed refresh rewrites them
-/// without changing what is installed or what Guard decided about it.
-const PACKAGE_POLICY_KEYS: [&str; 15] = [
+/// suggestions, reason text and the advisory and rule ids that matched are left
+/// out: a feed refresh rewrites them without changing what is installed or what
+/// Guard decided about it.
+const PACKAGE_POLICY_KEYS: [&str; 13] = [
     "alias",
     "decision",
     "dependencyPath",
@@ -202,10 +205,8 @@ const PACKAGE_POLICY_KEYS: [&str; 15] = [
     "name",
     "namespace",
     "packageManager",
-    "relatedAdvisoryIds",
     "requestedVersion",
     "resolvedVersion",
-    "ruleId",
     "sourceIdentity",
     "sourceRepository",
     "sourceRevisionKind",
@@ -253,15 +254,16 @@ fn policy_packages(packages: &Value) -> Value {
     Value::Array(items.iter().map(project).collect())
 }
 
-/// The policy half of the approval context. Bundle and feed revisions are left
-/// out on purpose: Guard Cloud refreshes them hourly, and a refresh that does
-/// not change a verdict, a matched rule or the matched advisories must not
-/// void a saved approval.
+/// The policy half of the approval context. Bundle and feed revisions, the
+/// matched rule and the matched advisories are left out on purpose: Guard
+/// Cloud refreshes them hourly, and a refresh must not void a saved approval.
+/// `matched_rule_id` and `matched_advisory_ids` keep fixed values so approvals
+/// saved before they left the context, with no rule or advisory matched, keep
+/// the same token.
 fn policy_context(
     request: &PackageApprovalHashRequestV1,
     config_policy: &Value,
     current_action: GuardAction,
-    matched_ids: Vec<String>,
 ) -> Value {
     let evaluation = &request.evaluation;
     let mut feed = Map::new();
@@ -270,11 +272,11 @@ fn policy_context(
         "enforcement",
         "entitlement_state",
         "exception_id",
-        "matched_rule_id",
         "policy_action",
     ] {
         feed.insert(key.to_owned(), field(evaluation, key).clone());
     }
+    feed.insert("matched_rule_id".to_owned(), Value::Null);
     feed.insert(
         "packages".to_owned(),
         policy_packages(field(evaluation, "packages")),
@@ -283,7 +285,7 @@ fn policy_context(
         "reason_codes".to_owned(),
         json!(policy_reason_codes(field(evaluation, "reasons"))),
     );
-    feed.insert("matched_advisory_ids".to_owned(), json!(matched_ids));
+    feed.insert("matched_advisory_ids".to_owned(), json!([]));
     json!({
         "configuration": config_policy,
         "current_action": current_action.as_str(),
@@ -301,7 +303,6 @@ fn artifact_hash(
     config_policy: &Value,
     current_action: GuardAction,
 ) -> Result<String, String> {
-    let store_path = request.store_path.as_deref().ok_or_else(invalid)?;
     let workspace = request.workspace_dir.as_deref().ok_or_else(invalid)?;
     let extension_control_digest = request
         .extension_control_digest
@@ -314,10 +315,7 @@ fn artifact_hash(
         Some(Value::Object(map)) => Some(map),
         Some(_) => return Err(invalid()),
     };
-    let matched_ids = matched_advisory_ids(&request.artifact, store_path)?
-        .into_iter()
-        .collect::<Vec<_>>();
-    let policy = policy_context(request, config_policy, current_action, matched_ids);
+    let policy = policy_context(request, config_policy, current_action);
 
     let artifact = &request.artifact;
     let metadata = artifact

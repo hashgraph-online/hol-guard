@@ -12,6 +12,7 @@ from codex_plugin_scanner.guard import native_restricted_pytest as native
 from codex_plugin_scanner.guard.runtime import contained_test_hook as sink
 from codex_plugin_scanner.guard.runtime import restricted_workspace as workspace_sink
 from codex_plugin_scanner.guard.runtime.restricted_pytest import RestrictedPytestError
+from tests import containment_resident as containment_probe
 
 COMMAND = "./todo.py add x"
 
@@ -310,7 +311,7 @@ def test_adapters_map_the_workspace_reason_to_its_profile(
 ) -> None:
     # Linux runs only this profile, so the resident naming it there pins the mapping.
     monkeypatch.setattr(containment_route, "host_platform", lambda: "linux")
-    sink = containment_route.native_containment_sink(
+    sink = containment_probe.native_containment_sink(
         receipt(), harness="claude-code", bridge=False, payload=payload(), guard_home=native_approval_reuse_runtime
     )
     assert sink == ("workspace-contained-v1", None)

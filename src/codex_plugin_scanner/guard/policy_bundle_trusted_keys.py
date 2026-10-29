@@ -22,7 +22,6 @@ from .native_policy_bundle import (
     policy_bundle_chunks,
     policy_bundle_verdict,
 )
-from .stable_digest import sha256_content_digest
 
 POLICY_BUNDLE_KEY_PURPOSE = "policy_bundle"
 POLICY_BUNDLE_KEYRING_CONTRACT_VERSION = "guard-policy-keyring.v1"
@@ -94,34 +93,6 @@ def _keys_from_wire(items: object) -> tuple[PolicyBundleVerificationKey, ...]:
 
 def _wire(keys: tuple[PolicyBundleVerificationKey, ...]) -> list[dict[str, object]]:
     return [key.to_dict() for key in keys]
-
-
-def policy_bundle_key_fingerprint(public_key_pem: str) -> str:
-    normalized_pem = public_key_pem.replace("\r\n", "\n").strip()
-    return sha256_content_digest(normalized_pem.encode("utf-8"))
-
-
-def policy_bundle_verification_key_from_public_key(
-    *,
-    key_id: str,
-    public_key_pem: str,
-    state: str = "active",
-    purpose: str = POLICY_BUNDLE_KEY_PURPOSE,
-    workspace_id: str | None = None,
-    valid_from: str | None = None,
-    valid_until: str | None = None,
-) -> PolicyBundleVerificationKey:
-    normalized_pem = public_key_pem.replace("\r\n", "\n").strip()
-    return PolicyBundleVerificationKey(
-        key_id=key_id.strip(),
-        public_key_pem=normalized_pem,
-        fingerprint_sha256=policy_bundle_key_fingerprint(normalized_pem),
-        state=state,
-        purpose=purpose,
-        workspace_id=workspace_id,
-        valid_from=valid_from,
-        valid_until=valid_until,
-    )
 
 
 def _load_keys(raw: object, *, require_keyring_contract: bool, safe: bool) -> tuple[PolicyBundleVerificationKey, ...]:

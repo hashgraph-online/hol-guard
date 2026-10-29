@@ -4,9 +4,14 @@ use std::time::Instant;
 
 #[path = "worktree_add_chain.rs"]
 pub(super) mod chain;
+#[path = "worktree_add_chain_route.rs"]
+mod chain_route;
+pub(crate) use chain::entered_checkouts;
 pub(crate) use chain::new_checkout_route;
 #[path = "worktree_add_destination.rs"]
 mod destination;
+#[path = "worktree_add_links.rs"]
+mod links;
 #[path = "worktree_add_names.rs"]
 mod names;
 
@@ -295,20 +300,22 @@ pub(super) fn separator_between(
     )
 }
 
-/// The checkout a proven `git worktree add` segment creates, and the `-C`
-/// directory it runs in when one is given.
+/// The checkout a proven `git worktree add` segment creates, the `-C`
+/// directory it runs in when one is given, and the commit it checks out
+/// when the proof read it.
 fn proven_checkout(
     segment: &CommandSegmentV1,
     reference_may_move: bool,
     context: super::PathContext<'_>,
     deadline: Option<Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
-) -> Option<(PathBuf, Option<String>)> {
+) -> Option<(PathBuf, Option<String>, Option<String>)> {
     let (spec, destination, chdir_cwd) = planned_checkout(segment, context)?;
     let context = super::PathContext {
         cwd: chdir_cwd.as_deref().or(context.cwd),
         ..context
     };
+    let mut commit = None;
     super::git_worktree::worktree_add_execution_free(
         segment.executable.as_deref().unwrap_or("git"),
         &spec.leading,
@@ -320,9 +327,10 @@ fn proven_checkout(
         context,
         deadline,
         execution_environment,
+        &mut commit,
     )
     .unwrap_or(false)
-    .then_some((destination, chdir_cwd))
+    .then_some((destination, chdir_cwd, commit))
 }
 
 /// The checkout `git worktree add` would create, with the directory its
@@ -359,6 +367,21 @@ fn implied_branch(destination: &str) -> bool {
         .rsplit('/')
         .next()
         .is_some_and(valid_branch_name)
+}
+
+/// The canonical checkout a `git worktree add` segment creates and the
+/// canonical directory its `-C` enters, as the proof plans them.
+pub(in crate::pretool) fn planned(
+    segment: &CommandSegmentV1,
+    context: super::PathContext<'_>,
+) -> Option<(PathBuf, Option<String>)> {
+    planned_checkout(segment, context).map(|(_, checkout, chdir)| (checkout, chdir))
+}
+
+/// The checkout a `git worktree add` segment creates, as the proof reads it,
+/// and whether a `-C` moves where a relative checkout lands.
+pub(in crate::pretool) fn destination(segment: &CommandSegmentV1) -> Option<(&str, bool)> {
+    parse(segment).map(|spec| (spec.destination, spec.chdir.is_some()))
 }
 
 fn parse(segment: &CommandSegmentV1) -> Option<WorktreeAdd<'_>> {

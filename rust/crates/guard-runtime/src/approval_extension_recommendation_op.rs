@@ -352,6 +352,11 @@ fn layer_states(layers: &[ExtensionControlLayer], kind: ControlLayerKind) -> Sta
         .collect()
 }
 
+/// Words an action class uses for an effect that destroys what is already
+/// there. A transfer that overwrites its destination is destructive even when
+/// the class never says the word, as `SCP overwrite command` does not.
+const DESTRUCTIVE_ACTION_WORDS: [&str; 2] = ["destructive", "overwrite"];
+
 /// Why an Allow deserves a caution, from the permission and the rules it gates.
 fn caution_reason(permission: &CatalogPermission, rules: &[&CatalogRule]) -> Option<&'static str> {
     if permission.risk_tier == "critical" || rules.iter().any(|rule| rule.severity == "critical") {
@@ -369,7 +374,11 @@ fn caution_reason(permission: &CatalogPermission, rules: &[&CatalogRule]) -> Opt
         .action_classes
         .iter()
         .chain(rules.iter().flat_map(|rule| rule.action_classes.iter()));
-    if action_classes.any(|action_class| action_class.contains("destructive")) {
+    if action_classes.any(|action_class| {
+        DESTRUCTIVE_ACTION_WORDS
+            .iter()
+            .any(|word| action_class.contains(word))
+    }) {
         return Some("destructive");
     }
     let mut risk_classes = rules.iter().flat_map(|rule| rule.risk_classes.iter());

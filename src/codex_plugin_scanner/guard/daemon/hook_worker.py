@@ -25,6 +25,7 @@ Security:
 
 from __future__ import annotations
 
+import os
 import time
 from collections.abc import Mapping
 from contextlib import suppress
@@ -44,6 +45,7 @@ from ..native_policy_snapshot_acked import acked_snapshot_binding_for_store as a
 from ..native_policy_snapshot_constants import _PUBLISH_TIMEOUT_SECONDS, TRANSIENT_PUBLICATION_ERRORS
 from ..native_runtime import NativeRuntimeStatus, native_runtime_status
 from ..native_runtime_status_share import share_verified_runtime_status
+from ..runtime.extension_control_runtime import current_extension_control_binding_digest
 from .hook_direct_counters import HookCounterLog
 from .hook_evidence_dispatch import HookEvidenceDispatch, run_hook_evidence
 from .hook_request_parsing import (
@@ -85,7 +87,17 @@ _TRANSIENT_RESIDENT_PUBLICATION_ERRORS = TRANSIENT_PUBLICATION_ERRORS | {"native
 # Harnesses whose PermissionRequest hook gets no decision, so the harness
 # shows its own approval prompt. Each raises it only after its PreToolUse
 # hook reviewed the same call.
-_PERMISSION_PASSTHROUGH_HARNESSES = frozenset({"codex", "copilot", "devin", "zcode"})
+_PERMISSION_PASSTHROUGH_HARNESSES = frozenset({"codex", "copilot", "devin", "zcode", "muse"})
+# The Claude hook fields the resident's lifecycle answers read: the session,
+# the prompt's kind and the tool it names.
+_CLAUDE_LIFECYCLE_FIELDS = ("session_id", "notification_type", "tool_name", "message", "title")
+# The prompt copy when the resident cannot answer: it says Guard is holding the
+# request, so an unreachable resident never leaves a prompt reading as though
+# Guard allowed the action.
+_CLAUDE_COPY_UNAVAILABLE = (
+    "HOL Guard is holding this Claude request for review. The HOL Guard runtime could not render "
+    "the full notice, so nothing in this prompt should be read as HOL Guard allowing the action."
+)
 
 
 @final
@@ -157,8 +169,14 @@ class HookWorker(HookWorkerNativeMixin):
         deadline: float | None,
         policy_snapshot: Mapping[str, object] | None = None,
         request_id: str | None = None,
+        local_cli_rules: bool = False,
+        observe_local_cli: bool = False,
+        record_receipt: bool = False,
+        structured_output_config: Mapping[str, object] | None = None,
+        containment_sink: bool = False,
     ) -> dict[str, object] | None:
         runtime_status = self._native_runtime_status()
+        store_path = getattr(self.store, "path", None)
         return review_raw_hook_native(
             payload=payload,
             harness=harness,
@@ -171,7 +189,24 @@ class HookWorker(HookWorkerNativeMixin):
             deadline=deadline,
             policy_snapshot=policy_snapshot,
             runtime_status=runtime_status,
+            observe_local_cli=observe_local_cli,
+            record_receipt=record_receipt,
             **({"request_id": request_id} if request_id is not None else {}),
+            # The edge settles the daemon's custom extension rules and proves a
+            # review's evidence; a launch resolves against the daemon's home and
+            # environment.
+            local_cli_rules=(
+                {
+                    "store_path": str(store_path),
+                    "user_home": str(Path.home()),
+                    "env": dict(os.environ),
+                    "exact_action_control_digest": current_extension_control_binding_digest(),
+                }
+                if local_cli_rules and isinstance(store_path, Path)
+                else None
+            ),
+            structured_output_config=structured_output_config,
+            containment_sink=containment_sink,
         )
 
     def _native_runtime_status(self) -> NativeRuntimeStatus:
@@ -271,25 +306,10 @@ class HookWorker(HookWorkerNativeMixin):
         self._last_native_decision_receipt = None
         harness = self._runtime_harness(params) or default_harness
         event_name = self._hook_event_name(payload)
-        if (
-            event_name == "Notification"
-            and harness.strip().lower().replace("_", "-") == "claude-code"
-            and str(payload.get("notification_type") or "") == "permission_prompt"
-        ):
-            return self._claude_permission_prompt_notification_response(payload)
-        if event_name == "PermissionRequest" and harness.strip().lower().replace("_", "-") == "claude-code":
-            from .claude_permission_request import claude_permission_request_response
-
-            return claude_permission_request_response(self.store, payload)
-        if harness.strip().lower().replace("_", "-") == "claude-code" and event_name in {"PostToolUse", "Stop"}:
-            from .claude_turn_events import claude_guard_question_answer, claude_turn_stop
-
-            if event_name == "Stop":
-                claude_turn_stop(self.store, payload)
-            else:
-                answered = claude_guard_question_answer(self.store, payload)
-                if answered is not None:
-                    return answered
+        if harness.strip().lower().replace("_", "-") == "claude-code":
+            answered = self._claude_lifecycle_response(event_name, payload)
+            if answered is not None:
+                return answered
         if (
             event_name == "PermissionRequest"
             and harness.strip().lower().replace("_", "-") in _PERMISSION_PASSTHROUGH_HARNESSES
@@ -299,6 +319,19 @@ class HookWorker(HookWorkerNativeMixin):
             # the harness asks for, so the decision stays with the harness's
             # own approval prompt.
             return {"hookSpecificOutput": {"hookEventName": "PermissionRequest"}}
+        if event_name == "PreToolUse" and harness.strip().lower() == "cursor":
+            from .cursor_shell_route import cursor_shell_route_response
+
+            routed = cursor_shell_route_response(
+                self,
+                payload=payload,
+                home_dir=home_dir,
+                guard_home=guard_home,
+                workspace=workspace,
+                deadline=deadline,
+            )
+            if routed is not None:
+                return routed
         # Send even unknown or malformed event labels to Rust. The edge
         # returns no semantic result for unsupported events, which this
         # method turns into a deterministic deny/fail-safe response.
@@ -319,39 +352,68 @@ class HookWorker(HookWorkerNativeMixin):
                 claimed_approval_request_id=claimed_approval_request_id,
             )
 
-    def _claude_permission_prompt_notification_response(
+    def _claude_lifecycle_response(
         self,
+        event_name: str,
         payload: dict[str, object],
-    ) -> dict[str, object]:
-        """Present the pending Guard approval when Claude shows a permission prompt."""
+    ) -> dict[str, object] | None:
+        """Claude Code's answer for a lifecycle hook, or ``None`` for the edge.
+
+        A permission prompt or dialog is answered by one resident call that
+        reads the session's pending Guard review, marks it seen and records
+        the prompt. ``Stop`` drops the session's unanswered prompts, so the
+        next turn reviews the call again instead of inheriting a block nobody
+        chose, and the edge still answers it. A ``PostToolUse`` that answers
+        the HOL Guard approval question saves that answer.
+        """
+        if event_name == "PostToolUse":
+            # The CLI helper modules resolve shared names through the command
+            # support registry, which a resident built in process has not loaded.
+            from ..cli import commands_support  # noqa: F401
+            from ..cli.commands_support_claude_approval import _settle_claude_guard_question
+
+            return None if _settle_claude_guard_question(self.store, payload) is None else {}
+        if event_name == "Notification" and str(payload.get("notification_type") or "") == "permission_prompt":
+            op = "claude_permission_prompt"
+        elif event_name == "PermissionRequest":
+            op = "claude_permission_request"
+        elif event_name == "Stop":
+            op = "claude_turn_stop"
+        else:
+            return None
         from ..cli._commands_shared import _now
-        from ..cli.commands_support_claude_approval import (
-            _claude_permission_prompt_additional_context,
-            _claude_permission_prompt_system_message,
-        )
-        from ..cli.commands_support_hook_state import (
-            _load_claude_permission_notice,
-            _mark_claude_pending_permission_prompt_seen,
+        from ..cli.commands_support_runtime_artifacts import _optional_string
+        from ..native_hook_authority_state import (
+            HOOK_AUTHORITY_STATE_CLAUDE_LIFECYCLE_FEATURE,
+            hook_authority_state,
+            object_field,
         )
 
-        notice = _load_claude_permission_notice(self.store, payload)
-        _mark_claude_pending_permission_prompt_seen(store=self.store, payload=payload, notice=notice)
-        self.store.add_event(
-            "claude/permission_prompt",
-            {
-                "session_id": payload.get("session_id"),
-                "notification_type": payload.get("notification_type"),
-                "tool_name": payload.get("tool_name"),
-                "notice": notice or {},
-            },
-            _now(),
+        reply = hook_authority_state(
+            self.store,
+            op,
+            now=_now(),
+            required_feature=HOOK_AUTHORITY_STATE_CLAUDE_LIFECYCLE_FEATURE,
+            session_id=_optional_string(payload.get("session_id")),
+            payload={name: payload[name] for name in _CLAUDE_LIFECYCLE_FIELDS if name in payload},
         )
+        if op == "claude_turn_stop":
+            return None
+        answered = object_field(reply, "harness_response")
+        if answered is not None:
+            return answered
+        if op == "claude_permission_request":
+            from ..adapters.claude_hook_config import CLAUDE_GUARD_PERMISSION_PASSTHROUGH_KEY
+
+            # Without the resident there is no pending review to present, so
+            # the dialog stays Claude's own, as for a session with none.
+            return {
+                CLAUDE_GUARD_PERMISSION_PASSTHROUGH_KEY: True,
+                "hookSpecificOutput": {"hookEventName": "PermissionRequest"},
+            }
         return {
-            "systemMessage": _claude_permission_prompt_system_message(payload=payload, notice=notice),
-            "hookSpecificOutput": {
-                "hookEventName": "Notification",
-                "additionalContext": _claude_permission_prompt_additional_context(notice),
-            },
+            "systemMessage": _CLAUDE_COPY_UNAVAILABLE,
+            "hookSpecificOutput": {"hookEventName": "Notification", "additionalContext": _CLAUDE_COPY_UNAVAILABLE},
         }
 
     def _record_post_tool_activity(

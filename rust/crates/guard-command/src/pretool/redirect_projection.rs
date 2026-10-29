@@ -15,6 +15,8 @@ use targets::{
 pub(super) mod git_chain;
 #[path = "redirect_leading_chain.rs"]
 mod leading_chain;
+#[path = "redirect_stdin.rs"]
+mod stdin;
 #[path = "redirect_targets.rs"]
 mod targets;
 
@@ -65,7 +67,7 @@ pub(super) fn project(
     let mut quote = Quote::None;
     let mut escaped = false;
     let mut heredocs: Vec<(String, bool)> = Vec::new();
-    let mut saw_heredoc = false;
+    let mut saw_stdin_data = false;
     // The single file a plain `< path` redirect feeds the first command.
     let mut input_source: Option<String> = None;
     let mut removed = false;
@@ -136,9 +138,15 @@ pub(super) fn project(
                 removed = true;
                 continue;
             }
+            '<' if chars.get(index + 1) == Some(&'<') && chars.get(index + 2) == Some(&'<') => {
+                index = stdin::remove_here_string(&chars, index, &mut out)?;
+                saw_stdin_data = true;
+                removed = true;
+                continue;
+            }
             '<' if chars.get(index + 1) == Some(&'<') => {
                 index = remove_quoted_heredoc(&chars, index, &mut out, &mut heredocs)?;
-                saw_heredoc = true;
+                saw_stdin_data = true;
                 removed = true;
                 continue;
             }
@@ -201,22 +209,18 @@ pub(super) fn project(
     {
         return None;
     }
-    // A heredoc body is stdin. Only `cat` is known to treat it as data.
-    if saw_heredoc
-        && !(model.segments.len() == 1
-            && model.segments[0].wrapper_chain.is_empty()
-            && model.segments[0].environment_names.is_empty()
-            && model.segments[0].executable.as_deref() == Some("cat")
-            && model.segments[0].arguments.is_empty())
-    {
+    // A heredoc body and a here-string word are both stdin, so the command
+    // has to be one that reads them as data rather than running them.
+    if saw_stdin_data && !stdin::reads_data(&model) {
         return None;
     }
-    // A quoted heredoc is literal data, but the bare `cat` that remains reads
+    // Literal standard input leaves a bare `cat` that still reads
     // standard input, which only the workspace sandbox bounds. A plan note in
     // the harness home and a repository beside the session's directory lie
     // outside that sandbox, so the write checked above is all that is left to
     // prove, and a no-op stands in for the command.
-    let command = if saw_heredoc
+    let command = if saw_stdin_data
+        && stdin::is_bare_cat(&model)
         && bounded_writes
         && writes_file
         && targets.iter().all(|target| {

@@ -20,6 +20,8 @@ mod containment;
 #[path = "managed_resident_handoff.rs"]
 mod handoff;
 pub(crate) use handoff::answer_shutdown;
+#[path = "managed_resident_handoff_record.rs"]
+mod handoff_record;
 #[path = "managed_resident_lease.rs"]
 mod lease;
 pub(crate) use lease::client_request;
@@ -33,15 +35,20 @@ mod managed_resident_transport;
 mod managed_resident_windows;
 #[path = "managed_resident_owner_lock.rs"]
 mod owner_lock;
+#[path = "managed_resident_prewarm.rs"]
+mod prewarm_lane;
 pub(crate) use owner_lock::ManagedOwnerLock;
 #[path = "managed_resident_exit.rs"]
 mod exit_record;
+#[path = "resident_lifecycle_journal.rs"]
+mod lifecycle_journal;
 #[path = "resident_private_file.rs"]
 mod private_file;
 #[path = "resident_requested_stop.rs"]
 mod requested_stop;
 #[path = "resident_failure_log.rs"]
 mod resident_failure_log;
+pub(crate) use lifecycle_journal::lifecycle_health;
 #[path = "resident_state_retirement.rs"]
 mod resident_state_retirement;
 #[path = "resident_restart_budget.rs"]
@@ -57,6 +64,13 @@ use crate::resident_state::{
 
 pub(crate) fn client_stream(state_base: &Path) -> Result<(), String> {
     client_stream::run(state_base)
+}
+
+/// Start this runtime's resident, if no client is already holding one, and
+/// keep it up for a bounded window so a session's first hook does not pay
+/// for the start. `managed_resident_prewarm.rs` has the whole contract.
+pub(crate) fn prewarm(state_base: &Path) -> Result<(), String> {
+    prewarm_lane::run(state_base)
 }
 
 const MANAGED_IDLE_TIMEOUT: Duration = Duration::from_secs(60 * 60);

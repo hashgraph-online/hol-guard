@@ -182,7 +182,9 @@ def read_legacy_codex_probe_receipt(
         if not isinstance(digest, str) or not hmac.compare_digest(digest, expected):
             continue
         occurred, recorded = _timestamp(activity["occurred_at"]), _timestamp(raw["recorded_at"])
-        receipt = validate_stored_native_decision_receipt(raw)
+        receipt = validate_stored_native_decision_receipt(
+            raw, guard_home=getattr(store, "guard_home", None), deadline_monotonic=deadline_monotonic
+        )
         if (
             receipt is None
             or occurred is None

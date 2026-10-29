@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import os
 import queue
+import re
 import resource
 import subprocess
 import threading
@@ -39,6 +40,17 @@ _BENIGN_HOOK_PAYLOAD = {
     "tool_use_id": "toolu_warm_path_probe",
 }
 _HOOK_ALLOW_CLASSES = frozenset({"permission_allow", "empty", "empty_object"})
+_MCP_ALLOW_CLASSES = frozenset({"ok"})
+# A refused sample keeps a bounded reason; the artifact is public, so the text is
+# truncated and nothing beyond the response's own message travels with it.
+_NON_OK_DETAIL_CHARS = 240
+_NON_OK_DETAIL_SAMPLES = 5
+_NON_OK_RUN_LIMIT = 20
+_CLASS_TOKEN_CHARS = 40
+# The error data of a refusal is the proxy's own structure, and a key in it can
+# be anything a caller named, so the report carries only the markers that tell
+# one refusal apart from another and never the keys themselves.
+_MCP_DATA_MARKERS = frozenset({"guard_timeout", "guardPolicyAction", "approvalRequests"})
 
 
 def clean_env(python: Path, home: Path) -> dict[str, str]:
@@ -101,6 +113,19 @@ def _run_install(cli: Path, harness: str, env: dict[str, str], home: Path, guard
         )
 
 
+def _class_token(value: str) -> str:
+    """A decision name as a short token safe to print as one word.
+
+    The decision travels from the hook's own JSON, so it is arbitrary text: a
+    sentence, a backtick, a newline. The class is a grouping key and a label in
+    the published report, and neither use survives either, so keep the word
+    characters and bound what is kept.
+    """
+
+    token = re.sub(r"[^0-9A-Za-z_-]+", "_", value).strip("_")[:_CLASS_TOKEN_CHARS]
+    return token or "unnamed"
+
+
 def classify_hook_output(returncode: int, stdout: str) -> str:
     if returncode != 0:
         return f"exit_{returncode}"
@@ -118,9 +143,9 @@ def classify_hook_output(returncode: int, stdout: str) -> str:
     specific = payload.get("hookSpecificOutput")
     permission = specific.get("permissionDecision") if isinstance(specific, dict) else None
     if isinstance(permission, str):
-        return f"permission_{permission}"
+        return f"permission_{_class_token(permission)}"
     decision = payload.get("decision")
-    return f"decision_{decision}" if isinstance(decision, str) else "other_json"
+    return f"decision_{_class_token(decision)}" if isinstance(decision, str) else "other_json"
 
 
 def _claude_pretool_handler(home: Path, workspace: Path) -> list[str] | str:
@@ -141,6 +166,120 @@ def _claude_pretool_handler(home: Path, workspace: Path) -> list[str] | str:
     raise RuntimeError("installed Claude settings carry no PreToolUse command handler")
 
 
+def _index_runs(indexes: list[int]) -> list[list[int]]:
+    """Consecutive sample indexes collapsed to ``[first, last]`` pairs.
+
+    A refusal that arrives in bursts and one that arrives at random carry the
+    same count; only the runs tell them apart.
+    """
+
+    runs: list[list[int]] = []
+    for index in indexes:
+        if runs and index == runs[-1][1] + 1:
+            runs[-1][1] = index
+        else:
+            runs.append([index, index])
+    return runs
+
+
+def summarize_non_ok(observed: list[tuple[float, str, str]], *, allow_classes: frozenset[str]) -> dict[str, object]:
+    """Bounded evidence for the samples the target did not allow.
+
+    ``classes`` counts them but keeps neither a reason nor a position, so a
+    fail-closed refusal, a review timeout and a real policy block all read as one
+    number against the same class. This keeps the first few distinct reasons and
+    where in the run they landed, which is what separates a warm-up window from a
+    steady refusal.
+    """
+
+    indexes = [index for index, (_, label, _) in enumerate(observed) if label not in allow_classes]
+    reasons: list[dict[str, object]] = []
+    seen: set[tuple[str, str]] = set()
+    for index in indexes:
+        _, label, detail = observed[index]
+        if (label, detail) in seen:
+            continue
+        seen.add((label, detail))
+        reasons.append({"index": index, "class": label, "detail": detail})
+        if len(reasons) >= _NON_OK_DETAIL_SAMPLES:
+            break
+    runs = _index_runs(indexes)
+    return {
+        "count": len(indexes),
+        "first_index": indexes[0] if indexes else None,
+        "runs": runs[:_NON_OK_RUN_LIMIT],
+        "runs_truncated": len(runs) > _NON_OK_RUN_LIMIT,
+        "reasons": reasons,
+    }
+
+
+def bounded_detail(text: str) -> str:
+    """One bounded line of refusal text.
+
+    Every refusal is bounded where it is produced rather than where it is
+    reported, so a hook or proxy that answers with a traceback on each of
+    hundreds of samples never leaves whole messages in the sample list, and the
+    deduplication that follows compares what the artifact will actually show.
+    """
+
+    return " ".join(text.split())[:_NON_OK_DETAIL_CHARS]
+
+
+def _hook_refusal_message(stdout: str) -> str:
+    """The refusal sentence inside a hook's answer, if it carries one.
+
+    A denial arrives as an envelope: the reason sits under
+    ``hookSpecificOutput``, wrapped in fields that name the event and repeat the
+    decision. Reporting the raw prefix of that JSON fills the one line the
+    report has with field names instead of the sentence that explains the
+    refusal.
+    """
+
+    try:
+        payload = json.loads(stdout)
+    except ValueError:
+        return ""
+    if not isinstance(payload, dict):
+        return ""
+    specific = payload.get("hookSpecificOutput")
+    candidates = (
+        specific.get("permissionDecisionReason") if isinstance(specific, dict) else None,
+        payload.get("reason"),
+        payload.get("systemMessage"),
+    )
+    return next((value.strip() for value in candidates if isinstance(value, str) and value.strip()), "")
+
+
+def describe_hook_failure(returncode: int, stdout: str, stderr: str) -> str:
+    """Why a hook sample was not an allow, in one bounded line."""
+
+    text = stderr.strip() or _hook_refusal_message(stdout)
+    return bounded_detail(f"exit={returncode} {text}".strip())
+
+
+def describe_mcp_failure(response: dict[str, object]) -> str:
+    """Why a ``tools/call`` sample was not ``ok``, in one bounded line.
+
+    ``-32001`` is the proxy's single refusal code: a policy block, a missing
+    native decision, a failed notification sync and a review timeout all carry
+    it, and only the message and a known marker in the error data tell them
+    apart.
+    """
+
+    error = response.get("error")
+    if isinstance(error, dict):
+        message = str(error.get("message", "")).strip()
+        data = error.get("data")
+        markers = ",".join(sorted(_MCP_DATA_MARKERS.intersection(map(str, data)))) if isinstance(data, dict) else ""
+        return bounded_detail(f"{message} [data:{markers}]" if markers else message)
+    result = response.get("result")
+    if isinstance(result, dict):
+        content = result.get("content")
+        if isinstance(content, list):
+            return bounded_detail(" ".join(str(item.get("text", "")) for item in content if isinstance(item, dict)))
+    return ""
+
+
 def run_hook_phase(cli: Path, env: dict[str, str], root: Path, *, warmup: int, samples: int) -> dict[str, object]:
     home, guard_home, workspace = root / "home", root / "guard-home", root / "workspace"
     for directory in (home, guard_home, workspace):
@@ -151,7 +290,7 @@ def run_hook_phase(cli: Path, env: dict[str, str], root: Path, *, warmup: int, s
         handler = _claude_pretool_handler(home, workspace)
         payload = json.dumps({**_BENIGN_HOOK_PAYLOAD, "cwd": str(workspace)})
 
-        def call() -> tuple[float, str]:
+        def call() -> tuple[float, str, str]:
             started = time.perf_counter_ns()
             result = subprocess.run(
                 handler,
@@ -165,7 +304,13 @@ def run_hook_phase(cli: Path, env: dict[str, str], root: Path, *, warmup: int, s
                 check=False,
             )
             elapsed = (time.perf_counter_ns() - started) / 1e6
-            return elapsed, classify_hook_output(result.returncode, result.stdout)
+            label = classify_hook_output(result.returncode, result.stdout)
+            detail = (
+                ""
+                if label in _HOOK_ALLOW_CLASSES
+                else describe_hook_failure(result.returncode, result.stdout, result.stderr)
+            )
+            return elapsed, label, detail
 
         warmup_ms = [call()[0] for _ in range(warmup)]
         before_service = service_snapshot(baseline, root)
@@ -175,8 +320,8 @@ def run_hook_phase(cli: Path, env: dict[str, str], root: Path, *, warmup: int, s
         after_service = service_snapshot(baseline, root)
     finally:
         stop_services(cli, env, home, guard_home, baseline, root)
-    latencies = [elapsed for elapsed, _ in observed]
-    classes = Counter(label for _, label in observed)
+    latencies = [elapsed for elapsed, _, _ in observed]
+    classes = Counter(label for _, label, _ in observed)
     client_cpu_ms = (
         (after_children.ru_utime + after_children.ru_stime) - (before_children.ru_utime + before_children.ru_stime)
     ) * 1000
@@ -186,6 +331,7 @@ def run_hook_phase(cli: Path, env: dict[str, str], root: Path, *, warmup: int, s
         "stats_ms": describe(latencies),
         "classes": dict(classes),
         "non_allow": sum(count for label, count in classes.items() if label not in _HOOK_ALLOW_CLASSES),
+        "non_ok": summarize_non_ok(observed, allow_classes=_HOOK_ALLOW_CLASSES),
         "warmup_ms": warmup_ms,
         "client_cpu_ms_per_call": client_cpu_ms / max(1, samples),
         "service_cpu_ms_per_call": service_cpu_ms / max(1, samples),
@@ -317,7 +463,7 @@ def _open_mcp_session(
     return session, init, ready_ms
 
 
-def _tool_call(session: _ProxySession, request_id: int) -> tuple[float, str]:
+def _tool_call(session: _ProxySession, request_id: int) -> tuple[float, str, str]:
     message = {
         "jsonrpc": "2.0",
         "id": request_id,
@@ -325,7 +471,8 @@ def _tool_call(session: _ProxySession, request_id: int) -> tuple[float, str]:
         "params": {"name": "safe_echo", "arguments": {"text": "guard"}},
     }
     elapsed, response = session.request(message)
-    return elapsed, classify_mcp_response(response)
+    label = classify_mcp_response(response)
+    return elapsed, label, "" if label in _MCP_ALLOW_CLASSES else describe_mcp_failure(response)
 
 
 def _warm_up_mcp(argv: list[str], env: dict[str, str], cwd: Path, stderr_path: Path) -> dict[str, object]:
@@ -339,12 +486,13 @@ def _warm_up_mcp(argv: list[str], env: dict[str, str], cwd: Path, stderr_path: P
     started = time.perf_counter_ns()
     session, init, _ = _open_mcp_session(argv, env, cwd, stderr_path)
     try:
-        _, call_class = _tool_call(session, 3)
+        _, call_class, call_detail = _tool_call(session, 3)
     finally:
         session.close()
     return {
         "initialize_class": "ok" if isinstance(init.get("result"), dict) else classify_mcp_response(init),
         "call_class": call_class,
+        "call_detail": call_detail,
         "elapsed_ms": (time.perf_counter_ns() - started) / 1e6,
     }
 
@@ -373,7 +521,7 @@ def run_mcp_phase(
         session, init, session_ready_ms = _open_mcp_session(argv, session_env, workspace, root / "proxy.stderr")
         next_id = 3
 
-        def call() -> tuple[float, str]:
+        def call() -> tuple[float, str, str]:
             nonlocal next_id
             request_id, next_id = next_id, next_id + 1
             return _tool_call(session, request_id)  # type: ignore[arg-type]
@@ -386,13 +534,14 @@ def run_mcp_phase(
         if session is not None:
             session.close()
         stop_services(cli, env, home, guard_home, baseline, root)
-    latencies = [elapsed for elapsed, _ in observed]
-    classes = Counter(label for _, label in observed)
+    latencies = [elapsed for elapsed, _, _ in observed]
+    classes = Counter(label for _, label, _ in observed)
     return {
         "samples_ms": latencies,
         "stats_ms": describe(latencies),
         "classes": dict(classes),
-        "non_allow": sum(count for label, count in classes.items() if label != "ok"),
+        "non_allow": sum(count for label, count in classes.items() if label not in _MCP_ALLOW_CLASSES),
+        "non_ok": summarize_non_ok(observed, allow_classes=_MCP_ALLOW_CLASSES),
         "server_requests_declined": session.server_requests if session is not None else 0,
         "warmup_ms": warmup_ms,
         "session_ready_ms": session_ready_ms,

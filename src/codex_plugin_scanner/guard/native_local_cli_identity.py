@@ -79,29 +79,6 @@ def valid_local_cli_identity(identity: object) -> TypeGuard[dict[str, str]]:
     )
 
 
-def native_local_cli_identity(source: dict[str, Any], *, guard_home: Path | None = None) -> dict[str, str] | None:
-    """Return ``{cli_id, name, kind, identity_hash}`` or ``None``.
-
-    ``source`` is one ``LocalCliIdentitySourceV1`` variant, tagged by
-    ``source``. ``None`` covers both "not a grantable identity" and native
-    failure; a failure is also recorded for ``track_local_cli_identity_failures``.
-    """
-
-    result = native_context_digest(
-        "local_cli_identity",
-        {"source": source},
-        guard_home=_resolve_digest_home(guard_home),
-    )
-    if not isinstance(result, dict) or result.get("status") != "ok":
-        return record_local_cli_identity_failure("native_local_cli_identity_unavailable")
-    if "local_cli_identity" not in result:
-        return None
-    identity = result.get("local_cli_identity")
-    if not valid_local_cli_identity(identity):
-        return record_local_cli_identity_failure("native_local_cli_identity_malformed")
-    return identity
-
-
 def _valid_unlisted_cli(record: object) -> TypeGuard[dict[str, Any]]:
     if not isinstance(record, dict) or set(record) != _UNLISTED_KEYS:
         return False
@@ -156,7 +133,6 @@ def native_unlisted_cli_identities(
 
 
 __all__ = [
-    "native_local_cli_identity",
     "native_unlisted_cli_identities",
     "record_local_cli_identity_failure",
     "track_local_cli_identity_failures",

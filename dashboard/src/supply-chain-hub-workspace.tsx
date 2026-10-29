@@ -88,6 +88,9 @@ export function SupplyChainHubWorkspace(props: {
   const handleAuditNavigate = useCallback(() => {
     props.onNavigate("/audit");
   }, [props.onNavigate]);
+  const handleWorkspacesNavigate = useCallback(() => {
+    props.onNavigate("/workspaces");
+  }, [props.onNavigate]);
   const handleFixAll = useCallback(() => {
     firewallPanelRef.current?.fixAll();
   }, []);
@@ -95,7 +98,6 @@ export function SupplyChainHubWorkspace(props: {
   return (
     <div className={SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS}>
       <WorkspacePageHeader
-        eyebrow="Supply chain"
         title={hubTitleForTab(tab)}
         tabs={hubTabs}
         activeTab={tab}
@@ -116,6 +118,7 @@ export function SupplyChainHubWorkspace(props: {
             receipts={props.receipts}
             approvalGate={props.approvalGate}
             auditSession={auditSession}
+            onOpenWorkspaces={handleWorkspacesNavigate}
           />
         )}
         {tab === "workspaces" && (
@@ -153,7 +156,6 @@ export function SupplyChainHubWorkspace(props: {
         <Suspense fallback={null}>
           <SupplyChainWorkspaceDetails
             snapshot={props.snapshot}
-            onGoHome={props.onGoHome}
             onAuditNavigate={handleAuditNavigate}
             auditSnapshot={auditSession.auditSnapshot}
             auditRunning={auditSession.auditRunning}

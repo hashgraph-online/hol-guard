@@ -77,8 +77,6 @@ _TRANSPORT_IDENTITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/daemon/manager_process_query.py",
         # Interpreter bootstrap identity only; no policy or command decisions.
         "src/codex_plugin_scanner/guard/daemon/pipx_import_paths.py",
-        # Resident request transport; the observed git path is a fact, never a verdict.
-        "src/codex_plugin_scanner/guard/native_codex_tool_output.py",
         # Resident sensitive-request transport; the observed git path is a fact, never a verdict.
         "src/codex_plugin_scanner/guard/native_sensitive_request.py",
         "src/codex_plugin_scanner/guard/frozen_runtime_commands.py",
@@ -87,9 +85,7 @@ _TRANSPORT_IDENTITY_PATHS: Final = frozenset(
 _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
     {
         # Reassembled resident fragments are bound by the native result digest.
-        "src/codex_plugin_scanner/guard/native_decision_receipt.py",
         "src/codex_plugin_scanner/guard/native_rich_command_model.py",
-        "src/codex_plugin_scanner/guard/native_command_observations.py",
         "src/codex_plugin_scanner/guard/native_context.py",
         # Execution-environment digest binds transport context without carrying
         # the environment values themselves.
@@ -218,7 +214,6 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         # DTO is strictly validated and never reinterpreted.
         "src/codex_plugin_scanner/guard/native_mcp_tool_policy.py",
         "src/codex_plugin_scanner/guard/native_git_execution_safety.py",
-        "src/codex_plugin_scanner/guard/native_codex_tool_output.py",
         "src/codex_plugin_scanner/guard/native_policy_bundle.py",
         # Gathers ambient facts for and decodes the resident package-shim admin envelope; results stay Rust.
         "src/codex_plugin_scanner/guard/native_shim_admin.py",
@@ -247,18 +242,8 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         # JSON-safe DTO copy shared by the native runner-authority and MCP
         # tool-evidence projections; it carries no decision.
         "src/codex_plugin_scanner/guard/runtime/json_safe_copy.py",
-        # Decodes the bounded resident attachment-scan reply into an
-        # artifact; the scan, its bounds and its verdict are all Rust.
-        "src/codex_plugin_scanner/guard/cli/commands_support_codex_prompt_attachments.py",
         "src/codex_plugin_scanner/guard/native_runtime.py",
         "src/codex_plugin_scanner/guard/native_context.py",
-    }
-)
-_STRUCTURED_OUTPUT_MEDIATION_PATHS: Final = frozenset(
-    {
-        "src/codex_plugin_scanner/guard/runtime/secret_sensitivity.py",
-        "src/codex_plugin_scanner/guard/runtime/structured_data_sensitivity.py",
-        "src/codex_plugin_scanner/guard/runtime/structured_output_mediation.py",
     }
 )
 _ASYNC_POLICY_PATHS: Final = frozenset(
@@ -309,6 +294,7 @@ _PRESENTATION_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/approvals.py",
         "src/codex_plugin_scanner/guard/codex_app_server.py",
         "src/codex_plugin_scanner/guard/continuation_runtime.py",
+        "src/codex_plugin_scanner/guard/daemon/cursor_shell_route.py",
         "src/codex_plugin_scanner/guard/edge_events.py",
         "src/codex_plugin_scanner/guard/local_authority_integrity.py",
         "src/codex_plugin_scanner/guard/mcp_tool_calls.py",

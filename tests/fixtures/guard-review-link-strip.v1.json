@@ -1,0 +1,65 @@
+{
+  "schema": "guard-review-link-strip-parity.v1",
+  "cases": [
+    {
+      "name": "trailing-separator",
+      "reason": "HOL Guard requires review before this action. Approve it here: http://127.0.0.1:8787/guard/approvals/abc123.",
+      "approval_url": "http://127.0.0.1:8787/guard/approvals/abc123",
+      "stripped": "HOL Guard requires review before this action. Approve it here."
+    },
+    {
+      "name": "trailing-url-no-period",
+      "reason": "HOL Guard requires review before this action. Approve it here: http://127.0.0.1:8787/guard/approvals/abc123",
+      "approval_url": "http://127.0.0.1:8787/guard/approvals/abc123",
+      "stripped": "HOL Guard requires review before this action. Approve it here"
+    },
+    {
+      "name": "url-mid-sentence",
+      "reason": "Open http://127.0.0.1:8787/guard/approvals/abc123 to approve, then retry the same command.",
+      "approval_url": "http://127.0.0.1:8787/guard/approvals/abc123",
+      "stripped": "Open  to approve, then retry the same command."
+    },
+    {
+      "name": "semicolon-before-period",
+      "reason": "Approve it here; http://127.0.0.1:8787/guard/approvals/abc123.",
+      "approval_url": "http://127.0.0.1:8787/guard/approvals/abc123",
+      "stripped": "Approve it here."
+    },
+    {
+      "name": "comma-separator",
+      "reason": "Approve it here, http://127.0.0.1:8787/guard/approvals/abc123.",
+      "approval_url": "http://127.0.0.1:8787/guard/approvals/abc123",
+      "stripped": "Approve it here."
+    },
+    {
+      "name": "nbsp-before-period",
+      "reason": "Approve it here: http://127.0.0.1:8787/guard/approvals/abc123 .",
+      "approval_url": "http://127.0.0.1:8787/guard/approvals/abc123",
+      "stripped": "Approve it here."
+    },
+    {
+      "name": "url-only",
+      "reason": "http://127.0.0.1:8787/guard/approvals/abc123",
+      "approval_url": "http://127.0.0.1:8787/guard/approvals/abc123",
+      "stripped": ""
+    },
+    {
+      "name": "two-occurrences",
+      "reason": "Approve at http://127.0.0.1:8787/guard/approvals/abc123 or reopen http://127.0.0.1:8787/guard/approvals/abc123.",
+      "approval_url": "http://127.0.0.1:8787/guard/approvals/abc123",
+      "stripped": "Approve at  or reopen."
+    },
+    {
+      "name": "newline-separator",
+      "reason": "Approve it here:\nhttp://127.0.0.1:8787/guard/approvals/abc123\n.",
+      "approval_url": "http://127.0.0.1:8787/guard/approvals/abc123",
+      "stripped": "Approve it here."
+    },
+    {
+      "name": "period-mid-text",
+      "reason": "Approve it here: http://127.0.0.1:8787/guard/approvals/abc123. Then retry.",
+      "approval_url": "http://127.0.0.1:8787/guard/approvals/abc123",
+      "stripped": "Approve it here. Then retry."
+    }
+  ]
+}

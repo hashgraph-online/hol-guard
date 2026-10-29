@@ -49,15 +49,36 @@ _GLOB_CHARACTERS = ("*", "?", "[")
 _NOT_A_PATH = frozenset({"${PORTAL_WEB_HEAD}"})
 
 
-def _referenced(tool_name: str, tool_input: dict[str, object]) -> list[str]:
+def _resolved(target: str, tokens: dict[str, str]) -> Path | None:
+    """Where a token path lands in the built fixture, or None for a bare name."""
+    if not target.startswith("${") or "}" not in target:
+        return None
+    token = target[: target.index("}") + 1]
+    if token not in tokens:
+        return None
+    return Path(target.replace(token, tokens[token]))
+
+
+def _referenced(tool_name: str, tool_input: dict[str, object], tokens: dict[str, str] | None = None) -> list[str]:
     """Token paths the case names, minus the ones its own command creates."""
     created = creation_targets(tool_name, tool_input)
+    # Only a target the fixture leaves absent shelters the paths below it. A
+    # copy into a folder that is already there still reads nothing new, so a
+    # missing path below that folder is still a missing path.
+    fresh = {
+        target
+        for target in created
+        if tokens is None or ((resolved := _resolved(target, tokens)) is not None and not resolved.exists())
+    }
     blob = json.dumps(tool_input)
     named = []
     for match in _TOKEN_PATH.finditer(blob):
         reference = match.group()
         bare = reference.rstrip("/")
-        if bare in created:
+        # A path below one the command creates, such as a package read
+        # through the link an earlier step makes, exists only once that step
+        # has run. The fixture leaves it absent, as `materialise` does.
+        if bare in created or any(bare.startswith(target + "/") for target in fresh):
             continue
         # A path whose own name holds a ``$`` — a dynamic route file such as
         # ``posts.$postId.tsx`` — ends the token match early, so the created
@@ -80,7 +101,7 @@ def test_every_benign_case_finds_the_paths_it_reads() -> None:
                 continue
             if case["id"] in PROBES_FOR_ABSENCE:
                 continue
-            for reference in _referenced(case.get("tool", ""), case.get("tool_input", {})):
+            for reference in _referenced(case.get("tool", ""), case.get("tool_input", {}), tokens):
                 token = reference[: reference.index("}") + 1]
                 if token not in tokens or token in _NOT_A_PATH:
                     continue
@@ -174,3 +195,13 @@ def test_a_probe_for_an_absent_path_is_never_built() -> None:
     kept = benign_path_tokens({"cases": [case for case in catalogue["cases"] if case["id"] in others]})
     assert named - kept, "no absence probe names a path of its own, so this pin measures nothing"
     assert (named - kept) & built == set()
+
+
+def test_only_an_absent_creation_target_shelters_the_paths_below_it(tmp_path: Path) -> None:
+    there = tmp_path / "there"
+    there.mkdir()
+    tokens = {"${ROOT}": str(tmp_path)}
+    copy = {"command": "cp notes.md ${ROOT}/there && cat ${ROOT}/there/missing.md"}
+    assert _referenced("bash", copy, tokens) == ["${ROOT}/there/missing.md"]
+    link = {"command": "ln -s ${ROOT}/there ${ROOT}/fresh && cat ${ROOT}/fresh/a.md"}
+    assert "${ROOT}/fresh/a.md" not in _referenced("bash", link, tokens)

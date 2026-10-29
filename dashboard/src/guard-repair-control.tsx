@@ -13,23 +13,49 @@ import { fetchResolvedApprovalGate } from "./use-resolved-approval-gate";
 
 type StepTone = "green" | "blue" | "attention" | "slate";
 
-export function repairStepTone(status: GuardRepairStep["status"]): StepTone {
-  if (status === "error") return "attention";
-  if (status === "changed") return "green";
-  if (status === "planned") return "blue";
+export function stepNeedsAttention(step: GuardRepairStep): boolean {
+  return step.needs_attention.length > 0;
+}
+
+export function repairAttentionTitles(steps: GuardRepairStep[]): string[] {
+  return steps.filter(stepNeedsAttention).map((step) => step.title);
+}
+
+export function repairStepTone(step: GuardRepairStep): StepTone {
+  if (step.status === "error" || stepNeedsAttention(step)) return "attention";
+  if (step.status === "changed") return "green";
+  if (step.status === "planned") return "blue";
   return "slate";
 }
 
-export function repairStepLabel(status: GuardRepairStep["status"]): string {
-  if (status === "error") return "Failed";
-  if (status === "changed") return "Fixed";
-  if (status === "planned") return "Needs repair";
-  if (status === "skipped") return "Skipped";
+export function repairStepLabel(step: GuardRepairStep): string {
+  if (step.status === "error") return "Failed";
+  // A step that fixed some apps and left others broken is not simply "Fixed":
+  // the part it could not settle is the part the user came here for.
+  if (stepNeedsAttention(step)) return "Needs you";
+  if (step.status === "changed") return "Fixed";
+  if (step.status === "planned") return "Needs repair";
+  if (step.status === "skipped") return "Skipped";
   return "Healthy";
 }
 
 export function repairHeadline(report: GuardRepairReport): string {
-  if (report.status === "partial") return "Some repair steps failed. Run Repair Guard again, or run `hol-guard repair` in a terminal.";
+  if (report.status === "partial") {
+    if (report.steps.some((step) => step.status === "error")) {
+      return "Some repair steps failed. Run Repair Guard again, or run `hol-guard repair` in a terminal.";
+    }
+    // Repair reports "partial" for a step that needs the user as well as for
+    // one that failed. Only the second is worth another run; telling the user
+    // to repair again when nothing failed sends them round a loop that ends
+    // where it started. A step that ran out of budget is the exception: it
+    // left work another run picks up.
+    const waiting = repairAttentionTitles(report.steps);
+    const named = waiting.length > 0 ? ` Still waiting on you: ${waiting.join(", ")}.` : "";
+    if (report.steps.some((step) => step.budget_exhausted)) {
+      return `No repair step failed. Run Repair Guard again to continue the cleanup it could not finish.${named}`;
+    }
+    return `No repair step failed, and running repair again reaches the same answer.${named}`;
+  }
   if (report.status === "repaired") return "Guard was repaired. Restart any coding-agent session that was blocked.";
   if (report.status === "needs_repair") return "Guard found problems to repair.";
   return "Nothing needed repair.";
@@ -45,7 +71,7 @@ export function GuardRepairStepList({ steps }: { steps: GuardRepairStep[] }) {
             <p className="text-sm font-medium text-brand-dark">{step.title}</p>
             <p className="break-words text-xs text-slate-500">{step.summary}</p>
           </div>
-          <Tag tone={repairStepTone(step.status)}>{repairStepLabel(step.status)}</Tag>
+          <Tag tone={repairStepTone(step)}>{repairStepLabel(step)}</Tag>
         </li>
       ))}
     </ul>

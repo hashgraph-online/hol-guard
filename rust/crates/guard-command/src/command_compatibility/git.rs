@@ -31,7 +31,7 @@ const RULES: &[(&str, &str)] = &[
     ("reflog", "command.git.reflog"),
 ];
 
-fn command_index(arguments: &[String]) -> Option<usize> {
+pub(crate) fn command_index(arguments: &[String]) -> Option<usize> {
     let mut index = 0;
     while let Some(argument) = arguments.get(index) {
         let option = argument.split('=').next().unwrap_or(argument);
@@ -97,46 +97,93 @@ fn bounded_inspection(arguments: &[String]) -> bool {
             && crate::pretool::git_side_record_reads::read_form(command, rest))
 }
 
+/// An option of a staged-index diff that only shapes what the command prints.
+fn bounded_cached_diff_option(option: &str) -> bool {
+    matches!(
+        option,
+        "--cached"
+            | "--staged"
+            | "HEAD"
+            | "--check"
+            | "--stat"
+            | "--numstat"
+            | "--shortstat"
+            | "--summary"
+            | "--name-only"
+            | "--name-status"
+            | "--patch"
+            | "-p"
+            | "--quiet"
+            | "--exit-code"
+            | "--no-color"
+            | "--color=never"
+            | "--no-ext-diff"
+            | "--no-textconv"
+    ) || option
+        .strip_prefix("-U")
+        .or_else(|| option.strip_prefix("--unified="))
+        .is_some_and(|lines| {
+            !lines.is_empty() && lines.len() <= 6 && lines.bytes().all(|b| b.is_ascii_digit())
+        })
+}
+
+/// An operand that git reads as a pathspec rather than as a revision. A `:`
+/// prefix (`:!vendor`, `:^docs`) can only be a pathspec, because a ref name
+/// cannot carry a colon. Anything else has to name an entry that is already
+/// there, which is the only way git itself tells a path from a revision:
+/// `git diff --cached origin/main` compares against a branch and keeps the
+/// index owner, while `git diff --cached web/package.json` narrows the same
+/// staged read the `--` form already admits. Without a known working
+/// directory nothing can be shown present, so the operand is not bounded.
+fn bounded_cached_diff_pathspec(operand: &str, directory: Option<&std::path::Path>) -> bool {
+    if operand.is_empty() || operand.starts_with('-') {
+        return false;
+    }
+    if operand.starts_with(':') {
+        return true;
+    }
+    // `symlink_metadata` rather than `exists`: a broken symlink is still an
+    // entry git sees, and any other error (an unreadable parent) refuses.
+    directory.is_some_and(|directory| directory.join(operand).symlink_metadata().is_ok())
+}
+
+/// The directory git resolves a bare operand against. A `-C <dir>` route moves
+/// it there, so an operand that is present beside the shell's own working
+/// directory proves nothing about the repository git actually reads; a relative
+/// route needs that working directory to resolve at all.
+fn operand_directory(cwd: Option<&str>, route: Option<&str>) -> Option<std::path::PathBuf> {
+    let Some(route) = route else {
+        return cwd.map(std::path::PathBuf::from);
+    };
+    let route = std::path::PathBuf::from(route);
+    if route.is_absolute() {
+        return Some(route);
+    }
+    cwd.map(|cwd| std::path::Path::new(cwd).join(route))
+}
+
 /// A staged-index diff that prints to stdout like `git diff HEAD`, which the
 /// ordinary diff proof already admits. The staged content is no more private
 /// than the working tree beside it, so the shared read proof (configuration
 /// probe, textconv and sensitive-pathspec screens) decides it. Forms that
 /// write a file or compare against another revision keep the index owner.
-fn bounded_cached_diff(arguments: &[String]) -> bool {
-    arguments
+///
+/// Trailing pathspecs are read the same way whether or not a `--` separates
+/// them, so the bare form is bounded on the same terms: every argument up to
+/// the first operand has to shape the output, and every operand from there on
+/// has to be a present in-tree pathspec. `directory` is where git resolves
+/// those operands: where the segment's native proofs ran, or the `-C` route it
+/// entered first.
+fn bounded_cached_diff(arguments: &[String], directory: Option<&std::path::Path>) -> bool {
+    let operands: Vec<&String> = arguments
         .iter()
         .take_while(|argument| argument.as_str() != "--")
-        .all(|argument| {
-            let option = argument.as_str();
-            matches!(
-                option,
-                "--cached"
-                    | "--staged"
-                    | "HEAD"
-                    | "--check"
-                    | "--stat"
-                    | "--numstat"
-                    | "--shortstat"
-                    | "--summary"
-                    | "--name-only"
-                    | "--name-status"
-                    | "--patch"
-                    | "-p"
-                    | "--quiet"
-                    | "--exit-code"
-                    | "--no-color"
-                    | "--color=never"
-                    | "--no-ext-diff"
-                    | "--no-textconv"
-            ) || option
-                .strip_prefix("-U")
-                .or_else(|| option.strip_prefix("--unified="))
-                .is_some_and(|lines| {
-                    !lines.is_empty()
-                        && lines.len() <= 6
-                        && lines.bytes().all(|b| b.is_ascii_digit())
-                })
-        })
+        .skip_while(|argument| bounded_cached_diff_option(argument))
+        .collect();
+    operands.len() <= 16
+        && operands
+            .iter()
+            .all(|operand| bounded_cached_diff_pathspec(operand, directory))
 }
 
 fn read_only_plumbing(arguments: &[String]) -> bool {
@@ -250,6 +297,18 @@ fn routed<'a>(
     context: crate::pretool::PathContext<'_>,
     inspection: bool,
 ) -> Option<&'a [String]> {
+    routed_with_route(arguments, context, inspection).map(|(rest, _)| rest)
+}
+
+/// [`routed`] plus the last `-C <dir>` the prefix entered. Git resolves a bare
+/// operand against that directory rather than against the shell's own working
+/// directory, so a proof over such an operand has to be taken there.
+fn routed_with_route<'a>(
+    arguments: &'a [String],
+    context: crate::pretool::PathContext<'_>,
+    inspection: bool,
+) -> Option<(&'a [String], Option<&'a str>)> {
+    let mut route = None;
     let mut index = 0;
     let mut saw_change_directory = false;
     let mut saw_git_dir = false;
@@ -341,13 +400,14 @@ fn routed<'a>(
             return None;
         }
         saw_change_directory = true;
+        route = Some(target);
         index += 1;
     }
     let rest = arguments.get(index..)?;
     if without_repository && crate::pretool::reads_without_repository(rest) {
         return None;
     }
-    Some(rest)
+    Some((rest, route))
 }
 
 #[cfg(test)]
@@ -497,7 +557,13 @@ pub(super) fn observe_with_contexts(
             .iter()
             .take_while(|argument| argument.as_str() != "--")
             .any(|argument| matches!(argument.as_str(), "--cached" | "--staged"))
-        && !inspection.is_some_and(|remaining| bounded_cached_diff(&remaining[1..]))
+        && !inspection.is_some_and(|remaining| {
+            let route = routed_with_route(arguments, context, true).and_then(|(_, route)| route);
+            bounded_cached_diff(
+                &remaining[1..],
+                operand_directory(proof_context.cwd, route).as_deref(),
+            )
+        })
     {
         result.rule("command.git.index-inspection", index, true);
     }

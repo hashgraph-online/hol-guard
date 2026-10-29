@@ -156,8 +156,8 @@ pub(super) fn evaluate_signals(
             "require-reapproval",
             "native_prompt_injection_review",
             reason(
-                "HOL Guard did not send this prompt because it asks to override trusted instructions. Nothing is waiting for approval; rephrase that part of the request.",
-                "HOL Guard held this tool call because its text asks to override trusted instructions.",
+                "HOL Guard did not send this prompt because it asks to override or reveal trusted instructions. Nothing is waiting for approval; rephrase that part of the request.",
+                "HOL Guard held this tool call because its text asks to override or reveal trusted instructions.",
             ),
         );
     }
@@ -226,6 +226,7 @@ pub(super) fn evaluate_signals(
         && !signals.sensitive_target
         && signals.url_values.is_empty()
         && signals.command.is_none()
+        && !signals.mirrored_input_unproven
         && signals.path_values.len() == 1
         && super::super::read_paths::omp_targets::bounded_directory_read_tool_target(
             harness,
@@ -327,6 +328,7 @@ pub(super) fn evaluate_signals(
     if action_type == PreToolActionTypeV1::FileRead
         && !signals.sensitive_target
         && signals.url_values.is_empty()
+        && !signals.mirrored_input_unproven
         && signals.path_values.len() == 1
         && if matches!(signals.tool_name.as_deref(), Some("Read" | "read")) {
             // Only the host `Read` tools open their path literally, so a

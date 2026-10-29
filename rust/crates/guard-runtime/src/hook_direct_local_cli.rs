@@ -42,8 +42,9 @@ pub(super) struct RuleCheck<'a> {
     pub(super) home_dir: &'a str,
     pub(super) guard_home: &'a str,
     pub(super) recording_only: bool,
-    /// The daemon's home and environment, when the caller is not the process
-    /// the launch runs under.
+    /// The daemon's home and environment, which the launch resolves
+    /// against. Without them a launch past a package script cannot be
+    /// identified, as one the daemon could not identify.
     pub(super) launch_env: Option<LaunchEnv<'a>>,
 }
 
@@ -150,28 +151,22 @@ fn local_launch(
 ) -> Result<Option<Launch>, ()> {
     let package = package_json_scripts(command, cwd, home_dir).map_err(|_| ())?;
     block::launch(package, || {
-        let identify_in = |user_home: &str, env: &BTreeMap<String, String>| {
-            identify(&Request {
-                command_text: command,
-                cwd,
-                home_dir: Some(home_dir),
-                user_home,
-                compound: false,
-                env,
-                budget_ms: IDENTIFY_BUDGET_MS,
-            })
-            .map_err(|_| ())
-        };
-        // The daemon resolves the launch against its own environment. The
-        // direct lane runs inside it; the resident is told it.
-        if let Some(launch_env) = launch_env {
-            return identify_in(launch_env.user_home, launch_env.env);
-        }
-        let user_home = std::env::var("HOME").map_err(|_| ())?;
-        let env: BTreeMap<String, String> = std::env::vars_os()
-            .filter_map(|(name, value)| Some((name.into_string().ok()?, value.into_string().ok()?)))
-            .collect();
-        identify_in(&user_home, &env)
+        // The daemon resolves the launch against its own home and
+        // environment. The resident runs with neither the daemon's `PATH` nor
+        // the rest of its environment, so it never substitutes its own: an
+        // `env`-shebang script would resolve to a different identity, miss
+        // its grant, and leave an allowed extension paused for review.
+        let launch_env = launch_env.ok_or(())?;
+        identify(&Request {
+            command_text: command,
+            cwd,
+            home_dir: Some(home_dir),
+            user_home: launch_env.user_home,
+            compound: false,
+            env: launch_env.env,
+            budget_ms: IDENTIFY_BUDGET_MS,
+        })
+        .map_err(|_| ())
     })
 }
 
@@ -227,7 +222,7 @@ pub(super) fn review_grant(check: &RuleCheck<'_>) -> Option<ReviewVerdict> {
 
 /// The daemon's command rule: the first non-blank command field of the tool
 /// input, then the arguments, then the payload itself.
-fn pre_tool_command(payload: &Map<String, Value>) -> Result<Option<&str>, ()> {
+pub(crate) fn pre_tool_command(payload: &Map<String, Value>) -> Result<Option<&str>, ()> {
     let tool_input = TOOL_INPUT_FIELDS
         .iter()
         .find_map(|field| payload.get(*field).and_then(Value::as_object));
@@ -251,10 +246,23 @@ pub(super) fn launch_cwd(
     payload: &Map<String, Value>,
     workspace: &str,
 ) -> Result<Option<String>, ()> {
-    let raw = match payload.get("cwd").and_then(Value::as_str) {
+    resolve_launch_dir(launch_dir_candidate(payload, workspace)?)
+}
+
+/// The directory `launch_cwd` resolves: the payload's non-blank `cwd`, else
+/// the workspace.
+pub(crate) fn launch_dir_candidate<'a>(
+    payload: &'a Map<String, Value>,
+    workspace: &'a str,
+) -> Result<&'a str, ()> {
+    Ok(match payload.get("cwd").and_then(Value::as_str) {
         Some(raw) if python_strip(raw).map_err(|_| ())?.is_some() => raw,
         _ => workspace,
-    };
+    })
+}
+
+/// `raw` resolved, when absolute and an existing directory once resolved.
+pub(crate) fn resolve_launch_dir(raw: &str) -> Result<Option<String>, ()> {
     if !Path::new(raw).is_absolute() {
         return Ok(None);
     }

@@ -207,3 +207,22 @@ fn a_directory_in_no_repository_is_no_sibling_root() {
     req.project_root_query = Some(plain.to_string_lossy().into_owned());
     assert_eq!(evaluate(&req)["project_root"], Value::Null);
 }
+
+#[test]
+fn a_new_worktree_chain_names_its_add_and_the_rest() {
+    let root = workspace();
+    let command = "git worktree add --detach ../app-fix HEAD && cd ../app-fix && bun run build";
+    let answer = evaluate(&request(command, root.path()));
+    assert_eq!(
+        answer["worktree_add"]["add"],
+        Value::from("git worktree add --detach ../app-fix HEAD")
+    );
+    assert_eq!(
+        answer["worktree_add"]["entered"],
+        Value::from("cd ../app-fix && bun run build")
+    );
+    assert_eq!(
+        evaluate(&request("pytest -q", root.path()))["worktree_add"],
+        Value::Null
+    );
+}

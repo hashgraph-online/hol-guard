@@ -22,6 +22,7 @@ RECORDING_METHODS = (
     "record_native_decision_receipt",
     "record_local_once_approval",
     "add_approval_request",
+    "queue_native_review",
     "add_event",
     "add_guard_event_v1",
 )

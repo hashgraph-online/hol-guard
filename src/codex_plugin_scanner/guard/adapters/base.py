@@ -316,6 +316,10 @@ class HarnessAdapter:
     fallback_hint = "Use the Guard approval center or native harness prompt to resolve pending requests."
     approval_prompt_channel = "browser"
     approval_auto_open_browser = True
+    #: Whether an unavailable command is enough to conclude the tool itself is gone.
+    #: A harness whose Guard hooks keep running without its CLI sets this False, so
+    #: leftover configuration is never mistaken for an absent tool.
+    command_absence_proves_uninstalled = True
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         super().__init_subclass__(**kwargs)
@@ -508,20 +512,6 @@ class HarnessAdapter:
     def runtime_probe(self, context: HarnessContext) -> dict[str, object] | None:
         return None
 
-    def attach_session(
-        self,
-        context: HarnessContext,
-        *,
-        session_id: str,
-        client_name: str,
-    ) -> dict[str, object]:
-        return {
-            "harness": self.harness,
-            "session_id": session_id,
-            "client_name": client_name,
-            "workspace": str(context.workspace_dir) if context.workspace_dir is not None else None,
-        }
-
     def start_operation(
         self,
         context: HarnessContext,
@@ -533,32 +523,6 @@ class HarnessAdapter:
             "harness": self.harness,
             "session_id": session_id,
             "operation_type": operation_type,
-            "workspace": str(context.workspace_dir) if context.workspace_dir is not None else None,
-        }
-
-    def request_approval(
-        self,
-        context: HarnessContext,
-        *,
-        request_ids: list[str],
-    ) -> dict[str, object]:
-        return {
-            "harness": self.harness,
-            "request_ids": request_ids,
-            "workspace": str(context.workspace_dir) if context.workspace_dir is not None else None,
-        }
-
-    def continue_after_approval(
-        self,
-        context: HarnessContext,
-        *,
-        operation_id: str,
-        approved: bool,
-    ) -> dict[str, object]:
-        return {
-            "harness": self.harness,
-            "operation_id": operation_id,
-            "status": "completed" if approved else "blocked",
             "workspace": str(context.workspace_dir) if context.workspace_dir is not None else None,
         }
 
@@ -574,14 +538,23 @@ class HarnessAdapter:
                 f"{self.harness} config was found, but Guard is not installed for this harness. "
                 f"Run `hol-guard install {self.harness}` to enable protection."
             )
-        if detection.config_paths and not detection.command_available:
+        if guard_managed and not detection.command_available and self.command_absence_proves_uninstalled:
             warnings.append(
-                f"{self.harness} config was found, but the {self.executable} command is not available on PATH."
+                f"Guard is configured for {self.harness}, but the {self.executable} command is not available on "
+                f"this machine. Install {self.executable}, or run `hol-guard uninstall {self.harness}` to remove "
+                "the leftover Guard configuration."
             )
         elif guard_managed and not detection.command_available:
+            # The tool runs Guard's hooks without its CLI, so the configuration is in use,
+            # not left behind: naming it leftover would invite an uninstall that drops live protection.
             warnings.append(
-                f"Guard launcher for {self.harness} is installed, but the {self.executable} command is not available "
-                "on PATH."
+                f"Guard is configured for {self.harness}, but the {self.executable} command is not available on "
+                f"this machine. Install {self.executable} to protect {self.harness} command-line sessions. "
+                f"The configuration is still in use, because {self.harness} runs Guard's hooks without it."
+            )
+        elif detection.config_paths and not detection.command_available:
+            warnings.append(
+                f"{self.harness} config was found, but the {self.executable} command is not available on PATH."
             )
         if runtime_probe is not None and runtime_probe.get("timed_out") is True:
             warnings.append(f"{self.executable} diagnostics timed out before Guard could confirm runtime state.")
@@ -604,7 +577,11 @@ class HarnessAdapter:
         return {
             "harness": self.harness,
             "installed": detection.installed,
-            "setup_status": _diagnostic_setup_status(detection, warnings),
+            "setup_status": _diagnostic_setup_status(
+                detection,
+                warnings,
+                command_absence_proves_uninstalled=self.command_absence_proves_uninstalled,
+            ),
             "command_available": detection.command_available,
             "config_paths": list(detection.config_paths),
             "artifacts": [artifact.to_dict() for artifact in detection.artifacts],
@@ -640,9 +617,18 @@ class HarnessAdapter:
         )
 
 
-def _diagnostic_setup_status(detection: HarnessDetection, warnings: list[str]) -> str:
+def _diagnostic_setup_status(
+    detection: HarnessDetection,
+    warnings: list[str],
+    *,
+    command_absence_proves_uninstalled: bool = True,
+) -> str:
     guard_managed = _detection_has_guard_management(detection)
     if guard_managed and _warnings_include_setup_failure(warnings):
+        if command_absence_proves_uninstalled and _only_tool_command_missing(detection, warnings):
+            # Guard config left behind for a tool that is no longer installed. Nothing can run
+            # unprotected, so report the tool as absent rather than as a broken Guard setup.
+            return "not_found"
         return "broken"
     if guard_managed:
         return "active"
@@ -692,14 +678,53 @@ def _is_guard_launcher_shim(path: Path) -> bool:
     return "codex_plugin_scanner.cli" in contents and "guard" in contents and "run" in contents
 
 
+_MISSING_COMMAND_MARKER = "command is not available"
+
+
 def _warnings_include_setup_failure(warnings: list[str]) -> bool:
     setup_markers = (
         "guard is not installed",
-        "command is not available",
+        _MISSING_COMMAND_MARKER,
         "native hooks are disabled",
         "managed codex hooks are missing",
     )
     return any(any(marker in warning.lower() for marker in setup_markers) for warning in warnings)
+
+
+def setup_failures_besides_missing_command(warnings: Sequence[str]) -> bool:
+    """Whether any warning remains once the one about the missing tool command is set aside.
+
+    Adapters word their own faults, from a rejected executable override to duplicate
+    managed entries, so a list of known phrases would quietly drop the ones it does
+    not know. Anything the missing command does not already explain keeps the setup
+    broken, which is what Guard reported before leftover configuration was recognised.
+    """
+
+    return any(_MISSING_COMMAND_MARKER not in warning.lower() for warning in warnings)
+
+
+def _guard_management_is_launcher_only(detection: HarnessDetection) -> bool:
+    """Whether a Guard launcher is the only thing Guard manages for this tool.
+
+    A launcher beside an ordinary, unmanaged tool config leaves `config_paths`
+    nonempty, so the config alone cannot tell leftover Guard configuration from a
+    tool config Guard never touched.
+    """
+
+    if any(_guard_managed_path(path) for path in detection.config_paths):
+        return False
+    managed = [artifact for artifact in detection.artifacts if _artifact_uses_guard(artifact)]
+    return bool(managed) and all(artifact.artifact_type == "guard_launcher_shim" for artifact in managed)
+
+
+def _only_tool_command_missing(detection: HarnessDetection, warnings: list[str]) -> bool:
+    # A Guard launcher is kept broken so it stays visible rather than vanishing, whether or not
+    # an unmanaged tool config sits beside it.
+    if detection.command_available or not detection.config_paths:
+        return False
+    if _guard_management_is_launcher_only(detection):
+        return False
+    return not setup_failures_besides_missing_command(warnings)
 
 
 __all__ = [
@@ -711,4 +736,5 @@ __all__ = [
     "_json_payload",
     "_resolve_command",
     "_run_command_probe",
+    "setup_failures_besides_missing_command",
 ]

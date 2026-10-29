@@ -375,6 +375,15 @@ def main() -> int:
     github_token = _read_env("GITHUB_TOKEN")
     github_event_name = _read_env("GITHUB_EVENT_NAME")
     github_event_path = _read_env("GITHUB_EVENT_PATH")
+    pr_comment_listing_repository = (
+        _public_repository_for_publish_hint(
+            repository=github_repository,
+            server_url=github_server_url,
+            event_path=github_event_path,
+        )
+        if publish_hint
+        else ""
+    )
     pr_comment_mode, pr_comment_style, pr_comment_max_findings = _resolve_pr_comment_settings(
         plugin_dir=plugin_dir,
         config_path=config,
@@ -479,15 +488,7 @@ def main() -> int:
                     local_plugin_count=local_plugin_count,
                     skipped_target_count=skipped_target_count,
                     findings=summary_findings,
-                    publish_hint_repository=(
-                        _public_repository_for_publish_hint(
-                            repository=github_repository,
-                            server_url=github_server_url,
-                            event_path=github_event_path,
-                        )
-                        if publish_hint
-                        else ""
-                    ),
+                    publish_hint_repository=pr_comment_listing_repository,
                 ),
             )
         output_values["action_exit_code"] = str(return_code)
@@ -547,6 +548,7 @@ def main() -> int:
                 policy_pass=policy_eval.policy_pass,
                 style=pr_comment_style,
                 max_findings_to_render=pr_comment_max_findings,
+                listing_hint_repository=pr_comment_listing_repository,
             )
         elif mode == "lint":
             rendered = _render_lint_output(
@@ -561,6 +563,7 @@ def main() -> int:
                 policy_pass=policy_eval.policy_pass,
                 style=pr_comment_style,
                 max_findings_to_render=pr_comment_max_findings,
+                listing_hint_repository=pr_comment_listing_repository,
             )
         else:
             if scan_scope != "plugin":
@@ -716,6 +719,7 @@ def main() -> int:
             verification_payload=verification_payload,
             style=pr_comment_style,
             max_findings_to_render=pr_comment_max_findings,
+            listing_hint_repository=pr_comment_listing_repository,
         )
         rendered = _render_verify_output(verification, output_format=output_format)
         verify_pass_for_summary = verification.verify_pass

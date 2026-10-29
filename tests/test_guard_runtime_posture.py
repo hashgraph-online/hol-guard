@@ -22,6 +22,7 @@ from codex_plugin_scanner.guard.runtime_identity_probe import (
     RUNTIME_PROBE_LAUNCH_FEATURE,
     probe_runtime_launches,
 )
+from codex_plugin_scanner.guard.runtime_instance_store import INSTANCE_STORE_NAME
 from codex_plugin_scanner.guard.runtime_posture import ADVISORIES_UNAVAILABLE, build_runtime_posture
 
 NOW = "2026-01-01T00:00:00+00:00"
@@ -257,6 +258,29 @@ def test_cli_json_shape(
         payload
     )
     assert payload["runtimes"][0]["family"] == "node"
+
+
+def test_cli_enumerates_running_processes_only_when_asked(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path, native_runtime: Path
+) -> None:
+    node = _nvm_node(tmp_path)
+    _patch_detections(monkeypatch, [_detection("node")], path=str(node.parent))
+    guard_args = _guard_args(tmp_path)
+    guard_home = Path(guard_args[guard_args.index("--guard-home") + 1])
+
+    assert main(["guard", "runtime", "posture", "--json", *guard_args]) == 0
+
+    quiet = json.loads(capsys.readouterr().out)
+    # The admitted read names launch paths. It does not look at other
+    # processes and leaves nothing behind in the Guard home.
+    assert quiet["coverage"]["instances_enumerated"] is False
+    assert not (guard_home / INSTANCE_STORE_NAME).exists()
+
+    assert main(["guard", "runtime", "posture", "--json", "--instances", *guard_args]) == 0
+
+    asked = json.loads(capsys.readouterr().out)
+    assert asked["coverage"]["instances_enumerated"] is True
+    assert (guard_home / INSTANCE_STORE_NAME).exists()
 
 
 def test_cli_unreadable_store_costs_the_advisories_not_the_report(

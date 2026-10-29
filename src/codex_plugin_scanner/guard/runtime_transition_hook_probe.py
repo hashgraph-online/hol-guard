@@ -10,8 +10,6 @@ import re
 import uuid
 from collections.abc import Mapping
 
-from .native_decision_receipt import validate_native_decision_receipt
-
 PROBE_FIELD = "guard_transition_probe"
 OBSERVATION_FIELD = "guard_transition_observation"
 PROBE_SCHEMA = "hol-guard.transition-hook-probe.v1"
@@ -42,6 +40,8 @@ def transition_hook_observation(payload: Mapping[str, object], receipt: object) 
     probe = transition_hook_probe(payload)
     if probe is None:
         return None
+    from .native_decision_receipt import validate_native_decision_receipt
+
     native = validate_native_decision_receipt(receipt)
     if (
         native is None

@@ -8,16 +8,17 @@ from typing import Any, cast
 
 from ..approval_gate import ApprovalGateError
 from ..approval_gate import input_from_mapping as approval_gate_input_from_mapping
+from ..approval_scope_selection import resolve_request_scope_selection
 from ..approval_scope_support import (
     IneligibleApprovalScopeError,
     StaleApprovalScopeContractError,
     request_scope_contract_payload,
-    resolve_request_scope_selection,
 )
 from ..approvals import ApprovalRequestAlreadyResolvedError, ApprovalRequestNotFoundError, apply_approval_resolution
 from ..native_approval_scope import ApprovalScopeUnavailableError
 from ..native_daemon_route import NativeDaemonRouteError, native_resolve_request
 from ..native_resident_revival import native_route_unavailable_body
+from ..trusted_local_tools import LocalToolGrantUnavailableError
 from .background_diagnostics import failure_detail, record_background_event
 from .command_activity_api import handle_command_activity_feedback
 from .extension_control_api import ExtensionControlApiError
@@ -447,6 +448,13 @@ class _ControlPostRoutes:
         except ApprovalScopeUnavailableError:
             self._write_json(
                 {"resolved": False, "error": "native_approval_scope_unavailable"},
+                status=503,
+                extra_headers={"Cache-Control": "no-store"},
+            )
+            return
+        except LocalToolGrantUnavailableError as error:
+            self._write_json(
+                {"resolved": False, "error": str(error)},
                 status=503,
                 extra_headers={"Cache-Control": "no-store"},
             )

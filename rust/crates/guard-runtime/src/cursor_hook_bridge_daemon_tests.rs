@@ -24,7 +24,7 @@ const SHELL: &[u8] =
     br#"{"hook_event_name":"beforeShellExecution","command":"ls","cwd":"/nonexistent-cursor-cwd"}"#;
 const MCP: &[u8] = br#"{"hook_event_name":"beforeMCPExecution","tool_name":"fetch","tool_input":{"q":"x"},"cwd":"/nonexistent-cursor-cwd"}"#;
 const READ_FILE: &[u8] = br#"{"hook_event_name":"beforeReadFile","file_path":"/tmp/a.txt","cwd":"/nonexistent-cursor-cwd"}"#;
-const PRE_TOOL: &[u8] = br#"{"hook_event_name":"preToolUse","tool_name":"Shell","tool_input":{"command":"ls"},"cwd":"/nonexistent-cursor-cwd"}"#;
+const PRE_TOOL: &[u8] = br#"{"hook_event_name":"preToolUse","tool_name":"Write","tool_input":{"file_path":"/tmp/a.txt","content":"x"},"cwd":"/nonexistent-cursor-cwd"}"#;
 const PROMPT: &[u8] = br#"{"hook_event_name":"UserPromptSubmit","prompt":"hi"}"#;
 const AFTER_SHELL: &[u8] = br#"{"hook_event_name":"afterShellExecution","command":"ls","output":"a","cwd":"/nonexistent-cursor-cwd"}"#;
 
@@ -88,7 +88,7 @@ fn serve_once(
 
 /// The bridge's answer for `raw` from a daemon that answers one hook with
 /// `status` and `body`, and the request the daemon got.
-fn ask(
+pub(super) fn ask(
     label: &str,
     raw: &[u8],
     status: u16,

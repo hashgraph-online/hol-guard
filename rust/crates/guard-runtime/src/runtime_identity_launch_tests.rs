@@ -35,11 +35,13 @@ pub(crate) fn spec(command: &str, launch_dir: &Path) -> Value {
     json!({"command": command, "launch_dir": text(launch_dir)})
 }
 
+#[cfg(unix)]
 fn spec_with_path(command: &str, launch_dir: &Path, path: &str) -> Value {
     json!({"command": command, "launch_dir": text(launch_dir), "configured_path": path})
 }
 
 /// The `(path, role)` targets of launch `index`.
+#[cfg(unix)]
 pub(crate) fn targets(result: &Value, index: usize) -> Vec<(String, String)> {
     result["launches"][index]["targets"]
         .as_array()
@@ -54,6 +56,7 @@ pub(crate) fn targets(result: &Value, index: usize) -> Vec<(String, String)> {
         .collect()
 }
 
+#[cfg(unix)]
 pub(crate) fn paths_of(result: &Value, index: usize) -> Vec<String> {
     targets(result, index)
         .into_iter()

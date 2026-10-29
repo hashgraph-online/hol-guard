@@ -33,7 +33,6 @@ _ROOTS: Final = (
     ("src/codex_plugin_scanner/guard/daemon/server.py", "_GuardDaemonHandler", "_handle_runtime_hook_fast"),
     ("src/codex_plugin_scanner/guard/daemon/server.py", "_GuardDaemonHandler", "_execute_runtime_hook"),
     ("src/codex_plugin_scanner/guard/native_pretool.py", None, "review_pre_tool_native"),
-    ("src/codex_plugin_scanner/guard/native_runtime.py", None, "review_post_tool_native"),
 )
 _SEMANTIC_MODULES: Final = frozenset(
     {

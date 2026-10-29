@@ -2,8 +2,10 @@
 //!
 //! Records the CLI a command launches (and refreshes a package script
 //! catalog), then refines the hook action with this device's grant. Python's
-//! `observe_unlisted_cli` and `apply_local_cli_grant` made one resident call
-//! per identity, record and grant read; the same steps run here in-process.
+//! observation and `apply_local_cli_grant` made one resident call per
+//! identity, record and grant read; the same steps run here in-process.
+//! [`observe_only`] records without refining, for the resident's own
+//! off-path observer (`crate::local_cli_observer`).
 //! The caller supplies only the command, its directories and environment, and
 //! the action being refined; none of those can create a grant.
 //!
@@ -28,7 +30,7 @@ use crate::context_digest_local_cli::python_path_name;
 use crate::context_digest_package_scripts::package_json_scripts;
 use crate::hook_direct::local_cli::block::{match_command_id, valid_package, valid_unlisted};
 use crate::local_cli_hook_contained::{self as contained, Refined};
-use crate::local_cli_identify::{identify, Request};
+use crate::local_cli_identify::{identify, launch_arguments, Request};
 use crate::local_store_read;
 use crate::native_exact_action_op::runner_bin::runner_split;
 
@@ -118,6 +120,13 @@ pub(crate) fn run_refined(request: &LocalCliHookRequestV1) -> Result<Refined, &'
     Ok(refined(request, &package))
 }
 
+/// The recording alone, refining nothing: what the resident's off-path
+/// observer records for an answered `PreToolUse`.
+pub(crate) fn observe_only(request: &LocalCliHookRequestV1) -> Result<(), &'static str> {
+    let package = checked_package(request)?;
+    observe(request, &package)
+}
+
 /// The grant refinement alone, recording nothing: what the workspace sink
 /// asks again right before it widens a sandbox by a grant.
 #[cfg(unix)]
@@ -150,7 +159,7 @@ fn refined(request: &LocalCliHookRequestV1, package: &Package) -> Refined {
     })
 }
 
-/// `observe_unlisted_cli`: the package script identity, else every CLI a
+/// The launch observation: the package script identity, else every CLI a
 /// single or compound invocation launches.
 fn observe(request: &LocalCliHookRequestV1, package: &Package) -> Result<(), &'static str> {
     let Ok(package) = package else {
@@ -192,6 +201,7 @@ fn observe(request: &LocalCliHookRequestV1, package: &Package) -> Result<(), &'s
             .path_class
             .clone()
             .filter(|class| !class.is_empty())
+            .or_else(|| launched_file(record_item.source_path.as_deref()))
             .unwrap_or_else(|| {
                 crate::custom_extension_suggestion::path_class(record_item.source_path.as_deref())
             });
@@ -210,6 +220,15 @@ fn observe(request: &LocalCliHookRequestV1, package: &Package) -> Result<(), &'s
         )?;
     }
     Ok(())
+}
+
+/// The resolved file the agent launched, kept so Load commands can read its
+/// help without asking the operator where it is. The store stays on this
+/// machine; anything that ranks or groups tools still derives a path class.
+fn launched_file(source_path: Option<&str>) -> Option<String> {
+    source_path
+        .filter(|path| std::path::Path::new(path).is_absolute())
+        .map(str::to_owned)
 }
 
 /// `record_local_cli_observation` with the Python store's defaults.
@@ -420,7 +439,12 @@ fn invocation_tokens(request: &LocalCliHookRequestV1, launch: &Launch) -> Result
     Ok(model
         .segments
         .first()
-        .map(|segment| command_tokens(&segment.arguments, launch))
+        .map(|segment| {
+            command_tokens(
+                launch_arguments(segment, &launch.name, &launch.kind),
+                launch,
+            )
+        })
         .unwrap_or_default())
 }
 
@@ -451,7 +475,9 @@ pub(crate) fn invocation_command_tokens(
     model
         .segments
         .first()
-        .map(|segment| tokens_for_identity(&segment.arguments, name, kind, runner))
+        .map(|segment| {
+            tokens_for_identity(launch_arguments(segment, name, kind), name, kind, runner)
+        })
         .unwrap_or_default()
 }
 

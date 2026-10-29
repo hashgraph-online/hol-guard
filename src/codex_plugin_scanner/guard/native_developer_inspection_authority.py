@@ -10,9 +10,9 @@ from pathlib import Path
 from typing import Any
 
 from . import native_git_execution_safety
-from .native_codex_tool_output import _environment_snapshot
 from .native_context import _resolve_digest_home
 from .native_direct_tool_context import _facts
+from .native_git_execution_safety import _tool_environment_snapshot as _environment_snapshot
 from .native_runner_authority import native_runner_authority
 from .runtime.shell_execution_context import _context_from_report
 

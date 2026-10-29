@@ -221,6 +221,7 @@ def test_report_is_exactly_reproducible_and_source_bound() -> None:
         "tests/test_guard_command_corpus_native_contract.py",
         "tests/guard_test_invariants.py",
         "tests/native_command_test_support.py",
+        "tests/native_command_effect_batch.py",
         "tests/test_native_command_test_support_batch.py",
         "tests/test_guard_native_classification_baseline.py",
         "src/codex_plugin_scanner/guard/runtime/command_decision_adapter.py",

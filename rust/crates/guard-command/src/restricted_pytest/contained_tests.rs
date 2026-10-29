@@ -221,6 +221,33 @@ fn relative_vitest_entry_uses_request_cwd_without_changing_resident_cwd() {
 }
 
 #[test]
+fn the_vitest_cli_module_spelling_plans_the_installed_bin_entry() {
+    let fixture = fixture("guard-vitest-cli-module");
+    let workspace = fixture.0.join("project");
+    let bin = workspace.join("bin");
+    let entry = workspace.join("node_modules/vitest/vitest.mjs");
+    let module = workspace.join("node_modules/vitest/dist/cli.js");
+    fs::create_dir_all(&bin).unwrap();
+    fs::create_dir_all(module.parent().unwrap()).unwrap();
+    fs::write(workspace.join("package.json"), "{}").unwrap();
+    fs::write(&entry, "").unwrap();
+    fs::write(&module, "").unwrap();
+    fs::write(bin.join("node"), b"\x7fELFnative-fixture").unwrap();
+    fs::set_permissions(bin.join("node"), fs::Permissions::from_mode(0o755)).unwrap();
+    let reply = evaluate_with_deadline(
+        "prepare_vitest",
+        &json!({
+            "command":["node","./node_modules/vitest/dist/cli.js","run"],
+            "workspace":workspace,"cwd":workspace,"platform":"darwin",
+            "backend_executable":"/usr/bin/true","search_path":bin
+        }),
+        Instant::now() + Duration::from_secs(5),
+    );
+    // The CLI module names the same runner, and the plan runs the `bin` entry.
+    assert_eq!(reply["value"]["command"][1], json!(entry));
+}
+
+#[test]
 fn large_ordinary_file_index_keeps_the_mapping_deadline_for_image_inspection() {
     let input = json!({"images":[],"read_files":(0..100000).map(|i|
         format!("/guard-fixture/workspace/a/b/c/d/e/f/ordinary-{i}.txt")).collect::<Vec<_>>(),

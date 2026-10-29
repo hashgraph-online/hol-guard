@@ -1,11 +1,13 @@
 """Non-authorizing native observations used by code-version regressions."""
 
+import re
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 from codex_plugin_scanner.guard.daemon import hook_native_exact_action
-from codex_plugin_scanner.guard.daemon.hook_native_exact_action import native_exact_action
+from codex_plugin_scanner.guard.native_daemon_route import _decide
+from tests import native_review_evidence_support as review_support
 
 
 def native_launch_evidence(
@@ -22,22 +24,83 @@ def native_launch_evidence(
     """Ask the resident's ``launch_evidence`` kind for observations only.
 
     No runtime caller sends this kind; regressions use it to see the code,
-    files and configuration an exact-action identity would cover.
+    files and configuration an exact-action identity would cover. The
+    resident observes the hook review through the exact action it derives.
     """
+    del tool_name  # The resident reads the tool name from the payload.
     try:
-        action = hook_native_exact_action._exact_query(
+        review = review_support._hook_review_query(
             harness=harness,
-            tool_name=tool_name,
             payload=payload,
             native_result=native_result,
             native_receipt=native_receipt,
             workspace=workspace,
             home_dir=home_dir,
         )
-        reply = hook_native_exact_action._answer({"kind": "launch_evidence", "action": action}, guard_home)
+        reply = _decide(
+            {"kind": "launch_evidence", "action": review},
+            guard_home,
+            {"evidence": (dict, type(None)), "unavailable_reason": (str, type(None))},
+            validate_launch_evidence,
+            operation=review_support._OPERATION,
+            max_request_bytes=review_support._MAX_REQUEST_BYTES,
+        )
         return reply["evidence"], reply["unavailable_reason"]
-    except (hook_native_exact_action.NativeExactActionError, OSError, RuntimeError, TypeError, ValueError):
+    except (review_support.NativeExactActionError, OSError, RuntimeError, TypeError, ValueError):
         return None, hook_native_exact_action.UNPROVEN_LAUNCH
+
+
+def validate_launch_evidence(payload: dict[str, Any]) -> None:
+    """An observation never carries approval authority or an ambiguous identity."""
+    invalid = review_support.NativeExactActionError(review_support._OPERATION.invalid)
+    evidence, reason = payload["evidence"], payload["unavailable_reason"]
+    if evidence is None:
+        if reason not in hook_native_exact_action._ONCE_ONLY_REASONS:
+            raise invalid
+        return
+    expected = {
+        "schema": "guard-native-launch-evidence.v1",
+        "code_identity_complete": False,
+        "unknown_edges": ["unverified_code_closure"],
+        "risk_verdict": "not_evaluated",
+        "execution_binding": "unavailable",
+        "duration": "none",
+        "scope": "observed_invocation",
+        "can_run_once": False,
+        "can_persist": False,
+    }
+    if reason is not None or set(evidence) != {*expected, "inventory_sha256"}:
+        raise invalid
+    if any(evidence[key] != value or type(evidence[key]) is not type(value) for key, value in expected.items()):
+        raise invalid
+    digest = evidence["inventory_sha256"]
+    if not isinstance(digest, str) or re.fullmatch(r"[a-f0-9]{64}", digest) is None:
+        raise invalid
+
+
+def native_exact_action(
+    *,
+    harness: str,
+    payload: Mapping[str, object],
+    native_result: Mapping[str, object],
+    native_receipt: Mapping[str, object] | None,
+    workspace: Path | None,
+    home_dir: Path | None,
+    guard_home: Path | None = None,
+    tool_name: str | None = None,
+) -> tuple[str | None, str | None]:
+    """The exact-action token of one review, or why it stays once-only."""
+    del tool_name  # The resident reads the tool name from the payload.
+    _valid, _binding, token, reason = review_support.native_review_evidence(
+        harness=harness,
+        payload=payload,
+        native_result=native_result,
+        native_receipt=native_receipt,
+        workspace=workspace,
+        home_dir=home_dir,
+        guard_home=guard_home,
+    )
+    return token, reason
 
 
 def _arguments(

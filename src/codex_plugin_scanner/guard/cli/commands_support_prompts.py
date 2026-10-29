@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import importlib
-from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -21,24 +20,12 @@ from ._commands_shared import *
 from .commands_parser_helpers import *
 
 
-def _runtime_policy_module():
-    return importlib.import_module(".commands_support_runtime_policy", __package__)
-
-
 def _runtime_resolution_module():
     return importlib.import_module(".commands_support_runtime_resolution", __package__)
 
 
 def _canonical_harness_name(value: str) -> str:
     return _runtime_resolution_module()._canonical_harness_name(value)
-
-
-def _ensure_terminal_punctuation(message: str) -> str:
-    return _runtime_policy_module()._ensure_terminal_punctuation(message)
-
-
-def _native_hook_reason(*values: object | None) -> str:
-    return _runtime_policy_module()._native_hook_reason(*values)
 
 
 def _guard_action_from_cli(value: object) -> GuardAction:
@@ -242,104 +229,6 @@ def _current_effective_risk_actions(config: GuardConfig) -> dict[str, str]:
         }
     return {}
 
-def _prompt_requires_hard_block(artifact: GuardArtifact) -> bool:
-    prompt_classes = artifact.metadata.get("prompt_request_classes")
-    if isinstance(prompt_classes, list):
-        return "guard_bypass_intent" in {str(item) for item in prompt_classes}
-    prompt_class = artifact.metadata.get("prompt_request_class")
-    return isinstance(prompt_class, str) and prompt_class == "guard_bypass_intent"
-
-def _prompt_request_classes(artifact: GuardArtifact) -> set[str]:
-    prompt_classes = artifact.metadata.get("prompt_request_classes")
-    values = prompt_classes if isinstance(prompt_classes, list) else [artifact.metadata.get("prompt_request_class")]
-    return {str(item) for item in values if isinstance(item, str) and item.strip()}
-
-def _claude_prompt_additional_context(
-    *,
-    harness: str,
-    event_name: str,
-    policy_action: str,
-    artifact: GuardArtifact,
-    native_reason: str,
-) -> str | None:
-    if _canonical_harness_name(harness) != "claude-code":
-        return None
-    if event_name != "UserPromptSubmit":
-        return None
-    if policy_action != "require-reapproval":
-        return None
-    if _prompt_requires_hard_block(artifact):
-        return None
-    return _claude_prompt_briefing(native_reason, secret="secret_read" in _prompt_request_classes(artifact))
-
-
-def _claude_prompt_briefing(native_reason: str, *, secret: bool) -> str:
-    """What Claude is told to do before a paused prompt's sensitive action."""
-
-    briefing_sentence = "HOL Guard will intercept Claude's next sensitive action and open a branded approval question."
-    if secret:
-        briefing_sentence = (
-            "HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval "
-            "question to protect you."
-        )
-    return (
-        f"{_ensure_terminal_punctuation(native_reason)} "
-        "Do not ask for approval at the prompt stage. Attempt the intended sensitive tool once so HOL Guard can "
-        "evaluate the exact tool, path, and arguments, then route that concrete action into a HOL Guard approval "
-        "question with Allow once, Allow during this session, and Keep blocked. First tell the user exactly: "
-        f"'{briefing_sentence}' "
-        "Attempt that sensitive tool at most once. If HOL Guard or Claude denies it, do not retry the same sensitive "
-        "action automatically. Instead, tell the user approval is required in Claude to continue."
-    )
-
-
-def _claude_prompt_intercept_message(*, secret: bool) -> str:
-    """Why Claude paused a sensitive prompt it may still approve."""
-
-    cause = "asks Claude to access local secrets" if secret else "leads to a sensitive action"
-    return (
-        f"HOL Guard intercepted this prompt because it {cause}. "
-        "If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
-    )
-
-
-def _claude_prompt_system_message(
-    *,
-    event_name: str,
-    policy_action: str,
-    artifact: GuardArtifact,
-    native_reason: Callable[[], str],
-) -> str | None:
-    """The system message Claude is shown, or ``None``.
-
-    The reason is read through a callable so a pass that needs no message
-    never composes one.
-    """
-
-    if event_name == "UserPromptSubmit":
-        if policy_action == "require-reapproval" and not _prompt_requires_hard_block(artifact):
-            return _claude_prompt_intercept_message(secret="secret_read" in _prompt_request_classes(artifact))
-        if policy_action in {"block", "sandbox-required"}:
-            return _ensure_terminal_punctuation(native_reason())
-        return None
-    if event_name == "PreToolUse" and policy_action in {"require-reapproval", "block", "sandbox-required"}:
-        return _ensure_terminal_punctuation(native_reason())
-    return None
-
-def _codex_prompt_block_system_message(*, policy_action: str, native_reason: Callable[[], str]) -> str | None:
-    """What Codex is told about a paused prompt, or ``None``.
-
-    The reason is read through a callable so a prompt that keeps running
-    never composes one.
-    """
-
-    if policy_action not in {"review", "require-reapproval", "sandbox-required", "block"}:
-        return None
-    reason = native_reason()
-    if "open hol guard" not in reason.lower():
-        return None
-    return f"HOL Guard paused your Codex prompt. {reason}"
-
 def _guard_rerun_command(args: argparse.Namespace) -> str:
     command = ["hol-guard", "run", str(args.harness)]
     _append_guard_context_args(command, args)
@@ -378,28 +267,14 @@ def _append_guard_context_args(command: list[str], args: argparse.Namespace) -> 
             flag = f"--{option_name.replace('_', '-')}"
             command.extend([flag, value])
 
-def _write_json_line(payload: dict[str, object], *, output_stream: TextIO | None = None) -> None:
-    stream = output_stream or sys.stdout
-    # stdout is the harness delivery channel; approval payloads must reach the operator.
-    stream.write(f"{json.dumps(payload, separators=(',', ':'))}\n")  # codeql[py/clear-text-logging-sensitive-data]
-    stream.flush()
-
 __all__ = [
     "_append_guard_context_args",
-    "_claude_prompt_additional_context",
-    "_claude_prompt_briefing",
-    "_claude_prompt_intercept_message",
-    "_claude_prompt_system_message",
-    "_codex_prompt_block_system_message",
     "_current_effective_risk_actions",
     "_guard_approvals_command",
     "_guard_diff_command",
     "_guard_rerun_command",
-    "_prompt_request_classes",
-    "_prompt_requires_hard_block",
     "_run_approval_password_settings_command",
     "_run_approval_totp_settings_command",
     "_shell_join",
     "_update_guard_cli_settings",
-    "_write_json_line",
 ]

@@ -41,7 +41,7 @@ mod contained_wrapper;
 mod contained_wrapper_plan;
 pub use contained_wrapper_plan::{
     contained_wrapper_plan, ContainedOutput, ContainedWrapperCore, ContainedWrapperPlan,
-    CONTAINED_WRAPPER_PLAN_UNSUPPORTED,
+    CONTAINED_WORKTREE_ADD_REASON, CONTAINED_WRAPPER_PLAN_UNSUPPORTED,
 };
 pub(crate) mod curl_reads;
 pub use curl_reads::bound_curl_read_destinations;
@@ -79,6 +79,7 @@ mod bun_eval;
 mod chain_temporary;
 mod clone_siblings;
 mod compound_reason;
+mod control_flow_chain;
 mod control_flow_flatten;
 mod fanout_reads;
 mod filter_pattern_text;
@@ -117,6 +118,7 @@ pub(crate) mod git_listing_reads;
 mod git_local_writes;
 mod git_probe;
 mod git_push;
+mod git_read_after_allow;
 mod git_remote_config;
 mod git_remote_ops;
 mod git_routes;
@@ -125,6 +127,7 @@ mod git_worktree;
 pub(crate) mod github_conversation;
 mod glob_words;
 mod guard_diagnostics;
+mod guard_names;
 mod list_wrapper;
 mod listing_reads;
 mod listing_temporary;
@@ -163,6 +166,7 @@ mod safe_links;
 pub(crate) mod safe_reads;
 mod safe_scalar;
 mod safe_writes;
+pub(crate) use safe_writes::protected_checkout_destination;
 mod script_content;
 pub(crate) use script_content::{argv_script, ArgvScript};
 mod search;
@@ -171,11 +175,12 @@ mod search_scope;
 mod search_scope_filter;
 mod search_scope_glob;
 mod search_scope_ignore;
-mod search_scope_tracked;
+pub(crate) mod search_scope_tracked;
 mod search_scope_walk;
 mod secret_aliases;
 pub(crate) mod sed_edits;
 mod segment_proof;
+pub(crate) mod shell_literal;
 mod shell_script;
 mod sink_peel;
 mod stderr_merge;
@@ -209,6 +214,7 @@ pub use generic::{bounded_task_metadata_output, evaluate_pre_tool_envelope};
 pub use git_push::{
     install_git_push_verdict, push_environment_git, GitPushRequest, GitPushVerdict,
 };
+pub(crate) use git_read_after_allow::git_reads_after_allowed_steps;
 pub use safe_scalar::PsqlEnvironment;
 #[cfg_attr(not(unix), allow(unused_imports))]
 pub(crate) use script_content::launch_loopback_ports;
@@ -217,6 +223,7 @@ pub(crate) use script_content::{
     sole_program_sources, sourced_program_sources, sourcing_bounded_sources,
 };
 pub(crate) use segment_proof::{benign_command_segments, without_stderr_merge};
+pub(crate) use worktree_add::entered_checkouts;
 pub(crate) use worktree_add::new_checkout_route;
 pub(crate) use worktree_add::verified_leading_cd;
 
@@ -292,7 +299,9 @@ pub(crate) fn fixed_command_floor(model: &CanonicalCommandV1) -> bool {
             &crate::canonical_command::CanonicalCommand::from_v1(model),
         )
         || ps::sensitive_exfiltration(model, sensitive_command, exfiltration_command)
-        || model.segments.iter().any(names_guard_outside_message)
+        || model.segments.iter().enumerate().any(|(index, segment)| {
+            names_guard_outside_message(segment, &guard_names::moved_by(&model.segments[..index]))
+        })
         || model.segments.iter().any(selects_secret_outside_message)
 }
 
@@ -303,8 +312,22 @@ pub(crate) fn fixed_command_floor(model: &CanonicalCommandV1) -> bool {
 /// The repository `gh` selects with `--repo` or `-R` is not such an argument:
 /// `owner/name` names a repository on the GitHub host, never a local file,
 /// program or process, so a repository called `hol-guard` keeps the Allow.
-fn names_guard_outside_message(segment: &crate::CommandSegmentV1) -> bool {
+/// The same holds for the owner and name in a `gh api repos/{owner}/{name}/...`
+/// endpoint; the rest of that path is still checked. A raw `-f` field of that
+/// call is a string in the request body, so only Guard's state counts there.
+///
+/// Git and directory changes take checkout paths, pathspecs and remote URLs.
+/// Those name Guard only when they reach its state, an installed Guard
+/// program or shell text an alias could run; see [`guard_names`].
+fn names_guard_outside_message(
+    segment: &crate::CommandSegmentV1,
+    moved: &guard_names::Moved,
+) -> bool {
     let selectors = github_repository_values(segment);
+    let endpoint = github_api_endpoint(segment);
+    let raw_fields =
+        endpoint.map_or_else(Vec::new, |_| guard_names::github_api_raw_fields(segment));
+    let by_location = guard_names::judged_by_location(segment);
     arguments_outside_message(segment).any(|argument| {
         if selectors
             .iter()
@@ -312,11 +335,64 @@ fn names_guard_outside_message(segment: &crate::CommandSegmentV1) -> bool {
         {
             return false;
         }
-        let lowered = argument.to_ascii_lowercase();
-        ["hol-guard", "plugin-guard", ".hol-guard"]
+        if endpoint.is_some_and(|endpoint| std::ptr::eq(endpoint, argument)) {
+            return names_guard(github_api_path_after_repository(argument).unwrap_or(argument));
+        }
+        if raw_fields
             .iter()
-            .any(|needle| lowered.contains(needle))
+            .any(|field| std::ptr::eq(*field, argument))
+        {
+            return guard_names::names_guard_state(argument);
+        }
+        if by_location {
+            return guard_names::names_guard_location(argument, moved);
+        }
+        names_guard(argument)
     })
+}
+
+fn names_guard(argument: &str) -> bool {
+    let lowered = argument.to_ascii_lowercase();
+    ["hol-guard", "plugin-guard", ".hol-guard"]
+        .iter()
+        .any(|needle| lowered.contains(needle))
+}
+
+/// The endpoint operand of `gh api`, found by the same parser that
+/// classifies the call. An argument list it cannot parse has no endpoint.
+fn github_api_endpoint(segment: &crate::CommandSegmentV1) -> Option<&String> {
+    if crate::command_compatibility::basename(segment) != "gh" {
+        return None;
+    }
+    let start = crate::github_command_capabilities::global_options_end(&segment.arguments)?;
+    let (first, rest) = segment.arguments[start..].split_first()?;
+    if first != "api" {
+        return None;
+    }
+    let index = crate::github_command_capabilities::api_endpoint_index(rest)?;
+    rest.get(index)
+}
+
+/// The part of a `repos/{owner}/{name}/...` endpoint after the repository,
+/// or `None` when the endpoint does not start with a valid `owner/name`.
+fn github_api_path_after_repository(endpoint: &str) -> Option<&str> {
+    let path = endpoint.strip_prefix('/').unwrap_or(endpoint);
+    let path = path.strip_prefix("repos/")?;
+    let mut parts = path.splitn(3, '/');
+    let owner = parts.next()?;
+    let name = parts.next()?;
+    let name = name.split(['?', '#']).next()?;
+    if [owner, name]
+        .iter()
+        .any(|part| part.trim_matches('.').is_empty())
+    {
+        return None;
+    }
+    let repository = format!("{owner}/{name}");
+    if !crate::command_compatibility::github_repository_selector(&repository) {
+        return None;
+    }
+    Some(&path[repository.len()..])
 }
 
 /// The `owner/name` values `gh` provably reads as its `--repo` selector.
@@ -810,6 +886,7 @@ const MAX_REWRITE_ROUNDS: usize = 3;
 fn rewritten_command_list(command: &str) -> Option<String> {
     for_loop_unroll::unroll(command)
         .or_else(|| control_flow_flatten::flatten(command))
+        .or_else(|| control_flow_chain::spliced(command))
         .or_else(|| list_wrapper::unwrapped(command))
 }
 
@@ -1168,10 +1245,8 @@ fn evaluate_single_command(
             "The Rust command authority proved this bounded command explicitly benign.",
         ));
     }
-    if git_search_text::sensitive_beyond_patterns(
-        &data_heredocs::without_data_bodies(normalized),
-        git_search_text::command_without_patterns(&model),
-    ) || secret_aliases::names_secret_alias(&model, context)
+    if git_search_text::command_sensitive(&model, normalized, context.cwd)
+        || secret_aliases::names_secret_alias(&model, context)
         || glob_words::names_hidden_glob(&model, context)
     {
         return Ok(pretool_decision(
@@ -1232,13 +1307,19 @@ fn evaluate_single_command(
             "HOL Guard could not match this command to the installed extension controls, so it stays blocked. A command that runs a script or another program (such as `bash script.sh`, `env`, `xargs`, `node -e` or a `$(...)` that runs one) cannot be matched. Run the program directly, or use a built-in tool. If an ordinary command keeps getting this, ask the user to run `hol-guard doctor`.",
         ));
     }
+    // Advice to split the command only helps a command with steps to split. A
+    // construct the parser could not flatten has no segments at all, and may
+    // still hold several commands, so only a single modeled step drops it.
+    let generic = if model.segments.len() != 1 {
+        "HOL Guard requires review because this command could not be confirmed read-only. Splitting it into simpler commands can let the read-only parts run without review."
+    } else {
+        "HOL Guard requires review because this command could not be confirmed read-only."
+    };
     Ok(pretool_decision(
         model,
         "review",
         "native_command_review_required",
-        reason.as_deref().unwrap_or(
-            "HOL Guard requires review because this command could not be confirmed read-only. Splitting it into simpler commands can let the read-only parts run without review.",
-        ),
+        reason.as_deref().unwrap_or(generic),
     ))
 }
 
@@ -1248,6 +1329,9 @@ mod control_flow_tests;
 #[cfg(test)]
 #[path = "for_loop_tests.rs"]
 mod for_loop_tests;
+#[cfg(test)]
+#[path = "guard_named_repository_tests.rs"]
+mod guard_named_repository_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

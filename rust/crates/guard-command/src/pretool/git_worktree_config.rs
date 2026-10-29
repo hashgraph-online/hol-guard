@@ -117,10 +117,15 @@ pub(super) fn safe_worktree_config(output: &[u8], home: &Path) -> Option<Option<
             continue;
         }
         // `worktree add` and each probe below use built-in commands, local
-        // refs, and no diff/editor operation. A global or system credential
-        // helper, such as the `osxkeychain` helper Git for macOS installs, is
-        // not consulted for this local-ref operation; retain the deny floor
-        // for repository-scoped helpers and execution-capable settings.
+        // refs, and no diff/editor operation. None of them asks Git for a
+        // credential, so no credential helper runs, whatever its scope: the
+        // branch the checkout starts from is resolved against the refs this
+        // repository already holds. A `local` value carries the same trust as
+        // the user's global one for that reason and for the reason
+        // `core.hooksPath` does: `git clone` never copies `.git/config`, so a
+        // repository value was written by this developer or a tool they ran.
+        // A `worktree` or `command` value can come from this very invocation,
+        // so it stays doubt.
         // The repository may not name further LFS programs for a filter
         // the user's own `git lfs install` set up.
         if !global_scope
@@ -139,7 +144,7 @@ pub(super) fn safe_worktree_config(output: &[u8], home: &Path) -> Option<Option<
             ) && !user_scope)
             || key.starts_with("hook.")
             || (display_pager_setting(&key) && !display_pager_key(&key))
-            || (key.starts_with("credential.") && !global_scope)
+            || (key.starts_with("credential.") && !global_scope && scope != "local")
             || (key.starts_with("include") && (!user_scope || key.contains("onbranch:")))
             || (key.starts_with("extensions.") && !inert_extension(&key))
             || (key.starts_with("submodule.")

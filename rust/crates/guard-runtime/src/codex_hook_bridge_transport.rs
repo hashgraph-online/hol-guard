@@ -1,6 +1,5 @@
 //! Authenticated same-connection transport for the native Codex hook
-//! bridge: a port of `_daemon_response_once` in
-//! `codex_daemon_hook_transport.py`. The bridge proves the daemon's identity
+//! bridge. The bridge proves the daemon's identity
 //! with a signed challenge, checks that the daemon auth token belongs to the
 //! same signed state, then posts the hook with the token and the proof on
 //! one loopback connection inside one absolute deadline.

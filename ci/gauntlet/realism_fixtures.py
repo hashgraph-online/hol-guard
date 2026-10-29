@@ -31,6 +31,8 @@ import shlex
 import sys
 from pathlib import Path
 
+from .extension_catalog_fixtures import CONTRIBUTIONS
+from .extension_catalog_fixtures import SOURCES as CATALOG_SOURCES
 from .feature_directory_fixtures import CONSOLE
 from .feature_directory_fixtures import SOURCES as FEATURE_SOURCES
 from .source_output_fixtures import PORTAL, SOURCES
@@ -72,22 +74,42 @@ CHECK_SCRIPT = "#!/bin/sh\n# Quick local check.\nset -eu\ngit status --short >/d
 DEPLOY_SCRIPT = "#!/bin/sh\n# Prints the rollout plan only.\necho 'deploy plan: dashboard'\n"
 # `id -un` resolves the user through getpwuid, which a macOS sandbox without the
 # user-database service cannot answer; the name itself is never printed.
+# The line the build prints last. A scenario that pipes the build into `tail` keeps a
+# successful status even when the build failed, so its oracle requires this line.
+VITE_BUILD_MARKER = "built in 12ms"
 VITE_STUB = (
     "#!/bin/sh\n"
     "# Synthetic stand-in for the installed vite CLI: no network, no writes.\n"
     "set -eu\n"
     'user=$(id -un)\n[ -n "$user" ]\n'
+    # Only `vite build` prints a build. Any other invocation fails the way the
+    # real CLI would, so the marker answers for a finished build and not for
+    # the entry having been reached.
+    'build=\n'
+    'for argument in "$@"; do\n'
+    '  if [ "$argument" = build ]; then build=1; fi\n'
+    'done\n'
+    '[ -n "$build" ] || { printf \'vite stand-in: expected the build command\\n\' >&2; exit 1; }\n'
     f"printf 'vite v{VITE_VERSION} building for production...\\n'\n"
     "printf 'dist/index.html  0.40 kB\\n'\n"
-    "printf 'built in 12ms\\n'\n"
+    f"printf '{VITE_BUILD_MARKER}\\n'\n"
 )
-# Windows runs the package entry with Node, as Guard's contained build does.
+# The package's own Node entry point: a second entry of the same install, beside the
+# shell CLI the `.bin` link resolves to. `bun node_modules/vite/bin/vite.js` names it
+# directly, which is the spelling the report came from, and Windows has no other one.
+# Both entries print the same build, so one output check answers for either spelling.
 VITE_STUB_NODE = (
     "// Synthetic stand-in for the installed vite CLI: no network, no writes.\n"
+    "// Only `vite build` prints a build, so the marker answers for a finished\n"
+    "// build and not for the entry having been reached.\n"
+    "if (!process.argv.slice(2).includes('build')) {\n"
+    "  process.stderr.write('vite stand-in: expected the build command\\n');\n"
+    "  process.exit(1);\n"
+    "}\n"
     "process.stdout.write(\n"
     f"  'vite v{VITE_VERSION} building for production...\\n' +\n"
     "  'dist/index.html  0.40 kB\\n' +\n"
-    "  'built in 12ms\\n'\n"
+    f"  '{VITE_BUILD_MARKER}\\n'\n"
     ");\n"
 )
 DOCTL_STUB = (
@@ -451,7 +473,7 @@ def add_main_shapes(main: Path) -> tuple[str, ...]:
     _write(main / "docs/review-notes.md", REVIEW_NOTES)
     for relative, text in SOURCES.items():
         _write(main / relative, text)
-    for relative, text in FEATURE_SOURCES.items():
+    for relative, text in {**FEATURE_SOURCES, **CATALOG_SOURCES}.items():
         _write(main / relative, text)
     _write(main / "scripts/check.sh", CHECK_SCRIPT, 0o755)
     _write(main / "scripts/release/deploy.sh", DEPLOY_SCRIPT, 0o755)
@@ -459,12 +481,11 @@ def add_main_shapes(main: Path) -> tuple[str, ...]:
     package = {"name": "vite", "version": VITE_VERSION, "bin": {"vite": "bin/vite"}}
     _write(modules / "vite/package.json", json.dumps(package) + "\n")
     _write(modules / "vite/bin/vite", VITE_STUB, 0o755)
-    if os.name == "nt":
-        _write(modules / "vite/bin/vite.js", VITE_STUB_NODE)
+    _write(modules / "vite/bin/vite.js", VITE_STUB_NODE)
     (modules / ".bin").mkdir()
     # npm links each bin relative to node_modules/.bin.
     (modules / ".bin/vite").symlink_to(Path("../vite/bin/vite"))
-    return (".gitignore", CONSOLE, DASHBOARD, PORTAL, "docs/review-notes.md", "scripts")
+    return (".gitignore", CONSOLE, CONTRIBUTIONS, DASHBOARD, PORTAL, "docs/review-notes.md", "scripts")
 
 
 def borrow_main_modules(main: Path, worktree: Path) -> None:

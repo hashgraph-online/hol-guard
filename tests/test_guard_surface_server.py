@@ -4295,30 +4295,13 @@ class TestGuardSurfaceServer:
             guard_home=tmp_path / "guard-home",
         )
 
-        session = adapter.attach_session(
-            context,
-            session_id="session-123",
-            client_name="copilot-cli",
-        )
         operation = adapter.start_operation(
             context,
             session_id="session-123",
             operation_type="run",
         )
-        approval = adapter.request_approval(
-            context,
-            request_ids=["req-1", "req-2"],
-        )
-        resumed = adapter.continue_after_approval(
-            context,
-            operation_id="operation-123",
-            approved=True,
-        )
 
-        assert session["session_id"] == "session-123"
         assert operation["operation_type"] == "run"
-        assert approval["request_ids"] == ["req-1", "req-2"]
-        assert resumed["status"] == "completed"
 
     def test_guard_surface_runtime_force_open_bypasses_auto_open_once(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")

@@ -7,16 +7,16 @@ from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 
+from .approval_scope_selection import resolve_request_scope_selection
 from .approval_scope_support import (
     APPROVAL_SCOPE_CONTRACT_VERSION,
     IneligibleApprovalScopeError,
     request_scope_contract,
-    resolve_request_scope_selection,
 )
 from .continuation_snapshot import canonical_continuation_correlation_id
 from .models import DECISION_SCOPE_VALUES
 from .native_approval_scope import ApprovalScopeUnavailableError
-from .project_identity import resolve_portable_project_identity
+from .project_identity import ProjectIdentityError, resolve_portable_project_identity
 from .review_claim_hashing import (
     compute_legacy_local_review_request_claim_hash,
     compute_local_review_request_claim_hash,
@@ -123,8 +123,22 @@ def _action_envelope_hash(request_row: dict[str, object]) -> str:
     return _sha256_hex(_stable_serialize(envelope))
 
 
-def _project_identity(request_row: dict[str, object]) -> str | None:
-    return resolve_portable_project_identity(_non_empty_string(request_row.get("workspace")))
+def _project_identity(request_row: dict[str, object], store) -> str | None:
+    """The claim's project identity, or no claim at all when nothing settles it.
+
+    Creation and validation hash the same claim, so an identity that is
+    present at one and missing at the other rejects a sound approval with
+    ``remote_approval_claim_hash_mismatch``. A workspace nothing could settle
+    therefore builds no claim: the projection publishes none and validation
+    refuses, which is the fail-closed half of that pair.
+    """
+    try:
+        return resolve_portable_project_identity(
+            _non_empty_string(request_row.get("workspace")),
+            guard_home=getattr(store, "guard_home", None),
+        )
+    except ProjectIdentityError as error:
+        raise GuardReviewContractError("project_identity_unresolved") from error
 
 
 def _capability_category(request_row: dict[str, object]) -> str:
@@ -226,7 +240,7 @@ def build_local_review_request_claim(
         "nonce": _non_empty_string(request_row.get("queue_group_id")) or local_request_id,
         "policyAction": policy_action,
         "policyVersion": _policy_version(request_row),
-        "projectIdentity": _project_identity(request_row),
+        "projectIdentity": _project_identity(request_row, store),
         "queueGroupId": _non_empty_string(request_row.get("queue_group_id")),
         "recommendedScope": recommended_scope,
         "riskCategory": _risk_category(request_row),

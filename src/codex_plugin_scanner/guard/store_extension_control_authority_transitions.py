@@ -171,17 +171,6 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
             return False
         return True
 
-    def _validate_transition_chain(
-        self,
-        revision: int,
-        *,
-        current_snapshot_digest: str,
-        key: bytes,
-    ) -> None:
-        self._extension_control_authority_op(
-            "validate_chain", key=key, revision=revision, snapshot_digest=current_snapshot_digest
-        )
-
     def list_extension_control_authority_history(
         self,
         *,
@@ -238,10 +227,3 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
             "update extension_control_authority_transition set phase = ?, committed_at = ? where revision = ?",
             (AuthorityPhase.COMMITTED.value, _now(), _row_int(row, "revision")),
         )
-
-    def _pending_transition(self, revision: int) -> sqlite3.Row | None:
-        with self._connect() as connection:
-            return connection.execute(
-                "select * from extension_control_authority_transition where revision = ?",
-                (revision,),
-            ).fetchone()

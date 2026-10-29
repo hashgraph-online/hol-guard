@@ -1,7 +1,8 @@
 //! Bounded metadata work, reserved from the existing evaluation pool budget.
-use super::{handle_pending_request, spawn_workers, write_overload, PendingRequest};
+use super::{handle_pending_request, spawn_workers, write_overload, PendingRequest, QueueCharge};
 use crate::policy_store::PolicySnapshotStore;
 use crate::resident_diagnostics::{self, Phase, Status};
+use crate::resident_health_counters::QueueLane;
 use serde::Deserialize;
 use std::sync::mpsc::{sync_channel, SyncSender, TrySendError};
 use std::sync::Arc;
@@ -18,6 +19,7 @@ pub(super) fn start(
 ) -> (SyncSender<PendingRequest>, Vec<JoinHandle<()>>) {
     let (sender, receiver) = sync_channel(capacity());
     let workers = spawn_workers(WORKERS, receiver, move |pending| {
+        crate::resident_health_counters::leave_queue(QueueLane::Control);
         handle_pending_request(pending, policy_store.clone(), None);
     });
     (sender, workers)
@@ -40,15 +42,21 @@ pub(super) fn is_request(bytes: &[u8]) -> bool {
                 | "cloud_catalog"
                 | "discovery_placement_project"
                 | "release_feed_project"
+                | "resident_health"
         )
     })
 }
 
 pub(super) fn enqueue(sender: &SyncSender<PendingRequest>, pending: PendingRequest) {
+    let charge = QueueCharge::take(QueueLane::Control);
     match sender.try_send(pending) {
-        Ok(()) => {}
-        Err(TrySendError::Full(mut pending)) => write_overload(&mut pending),
+        Ok(()) => charge.queued(),
+        Err(TrySendError::Full(mut pending)) => {
+            drop(charge);
+            write_overload(&mut pending);
+        }
         Err(TrySendError::Disconnected(pending)) => {
+            drop(charge);
             resident_diagnostics::finish_since(
                 Phase::ResidentDispatchWait,
                 Status::Error,
@@ -72,6 +80,7 @@ mod tests {
             "cloud_catalog",
             "discovery_placement_project",
             "release_feed_project",
+            "resident_health",
         ] {
             let bytes = serde_json::to_vec(&serde_json::json!({
                 "request": {"data": "bounded opaque data"}, "operation": operation,

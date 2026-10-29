@@ -1,7 +1,8 @@
 //! Parity vectors recorded from the legacy Python `local_supply_chain`
 //! approval-hash path before it was deleted. Their policy digests were later
-//! recomputed when bundle and feed revisions left the policy context and
-//! reasons were reduced to their codes.
+//! recomputed when bundle and feed revisions left the policy context,
+//! reasons were reduced to their codes, and the matched rule and advisories
+//! left it.
 
 use super::*;
 use guard_contracts::PackageApprovalHashRequestV1;
@@ -148,18 +149,11 @@ fn rejects_malformed_requests() {
         "native_package_approval_hash_invalid"
     );
 
-    let mut missing_digest = good.clone();
+    let mut missing_digest = good;
     missing_digest.extension_control_digest = None;
     assert_eq!(
         run(&missing_digest).unwrap_err(),
         "native_package_approval_hash_invalid"
-    );
-
-    let mut missing_store = good;
-    missing_store.store_path = Some(workspace.0.join("absent.db").to_string_lossy().into_owned());
-    assert_eq!(
-        run(&missing_store).unwrap_err(),
-        "native_package_advisory_store_unavailable"
     );
 }
 
@@ -335,23 +329,53 @@ fn feed_refresh_keeps_saved_approval_valid() {
     );
 }
 
+/// A feed refresh that matches a new advisory, or a new rule, keeps a saved
+/// approval: the advisory surfaces as a finding instead of a fresh prompt.
 #[test]
-fn feed_changes_that_touch_the_verdict_still_require_reapproval() {
+fn a_new_advisory_or_rule_match_keeps_the_saved_approval() {
     let saved = scored_vector();
-    let saved_token = context_token(&saved, "verdict-saved");
+    let saved_token = context_token(&saved, "match-saved");
 
     let mut new_advisory = saved.clone();
     new_advisory["advisory_rows"]
         .as_array_mut()
         .unwrap()
         .push(json!({"id": "GHSA-0002", "package_url": "pkg:npm/left-pad@1.3.0"}));
+    let mut new_rule = saved.clone();
+    new_rule["request"]["evaluation"]["matched_rule_id"] = json!("rule-2");
+    let mut package_advisory = saved.clone();
+    package_advisory["request"]["evaluation"]["packages"][0]["relatedAdvisoryIds"] =
+        json!(["GHSA-0001", "GHSA-0002"]);
+    let mut package_rule = saved.clone();
+    package_rule["request"]["evaluation"]["packages"][0]["ruleId"] = json!("rule-2");
+
+    for (name, changed) in [
+        ("advisory", new_advisory),
+        ("rule", new_rule),
+        ("package-advisory", package_advisory),
+        ("package-rule", package_rule),
+    ] {
+        let current = context_token(&changed, name);
+        assert_eq!(
+            crate::context_digest::validate_context_tokens(&saved_token, &current),
+            None,
+            "{name}"
+        );
+    }
+}
+
+/// A changed verdict still asks again. A blocking verdict never reaches reuse:
+/// a saved approval cannot lower `block`.
+#[test]
+fn feed_changes_that_touch_the_verdict_still_require_reapproval() {
+    let saved = scored_vector();
+    let saved_token = context_token(&saved, "verdict-saved");
+
     let mut new_reason = saved.clone();
     new_reason["request"]["evaluation"]["reasons"]
         .as_array_mut()
         .unwrap()
         .push(json!({"code": "typosquat", "message": "m", "severity": "high"}));
-    let mut new_rule = saved.clone();
-    new_rule["request"]["evaluation"]["matched_rule_id"] = json!("rule-2");
     let mut package_verdict = saved.clone();
     package_verdict["request"]["evaluation"]["packages"][0]["decision"] = json!("block");
     let mut package_reason = saved.clone();
@@ -361,9 +385,7 @@ fn feed_changes_that_touch_the_verdict_still_require_reapproval() {
         .push(json!({"code": "malware", "message": "m", "source": "bundle"}));
 
     for (name, changed) in [
-        ("advisory", new_advisory),
         ("reason", new_reason),
-        ("rule", new_rule),
         ("package-verdict", package_verdict),
         ("package-reason", package_reason),
     ] {

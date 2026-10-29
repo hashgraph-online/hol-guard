@@ -43,22 +43,6 @@
    "body": "8a70fafed4dc"
   },
   {
-   "file": "rust/crates/guard-command/src/codex_output_pathspecs.rs",
-   "item": "fn executable -- non-Unix block",
-   "verdict": "windows-permissive",
-   "note": "No mode-bit probe, so the resolved Git path always reads as executable. The caller still requires it to canonicalise onto the host's own Git executable, which is the load-bearing half of that check.",
-   "cfg": "not(unix)",
-   "body": "6b5b80b15b0b"
-  },
-  {
-   "file": "rust/crates/guard-command/src/codex_output_pathspecs.rs",
-   "item": "fn metadata_fields -- non-Unix block",
-   "verdict": "posix-primitive",
-   "note": "`st_dev`, `st_ino` and `st_mode` have no stable Windows reading, so identity falls back to size and mtime. The tuple is used to notice a file that changed under the scan, not to prove two paths are the same file.",
-   "cfg": "not(unix)",
-   "body": "2385428e2299"
-  },
-  {
    "verdict": "windows-equivalent",
    "note": "`runtime/harness_attribution.py` returns `None` on `os.name == \"nt\"` before it ever reaches `/bin/ps`, so there is no Windows behaviour to keep parity with rather than an absent one. A Windows harness is still attributed by its environment markers, which every supported harness sets; only the fallback parent walk is missing, and its absence leaves the origin unknown rather than wrong. The slug is receipt and display identity, never a policy selector, so an unknown origin softens nothing.",
    "file": "rust/crates/guard-command/src/harness_attribution.rs",
@@ -179,6 +163,14 @@
    "body": "c1b28980b610"
   },
   {
+   "verdict": "windows-unsupported",
+   "note": "Off Unix the chain keeps the review it already had: the sink that runs the proven `git worktree add` on the host before the checks exists only on macOS and Linux, so a split here would route the command to a refusal. Fails closed, and one reason Windows still prompts for checks in a new linked worktree.",
+   "file": "rust/crates/guard-command/src/pretool/contained_worktree_add.rs",
+   "item": "fn rejudge -- cfg! expression",
+   "cfg": "unix",
+   "body": "37388282ea80"
+  },
+  {
    "verdict": "other-platform",
    "note": "Windows resolves a sibling repository root in its own arm above (PR #5399), so this stub is now reached only on a platform Guard does not ship for. Returning `None` there leaves such a command reviewed, which is the honest answer where there is no containment sink at all.",
    "file": "rust/crates/guard-command/src/pretool/contained_wrapper.rs",
@@ -225,6 +217,14 @@
    "note": "Without the restricted launchers every setting counts as forwarded, so an environment-prefixed command is never admitted as plain data and stays reviewed. Fails closed, as the comment on the arm says.",
    "cfg": "not(unix)",
    "body": "9f1d3ea48453"
+  },
+  {
+   "file": "rust/crates/guard-command/src/pretool/generic_cursor_compaction_writes.rs",
+   "item": "fn plain_note(_metadata: &std::fs::Metadata) -> bool",
+   "verdict": "windows-unsupported",
+   "note": "Unix proves an existing compaction note has one link and no execute bit before Cursor overwrites it. The link count is unstable on Windows, so an existing note fails closed and keeps its review; a write to a new segment name still passes because nothing exists to alias.",
+   "cfg": "not(unix)",
+   "body": "ff97d5ea05af"
   },
   {
    "file": "rust/crates/guard-command/src/pretool/git_hook_files.rs",
@@ -830,17 +830,17 @@
    "verdict": "other-platform",
    "note": "Windows resolves the workspace in its own arm (`codex_hook_bridge_contain_windows.rs`); this stub is reached only on a platform Guard does not ship for, where `None` keeps the command reviewed because there is no sink.",
    "file": "rust/crates/guard-runtime/src/codex_hook_bridge_contain.rs",
-   "item": "fn resolved_workspace(_value: &str) -> Option<String>",
+   "item": "pub(crate) fn resolved_workspace(_value: &str) -> Option<String>",
    "cfg": "not(any(unix, windows))",
-   "body": "0c258e1c7d46"
+   "body": "773e21ce6c68"
   },
   {
    "verdict": "other-platform",
    "note": "Windows writes the snapshot under the profile's `AppData\\Local\\Temp` in its own arm; elsewhere `None` writes nothing, so the call keeps its review.",
    "file": "rust/crates/guard-runtime/src/codex_hook_bridge_contain.rs",
-   "item": "fn write_snapshot(_serialized: &[u8]) -> Option<PathBuf>",
+   "item": "pub(crate) fn write_snapshot(_serialized: &[u8]) -> Option<PathBuf>",
    "cfg": "not(any(unix, windows))",
-   "body": "36ec584876e3"
+   "body": "ce02efbefa6e"
   },
   {
    "verdict": "other-platform",
@@ -891,20 +891,28 @@
    "body": "a03b7f1733a8"
   },
   {
-   "file": "rust/crates/guard-runtime/src/codex_tool_output_op.rs",
-   "item": "fn attachment_reader( &self, attachment_root: &str, relative: &[String], max_bytes: u64, ) -> Option<Box<dyn std::io::Read + '_>>",
-   "verdict": "windows-equivalent",
-   "note": "Without `openat` the walk cannot be descriptor-relative, so the path is resolved once and required to stay under the resolved attachment root, with the same `.`/`..`/empty rejections.",
-   "cfg": "not(unix)",
-   "body": "9fa0c0329ba5"
-  },
-  {
    "verdict": "posix-primitive",
    "note": "`//host/share` as a POSIX double-slash root is a Unix path concept; a Windows UNC path is handled by the component reader instead, so the arm is correctly false there.",
    "file": "rust/crates/guard-runtime/src/compound_git_paths.rs",
    "item": "fn is_double_slash_root -- cfg! expression",
    "cfg": "unix",
    "body": "40044ed07203"
+  },
+  {
+   "verdict": "posix-primitive",
+   "note": "There is no parent-process reparent check to make, so `original_parent` is zero; the request is still parsed and refused before any decode, and the decode arm reports the unsupported platform.",
+   "file": "rust/crates/guard-runtime/src/content_decode.rs",
+   "item": "fn evaluate_content_decode_bytes -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "2a7c910f6277"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "Contained content decoding does not run off Unix; the outcome is `content_containment_unavailable` and nothing is decoded.",
+   "file": "rust/crates/guard-runtime/src/content_decode.rs",
+   "item": "fn contained_decode( _request: &ContentDecodeRequestV1, _raw: &[u8], _codings: &[ContentCoding], _caps: &ContentCodingCaps, _original_parent: i32, _started: Instant, _counters: &mut ContentDecodeCounters, ) -> Result<Vec<u8>, ContentDecodeError>",
+   "cfg": "not(unix)",
+   "body": "8ebb1bb3d55c"
   },
   {
    "verdict": "other-platform",
@@ -1062,9 +1070,9 @@
    "verdict": "other-platform",
    "note": "Windows expands `USERPROFILE` in its own arm; elsewhere `None` leaves the home unknown, every home-relative rule stays unmatched, and a connector-setup review defers to the daemon.",
    "file": "rust/crates/guard-runtime/src/hook_direct_review_request.rs",
-   "item": "pub(super) fn expanded_home(_environment: &BTreeMap<String, String>) -> Option<String>",
+   "item": "pub(crate) fn expanded_home(_environment: &BTreeMap<String, String>) -> Option<String>",
    "cfg": "not(any(unix, windows))",
-   "body": "de55ba4b1d6f"
+   "body": "69f65fe1875b"
   },
   {
    "verdict": "other-platform",
@@ -1219,6 +1227,14 @@
    "body": "3775a2c942d0"
   },
   {
+   "verdict": "windows-permissive",
+   "note": "Unix names the installed file by device and inode, which change whenever a different file is put behind the path. Windows has no comparable identifier in `std::fs::Metadata`, so the arm uses length and modification time, which an installed build moves together. It is permissive rather than equivalent: a replacement whose length and modification time both match the file it replaced reads as the same file, and the prewarm goes on renewing the replaced runtime's lease until its window ends. The cost of that gap is bounded and is not a protection one -- the hold is an optimisation, so at worst a new runtime waits up to `PREWARM_HOLD` before it can retire the old resident, and the next hook spawns against the installed runtime either way. `the_hold_ends_when_a_new_runtime_is_installed_over_this_one` runs on every platform and proves the arm off Unix: it renames a second file over the watched path and requires the hold to end.",
+   "file": "rust/crates/guard-runtime/src/managed_resident_prewarm.rs",
+   "item": "fn executable_identity -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "4cb3973546d8"
+  },
+  {
    "file": "rust/crates/guard-runtime/src/managed_resident_stop.rs",
    "item": "fn endpoint_is_contained(state: &ResidentState) -> bool",
    "verdict": "windows-permissive",
@@ -1371,6 +1387,22 @@
    "body": "6a7c0c4ecb3c"
   },
   {
+   "verdict": "windows-equivalent",
+   "note": "Windows writes the generation record through `persist_private_bytes`, the same owner-private, DACL-checked atomic replace the Windows snapshot cache uses; Unix writes it with a 0600 temp file, fsync and rename. Both commit the record only after the cache is durable, which `a_crashed_transaction_is_completed_at_every_boundary` pins.",
+   "file": "rust/crates/guard-runtime/src/policy_snapshot_materialize.rs",
+   "item": "fn write_state_file(home: &Home, payload: &[u8]) -> Result<(), String>",
+   "cfg": "not(unix)",
+   "body": "54101d1c5ec0"
+  },
+  {
+   "verdict": "other-platform",
+   "note": "The function is compiled only off Windows, so this block covers non-Unix, non-Windows targets that Guard does not ship; Windows takes the generation lock through `resident_state::private_lock_file` in its own arm.",
+   "file": "rust/crates/guard-runtime/src/policy_snapshot_materialize.rs",
+   "item": "fn open_unix_lock -- non-Unix block",
+   "cfg": "not(unix)",
+   "body": "8f4f603465db"
+  },
+  {
    "verdict": "other-platform",
    "note": "Windows takes the mutation lock in its own arm; elsewhere `native_command_control_mutation_lock_unsupported` refuses the mutation rather than performing it unlocked.",
    "file": "rust/crates/guard-runtime/src/policy_store_command_authority.rs",
@@ -1411,28 +1443,12 @@
    "body": "8d076d82e34c"
   },
   {
-   "verdict": "windows-unsupported",
-   "note": "The mirror reproduces a POSIX-rooted resolution only. Off Unix it returns `Unmirrored`, which hands the question to Python rather than answering it wrongly. Fails closed, at the cost of the native fast path on Windows.",
-   "file": "rust/crates/guard-runtime/src/project_identity.rs",
-   "item": "fn relative_path -- cfg! expression",
-   "cfg": "unix",
-   "body": "796040e01e80"
-  },
-  {
+   "verdict": "windows-equivalent",
+   "note": "Maps the same errno set as Windows reports it (`NotFound`, `NotADirectory`) plus the `_IGNORED_WINERRORS` 21, 123 and 1921, so the predicates read false where `pathlib` reads them false; any other error stays unknown.",
    "file": "rust/crates/guard-runtime/src/project_identity.rs",
    "item": "fn ignorable -- non-Unix block",
-   "verdict": "windows-unsupported",
-   "note": "The POSIX errno set that `pathlib` reads as a false predicate has no mapping here, so no error is ignorable and the caller surfaces it.",
    "cfg": "not(unix)",
-   "body": "75b57d7639d8"
-  },
-  {
-   "verdict": "windows-unsupported",
-   "note": "Same as `relative_path`: a `/`-rooted workspace is the only shape the mirror reproduces, and `Unmirrored` defers to Python everywhere else.",
-   "file": "rust/crates/guard-runtime/src/project_identity.rs",
-   "item": "fn workspace_path -- cfg! expression",
-   "cfg": "unix",
-   "body": "d4b82dbb6285"
+   "body": "80fd5f269335"
   },
   {
    "file": "rust/crates/guard-runtime/src/request_context_op.rs",
@@ -1585,6 +1601,14 @@
    "item": "fn open_without_following(path: &Path) -> std::io::Result<fs::File>",
    "cfg": "not(unix)",
    "body": "532a900bb473"
+  },
+  {
+   "verdict": "windows-unsupported",
+   "note": "The verified workspace read opens every path component beneath the repository by descriptor with O_NOFOLLOW so a parent swapped for a symlink after resolution is never followed; Windows has no openat, so the op answers native_verified_read_execute_unsupported and the read stays under ordinary review. File reads were already Unix-only before this op existed; pwd now fails closed the same way. The arm is compiled by the windows-native-runtime CI job and asserted by an_argv_outside_the_cohort_is_refused's not(unix) branch.",
+   "file": "rust/crates/guard-runtime/src/verified_read_execute_op.rs",
+   "item": "fn perform( _argv: &[String], _cwd: &str, _home_dir: Option<&str>, ) -> Result<VerifiedReadExecutePayloadV1, &'static str>",
+   "cfg": "not(unix)",
+   "body": "71d849460720"
   },
   {
    "verdict": "posix-primitive",

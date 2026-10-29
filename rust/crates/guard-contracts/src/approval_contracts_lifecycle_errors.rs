@@ -92,6 +92,7 @@ pub const NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES: &[&str] = &[
     "native_resident_private_root_missing",
     "native_resident_process_identity_mismatch",
     "native_resident_process_identity_unavailable",
+    "native_resident_not_serving",
     "native_resident_process_liveness_failed",
     "native_resident_request_invalid_json",
     "native_resident_restart_budget_encode_failed",

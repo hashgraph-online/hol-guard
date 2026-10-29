@@ -38,7 +38,6 @@ from ._shell_execution_context_support import (
     SHELL_DIRECTORY_COMMAND,
     ShellPathIdentity,
     ShellPathProof,
-    last_flow_operator,
     shell_path_identity_payload,
 )
 
@@ -65,10 +64,6 @@ class ShellExecutionSegment:
     @property
     def command_text(self) -> str:
         return shlex.join(self.tokens)
-
-    @property
-    def control_operator(self) -> str | None:
-        return last_flow_operator(self.control_after)
 
 
 @dataclass(frozen=True, slots=True)

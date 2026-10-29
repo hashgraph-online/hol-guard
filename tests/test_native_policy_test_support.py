@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard import native_policy_test_support as support
+from ci.native_runtime import native_policy_test_support as support
 
 
 def test_readiness_failure_reports_only_bounded_known_worker_locations(

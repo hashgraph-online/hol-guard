@@ -36,6 +36,48 @@ pub(crate) fn approval_wait_hint_for_home(
     hint.replace(" --json`", &format!(" --json --home {quoted}`"))
 }
 
+/// The `blocked_request_mode` a silent block is recorded with.
+pub(crate) const SAFE_ALTERNATIVE_MODE: &str = "safe-alternative";
+/// The silent block's reason when the review gave none.
+pub(crate) const BLOCKED_REASON: &str = "HOL Guard blocked this action.";
+
+/// `str(value or fallback)` for the values the resident reproduces: a string,
+/// or a falsy `None`, `False` or `""`. Anything else is `None`.
+pub(crate) fn falsy_or_text<'a>(
+    value: Option<&'a serde_json::Value>,
+    fallback: &'a str,
+) -> Option<&'a str> {
+    use serde_json::Value;
+    match value {
+        None | Some(Value::Null) | Some(Value::Bool(false)) => Some(fallback),
+        Some(Value::String(text)) if text.is_empty() => Some(fallback),
+        Some(Value::String(text)) => Some(text),
+        Some(_) => None,
+    }
+}
+
+/// The `safe-alternative` PreToolUse response that blocks `result` with
+/// `reason`: rendered for `harness`, never prompted.
+pub(crate) fn safe_alternative_block(
+    harness: &str,
+    result: &guard_command::hook_responses::Object,
+    reason: &str,
+) -> guard_command::hook_responses::Object {
+    use serde_json::json;
+    let mut blocked = result.clone();
+    blocked.insert("decision".to_owned(), json!("deny"));
+    blocked.insert("minimum_action".to_owned(), json!("block"));
+    blocked.insert("policy_action".to_owned(), json!("block"));
+    blocked.insert("reason".to_owned(), json!(reason));
+    let mut response = guard_command::hook_responses::pre_tool(harness, &blocked);
+    response.insert("prompted".to_owned(), json!(false));
+    response.insert(
+        "blocked_request_mode".to_owned(),
+        json!(SAFE_ALTERNATIVE_MODE),
+    );
+    response
+}
+
 pub(crate) fn wait_hint_projection(
     args: &serde_json::Value,
 ) -> crate::runner_authority_op::KindResult {

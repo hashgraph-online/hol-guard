@@ -348,12 +348,18 @@ fn only_plain_workspace_runs_take_the_native_sink() {
         &input("pytest && git push"),
         workspace
     ));
+    let mut worktree = denial.clone();
+    worktree["reason"] = json!(guard_command::pretool::CONTAINED_WORKTREE_ADD_REASON);
+    assert!(!native_shape(
+        &worktree,
+        &input("git worktree add ../app-fix HEAD && cd ../app-fix && pytest"),
+        workspace
+    ));
     let mut other = denial.clone();
     other["reason_code"] = json!("native_test_containment_required");
     assert!(!native_shape(&other, &input("pytest"), workspace));
-    // An outside-roots review a local CLI grant may route stays with the
-    // daemon, which asks the store and re-asks it in the sink; the direct lane
-    // never answers it on a grant of its own.
+    // An outside-roots review is not a sandbox requirement: the sink never
+    // takes it, and an allowed local CLI lifts it on the saved-decision path.
     let outside = json!({
         "decision": "deny",
         "policy_action": "review",

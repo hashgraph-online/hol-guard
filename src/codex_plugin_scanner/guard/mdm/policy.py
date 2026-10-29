@@ -14,7 +14,6 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Literal, cast
 
-from ..action_lattice import is_guard_action, most_restrictive_guard_action, normalize_guard_action
 from .contracts import (
     MDM_POLICY_SCHEMA_VERSION,
     InstallOwner,
@@ -30,7 +29,6 @@ from .contracts import (
 from .managed_file_trust import posix_path_is_root_owned_and_restricted
 
 _MAX_POLICY_BYTES = 1024 * 1024
-_MODE_STRENGTH = {"observe": 0, "prompt": 1, "enforce": 2}
 _TOP_LEVEL_KEYS = {
     "schemaVersion",
     "settings",
@@ -412,81 +410,6 @@ def _get_path(payload: Mapping[str, object], path: str) -> object:
     return current
 
 
-def _set_path(payload: dict[str, object], path: str, value: object) -> None:
-    parts = path.split(".")
-    current = payload
-    for part in parts[:-1]:
-        child = current.get(part)
-        if not isinstance(child, dict):
-            child = {}
-            current[part] = child
-        current = cast(dict[str, object], child)
-    current[parts[-1]] = value
-
-
-def _merge_strongest_actions(local: object, managed: object) -> object:
-    if isinstance(managed, dict):
-        merged = dict(local) if isinstance(local, dict) else {}
-        for key, value in managed.items():
-            merged[key] = _merge_strongest_actions(merged.get(key), value)
-        return merged
-    if local is None:
-        return normalize_guard_action(managed, unknown_action="block")
-    if managed is None:
-        return normalize_guard_action(local, unknown_action="block")
-    return most_restrictive_guard_action(local, managed, unknown_action="block")
-
-
-def _strongest_security_value(local: object, managed: object) -> object:
-    if isinstance(local, str) and isinstance(managed, str):
-        if is_guard_action(local) or is_guard_action(managed):
-            return most_restrictive_guard_action(local, managed, unknown_action="block")
-        if local in _MODE_STRENGTH and managed in _MODE_STRENGTH:
-            return max((local, managed), key=_MODE_STRENGTH.__getitem__)
-    return managed
-
-
-def _is_action_setting_path(path: str) -> bool:
-    parts = tuple(path.split("."))
-    return any(part == "actions" or part.endswith(("_actions", "Actions")) for part in parts) or parts[-1].endswith(
-        ("_action", "Action")
-    )
-
-
-def _compose_managed_value(local: object, managed: object) -> object:
-    if isinstance(local, dict) and isinstance(managed, dict):
-        composed = dict(local)
-        for key, managed_value in managed.items():
-            composed[key] = _compose_managed_value(composed.get(key), managed_value)
-        return composed
-    return _strongest_security_value(local, managed)
-
-
-def apply_managed_policy(local_payload: Mapping[str, object], policy: ManagedPolicy) -> dict[str, object]:
-    """Compose local configuration without allowing a managed requirement to weaken."""
-
-    composed = dict(local_payload)
-    for key, managed_value in policy.settings.items():
-        local_value = composed.get(key)
-        if _is_action_setting_path(key):
-            composed[key] = _merge_strongest_actions(local_value, managed_value)
-        elif key in composed:
-            composed[key] = _compose_managed_value(local_value, managed_value)
-        else:
-            composed[key] = managed_value
-    for setting_path in policy.locked_settings:
-        managed_value = _get_path(policy.settings, setting_path)
-        if managed_value is not _MISSING:
-            local_value = _get_path(composed, setting_path)
-            strongest_value = (
-                _merge_strongest_actions(local_value, managed_value)
-                if _is_action_setting_path(setting_path)
-                else _strongest_security_value(local_value, managed_value)
-            )
-            _set_path(composed, setting_path, strongest_value)
-    return composed
-
-
 def fail_closed_managed_policy() -> ManagedPolicy:
     """Return the non-weaker floor used when configured machine authority is unreadable."""
 
@@ -513,7 +436,6 @@ def fail_closed_managed_policy() -> ManagedPolicy:
 
 __all__ = [
     "ManagedPolicyError",
-    "apply_managed_policy",
     "fail_closed_managed_policy",
     "load_managed_policy",
     "parse_managed_policy",

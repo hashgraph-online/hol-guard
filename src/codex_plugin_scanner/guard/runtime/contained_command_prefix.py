@@ -270,4 +270,30 @@ def peel_run_prefixes(command: list[str]) -> tuple[list[str], int | None]:
         if peeled == command:
             break
         command, _ = _split_command_prefix(peeled)
-    return command, seconds
+    return bun_package_entry_as_node(command), seconds
+
+
+def bun_package_entry_as_node(command: list[str]) -> list[str]:
+    """`bun <dir>/node_modules/<package>/<entry>` spelled as the run `node` names.
+
+    Bun reads a file operand as the script to run, so an installed package's
+    entrypoint is the program Node starts on the same file. Native authority
+    reads it the same way (`bun_package_entry.rs`), and the planners run it on
+    the project's Node image, as they run `bun x vite build`. An option, a
+    remote URL or any other operand keeps the command as written.
+    """
+    if len(command) < 2:
+        return command
+    name = re.split(r"[\\/]", command[0])[-1]
+    if os.name == "nt" and len(name) > 4 and name[-4:].lower() == ".exe":
+        name = name[:-4]
+    entry = command[1].replace("\\", "/")
+    if (
+        name != "bun"
+        or entry.startswith("-")
+        or "://" in entry
+        or entry.endswith("/")
+        or "node_modules" not in entry.split("/")
+    ):
+        return command
+    return ["node", *command[1:]]

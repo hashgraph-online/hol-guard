@@ -98,6 +98,33 @@ fn a_head_ref_outside_the_checkout_is_quiet() {
 }
 
 #[test]
+fn a_workflow_run_job_that_checks_out_the_default_branch_is_quiet() {
+    // The usual follow-up workflow: it checks out its own default branch,
+    // downloads the triggering run's artifact and names that run's head only
+    // when reporting a status, so no pull request code reaches the workspace.
+    let text = format!(
+        "name: Report coverage\non:\n  workflow_run:\n    workflows: [CI]\n    types: [completed]\npermissions:\n  actions: read\n  statuses: write\njobs:\n  report:\n    if: github.event.workflow_run.conclusion == 'success'\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@{PIN}\n      - uses: actions/download-artifact@{PIN}\n        with:\n          name: coverage\n          run-id: ${{{{ github.event.workflow_run.id }}}}\n          github-token: ${{{{ github.token }}}}\n      - uses: actions/github-script@{PIN}\n        with:\n          script: |\n            await github.rest.repos.createCommitStatus({{\n              owner: context.repo.owner,\n              repo: context.repo.repo,\n              sha: context.payload.workflow_run.head_sha,\n              state: 'success',\n            }});\n"
+    );
+    assert!(ids(&text).is_empty(), "{text}");
+}
+
+#[test]
+fn a_head_checkout_in_a_workflow_that_also_runs_on_pull_request_target_is_reported() {
+    // Triggers apply to every job, so a job written for pull_request also
+    // runs on pull_request_target, with secrets and a write token.
+    for trigger in [
+        "on: [pull_request, pull_request_target]\n",
+        "on:\n  pull_request:\n    branches: [main]\n  pull_request_target:\n    types: [labeled]\n",
+    ] {
+        let text = format!(
+            "{trigger}jobs:\n  test:\n    runs-on: ubuntu-latest\n{}      - run: npm test\n",
+            pinned_checkout_step("${{ github.event.pull_request.head.sha }}")
+        );
+        assert_eq!(ids(&text), ["ci.workflow.untrusted-checkout"], "{text}");
+    }
+}
+
+#[test]
 fn a_commented_out_trigger_is_quiet() {
     let text = format!(
         "on:\n  pull_request:\n  # pull_request_target:\njobs:\n  b:\n{}",

@@ -54,14 +54,6 @@ class QueuedRuntimeHook:
 class RuntimeHookSchedulerOwner(Protocol):
     def release_permit(self, item: QueuedRuntimeHook) -> None: ...
 
-    def grow_reserved_bytes(
-        self,
-        *,
-        current_bytes: int,
-        payload_bytes: int,
-        deadline: float,
-    ) -> RuntimeHookAdmissionReason | None: ...
-
     def release_reserved_bytes(self, payload_bytes: int) -> None: ...
 
 
@@ -104,25 +96,6 @@ class RuntimeHookByteReservation:
 
     def is_owned_by(self, scheduler: RuntimeHookSchedulerOwner) -> bool:
         return self._scheduler is scheduler
-
-    def resize(self, payload_bytes: int, *, deadline: float) -> RuntimeHookAdmissionReason | None:
-        if self._released or self._transferred:
-            raise RuntimeError("runtime hook byte reservation is no longer resizable")
-        if payload_bytes < 0:
-            raise ValueError("runtime hook byte reservation cannot be negative")
-        if payload_bytes > self.payload_bytes:
-            reason = self._scheduler.grow_reserved_bytes(
-                current_bytes=self.payload_bytes,
-                payload_bytes=payload_bytes,
-                deadline=deadline,
-            )
-            if reason is not None:
-                return reason
-        released_bytes = self.payload_bytes - payload_bytes
-        self.payload_bytes = payload_bytes
-        if released_bytes > 0:
-            self._scheduler.release_reserved_bytes(released_bytes)
-        return None
 
     def release(self) -> None:
         if self._released or self._transferred:

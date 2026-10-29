@@ -11,8 +11,8 @@ mod cwd;
 #[path = "github_metadata_text.rs"]
 mod github_metadata_text;
 pub(super) use cwd::{
-    after_read_prefix, cwd_read_executable, exact_safe_cwd_compound, verified_cwd_compound_context,
-    verified_cwd_list_context,
+    after_read_prefix, cwd_read_executable, exact_safe_cwd_compound, git_read_cwd_compound_context,
+    verified_cwd_compound_context, verified_cwd_list_context,
 };
 
 pub(crate) fn benign_command_segments(
@@ -119,6 +119,7 @@ pub(crate) fn benign_command_segments(
                         | "find"
                         | "du"
                         | "diff"
+                        | "cmp"
                         | "file"
                         | "npm"
                         | "jq"
@@ -180,6 +181,18 @@ pub(crate) fn benign_command_segments(
         .collect()
 }
 
+/// A jq filter may name a `$variable` it binds itself, but the parsed
+/// argument does not show whether the shell expands that `$` first:
+/// `jq ". as \$x | $x"` reaches jq with whatever `$x` holds spliced into the
+/// code. Every `$` in the raw text must be single-quoted or escaped.
+fn jq_dollars_literal(segment: &crate::CommandSegmentV1) -> bool {
+    !segment
+        .arguments
+        .iter()
+        .any(|argument| argument.contains('$'))
+        || super::shell_literal::literal_everywhere(&segment.text, '$')
+}
+
 /// A later pipeline stage that only filters its standard input.
 pub(super) fn stdin_filter_segment(segment: &crate::CommandSegmentV1) -> bool {
     let basename = executable_basename(segment.executable.as_deref().unwrap_or(""));
@@ -187,7 +200,9 @@ pub(super) fn stdin_filter_segment(segment: &crate::CommandSegmentV1) -> bool {
         && ((basename == "cat" && safe_reads::safe_cat_stdin_arguments(&segment.arguments))
             || (matches!(basename, "head" | "tail")
                 && safe_reads::safe_head_tail_stdin_arguments(&segment.arguments))
-            || (basename == "jq" && safe_reads::safe_jq_stdin_arguments(&segment.arguments))
+            || (basename == "jq"
+                && jq_dollars_literal(segment)
+                && safe_reads::safe_jq_stdin_arguments(&segment.arguments))
             || (basename == "wc"
                 && safe_reads::safe_word_count_stdin_arguments(&segment.arguments))
             || (basename == "od" && safe_reads::safe_byte_dump_stdin_arguments(&segment.arguments))
@@ -261,10 +276,7 @@ pub(super) fn exact_safe_segment_with_context(
         secret_namespace.map(|index| github_metadata_text::without_namespace(segment, index));
     if (!inert_search
         && !super::source_file_read_segment(segment)
-        && super::git_search_text::sensitive_beyond_patterns(
-            sensitive_text.as_deref().unwrap_or(&segment.text),
-            super::git_search_text::segment_without_patterns(segment),
-        ))
+        && super::git_search_text::segment_sensitive(model, segment, sensitive_text, context.cwd))
         || (!matches!(basename, "rg" | "grep" | "egrep" | "fgrep" | "fd")
             && segment
                 .arguments
@@ -356,6 +368,7 @@ pub(super) fn exact_safe_segment_with_context(
         "du" => super::metadata_reads::safe_du_arguments(&segment.arguments, context),
         "df" => super::metadata_reads::safe_df_arguments(&segment.arguments),
         "diff" => super::metadata_reads::safe_diff_arguments(&segment.arguments, context),
+        "cmp" => super::metadata_reads::safe_cmp_arguments(&segment.arguments, context),
         "file" => super::metadata_reads::safe_file_arguments(&segment.arguments, context),
         "stat" => super::metadata_reads::safe_stat_arguments(&segment.arguments, context),
         "dirname" | "basename" => {
@@ -438,9 +451,11 @@ pub(super) fn exact_safe_segment_with_context(
             segment.pipeline_index,
         ),
         "jq" => {
-            (segment.pipeline_index > 0 && safe_reads::safe_jq_stdin_arguments(&segment.arguments))
-                || (segment.pipeline_index == 0
-                    && safe_reads::safe_jq_file_arguments(&segment.arguments, context))
+            jq_dollars_literal(segment)
+                && ((segment.pipeline_index > 0
+                    && safe_reads::safe_jq_stdin_arguments(&segment.arguments))
+                    || (segment.pipeline_index == 0
+                        && safe_reads::safe_jq_file_arguments(&segment.arguments, context)))
         }
         "wc" => safe_reads::safe_word_count_arguments(
             &segment.arguments,

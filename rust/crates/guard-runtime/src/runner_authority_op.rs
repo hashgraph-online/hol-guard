@@ -28,6 +28,7 @@ use super::gemini_detect;
 use super::grok_detect;
 use super::hermes_detect;
 use super::kimi_detect;
+use super::muse_detect;
 use super::oci_bundle_op as oci;
 use super::openclaw_detect;
 use super::opencode_detect;
@@ -137,6 +138,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "devin_detect" => devin_detect::detect(args),
         "grok_detect" => grok_detect::detect(args),
         "kimi_detect" => kimi_detect::detect(args),
+        "muse_detect" => muse_detect::detect(args),
         "openclaw_detect" => openclaw_detect::detect(args),
         "cursor_detect" => cursor_detect::detect(args),
         "opencode_detect" => opencode_detect::detect(args),

@@ -6,7 +6,12 @@ import os
 import sys
 from collections.abc import Mapping
 
+from ..action_lattice import normalize_guard_action
 from .grok_approval_resume import grok_resume_metadata_from_guard_payload
+
+# Every tier at or above review denies in Grok; an action Guard cannot place in
+# the lattice normalizes to review before it is tested against this set.
+_GROK_BLOCKING_ACTIONS = frozenset({"review", "require-reapproval", "sandbox-required", "block"})
 
 _GROK_EVENT_NAMES: dict[str, str] = {
     "pretooluse": "PreToolUse",
@@ -58,8 +63,14 @@ def grok_hook_response_from_guard(
     approval_payload: Mapping[str, object] | None = None,
     recording_only: bool = False,
 ) -> dict[str, object]:
-    """Translate Guard policy action into Grok hook stdout JSON."""
+    """Translate Guard policy action into Grok hook stdout JSON.
 
+    An action outside the canonical lattice is normalized to the review tier
+    first, so an unrecognized producer value denies instead of rendering an
+    allow-shaped response.
+    """
+
+    policy_action = normalize_guard_action(policy_action)
     if is_grok_observe_only_event(event_name):
         # Passive callbacks do not authorize a prompt or tool action.
         return {}
@@ -69,7 +80,7 @@ def grok_hook_response_from_guard(
         return {"decision": "block", "reason": reason.strip() or "Blocked by HOL Guard."}
     if recording_only:
         return {"decision": "allow"}
-    if policy_action in {"review", "require-reapproval", "sandbox-required", "block"}:
+    if policy_action in _GROK_BLOCKING_ACTIONS:
         cleaned_reason = _dedupe_grok_block_reason(reason.strip() if isinstance(reason, str) else "")
         response: dict[str, object] = {
             "decision": "deny",
@@ -93,15 +104,13 @@ def _dedupe_grok_block_reason(reason: str) -> str:
     return reason[:second].rstrip()
 
 
-_last_grok_policy_action = ""
-
-
 def grok_hook_process_exit(policy_action: str) -> int:
-    if _last_grok_policy_action == "allow":
-        return 0
+    """Return the exit code Grok expects, failing closed on an unknown action."""
+
     if _recording_only_from_guard_home():
         return 0
-    return 0 if policy_action not in {"review", "require-reapproval", "sandbox-required", "block"} else 2
+    normalized = normalize_guard_action(policy_action)
+    return 2 if normalized in _GROK_BLOCKING_ACTIONS else 0
 
 
 def _guard_store_from_argv():
