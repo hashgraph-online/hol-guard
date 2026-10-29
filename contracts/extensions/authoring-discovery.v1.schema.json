@@ -40,6 +40,11 @@
     "metadata": {
       "additionalProperties": false,
       "properties": {
+        "description": {
+          "maxLength": 512,
+          "minLength": 1,
+          "type": "string"
+        },
         "executable": {
           "maxLength": 64,
           "minLength": 0,
@@ -67,6 +72,11 @@
             "yarn",
             "pipx"
           ]
+        },
+        "license": {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
         },
         "name": {
           "maxLength": 128,

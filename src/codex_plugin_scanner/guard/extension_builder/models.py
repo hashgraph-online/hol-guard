@@ -22,6 +22,8 @@ from .validation import (
 )
 
 Kind = Literal["cli", "mcp"]
+# SPDX-style license expression tokens, e.g. "MIT" or "Apache-2.0 OR MIT".
+LICENSE_PATTERN = r"[A-Za-z0-9][A-Za-z0-9.+-]*(?: (?:AND|OR|WITH) [A-Za-z0-9][A-Za-z0-9.+-]*)*"
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,6 +38,8 @@ class Metadata:
     executable: str = ""
     launcher: str = ""
     package: str = ""
+    license: str = ""
+    description: str = ""
 
     @property
     def contribution_id(self) -> str:
@@ -46,7 +50,7 @@ class Metadata:
         return f"command.{'mcp-' if self.kind == 'mcp' else ''}{self.slug}"
 
     def to_dict(self) -> dict[str, object]:
-        return {
+        result: dict[str, object] = {
             "kind": self.kind,
             "slug": self.slug,
             "name": self.name,
@@ -57,6 +61,13 @@ class Metadata:
             "launcher": self.launcher,
             "package": self.package,
         }
+        # Optional presentation fields are emitted only when set, so snapshots
+        # written before they existed keep their binding digest.
+        if self.license:
+            result["license"] = self.license
+        if self.description:
+            result["description"] = self.description
+        return result
 
 
 def validate_metadata(metadata: Metadata) -> Metadata:
@@ -66,6 +77,9 @@ def validate_metadata(metadata: Metadata) -> Metadata:
     token(metadata.publisher_id, pattern=r"[A-Za-z0-9][A-Za-z0-9._-]*", maximum=128)
     https_reference(metadata.homepage)
     text(metadata.upstream_version, maximum=64)
+    if metadata.license:
+        token(metadata.license, pattern=LICENSE_PATTERN, maximum=128)
+    text(metadata.description, maximum=512, empty=True)
     if metadata.kind == "cli":
         token(metadata.executable)
         if metadata.slug.startswith("mcp-") or metadata.launcher or metadata.package:
@@ -96,6 +110,8 @@ def _metadata_from_dict(value: object) -> Metadata:
             executable=cast(str, row["executable"]),
             launcher=cast(str, row["launcher"]),
             package=cast(str, row["package"]),
+            license=cast(str, row.get("license", "")),
+            description=cast(str, row.get("description", "")),
         )
     )
 

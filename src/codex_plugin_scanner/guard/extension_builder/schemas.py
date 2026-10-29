@@ -42,8 +42,13 @@ def array_schema(items: object, maximum: int, *, minimum: int = 0, unique: bool 
     return {"type": "array", "items": items, "minItems": minimum, "maxItems": maximum, "uniqueItems": unique}
 
 
-def object_schema(properties: dict[str, object]) -> dict[str, object]:
-    return {"type": "object", "additionalProperties": False, "properties": properties, "required": list(properties)}
+def object_schema(properties: dict[str, object], *, optional: tuple[str, ...] = ()) -> dict[str, object]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": properties,
+        "required": [name for name in properties if name not in optional],
+    }
 
 
 _OPERATION_SCHEMA = object_schema(
@@ -73,7 +78,10 @@ DISCOVERY_JSON_SCHEMA = {
                     "executable": string_schema(64, minimum=0),
                     "launcher": {"enum": ["", *LAUNCHERS]},
                     "package": string_schema(256, minimum=0),
-                }
+                    "license": string_schema(128),
+                    "description": string_schema(512),
+                },
+                optional=("license", "description"),
             ),
             "adapter": {"enum": list(ADAPTERS)},
             "sourceSha256": string_schema(64, pattern=SHA_PATTERN),
