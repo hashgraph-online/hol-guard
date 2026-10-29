@@ -38,6 +38,9 @@ import { updateSettings } from "./guard-api";
 import { guardActionActivityCopy, guardActionDisposition } from "./guard-action";
 import { approvalLeftActionStopped } from "./evidence/approval-outcome";
 import { isConnectableAppHarness } from "./apps/harness-setup-target";
+import { buildHomeRuntimeErrorCopy } from "./home-runtime-error";
+import { ServiceRecoveryPanel } from "./service-recovery-panel";
+import type { RecoveryHandoffResult, RecoveryInstallMode } from "./service-recovery";
 import { RuntimeErrorState } from "./runtime-error-state";
 import type {
   GuardApprovalGatePublicConfig,
@@ -147,6 +150,8 @@ export function HomeWorkspace(props: {
   onOpenSettings: () => void;
   onRefreshRuntime?: () => Promise<void> | void;
   onReconnectSession?: () => Promise<void> | void;
+  onOpenRecovery?: () => RecoveryHandoffResult | void | Promise<RecoveryHandoffResult | void>;
+  recoveryInstallMode?: RecoveryInstallMode;
   onOpenSupplyChain?: () => void;
   onClearPolicies: (scope: { harness?: string; all?: boolean }) => void;
   onOpenAppDetail: (harness: string) => void;
@@ -315,6 +320,18 @@ export function HomeWorkspace(props: {
   }
 
   if (props.runtime.kind === "error") {
+    const errorCopy = buildHomeRuntimeErrorCopy(props.runtime.message);
+    if (errorCopy.kind === "daemon") {
+      return (
+        <ServiceRecoveryPanel
+          title={errorCopy.title}
+          body={errorCopy.body}
+          onRetryConnection={props.onRefreshRuntime}
+          onOpenRecovery={props.onOpenRecovery}
+          installMode={props.recoveryInstallMode}
+        />
+      );
+    }
     return (
       <RuntimeErrorState
         message={props.runtime.message}

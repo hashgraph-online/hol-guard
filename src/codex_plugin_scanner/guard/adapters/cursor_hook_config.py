@@ -24,8 +24,10 @@ from ._modules.cursor.cursor_hook_events import (
 from ._modules.cursor.cursor_hook_guard_cli import resolve_frozen_cursor_hook_launcher
 from ._modules.cursor.cursor_hook_native import (
     NATIVE_CURSOR_HOOK_COMMAND,
+    CursorNativeBridgeUnavailableError,
     client_hook_tokens,
     native_cursor_hook_bridge,
+    python_client_pinned,
 )
 from .base import HarnessContext
 from .hook_payloads import inline_hooks_payload
@@ -111,6 +113,10 @@ def _managed_hook_command(
     event_args = ["--cursor-hook-event", event_name]
     interpreter = str(python_executable) if python_executable is not None else isolated_cursor_hook_python()
     native_bridge = native_cursor_hook_bridge(guard_home)
+    if native_bridge is None and not python_client_pinned():
+        # The client this command would launch denies every gated hook, so the
+        # frozen launcher must not render a command without the runtime either.
+        raise CursorNativeBridgeUnavailableError("guard_cursor_native_bridge_unavailable")
     prefix = [] if native_bridge is None else [str(native_bridge), NATIVE_CURSOR_HOOK_COMMAND]
     if not interpreter and bool(getattr(sys, "frozen", False)):
         launcher = [_frozen_cursor_hook_launcher(), FROZEN_CURSOR_HOOK_COMMAND, script, *event_args]

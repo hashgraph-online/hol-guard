@@ -13,11 +13,8 @@ from ..frozen_runtime_commands import frozen_daemon_recovery_command
 from ..stable_guard_cli import uses_top_level_hook_command as _uses_top_level_hook_command
 from ._modules.cursor.cursor_hook_entries import _remove_managed_hook_entries, _render_without_managed_hook_entries
 from ._modules.cursor.cursor_hook_events import unsupported_cursor_hook_events
-from ._modules.cursor.cursor_hook_guard_cli import HOOK_SCRIPT_TEMPLATE_RESOLVER
-from ._modules.cursor.cursor_hook_script_template_head import HOOK_SCRIPT_TEMPLATE_HEAD
-from ._modules.cursor.cursor_hook_script_template_reason import HOOK_SCRIPT_TEMPLATE_REASON
-from ._modules.cursor.cursor_hook_script_template_route import HOOK_SCRIPT_TEMPLATE_ROUTE
-from ._modules.cursor.cursor_hook_script_template_tail import HOOK_SCRIPT_TEMPLATE_TAIL
+from ._modules.cursor.cursor_hook_native import CursorNativeBridgeUnavailableError, require_cursor_hook_bridge
+from ._modules.cursor.cursor_hook_script_template import HOOK_SCRIPT_TEMPLATE
 from .adapter_safe_output import write_text_at_authorized_path
 from .base import HarnessContext, PreparedHarnessInstall, _ensure_path_within_root
 from .cursor_hook_config import (
@@ -47,13 +44,6 @@ from .state_files import parse_backup_payload
 if TYPE_CHECKING:
     from ..runtime_transition import TransitionFile
 
-_HOOK_SCRIPT_TEMPLATE = (
-    HOOK_SCRIPT_TEMPLATE_HEAD
-    + HOOK_SCRIPT_TEMPLATE_REASON
-    + HOOK_SCRIPT_TEMPLATE_RESOLVER
-    + HOOK_SCRIPT_TEMPLATE_ROUTE
-    + HOOK_SCRIPT_TEMPLATE_TAIL
-)
 _INHERIT_ENV_KEYS = (
     "PATH",
     "HOME",
@@ -111,6 +101,10 @@ def _prepare_cursor_hooks(context: HarnessContext) -> PreparedHarnessInstall:
     from ..codex_hook_recovery import _snapshot
     from ..runtime_transition import RuntimeTransition, TransitionError, TransitionFile
 
+    try:
+        require_cursor_hook_bridge(context.guard_home)
+    except CursorNativeBridgeUnavailableError as error:
+        raise TransitionError("adapter_preparation_native_cursor_bridge_missing") from error
     secret_path = cursor_hook_attestation_secret_path(context.guard_home)
     secret = _snapshot(secret_path)
     if secret is None:
@@ -247,6 +241,9 @@ def _prepare_legacy_project_cursor_cleanup(context: HarnessContext) -> tuple[Tra
 def install_cursor_hooks(context: HarnessContext) -> dict[str, object]:
     """Install Guard-managed Cursor hooks and bridge script."""
 
+    # A hook written without the runtime denies every shell, read and MCP action
+    # Cursor gates, so there is no install to write when none can answer.
+    require_cursor_hook_bridge(context.guard_home)
     guard_cli = resolve_attested_guard_cli(context)
     hooks_path = cursor_hooks_path(context)
     script_path = cursor_hook_script_path(context)
@@ -504,7 +501,7 @@ def cursor_hook_script_source(
     if not _uses_top_level_hook_command(guard_cli):
         guard_argv = ["guard", *guard_argv]
     return (
-        _HOOK_SCRIPT_TEMPLATE.replace("__GUARD_HOME__", json.dumps(str(context.guard_home.resolve())))
+        HOOK_SCRIPT_TEMPLATE.replace("__GUARD_HOME__", json.dumps(str(context.guard_home.resolve())))
         .replace("__GUARD_CLI__", json.dumps(guard_cli))
         .replace("__GUARD_RECOVERY_COMMAND__", json.dumps(recovery_command))
         .replace(
@@ -525,6 +522,16 @@ def cursor_hook_script_source(
 def cursor_native_hook_state(context: HarnessContext) -> dict[str, object]:
     """Verify Cursor registration, scripts, and the current attested CLI identity."""
 
+    try:
+        require_cursor_hook_bridge(context.guard_home)
+    except CursorNativeBridgeUnavailableError:
+        # Checked before the attestation branch below: this is a RuntimeError too,
+        # and a missing runtime is not an attestation failure.
+        return {
+            "protection_active": False,
+            "integrity_status": "missing",
+            "reason": "guard_cursor_native_bridge_unavailable",
+        }
     try:
         guard_cli = resolve_attested_guard_cli(context)
         expected_source = cursor_hook_script_source(context, guard_cli=list(guard_cli.command))

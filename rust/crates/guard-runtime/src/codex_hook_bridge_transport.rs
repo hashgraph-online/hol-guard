@@ -194,10 +194,30 @@ pub(crate) fn authenticated_codex_hook_response(
 /// Python's call raised `OSError` or `HTTPException` (nothing was settled,
 /// the same request may be sent again), `Refused` where it raised
 /// `ValueError` (a status other than 200, an oversized or malformed body).
+/// `Rejected` is a 409 whose body names the daemon's stable rejection code,
+/// so the bridge can say why a decision was not applied.
 #[derive(Debug, PartialEq)]
 pub(crate) enum ApprovalFailure {
     Retry,
     Refused,
+    Rejected(String),
+}
+
+/// The daemon's rejection code from a 409 body: `{"error": "<code>"}` with a
+/// code of 1 to 80 characters from `[a-z0-9_]`. Anything else is not a
+/// stable code and is not repeated.
+fn rejection_code(text: &[u8]) -> Option<String> {
+    let parsed =
+        crate::pyjson::parse_mapping_lone_surrogates(py_strip(&String::from_utf8_lossy(text)))
+            .ok()?;
+    let Some(crate::pyjson::PyVal::Str(code)) = parsed.value.get("error") else {
+        return None;
+    };
+    let stable = (1..=80).contains(&code.len())
+        && code
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_');
+    stable.then(|| code.clone())
 }
 
 const APPROVAL_DEADLINE: &str = "daemon request exceeded the hook deadline";
@@ -251,11 +271,15 @@ pub(crate) fn approval_request(
         return Err(ApprovalFailure::Refused);
     }
     if head.status != 200 {
-        return if head.status == 404 && body.is_none() {
-            Ok(None)
-        } else {
-            Err(ApprovalFailure::Refused)
-        };
+        if head.status == 404 && body.is_none() {
+            return Ok(None);
+        }
+        if head.status == 409 {
+            if let Some(code) = rejection_code(&text) {
+                return Err(ApprovalFailure::Rejected(code));
+            }
+        }
+        return Err(ApprovalFailure::Refused);
     }
     match crate::pyjson::parse_mapping_lone_surrogates(py_strip(&String::from_utf8_lossy(&text))) {
         Ok(parsed) if matches!(parsed.value, crate::pyjson::PyVal::Dict(_)) => {

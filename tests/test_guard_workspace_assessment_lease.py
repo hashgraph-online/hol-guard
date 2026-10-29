@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from codex_plugin_scanner.guard import native_workspace_inventory as inventory
 from codex_plugin_scanner.guard import workspace_assessment_runner as runner
 from codex_plugin_scanner.guard import workspace_assessment_store as assessments
 from codex_plugin_scanner.guard.store import GuardStore
@@ -89,3 +90,24 @@ def test_a_run_queued_after_an_unretried_expiry_still_gets_its_retry(tmp_path: P
     retry = assessments.claim_next(store, owner="test", now_ms=later + assessments.LEASE_MS + 3)
     assert retry is not None and retry.trigger_kind == "manual"
     assert runs(store)[:2] == [("failed", "lease_expired"), ("failed", "lease_expired")]
+
+
+def test_an_audit_that_outlasts_its_stage_deadline_fails_without_waiting_for_the_lease(
+    tmp_path: Path, monkeypatch
+) -> None:
+    store = manual_run(tmp_path)
+    snapshots(monkeypatch, runner, SCANNED)
+    monotonic = [0.0]
+    pages: list[float] = []
+    monkeypatch.setattr(inventory.time, "monotonic", lambda: monotonic[0])
+
+    def audit(store, config, root):
+        while True:
+            inventory.check_audit_deadline()
+            pages.append(monotonic[0])
+            monotonic[0] += 2.0
+
+    monkeypatch.setattr(runner, "_local_audit", audit)
+    assert runner.run_next(store, None, owner="test", clock=lambda: T0)
+    assert runs(store) == [("failed", "supply_chain_audit_timed_out")]
+    assert max(pages) < runner.AUDIT_STAGE_SECONDS < assessments.LEASE_MS / 1000

@@ -36,6 +36,7 @@ import { selectNextAfterResolution, type QueueGroup } from "./queue-state";
 import { BulkBlockError, blockRequestsOnce, bulkBlockFailureMessage, bulkBlockSummary } from "./bulk-block-requests";
 import { useRouteFocus } from "./use-route-focus";
 import { commitDashboardLocation, useDashboardPathname } from "./dashboard-location";
+import { openRecoveryView } from "./service-recovery";
 import { RuntimeGate } from "./runtime-error-state";
 
 const HOME_QUEUE_PREVIEW_LIMIT = 50;
@@ -588,6 +589,7 @@ export function App() {
   const handleOpenInsights = useCallback(() => navigate("/evidence?view=insights"), [navigate]);
   const handleOpenCommands = useCallback(() => navigate("/evidence?view=commands"), [navigate]);
   const handleOpenSettings = useCallback(() => navigate("/settings"), []);
+  const handleOpenRecovery = useCallback(() => openRecoveryView(), []);
   const handleOpenSupplyChain = useCallback(() => navigate("/supply-chain"), []);
   const handleOpenPolicy = useCallback(() => navigate("/policy"), []);
   const handleOpenHelp = useCallback(() => setHelpOpen(true), []);
@@ -1069,6 +1071,7 @@ export function App() {
             onOpenSettings={handleOpenSettings}
             onRefreshRuntime={async () => { await refreshStateAfterAction(); }}
             onReconnectSession={handleReconnectSession}
+            onOpenRecovery={handleOpenRecovery}
             onOpenSupplyChain={handleOpenSupplyChain}
             onClearPolicies={handleClearPolicies}
             onOpenAppDetail={handleOpenAppDetail}

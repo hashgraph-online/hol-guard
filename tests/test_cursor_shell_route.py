@@ -2,16 +2,12 @@
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters._modules.cursor.cursor_hook_script_template_route import (
-    HOOK_SCRIPT_TEMPLATE_ROUTE,
-)
 from codex_plugin_scanner.guard.daemon import cursor_shell_route as route
 
 _SHELL = {"hook_event_name": "PreToolUse", "tool_name": "Shell", "tool_input": {"command": "pytest -q"}}
@@ -160,44 +156,6 @@ def test_a_sink_check_that_fails_is_reviewed_as_usual(tmp_path: Path, monkeypatc
 def test_windows_is_never_routed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(route.sys, "platform", "win32")
     assert _respond(_PROBE, tmp_path) is None
-
-
-def _hook_copy() -> dict[str, object]:
-    namespace: dict[str, object] = {"json": json}
-    exec(HOOK_SCRIPT_TEMPLATE_ROUTE, namespace)
-    return namespace
-
-
-def _routed_body(updated: object) -> str:
-    return json.dumps(
-        {"policy_action": "allow", "reason_code": _ROUTED, "hookSpecificOutput": {"updatedInput": updated}}
-    )
-
-
-def test_hook_copy_returns_the_sink_command_only_for_a_routed_answer() -> None:
-    respond = _hook_copy()["_cursor_shell_route_response"]
-    assert respond(_routed_body(_SINK) + "\n") == {"permission": "allow", "updated_input": _SINK}
-    plain = {"permission": "allow"}
-    for body in (
-        "",
-        "not json",
-        "[]",
-        json.dumps({"policy_action": "allow"}),
-        json.dumps({"policy_action": "deny", "reason_code": _ROUTED}),
-        _routed_body(None),
-        _routed_body({"command": 1}),
-        _routed_body(_SINK).replace('"/w"', "NaN"),
-        _routed_body(_SINK).replace('"/w"', "1e400"),
-        _routed_body(_SINK).replace('"/w"', '"\\ud800"'),
-    ):
-        assert respond(body) == plain, body
-
-
-def test_hook_copy_probe_matches_the_daemon() -> None:
-    # The hook detects its probe before it names it for the daemon.
-    probe = _hook_copy()["_cursor_shell_route_probe"]
-    for payload in (_SHELL, _BEFORE_SHELL, {**_SHELL, "tool_name": "Write"}):
-        assert probe(payload) == route.is_cursor_shell_probe({**payload, "cursor_route_probe": True})
 
 
 class _RoutingWorker:

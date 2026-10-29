@@ -21,6 +21,11 @@ on:
         required: false
         type: boolean
         default: false
+      allow_cache_write:
+        description: Trusted release builds may populate release caches. Pull request alphas must not.
+        required: false
+        type: boolean
+        default: true
 permissions:
   contents: read
 jobs:
@@ -44,6 +49,7 @@ jobs:
         with:
           version: "0.9.26"
           enable-cache: true
+          save-cache: ${{ inputs.allow_cache_write }}
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: distributions
@@ -79,9 +85,9 @@ jobs:
           # always stale after a fresh checkout, so storing them only spends quota.
           cache-workspace-crates: false
           cache-bin: false
-          # Release builds never consume the validation cache. PR canaries can
-          # restore this trusted cache, but cannot publish entries to it.
-          save-if: ${{ github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release/3.0') }}
+          # Release builds never consume the validation cache. PR canaries and
+          # pull request alphas can restore this cache, but cannot publish entries.
+          save-if: ${{ inputs.allow_cache_write && github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release/3.0') }}
       - name: Build version-matched runtime
         if: inputs.precompiled != true
         shell: bash

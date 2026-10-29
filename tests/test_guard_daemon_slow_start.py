@@ -72,6 +72,9 @@ def _patch_spawn(monkeypatch: pytest.MonkeyPatch, process: _FakeProcess, *, afte
     monkeypatch.setattr(daemon_manager_module.time, "sleep", lambda _: None)
     monkeypatch.setattr(daemon_manager_module.subprocess, "Popen", lambda *_a, **_k: process)
     monkeypatch.setattr(daemon_manager_module, "process_start_token", lambda _pid: "posix:token")
+    # The fake child never exists on the host, so its generation and owner come from the stubs
+    # rather than from a real ``ps`` probe through the patched ``subprocess.Popen``.
+    monkeypatch.setattr(daemon_manager_module, "process_owner_marker", lambda _pid: "uid:0")
     # No lock, no journal entry: the child is still importing Python.
     monkeypatch.setattr(start_classification, "daemon_owner_lock_is_held", lambda _gh: False)
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_process_inventory_for_guard_home", lambda _gh: [])

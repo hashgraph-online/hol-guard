@@ -39,6 +39,10 @@
 //! surrogate escape the client's `json.loads` keeps is sent and rendered as
 //! its `json.dumps` writes it; a path holding one is never a workspace, as
 //! the client's `Path.is_dir()` cannot encode it.
+//!
+//! The client steps named here are those of the Python client the bridge
+//! was ported from. That client is retired: the generated script now
+//! carries only the constants the bridge reads.
 
 use std::path::Path;
 use std::time::{Duration, Instant};

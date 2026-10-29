@@ -31,6 +31,7 @@ from ci.gauntlet.installed_runtime import (
     SHIM,
     InstalledRuntimeError,
     classify,
+    isolated_environment,
     resolve_runtime,
 )
 from ci.gauntlet.installed_store import STALE_COMMAND
@@ -436,6 +437,49 @@ def test_the_contract_is_the_lanes_own_and_covers_every_claude_event() -> None:
 
     contract = load_contract()
     assert set(contract["harnesses"]["claude-code"]["required_events"]) == set(_CLAUDE_EVENTS)
+
+
+def test_classify_reports_the_runtime_a_native_wheel_sealed(tmp_path: Path) -> None:
+    """A platform wheel carries its runtime inside the package, beside the script."""
+
+    site = tmp_path / "site-packages"
+    package = site / "codex_plugin_scanner"
+    (package / "_native").mkdir(parents=True)
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    sealed = package / "_native" / "hol-guard-runtime"
+    sealed.write_bytes(b"runtime")
+    shim = tmp_path / "interp"
+    shim.write_text(
+        f"#!{sys.executable}\nimport sys\nsys.path.insert(0, {str(site)!r})\n"
+        "sys.argv = [sys.argv[0]] + [a for a in sys.argv[1:] if a != '-I']\n"
+        "exec(compile(sys.argv[sys.argv.index('-c') + 1], '<probe>', 'exec'))\n",
+        encoding="utf-8",
+    )
+    shim.chmod(0o755)
+    script = tmp_path / "hol-guard"
+    script.write_text(f"#!{shim}\nprint('hol-guard 0.0.0-stub')\n", encoding="utf-8")
+    script.chmod(0o755)
+
+    kind, native = classify(script)
+    assert kind == SCRIPT
+    assert native == sealed
+
+
+def test_isolated_environment_pins_the_resolved_native_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("HOL_GUARD_NATIVE_BINARY", raising=False)
+    sealed = tmp_path / "hol-guard-runtime"
+    pinned = isolated_environment(home=tmp_path / "h", guard_home=tmp_path / "g", native_runtime=sealed)
+    assert pinned["HOL_GUARD_NATIVE_BINARY"] == str(sealed)
+    assert pinned["HOL_GUARD_NATIVE"] == "force"
+    unpinned = isolated_environment(home=tmp_path / "h", guard_home=tmp_path / "g")
+    assert "HOL_GUARD_NATIVE_BINARY" not in unpinned
+
+
+def test_the_contract_matches_zcodes_managed_events() -> None:
+    """ZCode's adapter manages exactly two hook events; the contract must not demand more."""
+
+    contract = load_contract()
+    assert contract["harnesses"]["zcode"]["required_events"] == ["PreToolUse", "UserPromptSubmit"]
 
 
 def test_the_contract_covers_every_muse_event() -> None:

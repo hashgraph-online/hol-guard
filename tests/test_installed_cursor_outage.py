@@ -50,7 +50,7 @@ def test_skipped_cases_cannot_produce_evidence(tmp_path: Path, monkeypatch: pyte
     monkeypatch.setattr(runner, "verify_install", lambda *_args: {"outside_checkout": True})
 
     def partial_run(_arguments, *, plugins):
-        plugins[0].passed = 9
+        plugins[0].passed = 6
         plugins[0].skipped = 1
         return 0
 
@@ -66,8 +66,8 @@ def test_checkout_import_invalidates_evidence(tmp_path: Path, monkeypatch: pytes
     monkeypatch.setattr(runner, "verify_install", lambda *_args: {"outside_checkout": True})
 
     def injected_run(_arguments, *, plugins):
-        plugins[0].passed = 10
-        plugins[0].group_passed = {"import_unavailable": 5, "unacknowledged_watch": 5}
+        plugins[0].passed = 7
+        plugins[0].group_passed = {"gate_denied": 5, "observer_continues": 2}
         module = ModuleType("codex_plugin_scanner.fixture_source_injection")
         module.__file__ = str(tmp_path / "src" / "fixture.py")
         monkeypatch.setitem(sys.modules, module.__name__, module)
@@ -85,8 +85,8 @@ def test_wrong_case_group_counts_cannot_produce_evidence(tmp_path: Path, monkeyp
     monkeypatch.setattr(runner, "verify_install", lambda *_args: {"outside_checkout": True})
 
     def injected_run(_arguments, *, plugins):
-        plugins[0].passed = 10
-        plugins[0].group_passed = {"import_unavailable": 10, "unacknowledged_watch": 0}
+        plugins[0].passed = 7
+        plugins[0].group_passed = {"gate_denied": 7, "observer_continues": 0}
         return 0
 
     monkeypatch.setattr(runner.pytest, "main", injected_run)

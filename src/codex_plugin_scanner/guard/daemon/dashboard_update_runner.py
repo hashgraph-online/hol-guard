@@ -17,6 +17,7 @@ from codex_plugin_scanner.guard.daemon.dashboard_update import (
     write_dashboard_update_outcome,
 )
 from codex_plugin_scanner.guard.daemon.manager import (
+    _guard_daemon_pid_identity_for_retirement,
     _retire_guard_daemon_pid,
     ensure_guard_daemon_after_update,
     guard_daemon_retirement_is_complete,
@@ -43,8 +44,17 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, RuntimeError, sqlite3.Error):
             store = None
         time.sleep(_DASHBOARD_UPDATE_DAEMON_SETTLE_SECONDS)
+        # Capture the requested daemon's exact process generation before any
+        # signal so a recycled PID is never terminated.
+        retirement_identity = _guard_daemon_pid_identity_for_retirement(args.daemon_pid)
         retire_all_guard_daemons_for_home(guard_home)
-        requested_daemon_retired = _retire_guard_daemon_pid(args.daemon_pid, expected_guard_home=guard_home)
+        expected_start_marker, expected_owner_marker = retirement_identity or (None, None)
+        requested_daemon_retired = _retire_guard_daemon_pid(
+            args.daemon_pid,
+            expected_guard_home=guard_home,
+            expected_start_marker=expected_start_marker,
+            expected_owner_marker=expected_owner_marker,
+        )
         if not requested_daemon_retired or not guard_daemon_retirement_is_complete(guard_home):
             failed_payload: dict[str, object] = {
                 "status": "failed",

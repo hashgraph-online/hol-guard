@@ -20,6 +20,7 @@ from typing import Any, TypeGuard
 
 from .native_context import _resolve_digest_home
 from .native_package_approval_hash import _transport
+from .native_workspace_inventory import check_audit_deadline
 
 _FEATURE = "package-audit-projection-v1"
 _RECEIPT_KEYS = frozenset({"policy_decision", "capabilities_summary", "artifact_name", "scanner_evidence"})
@@ -134,6 +135,7 @@ def native_advisory_aliases(packages: Sequence[object], *, store: Any) -> dict[i
 
     aliases: dict[int, list[str]] = {}
     for start, batch in _alias_batches(packages):
+        check_audit_deadline()
         payload = _send({"query": "aliases", "packages": batch, "store_path": str(store.path)}, store)
         entries = payload.get("aliases")
         if set(payload) != {"aliases"} or not isinstance(entries, list):

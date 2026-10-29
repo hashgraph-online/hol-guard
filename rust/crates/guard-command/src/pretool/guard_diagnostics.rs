@@ -33,6 +33,22 @@
 //! queue snapshot also applies a due Watch-posture revert, which only moves a
 //! posture back to protected and never weakens one.
 //!
+//! The launcher's parser reads `--json` and `--timeout` wherever they appear,
+//! so these shapes are matched the same way the other readers here are: the
+//! flags are lifted out before the subcommand path is compared. Writing
+//! `approvals wait <id> --json --timeout 300` asks for exactly the read that
+//! `approvals wait <id> --timeout 300 --json` performs, and an admission that
+//! turned on their order would pause the second spelling of a command it had
+//! already proved read-only.
+//!
+//! `hol-guard explain <target>` is admitted with it (`artifact_explanation`).
+//! It prints what Guard already knows about one inventory artifact, or scans
+//! one local path and reports the scan's own summary: scores, ecosystems,
+//! package names, finding titles and severity counts, never the target's
+//! bytes. It writes nothing to the local store, and the optional
+//! `--cisco-mode` selector only decides whether that scan may add Cisco's
+//! offline evidence.
+//!
 //! `hol-guard runtime` and `hol-guard runtime posture` print the executables
 //! the configured MCP servers would launch and the advisory coverage Guard
 //! already holds for them. Nothing is started, no Cloud call is made and no
@@ -173,7 +189,45 @@ pub(super) fn safe_hol_guard_arguments(arguments: &[String]) -> bool {
         || command_inspection(&words)
         || approval_inspection(&words)
         || record_inspection(&words)
+        || artifact_explanation(&words)
         || posture_inspection(&words)
+}
+
+/// `hol-guard explain <target>` prints the evidence Guard already holds for
+/// one inventory artifact, or scans one local path and reports what the scan
+/// found about it: scores, detected ecosystems, package names, finding titles
+/// and severity counts. The payload never carries the target's own bytes, and
+/// nothing in the local store is written.
+///
+/// `--cisco-mode` only chooses whether that scan may add Cisco's offline
+/// evidence, so it is admitted beside the target. `--json` is lifted out
+/// before the path is compared, as it is for the other readers here, so
+/// neither flag has to be written last. Every root override (`--home`,
+/// `--guard-home`, `--workspace`) stays under review: this proof covers the
+/// evidence Guard holds for this home, not for one a flag names.
+fn artifact_explanation(words: &[&str]) -> bool {
+    let json_flags = words.iter().filter(|word| **word == "--json").count();
+    let rest: Vec<&str> = words
+        .iter()
+        .copied()
+        .filter(|word| *word != "--json")
+        .collect();
+    json_flags <= 1
+        && match rest.as_slice() {
+            ["explain", target] => explained_target(target),
+            ["explain", target, "--cisco-mode", mode]
+            | ["explain", "--cisco-mode", mode, target] => {
+                explained_target(target) && matches!(*mode, "auto" | "on" | "off")
+            }
+            _ => false,
+        }
+}
+
+/// The single artifact `explain` reads: an inventory id or a local path. A
+/// leading dash is refused so the target can never be read as an option the
+/// shapes above did not admit.
+fn explained_target(target: &str) -> bool {
+    !target.starts_with('-') && inspected_text(target)
 }
 
 /// `repair --dry-run`, the recovery path's own preview: every repair step
@@ -202,22 +256,39 @@ fn posture_inspection(words: &[&str]) -> bool {
 /// `unlock` and `clear-history`, and every root override (`--home`,
 /// `--guard-home`, `--workspace`), are not admitted. `open` launches the
 /// user's own approval center rather than printing anything, so it stays on
-/// the review path with the other launches.
+/// the review path with the other launches. `--json` is lifted out before the
+/// path is read, so neither it nor `--timeout` has to be written last.
 fn approval_inspection(words: &[&str]) -> bool {
-    match words {
-        ["approvals"]
-        | ["approvals", "--json"]
-        | ["approvals", "list"]
-        | ["approvals", "list", "--json"] => true,
-        ["approvals", "retry-hint" | "wait", id]
-        | ["approvals", "retry-hint" | "wait", id, "--json"] => request_id(id),
-        ["approvals", "wait", id, "--timeout", seconds]
-        | ["approvals", "wait", id, "--timeout", seconds, "--json"] => {
-            request_id(id) && seconds.parse::<u16>().is_ok_and(|seconds| seconds <= 600)
+    let json_flags = words.iter().filter(|word| **word == "--json").count();
+    let rest: Vec<&str> = words
+        .iter()
+        .copied()
+        .filter(|word| *word != "--json")
+        .collect();
+    json_flags <= 1
+        && match rest.as_slice() {
+            ["approvals"] | ["approvals", "list"] => true,
+            ["approvals", "retry-hint" | "wait", id] => request_id(id),
+            ["approvals", "wait", id, "--timeout", seconds]
+            | ["approvals", "wait", "--timeout", seconds, id] => {
+                request_id(id) && wait_timeout(seconds)
+            }
+            _ => false,
         }
-        _ => false,
-    }
 }
+
+/// The launcher's own `--timeout` bound: its parser refuses anything outside
+/// `0..=MAX_APPROVAL_WAIT_SECONDS` before the wait begins, so a larger number
+/// names no runnable command and is not admitted here either.
+fn wait_timeout(seconds: &str) -> bool {
+    seconds
+        .parse::<u16>()
+        .is_ok_and(|seconds| seconds <= MAX_APPROVAL_WAIT_SECONDS)
+}
+
+/// Mirrors `MAX_APPROVAL_WAIT_TIMEOUT_SECONDS` in
+/// `src/codex_plugin_scanner/guard/approval_wait_limits.py`.
+const MAX_APPROVAL_WAIT_SECONDS: u16 = 600;
 
 fn request_id(id: &str) -> bool {
     !id.starts_with('-')

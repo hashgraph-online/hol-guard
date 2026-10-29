@@ -1,6 +1,6 @@
-use super::super::store::{self, STORE_UNREADABLE};
+use super::super::store::{self, STORE_NEWER, STORE_UNREADABLE};
 use super::*;
-use crate::local_store_read::{schema_checksum, SUPPORTED_SCHEMA_VERSION};
+use crate::local_store_read::{schema_checksum, STORE_FILE_NAME, SUPPORTED_SCHEMA_VERSION};
 use crate::policy_decision_lookup_op::tests::{seed_store, tmp_store};
 use crate::policy_decision_lookup_op::{policy_row_to_json, POLICY_LOOKUP_COLUMNS};
 use crate::policy_store::policy_store_direct_lane::{DirectLaneBinding, DirectLaneIntegrityKey};
@@ -234,7 +234,15 @@ fn a_missing_or_newer_store_is_read_as_the_proxy_reads_it() {
             params![SUPPORTED_SCHEMA_VERSION + 1],
         )
         .unwrap();
-    assert!(matches!(store::open(&newer), Err(STORE_UNREADABLE)));
+    assert!(matches!(store::open(&newer), Err(STORE_NEWER)));
+}
+
+#[test]
+fn a_store_the_resident_cannot_read_is_not_a_newer_store() {
+    let corrupt = std::env::temp_dir().join(format!("mcp-relay-corrupt-{}", std::process::id()));
+    std::fs::create_dir_all(&corrupt).unwrap();
+    std::fs::write(corrupt.join(STORE_FILE_NAME), b"not a database").unwrap();
+    assert!(matches!(store::open(&corrupt), Err(STORE_UNREADABLE)));
 }
 
 #[test]

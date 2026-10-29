@@ -4113,6 +4113,10 @@
     }
   }
 
+  .bg-slate-950 {
+    background-color: var(--color-slate-950);
+  }
+
   .bg-slate-950\/45 {
     background-color: #02061873;
   }
@@ -5470,6 +5474,10 @@
 
   .text-slate-50 {
     color: var(--color-slate-50);
+  }
+
+  .text-slate-100 {
+    color: var(--color-slate-100);
   }
 
   .text-slate-200 {

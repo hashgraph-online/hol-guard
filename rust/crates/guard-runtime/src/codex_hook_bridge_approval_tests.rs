@@ -309,3 +309,92 @@ fn a_refused_completion_is_not_replayed() {
     ));
     assert_eq!(daemon.join().unwrap().len(), 2);
 }
+
+#[test]
+fn a_rejected_completion_reports_the_daemon_code_once() {
+    let (home, daemon) = codex_home(
+        "codex-approval-rejected-completion",
+        vec![Exchange::Plain(
+            409,
+            r#"{"completed":false,"error":"fresh_policy_revalidation_failed"}"#.to_owned(),
+        )],
+    );
+    let deadline = Instant::now() + Duration::from_secs(20);
+    assert_eq!(
+        complete_resolution(
+            &home.state_path,
+            "req_12345678",
+            Action::Allow,
+            HOOK_INPUT,
+            deadline
+        ),
+        Err("fresh_policy_revalidation_failed".to_owned())
+    );
+    assert_eq!(daemon.join().unwrap().len(), 1);
+}
+
+#[test]
+fn a_rejection_without_a_stable_code_is_not_repeated() {
+    let long = "a".repeat(81);
+    for body in [
+        r#"{"completed":false,"error":"Policy Changed"}"#.to_owned(),
+        r#"{"completed":false,"error":""}"#.to_owned(),
+        format!(r#"{{"completed":false,"error":"{long}"}}"#),
+        r#"{"completed":false,"error":1}"#.to_owned(),
+        r#"{"completed":false}"#.to_owned(),
+        "[]".to_owned(),
+    ] {
+        let (home, daemon) = codex_home(
+            "codex-approval-rejected-unstable",
+            vec![Exchange::Plain(409, body.clone())],
+        );
+        let deadline = Instant::now() + Duration::from_secs(20);
+        assert_eq!(
+            complete_resolution(
+                &home.state_path,
+                "req_12345678",
+                Action::Allow,
+                HOOK_INPUT,
+                deadline
+            ),
+            Ok(None),
+            "{body}"
+        );
+        assert_eq!(daemon.join().unwrap().len(), 1);
+    }
+}
+
+#[test]
+fn the_rejection_notice_ends_with_the_stable_marker_line() {
+    let notice = rejected_allow_notice("exact_approval_authority_missing");
+    let lines: Vec<&str> = notice.lines().collect();
+    assert_eq!(lines.len(), 2);
+    assert!(lines[0].starts_with("HOL Guard kept this action blocked:"));
+    assert!(lines[0].contains("(exact_approval_authority_missing)"));
+    assert_eq!(
+        lines[1],
+        "guard_live_decision_rejection exact_approval_authority_missing"
+    );
+}
+
+/// A writer whose every write fails, as a closed or broken stderr does.
+struct BrokenStderr;
+
+impl std::io::Write for BrokenStderr {
+    fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+        Err(std::io::ErrorKind::BrokenPipe.into())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Err(std::io::ErrorKind::BrokenPipe.into())
+    }
+}
+
+#[test]
+fn a_broken_stderr_does_not_stop_a_notice_caller() {
+    let notice = rejected_allow_notice("fresh_policy_revalidation_failed");
+    notify(&mut BrokenStderr, &notice);
+    let mut written = Vec::new();
+    notify(&mut written, &notice);
+    assert_eq!(String::from_utf8(written).unwrap(), format!("{notice}\n"));
+}

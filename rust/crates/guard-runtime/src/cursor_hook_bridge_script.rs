@@ -6,12 +6,14 @@
 //! the renderer writes, from the current client or one an older Guard
 //! installed, and answers the hook itself; the client's own code never
 //! runs. A script whose constants it cannot read fails the hook closed.
+//! The current client carries only those constants and the answer for a
+//! hook no runtime answered: `{}` for an `after*` observer, else the
+//! bridge's own unavailable denial.
 //!
-//! [`CURSOR_SCRIPT_SHA256`] is the digest of the template the bridge was
-//! ported from, with its placeholders in place.
-//! `tests/test_cursor_native_bridge.py` renders the current template and
-//! checks it against this digest, so a template change fails CI until the
-//! native port is reviewed and the digest updated.
+//! [`CURSOR_SCRIPT_SHA256`] is the digest of the client template with its
+//! placeholders in place. `tests/test_cursor_native_bridge.py` renders the
+//! current template and checks it against this digest, so a template change
+//! fails CI until this reader is reviewed and the digest updated.
 
 use std::io::Read;
 use std::path::Path;
@@ -21,7 +23,7 @@ use crate::pyjson::{self, PyVal};
 /// SHA-256 of the current template with its placeholders in place.
 #[allow(dead_code)] // Read by `tests/test_cursor_native_bridge.py`.
 pub(crate) const CURSOR_SCRIPT_SHA256: &str =
-    "b49c5347c1fdcf8c6197a8dba406003d55869dbe0320a4c6f415c47d744048c3";
+    "c8101988ee68f6dc09365054a346cd29275e4e6690b098254b671e4b67b734a3";
 
 const MAX_SCRIPT_BYTES: u64 = 256 * 1024;
 /// Each constant line the renderer writes, as `<name> = <value>`.

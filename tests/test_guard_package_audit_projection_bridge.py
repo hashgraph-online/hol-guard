@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard import native_package_audit_projection as bridge
+from codex_plugin_scanner.guard import native_workspace_inventory as inventory
 
 _STORE = SimpleNamespace(guard_home=Path("/tmp/guard-home-audit"), path=Path("/tmp/guard-home-audit/guard.db"))
 _RECEIPT = {
@@ -99,6 +100,25 @@ def test_a_large_package_list_is_sent_in_bounded_batches(monkeypatch: pytest.Mon
     assert all(len(json.dumps(batch, separators=(",", ":"))) <= bridge._ALIAS_BATCH_BYTES for batch in batches)
     ends = [sum(len(batch) for batch in batches[: number + 1]) - 1 for number in range(len(batches))]
     assert aliases == {end: [f"CVE-{number + 1}"] for number, end in enumerate(ends)}
+
+
+def test_an_audit_deadline_stops_alias_batches_before_the_next_request(monkeypatch: pytest.MonkeyPatch) -> None:
+    packages = [{"name": f"package-{index:05d}", "pad": "x" * 400} for index in range(6000)]
+    clock = [0.0]
+    batches: list[object] = []
+
+    def transport(request: dict[str, object], *_args: object, **_kwargs: object) -> dict[str, object]:
+        batches.append(request)
+        clock[0] += 4.0
+        return {"aliases": []}
+
+    monkeypatch.setattr(bridge, "_transport", transport)
+    monkeypatch.setattr(inventory.time, "monotonic", lambda: clock[0])
+
+    with inventory.audit_deadline(3), pytest.raises(inventory.AuditDeadlineError):
+        bridge.native_advisory_aliases(packages, store=_STORE)
+
+    assert len(batches) == 1
 
 
 def test_an_empty_package_list_still_asks_once(monkeypatch: pytest.MonkeyPatch) -> None:

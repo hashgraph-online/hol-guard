@@ -178,21 +178,46 @@ pub(crate) fn transparent_prefix(tokens: &[String], index: usize) -> Option<(usi
 /// two system paths name the same program; `./timeout`, `bin/timeout` and
 /// `/tmp/timeout` are whatever that file holds, so they stay wrappers and
 /// keep the command under review.
-fn trusted_timeout(token: &str) -> bool {
+pub(crate) fn trusted_timeout(token: &str) -> bool {
     matches!(token, "timeout" | "/usr/bin/timeout" | "/bin/timeout")
 }
 
-/// A duration `timeout` reads: a number of seconds, or one carrying an `s`,
-/// `m`, `h` or `d` unit. `timeout 5m npm run build` bounds the same single
-/// child that `timeout 300 npm run build` bounds, so the unit a person writes
-/// cannot be what decides whether the command is read at all.
-fn timeout(value: &str) -> bool {
+/// The seconds in a duration `timeout` reads: a number of seconds, or one
+/// carrying an `s`, `m`, `h` or `d` unit, and `None` for anything else.
+///
+/// `timeout 5m npm run build` bounds the same single child that `timeout 300
+/// npm run build` bounds, so the unit a person writes cannot be what decides
+/// whether the command is read at all. Seconds are whole here, so a fractional
+/// duration rounds up: cutting `timeout 2.1` to two would end the run before
+/// the clock it was given. An exact zero turns `timeout` off and is answered
+/// as `0`, which bounds nothing.
+pub(crate) fn clock_seconds(value: &str) -> Option<u64> {
     let number = value.strip_suffix(['s', 'm', 'h', 'd']).unwrap_or(value);
+    let unit = match value.bytes().last() {
+        Some(b'm') => 60u64,
+        Some(b'h') => 3600,
+        Some(b'd') => 86400,
+        _ => 1,
+    };
     let (whole, fraction) = number.split_once('.').unwrap_or((number, ""));
-    number.len() <= 10
-        && !whole.is_empty()
-        && whole.bytes().all(|byte| byte.is_ascii_digit())
-        && fraction.bytes().all(|byte| byte.is_ascii_digit())
+    if number.len() > 10
+        || whole.is_empty()
+        || !whole.bytes().all(|byte| byte.is_ascii_digit())
+        || !fraction.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        return None;
+    }
+    let duration = number.parse::<f64>().ok()? * unit as f64;
+    Some(if duration == 0.0 {
+        0
+    } else {
+        duration.ceil() as u64
+    })
+}
+
+/// Whether this word is a duration `timeout` reads.
+fn timeout(value: &str) -> bool {
+    clock_seconds(value).is_some()
 }
 
 /// `command -v NAME` reports a path or a name and runs nothing, so the segment

@@ -24,7 +24,11 @@ from .native_package_audit_projection import (
     native_empty_audit_outcome,
     native_normalize_cloud_audit_response,
 )
-from .native_workspace_inventory import NativeWorkspaceInventoryError, native_workspace_inventory
+from .native_workspace_inventory import (
+    NativeWorkspaceInventoryError,
+    check_audit_deadline,
+    native_workspace_inventory,
+)
 from .runtime.package_intent_common import (
     PackageIntent,
     PackageIntentTarget,
@@ -324,6 +328,7 @@ def _workspace_local_evaluation(
         raise NativeWorkspaceInventoryError("Native workspace_inventory snapshot changed during audit")
     evaluations: list[dict[str, object]] = []
     for targets in _target_chunks(scanned.scan_targets):
+        check_audit_deadline()
         intent = _workspace_scan_intent(
             command_name=command_name,
             targets=targets,

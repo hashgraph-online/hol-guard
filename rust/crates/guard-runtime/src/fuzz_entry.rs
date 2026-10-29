@@ -123,6 +123,8 @@ pub const CONTAINED_ARGV_OPERATIONS: &[&str] = &[
     "contained_kind",
     "launcher_program",
     "transparent_prefix",
+    "command_prefix_split",
+    "run_prefix_peel",
 ];
 
 /// The containment argument screens, which decide whether a contained run's
