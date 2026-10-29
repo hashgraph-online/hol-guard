@@ -29,7 +29,7 @@ _ADMISSION_ERRORS: dict[str, str] = {
 }
 
 
-def configure_codebases_parser(guard_subparsers: argparse._SubParsersAction) -> None:
+def configure_codebases_parser(guard_subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     from ...argparse_utils import FriendlyArgumentParser
     from .commands_parser_helpers import _add_guard_common_args
 
