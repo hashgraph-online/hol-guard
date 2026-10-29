@@ -146,6 +146,9 @@ fn complete_request(stream: BoxedResidentStream, body: &[u8]) -> PendingRequest 
 
 #[test]
 fn regression_auth_worker_hands_a_fully_buffered_request_to_the_evaluation_pool() {
+    let _gauges = crate::resident_health_counters::GAUGE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     // An auth worker that evaluated a request whose payload arrived with its
     // header stayed busy for the whole evaluation, so a burst of hooks left
     // nobody to answer the next challenge and those callers fell back to the
@@ -177,6 +180,9 @@ fn regression_auth_worker_hands_a_fully_buffered_request_to_the_evaluation_pool(
 
 #[test]
 fn regression_auth_worker_evaluates_inline_when_the_evaluation_queue_is_full() {
+    let _gauges = crate::resident_health_counters::GAUGE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     // Answering native_overloaded here turned a busy evaluation pool into a
     // hook failure for requests the auth worker used to evaluate itself.
     let (control_sender, control_rx) = sync_channel(1);
@@ -206,6 +212,9 @@ fn regression_auth_worker_evaluates_inline_when_the_evaluation_queue_is_full() {
 
 #[test]
 fn auth_worker_answers_overloaded_for_a_fragmented_request_when_the_evaluation_queue_is_full() {
+    let _gauges = crate::resident_health_counters::GAUGE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     // Reading the rest of the payload would hold the auth worker on a slow
     // client, so a fragmented request is answered with retryable overload.
     let (control_sender, control_rx) = sync_channel(1);
@@ -231,6 +240,9 @@ fn auth_worker_answers_overloaded_for_a_fragmented_request_when_the_evaluation_q
 
 #[test]
 fn auth_worker_routes_a_complete_control_request_to_the_control_lane() {
+    let _gauges = crate::resident_health_counters::GAUGE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let (control_sender, control_rx) = sync_channel(1);
     let (evaluation_sender, evaluation_rx) = sync_channel(1);
     let body = br#"{"operation":"catalog_read"}"#;
@@ -275,6 +287,9 @@ fn a_request_that_already_broke_is_not_counted_as_a_second_broken_frame() {
 
 #[test]
 fn a_charge_that_never_reaches_the_channel_is_released() {
+    let _gauges = crate::resident_health_counters::GAUGE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     // The charge is taken before the send, so every path that does not leave
     // the request in the channel has to give it back. Dropping is what gives
     // it back, which is why no failure branch can forget to.
@@ -288,6 +303,9 @@ fn a_charge_that_never_reaches_the_channel_is_released() {
 
 #[test]
 fn a_charge_the_channel_accepted_is_left_for_its_worker() {
+    let _gauges = crate::resident_health_counters::GAUGE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     // The worker that receives the request releases the charge. An admission
     // that released it too would let the gauge fall below the work the lane is
     // actually holding.

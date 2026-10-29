@@ -100,6 +100,15 @@ pub(crate) fn record_panic() {
     add(&PANICS, 1);
 }
 
+/// Serializes the tests that read a lane gauge across a change of their own.
+///
+/// The gauges are process-wide and `cargo test` runs tests on parallel
+/// threads, so a test asserting an exact depth has to be the only one moving
+/// one. A poisoned lock is still a usable lock here: the gauges carry no
+/// invariant a panicking test could break.
+#[cfg(test)]
+pub(crate) static GAUGE_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 /// Add one to a queue's depth and raise its peak to match.
 fn claim(queued: &AtomicU64, peak: &AtomicU64) {
     let depth = queued.fetch_add(1, Ordering::Relaxed).saturating_add(1);

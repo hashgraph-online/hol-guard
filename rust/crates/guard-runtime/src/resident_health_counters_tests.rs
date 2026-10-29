@@ -98,6 +98,9 @@ fn an_event_count_stops_at_the_bound_instead_of_wrapping() {
 
 #[test]
 fn the_two_lanes_keep_their_own_gauges() {
+    let _gauges = GAUGE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let (evaluation_before, _) = lane_depth(QueueLane::Evaluation);
     let (control_before, _) = lane_depth(QueueLane::Control);
 
