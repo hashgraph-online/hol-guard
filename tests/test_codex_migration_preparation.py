@@ -109,6 +109,36 @@ def test_migration_preserves_launchable_legacy_handlers(tmp_path, monkeypatch, h
     assert migrated["hooks"]["PreToolUse"][-1] == legacy_group
 
 
+def test_unmanaged_migration_payload_prunes_unlaunchable_legacy_handlers(tmp_path, monkeypatch):
+    """Verification builds its expected identities from this payload, so it
+    must apply the same prune the migration applies; otherwise a stale
+    absolute launcher makes install reject the migration it produced."""
+    context, _config, _hooks = _sources(tmp_path, monkeypatch)
+    payload = {
+        "hooks": {
+            "PreToolUse": [
+                {"matcher": "Bash", "hooks": [{"type": "command", "command": "python3 user_hook.py"}]},
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": "/opt/hol-guard-previous/bin/hol-guard",
+                            "args": ["hook", "--harness", "codex"],
+                            "statusMessage": "HOL Guard checking Bash command",
+                        }
+                    ]
+                },
+            ]
+        }
+    }
+    expected = adapter._unmanaged_migration_payload(payload, context=context, owned_bindings=())
+    assert expected == {
+        "hooks": {
+            "PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "python3 user_hook.py"}]}]
+        }
+    }
+
+
 @pytest.mark.parametrize(
     "handler",
     [

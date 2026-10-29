@@ -758,6 +758,12 @@ def _unmanaged_migration_payload(
     cleaned_hooks, _ = _remove_manifest_bound_hook_events(hooks, owned_bindings)
     legacy_bindings = _current_install_legacy_bindings(context, cleaned_hooks)
     cleaned_hooks, _ = _remove_manifest_bound_hook_events(cleaned_hooks, legacy_bindings)
+    # The migration prunes unlaunchable legacy launchers instead of adopting
+    # them, so the identities verification expects must be pruned by the same
+    # rule; otherwise verification rejects the migration it just produced.
+    cleaned_hooks, _ = _remove_unlaunchable_guard_hook_events(
+        cleaned_hooks, legacy_status_messages=_LEGACY_MANAGED_HOOK_STATUS_MESSAGES
+    )
     self_bindings = _current_install_self_bindings(context, cleaned_hooks)
     cleaned_hooks, _ = _remove_manifest_bound_hook_events(cleaned_hooks, self_bindings)
     return {"hooks": cleaned_hooks} if cleaned_hooks else {}
