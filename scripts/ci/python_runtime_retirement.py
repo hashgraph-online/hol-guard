@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import json
 import tarfile
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from pathlib import Path, PurePosixPath
@@ -134,7 +135,7 @@ def _retired_flag_reads(tree: ast.AST, name: str, flags: set[str]) -> list[str]:
     return failures
 
 
-def _source_violations(text: str, name: str, modules: set[str], symbols: set[str]) -> list[str]:
+def _source_violations(text: str, name: str, modules: set[str], symbols: set[str], *, shipped: bool) -> list[str]:
     tree = ast.parse(text, filename=name)
     parts = list(PurePosixPath(name).with_suffix("").parts)
     if parts and parts[0] == "src":
@@ -173,6 +174,13 @@ def _source_violations(text: str, name: str, modules: set[str], symbols: set[str
             target = _literal_string(node.args[0]) if dynamic else None
             if target is not None and _matches_module(target, modules):
                 failures.append(f"{name}:{node.lineno}: dynamically imports retired module {target}")
+        elif shipped and isinstance(node, ast.Constant) and isinstance(node.value, str):
+            # A shim, a relaunch and a manifest all name their module in a
+            # string, which no import graph reaches. A test may name a retired
+            # module to prove it is gone, so only shipped source counts.
+            for module in sorted(modules):
+                if module in node.value:
+                    failures.append(f"{name}:{node.lineno}: names retired module {module} in a string")
     return failures
 
 
@@ -221,19 +229,30 @@ def _retired_content_validator(records: list[dict[str, object]], flags: set[str]
     digests = {str(record["source_sha256"]) for record in records}
     basenames = {PurePosixPath(str(record["path"])).stem for record in records}
 
-    def check_content(name: str, data: bytes) -> None:
+    def check_content(name: str, data: bytes, *, shipped: bool = True) -> None:
         if hashlib.sha256(data).hexdigest() in digests:
             raise RuntimeError(f"copied retired Python implementation: {name}")
         text = data.decode("utf-8-sig")
         if not any(token in text for token in symbols | basenames | flags | {"import"}):
             return
-        failures = _source_violations(text, name, modules, symbols)
+        failures = _source_violations(text, name, modules, symbols, shipped=shipped)
         if flags:
             failures.extend(_retired_flag_reads(ast.parse(text, filename=name), name, flags))
         if failures:
             raise RuntimeError("; ".join(failures))
 
     return check_content
+
+
+def _artifact_member_is_shipped(name: str) -> bool:
+    """Whether an archive member lands on the import path of an install.
+
+    An sdist also carries `tests`, `ci` and `scripts`, which a wheel never
+    installs. Those files may name a retired module on purpose to prove it is
+    gone, so they are held to the same rules as the repository copies.
+    """
+    parts = PurePosixPath(name.replace("\\", "/")).parts
+    return not any(part in _SOURCE_ROOTS[1:] for part in parts[:2])
 
 
 def validate_retired_artifacts(contract: Mapping[str, object], artifacts: Sequence[Path]) -> None:
@@ -255,7 +274,7 @@ def validate_retired_artifacts(contract: Mapping[str, object], artifacts: Sequen
             ):
                 raise RuntimeError(f"package artifact contains retired module: {name}")
             if data is not None:
-                check_content(name, data)
+                check_content(name, data, shipped=_artifact_member_is_shipped(name))
                 _check_retired_body_content(name, data, bodies)
 
 
@@ -404,6 +423,107 @@ def validate_entry_point_targets(root: Path, retired_modules: set[str]) -> None:
             raise RuntimeError(f"entry point targets a missing attribute: {name}: {module}:{attribute}")
 
 
+def _shipped_packages(root: Path) -> set[str]:
+    """Top-level package names an installed wheel answers imports for."""
+    names: set[str] = set()
+    for directory, package in _wheel_import_roots(root):
+        if package is not None:
+            names.add(package)
+            continue
+        base = root / directory if directory else root
+        if base.is_dir():
+            names.update(child.name for child in base.iterdir() if (child / "__init__.py").is_file())
+    return names
+
+
+def _dotted_module_name(value: str) -> bool:
+    parts = value.split(".")
+    return len(parts) > 1 and all(part.isidentifier() for part in parts)
+
+
+def _launch_targets(tree: ast.AST, packages: set[str]) -> Iterator[tuple[int, str]]:
+    """Module names a `-m` or `-c` launch sequence carries as plain strings.
+
+    A shim, a relaunch and a bootstrap all name their module in an argument
+    list rather than in an import, so the import graph never reaches it. The
+    module still has to be installed when the command runs.
+    """
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.List, ast.Tuple)):
+            elements: Sequence[ast.expr] = node.elts
+        elif isinstance(node, ast.Call):
+            elements = node.args
+        else:
+            continue
+        literals = [_literal_string(element) for element in elements]
+        if not any(literal in {"-m", "-c"} for literal in literals):
+            continue
+        for element, literal in zip(elements, literals, strict=True):
+            if literal is None or not _dotted_module_name(literal):
+                continue
+            if literal.split(".")[0] in packages:
+                yield element.lineno, literal
+
+
+def validate_launcher_module_targets(root: Path, retired_modules: set[str]) -> None:
+    """Reject a `-m` or `-c` launch that names a module the install no longer has.
+
+    Guard relaunches itself through the interpreter in several places. The
+    module name travels as an argument string, so a retirement that takes it
+    leaves a shim that only fails when a user runs the command.
+    """
+    directory = root / "src"
+    if not directory.is_dir():
+        return
+    packages = _shipped_packages(root)
+    if not packages:
+        return
+    for path in sorted(directory.rglob("*.py")):
+        text = path.read_text(encoding="utf-8")
+        if "-m" not in text and "-c" not in text:
+            continue
+        name = path.relative_to(root).as_posix()
+        for lineno, module in _launch_targets(ast.parse(text, filename=name), packages):
+            if _matches_module(module, retired_modules):
+                raise RuntimeError(f"{name}:{lineno}: launcher runs retired module {module}")
+            if _module_source(root, module) is None:
+                raise RuntimeError(f"{name}:{lineno}: launcher runs a module that does not exist: {module}")
+
+
+def _plugin_module_references(data: object) -> Iterator[str]:
+    if isinstance(data, Mapping):
+        module = data.get("module")
+        if data.get("kind") == "python-module" and isinstance(module, str):
+            yield module
+        for value in data.values():
+            yield from _plugin_module_references(value)
+    elif isinstance(data, list):
+        for value in data:
+            yield from _plugin_module_references(value)
+
+
+def validate_plugin_module_references(root: Path, retired_modules: set[str]) -> None:
+    """Reject a contribution whose detector names a module that is not there.
+
+    An extension names its detector module in a manifest string. Nothing
+    imports it, so a retirement that takes the module ships a manifest
+    pointing at nothing and every gate stays quiet.
+    """
+    directory = root / "contributions"
+    if not directory.is_dir():
+        return
+    for path in sorted(directory.rglob("*.json")):
+        text = path.read_text(encoding="utf-8")
+        if "python-module" not in text:
+            continue
+        name = path.relative_to(root).as_posix()
+        for module in _plugin_module_references(json.loads(text)):
+            if _matches_module(module, retired_modules):
+                raise RuntimeError(f"{name}: contribution names retired module {module}")
+            if _module_source(root, module) is None:
+                raise RuntimeError(f"{name}: contribution names a module that does not exist: {module}")
+
+
 def validate_retired_modules(
     root: Path,
     contract: Mapping[str, object],
@@ -413,7 +533,10 @@ def validate_retired_modules(
 ) -> list[dict[str, object]]:
     records = _records(contract)
     validate_retired_bodies(root, contract)
-    validate_entry_point_targets(root, {str(record["module"]) for record in records})
+    retired = {str(record["module"]) for record in records}
+    validate_entry_point_targets(root, retired)
+    validate_launcher_module_targets(root, retired)
+    validate_plugin_module_references(root, retired)
     retired_tests = contract.get("retired_test_paths", [])
     if not isinstance(retired_tests, list):
         raise RuntimeError("retired_test_paths must be a list")
@@ -445,7 +568,7 @@ def validate_retired_modules(
         for path in sorted((root / directory).rglob("*.py")):
             if path.stem in basenames:
                 raise RuntimeError(f"retired module name reappeared: {path.relative_to(root).as_posix()}")
-            check_content(path.relative_to(root).as_posix(), path.read_bytes())
+            check_content(path.relative_to(root).as_posix(), path.read_bytes(), shipped=directory == "src")
     validate_retired_artifacts(contract, artifacts)
     return evidence
 
