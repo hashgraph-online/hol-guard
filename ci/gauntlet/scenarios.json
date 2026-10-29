@@ -1434,6 +1434,9 @@
       "commands": [
         "hol-guard approvals --json list",
         "hol-guard approvals wait --timeout 1 no-pending-request"
+      ],
+      "benign_exit_commands": [
+        "hol-guard approvals wait --timeout 1 no-pending-request"
       ]
     },
     {
