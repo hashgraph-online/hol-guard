@@ -7,25 +7,20 @@ than a per-action one. Its inbox row is still written, under the connector's
 card over every call waiting on it. The agent is told the CLI is not set up on
 this device. For a local CLI or script the row stays an ordinary review: the
 agent waits for the user's Allow once or Always allow, as for any other review.
+
+The resident looks the connector up inside the queue call, from the launch
+``native_review_connector_lookup`` names, and answers what the notice needs
+under ``connector_setup``.
 """
 
 from __future__ import annotations
 
-import logging
-import re
-import sqlite3
 from collections.abc import Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-from ..blocked_request_mode import LOCAL_CONNECTOR_SURFACES, connector_setup_reason
+from ..local_cli_hook import launch_env
 from .hook_native_exact_action import launch_cwd, launch_path
 from .hook_request_parsing import pre_tool_command
-
-if TYPE_CHECKING:
-    from ..local_cli_hook import SetupConnector
-
-_LOGGER = logging.getLogger(__name__)
 
 CONNECTOR_SETUP_REQUIRED = "connector_setup_required"
 # Mirrors `connector_setup::NON_RECOGNITION_REASON_CODES`: any other review
@@ -33,18 +28,16 @@ CONNECTOR_SETUP_REQUIRED = "connector_setup_required"
 NON_RECOGNITION_REASON_CODES = frozenset(
     {"native_command_review_required", "native_workspace_containment_executable_outside_roots"}
 )
-_SAFE_NAME = re.compile(r"[A-Za-z0-9@][A-Za-z0-9._@+/-]{0,63}")
 
 
-def native_review_setup_connector(
-    store: object,
+def native_review_connector_lookup(
     *,
     payload: Mapping[str, object],
     native_result: Mapping[str, object],
     workspace: Path | None,
     home_dir: Path | None,
-) -> SetupConnector | None:
-    """The connector this review waits on, or ``None`` for an ordinary per-action review."""
+) -> dict[str, object] | None:
+    """The launch the queue call looks the review's connector up from, or ``None`` for an ordinary review."""
 
     if native_result.get("reason_code") not in NON_RECOGNITION_REASON_CODES:
         return None
@@ -52,55 +45,32 @@ def native_review_setup_connector(
     cwd = launch_cwd(payload, workspace)
     if command is None or cwd is None:
         return None
-    from ..local_cli_hook import local_cli_setup_connector
-
-    try:
-        return local_cli_setup_connector(
-            store=store,  # pyright: ignore[reportArgumentType]
-            command=command,
-            cwd=cwd,
-            home_dir=home_dir,
-            path=launch_path(payload),
-        )
-    except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error) as error:
-        # Without an answer the review stays an ordinary per-action one.
-        _LOGGER.warning("Connector setup lookup failed (%s)", type(error).__name__)
-        return None
+    return {
+        "command": command,
+        "cwd": str(cwd),
+        "home_dir": None if home_dir is None else str(home_dir),
+        "user_home": str(Path.home()),
+        "env": launch_env(launch_path(payload)),
+    }
 
 
-def connector_display_name(connector: SetupConnector) -> str:
-    """The CLI name for agent text, or a generic one when it is not a plain name."""
-
-    name = connector.name.strip()
-    return name if _SAFE_NAME.fullmatch(name) else "this local CLI"
-
-
-def connector_agent_reason(connector: SetupConnector, *, ask: bool, approvable: bool = True) -> str:
-    return connector_setup_reason(connector_display_name(connector), connector.surface, ask=ask, approvable=approvable)
-
-
-def connector_is_local(connector: SetupConnector | None) -> bool:
-    """Whether the setup review is for a local CLI or script, which is an ordinary approvable review."""
-
-    return connector is not None and connector.surface in LOCAL_CONNECTOR_SURFACES
-
-
-def raise_connector_setup_notice(store: object, queued: object, connector: SetupConnector | None) -> None:
+def raise_connector_setup_notice(store: object, queued: object) -> None:
     """The desktop notice for a queued native connector row; an ordinary review raises none here."""
 
-    if connector is None or not isinstance(queued, dict):
+    if not isinstance(queued, dict):
+        return
+    setup = queued.get("connector_setup")
+    name = setup.get("name") if isinstance(setup, dict) else None
+    if not isinstance(name, str) or not name:
         return
     from ..approvals import notify_connector_setup
 
-    notify_connector_setup(store, queued, connector_name=connector_display_name(connector))
+    notify_connector_setup(store, queued, connector_name=name)
 
 
 __all__ = [
     "CONNECTOR_SETUP_REQUIRED",
     "NON_RECOGNITION_REASON_CODES",
-    "connector_agent_reason",
-    "connector_display_name",
-    "connector_is_local",
-    "native_review_setup_connector",
+    "native_review_connector_lookup",
     "raise_connector_setup_notice",
 ]

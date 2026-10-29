@@ -1,10 +1,11 @@
 //! The connector a queued review waits on (`native_review_connector.py`).
 //!
 //! A review due only to non-recognition of a command that launches a local
-//! CLI this device never allowed or blocked is a setup decision. The daemon
-//! asks the resident's `local_cli_hook` operation for that connector
-//! (`native_review_setup_connector`), which records the launch as it answers,
-//! and then queues the row differently:
+//! CLI this device never allowed or blocked is a setup decision. The direct
+//! lane asks the `local_cli_hook` operation for that connector, which records
+//! the launch as it answers; a review the daemon queues is looked up inside
+//! its queue call (`queued_lookup`). Either way the row is queued
+//! differently:
 //!
 //! - the row is grouped under the connector's `queue_group_id`, and its
 //!   `extension_allow_hint` is the connector setup hint instead of the
@@ -82,7 +83,7 @@ const REVIEW_ACTION: &str = "review";
 
 /// `SetupConnector`: the connector the resident's lookup named.
 #[derive(Debug, Clone, PartialEq)]
-pub(super) struct Connector {
+pub(crate) struct Connector {
     cli_id: String,
     identity_hash: String,
     name: String,
@@ -93,7 +94,7 @@ pub(super) struct Connector {
 impl Connector {
     /// `_setup_connector`: exactly the connector fields, each a non-empty
     /// string, a local surface, and a group under the connector's identity.
-    fn parse(value: &Value) -> Option<Self> {
+    pub(crate) fn parse(value: &Value) -> Option<Self> {
         let fields = value.as_object()?;
         if fields.len() != CONNECTOR_FIELDS.len() {
             return None;
@@ -118,7 +119,7 @@ impl Connector {
     }
 
     /// `connector_display_name`.
-    fn display_name(&self) -> String {
+    pub(crate) fn display_name(&self) -> String {
         let name = crate::guard_store_json::py_strip(&self.name);
         if safe_name(name) {
             name.to_owned()
@@ -128,7 +129,7 @@ impl Connector {
     }
 
     /// `connector_is_local`.
-    fn is_local(&self) -> bool {
+    pub(crate) fn is_local(&self) -> bool {
         LOCAL_SURFACES.contains(&self.surface.as_str())
     }
 
@@ -136,7 +137,7 @@ impl Connector {
     /// the ordinary review text applies: only an exact-action Always allow
     /// can release a local row without a retry binding, and that text says
     /// so.
-    fn reason(&self, ask: bool, bound: bool, exact: bool) -> Option<String> {
+    pub(crate) fn reason(&self, ask: bool, bound: bool, exact: bool) -> Option<String> {
         if self.is_local() && !bound && exact {
             return None;
         }
@@ -147,6 +148,30 @@ impl Connector {
             &[],
             bound,
         ))
+    }
+
+    pub(crate) fn cli_id(&self) -> &str {
+        &self.cli_id
+    }
+
+    pub(crate) fn identity_hash(&self) -> &str {
+        &self.identity_hash
+    }
+
+    pub(crate) fn queue_group_id(&self) -> &str {
+        &self.queue_group_id
+    }
+
+    /// The connector as the lookup named it, which [`Connector::parse`]
+    /// reads back.
+    pub(crate) fn to_value(&self) -> Value {
+        json!({
+            "cli_id": self.cli_id,
+            "identity_hash": self.identity_hash,
+            "name": self.name,
+            "surface": self.surface,
+            "queue_group_id": self.queue_group_id,
+        })
     }
 }
 
@@ -415,6 +440,19 @@ fn record_context(context: &Context<'_>, setup: &Setup, oauth_source: &str) {
     let _ = crate::connector_setup_context_op::evaluate_connector_setup_context_request(&request);
     drop(gate);
     repair_store_permissions(guard_home);
+}
+
+/// `local_cli_setup_connector` for a review the daemon queues: the lookup
+/// runs inside its queue call, under the shared storage gate, before the
+/// write opens. Best effort, as the daemon's own call was: a gate held for
+/// maintenance or a failed lookup leaves the review an ordinary one.
+pub(crate) fn queued_lookup(request: &LocalCliHookRequestV1) -> Option<Connector> {
+    let home = Path::new(&request.guard_home);
+    let gate = storage_gate(home).ok()?;
+    let refined = crate::local_cli_hook_op::run_refined(request);
+    drop(gate);
+    repair_store_permissions(home);
+    from_refined(refined).ok().flatten()
 }
 
 /// What first stopped a connector, by the review reason that queued it.

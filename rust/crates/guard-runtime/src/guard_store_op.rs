@@ -187,7 +187,13 @@ fn evaluate_tracked(
     // names, so everything below sees that method.
     let started = Instant::now();
     let delegated = (request.method == native_review_queue::METHOD)
-        .then(|| native_review_queue::delegate(&request.args, owner, request.busy_timeout_ms))
+        .then(|| {
+            native_review_queue::delegate(&request.args, owner, request.busy_timeout_ms, |ask| {
+                crate::hook_direct::saved_decision::review_queue::connector::queued_lookup(
+                    &ask.request(request),
+                )
+            })
+        })
         .transpose()?;
     // The caller's deadline covers the whole call, so the write waits for the
     // lock only as long as the hint left it. With nothing left a contended

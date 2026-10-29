@@ -5,8 +5,9 @@ call that queues it: the coverage hint, read out of the evidence the review
 paused on, and the allow hint, stored only when the command reviewed again
 under the admitted snapshot is exactly the review that paused and enabling the
 hinted permissions would really settle it. For a review that waits on a local
-CLI's setup, the same call stores the connector setup hint instead.
-``native_review_hint_ask`` only bounds the time the resident may spend.
+CLI's setup, the same call looks the connector up and stores its setup hint
+instead. ``native_review_hint_ask`` only bounds the time the resident may
+spend.
 
 The resident's ``extension_review_hint`` op answers the same extension hints
 for a pending row read back without one. Python shape-checks the answer; there
@@ -22,7 +23,7 @@ import time
 from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Final
+from typing import Any, Final
 
 from ..native_daemon_route import _decide
 from ..native_resident_decision import ResidentOperation
@@ -38,9 +39,6 @@ from ..runtime.extension_coverage_hint import (
 from .hook_native_exact_action import launch_cwd as _launch_cwd
 from .hook_request_parsing import pre_tool_input
 
-if TYPE_CHECKING:
-    from ..local_cli_hook import SetupConnector
-
 EXTENSION_REVIEW_HINT_FEATURE: Final = "extension-review-hint-v1"
 # A hook with no deadline still bounds the hint, as the allow-hint ask does.
 _DEFAULT_BUDGET_SECONDS: Final = 5.0
@@ -51,7 +49,6 @@ _LIVE_BUDGET_SECONDS: Final = 1.2
 # queue-time ask, and the ask's timeout also covers a slot wait and the round
 # trip the resident's own margin cannot see.
 _SAFETY_MARGIN_SECONDS: Final = 0.35
-_MIN_BUDGET_SECONDS: Final = 0.15
 _MAX_BUDGET_MS: Final = 10_000
 # The resident refuses a canonical request over 1 MiB, so the client never
 # sends a larger envelope.
@@ -178,39 +175,22 @@ def _ask_review_hint(
     return parsed[0]
 
 
-def native_review_hint_ask(
-    deadline: float | None,
-    connector: SetupConnector | None,
-) -> dict[str, object] | None:
+def native_review_hint_ask(deadline: float | None) -> dict[str, object] | None:
     """What ``queue_native_review`` needs to decide a paused review's hint, or ``None`` for none.
 
     The resident decides the hint inside the queue call: the connector to set
     up for a review that waits on a local CLI's setup, else the extension
     hints read out of the evidence the review paused on, and none without
     that evidence. This only bounds how long it may take, from the hook's
-    deadline, and names the connector.
+    deadline. The connector hint is built from a catalog lookup, not a second
+    review, so the resident asks it with whatever time is left; an extension
+    hint needs 150 ms of it. Neither asks into the margin
+    kept for persisting the review and answering the hook.
     """
 
     budget = _DEFAULT_BUDGET_SECONDS if deadline is None else deadline - time.monotonic() - _SAFETY_MARGIN_SECONDS
-    # The connector hint is what resolves the row once setup finishes, and the
-    # resident builds it from a catalog lookup, not a second review, so it asks
-    # with whatever time is left below the usual minimum. It never asks into
-    # the margin kept for persisting the review and answering the hook.
-    if budget < _MIN_BUDGET_SECONDS and (connector is None or budget <= 0):
-        return None
     budget_ms = min(_MAX_BUDGET_MS, int(budget * 1000))
-    if budget_ms <= 0:
-        return None
-    ask: dict[str, object] = {"budget_ms": budget_ms}
-    if connector is not None:
-        ask["connector"] = {
-            "cli_id": connector.cli_id,
-            "identity_hash": connector.identity_hash,
-            "name": connector.name,
-            "surface": connector.surface,
-            "queue_group_id": connector.queue_group_id,
-        }
-    return ask
+    return {"budget_ms": budget_ms} if budget_ms > 0 else None
 
 
 def _live_reviewed_command(approval: Mapping[str, object]) -> tuple[str, Path | None] | None:

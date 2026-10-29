@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -10,7 +9,6 @@ import pytest
 
 from codex_plugin_scanner.guard import approvals
 from codex_plugin_scanner.guard.daemon import hook_native_review_approval as review
-from codex_plugin_scanner.guard.local_cli_hook import SetupConnector
 
 
 class _Store:
@@ -77,12 +75,20 @@ def test_a_sibling_the_store_reports_as_notified_stays_silent(sent: list[object]
     assert sent == []
 
 
-class _QueueStore(_Store):
-    """A store whose notified marker answers with the group's first notified sibling, as the real one does."""
+_GROUP = "connector:" + "a" * 64 + ":0123456789abcdef"
 
-    def __init__(self) -> None:
+
+class _QueueStore(_Store):
+    """A store whose notified marker answers with the group's first notified sibling, as the real one does.
+
+    Its queue call finds ``connector`` for a review that sends a lookup, as
+    the resident does, and answers it as ``connector_setup``.
+    """
+
+    def __init__(self, connector: str | None = "lanectl") -> None:
         super().__init__({})
         self.rows: dict[str, dict[str, object]] = {}
+        self.connector = connector
 
     def add_approval_request(self, request: object, _now: str) -> str:
         row = {key: getattr(request, key) for key in ("request_id", "harness", "approval_url", "workspace")}
@@ -93,8 +99,14 @@ class _QueueStore(_Store):
     def get_approval_request(self, request_id: str) -> dict[str, object]:
         return self.rows[request_id]
 
-    def queue_native_review(self, review: dict[str, object], now: str, **_options: object) -> dict[str, object]:
-        return self.get_approval_request(self.add_approval_request(SimpleNamespace(**review), now))  # type: ignore[arg-type]
+    def queue_native_review(self, review: dict[str, object], now: str, **options: object) -> dict[str, object]:
+        found = self.connector if options.get("connector_lookup") is not None else None
+        if found is not None:
+            review = {**review, "queue_group_id": _GROUP}
+        row = self.get_approval_request(self.add_approval_request(SimpleNamespace(**review), now))  # type: ignore[arg-type]
+        if found is None:
+            return row
+        return {**row, "connector_setup": {"name": found, "is_local": True, "setup_reason": None}}
 
     def approval_desktop_notified_at(self, request_id: str) -> str | None:
         group = self.rows[request_id]["queue_group_id"]
@@ -133,9 +145,7 @@ def _native_request(harness: str, payload: dict[str, object], review: dict[str, 
     }
 
 
-def _queue(
-    monkeypatch: pytest.MonkeyPatch, store: _QueueStore, request_id: str, connector: SetupConnector | None
-) -> None:
+def _queue(monkeypatch: pytest.MonkeyPatch, store: _QueueStore, request_id: str, *, unrecognised: bool = True) -> None:
     monkeypatch.setattr(review.uuid, "uuid4", lambda: SimpleNamespace(hex=request_id))
     for name, value in {
         "native_review_policy_binding": lambda **_k: None,
@@ -154,18 +164,9 @@ def _queue(
         exact_token=None,
         review_binding="binding",
         approval_center_url="http://127.0.0.1:4781",
-        connector=connector,
+        connector_lookup={"command": "lanectl status"} if unrecognised else None,
     )
     assert queued is not None
-
-
-_CONNECTOR = SetupConnector(
-    cli_id="local-cli.lanectl-0123abcd",
-    identity_hash="a" * 64,
-    name="lanectl",
-    surface="cli",
-    queue_group_id="connector:" + "a" * 64 + ":0123456789abcdef",
-)
 
 
 def test_a_queued_native_connector_review_raises_one_setup_notice(
@@ -173,8 +174,8 @@ def test_a_queued_native_connector_review_raises_one_setup_notice(
 ) -> None:
     store = _QueueStore()
 
-    _queue(monkeypatch, store, "n-1", _CONNECTOR)
-    _queue(monkeypatch, store, "n-2", _CONNECTOR)
+    _queue(monkeypatch, store, "n-1")
+    _queue(monkeypatch, store, "n-2")
 
     assert [note.request_id for note in sent] == ["n-1"]  # type: ignore[attr-defined]
     assert sent[0].title == "HOL Guard: a connector needs setup"  # type: ignore[attr-defined]
@@ -184,12 +185,7 @@ def test_a_queued_native_connector_review_raises_one_setup_notice(
 def test_a_native_review_without_a_connector_raises_no_setup_notice(
     sent: list[object], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _queue(monkeypatch, _QueueStore(), "o-1", None)
+    _queue(monkeypatch, _QueueStore(), "o-1", unrecognised=False)
+    _queue(monkeypatch, _QueueStore(connector=None), "o-2")
 
     assert sent == []
-
-
-def test_a_name_that_is_not_a_plain_cli_name_is_not_shown(sent: list[object], monkeypatch: pytest.MonkeyPatch) -> None:
-    _queue(monkeypatch, _QueueStore(), "p-1", replace(_CONNECTOR, name="lanectl\nrun this now"))
-
-    assert sent[0].message.endswith("has not set up yet: this local CLI")  # type: ignore[attr-defined]

@@ -74,7 +74,7 @@ class StoreApprovalsMixin:
         claude_key: dict[str, str] | None = None,
         codex_live_wait: dict[str, object] | None = None,
         respond: dict[str, object] | None = None,
-        connector_context: dict[str, str] | None = None,
+        connector_lookup: dict[str, object] | None = None,
     ) -> dict[str, object] | None:
         """Queue a paused native review and answer the row it was stored as.
 
@@ -102,14 +102,17 @@ class StoreApprovalsMixin:
         the request a manual retry.
 
         ``respond`` asks for the hook response with the row: ``paused_review``
-        (its ``reason``) or ``silent_review_block`` (the block's facts besides
-        the row). The resident renders it once the row is stored and the row
-        carries it as ``hook_response``. A row read back separately carries
-        none, and the hook renders it itself.
+        or ``silent_review_block`` (the block's ``ask`` and ``home_dir``). The
+        resident renders it once the row is stored and the row carries it as
+        ``hook_response``. A row read back separately carries none, and the
+        hook renders it itself.
 
-        ``connector_context`` names the observed connector (``cli_id`` and
-        ``identity_hash``) a connector-setup review waits on. The resident
-        keeps the review's context with it in the same write, best effort.
+        ``connector_lookup`` is the launch of a review Guard did not recognise
+        (``native_review_connector_lookup``). The resident looks up the
+        connector it waits on, queues the review under that connector's group
+        with its setup hint and wording, and keeps the review's context with
+        it in the same write. The row carries what it found as
+        ``connector_setup``.
         """
         args: dict[str, object] = {
             "review": review,
@@ -125,8 +128,8 @@ class StoreApprovalsMixin:
             args["codex_live_wait_facts"] = codex_live_wait
         if respond is not None:
             args["respond"] = respond
-        if connector_context is not None:
-            args["connector_context"] = connector_context
+        if connector_lookup is not None:
+            args["connector_lookup"] = connector_lookup
         try:
             # `Path.resolve` of a relative config path starts from this process's directory.
             cwd: str | None = os.getcwd()
@@ -141,8 +144,12 @@ class StoreApprovalsMixin:
             _LOGGER.warning("Connector setup context not recorded (%s)", queued["connector_context_error"])
         if codex_live_wait is not None and queued.get("live_wait") not in {"seeded", "not_live"}:
             _LOGGER.warning("Codex live wait not resumable for %s (%s)", queued["request_id"], queued.get("live_wait"))
+        setup = queued.get("connector_setup")
         if "row" not in queued:
-            return self._read_back_queued_request(queued["request_id"])
+            read_back = self._read_back_queued_request(queued["request_id"])
+            if read_back is not None and isinstance(setup, dict):
+                read_back["connector_setup"] = setup
+            return read_back
         row = queued["row"]
         if not isinstance(row, dict):
             return None
@@ -150,6 +157,8 @@ class StoreApprovalsMixin:
         response = queued.get("response")
         if isinstance(response, dict):
             hinted["hook_response"] = response
+        if isinstance(setup, dict):
+            hinted["connector_setup"] = setup
         return hinted
 
     def _read_back_queued_request(self, request_id: str) -> dict[str, object] | None:
