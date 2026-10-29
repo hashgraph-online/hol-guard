@@ -1307,13 +1307,11 @@ version = "3.58.0" # x-release-please-version
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },
-    { name = "idna" },
     { name = "jsonschema" },
     { name = "keyring" },
     { name = "mcp" },
     { name = "packaging" },
     { name = "pyyaml" },
-    { name = "regex" },
     { name = "requests" },
     { name = "rich" },
     { name = "sigstore" },
@@ -1344,6 +1342,7 @@ publish = [
 [package.dev-dependencies]
 ci-test = [
     { name = "build" },
+    { name = "idna" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-rerunfailures" },
@@ -1363,7 +1362,6 @@ requires-dist = [
     { name = "build", marker = "extra == 'dev'", specifier = ">=1.5.0" },
     { name = "cisco-ai-skill-scanner", marker = "extra == 'cisco'", specifier = "~=2.0.12" },
     { name = "cryptography", specifier = ">=50.0.0" },
-    { name = "idna", specifier = "==3.15" },
     { name = "jsonschema", specifier = ">=4.26.0" },
     { name = "keyring", specifier = ">=25.0" },
     { name = "litellm", marker = "python_full_version < '3.15' and extra == 'cisco'", specifier = "==1.93.2" },
@@ -1373,7 +1371,6 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.3" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=7.1.0" },
     { name = "pyyaml", specifier = ">=6.0.3" },
-    { name = "regex", specifier = ">=2025.0.0,<2027" },
     { name = "requests", specifier = ">=2.32,<3" },
     { name = "rich", specifier = ">=14.0,<15" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.15.15" },
@@ -1388,6 +1385,7 @@ provides-extras = ["cisco", "dev", "mdm-build", "publish"]
 [package.metadata.requires-dev]
 ci-test = [
     { name = "build", specifier = ">=1.5.0" },
+    { name = "idna", specifier = "==3.15" },
     { name = "pytest", specifier = ">=9.0.3" },
     { name = "pytest-cov", specifier = ">=7.1.0" },
     { name = "pytest-rerunfailures", specifier = ">=14.0" },
