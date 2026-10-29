@@ -19,6 +19,14 @@ fn local_package_entry(argument: &str, package_entry: &str) -> bool {
         .is_some_and(|prefix| prefix.is_empty() || prefix.ends_with('/'))
 }
 
+/// Vitest's installed entry points. `vitest.mjs` is the package's declared
+/// `bin` shim and `dist/cli.js` is the module that shim imports, so both
+/// spellings start the project's own installed runner.
+pub(crate) fn local_vitest_entry(argument: &str) -> bool {
+    local_package_entry(argument, "vitest/vitest.mjs")
+        || local_package_entry(argument, "vitest/dist/cli.js")
+}
+
 /// The program name; on Windows without `.exe`, as the pre-tool parser reads
 /// it, so `node.exe` and a resolved `C:\...\python.exe` plan like `node` and
 /// `python`.
@@ -461,7 +469,7 @@ pub fn contained_runner_invocation(
                 .first()
                 .map(|value| value.replace('\\', "/"))
                 .unwrap_or_default();
-            let tool = if local_package_entry(&entry, "vitest/vitest.mjs") {
+            let tool = if local_vitest_entry(&entry) {
                 "vitest"
             } else if local_package_entry(&entry, "jest/bin/jest.js") {
                 "jest"
@@ -585,8 +593,7 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
             || (matches!(name, "node" | "nodejs")
                 && entries.clone().any(|v| {
                     let entry = v.replace('\\', "/");
-                    local_package_entry(&entry, "vitest/vitest.mjs")
-                        || local_package_entry(&entry, "jest/bin/jest.js")
+                    local_vitest_entry(&entry) || local_package_entry(&entry, "jest/bin/jest.js")
                 })));
     let node_tool = bun.is_none()
         && manager_exec_runner(command).is_none()

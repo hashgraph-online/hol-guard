@@ -6196,6 +6196,40 @@
       "requires_sandbox": true
     },
     {
+      "id": "session-vitest-node-cli-module-root-sibling",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "node node_modules/vitest/dist/cli.js run --root ${ORG_WT}"
+      },
+      "cwd": "org_app",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "session-vitest-bun-cli-module-other-checkout",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bun ${ORG}/app-portal/node_modules/vitest/dist/cli.js run src"
+      },
+      "cwd": "org_wt",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
       "id": "cat-readme",
       "fix_area": "shell",
       "harnesses": [

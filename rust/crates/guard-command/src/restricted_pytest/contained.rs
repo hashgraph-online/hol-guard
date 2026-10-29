@@ -325,12 +325,30 @@ fn prepare_vitest(input: &Input) -> Result<Value, RestrictedPytestError> {
             .and_then(OsStr::to_str),
         Some("node" | "nodejs")
     );
+    // Vitest's `bin` shim and the CLI module that shim imports name the same
+    // installed runner, so either spelling resolves to the entry point Guard
+    // runs; the plan below still executes the package's own `bin` entry.
+    let spelled: Vec<PathBuf> = entry
+        .iter()
+        .cloned()
+        .chain(
+            (tool != "jest")
+                .then(|| {
+                    modules
+                        .join("vitest/dist/cli.js")
+                        .canonicalize()
+                        .ok()
+                        .filter(|p| p.is_file() && path_is_within(p, &modules))
+                })
+                .flatten(),
+        )
+        .collect();
     let matching = !node
         || input
             .command
             .get(1 + runtime.len())
             .and_then(|p| cwd.join(p).canonicalize().ok())
-            == entry;
+            .is_some_and(|p| spelled.contains(&p));
     if entry.is_none() || !matching {
         return Err(RestrictedPytestError::new(
             "vitest_restricted_dependency_unavailable",

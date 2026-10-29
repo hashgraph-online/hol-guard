@@ -300,6 +300,9 @@ fn a_relative_vitest_entry_names_the_same_runner_as_the_absolute_one() {
         "./node_modules/vitest/vitest.mjs",
         "dashboard/node_modules/vitest/vitest.mjs",
         "/work/app/node_modules/vitest/vitest.mjs",
+        "node_modules/vitest/dist/cli.js",
+        "./node_modules/vitest/dist/cli.js",
+        "/work/app/node_modules/vitest/dist/cli.js",
     ] {
         let command = json!(["node", argument, "run", "src"]);
         let kind = evaluate("contained_kind", &json!({ "command": command.clone() })).unwrap();
@@ -330,6 +333,9 @@ fn a_lookalike_entry_still_names_no_runner() {
         "vitest/vitest.mjs",
         "node_modules/vitest/dist/vitest.mjs",
         "node_modules/jest/bin/jest.js.bak",
+        "node_modules/vite/dist/cli.js",
+        "node_modules/xvitest/dist/cli.js",
+        "node_modules/vitest/dist/cli.mjs",
     ] {
         let command = json!(["node", argument, "run"]);
         let kind = evaluate("contained_kind", &json!({ "command": command })).unwrap();

@@ -19,6 +19,9 @@ fn a_relative_vitest_entry_reads_as_the_project_runner() {
         "node ./node_modules/vitest/vitest.mjs run src",
         "node dashboard/node_modules/vitest/vitest.mjs run",
         "node /work/app/node_modules/vitest/vitest.mjs run",
+        "node node_modules/vitest/dist/cli.js run",
+        "node ./node_modules/vitest/dist/cli.js run src",
+        "node /work/app/node_modules/vitest/dist/cli.js run --root /work/tree/app",
     ] {
         assert_eq!(
             reason(command),
@@ -51,6 +54,9 @@ fn a_lookalike_entry_reads_as_no_runner() {
         "node vitest/vitest.mjs run",
         "node node_modules/vitest/dist/vitest.mjs run",
         "node node_modules/vitest/vitest.mjs watch",
+        "node node_modules/vite/dist/cli.js run",
+        "node node_modules/xvitest/dist/cli.js run",
+        "node node_modules/vitest/dist/cli.mjs run",
     ] {
         assert_eq!(reason(command), None, "{command}");
     }

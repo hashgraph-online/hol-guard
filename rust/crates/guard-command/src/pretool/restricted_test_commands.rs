@@ -666,7 +666,7 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
         "vitest" => arguments.first().is_some_and(|arg| arg == "run"),
         "jest" => jest_contained_call(arguments),
         "node" | "nodejs" => {
-            matches!(arguments, [entry, run, ..] if local_package_entry(&entry.replace('\\', "/"), "vitest/vitest.mjs") && run == "run")
+            matches!(arguments, [entry, run, ..] if crate::contained_argv::local_vitest_entry(&entry.replace('\\', "/")) && run == "run")
                 || matches!(arguments, [entry, rest @ ..] if local_package_entry(&entry.replace('\\', "/"), "jest/bin/jest.js") && jest_contained_call(rest))
         }
         _ => false,
