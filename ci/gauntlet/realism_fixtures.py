@@ -118,6 +118,7 @@ DOCTL_STUB = (
     'case "${1:-}" in\n'
     "  version) printf 'doctl version 1.110.0-release\\n' ;;\n"
     "  apps) printf 'fixture-app-id    web\\n' ;;\n"
+    "  databases) printf 'fixture-db-id    fixture-db    pg    online    nyc3\\n' ;;\n"
     "  *) printf 'doctl stand-in: unsupported command\\n' >&2; exit 2 ;;\n"
     "esac\n"
 )
@@ -129,6 +130,10 @@ DOCTL_STUB_PYTHON = (
     "    sys.stdout.buffer.write(b'doctl version 1.110.0-release\\n')\n"
     "elif command == 'apps':\n"
     "    sys.stdout.buffer.write(b'fixture-app-id    web\\n')\n"
+    "elif command == 'databases':\n"
+    "    sys.stdout.buffer.write(\n"
+    "        b'fixture-db-id    fixture-db    pg    online    nyc3\\n'\n"
+    "    )\n"
     "else:\n"
     "    sys.stderr.buffer.write(b'doctl stand-in: unsupported command\\n')\n"
     "    sys.exit(2)\n"
