@@ -17336,6 +17336,23 @@
       "expect": "allow"
     },
     {
+      "id": "gauntlet-home-spelled-bun-entry",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd dashboard && ~/.bun/bin/bun node_modules/vite/bin/vite.js build 2>&1 | tail -15"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
       "id": "gauntlet-venv-activate-pytest",
       "fix_area": "shell",
       "harnesses": [
@@ -35488,6 +35505,40 @@
       },
       "cwd": "worktree",
       "expect": "allow"
+    },
+    {
+      "id": "session-home-spelled-uv-runs-pytest",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "~/.cargo/bin/uv run pytest tests/test_reports.py"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
+    },
+    {
+      "id": "session-home-spelled-bundler-runs-rspec",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "~/.asdf/installs/ruby/3.3.0/bin/bundle exec rspec"
+      },
+      "cwd": "worktree",
+      "expect": "allow",
+      "requires_sandbox": true
     }
   ],
   "mcp_cases": [
