@@ -177,8 +177,6 @@ fn only_an_unported_feature_or_a_newer_runtime_hands_the_session_to_the_proxy() 
         "mcp_relay_runtime_superseded",
         "mcp_relay_store_unreadable",
         "mcp_relay_layers_unavailable",
-        "mcp_relay_session_review_mode",
-        "mcp_relay_session_redaction_unbound",
         "mcp_relay_saved_remote_policy",
         "mcp_relay_saved_policy_unverifiable",
         "mcp_relay_session_server_proxy_tools",
@@ -204,10 +202,13 @@ fn only_an_unported_feature_or_a_newer_runtime_hands_the_session_to_the_proxy() 
         assert!(!hands_off(code), "{code}");
     }
     // A binding, store or daemon the resident cannot use keeps the session
-    // native too: each call the lane cannot decide is refused, never decided
-    // by the proxy.
+    // native too, and so does a review mode or redaction level the bound
+    // configs do not agree on: each call the lane cannot decide is refused,
+    // never decided by the proxy.
     for code in [
         DAEMON_REFUSED,
+        "mcp_relay_session_review_mode",
+        "mcp_relay_session_redaction_unbound",
         "direct_lane_unsupported",
         "mcp_relay_workspace_invalid",
         "mcp_relay_evidence_undrained",
