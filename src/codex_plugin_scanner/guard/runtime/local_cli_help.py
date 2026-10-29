@@ -180,18 +180,29 @@ def _script_source_commands(
 ) -> tuple[LocalCliCommand, ...] | None:
     """What a script's own source names, read from the verified script path.
 
-    Only a script launched through its interpreter qualifies: ``argv`` is then
-    ``(interpreter, script, "--help")`` and the script path already passed the
+    A script launched through its interpreter has ``argv`` of
+    ``(interpreter, script, "--help")``. One run directly has ``(script,
+    "--help")`` and counts only when the file starts with a ``#!`` line, so a
+    compiled program is never read as text. Either path already passed the
     probe's checks. Nothing in the file is run.
     """
 
-    if identity.kind != "script" or len(argv) != 3 or not _safe_probe_path(str(argv[1])):
+    if identity.kind == "script" and len(argv) == 3:
+        path, shebang_only = str(argv[1]), False
+    elif identity.kind == "executable" and len(argv) == 2:
+        path, shebang_only = str(argv[0]), True
+    else:
+        return None
+    if not _safe_probe_path(path):
         return None
     try:
-        with open(argv[1], "rb") as handle:
-            source = handle.read(_SCRIPT_SOURCE_LIMIT).decode("utf-8", errors="replace")
+        with open(path, "rb") as handle:
+            raw = handle.read(_SCRIPT_SOURCE_LIMIT)
     except OSError:
         return None
+    if shebang_only and not raw.startswith(b"#!"):
+        return None
+    source = raw.decode("utf-8", errors="replace")
     if not source.strip():
         return None
     return parse_cli_help_text(source, invocation=(identity.name,), guard_home=guard_home, script_source=True)

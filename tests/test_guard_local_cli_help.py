@@ -283,8 +283,11 @@ def test_a_command_help_that_lists_the_top_level_commands_again_adds_nothing(
 
     _stand_in_resident(
         monkeypatch,
-        lambda **kwargs: (_row("sync"), _row("push")) if len(kwargs["invocation"]) == 1 or kwargs["invocation"][1] == "sync"
-        else (_row("all"),),
+        lambda **kwargs: (
+            (_row("sync"), _row("push"))
+            if len(kwargs["invocation"]) == 1 or kwargs["invocation"][1] == "sync"
+            else (_row("all"),)
+        ),
     )
 
     def _probe(argv: Sequence[str]) -> str:
@@ -480,15 +483,35 @@ def test_a_script_that_rejects_help_is_read_from_its_own_source(
     assert [call["text"] for call in calls if call.get("script_source")] == [MERGE_SCRIPT]
 
 
-def test_only_a_script_launched_through_its_interpreter_has_its_source_read(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_a_script_run_directly_is_read_from_its_own_source(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """``./merge.sh`` names the script itself, with no interpreter in front."""
+
     script = tmp_path / "merge.sh"
     script.write_text(MERGE_SCRIPT, encoding="utf-8")
+
+    def _answer(**kwargs: object) -> tuple[dict[str, object], ...]:
+        return (_option("--repo"), _option("--dry-run")) if kwargs.get("script_source") else ()
+
+    calls = _stand_in_resident(monkeypatch, _answer)
+    commands, status = discover_local_cli_commands(
+        _identity("merge.sh"),
+        (str(script), "--help"),
+        runner=lambda _: "unknown argument: --help\n",
+    )
+    assert status == "ok"
+    assert [command.command_id for command in commands] == ["root", "--repo", "--dry-run", "other"]
+    assert [call["text"] for call in calls if call.get("script_source")] == [MERGE_SCRIPT]
+
+
+def test_a_program_without_a_shebang_line_is_never_read_as_source(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    program = tmp_path / "merge"
+    program.write_bytes(b"\xcf\xfa\xed\xfe" + MERGE_SCRIPT.encode("utf-8"))
     calls = _stand_in_resident(monkeypatch, lambda **_: ())
     _, status = discover_local_cli_commands(
         _identity("merge"),
-        (str(script), "--help"),
+        (str(program), "--help"),
         runner=lambda _: "unknown argument: --help\n",
     )
     assert status == "empty"
@@ -535,9 +558,7 @@ def test_a_catalog_without_options_keeps_its_root_wording() -> None:
     assert plain[0].description == "Run tool without a subcommand."
 
 
-def test_a_source_read_asks_only_a_resident_that_reads_sources(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_a_source_read_asks_only_a_resident_that_reads_sources(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """An older resident refuses the field, so it is sent only behind the feature."""
 
     from codex_plugin_scanner.guard import native_local_cli_help_parse as bridge
