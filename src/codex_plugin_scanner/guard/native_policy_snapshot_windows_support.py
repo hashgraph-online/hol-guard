@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import os
 import re
 import stat
@@ -190,6 +191,7 @@ def _windows_private_descriptor(directory: bool) -> Iterator[tuple[Any, Any, Any
         local_free(descriptor)
 
 
+@functools.cache
 def _windows_file_information_type() -> Any:
     import ctypes
     from ctypes import wintypes
@@ -211,6 +213,7 @@ def _windows_file_information_type() -> Any:
     return ByHandleFileInformation
 
 
+@functools.cache
 def _windows_security_attributes_type() -> Any:
     import ctypes
     from ctypes import wintypes
