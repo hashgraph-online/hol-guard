@@ -47,6 +47,7 @@ _RESULT_KEYS = frozenset(
 _BODY_KEYS = frozenset({"body_base64", "body_sha256"})
 _COUNTER_KEYS = frozenset({"decoder_calls", "input_bytes", "output_bytes", "layers", "elapsed_ms"})
 _HEX_64_RE = re.compile(r"[0-9a-f]{64}")
+_STATUSES: dict[str, ContentDecodeStatus] = {"decoded": "decoded", "rejected": "rejected", "incomplete": "incomplete"}
 _RESULT_ENVELOPE_BYTES = 8 * 1024
 # Fetch outcomes that are a verdict on the response, not a transport fault.
 _FETCH_REFUSALS = frozenset(
@@ -209,18 +210,18 @@ def decode_content_native(
     if not isinstance(payload, dict):
         return _invalid_result()
     status_value = payload.get("status")
+    result_status = _STATUSES.get(status_value) if isinstance(status_value, str) else None
     keys = frozenset(payload)
     counters = payload.get("counters")
     code = payload.get("code")
     message = payload.get("message")
     runtime_sha256 = payload.get("runtime_sha256")
     if (
-        keys != (_RESULT_KEYS | _BODY_KEYS if status_value == "decoded" else _RESULT_KEYS)
+        result_status is None
+        or keys != (_RESULT_KEYS | _BODY_KEYS if result_status == "decoded" else _RESULT_KEYS)
         or payload["schema"] != _RESULT_SCHEMA
         or payload["request_id"] != request["request_id"]
         or payload["request_sha256"] != request_digest
-        or not isinstance(status_value, str)
-        or status_value not in {"decoded", "rejected", "incomplete"}
         or not isinstance(code, str)
         or not 0 < len(code) <= _MAX_CODE_CHARS
         or not isinstance(message, str)
@@ -239,8 +240,8 @@ def decode_content_native(
         output_bytes=counters["output_bytes"],
         layers=counters["layers"],
     )
-    if status_value != "decoded":
-        return ManagedContentResult(status_value, code, message, counters=decode_counters)
+    if result_status != "decoded":
+        return ManagedContentResult(result_status, code, message, counters=decode_counters)
     body_base64 = payload["body_base64"]
     body_sha256 = payload["body_sha256"]
     if not isinstance(body_base64, str) or not isinstance(body_sha256, str):
