@@ -23,6 +23,14 @@ SCRIPT_ROOT = ROOT / "scripts"
 PACKAGE = "codex_plugin_scanner"
 BUILD_HOOK = "build_command_projection_hook"
 
+# Distributions whose import name is not the distribution name. A build
+# requirement is matched against what the build actually imports, and PyYAML
+# installs as `pyyaml` but imports as `yaml`.
+IMPORT_NAMES = {
+    "pyyaml": ("yaml",),
+    "typing-extensions": ("typing_extensions",),
+}
+
 tomllib = importlib.import_module("tomllib" if sys.version_info >= (3, 11) else "tomli")
 
 # uv installs `dependency-groups.dev` unless a caller opts out, so no command
@@ -46,10 +54,46 @@ def _distribution(requirement: str) -> str:
     return name.strip().lower().replace("_", "-")
 
 
+def _runtime_imports(tree: ast.Module) -> list[ast.Import | ast.ImportFrom]:
+    """Every import this file performs when it runs.
+
+    An import inside `if TYPE_CHECKING:` is never executed, so the
+    distribution behind it is not installed by running this file and the
+    package module behind it is not reached. The `else` branch of such a test
+    is the one that runs, so it is still read.
+    """
+
+    found: list[ast.Import | ast.ImportFrom] = []
+
+    class Visitor(ast.NodeVisitor):
+        def visit_If(self, node: ast.If) -> None:
+            test = node.test
+            type_checking = (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (
+                isinstance(test, ast.Attribute)
+                and isinstance(test.value, ast.Name)
+                and test.value.id == "typing"
+                and test.attr == "TYPE_CHECKING"
+            )
+            if type_checking:
+                for child in node.orelse:
+                    self.visit(child)
+                return
+            self.generic_visit(node)
+
+        def visit_Import(self, node: ast.Import) -> None:
+            found.append(node)
+
+        def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+            found.append(node)
+
+    Visitor().visit(tree)
+    return found
+
+
 def _top_level_imports(tree: ast.Module) -> set[str]:
     """Every top-level module name this file imports by name."""
     names: set[str] = set()
-    for node in ast.walk(tree):
+    for node in _runtime_imports(tree):
         if isinstance(node, ast.Import):
             names.update(alias.name.split(".", 1)[0] for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
@@ -65,7 +109,7 @@ def _package_imports(tree: ast.Module, *, package: str = "") -> set[str]:
     none and names its package imports in full.
     """
     names: set[str] = set()
-    for node in ast.walk(tree):
+    for node in _runtime_imports(tree):
         if isinstance(node, ast.Import):
             names.update(alias.name for alias in node.names if alias.name.startswith(PACKAGE))
         elif isinstance(node, ast.ImportFrom):
@@ -156,12 +200,21 @@ def _selection_text() -> str:
     return "\n".join(parts)
 
 
+def _unused_requirements(requires: list[str], imported: set[str]) -> list[str]:
+    """The distributions among `requires` that nothing in `imported` accounts for."""
+    return sorted(
+        name
+        for name in requires
+        if not any(module in imported for module in IMPORT_NAMES.get(name, (name.replace("-", "_"),)))
+    )
+
+
 def test_every_build_requirement_is_imported_while_the_wheel_is_built() -> None:
     """Verify every build requirement is imported while the wheel is built."""
     imported = _build_time_modules()
     metadata = _metadata()
     requires = [_distribution(entry) for entry in metadata["build-system"]["requires"]]
-    unused = sorted(name for name in requires if name.replace("-", "_") not in imported)
+    unused = _unused_requirements(requires, imported)
     assert not unused, (
         "These build requirements are installed into every build environment but nothing the build hook "
         f"reaches imports them: {unused}. Retire the requirement with the code that needed it."
@@ -171,6 +224,36 @@ def test_every_build_requirement_is_imported_while_the_wheel_is_built() -> None:
 def test_the_build_requirement_gate_reads_through_the_package_the_hook_imports() -> None:
     """`jsonschema` is reached only through the delivery modules, so the walk must see it."""
     assert {"hatchling", "jsonschema"} <= _build_time_modules()
+
+
+def test_a_requirement_whose_import_name_differs_is_matched_by_its_import_name() -> None:
+    """A distribution name is not an import name, so the gate maps the ones that differ."""
+    assert _unused_requirements(["pyyaml"], {"yaml"}) == []
+    assert _unused_requirements(["pyyaml"], {"pyyaml"}) == ["pyyaml"]
+    assert _unused_requirements(["hatchling"], {"hatchling"}) == []
+
+
+def test_an_import_that_only_type_checking_performs_is_not_a_build_time_import() -> None:
+    """A requirement reached only under `if TYPE_CHECKING:` is never installed by the build.
+
+    The same holds for the package closure: a module named only in a type-only
+    import is not reached at build time, so whatever it imports is not paid for
+    either. The `else` branch of such a test is what actually runs.
+    """
+
+    tree = ast.parse(
+        "from typing import TYPE_CHECKING\n"
+        "if TYPE_CHECKING:\n"
+        "    import tomlkit\n"
+        f"    from {PACKAGE}.guard import models\n"
+        "else:\n"
+        "    import json\n"
+        "if typing.TYPE_CHECKING:\n"
+        "    import keyring\n"
+        "import ast\n"
+    )
+    assert _top_level_imports(tree) == {"typing", "json", "ast"}
+    assert _package_imports(tree) == set()
 
 
 def _selects(name: str, flag: str, text: str) -> bool:
