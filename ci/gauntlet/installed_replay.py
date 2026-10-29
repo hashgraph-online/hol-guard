@@ -176,12 +176,13 @@ def replay_case(
     guard_home: Path,
     workspace: Path,
     repeat: int,
+    native_runtime: Path | None = None,
 ) -> dict[str, Any]:
     """Run one case ``repeat`` times and report agreement and expectation."""
 
     payload = fill(case["payload"], home=home, workspace=workspace)
     stdin = json.dumps(payload)
-    environment = isolated_environment(home=home, guard_home=guard_home)
+    environment = isolated_environment(home=home, guard_home=guard_home, native_runtime=native_runtime)
     runs: list[dict[str, Any]] = []
     for _ in range(repeat):
         started = time.monotonic()
@@ -247,6 +248,7 @@ def replay_harness(
     workspace: Path,
     repeat: int,
     argv_by_event: dict[str, list[str]] | None = None,
+    native_runtime: Path | None = None,
 ) -> dict[str, Any]:
     """Replay every contract case against the argv its own event registered.
 
@@ -278,7 +280,15 @@ def replay_harness(
             unregistered.append(f"{case['id']}: the install registered no runnable {event} hook to replay")
             continue
         results.append(
-            replay_case(case_argv, case, home=home, guard_home=guard_home, workspace=workspace, repeat=repeat)
+            replay_case(
+                case_argv,
+                case,
+                home=home,
+                guard_home=guard_home,
+                workspace=workspace,
+                repeat=repeat,
+                native_runtime=native_runtime,
+            )
         )
     failures = unregistered + [failure for result in results for failure in result["failures"]]
     return {

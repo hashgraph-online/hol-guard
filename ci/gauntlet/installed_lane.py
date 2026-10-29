@@ -115,6 +115,7 @@ def harness_pass(
                 workspace=workspace,
                 repeat=repeat,
                 argv_by_event={event: argv_for_event(expectation, config, event) for event in declared},
+                native_runtime=runtime.native_runtime,
             )
             result["replay"] = replay
             failures.extend(replay["failures"])

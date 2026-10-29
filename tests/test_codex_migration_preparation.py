@@ -37,6 +37,37 @@ def _sources(tmp_path, monkeypatch):
     return context, config, hooks
 
 
+def test_migration_prunes_unlaunchable_legacy_guard_handler(tmp_path, monkeypatch):
+    context, config, hooks = _sources(tmp_path, monkeypatch)
+    hooks.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {"matcher": "Bash", "hooks": [{"type": "command", "command": "python3 user_hook.py"}]},
+                        {
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": "/opt/hol-guard-previous/bin/hol-guard",
+                                    "args": ["hook", "--harness", "codex"],
+                                    "statusMessage": "HOL Guard checking Bash command",
+                                }
+                            ]
+                        },
+                    ]
+                }
+            }
+        )
+    )
+    prepared = adapter.prepare_codex_hook_migration(context, config_path=config, hooks_path=hooks)
+    changes = {change.path: change for change in prepared.files}
+    migrated = parse_toml_object(changes[config].after, path=config, label="fixture")
+    assert migrated["hooks"] == {
+        "PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "python3 user_hook.py"}]}]
+    }
+
+
 def test_migration_capture_never_publishes_or_creates_backup(tmp_path, monkeypatch):
     context, config, hooks = _sources(tmp_path, monkeypatch)
     before = _tree(tmp_path)
