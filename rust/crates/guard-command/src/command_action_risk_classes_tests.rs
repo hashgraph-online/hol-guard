@@ -52,6 +52,16 @@ fn the_shell_and_github_actions_carry_their_risk_classes() {
         risk_classes_for_command_action("local secret read shell command"),
         &["local_secret_read"]
     );
+    // Order matters: the resident reports these in table order, and the
+    // artifact a discovery build makes for this label publishes none of them.
+    assert_eq!(
+        risk_classes_for_command_action("credential exfiltration shell command"),
+        &[
+            "data_flow_exfiltration",
+            "credential_exfiltration",
+            "network_egress"
+        ]
+    );
 }
 
 #[test]
@@ -151,4 +161,57 @@ fn no_action_class_carries_a_risk_its_extension_does_not_publish() {
         }
     }
     assert!(checked > 0);
+}
+/// The labels pinned above that a packaged core extension publishes, with the
+/// extension that owns each one. A label Guard's own dispatcher produces, and
+/// a label an opt-in pack publishes, are left out: neither reaches
+/// `CATALOG_JSON`, which carries only `contracts/extensions/core-defaults.v1.json`.
+const PUBLISHED_ACTION_CLASS_PINS: &[(&str, &str)] = &[
+    ("command.shell-mutations", "destructive shell command"),
+    (
+        "command.shell-mutations",
+        "GitHub PR body shell substitution",
+    ),
+    (
+        "command.data-protection",
+        "credential exfiltration shell command",
+    ),
+    (
+        "command.guard-self-protection",
+        "Guard approval self-authorization command",
+    ),
+    ("command.github", "GitHub remote mutation command"),
+    ("command.github", "Unverified GitHub command capability"),
+    ("command.github", "GitHub local configuration write"),
+    ("command.remote.ssh", "SSH configured execution command"),
+    ("command.remote.rsync", "Rsync remote shell command"),
+];
+
+/// Renaming a label in `contributions/command-sources/` without renaming it
+/// here leaves the table answering for a label nothing produces any more,
+/// while the pins above keep passing against the stale entry. Require each
+/// pinned label to still appear under the extension that publishes it.
+#[test]
+fn every_pinned_action_class_is_published_by_its_extension() {
+    let catalog: Value =
+        serde_json::from_slice(guard_command_catalog_data::CATALOG_JSON).expect("catalog JSON");
+    let extensions = catalog["catalog"].as_array().expect("catalog array");
+    for (extension_id, label) in PUBLISHED_ACTION_CLASS_PINS {
+        let extension = extensions
+            .iter()
+            .find(|entry| entry["extension_id"].as_str() == Some(*extension_id))
+            .unwrap_or_else(|| panic!("{extension_id} is missing from the catalog"));
+        let published: BTreeSet<String> = strings(&extension["action_classes"])
+            .iter()
+            .map(|class| class.trim().to_lowercase())
+            .collect();
+        assert!(
+            published.contains(&label.trim().to_lowercase()),
+            "{extension_id} no longer publishes {label}"
+        );
+        assert!(
+            !risk_classes_for_command_action(label).is_empty(),
+            "{label} carries no risk classes"
+        );
+    }
 }
