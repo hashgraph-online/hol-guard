@@ -10,6 +10,11 @@
 //! and every `databases` read (connection URIs and user passwords). These are
 //! simply absent from the table.
 //!
+//! One `databases` shape is admitted beside the table, by
+//! [`databases_list_arguments`]: a cluster listing whose columns the command
+//! text itself names, and which are all inventory. See that function for why
+//! the columns have to be spelled out.
+//!
 //! The flags `--access-token`/`-t`, `--api-url`/`-u`, `--config`/`-c`,
 //! `--trace` and `--show` are never admitted. They put a token on the command
 //! line, send the stored token to another endpoint, load another account,
@@ -170,7 +175,95 @@ const DENIED_LONG_FLAGS: [&str; 5] = [
 ];
 
 pub(super) fn safe_doctl_arguments(arguments: &[String]) -> bool {
-    help_arguments(arguments) || read_arguments(arguments)
+    help_arguments(arguments) || read_arguments(arguments) || databases_list_arguments(arguments)
+}
+
+/// The spellings `doctl databases` answers to.
+const DATABASE_GROUPS: [&str; 5] = ["databases", "database", "dbs", "db", "d"];
+
+/// Columns of `doctl databases list` that name only cluster inventory. The
+/// command's own `--format` vocabulary adds `URI`, which is the connection
+/// string, so that one is absent here.
+const INVENTORY_COLUMNS: [&str; 10] = [
+    "id",
+    "name",
+    "engine",
+    "version",
+    "numnodes",
+    "region",
+    "status",
+    "size",
+    "created",
+    "storagemib",
+];
+
+/// A cluster listing whose columns are all inventory: which clusters exist,
+/// what they run and where. Nothing in that output names a credential, so
+/// asking about it interrupts ordinary infrastructure work for nothing.
+///
+/// The columns have to be named in the command. A bare `databases list`
+/// leaves them to whatever `doctl` prints by default, which Guard cannot read
+/// off the command text and which is free to change between releases, so that
+/// spelling keeps its review. `-o`/`--output` is refused outright: the JSON
+/// form prints the API object rather than the chosen columns, and a cluster
+/// carries `connection`, `ui_connection`, `private_connection`,
+/// `standby_connection` and `users`, each with a password in it.
+fn databases_list_arguments(arguments: &[String]) -> bool {
+    let mut index = 0;
+    while let Some(argument) = arguments.get(index) {
+        match argument.as_str() {
+            "-v" | "--verbose" => index += 1,
+            "--context" if arguments.len() > index + 1 => index += 2,
+            _ if argument.starts_with("--context=") => index += 1,
+            _ => break,
+        }
+    }
+    let Some(group) = arguments.get(index) else {
+        return false;
+    };
+    if !DATABASE_GROUPS.contains(&group.as_str()) {
+        return false;
+    }
+    if !arguments
+        .get(index + 1)
+        .is_some_and(|word| matches!(word.as_str(), "list" | "ls"))
+    {
+        return false;
+    }
+    named_inventory_columns(&arguments[index + 2..])
+}
+
+/// True when the listing's remaining words are `--no-header` and at least one
+/// `--format` naming inventory columns only.
+fn named_inventory_columns(arguments: &[String]) -> bool {
+    let mut index = 0;
+    let mut named = false;
+    while let Some(argument) = arguments.get(index) {
+        let columns = if argument == "--no-header" {
+            index += 1;
+            continue;
+        } else if argument == "--format" {
+            index += 2;
+            match arguments.get(index - 1) {
+                Some(value) => value.as_str(),
+                None => return false,
+            }
+        } else if let Some(value) = argument.strip_prefix("--format=") {
+            index += 1;
+            value
+        } else {
+            return false;
+        };
+        if !columns.split(',').all(inventory_column) {
+            return false;
+        }
+        named = true;
+    }
+    named
+}
+
+fn inventory_column(column: &str) -> bool {
+    INVENTORY_COLUMNS.contains(&column.to_ascii_lowercase().as_str())
 }
 
 fn help_arguments(arguments: &[String]) -> bool {
@@ -274,8 +367,45 @@ mod tests {
             "--context staging projects list",
             "-ojson vpcs list",
             "compute ssh-key list --format ID,Name",
+            "databases list --format ID,Name,Engine,Status,Region",
+            "databases list --format ID,Name,Engine,Status,Region --no-header",
+            "databases ls --format=id,name",
+            "db list --format Size,NumNodes,StorageMib,Created,Version",
+            "--context staging dbs list --format ID",
+            "-v database list --format ID",
+            "d list --format ID",
         ] {
             assert!(safe_doctl_arguments(&arguments(command)), "{command}");
+        }
+    }
+
+    /// The listing is admitted for what its own text proves it prints. A
+    /// default column set, a connection string, the JSON object, another
+    /// `databases` leaf and anything else carried along keep their review.
+    #[test]
+    fn a_cluster_listing_is_admitted_only_for_the_columns_it_names() {
+        for command in [
+            "databases list",
+            "databases ls",
+            "databases list --no-header",
+            "databases list --format",
+            "databases list --format ID,URI",
+            "databases list --format=uri",
+            "databases list --format ID,Name --output json",
+            "databases list --format ID,Name -o json",
+            "databases list --format ID,Name --show",
+            "databases list --format ID,Name --trace",
+            "databases list --format ID,Name mycluster",
+            "-o json databases list --format ID,Name",
+            "databases user list --format Name,Password",
+            "databases connection db1 --format URI",
+            "databases get db1 --format ID,Name",
+            "databases list --format ID,Name,Password",
+            "databases list --format ID,,Name",
+            "dbx list --format ID",
+            "--config other.yaml databases list --format ID",
+        ] {
+            assert!(!safe_doctl_arguments(&arguments(command)), "{command}");
         }
     }
 
@@ -293,7 +423,6 @@ mod tests {
             "registry garbage-collection start",
             "auth token",
             "auth init",
-            "databases list",
             "databases get db1",
             "databases connection db1",
             "apps list --access-token dop_v1_x",

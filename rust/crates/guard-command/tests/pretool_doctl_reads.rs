@@ -29,6 +29,8 @@ fn doctl_metadata_and_list_get_reads_are_explicitly_benign() {
             "doctl registry repository list-manifests web --format Digest,UpdatedAt,Tags --no-header",
             "doctl compute droplet list --output json",
             "doctl -o json projects list",
+            "doctl databases list --format ID,Name,Engine,Status,Region",
+            "doctl databases list --format ID,Name,Engine,Status,Region --no-header 2>&1 | head -20",
         ] {
             let (decision, minimum_action) = evaluate(harness, command);
             assert_eq!(decision, "allow", "{harness}: {command}");
@@ -51,6 +53,9 @@ fn doctl_effects_secrets_and_unbound_launches_stay_reviewed() {
             "doctl kubernetes cluster kubeconfig show prod",
             "doctl kubernetes cluster kubeconfig save prod",
             "doctl databases list",
+            "doctl databases list --format ID,URI",
+            "doctl databases list --format ID,Name --output json",
+            "doctl databases user list --format Name,Password",
             "doctl apps list --access-token dop_v1_example",
             "doctl -t dop_v1_example apps list",
             "doctl apps list --api-url https://example.invalid",
