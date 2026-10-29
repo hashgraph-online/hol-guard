@@ -222,6 +222,7 @@ pub(crate) use script_content::{
     activation_script_text, backgrounded_launch, models_exactly, prefixed_launch, sequential_jobs,
     sole_program_sources, sourced_program_sources, sourcing_bounded_sources,
 };
+pub use search_scope_tracked::proven_project_document;
 pub(crate) use segment_proof::{benign_command_segments, without_stderr_merge};
 pub(crate) use worktree_add::entered_checkouts;
 pub(crate) use worktree_add::new_checkout_route;

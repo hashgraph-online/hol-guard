@@ -223,6 +223,21 @@ fn workspace_visible_target(target: &Path, request: &NativeHookRequestV1) -> boo
 /// rather than stored credentials.
 const FEATURE_FOLDER_NAMES: [&str; 2] = ["auth", "authorization"];
 
+/// A credential-named file that PreToolUse already accepted as a committed
+/// project document, such as `contributions/extensions/command.kubernetes-secrets.json`.
+/// The recheck resolves the target again and repeats the whole proof, so a
+/// file swapped for a link to a real secret after PreToolUse, an untracked
+/// copy, or a Kubernetes `Secret` manifest keeps its review.
+fn tracked_project_document(target: &str, request: &NativeHookRequestV1) -> bool {
+    let target = match target.strip_prefix("~/") {
+        Some(rest) => Path::new(&request.home_dir).join(rest),
+        None => Path::new(target).to_path_buf(),
+    };
+    target.to_str().is_some_and(|target| {
+        guard_command::pretool::proven_project_document(target, request.cwd.as_deref())
+    })
+}
+
 fn sensitive_envelope_target(request: &NativeHookRequestV1) -> bool {
     let payload = &request.payload;
     let target = envelope_target(payload);
@@ -233,7 +248,8 @@ fn sensitive_envelope_target(request: &NativeHookRequestV1) -> bool {
         let path = Path::new(target.trim());
         sensitive_path_family(path).is_some()
             || (guard_secure_fs::credential_named_path(path)
-                && !workspace_visible_target(path, request))
+                && !workspace_visible_target(path, request)
+                && !tracked_project_document(target.trim(), request))
     };
     // A `file.json?q=<filter>` read queries the file before the `?`.
     let is_sensitive_entry = |entry: &str| {
