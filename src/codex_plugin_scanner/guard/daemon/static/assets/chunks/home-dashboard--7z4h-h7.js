@@ -3,7 +3,7 @@ import { a8, a9 } from "../guard-dashboard.js";
 import { H as HomeProtectionModule } from "./home-protection-module-Gmcu_gwW.js";
 import { B as BrandHero, a as BrandHeroFacts, b as BrandHeroBadge, u as useReducedMotion, c as brandMarkSvg } from "./brand-hero-COty1p6U.js";
 import { A as ABOUT_LOCAL_SECTION_TITLE, a as ABOUT_LOCAL_SECTION_BODY } from "./about-content-Dr9zFg1V.js";
-import { S as SUPPORTED_APPS_FULL } from "./app-catalog-By01oDVd.js";
+import { S as SUPPORTED_APPS_FULL } from "./app-catalog-M_B-xLuc.js";
 import "./supply-chain-protection-stats-BM1-krLn.js";
 function redactQueueArtifactName(value) {
   if (typeof value !== "string") return null;

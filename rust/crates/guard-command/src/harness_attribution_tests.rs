@@ -185,9 +185,19 @@ fn executable_names_map_to_their_harness() {
         ("/x/omp", "omp"),
         ("/x/opencode", "opencode"),
         ("/x/devin", "devin"),
+        ("/x/muse", "muse"),
+        ("/x/muse-bin", "muse"),
     ] {
         assert_eq!(harness_from_executable(path), Some(slug), "{path}");
     }
+}
+
+#[test]
+fn the_muse_origin_override_is_honoured() {
+    assert_eq!(
+        resolve_environment_harness_from(&env(&[("HOL_GUARD_ORIGIN_HARNESS", "muse")])).as_deref(),
+        Some("muse")
+    );
 }
 
 #[test]

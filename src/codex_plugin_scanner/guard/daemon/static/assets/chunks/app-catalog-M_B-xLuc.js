@@ -10,10 +10,11 @@ const SUPPORTED_APP_SLUGS = [
   "openclaw",
   "kimi",
   "grok",
-  "devin"
+  "devin",
+  "muse"
 ];
-const SUPPORTED_APPS_BRIEF = "Guard works with Codex, Claude Code, OpenCode, Copilot, Cursor, Cline, Gemini, Hermes, OpenClaw, Kimi, Grok, and Devin.";
-const SUPPORTED_APPS_FULL = "Guard works with Codex, Claude Code, OpenCode, Copilot, Cursor, Cline, Gemini, Hermes, OpenClaw, Kimi, Grok, Devin, and more. Run your AI app once and Guard will detect it automatically.";
+const SUPPORTED_APPS_BRIEF = "Guard works with Codex, Claude Code, OpenCode, Copilot, Cursor, Cline, Gemini, Hermes, OpenClaw, Kimi, Grok, Devin, and Muse.";
+const SUPPORTED_APPS_FULL = "Guard works with Codex, Claude Code, OpenCode, Copilot, Cursor, Cline, Gemini, Hermes, OpenClaw, Kimi, Grok, Devin, Muse, and more. Run your AI app once and Guard will detect it automatically.";
 function defaultConnectHarness(repairHarness, visibleHarnesses = []) {
   return repairHarness ?? visibleHarnesses[0] ?? SUPPORTED_APP_SLUGS[0];
 }

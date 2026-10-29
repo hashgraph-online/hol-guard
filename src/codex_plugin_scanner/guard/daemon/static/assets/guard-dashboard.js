@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-D19aMYSk.js","assets/chunks/home-protection-module-Gmcu_gwW.js","assets/chunks/supply-chain-protection-stats-BM1-krLn.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-By01oDVd.js","assets/chunks/fleet-workspace-BhAW5aBW.js","assets/chunks/harness-version-label-umIBukla.js","assets/chunks/connect-guard-cloud-button-BnLIEGxe.js","assets/chunks/settings-save-proof-modal-BEYD4Ahl.js","assets/chunks/settings-workspace-C6VZKa8F.js","assets/chunks/confirm-dialog-BLXC3Bky.js","assets/chunks/extensions-workspace-w89wHD9s.js","assets/chunks/app-detail-workspace-C7wm7L0l.js","assets/chunks/policy-workspace-page-DyqN3hYg.js","assets/chunks/about-workspace-DCyA9ZrR.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard--7z4h-h7.js","assets/chunks/home-protection-module-Gmcu_gwW.js","assets/chunks/supply-chain-protection-stats-BM1-krLn.js","assets/chunks/brand-hero-COty1p6U.js","assets/chunks/about-content-Dr9zFg1V.js","assets/chunks/app-catalog-M_B-xLuc.js","assets/chunks/fleet-workspace-BODfLE0m.js","assets/chunks/harness-version-label-umIBukla.js","assets/chunks/connect-guard-cloud-button-BnLIEGxe.js","assets/chunks/settings-save-proof-modal-BEYD4Ahl.js","assets/chunks/settings-workspace-9VAwelOb.js","assets/chunks/confirm-dialog-BLXC3Bky.js","assets/chunks/extensions-workspace-w89wHD9s.js","assets/chunks/app-detail-workspace-C7wm7L0l.js","assets/chunks/policy-workspace-page-DyqN3hYg.js","assets/chunks/about-workspace-DCyA9ZrR.js","assets/about-workspace.css"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -37340,9 +37340,9 @@ function RuntimeGate(props) {
   );
 }
 const HOME_QUEUE_PREVIEW_LIMIT = 50;
-const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-D19aMYSk.js"), true ? __vite__mapDeps([0,1,2,3,4,5]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
-const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-BhAW5aBW.js"), true ? __vite__mapDeps([6,7,8,5,9]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-C6VZKa8F.js"), true ? __vite__mapDeps([10,9,5,11,8]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard--7z4h-h7.js"), true ? __vite__mapDeps([0,1,2,3,4,5]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
+const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-BODfLE0m.js"), true ? __vite__mapDeps([6,7,8,5,9]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
+const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-9VAwelOb.js"), true ? __vite__mapDeps([10,9,5,11,8]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
   () => __vitePreload(() => import("./chunks/extensions-workspace-w89wHD9s.js"), true ? __vite__mapDeps([12,11]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
