@@ -2,11 +2,7 @@
 
 from __future__ import annotations
 
-import hashlib
-import hmac
 import os
-import shlex
-from collections.abc import Callable, Mapping
 from pathlib import Path
 
 import pytest
@@ -83,44 +79,6 @@ def test_attestation_write_does_not_follow_a_symlink(tmp_path: Path) -> None:
         _write_attestation_secret(secret_path, b"replacement-key")
 
     assert target.read_bytes() == b"outside-key"
-
-
-def test_hook_template_proof_signs_the_thrice_normalised_command(tmp_path: Path) -> None:
-    """The hook signs what the resident verifies: one pass picking the command
-    out of the payload, then the two passes the resident applies itself."""
-
-    from codex_plugin_scanner.guard.adapters._modules.cursor.cursor_hook_script_template_tail import (
-        HOOK_SCRIPT_TEMPLATE_TAIL,
-    )
-
-    raw = "lean-ctx -c \"lean-ctx -c 'lean-ctx -c git status'\""
-    secret = b"k" * 32
-    secret_path = tmp_path / "secrets" / "cursor-hook-attestation.key"
-    secret_path.parent.mkdir(parents=True)
-    secret_path.write_bytes(secret)
-    start = HOOK_SCRIPT_TEMPLATE_TAIL.index("def _cursor_conversation_id")
-    end = HOOK_SCRIPT_TEMPLATE_TAIL.index("def _cursor_availability_response")
-    namespace: dict[str, object] = {
-        "GUARD_HOME": str(tmp_path),
-        "Mapping": Mapping,
-        "Path": Path,
-        "hashlib": hashlib,
-        "hmac": hmac,
-        "os": os,
-        "shlex": shlex,
-    }
-    exec(HOOK_SCRIPT_TEMPLATE_TAIL[start:end], namespace)
-    compute_hook = namespace["_compute_cursor_after_observer_proof"]
-    assert isinstance(compute_hook, Callable)
-    payload = {"conversation_id": "conversation", "command": raw}
-    hook_proof = compute_hook(payload, "afterShellExecution", "binding")
-
-    def proof_over(command: str) -> str:
-        message = "\0".join(("conversation", command, "binding", "afterShellExecution"))
-        return hmac.new(secret, message.encode("utf-8"), hashlib.sha256).hexdigest()
-
-    assert hook_proof == proof_over("git status")
-    assert hook_proof != proof_over("lean-ctx -c git status")
 
 
 def stat_mode(path: Path) -> int:

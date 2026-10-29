@@ -222,7 +222,6 @@ select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM", "RUF"]
 [tool.ruff.lint.per-file-ignores]
 "tests/fixtures/mcp-canary-server.py" = ["N999"]
 "scripts/codex-auto-resume-smoke.py" = ["N999"]
-"scripts/e2e-cursor-hook-smoke.py" = ["N999"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

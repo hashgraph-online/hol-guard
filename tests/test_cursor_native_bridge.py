@@ -20,6 +20,7 @@ from codex_plugin_scanner.guard.adapters._modules.cursor.cursor_hook_native impo
     NATIVE_CURSOR_HOOK_COMMAND,
     NATIVE_CURSOR_HOOK_FEATURE,
 )
+from codex_plugin_scanner.guard.adapters._modules.cursor.cursor_hook_script_template import HOOK_SCRIPT_TEMPLATE
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.cursor_hook_config import (
     _is_managed_hook_command,
@@ -27,28 +28,12 @@ from codex_plugin_scanner.guard.adapters.cursor_hook_config import (
     _live_cursor_hook_script_path,
     _managed_hook_command,
 )
-from codex_plugin_scanner.guard.adapters.cursor_hooks import _HOOK_SCRIPT_TEMPLATE, cursor_hook_script_source
+from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
 from codex_plugin_scanner.guard.adapters.native_hook_bridge import native_hook_bridge_executable
 
 _POSIX_ONLY = pytest.mark.skipif(sys.platform == "win32", reason="asserts POSIX paths and hook command syntax")
 _PYTHON = Path("/usr/bin/python3")
 _NATIVE_SCRIPT = Path(__file__).resolve().parents[1] / "rust/crates/guard-runtime/src/cursor_hook_bridge_script.rs"
-_ANSWERS = Path(__file__).resolve().parent / "fixtures" / "cursor_native_answers" / "vectors.json"
-_AFTER_ANSWERS = _ANSWERS.with_name("after_vectors.json")
-_AFTER_SCHEMA = "hol-guard-cursor-native-after-answers.v1"
-_AFTER_INPUTS = (
-    '{"hook_event_name": "afterShellExecution", "command": " ls -la ", "cwd": "/nonexistent-cursor-cwd",'
-    ' "conversation_id": "c-1", "generation_id": "g-1", "output": "a\\nb", "duration": 12}',
-    '{"hook_event_name": " AfterShellExecution ", "command": "pwd", "tool_input": {"command": "echo hi"}}',
-    '{"hook_event_name": "afterMCPExecution", "tool_name": " lookup ", "tool_input": "{\\"q\\": 1}",'
-    ' "result_json": "{}", "url": "https://example.invalid/mcp"}',
-    '{"hook_event_name": "afterMCPExecution", "tool_input": ["a", 1]}',
-    '{"hook_event_name": "AFTERMCPEXECUTION", "tool_name": "", "tool_input": "not json"}',
-    '{"hookEventName": "afterShellExecution", "command": "ls", "workspace_roots": ["/nonexistent-root"]}',
-    '{"hook_event_name": "after_shell_execution", "command": "ls"}',
-    '{"hook_event_name": "after-mcp-execution", "tool_name": "x"}',
-)
-_AFTER_BODIES = ("{}", '{"policy_action": "block", "reason_code": "native_policy_block"}', ' {"x": [1]} ')
 _CONSTANTS = (
     "GUARD_HOME",
     "GUARD_CLI",
@@ -248,10 +233,9 @@ def _native_digest() -> str:
 
 
 def test_native_bridge_was_ported_from_the_current_client() -> None:
-    # A template change must be ported to cursor_hook_bridge.rs before the
-    # digest is updated: the native bridge answers for every client it can
-    # read, with no Python to hand a newer template to.
-    digest = hashlib.sha256(_HOOK_SCRIPT_TEMPLATE.encode("utf-8")).hexdigest()
+    # The native bridge reads the client's constants and never runs it, so a
+    # template change must keep those lines readable before the digest moves.
+    digest = hashlib.sha256(HOOK_SCRIPT_TEMPLATE.encode("utf-8")).hexdigest()
 
     assert digest == _native_digest()
 
@@ -266,121 +250,41 @@ def test_rendered_client_reads_back_as_the_template(tmp_path: Path) -> None:
         name = next((name for name in _CONSTANTS if line.startswith(f"{name} = ")), None)
         lines.append(line if name is None else f"{name} = __{name}__")
 
-    assert "\n".join(lines) == _HOOK_SCRIPT_TEMPLATE
+    assert "\n".join(lines) == HOOK_SCRIPT_TEMPLATE
 
 
-def _client(tmp_path: Path, timeout: str = "8") -> dict[str, object]:
+def _run_client(tmp_path: Path) -> tuple[str, int]:
     context = HarnessContext(home_dir=tmp_path, guard_home=tmp_path / "guard", workspace_dir=None)
-    context.guard_home.mkdir()
     source = cursor_hook_script_source(context, guard_cli=[sys.executable], recovery_command=[sys.executable])
-    source = source.replace("GUARD_HOOK_TIMEOUT_SECONDS = 42\n", f"GUARD_HOOK_TIMEOUT_SECONDS = {timeout}\n")
     namespace: dict[str, object] = {"__name__": "cursor_native_fixture"}
     exec(compile(source, "generated-cursor-hook", "exec"), namespace)
-    return namespace
-
-
-def test_native_answers_are_the_clients_own(tmp_path: Path) -> None:
-    # The bridge prints these answers without running the client, so each
-    # one must be what the client prints for the same daemon response.
-    namespace = _client(tmp_path)
-    emit = namespace["_emit_cursor_response"]
-    vectors = json.loads(_ANSWERS.read_text(encoding="utf-8"))["vectors"]
-    answered = [vector for vector in vectors if vector["stdout"] is not None]
-
-    for vector in answered:
-        payload = json.loads(vector["response"])
-        response, exit_code = emit(
-            hook_event_name=vector["event"],
-            policy_action=payload["policy_action"],
-            guard_payload=payload,
-        )
-        assert (json.dumps(response) + "\n", exit_code) == (vector["stdout"], vector["exit_code"])
-    assert len(answered) >= 10
-
-
-def test_client_takes_the_native_handoff_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("HOL_GUARD_BOUNDED_NATIVE_ELAPSED_MS", "1500")
-
-    namespace = _client(tmp_path)
-
-    budget = float(namespace["_HOOK_DEADLINE_MONOTONIC"]) - float(namespace["_HOOK_STARTED_MONOTONIC"])
-    assert budget == pytest.approx(6.5)
-    assert "HOL_GUARD_BOUNDED_NATIVE_ELAPSED_MS" not in namespace["os"].environ
-
-
-@pytest.mark.parametrize("raw", ["-5", "1.5", "", " 7", "\u0661", "99999999"])
-def test_client_never_gains_time_from_the_handoff(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, raw: str) -> None:
-    monkeypatch.setenv("HOL_GUARD_BOUNDED_NATIVE_ELAPSED_MS", raw)
-
-    namespace = _client(tmp_path)
-
-    # `deadline - started` is not a stable <= 8: adding the integer timeout to
-    # a monotonic float can round a few ulps high. The deadline itself is still
-    # the start plus that timeout, or earlier when a real elapsed value is
-    # removed. The 8 second cap stays the configured timeout.
-    timeout = namespace["GUARD_HOOK_TIMEOUT_SECONDS"]
-    assert timeout == 8
-    started = namespace["_HOOK_STARTED_MONOTONIC"]
-    deadline = namespace["_HOOK_DEADLINE_MONOTONIC"]
-    assert started <= deadline <= started + timeout
-
-
-@pytest.mark.parametrize("raw", ["99999999", "9" * 5000, "9" * 400], ids=["ordinary", "int_limit", "float_overflow"])
-def test_client_exhausted_native_handoff_deadline_is_exact_start(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, raw: str
-) -> None:
-    started = 122.888386772
-    monkeypatch.setattr("time.monotonic", lambda: started)
-    monkeypatch.setenv("HOL_GUARD_BOUNDED_NATIVE_ELAPSED_MS", raw)
-
-    client = _client(tmp_path)
-
-    assert client["GUARD_HOOK_TIMEOUT_SECONDS"] == 8
-    assert client["_HOOK_STARTED_MONOTONIC"] == started
-    assert client["_HOOK_DEADLINE_MONOTONIC"] == started
-    assert "HOL_GUARD_BOUNDED_NATIVE_ELAPSED_MS" not in client["os"].environ
-
-
-def _run_after_client(tmp_path: Path, raw: str, body: str) -> tuple[dict[str, object], str, int]:
-    tmp_path.mkdir()
-    namespace = _client(tmp_path)
-    sent: dict[str, object] = {}
-
-    def daemon(payload_json: str, **_kwargs: object) -> tuple[tuple[int, str, str], None]:
-        sent.update(json.loads(payload_json))
-        return (0, body, ""), None
-
-    namespace["_read_hook_input"] = lambda _deadline: raw
-    namespace["_daemon_hook_result"] = daemon
     stdout = io.StringIO()
     with contextlib.redirect_stdout(stdout):
-        exit_code = namespace["_main_inner"]()
-    sent.pop("guard_execution_environment", None)
-    return sent, stdout.getvalue(), exit_code
+        exit_code = namespace["main"]()
+    return stdout.getvalue(), exit_code
 
 
-def _after_vectors(tmp_path: Path) -> dict[str, object]:
-    # The client's own answer to each observer for every daemon body it
-    # accepts; an input it answers with anything but `{}` is not an observer.
-    vectors = []
-    for index, raw in enumerate(_AFTER_INPUTS):
-        answers = []
-        sent: dict[str, object] = {}
-        for number, body in enumerate(_AFTER_BODIES):
-            sent, stdout, exit_code = _run_after_client(tmp_path / f"{index}-{number}", raw, body)
-            answers.append({"daemon_body": body, "stdout": stdout, "exit_code": exit_code})
-        observer = all((answer["stdout"], answer["exit_code"]) == ("{}\n", 0) for answer in answers)
-        vectors.append({"input": raw, "observer": observer, "sent": sent, "answers": answers if observer else []})
-    return {"schema": _AFTER_SCHEMA, "vectors": vectors}
+@pytest.mark.parametrize("event", ["afterShellExecution", "after_mcp_execution", "AFTER-SHELL-EXECUTION"])
+def test_a_client_reached_directly_lets_an_observer_continue(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, event: str
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["hol-guard-cursor-hook.py", "--cursor-hook-event", event])
+
+    assert _run_client(tmp_path) == ("{}\n", 0)
 
 
-@_POSIX_ONLY
-def test_native_observer_answers_are_the_clients_own(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    # The bridge answers an observer with `{}` once the resident reviewed
-    # it, so the client must print exactly that for every accepted body.
-    monkeypatch.setattr(sys, "argv", ["hol-guard-cursor-hook.py"])
-    monkeypatch.delenv("CURSOR_PROJECT_DIR", raising=False)
-    generated = _after_vectors(tmp_path)
+@pytest.mark.parametrize("argv", [["--cursor-hook-event", "beforeShellExecution"], ["--cursor-hook-event"], []])
+def test_a_client_reached_directly_denies_a_gate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, argv: list[str]
+) -> None:
+    # The native bridge answers every hook in front of this client; a gate
+    # that reaches it directly had no native decision and is never allowed.
+    monkeypatch.setattr(sys, "argv", ["hol-guard-cursor-hook.py", *argv])
 
-    assert generated == json.loads(_AFTER_ANSWERS.read_text(encoding="utf-8"))
-    assert sum(1 for vector in generated["vectors"] if vector["observer"]) >= 6
+    stdout, exit_code = _run_client(tmp_path)
+
+    assert exit_code == 2
+    assert json.loads(stdout) == {
+        "permission": "deny",
+        "user_message": "HOL Guard could not complete the native hook decision safely.",
+    }

@@ -25,16 +25,6 @@
   ],
   "sites": [
     {
-      "file": "src/codex_plugin_scanner/guard/adapters/_modules/cursor/cursor_hook_script_template_tail.py",
-      "func": "HOOK_SCRIPT_TEMPLATE_TAIL:_cursor_permission",
-      "root": "hook",
-      "reading": "renders-native",
-      "actions": [
-        "allow"
-      ],
-      "note": "Maps the resident's policy_action into Cursor's permission vocabulary and denies an action it does not recognise."
-    },
-    {
       "file": "src/codex_plugin_scanner/guard/adapters/bounded_cli_hook_failure.py",
       "func": "_observe_payload",
       "root": "hook",
