@@ -263,7 +263,7 @@ fn comment_text(line: &str) -> Option<String> {
 /// alternative rather than starting an option row or prose.
 fn usage_continues(line: &str) -> bool {
     line.starts_with(|c: char| c.is_whitespace())
-        && py_strip(line).starts_with(|c: char| matches!(c, '[' | '(' | '|' | '<'))
+        && py_strip(line).starts_with(['[', '(', '|', '<'])
 }
 
 /// The options a usage synopsis names, and the value each one takes.
@@ -272,7 +272,7 @@ fn usage_options(usage: &str, found: &mut Found) {
     for token in usage.split_whitespace() {
         let token = token.trim_matches(|c: char| c == '"' || c == '\'');
         // `<name>` is the value itself; a bracket opens another group.
-        let opens = token.starts_with(|c: char| matches!(c, '[' | '(' | '{'));
+        let opens = token.starts_with(['[', '(', '{']);
         let core = token.trim_start_matches(['[', '(', '{', '|']);
         let closes = core.ends_with([']', ')', '}', '|', ',']);
         let core = core.trim_end_matches([']', ')', '}', '|', ',', '.']);

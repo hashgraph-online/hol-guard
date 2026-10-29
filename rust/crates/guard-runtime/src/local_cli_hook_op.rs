@@ -464,7 +464,9 @@ fn invocation_arguments(
 }
 
 /// `command_tokens_for_invocation` past the package script branch, for a
-/// caller that derived the launch identity itself.
+/// caller that derived the launch identity itself. Only the tests read the
+/// tokens alone; the hook path reads the arguments, for its options too.
+#[cfg(test)]
 pub(crate) fn invocation_command_tokens(
     command: &str,
     cwd: &str,
