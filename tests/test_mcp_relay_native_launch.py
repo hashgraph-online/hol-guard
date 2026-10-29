@@ -35,6 +35,8 @@ from codex_plugin_scanner.guard.adapters.mcp_servers import (
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.stable_guard_cli import guard_cli_launcher
 
+pytestmark = pytest.mark.native_mcp_relay
+
 _RUNTIME_SRC = Path(__file__).resolve().parents[1] / "rust" / "crates" / "guard-runtime" / "src"
 _RUNTIME = Path("/opt/guard/hol-guard-runtime")
 
@@ -109,13 +111,13 @@ def test_other_guard_proxies_are_never_relayed(tmp_path: Path, advertised: set[s
     assert mcp_proxy_launch(sys.executable, ["-m", "other.module", "guard", "codex-mcp-proxy"])[0] == sys.executable
 
 
-def test_python_selection_overrides_an_advertised_relay(
+def test_no_selection_keeps_the_python_proxy_from_an_advertised_relay(
     tmp_path: Path, advertised: set[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    advertised.update({NATIVE_MCP_RELAY_FEATURE, NATIVE_MCP_RELAY_DECIDE_FEATURE})
+    advertised.add(NATIVE_MCP_RELAY_FEATURE)
     monkeypatch.setenv(MCP_RELAY_SELECTION_ENV, "python")
     args = _python_args(tmp_path)
-    assert mcp_proxy_launch(sys.executable, args) == (sys.executable, args)
+    assert mcp_proxy_launch(sys.executable, args)[0] == str(_RUNTIME)
 
 
 def test_native_canary_needs_a_runtime_serving_relay_decisions(

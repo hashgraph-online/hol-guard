@@ -26,6 +26,9 @@ use std::path::Path;
 use zeroize::Zeroizing;
 
 pub(super) const STORE_UNREADABLE: &str = "mcp_relay_store_unreadable";
+/// A store schema newer than this runtime reads, which the proxy of the same
+/// release still serves.
+pub(super) const STORE_NEWER: &str = "mcp_relay_store_newer";
 pub(super) const SAVED_REMOTE: &str = "mcp_relay_saved_remote_policy";
 const SAVED_UNVERIFIABLE: &str = "mcp_relay_saved_policy_unverifiable";
 /// `REMOTE_POLICY_SOURCES` (`policy_integrity.py`).
@@ -43,7 +46,8 @@ pub(super) fn open(guard_home: &Path) -> Result<Option<CachedConnection>, &'stat
     };
     match schema_version(&connection).map_err(|_| STORE_UNREADABLE)? {
         Some(version) if version <= SUPPORTED_SCHEMA_VERSION => Ok(Some(connection)),
-        _ => Err(STORE_UNREADABLE),
+        Some(_) => Err(STORE_NEWER),
+        None => Err(STORE_UNREADABLE),
     }
 }
 

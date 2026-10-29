@@ -211,6 +211,7 @@ fn view_binds_one_harness_with_layers() {
     let bound = harness_view(Some(&view), "codex").unwrap();
     assert_eq!(bound.mode, "enforce");
     assert!(bound.layers.is_empty());
+    assert!(!bound.layers_unavailable);
     assert_eq!(harness_view(None, "codex"), Err("mcp_relay_view_missing"));
     assert_eq!(
         harness_view(Some(&view), "cursor"),
@@ -218,10 +219,9 @@ fn view_binds_one_harness_with_layers() {
     );
     let mut unlayered = view.clone();
     unlayered["extension_layers"] = Value::Null;
-    assert_eq!(
-        harness_view(Some(&unlayered), "codex"),
-        Err("mcp_relay_layers_unavailable")
-    );
+    let unlayered = harness_view(Some(&unlayered), "codex").unwrap();
+    assert!(unlayered.layers.is_empty());
+    assert!(unlayered.layers_unavailable);
     let mut renamed = view.clone();
     renamed["schema"] = json!("guard-mcp-relay-view.v3");
     assert_eq!(

@@ -12,8 +12,8 @@ Installers select the relay when the validated runtime advertises
 Python proxy. A frozen build launches the verified runtime copy under the
 proxy's ``--guard-home``, as its hooks do, because its bundled runtime can
 live in a per-launch extraction directory. A session whose calls the resident cannot decide is handed to the
-Python proxy by the relay at startup. ``HOL_GUARD_MCP_RELAY=python`` keeps the
-Python proxy, like the hook bridge overrides. ``HOL_GUARD_MCP_RELAY=native``
+Python proxy by the relay at startup. There is no setting that keeps the Python
+proxy for a session the relay can serve. ``HOL_GUARD_MCP_RELAY=native``
 selects the relay from any validated runtime that serves the resident's relay
 decision, including one that does not advertise the relay. Calls the resident
 defers are still refused.
@@ -44,8 +44,6 @@ def native_mcp_relay(guard_home: Path | None = None) -> Path | None:
     """
 
     selection = os.environ.get(MCP_RELAY_SELECTION_ENV)
-    if selection == "python":
-        return None
     feature = NATIVE_MCP_RELAY_DECIDE_FEATURE if selection == "native" else NATIVE_MCP_RELAY_FEATURE
     from .native_hook_bridge import native_hook_bridge_executable
 
