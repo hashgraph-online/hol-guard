@@ -51,6 +51,16 @@ fn identity_bodies_pass_through_without_a_decoder() {
 }
 
 #[test]
+fn identity_bodies_are_held_to_the_output_cap() {
+    let mut small = request(&["identity"], b"plain body");
+    small.caps.max_output_bytes = 4;
+    assert_eq!(
+        refused(&small),
+        (ContentDecodeStatus::Rejected, "content_output_too_large")
+    );
+}
+
+#[test]
 fn unsupported_and_over_deep_codings_are_refused_before_decode() {
     for values in [&["zstd"][..], &["gzip;q=1"][..], &["br", "compress"][..]] {
         assert_eq!(

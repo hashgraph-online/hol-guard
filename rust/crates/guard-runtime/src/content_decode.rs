@@ -186,7 +186,15 @@ fn decode_request(
         .collect();
     let codings = parse_content_codings(&values, caps.max_layers)?;
     if codings.is_empty() {
-        // Identity: nothing to decode, so no decoder and no containment.
+        // Identity: nothing to decode, so no decoder and no containment, but
+        // the body is still the output and is held to the output cap.
+        if counters.input_bytes > caps.max_output_bytes {
+            return Err(ContentDecodeError {
+                status: ContentDecodeStatus::Rejected,
+                code: "content_output_too_large",
+                message: "The decoded response exceeds Guard's size limit.",
+            });
+        }
         counters.output_bytes = counters.input_bytes;
         return Ok(raw);
     }

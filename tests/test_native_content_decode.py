@@ -164,6 +164,7 @@ def test_unbound_worker_results_fail_closed(
         {"status": "decoded", "code": "content_decoded", "message": "m", "counters": _counters()},
         {"status": "rejected", "code": "content_coding_unsupported", "message": "m", "counters": {"layers": 0}},
         {"status": "allowed", "code": "x", "message": "m", "counters": _counters()},
+        {**_decoded(b"plain"), "status": ["decoded"]},
     ],
 )
 def test_tampered_bodies_and_shapes_are_never_returned(
@@ -480,6 +481,14 @@ def test_identity_bodies_pass_through_without_a_decoder(native_hook_force: Path,
     result = _decode(b"plain body", ["identity"], state_dir)
 
     assert result.body == b"plain body"
+    assert result.counters is not None and result.counters.decoder_calls == 0
+
+
+@_unix_only
+def test_identity_bodies_are_held_to_the_output_cap(native_hook_force: Path, state_dir: Path) -> None:
+    result = _decode(b"plain body", [], state_dir, max_output_bytes=4)
+
+    assert (result.status, result.code, result.body) == ("rejected", "content_output_too_large", None)
     assert result.counters is not None and result.counters.decoder_calls == 0
 
 

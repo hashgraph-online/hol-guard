@@ -194,7 +194,8 @@ fn evaluate(request: &ArchiveAcquisitionRequestV1) -> Result<Value, &'static str
 /// Every hop of a managed content fetch must carry only codings the
 /// contained decoder accepts, in a stack no deeper than its ceiling, and no
 /// more header lines than it will take. This is the same parser the worker
-/// runs, so the fetch never spools a body the worker would refuse.
+/// runs, so the fetch never spools a body no worker policy could accept. A
+/// caller's tighter layer cap is applied by the worker, before any decoder.
 fn supported_content_codings(values: &[String]) -> Result<(), RestrictedDownloadError> {
     let refused = |code: &str, message: &str| RestrictedDownloadError {
         code: code.to_owned(),

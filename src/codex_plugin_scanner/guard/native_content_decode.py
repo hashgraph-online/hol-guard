@@ -219,6 +219,7 @@ def decode_content_native(
         or payload["schema"] != _RESULT_SCHEMA
         or payload["request_id"] != request["request_id"]
         or payload["request_sha256"] != request_digest
+        or not isinstance(status_value, str)
         or status_value not in {"decoded", "rejected", "incomplete"}
         or not isinstance(code, str)
         or not 0 < len(code) <= _MAX_CODE_CHARS
