@@ -462,6 +462,7 @@ pub mod composition_rules;
 pub mod contained_argv;
 #[cfg(unix)]
 pub mod contained_execution;
+mod contained_node_tool;
 mod contained_prefix;
 mod contained_run_prefix;
 #[cfg(unix)]
