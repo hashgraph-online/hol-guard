@@ -52,6 +52,13 @@ fn admits_only_exact_read_only_diagnostics() {
         "approvals wait req-1 --json",
         "approvals wait req-1 --timeout 0",
         "approvals wait req-1 --timeout 600 --json",
+        "approvals --json list",
+        "approvals --json wait req-1",
+        "approvals wait req-1 --json --timeout 300",
+        "approvals --json wait req-1 --timeout 300",
+        "approvals wait --timeout 300 req-1",
+        "approvals wait --timeout 300 req-1 --json",
+        "approvals --json retry-hint req-1",
         "approvals --help",
         "approvals list --help",
         "approvals retry-hint --help",
@@ -219,7 +226,6 @@ fn admits_only_exact_read_only_diagnostics() {
         "approvals --guard-home /tmp --json",
         "approvals --workspace /tmp",
         "approvals --json --json",
-        "approvals --json list",
         "approvals retry-hint",
         "approvals retry-hint --json",
         "approvals retry-hint --home /tmp",
@@ -231,6 +237,11 @@ fn admits_only_exact_read_only_diagnostics() {
         "approvals wait",
         "approvals wait req-1 --timeout 601",
         "approvals wait req-1 --timeout -1",
+        "approvals wait --timeout 300",
+        "approvals wait --timeout 300 --home",
+        "approvals wait --timeout 601 req-1",
+        "approvals wait --json --timeout 300 req-1 req-2",
+        "approvals --json wait req-1 --json",
         "approvals wait req-1 --home /tmp",
         "list approvals",
         "approve req-1",
@@ -291,6 +302,43 @@ fn admits_only_exact_read_only_diagnostics() {
         "package-shims --manager npm",
         "package-shims --approval-password x",
         "package-shims --json --json",
+    ] {
+        assert!(!safe_hol_guard_arguments(&arguments(command)), "{command}");
+    }
+}
+
+#[test]
+fn explain_reads_one_artifact_or_local_path() {
+    for command in [
+        "explain install-connect",
+        "explain codex.plugin-7",
+        "explain /tmp/project",
+        "explain /tmp/project/src/index.ts",
+        "explain ./src/index.ts",
+        "explain --json /tmp/project",
+        "explain /tmp/project --json",
+        "explain /tmp/project --cisco-mode off",
+        "explain --cisco-mode on /tmp/project",
+        "explain --json /tmp/project --cisco-mode auto",
+        "explain /tmp/project --cisco-mode auto --json",
+        "explain --help",
+        "help explain",
+    ] {
+        assert!(safe_hol_guard_arguments(&arguments(command)), "{command}");
+    }
+
+    for command in [
+        "explain",
+        "explain --json",
+        "explain -x",
+        "explain --cisco-mode off",
+        "explain /tmp/project /tmp/other",
+        "explain /tmp/project --cisco-mode",
+        "explain /tmp/project --cisco-mode deep",
+        "explain --json --json /tmp/project",
+        "explain /tmp/project --home /tmp/elsewhere",
+        "explain --guard-home /tmp/elsewhere /tmp/project",
+        "explain /tmp/project --workspace /tmp/elsewhere",
     ] {
         assert!(!safe_hol_guard_arguments(&arguments(command)), "{command}");
     }

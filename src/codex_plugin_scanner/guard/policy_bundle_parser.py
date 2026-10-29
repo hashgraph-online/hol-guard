@@ -33,18 +33,20 @@ CANONICAL_COMPILE_DOCUMENT_CODES = frozenset(
 # rejection.
 _CANONICAL_COMPILE_REMEDIATION = {
     "unsupported_policy_match": (
-        "Guard enforces match on artifacts, harnesses, publishers, tools and workspaces; other match "
-        "fields, such as packages, domains or paths, are not enforced on this device, and tools cannot "
-        "be combined with artifacts or publishers."
+        "Guard enforces match on artifacts, exact commands, harnesses, publishers, tools and workspaces; "
+        "other match fields, such as packages, domains or paths, are not enforced on this device. Tools "
+        "cannot be combined with artifacts or publishers, and an exact command cannot be combined with "
+        "artifacts, tools or publishers."
     ),
     "invalid_policy_match_selector": "Every match field needs at least one non-empty value.",
     "unsupported_policy_effect": "Guard enforces only allow and block rules.",
     "unsupported_policy_lifetime": ("Guard enforces lifetime.mode permanent, or until with an expiresAt time."),
     "unsupported_policy_budgets": "Budgets are not enforced by Guard.",
     "command_expression_requires_guard_3_1_runtime": (
-        "This device does not enforce command expressions, so the rule stays unapplied. A tool match is "
-        "not a substitute: it covers every call to that tool, not only this command, so widen the rule "
-        "only as a deliberate policy decision."
+        "This device does not enforce command expressions, such as a command prefix, so the rule stays "
+        "unapplied. Match the exact command instead, which Guard enforces. A tool match is not a "
+        "substitute: it covers every call to that tool, not only this command, so widen the rule only as "
+        "a deliberate policy decision."
     ),
     "policy_compilation_limit": (
         "The rules expand into more enforcement rows than one policy may hold. Split the policy, or list "

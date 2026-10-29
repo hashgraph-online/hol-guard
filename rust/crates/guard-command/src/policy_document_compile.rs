@@ -240,6 +240,45 @@ fn artifact_selectors(matcher: &Value, id: &str) -> Result<Vec<Value>, Error> {
         .collect()
 }
 
+/// A policy key bound to one exact shell command, hashed over the raw bytes the
+/// same way the legacy bundle builder and the hook lookup key them.
+fn exact_shell_command_id(command: &str) -> String {
+    format!(
+        "memory:exact-shell-command:{}",
+        hex::encode(Sha256::digest(command.as_bytes()))
+    )
+}
+
+fn has_selector(matcher: &Value, key: &str) -> bool {
+    !matcher[key].is_null() && matcher[key] != json!([])
+}
+
+/// Exact `commands` selectors as exact-shell-command artifact ids. Command
+/// expressions (objects) are refused before this runs; an exact command cannot
+/// be combined with artifact, tool or publisher selectors.
+fn command_artifact_selectors(matcher: &Value, id: &str) -> Result<Option<Vec<Value>>, Error> {
+    if !has_selector(matcher, "commands") {
+        return Ok(None);
+    }
+    if ["artifacts", "tools", "publishers"]
+        .iter()
+        .any(|key| has_selector(matcher, key))
+    {
+        return Err(error("unsupported_policy_match", id));
+    }
+    selectors(matcher, "commands", id)?
+        .iter()
+        .map(|command| {
+            let command = command.as_str().unwrap_or("");
+            if command.trim().is_empty() {
+                return Err(error("invalid_policy_match_selector", id));
+            }
+            Ok(json!(exact_shell_command_id(command)))
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map(Some)
+}
+
 fn scope(
     extension: &Value,
     artifact: &Value,
@@ -323,6 +362,7 @@ fn compile_range(
     let mut total = 0usize;
     let supported = BTreeSet::from([
         "artifacts",
+        "commands",
         "harnesses",
         "publishers",
         "tools",
@@ -363,7 +403,12 @@ fn compile_range(
             return Err(error("unsupported_policy_match", id));
         }
         let matcher = &rule["match"];
-        let artifacts = artifact_selectors(matcher, id)?;
+        let command_artifacts = command_artifact_selectors(matcher, id)?;
+        let exact_command = command_artifacts.is_some();
+        let artifacts = match command_artifacts {
+            Some(artifacts) => artifacts,
+            None => artifact_selectors(matcher, id)?,
+        };
         let harnesses = selectors(matcher, "harnesses", id)?;
         let publishers = selectors(matcher, "publishers", id)?;
         let workspaces = selectors(matcher, "workspaces", id)?;
@@ -403,7 +448,11 @@ fn compile_range(
                         }
                         if (offset..offset + limit).contains(&total) {
                             result.push(json!({"decision":{"harness":harness.as_str().unwrap_or("*"),
-                "scope":scope(&extension,artifact,workspace,publisher,harness),"action":rule["effect"],
+                "scope":if exact_command {
+                    if workspace.is_null() { "artifact" } else { "workspace" }.to_owned()
+                } else {
+                    scope(&extension,artifact,workspace,publisher,harness)
+                },"action":rule["effect"],
                 "artifact_id":artifact,"artifact_hash":optional(&extension["artifactHash"]),
                 "workspace":workspace,"publisher":publisher,"reason":optional(&rule["description"]),
                 "owner":optional(&provenance["createdBy"]),"source":"policy-yaml-import","expires_at":optional(&expires)},
