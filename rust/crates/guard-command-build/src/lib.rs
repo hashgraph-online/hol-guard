@@ -176,6 +176,8 @@ pub mod native_command_controls;
 pub mod native_command_program;
 #[path = "../../guard-command/src/network_url.rs"]
 pub mod network_url;
+#[path = "../../guard-command/src/node_build_output.rs"]
+pub mod node_build_output;
 #[path = "../../guard-command/src/npm_source_spec.rs"]
 pub mod npm_source_spec;
 #[path = "../../guard-command/src/ordered_json.rs"]
