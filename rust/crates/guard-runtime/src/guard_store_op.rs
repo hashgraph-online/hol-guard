@@ -10,7 +10,7 @@
 //! the caller, which passes every timestamp in the request.
 
 use std::path::Path;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use guard_contracts::{
     GuardStoreRequestV1, GuardStoreResultV1, GUARD_STORE_MAX_REQUEST_BYTES,
@@ -185,9 +185,19 @@ fn evaluate_tracked(
             .map_err(|_| StoreError::Invalid("native_guard_store_path_invalid"))?;
     // A paused review's request is built here and queued by the write it
     // names, so everything below sees that method.
+    let started = Instant::now();
     let delegated = (request.method == native_review_queue::METHOD)
         .then(|| native_review_queue::delegate(&request.args, owner, request.busy_timeout_ms))
         .transpose()?;
+    // The caller's deadline covers the whole call, so the write waits for the
+    // lock only as long as the hint left it. With nothing left a contended
+    // write fails at once rather than commit after the caller gave up.
+    let busy_timeout_ms = if delegated.is_some() {
+        let spent = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        request.busy_timeout_ms.saturating_sub(spent).max(1)
+    } else {
+        request.busy_timeout_ms
+    };
     let (method, request_args) = match &delegated {
         Some(delegated) => (delegated.method, &delegated.args),
         None => (request.method.as_str(), &request.args),
@@ -203,7 +213,7 @@ fn evaluate_tracked(
     // A warm call reuses a kept connection: reopening parsed the whole schema
     // on every call (see `guard_store_write_cache`).
     let connection = crate::guard_store_write_cache::open_read_write_cached(&path)?;
-    connection.busy_timeout(Duration::from_millis(request.busy_timeout_ms))?;
+    connection.busy_timeout(Duration::from_millis(busy_timeout_ms))?;
     apply_pragmas(&connection)?;
     // A total read only writes for the one-time rebuild a migration requests;
     // every other call stays lock-free.
