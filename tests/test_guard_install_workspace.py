@@ -453,6 +453,9 @@ def test_install_cursor_hook_script_allows_benign_shell_command(
         env.pop("PYTHONPATH", None)
         with live_cursor_daemon(guard_home):
             completed = run_cursor_hook(native_hook_force, hook_script, payload, env=env, cwd=repo)
-    assert completed.returncode == 0, completed.stderr
+    # A refused hook and a hook the bridge denied both exit 2, and only the
+    # answer on stdout tells them apart, so report both streams.
+    detail = f"stdout={completed.stdout!r} stderr={completed.stderr!r}"
+    assert completed.returncode == 0, detail
     response = json.loads(completed.stdout)
-    assert response.get("permission") == "allow"
+    assert response.get("permission") == "allow", detail
