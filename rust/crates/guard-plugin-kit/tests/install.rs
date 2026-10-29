@@ -505,7 +505,10 @@ fn listing_url_campaign_parameters_are_printed_unchanged() {
         "https://hol.org/registry/plugins/acme%2Ftoolgate?utm_content={}",
         "x".repeat(300)
     ));
-    assert_eq!(error("install", long, &[]), "plugin_kit_install_spec_invalid");
+    assert_eq!(
+        error("install", long, &[]),
+        "plugin_kit_install_spec_invalid"
+    );
 }
 
 #[test]
