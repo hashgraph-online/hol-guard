@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 import codex_plugin_scanner.action_runner as action_runner
-from codex_plugin_scanner.github_reporting import GitHubPrCommentResult
+from codex_plugin_scanner.github_reporting import GitHubPrCommentResult, build_verify_pr_comment_body
 from codex_plugin_scanner.models import ScanResult, build_severity_counts
 
 CONNECT_LINK = "https://hol.org/plugins/connect?repo=acme%2Ftool&utm_source=hol-scanner-action&utm_medium=job-summary"
@@ -151,3 +151,22 @@ def test_pr_comment_omits_listing_link(monkeypatch, tmp_path, event, publish_hin
     body = _scan_comment_body(monkeypatch, tmp_path, event=event, publish_hint=publish_hint)
 
     assert "hol.org/plugins" not in body
+
+
+def test_verify_pr_comment_carries_listing_link_only_when_given() -> None:
+    payload = {"verify_pass": True, "cases": []}
+
+    with_link = build_verify_pr_comment_body(
+        verification_payload=payload,
+        style="concise",
+        max_findings_to_render=5,
+        listing_hint_repository="acme/tool",
+    )
+    without_link = build_verify_pr_comment_body(
+        verification_payload=payload,
+        style="concise",
+        max_findings_to_render=5,
+    )
+
+    assert PR_COMMENT_LINK in with_link
+    assert "hol.org/plugins" not in without_link

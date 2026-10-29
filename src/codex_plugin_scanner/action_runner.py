@@ -719,6 +719,7 @@ def main() -> int:
             verification_payload=verification_payload,
             style=pr_comment_style,
             max_findings_to_render=pr_comment_max_findings,
+            listing_hint_repository=pr_comment_listing_repository,
         )
         rendered = _render_verify_output(verification, output_format=output_format)
         verify_pass_for_summary = verification.verify_pass

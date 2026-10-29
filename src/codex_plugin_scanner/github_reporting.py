@@ -137,6 +137,7 @@ def build_verify_pr_comment_body(
     verification_payload: dict[str, object],
     style: str,
     max_findings_to_render: int,
+    listing_hint_repository: str = "",
 ) -> str:
     verify_pass = bool(verification_payload.get("verify_pass"))
     status = "pass" if verify_pass else "blocked"
@@ -161,6 +162,8 @@ def build_verify_pr_comment_body(
                 f"- {icon} `{escape_markdown_text(component)}` {escape_markdown_text(name)}: "
                 f"{escape_markdown_text(message)}"
             )
+    if listing_hint_repository:
+        lines.extend(_render_listing_hint(listing_hint_repository))
     return "\n".join(lines)
 
 
