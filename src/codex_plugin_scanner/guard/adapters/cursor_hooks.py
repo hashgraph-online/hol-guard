@@ -13,6 +13,7 @@ from ..frozen_runtime_commands import frozen_daemon_recovery_command
 from ..stable_guard_cli import uses_top_level_hook_command as _uses_top_level_hook_command
 from ._modules.cursor.cursor_hook_entries import _remove_managed_hook_entries, _render_without_managed_hook_entries
 from ._modules.cursor.cursor_hook_events import unsupported_cursor_hook_events
+from ._modules.cursor.cursor_hook_native import CursorNativeBridgeUnavailableError, require_cursor_hook_bridge
 from ._modules.cursor.cursor_hook_script_template import HOOK_SCRIPT_TEMPLATE
 from .adapter_safe_output import write_text_at_authorized_path
 from .base import HarnessContext, PreparedHarnessInstall, _ensure_path_within_root
@@ -100,6 +101,10 @@ def _prepare_cursor_hooks(context: HarnessContext) -> PreparedHarnessInstall:
     from ..codex_hook_recovery import _snapshot
     from ..runtime_transition import RuntimeTransition, TransitionError, TransitionFile
 
+    try:
+        require_cursor_hook_bridge(context.guard_home)
+    except CursorNativeBridgeUnavailableError as error:
+        raise TransitionError("adapter_preparation_native_cursor_bridge_missing") from error
     secret_path = cursor_hook_attestation_secret_path(context.guard_home)
     secret = _snapshot(secret_path)
     if secret is None:
@@ -236,6 +241,9 @@ def _prepare_legacy_project_cursor_cleanup(context: HarnessContext) -> tuple[Tra
 def install_cursor_hooks(context: HarnessContext) -> dict[str, object]:
     """Install Guard-managed Cursor hooks and bridge script."""
 
+    # A hook written without the runtime denies every shell, read and MCP action
+    # Cursor gates, so there is no install to write when none can answer.
+    require_cursor_hook_bridge(context.guard_home)
     guard_cli = resolve_attested_guard_cli(context)
     hooks_path = cursor_hooks_path(context)
     script_path = cursor_hook_script_path(context)
@@ -514,6 +522,16 @@ def cursor_hook_script_source(
 def cursor_native_hook_state(context: HarnessContext) -> dict[str, object]:
     """Verify Cursor registration, scripts, and the current attested CLI identity."""
 
+    try:
+        require_cursor_hook_bridge(context.guard_home)
+    except CursorNativeBridgeUnavailableError:
+        # Checked before the attestation branch below: this is a RuntimeError too,
+        # and a missing runtime is not an attestation failure.
+        return {
+            "protection_active": False,
+            "integrity_status": "missing",
+            "reason": "guard_cursor_native_bridge_unavailable",
+        }
     try:
         guard_cli = resolve_attested_guard_cli(context)
         expected_source = cursor_hook_script_source(context, guard_cli=list(guard_cli.command))

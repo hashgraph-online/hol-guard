@@ -111,7 +111,8 @@ def test_pinning_the_python_client_keeps_its_argv(tmp_path: Path, monkeypatch: p
 
 
 def test_frozen_cursor_hook_keeps_its_launcher(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _offer_native(monkeypatch, tmp_path / "hol-guard-runtime")
+    runtime = tmp_path / "hol-guard-runtime"
+    _offer_native(monkeypatch, runtime)
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.adapters.cursor_hook_config.isolated_cursor_hook_python", lambda: None
@@ -119,10 +120,18 @@ def test_frozen_cursor_hook_keeps_its_launcher(tmp_path: Path, monkeypatch: pyte
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.adapters.cursor_hook_config._frozen_cursor_hook_launcher", lambda: "/bin/hol-guard"
     )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.adapters.cursor_hook_config.native_cursor_hook_bridge", lambda _home=None: runtime
+    )
 
     command = _managed_hook_command(python_executable=None, script_path=_script(tmp_path), event_name="preToolUse")
 
-    assert shlex.split(command)[:2] == ["/bin/hol-guard", "__guard-cursor-hook"]
+    assert shlex.split(command)[:4] == [
+        str(runtime),
+        NATIVE_CURSOR_HOOK_COMMAND,
+        "/bin/hol-guard",
+        "__guard-cursor-hook",
+    ]
 
 
 def test_native_bridge_is_offered_on_windows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
