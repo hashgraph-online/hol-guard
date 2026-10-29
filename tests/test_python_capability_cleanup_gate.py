@@ -692,6 +692,48 @@ def test_shipped_source_rejects_a_retired_module_spelled_with_an_escape(tmp_path
         _validate(root, contract)
 
 
+def test_shipped_source_may_name_a_live_module_that_starts_with_a_retired_name(tmp_path: Path) -> None:
+    root, contract = _retired_oracle_repository(tmp_path)
+    _shipped_package(root)
+    # A longer final component is a different module, not the retired one.
+    (root / "src/codex_plugin_scanner/shim.py").write_text(f'TARGET = "{RETIRED_ORACLE}_native"\n', encoding="utf-8")
+
+    _validate(root, contract)
+
+
+def test_shipped_source_rejects_a_submodule_of_a_retired_module(tmp_path: Path) -> None:
+    root, contract = _retired_oracle_repository(tmp_path)
+    _shipped_package(root)
+    (root / "src/codex_plugin_scanner/shim.py").write_text(f'TARGET = "{RETIRED_ORACLE}.plan"\n', encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="names retired module"):
+        _validate(root, contract)
+
+
+def test_shipped_source_rejects_a_basename_split_across_a_concatenation(tmp_path: Path) -> None:
+    root, contract = _retired_oracle_repository(tmp_path)
+    _shipped_package(root)
+    prefix, _, basename = RETIRED_ORACLE.rpartition(".")
+    head, tail = basename[:5], basename[5:]
+    # The split falls inside the basename, so the raw text carries no symbol, no
+    # basename and no `import` for a text screen to catch.
+    (root / "src/codex_plugin_scanner/shim.py").write_text(f'TARGET = "{prefix}.{head}" "{tail}"\n', encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="names retired module"):
+        _validate(root, contract)
+
+
+def test_shipped_source_rejects_a_retired_module_spelled_with_an_octal_escape(tmp_path: Path) -> None:
+    root, contract = _retired_oracle_repository(tmp_path)
+    _shipped_package(root)
+    _, _, basename = RETIRED_ORACLE.rpartition(".")
+    octal = RETIRED_ORACLE.replace(basename, f"\\{ord(basename[0]):03o}{basename[1:]}")
+    (root / "src/codex_plugin_scanner/shim.py").write_text(f'TARGET = "{octal}"\n', encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="names retired module"):
+        _validate(root, contract)
+
+
 def test_contribution_rejects_a_retired_detector_module(tmp_path: Path) -> None:
     root, contract = _retired_oracle_repository(tmp_path)
     _shipped_package(root)

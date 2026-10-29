@@ -99,6 +99,18 @@ def _matches_module(value: str, modules: set[str]) -> bool:
     return any(value == module or value.startswith(module + ".") for module in modules)
 
 
+def _spells_module(text: str, module: str) -> bool:
+    """Whether `text` names `module` itself, or a module under it.
+
+    `codex_plugin_scanner.guard.runtime.hook_review_engine_native` is a live
+    module that merely starts with a retired name, so the match needs the same
+    boundary `_matches_module` applies to an import: the retired name ends the
+    dotted name, or a `.` and a submodule follow it.
+    """
+
+    return re.search(rf"(?<![\w.]){re.escape(module)}(?![\w])", text) is not None
+
+
 def _literal_string(node: ast.AST) -> str | None:
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return node.value
@@ -220,7 +232,7 @@ def _source_violations(text: str, name: str, modules: set[str], symbols: set[str
             # module to prove it is gone, so only shipped source counts.
             for text in _string_texts(node):
                 for module in sorted(modules):
-                    if module in text and (node.lineno, module) not in named:
+                    if _spells_module(text, module) and (node.lineno, module) not in named:
                         named.add((node.lineno, module))
                         failures.append(f"{name}:{node.lineno}: names retired module {module} in a string")
     return failures
@@ -265,9 +277,6 @@ def _removed_runtime_flags(contract: Mapping[str, object]) -> set[str]:
     return set(flags)
 
 
-_ESCAPED_TEXT = re.compile(r"\\(x[0-9a-fA-F]{2}|u[0-9a-fA-F]{4}|U[0-9a-fA-F]{8}|N\{)")
-
-
 def _retired_content_validator(records: list[dict[str, object]], flags: set[str]) -> Callable[[str, bytes], None]:
     modules = {str(record["module"]) for record in records}
     symbols = {symbol for record in records for symbol in record["forbidden_symbols"]}
@@ -278,11 +287,12 @@ def _retired_content_validator(records: list[dict[str, object]], flags: set[str]
         if hashlib.sha256(data).hexdigest() in digests:
             raise RuntimeError(f"copied retired Python implementation: {name}")
         text = data.decode("utf-8-sig")
-        # An escape sequence spells a name the raw text does not carry, so a file
-        # that escapes anything is parsed rather than skipped on its text alone.
-        if _ESCAPED_TEXT.search(text) is None and not any(
-            token in text for token in symbols | basenames | flags | {"import"}
-        ):
+        # A shipped file is always parsed. A concatenation splits a name across
+        # literals the raw text never carries whole, and an escape spells one no
+        # substring search finds, so no cheap text screen can decide that a file
+        # on the import path is safe to skip. Test and tooling sources only have
+        # to be read for a name they spell plainly, so they keep the screen.
+        if not shipped and not any(token in text for token in symbols | basenames | flags | {"import"}):
             return
         failures = _source_violations(text, name, modules, symbols, shipped=shipped)
         if flags:
