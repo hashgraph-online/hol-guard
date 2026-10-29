@@ -17,9 +17,6 @@ from codex_plugin_scanner.guard.runtime.command_capability import (
     COMMAND_CAPABILITY_STATE_KEY,
     COMMAND_LOCAL_APPROVALS_STATE_KEY,
     COMMAND_REPLAY_STATE_KEY,
-    LOCAL_CONFIRMATION_COMMAND_OPERATIONS,
-    READ_ONLY_COMMAND_OPERATIONS,
-    STATE_CHANGING_COMMAND_OPERATIONS,
     CommandCapabilityError,
     approve_pending_command,
     authorize_command_job,
@@ -185,16 +182,21 @@ def test_capability_rejects_future_issue_time_and_empty_issuer(tmp_path: Path) -
     assert status["reason"] == "capability_issued_in_future"
 
 
-def test_every_supported_operation_has_one_local_side_effect_classification() -> None:
-    classified = (
-        set(READ_ONLY_COMMAND_OPERATIONS)
-        | set(LOCAL_CONFIRMATION_COMMAND_OPERATIONS)
-        | set(STATE_CHANGING_COMMAND_OPERATIONS)
-    )
+def test_every_supported_operation_has_one_local_side_effect_classification(tmp_path: Path) -> None:
+    """The runtime grants every operation this build can execute, and only those.
 
-    assert classified == set(SUPPORTED_COMMAND_OPERATIONS) - {EXACT_CLOUD_REVIEW_OPERATION}
-    assert EXACT_CLOUD_REVIEW_OPERATION not in classified
-    assert not (set(READ_ONLY_COMMAND_OPERATIONS) & set(STATE_CHANGING_COMMAND_OPERATIONS))
+    A capability may carry an operation only when a local side-effect class
+    covers it, so issuing each supported operation in turn proves the runtime's
+    classification still spans the executors. The exact-review grant is issued
+    by the review path for itself and is deliberately outside that set.
+    """
+    store = _connected_store(tmp_path)
+    for operation in sorted(set(SUPPORTED_COMMAND_OPERATIONS) - {EXACT_CLOUD_REVIEW_OPERATION}):
+        assert _issue(store, operation)["operations"] == [operation], operation
+
+    with pytest.raises(CommandCapabilityError) as error:
+        _issue(store, EXACT_CLOUD_REVIEW_OPERATION)
+    assert error.value.code == "unsupported_capability_operation"
 
 
 def test_retired_cloud_review_operations_are_not_advertised_or_authorizable(tmp_path: Path) -> None:
@@ -203,15 +205,13 @@ def test_retired_cloud_review_operations_are_not_advertised_or_authorizable(tmp_
         "guard.localRequests.snapshot",
         "guard.liveRequests.reassignQuarantined",
     )
-    classified = (
-        set(READ_ONLY_COMMAND_OPERATIONS)
-        | set(LOCAL_CONFIRMATION_COMMAND_OPERATIONS)
-        | set(STATE_CHANGING_COMMAND_OPERATIONS)
-    )
     assert not (set(retired_operations) & set(SUPPORTED_COMMAND_OPERATIONS))
-    assert not (set(retired_operations) & classified)
 
     store = _connected_store(tmp_path)
+    for operation in retired_operations:
+        with pytest.raises(CommandCapabilityError) as error:
+            _issue(store, operation)
+        assert error.value.code == "unsupported_capability_operation", operation
     _issue(store, "guard.packageShims.status")
     for index, operation in enumerate(retired_operations):
         job = _job(store, job_id=f"retired-job-{index}")
@@ -273,11 +273,17 @@ def test_capability_is_signed_exact_revocable_and_does_not_disable_sync(tmp_path
         {"state": "result_pending", "pending_result": {"legacy": True}},
         datetime.now(timezone.utc).isoformat(),
     )
-    status = _issue(store, *READ_ONLY_COMMAND_OPERATIONS)
+    status = _issue(store, "read-only")
 
     assert status["enabled"] is True
     assert store.get_sync_payload(command_queue.COMMAND_QUEUE_STATE_KEY) is None
-    assert status["operations"] == sorted(READ_ONLY_COMMAND_OPERATIONS)
+    read_only = status["operations"]
+    assert isinstance(read_only, list) and read_only == sorted(read_only)
+    # The group stands for the operations that only read local state, so it
+    # carries no write and never the exact-review grant.
+    assert {"guard.app.status", "guard.packageShims.status"} <= set(read_only)
+    assert set(read_only) <= set(SUPPORTED_COMMAND_OPERATIONS)
+    assert not ({"guard.app.update", "guard.app.remove", EXACT_CLOUD_REVIEW_OPERATION} & set(read_only))
     assert command_queue.command_queue_enabled(store, environ={}) is True
 
     stored = store.get_sync_payload(COMMAND_CAPABILITY_STATE_KEY)

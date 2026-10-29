@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from typing import Any
 
@@ -12,30 +11,11 @@ from codex_plugin_scanner.guard import native_command_capability as module
 from codex_plugin_scanner.guard.native_command_capability import (
     CommandCapabilityUnavailableError,
     native_command_capability,
+    native_command_capability_issue,
 )
 from codex_plugin_scanner.guard.native_context import _canonical_request_sha256
-from codex_plugin_scanner.guard.runtime.command_operation_classification import (
-    LOCAL_CONFIRMATION_COMMAND_OPERATIONS,
-    READ_ONLY_COMMAND_OPERATIONS,
-    REMOTE_STEP_UP_COMMAND_OPERATIONS,
-    STATE_CHANGING_COMMAND_OPERATIONS,
-)
 
 _CONTRACT = Path(__file__).resolve().parents[1] / "rust/crates/guard-contracts/src/command_capability.rs"
-
-
-def _rust_operations(name: str) -> tuple[str, ...]:
-    source = _CONTRACT.read_text(encoding="utf-8")
-    match = re.search(rf"pub const {name}: &\[&str\] =\s*&\[(.*?)\];", source, re.S)
-    assert match is not None, name
-    return tuple(re.findall(r'"([^"]+)"', match.group(1)))
-
-
-def test_rust_operation_classes_mirror_the_python_classification() -> None:
-    assert _rust_operations("READ_ONLY_COMMAND_OPERATIONS") == READ_ONLY_COMMAND_OPERATIONS
-    assert set(_rust_operations("LOCAL_CONFIRMATION_COMMAND_OPERATIONS")) == LOCAL_CONFIRMATION_COMMAND_OPERATIONS
-    assert set(_rust_operations("STATE_CHANGING_COMMAND_OPERATIONS")) == STATE_CHANGING_COMMAND_OPERATIONS
-    assert set(_rust_operations("REMOTE_STEP_UP_COMMAND_OPERATIONS")) == REMOTE_STEP_UP_COMMAND_OPERATIONS
 
 
 def test_rust_schemas_mirror_the_python_client() -> None:
@@ -44,6 +24,9 @@ def test_rust_schemas_mirror_the_python_client() -> None:
         ("COMMAND_CAPABILITY_REQUEST_SCHEMA", module._REQUEST_SCHEMA),
         ("COMMAND_CAPABILITY_RESULT_SCHEMA", module._RESULT_SCHEMA),
         ("COMMAND_CAPABILITY_FEATURE", module.COMMAND_CAPABILITY_FEATURE),
+        ("COMMAND_CAPABILITY_ISSUE_REQUEST_SCHEMA", module._ISSUE_REQUEST_SCHEMA),
+        ("COMMAND_CAPABILITY_ISSUE_RESULT_SCHEMA", module._ISSUE_RESULT_SCHEMA),
+        ("COMMAND_CAPABILITY_ISSUE_FEATURE", module.COMMAND_CAPABILITY_ISSUE_FEATURE),
     ):
         assert f'pub const {constant}: &str = "{expected}";' in source
 
@@ -147,3 +130,50 @@ def test_an_unbound_reply_answers_nothing(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(module, "_payload", lambda response, bound, home: None)
     with pytest.raises(CommandCapabilityUnavailableError):
         _call()
+
+
+def _issue_call(**overrides: Any) -> dict[str, object]:
+    arguments: dict[str, Any] = {
+        "requested": ("read-only",),
+        "supported_operations": ("guard.app.status",),
+        "issuer": "local-cli",
+        "ttl_seconds": 86400,
+        "guard_home": Path("/guard"),
+    }
+    arguments.update(overrides)
+    return native_command_capability_issue(**arguments)
+
+
+def test_the_issue_request_ships_the_words_as_typed(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen = _capture(monkeypatch, {"granted": True, "reason": None, "operations": ["guard.app.status"]})
+    answer = _issue_call(requested=["read-only, guard.app.update", "guard.app.status"])
+    assert answer == {"granted": True, "reason": None, "operations": ["guard.app.status"]}
+    assert seen["operation"] == "command_capability_issue"
+    assert seen["feature"] == module.COMMAND_CAPABILITY_ISSUE_FEATURE
+    assert seen["wire"]["schema"] == module._ISSUE_REQUEST_SCHEMA
+    assert seen["wire"]["requested"] == ["read-only, guard.app.update", "guard.app.status"]
+    assert seen["wire"]["supported_operations"] == ["guard.app.status"]
+    assert seen["wire"]["issuer"] == "local-cli"
+    assert seen["wire"]["ttl_seconds"] == 86400
+    assert seen["bound"] == seen["wire"]
+
+
+def test_an_unprepared_resident_issues_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(module, "ensure_resident_prerequisite", lambda home: False)
+    with pytest.raises(CommandCapabilityUnavailableError):
+        _issue_call()
+
+
+def test_an_issue_transport_failure_answers_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(module, "ensure_resident_prerequisite", lambda home: True)
+    monkeypatch.setattr(module, "_resident_request", lambda **kwargs: (_ for _ in ()).throw(OSError("closed")))
+    with pytest.raises(CommandCapabilityUnavailableError):
+        _issue_call()
+
+
+def test_an_unbound_issue_reply_answers_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(module, "ensure_resident_prerequisite", lambda home: True)
+    monkeypatch.setattr(module, "_resident_request", lambda **kwargs: {"status": "ok"})
+    monkeypatch.setattr(module, "_payload", lambda response, bound, home: None)
+    with pytest.raises(CommandCapabilityUnavailableError):
+        _issue_call()
