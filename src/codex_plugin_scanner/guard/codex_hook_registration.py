@@ -90,13 +90,18 @@ def _is_unlaunchable_legacy_guard_handler(
     if handler.get("statusMessage") not in legacy_status_messages:
         return False
     command = handler.get("command")
-    tokens = hook_command_tokens(command if isinstance(command, str) else None, windows=windows)
+    if not isinstance(command, str):
+        return False
+    if hook_commands_use_windows_syntax(windows) != (os.name == "nt"):
+        return False
+    tokens = hook_command_tokens(command, windows=windows)
     arguments = handler.get("args")
     argument_tokens = [str(argument) for argument in arguments] if isinstance(arguments, list) else []
     if not has_codex_harness_tokens([*tokens, *argument_tokens]):
         return False
     program = tokens[0] if tokens else ""
-    return bool(program) and not Path(program).exists()
+    path = Path(program)
+    return path.is_absolute() and not path.exists()
 
 
 def remove_manifest_bound_hook_events(

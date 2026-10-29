@@ -470,6 +470,7 @@ def test_isolated_environment_pins_the_resolved_native_runtime(tmp_path: Path, m
     sealed = tmp_path / "hol-guard-runtime"
     pinned = isolated_environment(home=tmp_path / "h", guard_home=tmp_path / "g", native_runtime=sealed)
     assert pinned["HOL_GUARD_NATIVE_BINARY"] == str(sealed)
+    assert pinned["HOL_GUARD_NATIVE"] == "force"
     unpinned = isolated_environment(home=tmp_path / "h", guard_home=tmp_path / "g")
     assert "HOL_GUARD_NATIVE_BINARY" not in unpinned
 

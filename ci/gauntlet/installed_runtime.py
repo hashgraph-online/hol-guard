@@ -295,10 +295,13 @@ def isolated_environment(*, home: Path, guard_home: Path, native_runtime: Path |
     ``~/.claude``, ``~/.codex`` and ``~/.omp``.
 
     When the lane resolved the executable's own sealed native runtime, it is
-    pinned here explicitly. The hooks the install registers inherit this
-    environment from the harness process the lane spawns, and a hook that
-    cannot resolve the native runtime fails closed as an infrastructure
-    denial, which the replay would otherwise record as a harness verdict.
+    pinned here explicitly, with the native mode forced: the runtime only
+    honours the binary override under ``force``, so exporting the path alone
+    would leave selection to the default candidate search. The hooks the
+    install registers inherit this environment from the harness process the
+    lane spawns, and a hook that cannot resolve the native runtime fails
+    closed as an infrastructure denial, which the replay would otherwise
+    record as a harness verdict.
     """
 
     environment = _base_environment()
@@ -310,6 +313,7 @@ def isolated_environment(*, home: Path, guard_home: Path, native_runtime: Path |
     environment["XDG_CACHE_HOME"] = str(home / ".cache")
     if native_runtime is not None:
         environment["HOL_GUARD_NATIVE_BINARY"] = str(native_runtime)
+        environment["HOL_GUARD_NATIVE"] = "force"
     return environment
 
 

@@ -68,6 +68,66 @@ def test_migration_prunes_unlaunchable_legacy_guard_handler(tmp_path, monkeypatc
     }
 
 
+@pytest.mark.parametrize(
+    "handler",
+    [
+        # A bare launcher name resolves through PATH when Codex starts the
+        # hook, so a legacy registration spelled that way is launchable and
+        # must survive migration even when no such file sits in the cwd.
+        {
+            "type": "command",
+            "command": "hol-guard hook --harness codex",
+            "statusMessage": "HOL Guard checking Bash command",
+        },
+        # A relative program path is likewise resolved by the launching
+        # shell, not by the migration's working directory.
+        {
+            "type": "command",
+            "command": "./hol-guard hook --harness codex",
+            "statusMessage": "HOL Guard checking Bash command",
+        },
+    ],
+)
+def test_migration_preserves_launchable_legacy_handlers(tmp_path, monkeypatch, handler):
+    context, config, hooks = _sources(tmp_path, monkeypatch)
+    legacy_group = {"hooks": [handler]}
+    hooks.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {"matcher": "Bash", "hooks": [{"type": "command", "command": "python3 user_hook.py"}]},
+                        legacy_group,
+                    ]
+                }
+            }
+        )
+    )
+    prepared = adapter.prepare_codex_hook_migration(context, config_path=config, hooks_path=hooks)
+    changes = {change.path: change for change in prepared.files}
+    migrated = parse_toml_object(changes[config].after, path=config, label="fixture")
+    assert migrated["hooks"]["PreToolUse"][-1] == legacy_group
+
+
+@pytest.mark.parametrize(
+    "handler",
+    [
+        {"type": "command", "statusMessage": "HOL Guard checking Bash command"},
+        {"type": "command", "command": 42, "statusMessage": "HOL Guard checking Bash command"},
+    ],
+)
+def test_migration_rejects_malformed_legacy_handlers_in_inventory(tmp_path, monkeypatch, handler):
+    """A handler without a string command fails inventory with a precise
+    error before migration pruning ever sees it, so it cannot crash the
+    migration with an unhandled type error."""
+    context, config, hooks = _sources(tmp_path, monkeypatch)
+    hooks.write_text(json.dumps({"hooks": {"PreToolUse": [{"hooks": [handler]}]}}))
+    before = _tree(tmp_path)
+    with pytest.raises(RuntimeError, match="codex_hook_inventory_malformed_handler"):
+        adapter.prepare_codex_hook_migration(context, config_path=config, hooks_path=hooks)
+    assert _tree(tmp_path) == before
+
+
 def test_migration_capture_never_publishes_or_creates_backup(tmp_path, monkeypatch):
     context, config, hooks = _sources(tmp_path, monkeypatch)
     before = _tree(tmp_path)
