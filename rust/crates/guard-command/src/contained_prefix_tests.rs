@@ -65,9 +65,9 @@ fn an_option_keeps_the_prefix_in_place() {
 
 #[test]
 fn an_unfiltered_setting_leaves_the_prefix_in_place() {
-    let (core, carried) = split(&["env", "LD_PRELOAD=/tmp/x.so", "pytest"], true);
+    let (core, carried) = split(&["env", "PYTHONPATH=/tmp/x", "pytest"], true);
 
-    assert_eq!(core, words(&["env", "LD_PRELOAD=/tmp/x.so", "pytest"]));
+    assert_eq!(core, words(&["env", "PYTHONPATH=/tmp/x", "pytest"]));
     assert!(carried.is_empty());
 }
 
@@ -117,6 +117,15 @@ fn a_value_opening_with_a_dash_is_not_plain_data() {
     let (core, _) = split(&["REPORT=-rf", "pytest"], true);
 
     assert_eq!(core, words(&["REPORT=-rf", "pytest"]));
+}
+
+#[test]
+fn a_value_the_shell_would_expand_is_not_plain_data() {
+    // The sink receives the words a shell already split, so a surviving `$`
+    // is a character the environment filter has no plain reading for.
+    let (core, _) = split(&["REPORT_DIR=$HOME/x", "pytest"], true);
+
+    assert_eq!(core, words(&["REPORT_DIR=$HOME/x", "pytest"]));
 }
 
 #[test]
@@ -203,7 +212,7 @@ fn a_dropped_setting_is_reported_wherever_it_stood() {
 #[test]
 fn a_refused_prefix_reports_no_drop_it_did_not_make() {
     assert!(!dropped(
-        &["env", "REPORT_DIR=/tmp/r", "LD_PRELOAD=/tmp/x.so", "pytest"],
+        &["env", "REPORT_DIR=/tmp/r", "PYTHONPATH=/tmp/x", "pytest"],
         true
     ));
 }

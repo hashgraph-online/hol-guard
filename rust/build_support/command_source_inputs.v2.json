@@ -87,6 +87,7 @@
       "src/command_structured_matchers/mod.rs",
       "src/command_tokens.rs",
       "src/contained_argv.rs",
+      "src/contained_prefix.rs",
       "src/contained_runner/common.rs",
       "src/contained_runner/contract.rs",
       "src/contained_runner/decision.rs",
