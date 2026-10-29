@@ -12,6 +12,7 @@ from codex_plugin_scanner.guard import workspace_assessment_worker as worker
 from codex_plugin_scanner.guard.cli.codebase_commands import default_codebase_root, run_codebases_command
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.workspace_assessment_admissions import end_unregistered_install_admissions
 from codex_plugin_scanner.guard.workspace_assessment_reads import list_worktrees
 from tests.test_guard_workspace_assessment_runner import SNAPSHOT, snapshots
 
@@ -92,6 +93,36 @@ def test_add_again_reports_the_codebase_without_queueing_another_check(
     assert output.startswith(f"Guard already checks {tmp_path.resolve()}.")
     [after] = list_worktrees(store)
     assert after["dirty_generation"] == before["dirty_generation"]
+
+
+def test_add_makes_an_install_admission_manual_so_removing_the_install_keeps_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    snapshots(monkeypatch, worker, STAT)
+    store = GuardStore(tmp_path / "home")
+    worker.admit_workspace(store, str(tmp_path), automatic=True)
+
+    code, output = run(store, ["add", str(tmp_path)])
+
+    assert code == 0
+    assert output.startswith(f"Added {tmp_path.resolve()}.")
+    assert end_unregistered_install_admissions(store, set(), now_ms=1) == 0
+    [worktree] = list_worktrees(store)
+    assert worktree["paused"] is False
+
+
+def test_add_admits_a_new_worktree_in_a_folder_that_held_another(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    snapshots(monkeypatch, worker, STAT)
+    store = GuardStore(tmp_path / "home")
+    run(store, ["add", str(tmp_path)])
+    snapshots(monkeypatch, worker, replace(STAT, worktree_key=STAT.worktree_key[::-1]))
+
+    payload = json.loads(run(store, ["add", str(tmp_path), "--json"])[1])
+
+    assert payload["added"] is True
+    assert payload["worktree_key"] == STAT.worktree_key[::-1]
 
 
 def test_add_reports_the_resolved_folder_it_admitted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

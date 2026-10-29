@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, TextIO
 if TYPE_CHECKING:
     from ..config import GuardConfig
     from ..store import GuardStore
+    from ..workspace_assessment_store import WorktreeKeys
 
 _ADMISSION_ERRORS: dict[str, str] = {
     "workspace_root_missing": "That folder does not exist.",
@@ -78,13 +79,27 @@ def _checks_off_note(config: GuardConfig | None) -> str | None:
     return "Background checks are turned off in Guard settings (workspace_assessment_enabled), so none will run."
 
 
-def _admitted(store: GuardStore, root: Path) -> dict[str, object] | None:
-    from ..workspace_assessment_reads import list_worktrees
+def _admitted(store: GuardStore, root: Path) -> WorktreeKeys | None:
+    """Return the keys of the worktree at ``root`` when someone already added it and it is still checked.
 
-    for item in list_worktrees(store):
-        if item["root"] == str(root) and not item["paused"]:
-            return item
-    return None
+    An install-made admission does not count: adding it again makes it manual, so
+    removing that install later leaves it checked. Neither does an older worktree
+    that used to live at the same folder.
+    """
+
+    from .. import workspace_assessment_worker as worker
+    from ..native_workspace_snapshot import WorkspaceSnapshotError
+    from ..workspace_assessment_admissions import is_manual_admission
+    from ..workspace_assessment_store import WorktreeKeys
+
+    if not root.is_dir():
+        return None
+    try:
+        snapshot = worker.workspace_snapshot(root, mode="stat")
+    except WorkspaceSnapshotError:
+        return None
+    keys = WorktreeKeys(snapshot.codebase_key, snapshot.worktree_key)
+    return keys if is_manual_admission(store, keys, root=str(root)) else None
 
 
 def _add(args: argparse.Namespace, store: GuardStore, config: GuardConfig | None, stream: TextIO | None) -> int:
@@ -106,8 +121,8 @@ def _add(args: argparse.Namespace, store: GuardStore, config: GuardConfig | None
             "added": False,
             "already_checked": True,
             "root": str(root),
-            "codebase_key": existing["codebase_key"],
-            "worktree_key": existing["worktree_key"],
+            "codebase_key": existing.codebase_key,
+            "worktree_key": existing.worktree_key,
         }
         lines = [f"Guard already checks {root}.", follow_up]
     else:
