@@ -200,8 +200,8 @@ fn native_sink(
     None
 }
 
-/// Whether the native sink reproduces this workspace sandbox: a plain
-/// workspace run, not a chain with a step Guard runs outside the sandbox,
+/// Whether the native sink reproduces this workspace sandbox: a workspace
+/// run, or checks followed by Git steps, but not a `git worktree add` chain,
 /// started in the workspace itself, with no pipe, redirection of stderr,
 /// exit-status read, home expansion or directory change the sink does not yet
 /// replay.

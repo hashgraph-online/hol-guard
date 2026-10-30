@@ -341,9 +341,10 @@ fn only_plain_workspace_runs_take_the_native_sink() {
     let mut moved = input("pytest");
     moved.insert("cwd".to_owned(), json!("/elsewhere"));
     assert!(!native_shape(&denial, &moved, workspace));
+    // The sink runs the Git steps after the checks itself.
     let mut publish = denial.clone();
     publish["reason"] = json!(crate::contained_workspace_sink::PUBLISH_REASON);
-    assert!(!native_shape(
+    assert!(native_shape(
         &publish,
         &input("pytest && git push"),
         workspace

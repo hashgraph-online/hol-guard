@@ -32,6 +32,8 @@ const ADDRESS_SPACE_BYTES: u64 = 4 * 1024 * 1024 * 1024;
 const FILE_SIZE_BYTES: u64 = 256 * 1024 * 1024;
 const OPEN_FILES: u64 = 256;
 const CEILING_BUDGET: Duration = Duration::from_secs(5);
+/// The launcher's `CEILING` for a host step, which runs without limits.
+pub(super) const HOST_STEP: &str = "host";
 /// Lowers the process ceiling the launcher passes as `$1`, then runs the
 /// rest: Apple targets expose `RLIMIT_NPROC` only through the shell.
 #[cfg(target_vendor = "apple")]
@@ -96,6 +98,14 @@ impl Signals {
         }
     }
 
+    /// Signals that nothing waits on, for a test that starts a command.
+    #[cfg(test)]
+    pub(super) fn idle() -> Self {
+        Self {
+            running: Arc::new(Mutex::new(Running::default())),
+        }
+    }
+
     fn track(&self, child: Option<i32>) {
         if let Ok(mut running) = self.running.lock() {
             running.child = child;
@@ -154,35 +164,8 @@ pub(super) fn run_backend(
         .stdin(Stdio::null())
         .stdout(clone(&stdout)?)
         .stderr(clone(&stderr)?);
-    // Track the child under the lock, so a signal never meets a child that
-    // started but is not yet tracked.
-    let child = {
-        let mut running = signals
-            .running
-            .lock()
-            .map_err(|_| Failure::new(SANDBOX_UNAVAILABLE, "The sandbox state is unavailable."))?;
-        let child = command.spawn().map_err(|error| not_started(&error))?;
-        running.child = i32::try_from(child.id()).ok();
-        child
-    };
-    let pid = child.id();
-    let (sender, receiver) = mpsc::channel();
-    let waiter = std::thread::spawn(move || {
-        let mut child = child;
-        let _ = sender.send(child.wait());
-    });
-    let waited = receiver.recv_timeout(Duration::from_secs(timeout_seconds));
-    let timed_out = waited.is_err();
-    let group = i32::try_from(pid).ok().map(Pid::from_raw);
-    if let Some(group) = group {
-        let _ = killpg(group, Signal::SIGKILL);
-    }
-    let status = match waited {
-        Ok(status) => status.ok(),
-        Err(_) => receiver.recv().ok().and_then(Result::ok),
-    };
-    let _ = waiter.join();
-    signals.track(None);
+    let (status, timed_out) = run_tracked(&mut command, signals, timeout_seconds, true)
+        .map_err(|error| not_started(&error))?;
     let stdout_text = replay(stdout, &mut std::io::stdout());
     let stderr_text = replay(stderr, &mut std::io::stderr());
     if timed_out {
@@ -204,6 +187,46 @@ pub(super) fn run_backend(
         let _ = stderr.flush();
     }
     Ok(code)
+}
+
+/// Start `command`, which the launcher makes a session of its own, and wait
+/// up to `timeout_seconds`. The child is tracked under the lock, so a signal
+/// never meets a child that started but is not yet tracked. Its group is
+/// killed when the time runs out, and also once it exits when `sweep`. The
+/// status, and whether the time ran out.
+pub(super) fn run_tracked(
+    command: &mut Command,
+    signals: &Signals,
+    timeout_seconds: u64,
+    sweep: bool,
+) -> std::io::Result<(Option<ExitStatus>, bool)> {
+    let child = {
+        let mut running = signals
+            .running
+            .lock()
+            .map_err(|_| std::io::Error::other("the sandbox state is unavailable"))?;
+        let child = command.spawn()?;
+        running.child = i32::try_from(child.id()).ok();
+        child
+    };
+    let group = i32::try_from(child.id()).ok().map(Pid::from_raw);
+    let (sender, receiver) = mpsc::channel();
+    let waiter = std::thread::spawn(move || {
+        let mut child = child;
+        let _ = sender.send(child.wait());
+    });
+    let waited = receiver.recv_timeout(Duration::from_secs(timeout_seconds));
+    let timed_out = waited.is_err();
+    if let Some(group) = group.filter(|_| sweep || timed_out) {
+        let _ = killpg(group, Signal::SIGKILL);
+    }
+    let status = match waited {
+        Ok(status) => status.ok(),
+        Err(_) => receiver.recv().ok().and_then(Result::ok),
+    };
+    let _ = waiter.join();
+    signals.track(None);
+    Ok((status, timed_out))
 }
 
 fn not_started(error: &std::io::Error) -> Failure {
@@ -269,7 +292,7 @@ fn display_text(raw: &[u8]) -> String {
 }
 
 /// The shell's view of `status`: the code, or 128 plus the signal.
-fn exit_code(status: ExitStatus) -> i32 {
+pub(super) fn exit_code(status: ExitStatus) -> i32 {
     status
         .code()
         .or_else(|| status.signal().map(|signal| 128 + signal))
@@ -354,11 +377,18 @@ fn read_all(mut file: File) -> Vec<u8> {
 }
 
 /// `contained-workspace-launch CEILING ARGV...`: start a session, apply the
-/// sandbox's resource limits, and exec `ARGV`. Returns only on failure.
+/// sandbox's resource limits, and exec `ARGV`. With `host` for `CEILING`,
+/// a host step: the session only. Returns only on failure.
 pub(crate) fn launch(args: &[String]) -> i32 {
     let Some((ceiling, argv)) = args.split_first() else {
         return launch_failed("missing command");
     };
+    if let (HOST_STEP, Some((program, arguments))) = (ceiling.as_str(), argv.split_first()) {
+        let _ = nix::unistd::setsid();
+        release_forwarded_signals();
+        let error = Command::new(program).args(arguments).exec();
+        return launch_failed(&error.to_string());
+    }
     let (Ok(ceiling), Some(_)) = (ceiling.parse::<u64>(), argv.first()) else {
         return launch_failed("invalid launch arguments");
     };
@@ -440,52 +470,5 @@ fn lowered(soft: u64, hard: u64, requested: u64) -> (u64, u64) {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn limits_only_ever_come_down() {
-        let infinite = libc::RLIM_INFINITY;
-        assert_eq!(lowered(infinite, infinite, 256), (256, 256));
-        assert_eq!(lowered(100, infinite, 256), (100, 256));
-        assert_eq!(lowered(infinite, 200, 256), (200, 200));
-        assert_eq!(lowered(1024, 4096, 256), (256, 256));
-    }
-
-    #[test]
-    fn replayed_output_is_display_safe() {
-        assert_eq!(display_text(b"a\r\nb\x1b[0m\tc\n"), "a\nb\u{fffd}[0m\tc\n");
-        assert_eq!(display_text(b"\xff"), "\u{fffd}");
-    }
-
-    #[test]
-    fn a_captured_command_reports_its_output_and_exit() {
-        let scratch = tempfile::tempdir().unwrap();
-        let command = [
-            "/bin/sh".to_owned(),
-            "-c".to_owned(),
-            "echo out; echo err >&2; exit 3".to_owned(),
-        ];
-        let environment = BTreeMap::from([("PATH".to_owned(), "/usr/bin:/bin".to_owned())]);
-        let captured = run_captured(
-            &command,
-            &environment,
-            scratch.path(),
-            scratch.path(),
-            Duration::from_secs(10),
-        )
-        .unwrap();
-        assert_eq!(captured.code, 3);
-        assert_eq!(captured.stdout, b"out\n");
-        assert_eq!(captured.stderr, b"err\n");
-        let slow = ["/bin/sh".to_owned(), "-c".to_owned(), "sleep 5".to_owned()];
-        assert!(run_captured(
-            &slow,
-            &environment,
-            scratch.path(),
-            scratch.path(),
-            Duration::from_millis(100),
-        )
-        .is_none());
-    }
-}
+#[path = "contained_workspace_sink_process_tests.rs"]
+mod tests;

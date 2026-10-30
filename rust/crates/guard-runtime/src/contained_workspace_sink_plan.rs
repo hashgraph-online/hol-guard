@@ -16,6 +16,8 @@ pub(super) struct Plan {
     pub(super) capabilities: Value,
     pub(super) argv: Vec<String>,
     pub(super) prefix: Option<String>,
+    /// The Git steps a publish chain runs on the host once the checks pass.
+    pub(super) suffix: Option<String>,
     pub(super) bootstrap: Option<Value>,
     pub(super) backend_executable: String,
     pub(super) sandbox_path: String,
@@ -25,10 +27,13 @@ pub(super) struct Plan {
     pub(super) write_denials: Value,
 }
 
+/// With `publish`, the plan runs only the checks before the Git steps it
+/// names, and neither bootstraps nor prefixes them.
 pub(super) fn validated_plan(
     plan: Value,
     command: &str,
     workspace: &str,
+    publish: bool,
     grant: Option<&ExpectedGrant>,
 ) -> Outcome<Plan> {
     let Value::Object(mut plan) = plan else {
@@ -44,10 +49,19 @@ pub(super) fn validated_plan(
     // A base plan without a decided grant; with one, a plan widened by it.
     let scripts = crate::contained_workspace_grant_plan::grant_script_roots(&plan, grant)
         .ok_or_else(|| Failure::invalid(INVALID_PLAN))?;
-    if !plan["native_suffix"].is_null() {
-        return Err(Failure::invalid(PLAN_MISMATCH));
-    }
     let mismatch = || Failure::invalid(PLAN_MISMATCH);
+    let suffix = match &plan["native_suffix"] {
+        Value::Null if !publish => None,
+        Value::String(suffix) if publish => Some(suffix.clone()),
+        _ => return Err(mismatch()),
+    };
+    let command = match &suffix {
+        Some(suffix) if plan["prefix_command"].is_null() && plan["bootstrap_git"].is_null() => {
+            super::split::checks(command, suffix).ok_or_else(mismatch)?
+        }
+        Some(_) => return Err(mismatch()),
+        None => command,
+    };
     let argv: Vec<String> = match &plan["command"] {
         Value::Array(items) => items
             .iter()
@@ -100,6 +114,7 @@ pub(super) fn validated_plan(
             .ok_or_else(|| Failure::invalid(INVALID_PLAN))?,
         capabilities: plan["capabilities"].clone(),
         prefix,
+        suffix,
         bootstrap,
         backend_executable: text(&plan["backend_executable"])
             .ok_or_else(|| Failure::invalid(INVALID_PLAN))?,

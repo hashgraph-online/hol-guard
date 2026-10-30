@@ -8,7 +8,8 @@
 //! Seatbelt on macOS, a bubblewrap overlay on Linux. It replaces
 //! `guard execute-contained-test` for that shape, step for step: every check
 //! that fails, fails closed with the reason that command printed, and nothing
-//! runs outside the sandbox except the `git init` a plan bootstraps.
+//! runs outside the sandbox except the `git init` a plan bootstraps and the
+//! Git steps that follow passing checks, once the resident proves them again.
 //!
 //! Rust owns every verdict: the resident's receipt, the operations' plan.
 
@@ -26,6 +27,8 @@ mod grant;
 #[cfg(any(target_os = "linux", all(unix, test)))]
 #[path = "contained_workspace_sink_overlay.rs"]
 mod overlay;
+#[path = "contained_workspace_sink_paths.rs"]
+mod paths;
 #[path = "contained_workspace_sink_plan.rs"]
 mod plan_check;
 #[path = "contained_workspace_sink_process.rs"]
@@ -37,12 +40,14 @@ mod snapshot;
 #[path = "contained_workspace_sink_split.rs"]
 mod split;
 
+use paths::{expand_user, py_normal, search_path, wire_path};
 use plan_check::{plan_paths, validated_plan};
 use runner::{bootstrap_init, Launch, PrivateRoot};
 use snapshot::read_request;
 
 pub(crate) use process::launch;
 pub(crate) use split::host_split;
+use split::publishes;
 #[cfg(test)]
 pub(crate) use split::PUBLISH_REASON;
 
@@ -304,7 +309,13 @@ fn run_workspace_contained(
         &authority.workspace,
         command,
     )?;
-    let decided = grant::decided(&store)?;
+    // The Git steps after the checks run on the host, so no grant widens them.
+    let publish = publishes(first_receipt.get("reason"));
+    let decided = if publish {
+        None
+    } else {
+        grant::decided(&store)?
+    };
     let mut input = json!({
         "text": command,
         "workspace": authority.workspace,
@@ -312,7 +323,7 @@ fn run_workspace_contained(
         "platform": HOST_PLATFORM,
         "home": home,
         "git_environment": git_environment,
-        "publish_suffix": false,
+        "publish_suffix": publish,
     });
     let expected = match &decided {
         Some(decided) => {
@@ -322,7 +333,13 @@ fn run_workspace_contained(
         None => None,
     };
     let plan = native("prepare_workspace_contained", input)?;
-    let plan = validated_plan(plan, command, &authority.workspace, expected.as_ref())?;
+    let plan = validated_plan(
+        plan,
+        command,
+        &authority.workspace,
+        publish,
+        expected.as_ref(),
+    )?;
     // A second receipt taken after planning must still bind the same evidence.
     let second = authority
         .authorize(payload)
@@ -331,13 +348,16 @@ fn run_workspace_contained(
             Failure::invalid("Guard could not re-authorize this workspace sandbox execution.")
         })?;
     if second.get("command_binding_digest") != first_receipt.get("command_binding_digest")
+        || publishes(second.get("reason")) != publish
         || host_split(second.get("reason"))
     {
         return Err(Failure::invalid(
             "The command evidence changed before launch.",
         ));
     }
-    grant::unchanged(&decided, grant::decided(&store))?;
+    if !publish {
+        grant::unchanged(&decided, grant::decided(&store))?;
+    }
     let exec_roots = plan_paths(&plan.exec_roots)?;
     let write_denials = plan_paths(&plan.write_denials)?;
     let private = PrivateRoot::create().ok_or_else(|| {
@@ -372,7 +392,13 @@ fn run_workspace_contained(
             return Ok(0);
         }
     }
-    launch.contained(&plan.argv)
+    let exit_code = launch.contained(&plan.argv)?;
+    match &plan.suffix {
+        Some(suffix) if exit_code == 0 => {
+            split::run_publish_steps(payload, suffix, workspace, authority, signals)
+        }
+        _ => Ok(exit_code),
+    }
 }
 
 /// Run a restricted-execution operation in process: its value, or the
@@ -424,75 +450,6 @@ fn environment() -> Vec<(String, String)> {
     std::env::vars_os()
         .filter_map(|(name, value)| Some((name.into_string().ok()?, value.into_string().ok()?)))
         .collect()
-}
-
-/// `PATH`, each entry made absolute, as the operations search it.
-fn search_path() -> String {
-    let path = std::env::var("PATH").unwrap_or_else(|_| "/bin:/usr/bin".to_owned());
-    path.split(':')
-        .map(|item| absolute(&py_normal(item)))
-        .collect::<Vec<_>>()
-        .join(":")
-}
-
-/// `str(path.expanduser().absolute())`.
-fn wire_path(path: &Path) -> String {
-    absolute(&py_normal(&expand_user(&path.to_string_lossy())))
-}
-
-/// `os.path.expanduser` for `~` and `~/...`.
-fn expand_user(text: &str) -> String {
-    let home = || {
-        crate::claude_hook_bridge::home_directory()
-            .map(|home| home.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "~".to_owned())
-    };
-    if text == "~" {
-        return home();
-    }
-    match text.strip_prefix("~/") {
-        Some(rest) => format!("{}/{rest}", home().trim_end_matches('/')),
-        None => text.to_owned(),
-    }
-}
-
-/// `str(Path(text))`: repeated and trailing slashes and `.` parts dropped.
-fn py_normal(text: &str) -> String {
-    if text.is_empty() {
-        return ".".to_owned();
-    }
-    let root = if text.starts_with("//") && !text.starts_with("///") {
-        "//"
-    } else if text.starts_with('/') {
-        "/"
-    } else {
-        ""
-    };
-    let parts: Vec<&str> = text
-        .split('/')
-        .filter(|part| !part.is_empty() && *part != ".")
-        .collect();
-    let joined = parts.join("/");
-    match (root, joined.is_empty()) {
-        ("", true) => ".".to_owned(),
-        (root, _) => format!("{root}{joined}"),
-    }
-}
-
-/// `Path.absolute()` of a normalized path: relative paths join the current
-/// directory.
-fn absolute(normal: &str) -> String {
-    if normal.starts_with('/') {
-        return normal.to_owned();
-    }
-    let cwd = std::env::current_dir()
-        .map(|cwd| cwd.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    if normal == "." {
-        cwd
-    } else {
-        format!("{}/{normal}", cwd.trim_end_matches('/'))
-    }
 }
 
 #[cfg(test)]
