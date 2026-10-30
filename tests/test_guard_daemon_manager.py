@@ -1835,8 +1835,13 @@ def test_ensure_guard_daemon_timeout_does_not_kill_unattributed_descendant_proce
 
 
 @pytest.mark.skipif(os.name == "nt", reason="requires POSIX setsid subprocesses")
-def test_real_timeout_keeps_escaped_helper_and_blocks_replacement_until_receipt_is_resolved(tmp_path):
-    """An unreported setsid child keeps the launch receipt permanently fail closed."""
+def test_real_timeout_receipt_resolves_once_the_launch_is_gone_despite_an_escaped_helper(tmp_path):
+    """A timed-out launch must not refuse every later daemon start for its home.
+
+    The setsid helper it left behind cannot be found or stopped from here, and
+    keeping the receipt would not stop it either. Once the root is gone and no
+    daemon serves the home, the receipt only kept Guard itself from starting.
+    """
 
     guard_home = tmp_path / "guard-home"
     home_dir = tmp_path / "user-home"
@@ -1877,14 +1882,12 @@ def test_real_timeout_keeps_escaped_helper_and_blocks_replacement_until_receipt_
         assert pending["launch_generation"] == pending["launch_nonce"]
         assert pending["generation"] == pending["launch_nonce"]
         assert pending["guard_home"] == str(guard_home.resolve())
+        assert daemon_manager_module._guard_daemon_pid_is_proven_dead(pending["pid"])
+        assert not daemon_manager_module._guard_daemon_pending_launch_state_is_resolved(guard_home)
 
-        with pytest.raises(RuntimeError, match="previous Guard daemon launch could not be retired safely"):
-            daemon_manager_module.ensure_guard_daemon(
-                guard_home,
-                home_dir=home_dir,
-                executable=wrapper,
-                start_timeout=5.0,
-            )
+        assert daemon_manager_module._resolve_abandoned_guard_daemon_pending_launch(guard_home, pending)
+        assert daemon_manager_module._guard_daemon_pending_launch_state_is_resolved(guard_home)
+        assert daemon_manager_module._guard_daemon_pid_is_running(helper_pid)
     finally:
         if helper_identity is None:
             helper_identity = _load_escaped_helper_receipt(guard_home)
@@ -1894,18 +1897,6 @@ def test_real_timeout_keeps_escaped_helper_and_blocks_replacement_until_receipt_
                 start_marker=helper_identity[1],
                 owner=helper_identity[2],
             )
-
-    # The current launch protocol has no controlled child receipt to prove
-    # that this separately-created session belonged to the launch. Exact
-    # helper death therefore does not make replacement safe by itself.
-    assert not daemon_manager_module._guard_daemon_pending_launch_state_is_resolved(guard_home)
-    with pytest.raises(RuntimeError, match="previous Guard daemon launch could not be retired safely"):
-        daemon_manager_module.ensure_guard_daemon(
-            guard_home,
-            home_dir=home_dir,
-            executable=wrapper,
-            start_timeout=5.0,
-        )
 
 
 @pytest.mark.skipif(os.name == "nt", reason="requires POSIX subprocess identity markers")
