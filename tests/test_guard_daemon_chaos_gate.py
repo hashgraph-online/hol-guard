@@ -26,12 +26,14 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Generator, Mapping
+from collections.abc import Callable, Generator, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, suppress
 from pathlib import Path
+from typing import TypeVar
 
 import pytest
 
@@ -142,6 +144,36 @@ def _status_code(response: bytes) -> int:
     if len(parts) < 2 or not parts[1].isdigit():
         return 0
     return int(parts[1])
+
+
+_T = TypeVar("_T")
+
+#: How long a shape keeps asking for its own answer while the daemon is full.
+OVERLOAD_RETRY_SECONDS = 10.0
+
+
+def _past_overload(attempt: Callable[[], _T]) -> _T:
+    """Repeat ``attempt`` while the daemon refuses it for request capacity.
+
+    A 503 says the daemon was full, not what the request shape earns. The
+    mixed-client case asks the second question, and its own load can reach
+    the normal-admission limit, so a shape refused for capacity is asked
+    again until it gets an answer of its own.
+    """
+
+    deadline = time.monotonic() + OVERLOAD_RETRY_SECONDS
+    while True:
+        try:
+            result = attempt()
+        except urllib.error.HTTPError as error:
+            if error.code != 503 or time.monotonic() >= deadline:
+                raise
+            time.sleep(0.05)
+            continue
+        if result == 503 and time.monotonic() < deadline:
+            time.sleep(0.05)
+            continue
+        return result
 
 
 def _healthy(port: int, *, timeout: float = 5.0) -> bool:
@@ -434,14 +466,16 @@ def test_sixty_four_mixed_clients_each_get_the_answer_their_shape_earns(
         def mixed(index: int) -> tuple[str, object]:
             shape = index % 4
             if shape == 0:
-                return "hook", _authenticated_hook(daemon, query)
+                return "hook", _past_overload(lambda: _authenticated_hook(daemon, query))
             if shape == 1:
                 malformed_headers, malformed_body, expected = MALFORMED_SHAPES[index % len(MALFORMED_SHAPES)]
-                status = _status_code(_exchange(port, _frame(token, malformed_headers, malformed_body)))
+                status = _past_overload(
+                    lambda: _status_code(_exchange(port, _frame(token, malformed_headers, malformed_body)))
+                )
                 return "malformed", (expected, status)
             if shape == 2:
                 forged = f"forged-{index:08d}-{'b' * 24}"
-                return "forged", _status_code(_exchange(port, _frame(forged, headers, body)))
+                return "forged", _past_overload(lambda: _status_code(_exchange(port, _frame(forged, headers, body))))
             client = _trickle_client(port, token)
             try:
                 return "trickle", _status_code(_receive(client))
@@ -581,8 +615,10 @@ def test_a_read_only_guard_home_never_turns_into_an_allow(
     try:
         try:
             daemon = _started_daemon(guard_home)
-        except OSError:
-            return
+        except OSError as error:
+            # A daemon that never started has not been asked the question this
+            # case exists for. Say so rather than reporting a pass.
+            pytest.skip(f"the daemon refused to start against a read-only guard home: {error}")
         try:
             with _saturated_hook_queue(daemon):
                 answer = _authenticated_hook(daemon, _hook_query(daemon, tmp_path))
@@ -657,9 +693,16 @@ def test_a_full_disk_never_changes_a_hook_answer_or_stops_the_daemon(
             attempted.append(str(action.get("action", "")))
             raise OSError(errno.ENOSPC, os.strerror(errno.ENOSPC))
 
+        query = _hook_query(daemon, tmp_path)
+        # The answer this hook earns while the disk still has room. "Never
+        # changes a hook answer" is a claim about this value, so read it
+        # before the disk fills and compare against it afterwards; a decision
+        # that is merely a string would hide a deny turning into an allow.
+        baseline = _authenticated_hook(daemon, query, timeout=60.0)["decision"]
+        assert isinstance(baseline, str), baseline
+
         monkeypatch.setattr(NativeHookEvidenceWriter, "_call", _no_space_left)
 
-        query = _hook_query(daemon, tmp_path)
         answers = [_authenticated_hook(daemon, query, timeout=60.0) for _ in range(8)]
 
         # Evidence is submitted behind the response, so give the dispatch the
@@ -673,7 +716,7 @@ def test_a_full_disk_never_changes_a_hook_answer_or_stops_the_daemon(
 
         assert attempted, "no hook ever reached the evidence writer"
         for answer in answers:
-            assert isinstance(answer.get("decision"), str), answer
+            assert answer.get("decision") == baseline, answer
         assert _healthy(daemon.port)
         assert handler_errors == []
 
