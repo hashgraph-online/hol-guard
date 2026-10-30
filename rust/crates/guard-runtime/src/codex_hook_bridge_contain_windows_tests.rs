@@ -21,6 +21,7 @@ fn no_native(
     _: &serde_json::Value,
     _: &serde_json::Map<String, serde_json::Value>,
     _: &str,
+    _: &str,
 ) -> Option<String> {
     None
 }

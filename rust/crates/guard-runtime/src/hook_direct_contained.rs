@@ -117,8 +117,9 @@ struct Host {
 }
 
 /// The runtime executable that runs a call's sink itself, given the answer,
-/// the call's tool input and its workspace; `None` keeps Guard's own sink.
-pub(crate) type NativeSink = fn(&Value, &Map<String, Value>, &str) -> Option<String>;
+/// the call's tool input, its workspace and the user's home; `None` keeps
+/// Guard's own sink.
+pub(crate) type NativeSink = fn(&Value, &Map<String, Value>, &str, &str) -> Option<String>;
 
 /// `route` on `host`, with request snapshots under `temp`.
 fn route_on(
@@ -140,7 +141,7 @@ fn route_on(
     };
     let projected = projected_input(original, target);
     let original = projected.as_ref().unwrap_or(original);
-    let native = (host.native)(response, original, target.workspace);
+    let native = (host.native)(response, original, target.workspace, target.home_dir);
     request::write_and_route(temp, payload, original, target, native.as_deref())
 }
 
@@ -201,7 +202,7 @@ pub(crate) fn unprojected_sink_command(
     if guard_command::pretool::generic::contained_target(command, context).is_some() {
         return None;
     }
-    let executable = native(response, original, workspace)?;
+    let executable = native(response, original, workspace, home_dir)?;
     Some(vec![
         executable,
         crate::contained_workspace_sink::SINK_COMMAND.to_owned(),
@@ -227,8 +228,9 @@ pub(crate) fn native_sink(
     response: &Value,
     original: &Map<String, Value>,
     workspace: &str,
+    home: &str,
 ) -> Option<String> {
-    if !native_shape(response, original, workspace)
+    if !native_shape(response, original, workspace, home)
         || std::env::var_os(NATIVE_SINK_SWITCH).is_some_and(|value| value == "0")
     {
         return None;
@@ -245,17 +247,22 @@ pub(crate) fn native_sink(
     _response: &Value,
     _original: &Map<String, Value>,
     _workspace: &str,
+    _home: &str,
 ) -> Option<String> {
     None
 }
 
 /// Whether the native sink reproduces this workspace sandbox: a workspace
 /// run, or checks followed by Git steps, but not a `git worktree add` chain,
-/// started in the workspace itself, with no pipe, redirection of stderr,
-/// exit-status read, home expansion or directory change the sink does not yet
-/// replay.
+/// started in the workspace itself or below a sibling repository's root,
+/// with no home expansion or directory change the sink does not yet replay.
 #[cfg(any(target_os = "macos", target_os = "linux", all(unix, test)))]
-fn native_shape(response: &Value, original: &Map<String, Value>, workspace: &str) -> bool {
+fn native_shape(
+    response: &Value,
+    original: &Map<String, Value>,
+    workspace: &str,
+    home: &str,
+) -> bool {
     use crate::contained_workspace_sink::{host_split, WORKSPACE_PROFILE, WORKSPACE_REASON};
     let text = |name: &str| response.get(name).and_then(Value::as_str);
     let Some(command) = original.get("command").and_then(Value::as_str) else {
@@ -265,7 +272,9 @@ fn native_shape(response: &Value, original: &Map<String, Value>, workspace: &str
         && text("required_execution_profile") == Some(WORKSPACE_PROFILE)
         && !host_split(response.get("reason"))
         && !original.contains_key("cwd")
-        && (!command.trim_start().starts_with("cd") || inner_directory_change(command, workspace))
+        && (!command.trim_start().starts_with("cd")
+            || inner_directory_change(command, workspace)
+            || crate::contained_workspace_sink::entered_sibling(command, workspace, home).is_some())
         && (!PACKAGE_DIRECTORY_FLAGS
             .iter()
             .chain([&SHORT_DIRECTORY_FLAG])
@@ -279,8 +288,9 @@ fn native_shape(response: &Value, original: &Map<String, Value>, workspace: &str
 /// Whether a leading `cd` leaves the call as the daemon's sink runs it: a
 /// plain target naming a directory strictly inside the workspace, then `&&`.
 /// The daemon runs such a command whole, `cd` included, from the workspace
-/// root, as the native sink does. A `cd` to the root itself or out to a
-/// sibling repository is planned again there, so it keeps the daemon's sink.
+/// root, as the native sink does. A `cd` to the root itself or to a sibling
+/// repository's root is planned again there, so it keeps the daemon's sink;
+/// one below a sibling's root runs from that root (`entered_sibling`).
 #[cfg(any(target_os = "macos", target_os = "linux", all(unix, test)))]
 fn inner_directory_change(command: &str, workspace: &str) -> bool {
     let Some(rest) = command.trim_start_matches([' ', '\t']).strip_prefix("cd") else {
@@ -473,3 +483,7 @@ mod tests;
 #[cfg(test)]
 #[path = "hook_direct_contained_venv_tests.rs"]
 mod venv_tests;
+
+#[cfg(test)]
+#[path = "hook_direct_contained_sibling_tests.rs"]
+mod sibling_tests;

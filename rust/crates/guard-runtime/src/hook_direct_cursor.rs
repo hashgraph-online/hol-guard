@@ -391,7 +391,12 @@ fn routed(parsed: &Value, payload: &Map<String, Value>, scope: &Scope) -> Option
 /// in the call; the probe only reaches the sink when that names the
 /// workspace, which the sink runs in anyway, so the repeat is set aside once
 /// it still resolves there. Any other spelling keeps Guard's sink.
-fn native_sink(response: &Value, original: &Map<String, Value>, workspace: &str) -> Option<String> {
+fn native_sink(
+    response: &Value,
+    original: &Map<String, Value>,
+    workspace: &str,
+    home: &str,
+) -> Option<String> {
     let mut call = original.clone();
     let root = std::fs::canonicalize(workspace).ok()?;
     for key in ["cwd", "working_directory"] {
@@ -402,7 +407,7 @@ fn native_sink(response: &Value, original: &Map<String, Value>, workspace: &str)
             Some(_) => return None,
         }
     }
-    super::contained::native_sink(response, &call, workspace)
+    super::contained::native_sink(response, &call, workspace, home)
 }
 
 /// Whether `value` names the workspace itself, after `~` expansion against

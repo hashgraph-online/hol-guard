@@ -1,5 +1,5 @@
 //! The root a workspace sandbox runs from when the call's absolute script
-//! lies in a sibling repository.
+//! lies in a sibling repository, or its `cd` enters one below its root.
 
 use serde_json::{json, Map, Value};
 use std::fs;
@@ -16,7 +16,14 @@ fn fixture() -> (tempfile::TempDir, PathBuf) {
         .unwrap();
     let root = directory.path().to_path_buf();
     let projects = root.join("home/projects");
-    for directory in ["app/.git", "report/.git", "report/scripts", "plain"] {
+    for directory in [
+        "app/.git",
+        "app/web",
+        "report/.git",
+        "report/scripts",
+        "report/packages/web",
+        "plain",
+    ] {
         fs::create_dir_all(projects.join(directory)).unwrap();
     }
     for repository in ["app", "report"] {
@@ -57,6 +64,32 @@ fn a_script_in_a_sibling_repository_runs_from_its_root() {
             "python3 {}/scripts/report.py && ls",
             projects.join("report").display()
         ),
+    ] {
+        assert_eq!(sibling_root(&command, workspace, &home), None, "{command}");
+    }
+}
+
+#[test]
+fn a_cd_below_a_sibling_root_runs_from_that_root() {
+    let (_fixture, root) = fixture();
+    let (home, projects) = (root.join("home"), root.join("home/projects"));
+    let workspace = projects.join("app");
+    let workspace = workspace.to_str().unwrap();
+    let report = projects.join("report");
+    let entered = format!("cd {}/packages/web && npm test", report.display());
+    assert_eq!(
+        sibling_root(&entered, workspace, &home),
+        Some(report.clone())
+    );
+    for command in [
+        // The root itself is authorized again for the rest, by Guard's sink.
+        format!("cd {} && npm test", report.display()),
+        // A directory inside the workspace runs from the workspace.
+        format!("cd {}/web && npm test", projects.join("app").display()),
+        // A directory in no repository roots nothing.
+        format!("cd {}/plain && npm test", projects.display()),
+        // A relative spelling is not peeled below a sibling root.
+        "cd ../report/packages/web && npm test".to_owned(),
     ] {
         assert_eq!(sibling_root(&command, workspace, &home), None, "{command}");
     }

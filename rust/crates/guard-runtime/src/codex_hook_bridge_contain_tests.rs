@@ -23,6 +23,7 @@ fn no_native(
     _: &serde_json::Value,
     _: &serde_json::Map<String, serde_json::Value>,
     _: &str,
+    _: &str,
 ) -> Option<String> {
     None
 }
@@ -255,6 +256,7 @@ fn runtime_sink(
     answer: &serde_json::Value,
     original: &serde_json::Map<String, serde_json::Value>,
     workspace: &str,
+    _home: &str,
 ) -> Option<String> {
     (answer["reason_code"] == "native_workspace_containment_required"
         && answer["required_execution_profile"] == "workspace-contained-v1"

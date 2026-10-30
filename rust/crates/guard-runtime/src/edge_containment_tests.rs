@@ -78,12 +78,12 @@ fn receipt() -> Value {
     })
 }
 
-fn no_native(_: &Value, _: &Map<String, Value>, _: &str) -> Option<String> {
+fn no_native(_: &Value, _: &Map<String, Value>, _: &str, _: &str) -> Option<String> {
     None
 }
 
 /// The runtime's own sink, for any call it is asked about.
-fn runtime_sink(_: &Value, _: &Map<String, Value>, _: &str) -> Option<String> {
+fn runtime_sink(_: &Value, _: &Map<String, Value>, _: &str, _: &str) -> Option<String> {
     Some("/opt/hol guard/runtime".to_owned())
 }
 

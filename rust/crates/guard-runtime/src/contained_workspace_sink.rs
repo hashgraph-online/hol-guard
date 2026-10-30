@@ -45,6 +45,7 @@ use plan_check::{plan_paths, sibling_root, validated_plan};
 use runner::{bootstrap_init, Launch, PrivateRoot};
 use snapshot::read_request;
 
+pub(crate) use plan_check::entered_sibling;
 pub(crate) use process::launch;
 pub(crate) use split::host_split;
 use split::publishes;
