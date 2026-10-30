@@ -288,6 +288,7 @@ def host_tool_path(home: Path, search_path: str) -> str:
     local_bin = home / ".local" / "bin"
     php = home / ".asdf" / "installs" / "php" / "8.3.6" / "bin"
     ruby = home / ".asdf" / "installs" / "ruby" / "3.3.0" / "bin"
+    cloud_sdk = home / "google-cloud-sdk" / "bin"
     tools = (
         (bun, ("bun",)),
         (node, ("node", "npm", "npx", "yarn")),
@@ -300,6 +301,12 @@ def host_tool_path(home: Path, search_path: str) -> str:
         # command rather than this host's package layout.
         (php, ("composer",)),
         (ruby, ("bundle", "bundler")),
+        # An unpacked cloud SDK, which is how a developer gets `kubectl` when
+        # no package manager owns it. It stays off the returned PATH on
+        # purpose: the cases that use it spell the installer's own path, and
+        # the gate would not be measuring that spelling if the same name also
+        # resolved on PATH.
+        (cloud_sdk, ("kubectl",)),
     )
     for directory, names in tools:
         for name in names:

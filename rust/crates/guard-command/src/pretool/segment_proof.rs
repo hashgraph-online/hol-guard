@@ -295,7 +295,8 @@ pub(super) fn exact_safe_segment_with_context(
         || (executable.contains(['/', '\\'])
             && !super::postgres_reads::trusted_pg_ctl_path(executable, context)
             && !super::guard_diagnostics::guard_install_executable(executable, context)
-            && !super::venv_program_path::environment_program(executable, context))
+            && !super::venv_program_path::environment_program(executable, context)
+            && !super::installed_program_path::installed_program(executable, context))
     {
         return false;
     }
