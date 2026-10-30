@@ -170,10 +170,14 @@ fn cwd_shadows_launcher(cwd: &Path) -> bool {
 /// location at all -- a clone, an unpacked archive, a generated `bin`. That
 /// is why the bare-name proof already refuses a launcher it can see in the
 /// working directory ([`cwd_shadows_launcher`]). A component that names no
-/// directory of its own -- `..`, `.`, or the empty one a doubled separator
-/// leaves -- is refused with it: an install is never spelled by walking back
-/// out of somewhere, and the detour would otherwise reach a file inside the
-/// working directory without matching the prefix that refuses it.
+/// directory of its own ([`names_its_own_directory`]) is refused with it: an
+/// install is never spelled by walking back out of somewhere, and the detour
+/// would otherwise reach a file inside the working directory without matching
+/// the prefix that refuses it.
+///
+/// A root that holds one directory per application admits only Guard's own
+/// ([`APPLICATION_ROOTS`]), since every other directory there was written by
+/// a different installer or by whoever unpacked a checkout beside them.
 ///
 /// [`safe_hol_guard_arguments`] still decides which subcommands the
 /// admission covers, so the control surface keeps its review.
@@ -181,10 +185,14 @@ pub(super) fn guard_install_executable(executable: &str, context: super::PathCon
     // The same spelling the admission arm dispatches on, so a name that could
     // not reach that arm never pays for the walk below.
     let basename = super::executable_basename(executable).to_ascii_lowercase();
-    let name = basename
-        .strip_suffix(".exe")
-        .or_else(|| basename.strip_suffix(".cmd"))
-        .unwrap_or(&basename);
+    // Only the program suffix Windows gives a real executable. A `.cmd`
+    // target is handed to `cmd.exe /c`, which reads the arguments again after
+    // the launcher was spawned with them, and `command test <text>` carries
+    // text whose whole purpose is to hold the operators that second reading
+    // would act on. Guard does write a `hol-guard.cmd` PATH shim, so this is a
+    // real spelling of the launcher; it keeps the normal review rather than an
+    // admission whose argument screen cannot survive being re-read.
+    let name = basename.strip_suffix(".exe").unwrap_or(&basename);
     name == "hol-guard"
         && anchored_at_install_root(executable, context)
         && super::guard_names::names_guard_location(
@@ -253,7 +261,7 @@ fn anchored_at_install_root(executable: &str, context: super::PathContext<'_>) -
     // workspace is refused by.
     let mut components = spelled.split('/');
     components.next();
-    if !absolute || components.any(|component| matches!(component, "" | "." | "..")) {
+    if !absolute || !components.all(names_its_own_directory) {
         return false;
     }
     let lowered = spelled.to_ascii_lowercase();
@@ -274,14 +282,55 @@ fn anchored_at_install_root(executable: &str, context: super::PathContext<'_>) -
         [drive, b':', b'/', ..] if drive.is_ascii_alphabetic() => &lowered[2..],
         _ => lowered.as_str(),
     };
-    INSTALL_ROOTS
-        .iter()
-        .any(|root| match root.strip_prefix('~') {
+    INSTALL_ROOTS.iter().any(|root| {
+        let below = match root.strip_prefix('~') {
             Some(rest) => home
                 .as_deref()
-                .is_some_and(|home| lowered.starts_with(&format!("{home}{rest}"))),
-            None => rooted.starts_with(*root),
+                .and_then(|home| lowered.strip_prefix(format!("{home}{rest}").as_str())),
+            None => rooted.strip_prefix(*root),
+        };
+        below.is_some_and(|rest| {
+            !APPLICATION_ROOTS.contains(root)
+                || rest.split('/').next().is_some_and(names_guard_install)
         })
+    })
+}
+
+/// Whether one component of a spelled path names a directory of its own.
+///
+/// `.`, `..` and the empty component a doubled separator leaves name none, so
+/// the same file could be reached by a spelling that misses the workspace
+/// prefix below. Windows drops a trailing dot or space from each component
+/// before it opens one, so `proj.\bin` opens `proj\bin`: that spelling misses
+/// the prefix while the file it reaches is inside the workspace. A component
+/// carrying `~` is a short name (`PROGRA~1`), which the same comparison cannot
+/// read either. An install is spelled by none of them.
+fn names_its_own_directory(component: &str) -> bool {
+    !matches!(component, "" | "." | "..")
+        && !component.ends_with(['.', ' '])
+        && !component.contains('~')
+}
+
+/// Install roots that hold one directory per application rather than one
+/// shared tree. Guard's own is named after it, so a sibling that is not is
+/// another program's install or a checkout written beside them, and the `bin`
+/// it carries proves nothing about who wrote the file inside.
+const APPLICATION_ROOTS: &[&str] = &[
+    "~/applications/",
+    "~/appdata/local/programs/",
+    "/applications/",
+    "/program files (x86)/",
+    "/program files/",
+    "/programdata/",
+];
+
+/// Whether a directory directly below an application root is Guard's own. The
+/// installers write `HOL Guard`, the macOS bundle of the same name, or the
+/// package name; a version or edition written after it is still Guard's.
+fn names_guard_install(component: &str) -> bool {
+    ["hol guard", "hol-guard", "hol_guard", "plugin-guard"]
+        .iter()
+        .any(|name| component.starts_with(name))
 }
 
 pub(super) fn safe_hol_guard_arguments(arguments: &[String]) -> bool {

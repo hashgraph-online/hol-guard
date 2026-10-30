@@ -648,3 +648,121 @@ fn an_installed_guard_program_names_the_launcher_on_windows() {
         );
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn an_application_root_admits_guards_own_directory_and_no_sibling() {
+    let context = super::super::PathContext {
+        home_dir: Some("/Users/u"),
+        cwd: Some("/Users/u/projects/app"),
+        ..Default::default()
+    };
+    for executable in [
+        "/Applications/HOL Guard.app/Contents/MacOS/hol-guard",
+        "/Applications/hol-guard/bin/hol-guard",
+        "/Users/u/Applications/HOL Guard.app/Contents/MacOS/hol-guard",
+    ] {
+        assert!(
+            super::guard_install_executable(executable, context),
+            "{executable}"
+        );
+    }
+    // A directory below an application root belongs to whoever wrote it. A
+    // checkout unpacked there carries its own `bin`, which the location
+    // screen reads as an install, so the root has to name Guard's directory
+    // rather than admit every sibling of it.
+    for executable in [
+        "/Applications/demo/bin/hol-guard",
+        "/Applications/Some Vendor/tools/hol-guard",
+        "/Users/u/Applications/demo/bin/hol-guard",
+    ] {
+        assert!(
+            !super::guard_install_executable(executable, context),
+            "{executable}"
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn a_component_windows_would_trim_cannot_reach_the_workspace() {
+    // Windows opens `app.\bin` as `app\bin`, so a spelling carrying the dot
+    // names the workspace's own directory while missing the prefix that
+    // refuses it. The reading here is the spelling's, on every platform.
+    let context = super::super::PathContext {
+        home_dir: Some("/Users/u"),
+        cwd: Some("/Users/u/Library/Application Support/app"),
+        ..Default::default()
+    };
+    for detour in [
+        "/Users/u/Library/Application Support/app./bin/hol-guard",
+        "/Users/u/Library/Application Support/app /bin/hol-guard",
+        "/Users/u/Library/Application Support/app/bin./hol-guard",
+        // A short name is another spelling the prefix comparison cannot read.
+        "/Users/u/Library/Applic~1/app/bin/hol-guard",
+    ] {
+        assert!(
+            !super::guard_install_executable(detour, context),
+            "{detour}"
+        );
+    }
+    assert!(super::guard_install_executable(
+        "/Users/u/Library/Application Support/hol-guard/bin/hol-guard",
+        context
+    ));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_batch_launcher_is_not_an_installed_guard_program() {
+    // The desktop PATH shim is a real spelling of the launcher, and `cmd.exe`
+    // reads a batch target's arguments a second time. `command test <text>`
+    // carries the operators that second reading would act on, so the shim
+    // keeps its review instead of the admission the executable gets.
+    let context = super::super::PathContext {
+        home_dir: Some("/Users/u"),
+        cwd: Some("/Users/u/projects/app"),
+        ..Default::default()
+    };
+    for executable in [
+        "/Users/u/.hol-guard/bin/hol-guard.cmd",
+        "/Users/u/.local/bin/hol-guard.bat",
+    ] {
+        assert!(
+            !super::guard_install_executable(executable, context),
+            "{executable}"
+        );
+    }
+    assert!(super::guard_install_executable(
+        "/Users/u/.hol-guard/bin/hol-guard.exe",
+        context
+    ));
+}
+
+#[cfg(windows)]
+#[test]
+fn a_checkout_below_an_application_root_keeps_its_review_on_windows() {
+    let context = super::super::PathContext {
+        home_dir: Some("C:\\Users\\u"),
+        cwd: Some("C:\\Users\\u\\projects\\app"),
+        ..Default::default()
+    };
+    for executable in [
+        // `Programs` holds one directory per installer. A checkout written
+        // beside them carries a `bin` the location screen reads as an install.
+        "C:\\Users\\u\\AppData\\Local\\Programs\\demo\\bin\\hol-guard.exe",
+        "C:\\Program Files\\demo\\bin\\hol-guard.exe",
+        "C:\\ProgramData\\demo\\bin\\hol-guard.exe",
+        // Windows trims a trailing dot before it opens the directory, so this
+        // spelling reaches the workspace's own `bin` while missing its prefix.
+        "C:\\Users\\u\\AppData\\Roaming\\proj.\\bin\\hol-guard.exe",
+        "C:\\Users\\u\\AppData\\Roaming\\PROGRA~1\\bin\\hol-guard.exe",
+        // A batch target is re-read by `cmd.exe` after it is spawned.
+        "C:\\Program Files\\HOL Guard\\hol-guard.cmd",
+    ] {
+        assert!(
+            !super::guard_install_executable(executable, context),
+            "{executable}"
+        );
+    }
+}
