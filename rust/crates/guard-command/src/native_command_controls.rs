@@ -520,14 +520,38 @@ impl CompiledNativeCommandControls {
     /// another drops the program it rewrote away, and with it the extension
     /// evidence that program carried, so a watched program keeps its own
     /// evaluation instead.
+    ///
+    /// An extension reaches a program two ways: the list it declares, and the
+    /// executables its own rules require. Both are read the way the rest of
+    /// the program reads a program name — by basename, without case — so
+    /// `/usr/bin/tee` and `TEE` name the same watched program `tee` does.
+    ///
+    /// A rule that can match without naming any program is left out rather
+    /// than read as watching everything. A quarter of the packaged
+    /// extensions carry such a rule, the required `command.filesystem` and
+    /// `command.git` among them, so reading one as watching every program
+    /// would answer `true` for every name and leave no projection able to
+    /// run at all. Those rules name no program, which is not the same as
+    /// naming this one, and the unmodeled-command path reads its own name
+    /// sets the same way.
     pub(crate) fn watches_executable(&self, executable: &str) -> bool {
-        self.program.extensions.iter().any(|extension| {
-            self.active_extensions.contains(&extension.extension_id)
-                && extension
-                    .executables
-                    .iter()
-                    .any(|candidate| candidate == executable)
-        })
+        let wanted = crate::command_ascii_comparison::lowercase_for_ascii_comparison(
+            crate::native_command_program::basename(executable),
+        );
+        self.program
+            .extensions
+            .iter()
+            .enumerate()
+            .any(|(index, extension)| {
+                self.active_extensions.contains(&extension.extension_id)
+                    && self
+                        .program
+                        .extension_known_names(
+                            index,
+                            unmodeled::compatibility_executables(&extension.extension_id),
+                        )
+                        .contains(&wanted)
+            })
     }
 }
 

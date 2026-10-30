@@ -736,14 +736,15 @@ fn evaluate_envelope(
     // forms on the same target checks.
     // An extension that watches `tee` evaluates the stage itself, and the
     // rewrite deletes the program it would match on. Leaving such a command
-    // on the existing path keeps that evaluation.
-    let tee_is_watched = controls.is_some_and(|controls| controls.watches_executable("tee"));
+    // on the existing path keeps that evaluation. The question is asked only
+    // of a command the rewrite actually read a stage out of, because
+    // answering it walks every active extension's rules.
     if let Some(rewritten) = signals
         .command
         .as_deref()
         .filter(|_| project_redirects && !search_scope_proven && !apply_patch_proven)
-        .filter(|_| !tee_is_watched)
         .and_then(redirect_tee::as_redirects)
+        .filter(|_| !controls.is_some_and(|controls| controls.watches_executable("tee")))
     {
         let rewritten_payload = payload_with_command(
             payload,
