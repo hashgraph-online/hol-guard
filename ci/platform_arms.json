@@ -907,6 +907,14 @@
    "body": "40044ed07203"
   },
   {
+   "verdict": "other-platform",
+   "note": "Neither Unix nor Windows: no hook on such a platform writes a request snapshot, so the sink reads none. `None` refuses the run with `contained_run_authorization_failed` and no sandbox starts. Windows reads through `codex_hook_bridge_contain_windows::read_snapshot`, proven by its Windows unit tests.",
+   "file": "rust/crates/guard-runtime/src/contained_test_request.rs",
+   "item": "fn read_snapshot(_: &Path) -> Option<Vec<u8>>",
+   "cfg": "not(any(unix, windows))",
+   "body": "24533b1b187e"
+  },
+  {
    "verdict": "posix-primitive",
    "note": "There is no parent-process reparent check to make, so `original_parent` is zero; the request is still parsed and refused before any decode, and the decode arm reports the unsupported platform.",
    "file": "rust/crates/guard-runtime/src/content_decode.rs",
