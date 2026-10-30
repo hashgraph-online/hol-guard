@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
 import os
 import signal
@@ -2052,6 +2053,36 @@ def test_linux_environment_search_checks_a_root_owned_entry_that_runs_as_this_us
     assert search() is None
     (proc_root / "102" / "environ").chmod(0o600)
     assert search() is True
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX procfs layout")
+def test_linux_environment_search_is_unknown_while_entries_keep_vanishing(tmp_path, monkeypatch):
+    # A holder can fork a child the listing already passed, then exit before it is read.
+    proc_root = tmp_path / "proc"
+    _fake_linux_process(proc_root, 101, environment=b"A=1\0", start_tick=500)
+    (proc_root / "102").mkdir()
+    search = partial(
+        daemon_manager_module._linux_proc_environment_contains,
+        b"LAUNCH=abc",
+        launched_at_tick=400,
+        deadline=time.monotonic() + 5,
+        proc_root=proc_root,
+    )
+
+    assert search() is None
+    passes: list[str] = []
+    process_query = importlib.import_module("codex_plugin_scanner.guard.daemon.manager_process_query")
+    real_pass = process_query._linux_proc_environment_pass
+
+    def pass_after_exit(*args, **kwargs):
+        passes.append("pass")
+        if len(passes) == 2:
+            (proc_root / "102").rmdir()
+        return real_pass(*args, **kwargs)
+
+    monkeypatch.setattr(process_query, "_linux_proc_environment_pass", pass_after_exit)
+    assert search() is False
+    assert passes == ["pass", "pass"]
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX procfs layout")

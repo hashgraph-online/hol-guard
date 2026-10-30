@@ -11,7 +11,7 @@ import subprocess
 import threading
 from contextlib import suppress
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, Literal
 
 from .manager_ephemeral_reap import _ManagerProxy
 
@@ -108,6 +108,9 @@ def _linux_proc_process_entries(proc_root: Path = Path("/proc")) -> list[tuple[i
     return entries
 
 
+_LINUX_PROC_ENVIRONMENT_SCAN_PASSES = 3
+
+
 def _linux_proc_environment_contains(
     entry: bytes,
     *,
@@ -121,10 +124,32 @@ def _linux_proc_environment_contains(
     overflowed, or a process that started at or after ``launched_at_tick`` (so could
     descend from the launch) hides its environment. A process that started earlier
     cannot carry the entry, so its unreadable environment is skipped.
+
+    A procfs listing is not a snapshot: a holder can fork a child the listing has
+    already passed and exit before its own entry is read. A pass that saw any entry
+    vanish therefore cannot answer ``False``; the scan repeats it a bounded number
+    of times and stays unknown if every pass saw one.
     """
 
+    for _ in range(_LINUX_PROC_ENVIRONMENT_SCAN_PASSES):
+        result = _linux_proc_environment_pass(
+            entry, launched_at_tick=launched_at_tick, deadline=deadline, proc_root=proc_root
+        )
+        if result != "vanished":
+            return result
+    return None
+
+
+def _linux_proc_environment_pass(
+    entry: bytes,
+    *,
+    launched_at_tick: int,
+    deadline: float,
+    proc_root: Path,
+) -> bool | Literal["vanished"] | None:
     remaining_bytes = m._GUARD_DAEMON_LAUNCH_ENVIRONMENT_QUERY_LIMIT_BYTES
     user_id = m.os.getuid()
+    vanished = False
     try:
         for process_dir in proc_root.iterdir():
             if m.time.monotonic() >= deadline:
@@ -132,17 +157,24 @@ def _linux_proc_environment_contains(
             if not process_dir.name.isdigit():
                 continue
             try:
-                if process_dir.stat().st_uid != user_id and not _linux_proc_runs_as_user(process_dir, user_id):
-                    continue
+                if process_dir.stat().st_uid != user_id:
+                    runs_as_user = _linux_proc_runs_as_user(process_dir, user_id)
+                    if runs_as_user is None:
+                        vanished = True
+                        continue
+                    if not runs_as_user:
+                        continue
                 with (process_dir / "environ").open("rb") as stream:
                     raw_environment = stream.read(remaining_bytes + 1)
             except (FileNotFoundError, ProcessLookupError):
+                vanished = True
                 continue
             except PermissionError:
                 started_at_tick = _linux_proc_start_tick(process_dir)
                 if started_at_tick is None:
                     if (process_dir / "stat").exists():
                         return None
+                    vanished = True
                     continue
                 if started_at_tick >= launched_at_tick:
                     return None
@@ -156,16 +188,17 @@ def _linux_proc_environment_contains(
                 return True
     except OSError:
         return None
-    return False
+    return "vanished" if vanished else False
 
 
-def _linux_proc_runs_as_user(process_dir: Path, user_id: int) -> bool:
+def _linux_proc_runs_as_user(process_dir: Path, user_id: int) -> bool | None:
     """Whether ``status`` lists ``user_id`` among the process's user ids.
 
     A process that is not dumpable has a root-owned ``/proc/PID``, so the directory
     owner alone would hide a same-user launch descendant that dropped dumpability.
     An unreadable or missing ``Uid:`` line counts as this user's, so the caller
-    reaches the environment and start-tick checks instead of skipping it.
+    reaches the environment and start-tick checks instead of skipping it. ``None``
+    means the process exited before its status could be read.
     """
 
     try:
@@ -174,7 +207,7 @@ def _linux_proc_runs_as_user(process_dir: Path, user_id: int) -> bool:
                 if line.startswith("Uid:"):
                     return str(user_id) in line.split()[1:]
     except (FileNotFoundError, ProcessLookupError):
-        return False
+        return None
     except OSError:
         return True
     return True
