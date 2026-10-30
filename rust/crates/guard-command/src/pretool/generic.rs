@@ -745,7 +745,7 @@ fn evaluate_envelope(
             signals.command.as_deref().unwrap_or_default(),
             &rewritten,
         );
-        return evaluate_envelope(
+        let rewritten_result = evaluate_envelope(
             harness,
             event,
             &rewritten_payload,
@@ -755,6 +755,15 @@ fn evaluate_envelope(
             execution_environment,
             project_redirects,
         );
+        // Only a settled redirect spelling answers for the pipeline. When the
+        // projection cannot bound the target it leaves the redirect in the
+        // text, where the shell parser models no segments at all, so the
+        // rewritten review would drop the evidence the pipeline's own
+        // segments carry. The original text keeps that evidence, and it
+        // already fails closed on a write the parser cannot bound.
+        if rewritten_result.minimum_action == "allow" && rewritten_result.decision == "allow" {
+            return rewritten_result;
+        }
     }
 
     if let Some(projection) = signals
