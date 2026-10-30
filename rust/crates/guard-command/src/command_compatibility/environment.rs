@@ -480,4 +480,29 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn only_the_prefix_the_run_receives_clears_a_build_setting() {
+        // The screen reads the assignments the shell applies to the run. A
+        // second assignment of the name is the value that reaches the
+        // program, and a word after the program is that program's argument,
+        // so neither can stand in for the setting in effect.
+        for (assignment, command) in [
+            ("GOFLAGS=-v GOFLAGS=-toolexec=./x", "go test ./..."),
+            ("GOFLAGS=-toolexec=./x GOFLAGS=-v", "go test ./..."),
+            ("GOFLAGS=-toolexec=./x", "go test ./... GOFLAGS=-v"),
+            ("RUSTFLAGS=-Dwarnings RUSTFLAGS=-Clinker=./ld", "cargo test"),
+        ] {
+            assert!(
+                super::super::assignment_prefix_is_unsupported(&valued_segment(
+                    assignment, command
+                )),
+                "{assignment} {command}"
+            );
+        }
+        // Repeating the same screened value is still only screened values.
+        assert!(!super::super::assignment_prefix_is_unsupported(
+            &valued_segment("GOFLAGS=-v GOFLAGS=-count=1", "go test ./...")
+        ));
+    }
 }

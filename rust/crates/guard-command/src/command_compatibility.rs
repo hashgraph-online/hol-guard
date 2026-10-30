@@ -219,15 +219,24 @@ fn assignment_prefix_is_unsupported(segment: &CommandSegmentV1) -> bool {
 /// an uncertain command, so `GOFLAGS=-count=1 go test ./...` blocked outright
 /// while the same run without the prefix passed. A value the screen does not
 /// hold (`-toolexec=./x`, `-Clinker=./ld`, `-pevil`) still fails here.
+///
+/// Only the prefix the shell applies to the run is read, and every assignment
+/// of the name in it has to pass. A word spelled like the setting after the
+/// program is an argument to that program, not the setting in effect, and a
+/// second assignment of the same name is the value the run actually gets, so
+/// reading either as the screened one would clear
+/// `GOFLAGS=-v GOFLAGS=-toolexec=./x go test ./...` on the strength of a value
+/// the run never sees.
 fn screened_build_setting(segment: &CommandSegmentV1, name: &str) -> bool {
-    segment.tokens.iter().any(|token| {
-        token
-            .strip_prefix(name)
-            .and_then(|rest| rest.strip_prefix('='))
-            .is_some_and(|value| {
-                crate::pretool::generic::inert_tool_settings::inert_tool_setting(name, value)
-            })
-    })
+    let prefix = crate::command_tokens::leading_environment(&segment.tokens).1;
+    let mut values = segment.tokens[..prefix.min(segment.tokens.len())]
+        .iter()
+        .filter_map(|token| token.strip_prefix(name).and_then(|rest| rest.strip_prefix('=')))
+        .peekable();
+    values.peek().is_some()
+        && values.all(|value| {
+            crate::pretool::generic::inert_tool_settings::inert_tool_setting(name, value)
+        })
 }
 
 /// A list item such as `OUT=build/report.json` only sets shell variables, so
