@@ -105,6 +105,10 @@ def test_a_workspace_receipt_runs_what_the_read_only_parsers_reject(
             # No launcher stands ahead of the program either, so the whole
             # command is its own core and it carries no timeout.
             return {"core": list(fields["command"]), "seconds": None}
+        if operation == "pytest_command":
+            # The command names a script of its own, so no pytest run stands
+            # behind it.
+            return False
         assert operation == "contained_kind", operation
         return kinds
 
