@@ -42,11 +42,17 @@ pub(super) fn safe_rg_segment(
     {
         return true;
     }
-    let absent = model
-        .segments
-        .iter()
-        .filter(|other| other.span != segment.span)
-        .all(|other| super::grep::creates_nothing(other, true));
+    // The absent-root proof reads a root as the command spells it. Windows
+    // drops the backslashes of an unquoted `C:\work\missing` before `rg`
+    // runs, so the search would open the drive-relative `C:workmissing` the
+    // proof never measured; the drive screen keeps the proof to spellings
+    // that reach the program intact.
+    let absent = crate::pretool::directory_targets::drive_targets_quoted(segment)
+        && model
+            .segments
+            .iter()
+            .filter(|other| other.span != segment.span)
+            .all(|other| super::grep::creates_nothing(other, true));
     safe_rg_arguments_inner(&segment.arguments, context, false, true, absent)
 }
 
@@ -639,6 +645,55 @@ mod tests {
             );
         }
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    /// Windows drops the backslashes of an unquoted drive path before the
+    /// program runs, so `rg PATTERN C:\work\notes` opens the drive-relative
+    /// `C:worknotes` while the absent-root proof measured the spelling as
+    /// written. The proof waits for a spelling that reaches `rg` intact.
+    #[cfg(windows)]
+    #[test]
+    fn an_unquoted_drive_root_is_never_proven_absent() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/rg-absent-drive-roots")
+            .join(std::process::id().to_string());
+        std::fs::create_dir_all(root.join("work/app/src")).unwrap();
+        let root = crate::runtime_read_paths::canonicalize_text(&root).unwrap();
+        let cwd = root.join("work/app");
+        // The same missing root, spelled with the separators Windows uses.
+        let missing = root.join("work").join("notes").display().to_string();
+        let context = crate::pretool::PathContext {
+            home_dir: root.to_str(),
+            cwd: cwd.to_str(),
+            ripgrep_config_absent: true,
+            shell_home_matches: true,
+            ..Default::default()
+        };
+        for (quoted, allowed) in [(false, false), (true, true)] {
+            let command = if quoted {
+                format!("rg -ln fixture \"{missing}\"")
+            } else {
+                format!("rg -ln fixture {missing}")
+            };
+            let model = crate::parse_command(&crate::CommandModelRequestV1 {
+                command: command.clone(),
+                dialect: "posix".to_owned(),
+                transport: "shell_string".to_owned(),
+                extraction_provenance: "guard-shell".to_owned(),
+            })
+            .unwrap();
+            let segment = model
+                .segments
+                .iter()
+                .find(|segment| segment.executable.as_deref() == Some("rg"))
+                .unwrap();
+            assert_eq!(
+                safe_rg_segment(&model, segment, context),
+                allowed,
+                "{command}"
+            );
+        }
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

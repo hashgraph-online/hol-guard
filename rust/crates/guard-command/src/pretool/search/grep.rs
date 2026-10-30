@@ -34,9 +34,13 @@ pub(crate) fn safe_grep_segment(
         .iter()
         .filter(|other| other.span != segment.span)
         .collect();
+    // Both absent routes read an operand as the command spells it, so a
+    // drive path whose backslashes the shell drops before `grep` runs names
+    // a different directory to the program than to the proof.
+    let quoted = crate::pretool::directory_targets::drive_targets_quoted(segment);
     let absent = AbsentOperands {
-        plain: others.iter().all(|other| creates_nothing(other, false)),
-        recursive: others.iter().all(|other| creates_nothing(other, true)),
+        plain: quoted && others.iter().all(|other| creates_nothing(other, false)),
+        recursive: quoted && others.iter().all(|other| creates_nothing(other, true)),
     };
     safe_arguments(&segment.arguments, context, false, absent)
 }
