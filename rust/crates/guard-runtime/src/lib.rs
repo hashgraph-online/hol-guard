@@ -335,6 +335,7 @@ mod guard_store_approval_row;
 mod guard_store_approval_sweep;
 mod guard_store_approval_write;
 mod guard_store_args;
+mod guard_store_claimed_native_allow;
 mod guard_store_claude_review;
 mod guard_store_clients;
 mod guard_store_cmd_activity;
@@ -359,6 +360,7 @@ mod guard_store_connect_vectors_tests;
 mod guard_store_connector_context;
 mod guard_store_db;
 mod guard_store_exact_cloud_apply;
+mod guard_store_exact_cloud_peek;
 mod guard_store_guard_event;
 #[cfg(test)]
 mod guard_store_guard_event_tests;

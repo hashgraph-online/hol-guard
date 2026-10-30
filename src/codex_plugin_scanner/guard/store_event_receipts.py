@@ -4,15 +4,9 @@
 
 from __future__ import annotations
 
-from .local_authority_integrity import verify_local_authority_payload
-from .policy_integrity import PolicyIntegrityVerificationResult
-
 # ruff: noqa: F403,F405
 from .store_base import *
-from .store_local_once_authority import (
-    local_once_integrity_purpose,
-    persist_local_once_approval,
-)
+from .store_local_once_authority import persist_local_once_approval
 
 
 def _list_events_query(limit: int, event_name: str | None) -> tuple[str, tuple[object, ...]]:
@@ -115,84 +109,3 @@ class StoreEventReceiptsMixin:
                 }
             )
         return items
-
-
-def _local_once_approval_signed_payload(row: Mapping[str, object]) -> dict[str, object]:
-    payload = {
-        "approval_id": _row_value(row, "approval_id"),
-        "request_id": _row_value(row, "request_id"),
-        "harness": _row_value(row, "harness"),
-        "artifact_id": _row_value(row, "artifact_id"),
-        "artifact_hash": _row_value(row, "artifact_hash"),
-        "workspace": _row_value(row, "workspace"),
-        "publisher": _row_value(row, "publisher"),
-        "action": _row_value(row, "action"),
-        "created_at": _row_value(row, "created_at"),
-        "expires_at": _row_value(row, "expires_at"),
-        "claimed_at": _row_value(row, "claimed_at"),
-    }
-    authority_kind = _row_value(row, "authority_kind")
-    if authority_kind is not None:
-        payload["authority_kind"] = authority_kind
-    return payload
-
-
-def _local_once_approval_integrity(row: Mapping[str, object]) -> dict[str, object]:
-    return {
-        "integrity_version": _row_value(row, "integrity_version"),
-        "payload_hash": _row_value(row, "payload_hash"),
-        "payload_mac": _row_value(row, "payload_mac"),
-        "integrity_key_id": _row_value(row, "integrity_key_id"),
-        "signed_at": _row_value(row, "signed_at"),
-    }
-
-
-def _verify_local_once_approval(
-    row: Mapping[str, object],
-    *,
-    key: bytes | None,
-    key_id: str | None,
-) -> PolicyIntegrityVerificationResult:
-    authority_kind = _row_value(row, "authority_kind")
-    return verify_local_authority_payload(
-        _local_once_approval_signed_payload(row),
-        _local_once_approval_integrity(row),
-        key=key,
-        key_id=key_id,
-        purpose=local_once_integrity_purpose(authority_kind),
-    )
-
-
-def _local_once_approval_payload(row: Mapping[str, object]) -> dict[str, object]:
-    payload = {
-        "action": str(row["action"]),
-        "approval_id": str(row["approval_id"]),
-        "artifact_hash": row["artifact_hash"],
-        "artifact_id": row["artifact_id"],
-        "decision_id": None,
-        "expires_at": row["expires_at"],
-        "harness": str(row["harness"]),
-        "integrity_key_id": row["integrity_key_id"],
-        "integrity_status": "valid",
-        "integrity_version": row["integrity_version"],
-        "owner": None,
-        "publisher": row["publisher"],
-        "reason": "approved once in review",
-        "request_id": str(row["request_id"]),
-        "scope": "artifact",
-        "source": "approval-gate-once",
-        "signed_at": row["signed_at"],
-        "updated_at": str(row["created_at"]),
-        "workspace": row["workspace"],
-    }
-    authority_kind = _row_value(row, "authority_kind")
-    if authority_kind is not None:
-        payload["authority_kind"] = authority_kind
-    return payload
-
-
-def _row_value(row: Mapping[str, object], key: str) -> object:
-    try:
-        return row[key]
-    except KeyError:
-        return None

@@ -7,7 +7,6 @@ are pinned by `tests/fixtures/workspace_grant_plan/parity_vectors.json`.
 from __future__ import annotations
 
 import os
-import shlex
 from collections.abc import Mapping
 from dataclasses import dataclass
 from itertools import pairwise
@@ -44,16 +43,31 @@ PLAN_FIELDS = frozenset(
 _SCRIPT_SUFFIXES = frozenset({".py", ".js", ".mjs", ".cjs", ".jsx", ".ts", ".mts", ".cts", ".tsx"})
 
 
+def _absolute_words(command: str) -> list[str]:
+    """Ask native authority for the absolute words the command spells.
+
+    Native authority read this text when it admitted the run and drew the plan
+    whose grant is being checked here. Reading it again in Python is a second
+    grammar deciding the same thing: whether `;`, `>` or `|` ends the word that
+    names the script, and whether `#` starts a comment or spells a directory.
+    A plan a grant is admitted against has to be read by the reading that drew
+    it.
+
+    An answer that is not a list of words is no reading at all, so it raises
+    rather than passing for a command that names nothing.
+    """
+    from ..native_restricted_pytest import restricted_native
+    from .restricted_pytest_model import PYTEST_INVALID_COMMAND_REASON_CODE, RestrictedPytestError
+
+    words = restricted_native("command_absolute_words", {"command_text": command}, list)
+    if type(words) is not list or not all(type(word) is str for word in words):
+        raise RestrictedPytestError(PYTEST_INVALID_COMMAND_REASON_CODE, "Invalid restricted execution request.")
+    return list(words)
+
+
 def _launched(path: Path, command: str) -> bool:
     """The command carries an absolute word that names exactly this file."""
-    lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
-    lexer.whitespace_split = True
-    lexer.commenters = ""
-    try:
-        words = list(lexer)
-    except ValueError:
-        return False
-    return any(word.startswith("/") and os.path.realpath(word) == str(path) for word in words)
+    return any(os.path.realpath(word) == str(path) for word in _absolute_words(command))
 
 
 def read_grants_valid(value: object, command: str) -> bool:

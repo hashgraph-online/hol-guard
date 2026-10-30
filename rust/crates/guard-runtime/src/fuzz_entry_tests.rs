@@ -147,11 +147,11 @@ fn the_corpus_carries_a_seed_each_screen_reads_as_its_own_request() {
             let _ = answered.insert(operation);
         }
     }
-    // `script_words` and `command_words` read a string rather than the
-    // `command` array every other screen reads, so a corpus of command
-    // requests would replay their seeds into an early error and never reach
-    // the lexer behind them.
-    for screen in ["script_words", "command_words"] {
+    // `script_words`, `command_words` and `command_absolute_words` read a
+    // string rather than the `command` array every other screen reads, so a
+    // corpus of command requests would replay their seeds into an early error
+    // and never reach the lexer behind them.
+    for screen in ["script_words", "command_words", "command_absolute_words"] {
         assert!(
             answered.contains(screen),
             "no seed reaches the {screen} screen as a request it answers: {answered:?}"

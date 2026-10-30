@@ -11,9 +11,11 @@ import codex_plugin_scanner.guard.codex_live_decision as live_decision_module
 from codex_plugin_scanner.guard.codex_live_decision import complete_codex_live_decision
 from codex_plugin_scanner.guard.local_authority_integrity import sign_local_authority_payload
 from codex_plugin_scanner.guard.models import PolicyDecision
+from codex_plugin_scanner.guard.native_guard_store import NativeGuardStoreUnavailable
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import enable_exact_cloud_review
 from codex_plugin_scanner.guard.runtime.exact_cloud_review_apply import apply_exact_cloud_review
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.store_exact_cloud_local_once import StoreExactCloudLocalOnceMixin
 from tests.guard_exact_cloud_review_support import (
     connected_exact_review_store,
     remote_approval,
@@ -227,3 +229,49 @@ def test_live_completion_fails_closed_when_authority_revision_changes_before_cla
     )
     resume = store.get_request_resume("exact-live-revision-race")
     assert resume is not None and resume["status"] == "pending"
+
+
+class _DroppingPeekStore(StoreExactCloudLocalOnceMixin):
+    def __init__(self, failures: list[NativeGuardStoreUnavailable]) -> None:
+        self.failures = failures
+        self.calls = 0
+
+    def _policy_integrity_secret_material(self, *, create: bool) -> tuple[bytes | None, str | None]:
+        return b"k" * 32, "key-1"
+
+    def _provision_resident_verifier(self, key: bytes | None = None) -> None:
+        assert key == b"k" * 32
+
+    def _native_store_call(self, method: str, args: Mapping[str, object]) -> object:
+        assert method == "peek_exact_cloud_local_once_approval"
+        self.calls += 1
+        if self.failures:
+            raise self.failures.pop(0)
+        return {"request_id": args["request_id"], "action": "allow"}
+
+
+def _no_answer(reason: str = "native_guard_store_unavailable") -> NativeGuardStoreUnavailable:
+    error = NativeGuardStoreUnavailable("dropped")
+    error.reason = reason
+    return error
+
+
+def test_exact_cloud_peek_retries_one_dropped_round_trip() -> None:
+    store = _DroppingPeekStore([_no_answer()])
+
+    decision = store.peek_exact_cloud_local_once_approval(request_id="r1", now="2026-10-30T00:00:00+00:00")
+
+    assert decision == {"request_id": "r1", "action": "allow"}
+    assert store.calls == 2
+
+
+def test_exact_cloud_peek_gives_up_after_the_second_drop_or_another_failure() -> None:
+    twice = _DroppingPeekStore([_no_answer(), _no_answer()])
+    with pytest.raises(NativeGuardStoreUnavailable):
+        twice.peek_exact_cloud_local_once_approval(request_id="r1", now="2026-10-30T00:00:00+00:00")
+    assert twice.calls == 2
+
+    refused = _DroppingPeekStore([_no_answer("native_guard_store_refused")])
+    with pytest.raises(NativeGuardStoreUnavailable):
+        refused.peek_exact_cloud_local_once_approval(request_id="r1", now="2026-10-30T00:00:00+00:00")
+    assert refused.calls == 1
