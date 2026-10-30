@@ -23,6 +23,11 @@ pub(crate) fn evaluate(
         budget.check()?;
         return Ok(result);
     }
+    if operation == "workspace_grant_script_roots" {
+        let result = crate::contained_workspace_grant_plan::evaluate(input);
+        budget.check()?;
+        return Ok(result);
+    }
     if operation == "process_ceiling" {
         let result = crate::restricted_process_ceiling::evaluate(budget.deadline());
         budget.check()?;
