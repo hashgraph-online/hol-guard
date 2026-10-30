@@ -148,6 +148,11 @@ fn a_list_of_command_groups_is_read_as_the_lists_inside_them() {
                 false,
             ),
             (
+                format!("cat {web}/two.txt |& (cd {api} && cat one.txt)"),
+                false,
+            ),
+            (format!("(cd {api} && cat one.txt) |& cat"), false),
+            (
                 format!("(cd {api} && cat one.txt) & cat {web}/two.txt"),
                 false,
             ),

@@ -188,15 +188,19 @@ pub(super) fn blank_top_level_groups(chars: &[char]) -> Option<Vec<char>> {
 
 /// Whether a group opening after the last significant character starts a list
 /// element. A list element starts the command or follows the operator that
-/// ended the one before it. A single `|` is not one of those: the group is
-/// then an element of a pipeline, and the list inside it would feed the next
-/// stage on its own once the brackets were gone.
+/// ended the one before it. A single `|` is not one of those, and neither is
+/// `|&`: the group is then an element of a pipeline, and the list inside it
+/// would feed the next stage on its own once the brackets were gone.
 fn opens_a_list_element(chars: &[char], last_significant: Option<usize>) -> bool {
     let Some(last) = last_significant else {
         return true;
     };
     match chars[last] {
-        ';' | '\n' | '&' => true,
+        ';' | '\n' => true,
+        // `|&` is a pipe that merges stderr, not a background `&` or `&&`.
+        '&' => last
+            .checked_sub(1)
+            .is_none_or(|before| chars[before] != '|'),
         '|' => last
             .checked_sub(1)
             .is_some_and(|before| chars[before] == '|'),
