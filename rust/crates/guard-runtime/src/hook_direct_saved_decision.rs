@@ -69,6 +69,15 @@ const NON_OVERRIDABLE_ACTION_TYPES: [&str; 5] = [
 /// `REMOTE_POLICY_SOURCES` (`policy_integrity.py`).
 const REMOTE_SOURCES_SQL: &str = "('cloud-sync', 'team-policy', 'policy-bundle', \
      'policy-bundle-canonical', 'cloud-signed-memory')";
+/// `_SHELL_ACTION_TYPES` (`hook_native_saved_approval.py`).
+const SHELL_ACTION_TYPES: [&str; 6] = [
+    "command",
+    "package",
+    "process_service",
+    "network",
+    "shell",
+    "shell_command",
+];
 const SAVED_BLOCK_REASON_CODE: &str = "saved_exact_action_block";
 const SAVED_BLOCK_REASON: &str = "You chose to always block this exact action in HOL Guard.";
 /// The worst-case growth of a request on the daemon's wire, where every byte
@@ -175,6 +184,12 @@ pub(super) fn answer(edge: &[u8], context: &Context<'_>) -> Result<Value, HookDi
                 super::local_cli::block::block_response(context.harness, &result, name, false)
                     .ok_or(HookDirectDefer::SavedDecision)?;
             return Ok(parsed);
+        }
+        // A saved block on the exact command, such as a Guard Cloud policy
+        // rule, is the daemon's to apply, and it wins over any saved allow or
+        // approve-once retry this lane would answer.
+        if store.exact_command_blocked(context.payload, &result)? {
+            return Err(HookDirectDefer::SavedDecision);
         }
         match &token {
             Ok(token) if store.decided(Some(token))? => {
@@ -449,6 +464,27 @@ pub(crate) fn overridable_action_type(action_type: Option<&Value>) -> bool {
     }
 }
 
+/// `pre_tool_command` (`hook_request_parsing.py`): the command line a
+/// PreToolUse payload carries, read from the same places in the same order.
+fn pre_tool_command(payload: &Map<String, Value>) -> Option<&str> {
+    let input = ["tool_input", "toolInput"]
+        .into_iter()
+        .find_map(|key| payload.get(key).and_then(Value::as_object));
+    [
+        input,
+        payload.get("arguments").and_then(Value::as_object),
+        Some(payload),
+    ]
+    .into_iter()
+    .flatten()
+    .find_map(|candidate| {
+        ["command", "cmd", "shell_command", "shellCommand"]
+            .into_iter()
+            .filter_map(|key| candidate.get(key).and_then(Value::as_str))
+            .find(|value| !crate::context_digest::python_strip(value).is_empty())
+    })
+}
+
 /// Python truthiness of an optional JSON value.
 fn truthy(value: Option<&Value>) -> bool {
     match value {
@@ -486,6 +522,40 @@ impl StoreShape<'_> {
             if table_exists(self.connection, table).map_err(unavailable)?
                 && self.any(&format!("select 1 from {table} limit 1"), &[])?
             {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    /// `native_exact_command_block_response`'s probe: whether an
+    /// artifact-scoped block names this shell command's exact-command ids.
+    fn exact_command_blocked(
+        &self,
+        payload: &Map<String, Value>,
+        result: &Object,
+    ) -> Result<bool, HookDirectDefer> {
+        let shell = result
+            .get("action")
+            .and_then(|action| action.get("action_type"))
+            .and_then(Value::as_str)
+            .is_some_and(|kind| SHELL_ACTION_TYPES.contains(&kind));
+        let Some(command) = shell.then(|| pre_tool_command(payload)).flatten() else {
+            return Ok(false);
+        };
+        let candidates = crate::memory_pattern::verdict(&crate::memory_pattern::MemoryRequest {
+            command: Some(command),
+            artifact_type: Some("shell_command"),
+            artifact_id: None,
+            artifact_name: None,
+            harness: None,
+        });
+        for id in &candidates.exact_artifact_ids {
+            if self.any(
+                "select 1 from policy_decisions where harness in (?1, '*') and scope = 'artifact' \
+                 and action = 'block' and artifact_id = ?2 limit 1",
+                &[self.harness, id],
+            )? {
                 return Ok(true);
             }
         }

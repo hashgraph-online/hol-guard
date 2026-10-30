@@ -505,3 +505,76 @@ mod seeded;
 #[cfg(unix)]
 #[path = "hook_direct_saved_custom_grant_tests.rs"]
 mod custom_grant_tests;
+
+const NPM_PUBLISH_ID: &str =
+    "memory:exact-shell-command:42064321d2841d3b9ef8033b6f2374a1645cba1ca90f6aefb6bc1280dd45f046";
+
+fn command_review(action_type: &str) -> Object {
+    json!({"action": {"action_type": action_type}})
+        .as_object()
+        .unwrap()
+        .clone()
+}
+
+fn bash(command: &str) -> Map<String, Value> {
+    json!({"tool_name": "Bash", "tool_input": {"command": command}})
+        .as_object()
+        .unwrap()
+        .clone()
+}
+
+#[test]
+fn an_exact_command_block_stops_the_direct_lane_answering() {
+    let (_path, connection) = local_store("exact-command-block");
+    let store = shape(&connection);
+    let review = command_review("command");
+    assert!(!store
+        .exact_command_blocked(&bash("npm publish"), &review)
+        .unwrap());
+    insert_decision(
+        &connection,
+        "codex",
+        NPM_PUBLISH_ID,
+        "",
+        "block",
+        "policy-bundle-canonical",
+    );
+    // A block another harness owns leaves this one's answer alone.
+    assert!(!store
+        .exact_command_blocked(&bash("npm publish"), &review)
+        .unwrap());
+    insert_decision(
+        &connection,
+        "*",
+        NPM_PUBLISH_ID,
+        "",
+        "allow",
+        "policy-bundle-canonical",
+    );
+    assert!(!store
+        .exact_command_blocked(&bash("npm publish"), &review)
+        .unwrap());
+    insert_decision(
+        &connection,
+        "*",
+        NPM_PUBLISH_ID,
+        "",
+        "block",
+        "policy-bundle-canonical",
+    );
+    assert!(store
+        .exact_command_blocked(&bash("npm publish"), &review)
+        .unwrap());
+    assert!(store
+        .exact_command_blocked(&bash("npm publish"), &command_review("shell"))
+        .unwrap());
+    // Exact means the raw bytes: another command, or a tool that is not a
+    // shell, keeps its own review.
+    assert!(!store
+        .exact_command_blocked(&bash("npm publish --dry-run"), &review)
+        .unwrap());
+    assert!(!store
+        .exact_command_blocked(&bash("npm publish"), &command_review("mcp_tool"))
+        .unwrap());
+    assert!(!store.exact_command_blocked(&bash("  "), &review).unwrap());
+}
