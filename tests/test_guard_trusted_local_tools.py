@@ -11,10 +11,10 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import trusted_local_tools
 from codex_plugin_scanner.guard.trusted_local_tools import (
     LocalToolGrantUnavailableError,
-    local_tool_approval_eligibility,
     local_tool_approval_payload,
     parse_local_tool_grant_selection,
 )
+from tests.local_tool_eligibility_support import local_tool_approval_eligibility
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
