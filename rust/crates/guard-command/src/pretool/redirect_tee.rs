@@ -9,8 +9,9 @@
 //! redirect projection then models as `A | B` with `P` among the written
 //! targets, under every check a redirect's target gets. Anything the
 //! rewrite cannot read exactly — a substitution, a glob, a `$`, an unknown
-//! flag, a `-` operand, a heredoc, `|&` — leaves the command untouched, so
-//! the existing fail-closed path still sees it.
+//! flag, a `-` operand, a heredoc, a merged stderr stream, a redirection on
+//! the stage itself — leaves the command untouched, so the existing
+//! fail-closed path still sees it.
 
 /// `raw` with every plain `| tee PATH...` stage rewritten as the output
 /// redirects it performs, or `None` when no stage was rewritten.
@@ -18,10 +19,12 @@ pub(super) fn as_redirects(raw: &str) -> Option<String> {
     if !raw.contains("tee") {
         return None;
     }
-    // A form the stage scanner below cannot read exactly. `|&` carries
-    // stderr into the stage, so the redirect that replaces it would have to
-    // move too; the rest hide text from a plain left-to-right read.
-    for form in ["$(", "`", "<(", ">(", "|&", "<<"] {
+    // A form the stage scanner below cannot read exactly. `|&`, `2>&1` and
+    // `&>` carry stderr into the stage, so the redirect that replaces it
+    // would have to move too, and the two spellings have to decide alike.
+    // A `$` stands for text this scan never reads, wherever it sits. The
+    // rest hide text from a plain left-to-right read.
+    for form in ["$", "`", "<(", ">(", "|&", ">&", "&>", "<<"] {
         if raw.contains(form) {
             return None;
         }
@@ -78,6 +81,9 @@ pub(super) fn as_redirects(raw: &str) -> Option<String> {
                     return None;
                 }
                 if let Some(stage) = read_tee_stage(&chars, index + 1) {
+                    while out.ends_with(' ') || out.ends_with('\t') {
+                        out.pop();
+                    }
                     for target in &stage.targets {
                         out.push_str(if stage.append { " >> " } else { " > " });
                         out.push_str(target);
@@ -139,7 +145,15 @@ fn read_tee_stage(chars: &[char], start: usize) -> Option<TeeStage> {
     let mut end = index;
     loop {
         index = skip_spaces(chars, index);
-        if index >= chars.len() || is_boundary(chars[index]) {
+        if index >= chars.len() {
+            break;
+        }
+        if is_boundary(chars[index]) {
+            // A redirection on the stage itself moves where `tee` writes,
+            // so the targets read here would no longer name the writes.
+            if matches!(chars[index], '<' | '>') {
+                return None;
+            }
             break;
         }
         let word_start = index;
@@ -161,7 +175,11 @@ fn read_tee_stage(chars: &[char], start: usize) -> Option<TeeStage> {
         }
         targets.push(word);
     }
-    (!targets.is_empty()).then_some(TeeStage { targets, append, end })
+    (!targets.is_empty()).then_some(TeeStage {
+        targets,
+        append,
+        end,
+    })
 }
 
 /// Whether `word` names one file the shell opens without expanding it.
@@ -243,8 +261,21 @@ mod tests {
     #[test]
     fn refuses_a_command_carrying_hidden_text() {
         assert_eq!(as_redirects("ls | tee $(date).log"), None);
-        assert_eq!(as_redirects("npm run build |& tee out.log"), None);
         assert_eq!(as_redirects("cat <<'EOF' | tee out.log\nbody\nEOF"), None);
+        // A `$` stands for text this scan never reads, wherever it sits.
+        assert_eq!(
+            as_redirects("python3 -m http.server 8080 | tee site.log & pid=$!; kill $pid"),
+            None
+        );
+        assert_eq!(as_redirects("ls $PWD | tee out.log"), None);
+    }
+
+    #[test]
+    fn refuses_both_spellings_of_a_merged_stderr_stream() {
+        // The two spellings name the same pipeline, so they decide alike.
+        assert_eq!(as_redirects("npm run build |& tee out.log"), None);
+        assert_eq!(as_redirects("npm run build 2>&1 | tee out.log"), None);
+        assert_eq!(as_redirects("npm run build &> all.log | tee out.log"), None);
     }
 
     #[test]
