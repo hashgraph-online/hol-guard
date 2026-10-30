@@ -1388,8 +1388,7 @@
       "prompt": "I want to know which package managers this machine has. Run each of the listed commands once, exactly as written, and tell me what each one printed. Do not install anything, do not add arguments and do not retry a command that fails.",
       "commands": [
         "npx -v",
-        "uv -v",
-        "go -v"
+        "uv -v"
       ]
     },
     {
