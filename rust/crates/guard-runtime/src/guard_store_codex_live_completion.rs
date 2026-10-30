@@ -21,6 +21,7 @@ use crate::codex_live_operation::{self, Operation};
 use crate::codex_request_resume_store::resume;
 use crate::continuation_authority_op as authority;
 use crate::guard_store_args::Args;
+use crate::guard_store_codex_live_authority::{self as live_authority, EVIDENCE_REQUIRED};
 use crate::guard_store_db::{StoreError, StoreResult};
 use crate::guard_store_json::{add_micros_aware_isoformat, add_seconds_utc_isoformat, py_strip};
 use crate::guard_store_outbox_identity::{correlation_id, correlation_shaped};
@@ -63,14 +64,21 @@ pub(crate) fn complete(
         if let Some(replayed) = replayed {
             return Ok(replayed);
         }
-        if !args.flag("authority_gathered")? {
+        if !args.flag("authority_gathered")? && !args.flag("native_evidence")? {
             // Nothing is written yet: the caller reads the policy store and
             // the keyring only once no recorded resume answers, then asks
             // again with the authority's evidence.
-            return Ok(failure("codex_live_evidence_required"));
+            return Ok(failure(EVIDENCE_REQUIRED));
         }
-        let decision =
-            crate::guard_store_codex_live_authority::resolve(connection, guard_home, args)?;
+        // The evidence the daemon published answers first; when the resident
+        // cannot read it, it refuses before any lookup, so asking again with
+        // the gathered evidence repeats nothing.
+        let decision = match live_authority::resolve(connection, guard_home, args, owner) {
+            Err(StoreError::Invalid(reason)) if reason == EVIDENCE_REQUIRED => {
+                return Ok(failure(EVIDENCE_REQUIRED));
+            }
+            decision => decision?,
+        };
         if decision.is_null() {
             return Ok(failure("exact_approval_authority_missing"));
         }

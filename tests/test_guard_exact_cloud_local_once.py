@@ -177,6 +177,15 @@ class _Evidence:
         self.degraded_trust_status = {"status": "degraded"} if degraded else None
 
 
+def _unavailable(reason: str) -> NativeGuardStoreUnavailable:
+    error = NativeGuardStoreUnavailable(reason)
+    error.reason = reason
+    return error
+
+
+_NO_PUBLISHED_EVIDENCE = _unavailable("codex_live_evidence_required")
+
+
 class _OneCallStore(StoreExactCloudLocalOnceMixin):
     def __init__(
         self,
@@ -186,12 +195,14 @@ class _OneCallStore(StoreExactCloudLocalOnceMixin):
         evidence_error: Exception | None = None,
         reply: object = None,
         replies: list[object] | None = None,
+        native: object = _NO_PUBLISHED_EVIDENCE,
     ) -> None:
         self.key = key
         self.degraded = degraded
         self.evidence_error = evidence_error
         self.reply = reply
         self.replies = replies or []
+        self.native = native
         self.steps: list[object] = []
 
     def _policy_integrity_secret_material(self, *, create: bool) -> tuple[bytes | None, str | None]:
@@ -229,6 +240,12 @@ class _OneCallStore(StoreExactCloudLocalOnceMixin):
         }
 
     def _native_store_call(self, method: str, args: Mapping[str, object]) -> object:
+        if method == "codex_live_allow_authority" and args.get("native_evidence") is True:
+            # The call on the evidence the daemon published.
+            self.steps.append((f"native:{method}", dict(args)))
+            if isinstance(self.native, Exception):
+                raise self.native
+            return self.native
         self.steps.append((method, dict(args)))
         if self.replies:
             return self.replies.pop(0)
@@ -253,10 +270,12 @@ def test_live_authority_asks_the_resident_once_with_a_non_consuming_lookup() -> 
     with pytest.raises(NativeGuardStoreUnavailable):
         _authority(store)
 
-    assert store.steps[0] == ("evidence", "2026-10-30T00:00:00+00:00")
-    lookup = store.steps[1]
+    native = store.steps[0]
+    assert isinstance(native, tuple) and native[0] == "native:codex_live_allow_authority"
+    assert store.steps[1] == ("evidence", "2026-10-30T00:00:00+00:00")
+    lookup = store.steps[2]
     assert isinstance(lookup, tuple) and lookup[0] == "lookup"
-    assert store.steps[2] == ("provision", b"k" * 32)
+    assert store.steps[3] == ("provision", b"k" * 32)
     assert lookup[1]["consume_one_shot"] is False
     assert lookup[1]["workspace"] == "/work/a"
     calls = [step for step in store.steps if isinstance(step, tuple) and step[0] == "codex_live_allow_authority"]
@@ -313,7 +332,7 @@ def _complete(store: _OneCallStore, *, action: str, fresh: bool) -> dict[str, ob
 
 
 _EVIDENCE_REQUIRED = {"completed": False, "error": "codex_live_evidence_required"}
-_BASE_ARGS = {"request_id", "now", "cwd", "fresh_allow_authorized"}
+_BASE_ARGS = {"request_id", "now", "cwd", "fresh_allow_authorized", "native_evidence"}
 
 
 def _completion_calls(store: _OneCallStore) -> list[dict[str, object]]:
@@ -374,3 +393,46 @@ def test_live_completion_without_a_resident_reply_is_not_recorded() -> None:
     store = _OneCallStore(reply=[])
 
     assert _complete(store, action="allow", fresh=False) == {"completed": False, "error": "continuation_not_recorded"}
+
+
+def test_live_authority_reads_the_published_evidence_first() -> None:
+    allow = {"action": "allow", "source": "approval-gate-once", "request_id": "r1"}
+    store = _OneCallStore(native=allow)
+
+    assert _authority(store) == allow
+    (step,) = store.steps
+    assert isinstance(step, tuple) and step[0] == "native:codex_live_allow_authority"
+    assert set(step[1]) == {"request_id", "now", "cwd", "native_evidence"}
+
+
+def test_live_authority_with_published_evidence_and_no_allow_answers_none() -> None:
+    store = _OneCallStore(native=None)
+
+    assert _authority(store) is None
+    assert len(store.steps) == 1
+
+
+def test_live_authority_never_retries_a_resident_that_did_not_answer() -> None:
+    store = _OneCallStore(native=_unavailable("native_guard_store_unavailable"), reply={"action": "allow"})
+
+    with pytest.raises(NativeGuardStoreUnavailable):
+        _authority(store)
+    assert len(store.steps) == 1
+
+
+def test_live_completion_on_published_evidence_gathers_nothing() -> None:
+    store = _OneCallStore(
+        key=False, evidence_error=OSError("policy store unreadable"), reply={"completed": True, "action": "allow"}
+    )
+
+    assert _complete(store, action="allow", fresh=True) == {"completed": True, "action": "allow"}
+    assert _completion_call(store)["native_evidence"] is True
+    assert not any(isinstance(step, tuple) and step[0] in {"evidence", "lookup", "provision"} for step in store.steps)
+
+
+def test_live_completion_never_retries_a_resident_that_did_not_answer() -> None:
+    store = _OneCallStore()
+
+    with pytest.raises(NativeGuardStoreUnavailable):
+        _complete(store, action="allow", fresh=True)
+    assert len(store.steps) == 1

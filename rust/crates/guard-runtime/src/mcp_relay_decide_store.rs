@@ -53,11 +53,11 @@ pub(super) fn open(guard_home: &Path) -> Result<Option<CachedConnection>, &'stat
 
 /// The evidence `policy_lookup_evidence` ships for every lookup of one call,
 /// on the snapshot the caller holds open.
-pub(super) struct Saved<'c> {
+pub(crate) struct Saved<'c> {
     pub(super) connection: &'c Connection,
     pub(super) store_path: String,
     pub(super) guard_home: String,
-    pub(super) now: String,
+    pub(crate) now: String,
     /// A row from a local source: only then does the proxy ship the policy
     /// key and the refreshed integrity state.
     pub(super) has_local_policy: bool,
@@ -75,7 +75,7 @@ pub(super) struct Saved<'c> {
 /// `None` when the store holds no saved row, so every lookup misses; the
 /// saved-row evidence when the resident reads the rows as the proxy would;
 /// a defer code for every other store.
-pub(super) fn saved<'c>(
+pub(crate) fn saved<'c>(
     connection: &'c Connection,
     binding: &DirectLaneBinding,
     guard_home: &str,
@@ -131,7 +131,7 @@ pub(super) fn saved<'c>(
 
 /// The integrity state and key the daemon published, when they are the
 /// protected, enforced, cut-over state its key signs.
-pub(super) fn published_integrity(
+pub(crate) fn published_integrity(
     binding: &DirectLaneBinding,
 ) -> Result<
     (
@@ -226,7 +226,7 @@ impl Shape<'_> {
 
 impl Saved<'_> {
     /// `policy_decision_lookup_request` for one non-consuming probe.
-    pub(super) fn lookup_request(
+    pub(crate) fn lookup_request(
         &self,
         probe: &Probe<'_>,
     ) -> guard_contracts::PolicyDecisionLookupRequestV1 {
@@ -296,11 +296,11 @@ impl Saved<'_> {
 }
 
 /// One probe's selectors.
-pub(super) struct Probe<'a> {
-    pub(super) harness: &'a str,
-    pub(super) artifact_id: &'a str,
-    pub(super) artifact_hash: Option<&'a str>,
-    pub(super) workspace: Option<&'a str>,
-    pub(super) publisher: Option<&'a str>,
-    pub(super) exact_match_context: Option<&'a str>,
+pub(crate) struct Probe<'a> {
+    pub(crate) harness: &'a str,
+    pub(crate) artifact_id: &'a str,
+    pub(crate) artifact_hash: Option<&'a str>,
+    pub(crate) workspace: Option<&'a str>,
+    pub(crate) publisher: Option<&'a str>,
+    pub(crate) exact_match_context: Option<&'a str>,
 }

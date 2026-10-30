@@ -14,6 +14,13 @@
 //! of this request. Anything else, including a lookup that fails, is `Null`.
 //! The lookup may record integrity audit events, so a caller must never
 //! repeat a call whose reply it lost.
+//!
+//! A caller that asks for `native_evidence` sends neither key nor lookup: the
+//! resident reads both from the integrity state and key the daemon published,
+//! as the MCP relay does. When it cannot (no current binding, a state that is
+//! not the protected one the store holds, or rows it cannot verify), it
+//! refuses with `codex_live_evidence_required` before reading anything, and
+//! the caller gathers the evidence and asks again.
 
 use std::path::Path;
 
@@ -24,13 +31,22 @@ use serde_json::Value;
 use crate::guard_store_args::Args;
 use crate::guard_store_db::{StoreError, StoreResult};
 use crate::local_store_read::STORE_FILE_NAME;
+use crate::mcp_relay_decide::store::{self as saved_store, Probe};
+use crate::policy_store::PolicySnapshotStore;
 use crate::project_identity::{portable_workspace, resolve_relative, PortableIdentity};
+
+/// The resident cannot read this call's evidence itself.
+pub(crate) const EVIDENCE_REQUIRED: &str = "codex_live_evidence_required";
 
 pub(crate) fn resolve(
     connection: &Connection,
     guard_home: &str,
     args: &Args<'_>,
+    owner: Option<&PolicySnapshotStore>,
 ) -> StoreResult<Value> {
+    if args.flag("native_evidence")? {
+        return resolve_native(connection, guard_home, args, owner);
+    }
     let request_id = args.str("request_id")?;
     // One consistent view of the request and the allow issued for it.
     connection.execute_batch("BEGIN")?;
@@ -70,7 +86,17 @@ pub(crate) fn resolve(
         .to_string_lossy()
         .into_owned();
     request.guard_home = guard_home.to_owned();
-    match identity(request.workspace.as_deref(), args.opt_str("cwd")?) {
+    evaluate(request, request_id, args.opt_str("cwd")?)
+}
+
+/// The lookup composed with the workspace's portable project memory, when it
+/// answers this request.
+fn evaluate(
+    mut request: PolicyDecisionLookupRequestV1,
+    request_id: &str,
+    cwd: Option<&str>,
+) -> StoreResult<Value> {
+    match identity(request.workspace.as_deref(), cwd) {
         PortableIdentity::Absent => {}
         PortableIdentity::Identity(identity) => request.portable_workspace = Some(identity),
         PortableIdentity::Unknown => return Ok(Value::Null),
@@ -84,6 +110,100 @@ pub(crate) fn resolve(
     } else {
         Value::Null
     })
+}
+
+/// `resolve` on the evidence the daemon published: the key it signs with
+/// reads the exact Cloud allow, and the saved rows are read as the MCP relay
+/// reads them (`mcp_relay_decide_store.rs`).
+fn resolve_native(
+    connection: &Connection,
+    guard_home: &str,
+    args: &Args<'_>,
+    owner: Option<&PolicySnapshotStore>,
+) -> StoreResult<Value> {
+    let required = || StoreError::Invalid(EVIDENCE_REQUIRED);
+    if args.raw("lookup").is_some() || args.raw("integrity_key_b64").is_some() {
+        return Err(StoreError::Invalid("codex_live_authority_lookup_invalid"));
+    }
+    let request_id = args.str("request_id")?;
+    let now = guard_contracts::canonical_utc_timestamp(args.str("now")?)
+        .ok_or(StoreError::Invalid("exact_cloud_peek_time_invalid"))?;
+    let binding = owner
+        .ok_or_else(required)?
+        .admit_direct_binding()
+        .map_err(|_| required())?;
+    let (_, key) = saved_store::published_integrity(&binding).map_err(|_| required())?;
+    connection.execute_batch("BEGIN")?;
+    let read = native_read(connection, guard_home, request_id, &now, &binding, key);
+    connection.execute_batch("ROLLBACK")?;
+    let lookup = match read? {
+        Native::Answered(decision) => return Ok(decision),
+        Native::Lookup(lookup) => lookup,
+        Native::NoLookup => return Ok(Value::Null),
+    };
+    evaluate(lookup, request_id, args.opt_str("cwd")?)
+}
+
+enum Native {
+    /// The exact Cloud allow issued for the request.
+    Answered(Value),
+    /// The lookup the saved rows need.
+    Lookup(PolicyDecisionLookupRequestV1),
+    /// No saved row can answer.
+    NoLookup,
+}
+
+/// The exact Cloud allow and the saved-row lookup, on one snapshot.
+fn native_read(
+    connection: &Connection,
+    guard_home: &str,
+    request_id: &str,
+    now: &str,
+    binding: &crate::policy_store::policy_store_direct_lane::DirectLaneBinding,
+    key: &crate::policy_store::policy_store_direct_lane::DirectLaneIntegrityKey,
+) -> StoreResult<Native> {
+    let exact = crate::guard_store_exact_cloud_peek::verified_decision(
+        connection,
+        request_id,
+        now,
+        &key.key,
+        &key.key_id,
+    )?;
+    if answers(&exact, request_id) {
+        return Ok(Native::Answered(exact));
+    }
+    let request = crate::guard_store_db::query_one(
+        connection,
+        "select harness, artifact_id, artifact_hash, workspace, publisher \
+         from approval_requests where request_id = ?",
+        &[Value::from(request_id)],
+    )?
+    .unwrap_or_default();
+    let text = |field: &str| {
+        request
+            .get(field)
+            .and_then(Value::as_str)
+            .filter(|text| !text.is_empty())
+    };
+    let (Some(harness), Some(artifact_id)) = (text("harness"), text("artifact_id")) else {
+        // `policy_decision_lookup_request` would send no artifact: the caller
+        // builds that lookup.
+        return Err(StoreError::Invalid(EVIDENCE_REQUIRED));
+    };
+    let Some(mut saved) = saved_store::saved(connection, binding, guard_home, harness)
+        .map_err(|_| StoreError::Invalid(EVIDENCE_REQUIRED))?
+    else {
+        return Ok(Native::NoLookup);
+    };
+    saved.now = now.to_owned();
+    Ok(Native::Lookup(saved.lookup_request(&Probe {
+        harness,
+        artifact_id,
+        artifact_hash: text("artifact_hash"),
+        workspace: text("workspace"),
+        publisher: text("publisher"),
+        exact_match_context: None,
+    })))
 }
 
 /// `_portable_project_workspace(workspace)`, with a relative workspace read

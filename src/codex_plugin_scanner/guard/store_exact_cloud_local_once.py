@@ -6,10 +6,13 @@ import sqlite3
 from collections.abc import Callable, Mapping
 from typing import Any, Protocol
 
+from .native_guard_store import NativeGuardStoreUnavailable
 from .native_store_policy import encode_key
 from .project_identity import _process_directory
 
 _LOOKUP_KEY_FIELDS = ("integrity_key_b64", "local_once_integrity_key_b64")
+# The resident has no published evidence to read; the caller must send it.
+_EVIDENCE_REQUIRED = "codex_live_evidence_required"
 
 
 class _NativeStoreOwner(Protocol):
@@ -30,11 +33,18 @@ class StoreExactCloudLocalOnceMixin:
     ) -> dict[str, object] | None:
         # The resident reads the request's exact Cloud allow and otherwise the
         # non-consuming lookup composed with the workspace's portable project
-        # memory, in one call. The keyring and the integrity-state refresh
-        # stay here.
-        args, evidence_error = _live_authority_args(self, request, now=now)
-        # Never retried: the lookup records a refused row's integrity audit.
-        decision = self._native_store_call("codex_live_allow_authority", args)
+        # memory, in one call, on the evidence the daemon published. Only when
+        # it cannot does this gather the evidence and the key and ask again.
+        base = {"request_id": request["request_id"], "now": now, "cwd": _process_directory()}
+        evidence_error: Exception | None = None
+        try:
+            decision = self._native_store_call("codex_live_allow_authority", {**base, "native_evidence": True})
+        except NativeGuardStoreUnavailable as error:
+            if error.reason != _EVIDENCE_REQUIRED:
+                raise
+            args, evidence_error = _live_authority_args(self, request, now=now)
+            # Never retried: the lookup records a refused row's integrity audit.
+            decision = self._native_store_call("codex_live_allow_authority", args)
         if isinstance(decision, Mapping):
             return dict(decision)
         if evidence_error is not None:
@@ -49,19 +59,20 @@ class StoreExactCloudLocalOnceMixin:
         fresh_allow_authorized: bool,
     ) -> dict[str, object]:
         # The resident checks the decision, replays a recorded resume, reads
-        # an allow's exact authority, spends it and records the waiting hook's
-        # continuation. A fresh allow's evidence is gathered only once the
-        # resident asks for it, so a replay never reads the policy store or
-        # the keyring.
+        # an allow's exact authority on the evidence the daemon published,
+        # spends it and records the waiting hook's continuation. Only when it
+        # cannot read that evidence does this gather it and ask again, so a
+        # replay never reads the policy store or the keyring.
         args: dict[str, object] = {
             "request_id": request["request_id"],
             "now": now,
             "cwd": _process_directory(),
             "fresh_allow_authorized": fresh_allow_authorized,
+            "native_evidence": True,
         }
         result = self._native_store_call("complete_codex_live_decision", args)
         evidence_error: Exception | None = None
-        if isinstance(result, Mapping) and result.get("error") == "codex_live_evidence_required":
+        if isinstance(result, Mapping) and result.get("error") == _EVIDENCE_REQUIRED:
             args, evidence_error = _live_authority_args(self, request, now=now)
             args["fresh_allow_authorized"] = fresh_allow_authorized
             args["authority_gathered"] = True
