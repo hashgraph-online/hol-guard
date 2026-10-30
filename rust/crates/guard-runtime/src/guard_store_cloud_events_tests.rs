@@ -90,13 +90,13 @@ fn queued_events_count_and_read_oldest_first() {
     queue(&connection, "e-1", "t1", 10);
     let all = call(&connection, count, json!({})).unwrap();
     assert_eq!(all, json!(2));
-    let listed = queued(&connection, "", 200).unwrap();
+    let listed = queued(&connection, "", 200, "t-now").unwrap();
     assert_eq!(listed[0]["event_id"], json!("e-1"));
     assert_eq!(listed[1]["event_id"], json!("e-2"));
     assert_eq!(listed[0]["uploaded_at"], Value::Null);
     assert_eq!(listed[0]["payload"]["payload"], json!({"a": "é", "b": 1}));
     assert_eq!(
-        queued(&connection, "", 1)
+        queued(&connection, "", 1, "t-now")
             .unwrap()
             .as_array()
             .unwrap()
@@ -144,7 +144,7 @@ fn uploading_the_backlog_records_the_recovery() {
     assert_eq!(state["pendingCount"], json!(0));
     assert_eq!(state["recoveredAt"], json!("t9"));
     assert_eq!(state["rejectedCount"], json!(1));
-    let listed = queued(&connection, " where uploaded_at is not null", 200).unwrap();
+    let listed = queued(&connection, " where uploaded_at is not null", 200, "t-now").unwrap();
     assert_eq!(listed[0]["uploaded_at"], json!("t9"));
 }
 
@@ -175,11 +175,109 @@ fn a_payload_that_is_not_json_is_refused() {
     )
     .unwrap();
     assert!(matches!(
-        queued(&connection, "", 200),
+        queued(&connection, "", 200, "t-now"),
         Err(StoreError::Invalid("guard_event_payload_invalid"))
     ));
     assert!(matches!(
         call(&connection, count, json!({"uploaded": "yes"})),
         Err(StoreError::Invalid("native_guard_store_args_invalid"))
     ));
+}
+
+fn store_raw(connection: &Connection, id: &str, occurred_at: &str, payload_json: &str) {
+    exec(
+        connection,
+        "insert into guard_cloud_events \
+         (event_id, idempotency_key, event_type, payload_json, occurred_at, uploaded_at) \
+         values (?, ?, 'test.event', ?, ?, null)",
+        &[
+            Value::from(id),
+            Value::from(format!("key:{id}")),
+            Value::from(payload_json),
+            Value::from(occurred_at),
+        ],
+    )
+    .unwrap();
+}
+
+fn padded(bytes: usize) -> String {
+    format!("{{\"pad\": \"{}\"}}", "x".repeat(bytes))
+}
+
+fn oversized(connection: &Connection) -> Value {
+    let row = query_one(
+        connection,
+        "select payload_json from sync_state where state_key = ?",
+        &[Value::from(
+            crate::guard_store_receipt_events::OVERSIZED_KEY,
+        )],
+    )
+    .unwrap()
+    .unwrap();
+    serde_json::from_str(text(&row, "payload_json")).unwrap()
+}
+
+#[test]
+fn a_queue_read_stops_at_its_byte_budget_and_the_next_read_continues() {
+    let connection = store();
+    let third = READ_BYTES_BUDGET / 3;
+    for (id, at) in [("e-1", "t1"), ("e-2", "t2"), ("e-3", "t3"), ("e-4", "t4")] {
+        store_raw(&connection, id, at, &padded(third));
+    }
+    let first = queued(&connection, " where uploaded_at is null", 200, "t-now").unwrap();
+    let ids: Vec<_> = first
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["event_id"].clone())
+        .collect();
+    assert_eq!(ids, vec![json!("e-1"), json!("e-2")]);
+    exec(
+        &connection,
+        "update guard_cloud_events set uploaded_at = 'u' where event_id in ('e-1', 'e-2')",
+        &[],
+    )
+    .unwrap();
+    let second = queued(&connection, " where uploaded_at is null", 200, "t-now").unwrap();
+    assert_eq!(second.as_array().unwrap().len(), 2);
+}
+
+#[test]
+fn one_event_that_fills_the_budget_is_still_read() {
+    let connection = store();
+    store_raw(&connection, "e-1", "t1", &padded(EVENT_BYTES_LIMIT - 16));
+    store_raw(&connection, "e-2", "t2", &padded(8));
+    let listed = queued(&connection, " where uploaded_at is null", 200, "t-now").unwrap();
+    assert_eq!(listed.as_array().unwrap().len(), 1);
+    assert_eq!(listed[0]["event_id"], json!("e-1"));
+}
+
+#[test]
+fn a_stored_event_too_large_to_read_leaves_the_queue_and_is_recorded() {
+    let connection = store();
+    store_raw(&connection, "e-1", "t1", &padded(EVENT_BYTES_LIMIT));
+    store_raw(&connection, "e-2", "t2", &padded(8));
+    let listed = queued(&connection, " where uploaded_at is null", 200, "t-now").unwrap();
+    assert_eq!(listed.as_array().unwrap().len(), 1);
+    assert_eq!(listed[0]["event_id"], json!("e-2"));
+    assert_eq!(call(&connection, count, json!({})).unwrap(), json!(1));
+    let state = oversized(&connection);
+    assert_eq!(state["droppedCount"], json!(1));
+    assert_eq!(state["lastEventType"], json!("test.event"));
+    assert_eq!(state["lastDroppedAt"], json!("t-now"));
+}
+
+#[test]
+fn an_event_too_large_to_read_is_never_queued() {
+    let connection = store();
+    let mut big = event("e-1", "t1");
+    big["payload"] = json!({"pad": "x".repeat(EVENT_BYTES_LIMIT)});
+    call(
+        &connection,
+        add,
+        json!({"event": big, "event_queue_limit": 10, "now": "t-now"}),
+    )
+    .unwrap();
+    assert_eq!(call(&connection, count, json!({})).unwrap(), json!(0));
+    assert_eq!(oversized(&connection)["droppedCount"], json!(1));
 }

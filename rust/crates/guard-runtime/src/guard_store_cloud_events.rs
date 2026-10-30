@@ -4,6 +4,10 @@
 //! them. Once the pending queue is full, new events are dropped and the
 //! rejection is recorded under the queue capacity state; uploading enough of
 //! the backlog marks that state recovered.
+//!
+//! A queue read fits in one native store response: it returns as many events
+//! as fit the byte budget, and the sync loop reads again until the queue is
+//! empty. A pending event too large to ever fit is dropped and recorded.
 
 use serde_json::{json, Map, Value};
 
@@ -11,12 +15,20 @@ use crate::guard_store_args::Args;
 use crate::guard_store_db::{exec, query_all, query_one, text, StoreError, StoreResult};
 use crate::guard_store_json::{dumps_default, py_strip};
 use crate::guard_store_receipt_decision::json_object;
-use crate::guard_store_receipt_events::{add_guard_event, CAPACITY_KEY};
+use crate::guard_store_receipt_events::{
+    add_guard_event, record_oversized, CAPACITY_KEY, EVENT_BYTES_LIMIT,
+};
 use crate::guard_store_receipt_reads::reconcile_events;
 
 const ARGS_INVALID: StoreError = StoreError::Invalid("native_guard_store_args_invalid");
 const PAYLOAD_INVALID: StoreError = StoreError::Invalid("guard_event_payload_invalid");
 const UNENCODABLE: StoreError = StoreError::Invalid("native_guard_store_payload_unencodable");
+
+/// The payload bytes one queue read returns: half the 2 MiB response limit,
+/// which leaves room for each event's other fields and the envelope. The
+/// payload is decoded from `json.dumps` text, whose ASCII escapes never grow
+/// when encoded again.
+const READ_BYTES_BUDGET: usize = EVENT_BYTES_LIMIT;
 
 /// `add_event`: append one entry to the local event log. The caller sends the
 /// payload already encoded, so the stored text is exactly what `json.dumps`
@@ -79,10 +91,15 @@ pub(crate) fn list(connection: &rusqlite::Connection, args: &Args<'_>) -> StoreR
     let filter = uploaded_filter(args)?;
     let limit = args.int("limit")?;
     reconcile_events(connection, args)?;
-    queued(connection, filter, limit)
+    queued(connection, filter, limit, args.str("now")?)
 }
 
-fn queued(connection: &rusqlite::Connection, filter: &str, limit: i64) -> StoreResult<Value> {
+fn queued(
+    connection: &rusqlite::Connection,
+    filter: &str,
+    limit: i64,
+    now: &str,
+) -> StoreResult<Value> {
     let rows = query_all(
         connection,
         &format!(
@@ -91,24 +108,55 @@ fn queued(connection: &rusqlite::Connection, filter: &str, limit: i64) -> StoreR
         ),
         &[Value::from(limit)],
     )?;
-    rows.iter()
-        .map(|row| {
-            let payload = match serde_json::from_str::<Value>(text(row, "payload_json")) {
-                Ok(Value::Object(map)) => map,
-                Ok(_) => Map::new(),
-                Err(_) => return Err(PAYLOAD_INVALID),
-            };
-            Ok(json!({
-                "event_id": text(row, "event_id"),
-                "idempotency_key": text(row, "idempotency_key"),
-                "event_type": text(row, "event_type"),
-                "occurred_at": text(row, "occurred_at"),
-                "uploaded_at": row.get("uploaded_at").cloned().unwrap_or(Value::Null),
-                "payload": payload,
-            }))
-        })
-        .collect::<StoreResult<Vec<_>>>()
-        .map(Value::Array)
+    let mut events = Vec::new();
+    let mut size = 0;
+    for row in &rows {
+        let payload_json = text(row, "payload_json");
+        if payload_json.len() > EVENT_BYTES_LIMIT {
+            drop_oversized(connection, row, now)?;
+            continue;
+        }
+        if !events.is_empty() && size + payload_json.len() > READ_BYTES_BUDGET {
+            break;
+        }
+        size += payload_json.len();
+        events.push(queued_event(row)?);
+    }
+    Ok(Value::Array(events))
+}
+
+fn queued_event(row: &crate::guard_store_db::Row) -> StoreResult<Value> {
+    let payload = match serde_json::from_str::<Value>(text(row, "payload_json")) {
+        Ok(Value::Object(map)) => map,
+        Ok(_) => Map::new(),
+        Err(_) => return Err(PAYLOAD_INVALID),
+    };
+    Ok(json!({
+        "event_id": text(row, "event_id"),
+        "idempotency_key": text(row, "idempotency_key"),
+        "event_type": text(row, "event_type"),
+        "occurred_at": text(row, "occurred_at"),
+        "uploaded_at": row.get("uploaded_at").cloned().unwrap_or(Value::Null),
+        "payload": payload,
+    }))
+}
+
+/// A pending event stored before the size limit can never be read back for
+/// upload, so it leaves the queue. An uploaded one is only left unlisted.
+fn drop_oversized(
+    connection: &rusqlite::Connection,
+    row: &crate::guard_store_db::Row,
+    now: &str,
+) -> StoreResult<()> {
+    if row.get("uploaded_at").is_some_and(|value| !value.is_null()) {
+        return Ok(());
+    }
+    exec(
+        connection,
+        "delete from guard_cloud_events where event_id = ? and uploaded_at is null",
+        &[Value::from(text(row, "event_id"))],
+    )?;
+    record_oversized(connection, &Value::from(text(row, "event_type")), now)
 }
 
 /// `mark_guard_events_v1_uploaded`: mark the uploaded events and, once the

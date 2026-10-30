@@ -343,7 +343,10 @@ class StoreCloudEventsMixin:
         )
 
     def list_guard_events_v1(self, *, uploaded: bool | None = None, limit: int = 200) -> list[dict[str, object]]:
-        return self._native_store_call("list_guard_events_v1", {"uploaded": uploaded, "limit": limit})
+        return self._native_store_call(
+            "list_guard_events_v1",
+            {"uploaded": uploaded, "limit": limit, "now": datetime.now(timezone.utc).isoformat()},
+        )
 
     def count_guard_events_v1(self, *, uploaded: bool | None = None) -> int:
         return int(self._native_store_call("count_guard_events_v1", {"uploaded": uploaded}))
