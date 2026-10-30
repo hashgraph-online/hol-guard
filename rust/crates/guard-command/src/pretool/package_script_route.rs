@@ -14,9 +14,11 @@
 //! script keeps the narrow receipt only for an output directory it accepts.
 
 #[cfg(unix)]
+use crate::contained_package_test::lifecycle;
+#[cfg(unix)]
 use crate::contained_runner::pkg_json::{object_of, read_json_with_integrity};
 #[cfg(unix)]
-use crate::sfrs_shlex::{split_with, PLAIN_LEXER, SCRIPT_LEXER};
+use crate::sfrs_shlex::{split_with, PLAIN_LEXER};
 use crate::CanonicalCommandV1;
 #[cfg(unix)]
 use serde_json::{Map, Value};
@@ -324,69 +326,10 @@ fn nearest(directory: &Path, workspace: &Path, relative: &str) -> PathBuf {
 }
 
 #[cfg(unix)]
-/// Python truthiness of a manifest value.
-fn truthy(value: Option<&Value>) -> bool {
-    match value {
-        None | Some(Value::Null) => false,
-        Some(Value::Bool(value)) => *value,
-        Some(Value::Number(value)) => value.as_f64().is_some_and(|value| value != 0.0),
-        Some(Value::String(value)) => !value.is_empty(),
-        Some(Value::Array(value)) => !value.is_empty(),
-        Some(Value::Object(value)) => !value.is_empty(),
-    }
-}
-
-#[cfg(unix)]
-fn lifecycle(scripts: &Map<String, Value>, task: &str) -> bool {
-    ["pre", "post"]
-        .iter()
-        .any(|phase| truthy(scripts.get(&format!("{phase}{task}"))))
-}
-
-#[cfg(unix)]
-/// `resolve_package_test`: an explicit `--` before arguments, no lifecycle
-/// scripts, no shell expansion or effects, and `node --test` or `vitest run`.
+/// `resolve_package_test`: the sink's own reading of the declared script, so
+/// the route offers the narrow receipt only for a run the sink will resolve.
 fn test_script(scripts: &Map<String, Value>, arguments: &[String]) -> bool {
-    let trailing = match arguments {
-        [test, rest @ ..] if test == "test" => rest,
-        [_, _, rest @ ..] => rest,
-        _ => return false,
-    };
-    if trailing.first().is_some_and(|word| word != "--") || lifecycle(scripts, "test") {
-        return false;
-    }
-    let Some(script) = scripts.get("test").and_then(Value::as_str) else {
-        return false;
-    };
-    if script.contains(['$', '`', '\n', '\r']) {
-        return false;
-    }
-    let Ok(tokens) = split_with(SCRIPT_LEXER, script) else {
-        return false;
-    };
-    if tokens
-        .iter()
-        .any(|token| !token.is_empty() && token.chars().all(|c| ";&|<>".contains(c)))
-    {
-        return false;
-    }
-    // The manager appends what follows `--` to the script, so the sink runs
-    // both halves and both are read as one Jest call.
-    let passthrough = trailing.get(1..).unwrap_or_default();
-    match tokens.as_slice() {
-        [runner, rest @ ..] => {
-            let flag = rest.first();
-            (matches!(executable_basename(runner), "node" | "nodejs")
-                && flag.is_some_and(|flag| flag == "--test"))
-                || (runner == "vitest" && flag.is_some_and(|flag| flag == "run"))
-                || (runner == "jest" && {
-                    let call: Vec<String> =
-                        rest.iter().chain(passthrough.iter()).cloned().collect();
-                    crate::contained_argv::jest_contained_call(&call)
-                })
-        }
-        _ => false,
-    }
+    crate::contained_package_test::script_tokens(arguments, Some(scripts)).is_ok()
 }
 
 #[cfg(unix)]

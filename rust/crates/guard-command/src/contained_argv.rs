@@ -532,6 +532,8 @@ pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
             | "run_prefix_peel"
             | "node_tool_route"
             | "pytest_command"
+            | "package_test_command"
+            | "package_test_resolve"
     ) {
         return None;
     }
@@ -563,6 +565,14 @@ pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
         }
         "node_tool_route" => crate::contained_node_tool::route_request(input, &command),
         "pytest_command" => Ok(json!(crate::pytest_argv::command_targets_pytest(&command))),
+        "package_test_command" => Ok(json!(crate::contained_package_test::is_package_test(
+            &command
+        ))),
+        "package_test_resolve" => crate::contained_package_test::resolve(
+            &command,
+            input.get("scripts").and_then(Value::as_object),
+        )
+        .map(|value| json!(value)),
         "run_prefix_peel" => {
             let (core, seconds) = crate::contained_run_prefix::run_prefix_peel(&command);
             Ok(json!({ "core": core, "seconds": seconds }))
