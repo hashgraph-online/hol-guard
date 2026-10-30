@@ -185,6 +185,7 @@ def test_saved_exact_action_block_wins_over_custom_extension_allow(
         hook_native_review_approval, "review_evidence_parts", lambda _evidence: (True, None, "token", None)
     )
     monkeypatch.setattr(hook_native_review_approval, "native_saved_decision_response", lambda *_a, **_k: saved_block)
+    monkeypatch.setattr(hook_native_review_approval, "native_exact_command_block_response", lambda *_a, **_k: None)
 
     response = hook_native_review_approval.pause_native_pre_tool_for_approval(
         object(),

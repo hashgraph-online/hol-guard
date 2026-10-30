@@ -99,6 +99,12 @@ const COMPOSER_PROGRAM_VERBS: &[&str] = &["exec", "run", "run-script"];
 /// Bundler verbs that read the bundle the project owns. `exec` starts a
 /// project tool; the rest report what the bundle already holds.
 const BUNDLE_LOCAL_VERBS: &[&str] = &["exec", "list", "show", "check"];
+/// Bundler's own options, which it reads in front of the verb. Each one only
+/// changes how Bundler reports, so the verb standing behind one is still the
+/// verb and the bundle it reads is the same bundle. `--retry` is absent: it
+/// carries its count in the next word, and what it retries is the network
+/// fetching a gem rather than anything the bundle already holds.
+const BUNDLE_INERT_FLAGS: &[&str] = &["--no-color", "--verbose", "-V"];
 
 // The variables that move a manager's project, configuration or dependency
 // directories. Set in front of the command, any of them replaces what the
@@ -366,9 +372,15 @@ fn local_composer_work(arguments: &[&str], directory: &Path, workspace: &Path) -
 
 fn local_bundle_work(arguments: &[&str], directory: &Path, workspace: &Path) -> bool {
     let words = before_separator(arguments);
-    let Some(&verb) = words.first() else {
+    // Bundler reads its own reporting options in front of the verb, so the
+    // first word that is not one of them is the verb.
+    let Some(index) = words
+        .iter()
+        .position(|word| !BUNDLE_INERT_FLAGS.contains(word))
+    else {
         return false;
     };
+    let verb = words[index];
     if !BUNDLE_LOCAL_VERBS.contains(&verb) {
         return false;
     }
@@ -378,9 +390,9 @@ fn local_bundle_work(arguments: &[&str], directory: &Path, workspace: &Path) -> 
         return false;
     }
     if verb != "exec" {
-        return words[1..].iter().all(|word| !word.starts_with('-'));
+        return words[index + 1..].iter().all(|word| !word.starts_with('-'));
     }
-    let line = &arguments[1..];
+    let line = &arguments[index + 1..];
     line.first().is_some_and(|word| !word.starts_with('-')) && !names_a_package_tool(line)
 }
 

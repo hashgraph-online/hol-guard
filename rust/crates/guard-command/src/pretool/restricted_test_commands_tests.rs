@@ -78,6 +78,11 @@ fn admission_and_the_route_read_one_tool_table() {
             "npm exec -- prettier --list-different .",
             Some(ToolMode::Report),
         ),
+        // The same run with npm's own quiet option in front of the tool.
+        (
+            "npm exec --silent -- prettier --list-different .",
+            Some(ToolMode::Report),
+        ),
         (
             "node node_modules/typescript/bin/tsc --noEmit",
             Some(ToolMode::Report),
@@ -118,5 +123,44 @@ fn admission_and_the_route_read_one_tool_table() {
             None => None,
         };
         assert_eq!(reason(command), admitted, "{command}");
+    }
+}
+
+#[test]
+fn an_inert_npm_exec_option_leaves_the_run_the_tool_it_names() {
+    // `npm exec` is `npx` under another name and takes the same options in
+    // front of the tool: they answer the install prompt, pick the cache over
+    // the registry, or quiet the runner. None of them names a package, so the
+    // run behind them is still the workspace's own test runner, the one the
+    // `npx` spelling has always been admitted as.
+    for command in [
+        "npm exec --no -- vitest run",
+        "npm exec --yes -- vitest run",
+        "npm exec -y -- vitest run",
+        "npm exec --no-install -- vitest run",
+        "npm exec --prefer-offline --silent -- vitest run",
+        "npm exec --no vitest run",
+        "npm x --no -- vitest run",
+        "npm x -q -- jest",
+    ] {
+        assert_eq!(
+            reason(command),
+            Some("native_vitest_readonly_containment_required"),
+            "{command}"
+        );
+    }
+    // An option that names the package to fetch, one no table lists, and the
+    // managers whose own exec options choose which packages a run reaches are
+    // all left with the review they had.
+    for command in [
+        "npm exec --package=cowsay -- vitest run",
+        "npm exec -p cowsay -- vitest run",
+        "npm exec --call -- vitest run",
+        "npm exec --prefix ../other -- vitest run",
+        "npm exec --yes=false -- vitest run",
+        "pnpm exec --recursive -- vitest run",
+        "yarn exec --silent -- vitest run",
+    ] {
+        assert_eq!(reason(command), None, "{command}");
     }
 }

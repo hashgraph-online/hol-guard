@@ -61,7 +61,7 @@ mod redaction_and_combination;
 use redaction_and_combination::*;
 
 #[path = "package_intent_parser/runner_options.rs"]
-mod runner_options;
+pub(crate) mod runner_options;
 use runner_options::*;
 
 #[path = "package_intent_parser/local_execution.rs"]

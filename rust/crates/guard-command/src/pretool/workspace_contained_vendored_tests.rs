@@ -265,6 +265,27 @@ fn a_verb_that_hands_the_line_to_a_package_manager_keeps_its_review() {
     ));
     assert!(run("bundle", &ruby, &["exec", "rspec", "spec/gem_spec.rb"]));
     assert!(run("bundle", &ruby, &["exec", "rake", "db:migrate"]));
+    // Bundler's own reporting options stand in front of the verb, so the
+    // verb behind one is still the verb and the line behind it is still the
+    // project tool's.
+    assert!(run(
+        "bundle",
+        &ruby,
+        &["--no-color", "exec", "rspec", "spec/gem_spec.rb"]
+    ));
+    assert!(run("bundle", &ruby, &["-V", "exec", "rake", "db:migrate"]));
+    assert!(run("bundle", &ruby, &["--verbose", "--no-color", "list"]));
+    // A reporting option in front does not make the rest of the line
+    // Bundler's own: a delegated package manager still keeps its review, and
+    // so does an option Bundler reads for the network.
+    assert!(!run(
+        "bundle",
+        &ruby,
+        &["--no-color", "exec", "gem", "install"]
+    ));
+    assert!(!run("bundle", &ruby, &["--retry", "3", "exec", "rspec"]));
+    // Reporting options alone leave no verb behind them.
+    assert!(!run("bundle", &ruby, &["--no-color"]));
     let composer: [&[&str]; 7] = [
         &["exec", "composer", "install"],
         &["exec", "vendor/bin/composer", "update"],

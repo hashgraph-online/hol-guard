@@ -414,17 +414,41 @@ fn runner_tail_or_error(
 /// tool, never the manager, so a manager option before the tool (`-c` runs a
 /// shell, `-r`/`--filter` fan out) is not a local-bin run.
 fn manager_exec_tool(command: &[String]) -> Option<&[String]> {
-    let rest = match (basename(command), command.get(1..)?) {
-        ("npm", [verb, rest @ ..]) if verb == "exec" || verb == "x" => rest,
-        ("pnpm" | "yarn", [verb, rest @ ..]) if verb == "exec" => rest,
+    let (npm, mut rest) = match (basename(command), command.get(1..)?) {
+        ("npm", [verb, rest @ ..]) if verb == "exec" || verb == "x" => (true, rest),
+        ("pnpm" | "yarn", [verb, rest @ ..]) if verb == "exec" => (false, rest),
         _ => return None,
     };
+    // `npm exec` answers the install prompt and chooses between the cache and
+    // the registry before the tool, the way `npx` does. None of those options
+    // names a package, so the tool behind them is still the workspace's own
+    // one, and the route that admits the run has to read the same argv the
+    // sink will. `pnpm exec` and `yarn exec` options choose which packages
+    // the run reaches, so they are not peeled.
+    if npm {
+        while let [option, tail @ ..] = rest {
+            if !npm_exec_inert_option(option) {
+                break;
+            }
+            rest = tail;
+        }
+    }
     let rest = match rest {
         [separator, rest @ ..] if separator == "--" => rest,
         rest => rest,
     };
     rest.first().filter(|tool| !tool.starts_with('-'))?;
     Some(rest)
+}
+
+/// Whether an `npm exec` option names no package. The answer is read from the
+/// table `npx` itself is parsed with, so the two spellings of one run cannot
+/// drift apart. The separator is left out of the answer: it ends the options
+/// rather than being one, and the peel above reads it on its own.
+pub(crate) fn npm_exec_inert_option(option: &str) -> bool {
+    crate::package_intent_parser::runner_options::local_execution_flags("npx")
+        .iter()
+        .any(|flag| *flag != "--" && *flag == option)
 }
 
 /// `npm exec vitest run ...`, `npm exec jest ...` and the other manager

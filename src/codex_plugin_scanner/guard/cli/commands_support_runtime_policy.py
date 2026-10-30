@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import importlib
-import re
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
@@ -26,12 +25,6 @@ from .commands_support_runtime_artifact_policy import (
 
 # Bump when runtime scanner or action-composition semantics change. Product and
 # approval-surface versions deliberately do not participate in this identity.
-_RUNTIME_HOOK_EVALUATOR_POLICY_VERSION = "runtime-hook-evaluation-v1"
-_LOCAL_REVIEW_INSTRUCTION_RE = re.compile(
-    re.escape("Review this request in HOL Guard, then retry."),
-    re.IGNORECASE,
-)
-_LOCAL_APPROVAL_REQUEST_URL_RE = re.compile(r"https?://[^\s]+/requests(?:/[^\s]*)?", re.IGNORECASE)
 
 
 def _runtime_artifacts_module():

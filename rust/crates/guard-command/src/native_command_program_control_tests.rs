@@ -177,6 +177,57 @@ fn native_mcp_defaults_are_opt_in_tightening_only_and_redacted() {
 }
 
 #[test]
+fn a_lone_short_version_flag_is_the_same_inspection_as_the_long_one() {
+    let unrestricted = binding(&[], false);
+    for command in [
+        "npx -v",
+        "bunx -v",
+        "npm -V",
+        "uv -v",
+        "go -v",
+        "mvn -v",
+        "composer -v",
+        "bundle -v",
+        "gradle -v",
+        "cargo -V",
+    ] {
+        let observations = decision(command, &unrestricted).command_extensions.unwrap();
+        assert!(
+            !observations
+                .permission_observations
+                .iter()
+                .any(|item| item.extension_id.starts_with("command.package.")),
+            "{command}"
+        );
+    }
+    // A flag is only an inspection while it is the whole argument list: a
+    // second word can name the package the manager would fetch. And `-V` is
+    // not that flag everywhere: Gradle and Maven spell `--show-version` with
+    // it, which prints the version and then runs the build, and Bundler reads
+    // it as `--verbose`, where a bare `bundle` installs.
+    for command in [
+        "npx -v left-pad",
+        "npx --no-install -v",
+        "uv add -v httpx",
+        "gradle -V",
+        "gradlew -V",
+        "mvn -V",
+        "mvnw -V",
+        "bundle -V",
+        "bundler -V",
+    ] {
+        let observations = decision(command, &unrestricted).command_extensions.unwrap();
+        assert!(
+            observations
+                .permission_observations
+                .iter()
+                .any(|item| item.extension_id.starts_with("command.package.")),
+            "{command}"
+        );
+    }
+}
+
+#[test]
 fn a_watched_executable_names_the_program_a_projection_must_not_rewrite_away() {
     let controls = authored_controls(&binding(&[], false)).unwrap();
     let program = crate::native_command_program::authored_test_support::full_program();
