@@ -182,10 +182,17 @@ def test_safe_vectors_reject_shell_syntax_and_expansions(tmp_path: Path, argv: l
 
 @pytest.mark.parametrize("argv", [["items", "delete"], ["status"], ["--help"]])
 def test_safe_vectors_are_bound_to_their_exact_operation(tmp_path: Path, argv: list[str]) -> None:
+    """The matchers place the vector, so a vector they place elsewhere is refused.
+
+    `items delete` is another operation's, and neither `status` nor a bare
+    `--help` is an invocation of `items list` at all, so no matcher an installed
+    extension would carry claims any of them for the operation under review.
+    """
+
     discovery = make_discovery(tmp_path)
     payload, entry = reviewed_entry(discovery, ("items", "list"))
     entry["safeArgv"] = [argv]
-    with pytest.raises(BuilderError, match="operation path"):
+    with pytest.raises(BuilderError, match="another or ambiguous operation"):
         load_review(payload, discovery)
 
 
@@ -209,10 +216,17 @@ def test_blocked_operation_cannot_gain_a_safe_variant(tmp_path: Path) -> None:
 
 
 def test_root_safe_variants_cannot_preapprove_unknown_commands(tmp_path: Path) -> None:
+    """A root row owns the executable's flags, not an operation nobody discovered.
+
+    A root matcher claims every invocation of the executable, so a bare word
+    under it would preapprove a subcommand review was never shown. The grammar
+    refuses an operand there rather than reading one.
+    """
+
     discovery = make_discovery(tmp_path)
     payload, entry = reviewed_entry(discovery, ())
     entry["safeArgv"] = [["undiscovered"]]
-    with pytest.raises(BuilderError, match="Root safe variants"):
+    with pytest.raises(BuilderError, match="another or ambiguous operation"):
         load_review(payload, discovery)
     entry["safeArgv"] = [["--undiscovered"]]
     with pytest.raises(BuilderError, match="option"):

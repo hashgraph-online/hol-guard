@@ -58,29 +58,6 @@ def default_review(discovery: Discovery) -> Review:
     return Review(discovery.binding, tuple(sorted((row.operation_id, Decision(state)) for row in discovery.operations)))
 
 
-def _safe_variant_scope(discovery: Discovery, operation: Operation, argv: tuple[str, ...]) -> None:
-    """Refuse a vector the discovery places under another operation than its owner.
-
-    The grammar has already read the vector by the time this runs, so these are
-    comparisons against the paths the discovery found rather than a second
-    reading of the command. The root rule is the one native binding cannot
-    reach: a bare word under a root operation names an operation the discovery
-    does not carry, so no other matcher claims it and the grammar sees nothing
-    wrong with it.
-    """
-
-    if argv[: len(operation.path)] != operation.path:
-        raise BuilderError("safe_variant_scope", "Safe arguments must begin with their reviewed operation path.")
-    candidates = [row.path for row in discovery.operations if row.path and argv[: len(row.path)] == row.path]
-    longest = max(candidates, key=len) if candidates else ()
-    if longest != operation.path:
-        raise BuilderError("safe_variant_scope", "Review a safe invocation under its most specific known operation.")
-    if not operation.path and any(not argument.startswith("-") for argument in argv):
-        raise BuilderError(
-            "safe_variant_scope", "Root safe variants may contain literal flags only, not unknown operations."
-        )
-
-
 def _decision(discovery: Discovery, operation: Operation, value: object) -> Decision:
     row = object_value(value)
     decision = Decision(
@@ -137,11 +114,11 @@ def load_review(value: object, discovery: Discovery) -> Review:
             for argv in decisions[operation.operation_id].safe_argv
         )
         blocked_ids = frozenset(key for key, decision in decisions.items() if decision.state == "block")
-        # The grammar reads every vector before any of them is placed, so an
-        # author who wrote shell syntax is told that, rather than being told
-        # which operation a command nobody can parse should have been filed
-        # under.
+        # The matchers a compiled extension carries are the only reading of a
+        # reviewed vector: whether it is spelled as a literal invocation at all,
+        # whether its options were discovered, and which operation the grammar
+        # places it under. Python comparing discovery paths beside that answer
+        # was a second grammar that could call a vector well placed after the
+        # matchers had already refused it.
         validate_native_bindings(discovery, safe_rows, blocked_ids)
-        for operation, argv in safe_rows:
-            _safe_variant_scope(discovery, operation, argv)
     return Review(discovery.binding, tuple(sorted(decisions.items())))
