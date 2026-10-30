@@ -89,7 +89,7 @@ pub(crate) fn resolve(
 /// `_portable_project_workspace(workspace)`, with a relative workspace read
 /// under the caller's working directory as `resolve_portable_project_identity`
 /// sends it.
-fn identity(workspace: Option<&str>, cwd: Option<&str>) -> PortableIdentity {
+pub(crate) fn identity(workspace: Option<&str>, cwd: Option<&str>) -> PortableIdentity {
     let Some(workspace) = workspace.filter(|workspace| !workspace.trim().is_empty()) else {
         return PortableIdentity::Absent;
     };

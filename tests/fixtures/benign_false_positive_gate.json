@@ -1380,6 +1380,131 @@
       "contained_ok": true
     },
     {
+      "id": "cargo-global-offline-test",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cargo --offline test"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "cargo-global-quiet-test",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cargo -q test"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "cargo-global-locked-offline-test",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cargo --locked --offline test"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "cargo-global-color-attached-test",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cargo --color=never test"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "cargo-global-verbose-build",
+      "fix_area": "package",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cargo -v build"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-cargo-global-config-key-test",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cargo --config net.offline=false test"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-cargo-global-unstable-flag-test",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cargo -Z unstable-options test"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-cargo-global-offline-install",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cargo --offline install cargo-nextest"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "rustc-version",
       "fix_area": "shell",
       "harnesses": [
@@ -10647,6 +10772,70 @@
       "tool": "shell",
       "tool_input": {
         "command": "npx vitest run tests/sample.test.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-inline-fail-fast-bundle-pytest",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bash -ec 'pytest -q'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-inline-fail-fast-separate-npm",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bash -e -c 'npm run build'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-inline-fail-fast-three-letters",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bash -euxc 'pytest -q'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-inline-trace-sh-vitest",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sh -x -c 'npx vitest run tests/sample.test.ts'"
       },
       "cwd": "worktree",
       "expect": "allow"

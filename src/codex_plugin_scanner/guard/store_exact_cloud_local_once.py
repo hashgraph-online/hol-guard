@@ -32,40 +32,7 @@ class StoreExactCloudLocalOnceMixin:
         # non-consuming lookup composed with the workspace's portable project
         # memory, in one call. The keyring and the integrity-state refresh
         # stay here.
-        request_id = request["request_id"]
-        args: dict[str, object] = {"request_id": request_id, "now": now, "cwd": _process_directory()}
-        # The lookup is only the fallback: evidence that cannot be gathered
-        # must not hide the exact Cloud allow the resident reads first.
-        evidence_error: Exception | None = None
-        lookup: dict[str, object] | None = None
-        try:
-            evidence = self.policy_lookup_evidence(now=now)
-        except (OSError, RuntimeError, ValueError, sqlite3.Error) as error:
-            evidence_error = error
-        else:
-            if evidence.degraded_trust_status is None:
-                lookup = self.policy_decision_lookup_request(
-                    evidence,
-                    harness=str(request["harness"]),
-                    artifact_id=_text(request.get("artifact_id")),
-                    artifact_hash=_text(request.get("artifact_hash")),
-                    workspace=_text(request.get("workspace")),
-                    publisher=_text(request.get("publisher")),
-                    runtime_exact_match_context=None,
-                    consume_one_shot=False,
-                )
-        # Read after the evidence, which may mint the key the lookup names.
-        key, key_id = self._policy_integrity_secret_material(create=False)
-        if key is not None and key_id is not None:
-            self._provision_resident_verifier(key)
-            args["integrity_key_b64"] = encode_key(key)
-            args["integrity_key_id"] = key_id
-        if lookup is not None:
-            # Key bytes travel only at the top level, which the request digest
-            # never covers; the resident restores them into the lookup.
-            for field in _LOOKUP_KEY_FIELDS:
-                lookup.pop(field, None)
-            args["lookup"] = lookup
+        args, evidence_error = _live_authority_args(self, request, now=now)
         # Never retried: the lookup records a refused row's integrity audit.
         decision = self._native_store_call("codex_live_allow_authority", args)
         if isinstance(decision, Mapping):
@@ -73,6 +40,38 @@ class StoreExactCloudLocalOnceMixin:
         if evidence_error is not None:
             raise evidence_error
         return None
+
+    def complete_codex_live_decision(
+        self: _NativeStoreOwner,
+        request: Mapping[str, object],
+        *,
+        now: str,
+        fresh_allow_authorized: bool,
+    ) -> dict[str, object]:
+        # The resident checks the decision, replays a recorded resume, reads
+        # an allow's exact authority, spends it and records the waiting hook's
+        # continuation. A fresh allow's evidence is gathered only once the
+        # resident asks for it, so a replay never reads the policy store or
+        # the keyring.
+        args: dict[str, object] = {
+            "request_id": request["request_id"],
+            "now": now,
+            "cwd": _process_directory(),
+            "fresh_allow_authorized": fresh_allow_authorized,
+        }
+        result = self._native_store_call("complete_codex_live_decision", args)
+        evidence_error: Exception | None = None
+        if isinstance(result, Mapping) and result.get("error") == "codex_live_evidence_required":
+            args, evidence_error = _live_authority_args(self, request, now=now)
+            args["fresh_allow_authorized"] = fresh_allow_authorized
+            args["authority_gathered"] = True
+            # Never retried: the lookup records a refused row's integrity audit.
+            result = self._native_store_call("complete_codex_live_decision", args)
+        if not isinstance(result, Mapping):
+            return {"completed": False, "error": "continuation_not_recorded"}
+        if evidence_error is not None and result.get("error") == "exact_approval_authority_missing":
+            raise evidence_error
+        return dict(result)
 
     def settle_claimed_native_allow(
         self: _NativeStoreOwner,
@@ -111,6 +110,48 @@ class StoreExactCloudLocalOnceMixin:
         # completion's lookup records a refused row's integrity audit, so a
         # call whose reply was lost may already have landed.
         return self._native_store_call("settle_claimed_native_allow", args) is True
+
+
+def _live_authority_args(
+    owner: _NativeStoreOwner, request: Mapping[str, object], *, now: str
+) -> tuple[dict[str, object], Exception | None]:
+    """The authority arguments of a Codex live allow, and any evidence error.
+
+    The lookup is only the fallback: evidence that cannot be gathered must not
+    hide the exact Cloud allow the resident reads first.
+    """
+    args: dict[str, object] = {"request_id": request["request_id"], "now": now, "cwd": _process_directory()}
+    evidence_error: Exception | None = None
+    lookup: dict[str, object] | None = None
+    try:
+        evidence = owner.policy_lookup_evidence(now=now)
+    except (OSError, RuntimeError, ValueError, sqlite3.Error) as error:
+        evidence_error = error
+    else:
+        if evidence.degraded_trust_status is None:
+            lookup = owner.policy_decision_lookup_request(
+                evidence,
+                harness=str(request["harness"]),
+                artifact_id=_text(request.get("artifact_id")),
+                artifact_hash=_text(request.get("artifact_hash")),
+                workspace=_text(request.get("workspace")),
+                publisher=_text(request.get("publisher")),
+                runtime_exact_match_context=None,
+                consume_one_shot=False,
+            )
+    # Read after the evidence, which may mint the key the lookup names.
+    key, key_id = owner._policy_integrity_secret_material(create=False)
+    if key is not None and key_id is not None:
+        owner._provision_resident_verifier(key)
+        args["integrity_key_b64"] = encode_key(key)
+        args["integrity_key_id"] = key_id
+    if lookup is not None:
+        # Key bytes travel only at the top level, which the request digest
+        # never covers; the resident restores them into the lookup.
+        for field in _LOOKUP_KEY_FIELDS:
+            lookup.pop(field, None)
+        args["lookup"] = lookup
+    return args, evidence_error
 
 
 def _text(value: object) -> str | None:

@@ -123,12 +123,12 @@ fn build(facts: &Value, args: &Map<String, Value>, guard_home: &Path) -> Option<
 /// This machine's managed policy. Tests read an unmanaged machine root, so
 /// the host's own policy never changes their waits.
 #[cfg(not(test))]
-fn managed_policy_source() -> ManagedPolicySource {
+pub(crate) fn managed_policy_source() -> ManagedPolicySource {
     ManagedPolicySource::native()
 }
 
 #[cfg(test)]
-fn managed_policy_source() -> ManagedPolicySource {
+pub(crate) fn managed_policy_source() -> ManagedPolicySource {
     ManagedPolicySource {
         system: crate::managed_policy_load::MachineSystem::Other,
         policy_path: None,
