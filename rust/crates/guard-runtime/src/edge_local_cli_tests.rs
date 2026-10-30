@@ -1,8 +1,8 @@
-use super::{exact_command_block, settle, settle_within};
+use super::{exact_command_block, read_by_daemon, settle, settle_within};
 use crate::context_digest_package_scripts::package_json_scripts;
 use guard_contracts::{
-    GuardHookEnvelopeV2, GuardHookLocalCliRulesV1, GuardHookSourceMetadataV2,
-    GUARD_HOOK_ENVELOPE_V2_SCHEMA,
+    GuardHookEnvelopeV2, GuardHookLocalCliRuleV1, GuardHookLocalCliRulesV1,
+    GuardHookSourceMetadataV2, GUARD_HOOK_ENVELOPE_V2_SCHEMA,
 };
 use serde_json::{json, Value};
 use std::fs;
@@ -457,4 +457,43 @@ fn the_edge_leaves_calls_it_does_not_read_to_the_daemon() {
         exact_command_block(&envelope, "claude-code", "PreToolUse"),
         None
     );
+}
+
+#[test]
+fn a_store_path_beside_the_guard_home_is_never_opened() {
+    let (mut envelope, _) = case("ecb-elsewhere", None, false);
+    let elsewhere = Path::new(&envelope.source.guard_home).join("elsewhere");
+    fs::create_dir(&elsewhere).unwrap();
+    fs::write(elsewhere.join("guard.db"), b"not a database").unwrap();
+    envelope.local_cli_rules.as_mut().unwrap().store_path =
+        elsewhere.join("guard.db").to_str().unwrap().to_owned();
+
+    // Refused, not read: the daemon's own lookup decides.
+    assert_eq!(
+        exact_command_block(&envelope, "claude-code", "PreToolUse"),
+        Some(true)
+    );
+}
+
+#[test]
+fn only_a_shell_action_no_custom_rule_blocked_is_probed() {
+    let shell = json!({ "action": { "action_type": "shell_command" }, "minimum_action": "block" });
+    assert!(read_by_daemon(&shell, None));
+    let custom = GuardHookLocalCliRuleV1 {
+        blocked: true,
+        harness_response: json!({}),
+    };
+    assert!(!read_by_daemon(&shell, Some(&custom)));
+    let allowed = GuardHookLocalCliRuleV1 {
+        blocked: false,
+        harness_response: json!({}),
+    };
+    assert!(read_by_daemon(&shell, Some(&allowed)));
+    for result in [
+        json!({ "action": { "action_type": "file_read" } }),
+        json!({ "action": "shell_command" }),
+        json!({}),
+    ] {
+        assert!(!read_by_daemon(&result, None), "{result}");
+    }
 }

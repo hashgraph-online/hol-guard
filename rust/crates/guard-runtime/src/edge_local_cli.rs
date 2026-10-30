@@ -21,7 +21,9 @@ use std::path::Path;
 use std::sync::mpsc;
 use std::time::Duration;
 
-use guard_contracts::{GuardHookEnvelopeV2, GuardHookLocalCliRuleV1, HookLocalCliRuleRequestV1};
+use guard_contracts::{
+    GuardHookEdgeResultV2, GuardHookEnvelopeV2, GuardHookLocalCliRuleV1, HookLocalCliRuleRequestV1,
+};
 use serde_json::{json, Map, Value};
 
 use crate::hook_direct::local_cli::block;
@@ -132,12 +134,49 @@ pub(super) fn exact_command_block(
         return None;
     }
     let command = crate::local_store_read::pre_tool_command(envelope.raw_payload.as_object()?)?;
-    // The daemon's own store, the one its lookup would read.
+    // The daemon's own store, the one its lookup would read, checked the way
+    // every other rule read is. A path it refuses may still name a block, so
+    // the daemon's lookup decides.
+    let Ok(store_path) =
+        crate::local_store_read::require_store_path(&rules.store_path, &envelope.source.guard_home)
+    else {
+        return Some(true);
+    };
     Some(crate::local_store_read::exact_command_block_hint(
-        Path::new(&rules.store_path),
+        &store_path,
         harness,
         command,
     ))
+}
+
+/// The action types the daemon's saved exact-command block lookup reads
+/// (`_SHELL_ACTION_TYPES`, `hook_native_saved_approval.py`).
+const SHELL_ACTION_TYPES: [&str; 6] = [
+    "command",
+    "package",
+    "process_service",
+    "network",
+    "shell",
+    "shell_command",
+];
+
+/// Answer `edge.exact_command_block` only where the daemon reads it: a shell
+/// action no custom rule already blocked. Anything else never opens the store.
+pub(super) fn attach_exact_command_block(
+    envelope: &GuardHookEnvelopeV2,
+    edge: &mut GuardHookEdgeResultV2,
+) {
+    edge.exact_command_block = read_by_daemon(&edge.result, edge.local_cli_rule.as_ref())
+        .then(|| exact_command_block(envelope, &edge.harness, &edge.event_name))
+        .flatten();
+}
+
+fn read_by_daemon(result: &Value, local_cli_rule: Option<&GuardHookLocalCliRuleV1>) -> bool {
+    let action_type = result
+        .pointer("/action/action_type")
+        .and_then(Value::as_str);
+    !local_cli_rule.is_some_and(|rule| rule.blocked)
+        && action_type.is_some_and(|kind| SHELL_ACTION_TYPES.contains(&kind))
 }
 
 /// The custom block for `result`, or, when the call is too large to render

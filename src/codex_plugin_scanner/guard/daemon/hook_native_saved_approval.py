@@ -158,7 +158,8 @@ def native_exact_command_block_response(
                 consume_one_shot=False,
             )
         except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error) as error:
-            # A block for this command exists but could not be read.
+            # The edge said a block may name this command, or gave no answer
+            # (an older resident); a failed lookup cannot rule one out.
             _LOGGER.warning("Native exact-command block lookup failed (%s)", type(error).__name__)
             return _saved_block_response(
                 harness,
