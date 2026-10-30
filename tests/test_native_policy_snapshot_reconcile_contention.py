@@ -1,4 +1,4 @@
-"""A locked store during reconcile republishes instead of ending the publisher."""
+"""Reconcile reads: a locked store republishes, and a pass shares one connection."""
 
 from __future__ import annotations
 
@@ -123,5 +123,51 @@ def test_publisher_thread_survives_a_locked_store(
         assert publisher._thread is not None
         assert publisher._thread.is_alive()
         assert not publisher.is_ready()
+    finally:
+        publisher.close()
+
+
+def test_periodic_recheck_reads_the_store_over_one_connection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = _DeterministicClock()
+    publisher = _acked_publisher(tmp_path, clock, "enforce")
+    store = publisher.store
+    store.get_runtime_state()
+    fingerprint = publisher._current_input_fingerprint()
+    publisher._input_fingerprint = fingerprint
+    reads: list[None] = []
+
+    def read_store(*_args: object, **_kwargs: object) -> bool:
+        store.get_runtime_state()
+        reads.append(None)
+        return False
+
+    monkeypatch.setattr(publisher, "_current_input_fingerprint", lambda: fingerprint)
+    for name in (
+        "_policy_input_changed",
+        "_recheck_direct_lane_local_cli",
+        "_recheck_direct_lane_review_facts",
+        "_recheck_direct_lane_structured_output",
+        "_recheck_direct_lane_mcp_relay",
+        "_recheck_direct_lane_saved_state",
+    ):
+        monkeypatch.setattr(publisher, name, read_store)
+    connects: list[None] = []
+    connect = sqlite3.connect
+
+    def counting_connect(*args: object, **kwargs: object) -> sqlite3.Connection:
+        connects.append(None)
+        return connect(*args, **kwargs)
+
+    monkeypatch.setattr(sqlite3, "connect", counting_connect)
+    publisher._reconcile_due_monotonic = clock.monotonic
+    try:
+        reconcile_policy_inputs(publisher)
+
+        assert len(reads) == 6
+        assert len(connects) == 1, "each read outside a scope opens a connection and parses the schema"
+        assert publisher.is_ready()
     finally:
         publisher.close()

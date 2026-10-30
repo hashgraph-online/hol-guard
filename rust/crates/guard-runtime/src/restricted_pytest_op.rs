@@ -37,6 +37,7 @@ pub(crate) fn evaluate(
     #[cfg(not(unix))]
     let result = if let Some(result) = guard_command::contained_argv::evaluate(operation, input)
         .or_else(|| guard_command::vite_output::evaluate(operation, input))
+        .or_else(|| guard_command::node_build_output::evaluate(operation, input))
     {
         result
     } else if operation == "normalized_command" {

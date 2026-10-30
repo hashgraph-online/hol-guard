@@ -18,10 +18,19 @@ _REPORT = {"kind": "tool", "runtime_arguments": [], "expected_entry": None, "mod
 _TSC = _REPORT | {"name": "tsc", "entries": ["typescript/bin/tsc"]}
 
 
-def _routes(monkeypatch, answer):
-    """Answer the sink's one routing question the way native authority would."""
+def _routes(monkeypatch, answer, *, build_output=None):
+    """Answer the sink's routing question the way native authority would.
+
+    A build asks a second question: the one directory it may write, read from
+    its own words and the project's Vite config. That reading is pinned in
+    `node_build_output_tests.rs`, so `build_output` names the answer for the
+    build under test and this stand-in never reads those words itself.
+    """
 
     def _native(operation, fields, expected):
+        if operation == "node_build_output_root":
+            assert build_output is not None
+            return str(build_output)
         assert operation == "node_tool_route"
         value = answer(fields) if callable(answer) else answer
         if isinstance(value, RestrictedPytestError):
@@ -319,6 +328,7 @@ def test_relative_vite_entry_resolves_from_the_command_directory(monkeypatch, tm
             "expected_entry": spelling,
             "mode": "build",
         },
+        build_output=project / "dist",
     )
     plan = tool.prepare_restricted_node_tool(["node", spelling, "build"], workspace=project)
     assert plan.command == ("/usr/bin/node", str(entry.resolve()), "build")
