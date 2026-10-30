@@ -217,6 +217,7 @@ mod mapping_elf;
 mod mapping_snapshot;
 #[cfg(test)]
 mod mapping_tests;
+mod node_tool_plan;
 mod paths;
 mod profiles;
 mod toolchains;

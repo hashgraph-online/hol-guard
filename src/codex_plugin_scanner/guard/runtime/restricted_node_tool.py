@@ -10,9 +10,9 @@ from dataclasses import replace
 from pathlib import Path
 from typing import NamedTuple
 
-from ..native_restricted_pytest import decode_native_plan, restricted_native
+from ..native_restricted_pytest import decode_native_plan, native_launch_plan, restricted_native
 from .package_evidence_common import read_json_with_integrity
-from .restricted_node_test import nearest_project_root, prepare_restricted_node_test
+from .restricted_node_test import nearest_project_root
 from .restricted_pytest_model import (
     NODE_BUILD_OUTPUT_PROFILE_VERSION,
     NODE_TOOL_READ_ONLY_PROFILE_VERSION,
@@ -22,7 +22,6 @@ from .restricted_pytest_model import (
 )
 from .restricted_pytest_sandbox import _run_backend_process
 from .restricted_pytest_validation import _normalized_command, _path_is_within
-from .restricted_vite_output import config_bundle_directory
 from .restricted_vitest import run_restricted_node_plan
 
 # How much longer than the run's own deadline this waits for the native
@@ -32,32 +31,6 @@ from .restricted_vitest import run_restricted_node_plan
 # middle of publishing, with the previous output already removed and the new
 # one half written, and would leave the staged copy behind.
 _WINDOWS_STAGING_GRACE_SECONDS = 120
-
-
-def _tool_entry(entries: Sequence[str], cwd: Path, workspace: Path) -> tuple[Path, str]:
-    """The `node_modules` directory holding the tool and its path below it.
-
-    A tool may publish its executable under more than one name across major
-    versions, so look for every spelling and keep the one the nearest project
-    installs: a package that pins its own major is what the command would run,
-    not a copy hoisted further up a monorepo. When no project has any of them,
-    name the first spelling so the caller reports a missing dependency.
-    """
-    installed = []
-    for relative in entries:
-        try:
-            modules = nearest_project_root(cwd, workspace, "node_modules/" + relative) / "node_modules"
-        except OSError:
-            continue
-        if (modules / relative).is_file():
-            installed.append((len(modules.parts), modules, relative))
-    if installed:
-        # Deepest wins, and a tie keeps the order the spellings are declared in.
-        depth = max(entry[0] for entry in installed)
-        _, modules, relative = next(entry for entry in installed if entry[0] == depth)
-        return modules, relative
-    first = entries[0]
-    return nearest_project_root(cwd, workspace, "node_modules/" + first) / "node_modules", first
 
 
 def _is_real_directory(path: Path) -> bool:
@@ -269,6 +242,24 @@ def _script_body(task: str, *, workspace: Path, cwd: Path | None) -> tuple[str, 
 def prepare_restricted_node_tool(
     command: Sequence[str], *, workspace: Path, cwd: Path | None = None, home_dir: Path | None = None
 ) -> RestrictedPytestPlan:
+    if sys.platform == "win32":
+        return _prepare_windows_route(command, workspace=workspace, cwd=cwd or workspace)
+    # The route, a package script's own words, the tool's entrypoint in the
+    # nearest `node_modules` and a build's output directory are one native
+    # reading, so the plan cannot name a tool the classifier did not read.
+    return native_launch_plan(
+        "prepare_node_tool",
+        command,
+        workspace=workspace,
+        cwd=cwd or workspace,
+        home_dir=home_dir,
+        platform=sys.platform,
+        backend_executable=None,
+        profile=(NODE_BUILD_OUTPUT_PROFILE_VERSION, NODE_TOOL_READ_ONLY_PROFILE_VERSION),
+    )
+
+
+def _prepare_windows_route(command: Sequence[str], *, workspace: Path, cwd: Path) -> RestrictedPytestPlan:
     argv = _normalized_command(command)
     route = _native_route(argv, None)
     if isinstance(route, _ScriptRoute):
@@ -277,51 +268,15 @@ def prepare_restricted_node_tool(
         route = _native_route(argv, _script_body(route.task, workspace=workspace, cwd=cwd))
     if isinstance(route, _ScriptRoute):
         raise RestrictedPytestError("node_tool_invalid_command", "Only a single named package script is supported.")
-    name, args, runtime_args, entries, build = (
+    expected_entry = None if route.expected_entry is None else Path(route.expected_entry)
+    return _prepare_windows_tool(
         route.name,
         route.arguments,
         route.runtime_arguments,
-        route.entries,
-        route.build,
-    )
-    expected_entry = None if route.expected_entry is None else Path(route.expected_entry)
-    if sys.platform == "win32":
-        return _prepare_windows_tool(
-            name, args, runtime_args, expected_entry, build=build, workspace=workspace, cwd=cwd or workspace
-        )
-    base = prepare_restricted_node_test(["node", "--test"], workspace=workspace, cwd=cwd, home_dir=home_dir)
-    output_roots = ()
-    if build:
-        output_roots = (_vite_output(args, workspace=base.workspace, cwd=base.cwd),)
-    try:
-        modules, relative = _tool_entry(entries, base.cwd, base.workspace)
-        entry = (modules / relative).resolve(strict=True)
-        if not entry.is_file() or not _path_is_within(entry, modules):
-            raise OSError("external tool entrypoint")
-        # A relative entrypoint names a file below the command's directory.
-        if expected_entry is not None and (base.cwd / expected_entry).resolve(strict=True) != entry:
-            raise OSError("unexpected tool entrypoint")
-    except (OSError, RuntimeError) as error:
-        raise RestrictedPytestError(
-            "node_tool_dependency_unavailable",
-            "The local lint/typecheck tool is unavailable; no replacement was downloaded.",
-        ) from error
-    if build and not any(value == "--configLoader" or value.startswith("--configLoader=") for value in args):
-        explicit_config = any(value in {"-c", "--config"} or value.startswith("--config=") for value in args)
-        bundle = None if explicit_config else config_bundle_directory(base.cwd, base.workspace, modules)
-        if bundle is None:
-            args = (*args, "--configLoader", "runner")
-        else:
-            output_roots = (*output_roots, bundle)
-    return replace(
-        base,
-        profile_version=NODE_BUILD_OUTPUT_PROFILE_VERSION if build else NODE_TOOL_READ_ONLY_PROFILE_VERSION,
-        command=(str(base.executable), *runtime_args, str(entry), *args),
-        output_roots=output_roots,
-        denied_capabilities=tuple(
-            "workspace-source-write" if build and value == "workspace-write" else value
-            for value in base.denied_capabilities
-        ),
+        expected_entry,
+        build=route.build,
+        workspace=workspace,
+        cwd=cwd,
     )
 
 

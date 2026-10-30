@@ -33,22 +33,4 @@ def declared_vite_output(cwd: Path, workspace: Path, *, config: Path | None = No
     return None if answer is None else Path(answer)
 
 
-def config_bundle_directory(cwd: Path, workspace: Path, modules: Path) -> Path | None:
-    """Where Vite's default loader writes the bundled config, when Guard can grant it.
-
-    Vite bundles `vite.config.ts` into `node_modules/.vite-temp` next to the
-    config, imports that one file and deletes it. Granting that directory lets
-    configs that use `__dirname` load as they do outside Guard. None keeps the
-    write-free runner loader.
-    """
-    from ..native_restricted_pytest import restricted_native
-
-    answer = restricted_native(
-        "vite_bundle_directory",
-        {"cwd": cwd, "workspace": workspace, "modules": modules},
-        (str, type(None)),
-    )
-    return None if answer is None else Path(answer)
-
-
-__all__ = ["config_bundle_directory", "declared_vite_output"]
+__all__ = ["declared_vite_output"]

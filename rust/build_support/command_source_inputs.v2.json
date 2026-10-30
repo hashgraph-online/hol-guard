@@ -636,6 +636,7 @@
       "src/restricted_pytest/mapping_elf.rs",
       "src/restricted_pytest/mapping_snapshot.rs",
       "src/restricted_pytest/mod.rs",
+      "src/restricted_pytest/node_tool_plan.rs",
       "src/restricted_pytest/paths.rs",
       "src/restricted_pytest/profiles.rs",
       "src/restricted_pytest/toolchains.rs",
