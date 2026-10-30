@@ -132,7 +132,7 @@ def _linux_proc_environment_contains(
             if not process_dir.name.isdigit():
                 continue
             try:
-                if process_dir.stat().st_uid != user_id:
+                if process_dir.stat().st_uid != user_id and not _linux_proc_runs_as_user(process_dir, user_id):
                     continue
                 with (process_dir / "environ").open("rb") as stream:
                     raw_environment = stream.read(remaining_bytes + 1)
@@ -157,6 +157,27 @@ def _linux_proc_environment_contains(
     except OSError:
         return None
     return False
+
+
+def _linux_proc_runs_as_user(process_dir: Path, user_id: int) -> bool:
+    """Whether ``status`` lists ``user_id`` among the process's user ids.
+
+    A process that is not dumpable has a root-owned ``/proc/PID``, so the directory
+    owner alone would hide a same-user launch descendant that dropped dumpability.
+    An unreadable or missing ``Uid:`` line counts as this user's, so the caller
+    reaches the environment and start-tick checks instead of skipping it.
+    """
+
+    try:
+        with (process_dir / "status").open("r", encoding="ascii", errors="replace") as stream:
+            for line in stream:
+                if line.startswith("Uid:"):
+                    return str(user_id) in line.split()[1:]
+    except (FileNotFoundError, ProcessLookupError):
+        return False
+    except OSError:
+        return True
+    return True
 
 
 def _linux_proc_start_tick(process_dir: Path) -> int | None:

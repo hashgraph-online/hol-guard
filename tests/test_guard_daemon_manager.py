@@ -1981,10 +1981,14 @@ def test_launch_receipt_stays_while_its_root_runs(tmp_path, monkeypatch):
     assert daemon_manager_module._retire_exited_posix_pending_launch(guard_home, deadline=time.monotonic() + 5) is False
 
 
-def _fake_linux_process(proc_root, pid, *, environment, start_tick, readable=True):
+def _fake_linux_process(proc_root, pid, *, environment, start_tick, readable=True, status_uid=None):
     process_dir = proc_root / str(pid)
     process_dir.mkdir(parents=True)
     (process_dir / "environ").write_bytes(environment)
+    if status_uid is not None:
+        (process_dir / "status").write_text(
+            f"Name:\tpython\nUid:\t{status_uid}\t{status_uid}\t{status_uid}\t{status_uid}\n"
+        )
     fields = " ".join(["S"] + ["0"] * 18 + [str(start_tick)])
     (process_dir / "stat").write_text(f"{pid} (python) {fields}\n", encoding="ascii")
     if not readable:
@@ -2023,6 +2027,31 @@ def test_linux_environment_search_only_skips_a_hidden_process_older_than_the_lau
         )
         is expected
     )
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX procfs layout")
+@pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0, reason="root reads any environment")
+def test_linux_environment_search_checks_a_root_owned_entry_that_runs_as_this_user(tmp_path, monkeypatch):
+    # A non-dumpable process has a root-owned /proc/PID; its status still names its user.
+    caller_uid = os.getuid() + 4242
+    monkeypatch.setattr(daemon_manager_module.os, "getuid", lambda: caller_uid)
+    proc_root = tmp_path / "proc"
+    _fake_linux_process(proc_root, 101, environment=b"LAUNCH=abc\0", start_tick=500, status_uid=0)
+    search = partial(
+        daemon_manager_module._linux_proc_environment_contains,
+        b"LAUNCH=abc",
+        launched_at_tick=400,
+        deadline=time.monotonic() + 5,
+        proc_root=proc_root,
+    )
+
+    assert search() is False
+    _fake_linux_process(
+        proc_root, 102, environment=b"LAUNCH=abc\0", start_tick=500, readable=False, status_uid=caller_uid
+    )
+    assert search() is None
+    (proc_root / "102" / "environ").chmod(0o600)
+    assert search() is True
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX procfs layout")
