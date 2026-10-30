@@ -104,12 +104,7 @@ these items ask for.
 - [ ] NRH-T083 keep durable correlation in Python and add read-then-exfil plus Guard-disable-then-retry sequences;
 - [ ] NRH-T084 use more restrictive effect/action on mismatch;
 - [ ] NRH-T085 expand secret/exfiltration corpus across credentials, shells, encodings, archives, cloud/GitHub/webhook/database/language clients;
-- [ ] NRH-T086 prove no secret sample reaches responses/logs/diagnostics/metrics/artifacts/crashes;
-  the detector's own copies are narrowed: `SecretFinding` scrubs its candidate on drop, the
-  fingerprint hashes the field in place instead of joining it into a temporary, and the scan keys
-  deduplication on a digest, so a run no longer leaves four plaintext copies of every detected
-  secret in freed allocations until the process exits. The scanned text buffer itself is still
-  unscrubbed, and a crash dump taken mid-scan would still carry it;
+- [ ] NRH-T086 prove no secret sample reaches responses/logs/diagnostics/metrics/artifacts/crashes; the diagnostics surface is closed: `daemon.log` recorded a formatted traceback for every `record_exception` caller that passed no `exc_info`, which repeated the install's absolute paths, the account that owns them, the source line that raised and the exception's own message, and that log is the artifact an operator hands over. The formatter now records a bounded chain of exception class names instead, pinned by `tests/test_guard_daemon_diagnostics.py::test_daemon_diagnostics_disclose_no_part_of_the_failure_they_recorded`. The detector's own copies are narrowed too: `SecretFinding` scrubs its candidate on drop, the fingerprint hashes the field in place instead of joining it into a temporary, and the scan keys deduplication on a digest, so a run no longer leaves four plaintext copies of every detected secret in freed allocations until the process exits. The scanned text buffer itself is still unscrubbed, and a crash dump taken mid-scan would still carry it. Responses, metrics, artifacts and crashes remain open;
 - [ ] NRH-T087 add bounded native prompt-injection DTO/rules with documentation/fixture/quotation context parity;
 - [ ] NRH-T088 scan untrusted repository/web/issue/PR/log/MCP/file output and expose tightening-only signals until parity;
 - [ ] NRH-T089 add POSIX/PowerShell/CMD/language/Git/package/cloud mass-deletion effects and bounded scope estimation;

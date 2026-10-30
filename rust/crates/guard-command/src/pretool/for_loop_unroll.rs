@@ -96,7 +96,11 @@ pub(super) fn unroll(command: &str) -> Option<String> {
     let mut out = prefix;
     for word in &words {
         for (text, separator) in &items {
-            let step = substitute(text, word)?;
+            // The unrolled list runs the items the loop ran. A leading `!`
+            // only inverts an item's exit status, so it is dropped wherever
+            // the separator after it shows nothing reads that outcome.
+            let step =
+                super::control_flow_flatten::unnegated_part(&substitute(text, word)?, separator);
             out.push_str(&step);
             if !tail.is_empty() {
                 out.push(' ');

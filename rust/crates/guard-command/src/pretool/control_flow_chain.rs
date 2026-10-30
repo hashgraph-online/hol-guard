@@ -15,57 +15,10 @@
 //! or a background job anywhere in the command. Anything else this does not
 //! fully understand returns `None` and keeps the existing review.
 
-use super::control_flow_flatten::{conditional_parts, keyword, MAX_FLATTENED_BYTES};
-
-/// Commands that change the state later commands in the same shell run with.
-const STATE_CHANGING: &[&str] = &[
-    "cd",
-    "pushd",
-    "popd",
-    "export",
-    "unset",
-    "set",
-    "shopt",
-    "setopt",
-    "unsetopt",
-    "source",
-    ".",
-    "alias",
-    "unalias",
-    "umask",
-    "eval",
-    "exec",
-    "read",
-    "mapfile",
-    "readarray",
-    "declare",
-    "typeset",
-    "local",
-    "readonly",
-    "trap",
-    "hash",
-    "builtin",
-    "command",
-    "enable",
-    "ulimit",
-    "getopts",
-    "let",
-    "shift",
-    "chdir",
-    "integer",
-    "float",
-    "private",
-    "autoload",
-    "unfunction",
-    "unhash",
-    "emulate",
-    "zmodload",
-    "vared",
-    "disable",
-    "noglob",
-    "nocorrect",
-    "-",
-];
+use super::control_flow_flatten::{
+    command_head, command_word_changes_shell_state, conditional_parts, keyword, rendered_separator,
+    unnegated_part, MAX_FLATTENED_BYTES,
+};
 
 /// Keywords that open or continue a construct this splice does not read.
 const OTHER_CONSTRUCTS: &[&str] = &[
@@ -103,9 +56,14 @@ pub(super) fn spliced(command: &str) -> Option<String> {
         }
         let last = parts.len() - 1;
         for (index, (item, separator)) in parts.iter().enumerate() {
-            out.push_str(item);
+            // The last item keeps any `!` it carries: the splice drops its
+            // separator and the text around the conditional reads the
+            // outcome in its place.
             if index < last {
-                out.push_str(separator);
+                out.push_str(&unnegated_part(item, separator));
+                out.push_str(rendered_separator(separator));
+            } else {
+                out.push_str(item);
             }
         }
         if !tail.is_empty() {
@@ -237,15 +195,10 @@ fn starts_with_word(text: &str, word: &str) -> bool {
 /// its real name is unknown here.
 fn changes_shell_state(item: &str) -> bool {
     item.split('|').any(|stage| {
-        let first = stage.split_whitespace().next().unwrap_or_default();
-        STATE_CHANGING.contains(&first)
+        let first = command_head(stage);
+        command_word_changes_shell_state(stage)
             || first == "if"
             || OTHER_CONSTRUCTS.contains(&first)
-            || first.contains(['\'', '"', '\\', '$'])
-            || (first == "printf" && stage.split_whitespace().any(|word| word.starts_with("-v")))
-            || first.split_once('=').is_some_and(|(name, _)| {
-                !name.is_empty() && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
-            })
     })
 }
 

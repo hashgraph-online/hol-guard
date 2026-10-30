@@ -1083,6 +1083,14 @@
    "body": "cd50b16d1937"
   },
   {
+   "verdict": "windows-unsupported",
+   "note": "Off Unix the runtime runs no contained sink of its own (contained_workspace_sink is Unix-only), so a Codex call keeps the installed Guard's `guard execute-contained-test` sink exactly as before; the Windows rewrite tests pin that command line.",
+   "file": "rust/crates/guard-runtime/src/hook_direct_contained.rs",
+   "item": "pub(crate) fn unprojected_sink_command( _response: &Value, _original: &Map<String, Value>, _workspace: &str, _home_dir: &str, _native: NativeSink, ) -> Option<Vec<String>>",
+   "cfg": "not(unix)",
+   "body": "071cae1ef9da"
+  },
+  {
    "file": "rust/crates/guard-runtime/src/hook_direct_contained.rs",
    "item": "mod request",
    "verdict": "windows-unsupported",
