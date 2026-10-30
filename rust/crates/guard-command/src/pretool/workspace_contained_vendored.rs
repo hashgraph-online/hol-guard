@@ -317,9 +317,23 @@ fn composer_manifest(directory: &Path) -> Option<serde_json::Value> {
 /// registers a plugin's commands before it turns the project's scripts into
 /// commands, and the plugin wins a name collision, so a declared script name
 /// is only that script while no plugin may run. Since Composer 2.2 a plugin
-/// runs only where the project's own `config.allow-plugins` admits it, which
-/// is what this reads: an absent or false setting is the project telling
-/// Composer to run none.
+/// runs only where `config.allow-plugins` admits it, and this reads the
+/// project's own manifest: an absent or false setting there is the project
+/// telling Composer to run none.
+///
+/// Composer merges `$COMPOSER_HOME/config.json` into that configuration and
+/// loads the plugins `composer global require` installed, so on a host the
+/// project's setting is not the whole answer. It is the whole answer for the
+/// run this module admits, because that run is contained: the launcher
+/// clears the environment down to an allow-list no `COMPOSER_*` name is on,
+/// and points `HOME` at a private scratch directory that holds no Composer
+/// home at all. A line carrying its own `COMPOSER_HOME` never reaches here —
+/// [`local_vendored_work`] refuses the segment first. So the global
+/// configuration and the global `vendor` tree are both out of reach of the
+/// process this decision describes, and the project's manifest is the only
+/// configuration it reads. `a_contained_run_is_never_given_a_composer_home`
+/// pins that, so a name added to the allow-list later cannot quietly hand
+/// the run a home this reading assumed away.
 fn allows_plugins(manifest: &serde_json::Value) -> bool {
     match manifest
         .get("config")
