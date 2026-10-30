@@ -1093,6 +1093,7 @@ impl SupplyChainStore for ResidentSupplyChainStore {
             local_once_integrity_key_b64: key_b64.as_ref().map(|k| k.to_string()),
             local_once_integrity_key_id: key_id,
             policy_bundle_decision_identities: None,
+            policy_bundle_rules_lifted: false,
             probe_groups: None,
             portable_workspace: None,
             evidence_binding: None,

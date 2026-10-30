@@ -52,6 +52,8 @@ const APPROVAL_GATE_POLICY_SOURCE: &str = "approval-gate";
 const APPROVAL_CONTEXT_SQL_PATTERN: &str = "guard-approval-context:v1:%";
 const RUNTIME_SCOPED_EXACT_MATCH_PREFIX: &str = "runtime-exact:";
 const POLICY_BUNDLE_SOURCE: &str = "policy-bundle";
+/// Rows a v2 bundle compiles to on sync (`_build_canonical_policy_bundle_decisions`).
+const POLICY_BUNDLE_CANONICAL_SOURCE: &str = "policy-bundle-canonical";
 
 /// `_SCOPED_RUNTIME_EXACT_FAMILIES` (`store_base.py:317`) — the 5 families that
 /// get a runtime exact-match key. `mcp`/`prompt-env-read`/`prompt-file` are
@@ -876,6 +878,7 @@ pub(crate) fn materialized_policy_bundle_row_identity(row: &Value) -> Value {
 fn runtime_policy_row_is_eligible(
     row: &Value,
     bundle_identities: &[Vec<Value>],
+    bundle_rules_lifted: bool,
     requested_artifact_id: Option<&str>,
     requested_artifact_hash: Option<&str>,
     runtime_exact_match_key: Option<&str>,
@@ -884,6 +887,14 @@ fn runtime_policy_row_is_eligible(
 ) -> bool {
     let source = row_value(row, "source").as_str().unwrap_or("").to_string();
     if source == "cloud-sync" || source == "team-policy" {
+        return false;
+    }
+    // An approved Cloud exception lifts the bundle's canonical blocks and
+    // reviews for this target; its allows still apply.
+    if source == POLICY_BUNDLE_CANONICAL_SOURCE
+        && bundle_rules_lifted
+        && row_value(row, "action").as_str() != Some("allow")
+    {
         return false;
     }
     if source == POLICY_BUNDLE_SOURCE {
@@ -1688,6 +1699,7 @@ fn evaluate_in_connection(
             if !runtime_policy_row_is_eligible(
                 candidate,
                 &bundle_identities,
+                request.policy_bundle_rules_lifted,
                 artifact_id,
                 artifact_hash,
                 runtime_exact_match_key.as_deref(),
@@ -1785,6 +1797,7 @@ fn evaluate_in_connection(
         if !runtime_policy_row_is_eligible(
             candidate,
             &bundle_identities,
+            request.policy_bundle_rules_lifted,
             artifact_id,
             artifact_hash,
             runtime_exact_match_key.as_deref(),

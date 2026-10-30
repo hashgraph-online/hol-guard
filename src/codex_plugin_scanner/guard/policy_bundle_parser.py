@@ -154,6 +154,7 @@ def policy_bundle_acceptance_checkpoint(policy_bundle: dict[str, object]) -> dic
         "issuedAt": policy_bundle.get("issuedAt"),
         "payloadHash": policy_bundle.get("payloadHash"),
         "workspaceId": policy_bundle.get("workspaceId"),
+        "cloudExceptionsIssuedAt": policy_bundle.get("cloudExceptionsIssuedAt"),
     }
     return {key: value for key, value in checkpoint.items() if value is not None}
 

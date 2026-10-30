@@ -13,10 +13,11 @@ use crate::policy_bundle_py::{
     int_cmp, int_token, is_int, is_sha256_digest, obj, py_eq, py_eq_opt, strict_non_empty, Obj,
 };
 use crate::policy_bundle_time::strict_utc_micros;
+use crate::policy_bundle_v1_rules::cloud_exceptions_are_valid;
 
 pub(crate) const CONTRACT: &str = "guard-policy-bundle.v2";
 const DEFAULT_STRING_MAX: usize = 1_048_576;
-const TOP_LEVEL: [&str; 12] = [
+const TOP_LEVEL: [&str; 14] = [
     "envelopeVersion",
     "contractVersion",
     "bundleVersion",
@@ -29,7 +30,12 @@ const TOP_LEVEL: [&str; 12] = [
     "verifier",
     "payload",
     "rollback",
+    "cloudExceptions",
+    "cloudExceptionsIssuedAt",
 ];
+/// Signed but outside `bundleHash`: Cloud re-signs a published bundle with the
+/// current exception set, so its rollout identity stays the same.
+const CLOUD_EXCEPTION_KEYS: [&str; 2] = ["cloudExceptions", "cloudExceptionsIssuedAt"];
 const ROLLBACK_KEYS: [&str; 8] = [
     "rollbackOfBundleHash",
     "rollbackOfBundleVersion",
@@ -83,11 +89,16 @@ fn sha256_hex(bytes: &[u8]) -> String {
 }
 
 /// `_unsigned_bundle_core`.
-fn unsigned_core(bundle: &Obj) -> Result<Value, String> {
+fn unsigned_core(bundle: &Obj, with_cloud_exceptions: bool) -> Result<Value, String> {
     let whole = Value::Object(bundle.clone());
     v2_check(&whole, 0).map_err(str::to_owned)?;
     let mut core = bundle.clone();
     core.remove("bundleHash");
+    if !with_cloud_exceptions {
+        for key in CLOUD_EXCEPTION_KEYS {
+            core.remove(key);
+        }
+    }
     let Some(Value::Object(verifier)) = core.get("verifier") else {
         return Err("invalid_verifier".to_owned());
     };
@@ -106,13 +117,13 @@ fn canonical(value: &Value) -> Result<Vec<u8>, String> {
 pub(crate) fn bundle_hash(bundle: &Obj) -> Result<String, String> {
     Ok(format!(
         "sha256:{}",
-        sha256_hex(&canonical(&unsigned_core(bundle)?)?)
+        sha256_hex(&canonical(&unsigned_core(bundle, false)?)?)
     ))
 }
 
 /// `canonical_policy_bundle_v2_payload`.
 pub(crate) fn canonical_payload(bundle: &Obj) -> Result<Vec<u8>, String> {
-    let Value::Object(mut core) = unsigned_core(bundle)? else {
+    let Value::Object(mut core) = unsigned_core(bundle, true)? else {
         return Err("invalid_bundle".to_owned());
     };
     let Some(hash) = strict_non_empty(bundle.get("bundleHash"), 128) else {
@@ -202,9 +213,9 @@ fn check_envelope(bundle: &Obj, authority: &Authority) -> Result<(), &'static st
     if !known_keys(bundle, &TOP_LEVEL) {
         return Err("unknown_field");
     }
-    let required = TOP_LEVEL
-        .iter()
-        .filter(|key| !matches!(**key, "expiresAt" | "rollback"));
+    let required = TOP_LEVEL.iter().filter(|key| {
+        !matches!(**key, "expiresAt" | "rollback") && !CLOUD_EXCEPTION_KEYS.contains(key)
+    });
     if required.into_iter().any(|key| !bundle.contains_key(*key)) {
         return Err("missing_required_field");
     }
@@ -252,7 +263,29 @@ fn check_envelope(bundle: &Obj, authority: &Authority) -> Result<(), &'static st
     if rollback_error(bundle.get("rollback")) {
         return Err("invalid_rollback");
     }
+    if cloud_exceptions_error(bundle) {
+        return Err("invalid_cloud_exceptions");
+    }
     Ok(())
+}
+
+/// Exceptions travel with the time Cloud issued them; neither comes alone.
+fn cloud_exceptions_error(bundle: &Obj) -> bool {
+    match (
+        bundle.get("cloudExceptions"),
+        bundle.get("cloudExceptionsIssuedAt"),
+    ) {
+        (None, None) => false,
+        (Some(_), Some(issued)) => {
+            !cloud_exceptions_are_valid(bundle)
+                || cloud_exceptions_issued_at(Some(issued)).is_none()
+        }
+        _ => true,
+    }
+}
+
+fn cloud_exceptions_issued_at(value: Option<&Value>) -> Option<i64> {
+    value.and_then(Value::as_str).and_then(strict_utc_micros)
 }
 
 /// `validated_policy_bundle_v2_payload`. `NeedsEvidence` asks the caller for the
@@ -311,6 +344,7 @@ pub(crate) struct Transition<'a> {
     pub(crate) current_hash: Option<&'a Value>,
     pub(crate) expected_last_good_version: Option<&'a Value>,
     pub(crate) expected_last_good_hash: Option<&'a Value>,
+    pub(crate) current_cloud_exceptions_issued_at: Option<&'a Value>,
 }
 
 pub(crate) fn transition_error(bundle: &Obj, state: &Transition) -> Option<&'static str> {
@@ -329,8 +363,18 @@ pub(crate) fn transition_error(bundle: &Obj, state: &Transition) -> Option<&'sta
     match int_cmp(incoming, current_token) {
         Ordering::Less => return Some("bundle_downgrade_rejected"),
         Ordering::Equal => {
-            return (!py_eq(&Value::String(hash.clone()), current_hash))
-                .then_some("bundle_version_conflict");
+            if !py_eq(&Value::String(hash.clone()), current_hash) {
+                return Some("bundle_version_conflict");
+            }
+            // The same bundle may come back with a newer exception set, never
+            // with an older one or with none once a set was accepted.
+            let accepted = cloud_exceptions_issued_at(state.current_cloud_exceptions_issued_at);
+            let incoming = cloud_exceptions_issued_at(bundle.get("cloudExceptionsIssuedAt"));
+            return match (accepted, incoming) {
+                (Some(accepted), Some(incoming)) if incoming >= accepted => None,
+                (Some(_), _) => Some("cloud_exceptions_replay"),
+                (None, _) => None,
+            };
         }
         Ordering::Greater => {}
     }

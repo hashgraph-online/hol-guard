@@ -39,6 +39,7 @@ fn request(store: &std::path::Path, workspace: Option<&str>) -> PolicyDecisionLo
         local_once_integrity_key_b64: Some(key_b64()),
         local_once_integrity_key_id: Some(KEY_ID.to_owned()),
         policy_bundle_decision_identities: None,
+        policy_bundle_rules_lifted: false,
         probe_groups: None,
         portable_workspace: Some(PORTABLE.to_owned()),
         evidence_binding: None,

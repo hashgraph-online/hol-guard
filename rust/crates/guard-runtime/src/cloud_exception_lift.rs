@@ -49,6 +49,16 @@ pub(crate) fn lift_cloud_excepted_identities(
         .collect()
 }
 
+/// Whether an active exception in `bundle` covers `target`, which lifts the
+/// bundle's canonical (v2) non-allow rules for that lookup
+/// (`policy_bundle_rules_lifted`).
+pub(crate) fn cloud_exception_covers(
+    bundle: Option<&Map<String, Value>>,
+    target: &LiftTarget<'_>,
+) -> bool {
+    bundle.is_some_and(|bundle| covered(bundle, target))
+}
+
 struct Exception<'a> {
     id: &'a str,
     scope: &'a str,

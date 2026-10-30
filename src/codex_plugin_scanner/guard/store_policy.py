@@ -9,7 +9,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal, cast
 
-from .cloud_exceptions import lift_cloud_excepted_policy_bundle_identities
+from .cloud_exceptions import (
+    cloud_exception_lifting_policy_bundle,
+    lift_cloud_excepted_policy_bundle_identities,
+)
 from .managed_controls_policy_bundle import (
     MANAGED_CONTROLS_ACTIVE_STATE_KEY,
     MANAGED_CONTROLS_LAST_GOOD_STATE_KEY,
@@ -1114,6 +1117,20 @@ class StorePolicyMixin:
         )
         if identities:
             request["policy_bundle_decision_identities"] = identities
+        # Canonical (v2) bundle rows carry no identity gate, so the same lift
+        # travels as a flag the resident applies to them.
+        if evidence.policy_bundle_cloud_exceptions is not None and (
+            cloud_exception_lifting_policy_bundle(
+                evidence.policy_bundle_cloud_exceptions,
+                harness=harness,
+                artifact_id=artifact_id,
+                publisher=publisher,
+                workspace=workspace,
+                now=evidence.now,
+            )
+            is not None
+        ):
+            request["policy_bundle_rules_lifted"] = True
         if portable_workspace is not None:
             request["portable_workspace"] = portable_workspace
             # Unset options are omitted, never sent as null: the resident
@@ -1316,8 +1333,10 @@ class StorePolicyMixin:
         identities, cloud_exceptions = self._cached_policy_bundle_authority(
             now=_parse_utc_timestamp(current_time).timestamp(),
         )
+        # A v2 bundle materializes no identities, but its Cloud exceptions
+        # still lift the canonical rules it compiled to.
         if not identities:
-            return None, None
+            return None, cloud_exceptions
         return [[field for field in identity] for identity in identities], cloud_exceptions
 
     def resolve_policy_decision(

@@ -36,7 +36,9 @@
 
 use super::local_cli::block::ReviewVerdict;
 use super::{reviewed_edge, HookDirectDefer, PRE_TOOL_USE};
-use crate::cloud_exception_lift::{lift_cloud_excepted_identities, LiftTarget};
+use crate::cloud_exception_lift::{
+    cloud_exception_covers, lift_cloud_excepted_identities, LiftTarget,
+};
 use crate::connector_setup::grant_lifts;
 use crate::local_store_read::{
     open_read_only, schema_version, table_exists, STORE_FILE_NAME, SUPPORTED_SCHEMA_VERSION,
@@ -285,17 +287,16 @@ fn saved_response(
     let (bundle_identities, bundle) = store.bundle_authority(&now)?;
     // Lifted once against the evaluated working directory and shared by the
     // local and portable probes, as `policy_decision_lookup_request` does.
-    let bundle_identities = lift_cloud_excepted_identities(
-        &bundle_identities,
-        bundle.as_ref(),
-        &LiftTarget {
-            harness: context.harness,
-            artifact_id: Some(store.artifact_id),
-            publisher: None,
-            workspace: Some(context.workspace),
-            now: &now,
-        },
-    );
+    let lift_target = LiftTarget {
+        harness: context.harness,
+        artifact_id: Some(store.artifact_id),
+        publisher: None,
+        workspace: Some(context.workspace),
+        now: &now,
+    };
+    let bundle_identities =
+        lift_cloud_excepted_identities(&bundle_identities, bundle.as_ref(), &lift_target);
+    let rules_lifted = cloud_exception_covers(bundle.as_ref(), &lift_target);
     let composition = portable::composition(context.workspace)?;
     let key_b64 = Zeroizing::new(Base64UrlUnpadded::encode_string(&key.key));
     let store_path = Path::new(context.guard_home).join(STORE_FILE_NAME);
@@ -324,6 +325,7 @@ fn saved_response(
         local_once_integrity_key_id: Some(key.key_id.clone()),
         policy_bundle_decision_identities: (!bundle_identities.is_empty())
             .then_some(bundle_identities),
+        policy_bundle_rules_lifted: rules_lifted,
         probe_groups: None,
         portable_workspace: None,
         evidence_binding: None,

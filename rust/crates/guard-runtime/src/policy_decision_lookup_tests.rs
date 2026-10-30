@@ -86,6 +86,7 @@ fn base_request(store_path: &std::path::Path) -> PolicyDecisionLookupRequestV1 {
         local_once_integrity_key_b64: None,
         local_once_integrity_key_id: None,
         policy_bundle_decision_identities: None,
+        policy_bundle_rules_lifted: false,
         probe_groups: None,
         portable_workspace: None,
         evidence_binding: None,
@@ -406,12 +407,53 @@ fn family_scoped_row_is_eligible_for_concrete_lookup() {
     assert!(runtime_policy_row_is_eligible(
         &row,
         &[],
+        false,
         Some("codex:project:mcp:safe-read"),
         None,
         None,
         None,
         None
     ));
+}
+
+/// An approved Cloud exception lifts a v2 bundle's canonical blocks and
+/// reviews for the lookup it covers; its canonical allows and every other
+/// source still apply.
+#[test]
+fn lifted_bundle_drops_only_canonical_restrictions() {
+    let row = |action: &str, source: &str| {
+        json!({
+            "decision_id": 1, "harness": "codex", "scope": "harness",
+            "artifact_id": "family:mcp", "artifact_hash": Value::Null,
+            "action": action, "source": source,
+        })
+    };
+    let eligible = |row: &Value, lifted: bool| {
+        runtime_policy_row_is_eligible(
+            row,
+            &[],
+            lifted,
+            Some("codex:project:mcp:safe-read"),
+            None,
+            None,
+            None,
+            None,
+        )
+    };
+    for action in ["block", "review", "require-reapproval", "sandbox-required"] {
+        let canonical = row(action, "policy-bundle-canonical");
+        assert!(
+            eligible(&canonical, false),
+            "{action} applies without an exception"
+        );
+        assert!(
+            !eligible(&canonical, true),
+            "{action} is lifted by the exception"
+        );
+    }
+    assert!(eligible(&row("allow", "policy-bundle-canonical"), true));
+    assert!(eligible(&row("block", "policy-yaml-import"), true));
+    assert!(eligible(&row("block", "cloud-signed-memory"), true));
 }
 
 /// Vectors recorded from the retired Python

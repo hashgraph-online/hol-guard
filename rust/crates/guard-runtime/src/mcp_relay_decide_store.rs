@@ -12,7 +12,9 @@
 //! than the published protected one, a newer or unknown schema, and a store it
 //! cannot read all defer the call.
 
-use crate::cloud_exception_lift::{lift_cloud_excepted_identities, LiftTarget};
+use crate::cloud_exception_lift::{
+    cloud_exception_covers, lift_cloud_excepted_identities, LiftTarget,
+};
 use crate::local_store_read::{
     open_read_only_cached, schema_version, table_exists, CachedConnection, STORE_FILE_NAME,
     SUPPORTED_SCHEMA_VERSION,
@@ -231,16 +233,17 @@ impl Saved<'_> {
         probe: &Probe<'_>,
     ) -> guard_contracts::PolicyDecisionLookupRequestV1 {
         let policy_key = self.has_local_policy;
+        let lift_target = LiftTarget {
+            harness: probe.harness,
+            artifact_id: Some(probe.artifact_id),
+            publisher: probe.publisher,
+            workspace: probe.workspace,
+            now: &self.now,
+        };
         let identities = lift_cloud_excepted_identities(
             &self.bundle_identities,
             self.bundle.as_ref(),
-            &LiftTarget {
-                harness: probe.harness,
-                artifact_id: Some(probe.artifact_id),
-                publisher: probe.publisher,
-                workspace: probe.workspace,
-                now: &self.now,
-            },
+            &lift_target,
         );
         guard_contracts::PolicyDecisionLookupRequestV1 {
             schema: guard_contracts::POLICY_DECISION_LOOKUP_REQUEST_SCHEMA.to_owned(),
@@ -266,6 +269,7 @@ impl Saved<'_> {
             local_once_integrity_key_b64: Some(self.key_b64.to_string()),
             local_once_integrity_key_id: Some(self.key_id.clone()),
             policy_bundle_decision_identities: (!identities.is_empty()).then_some(identities),
+            policy_bundle_rules_lifted: cloud_exception_covers(self.bundle.as_ref(), &lift_target),
             probe_groups: None,
             portable_workspace: None,
             evidence_binding: None,

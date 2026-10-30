@@ -166,6 +166,8 @@ _POLICY_YAML_IMPORT_ENV = "HOL_GUARD_POLICY_YAML_IMPORT"
 # exact-shell-command rows the hook looks up, so Guard Cloud may deliver exact
 # command rules in a v2 bundle to a device that advertises this.
 POLICY_EXACT_COMMAND_RULES_CAPABILITY = "policy-document-exact-commands.v1"
+# Accepts Cloud exceptions signed into a v2 bundle (``cloudExceptions``).
+POLICY_BUNDLE_V2_CLOUD_EXCEPTIONS_CAPABILITY = "policy-bundle-v2-cloud-exceptions.v1"
 # Re-exported for the supply-chain services; the resident derives the endpoint.
 _normalized_receipts_sync_url = _sync.normalized_receipts_sync_url
 
@@ -279,6 +281,9 @@ def _policy_bundle_is_version_downgrade(
         expected_hash = (
             expected_last_good_bundle.get("bundleHash") if isinstance(expected_last_good_bundle, dict) else None
         )
+        current_exceptions_issued_at = (
+            existing_bundle.get("cloudExceptionsIssuedAt") if isinstance(existing_bundle, dict) else None
+        )
         transition_error = validate_policy_bundle_v2_transition(
             next_bundle,
             current_bundle_version=(
@@ -291,6 +296,9 @@ def _policy_bundle_is_version_downgrade(
                 else None
             ),
             expected_last_good_bundle_hash=(expected_hash if isinstance(expected_hash, str) else None),
+            current_cloud_exceptions_issued_at=(
+                current_exceptions_issued_at if isinstance(current_exceptions_issued_at, str) else None
+            ),
         )
         if transition_error == NATIVE_UNAVAILABLE_REJECTION:
             # The resident could not decide. That is an outage, never a
@@ -1843,6 +1851,7 @@ def _local_guard_runtime_session(
         "guard-cloud-sync",
         "local-daemon",
         FLEET_POSTURE_CAPABILITY,
+        POLICY_BUNDLE_V2_CLOUD_EXCEPTIONS_CAPABILITY,
     ]
     session: dict[str, object] = {
         "harness": "hol-guard",

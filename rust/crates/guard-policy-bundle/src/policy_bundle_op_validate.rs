@@ -71,6 +71,7 @@ fn transition(input: &Obj) -> Handled {
         current_hash: present("current_hash"),
         expected_last_good_version: present("expected_last_good_version"),
         expected_last_good_hash: present("expected_last_good_hash"),
+        current_cloud_exceptions_issued_at: present("current_cloud_exceptions_issued_at"),
     };
     match v2::transition_error(&bundle, &state) {
         Some(code) => Err(Fail::from(code)),

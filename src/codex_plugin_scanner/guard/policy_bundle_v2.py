@@ -31,10 +31,20 @@ def validate_policy_bundle_v2_transition(
     current_bundle_hash: str | None,
     expected_last_good_bundle_version: int | None = None,
     expected_last_good_bundle_hash: str | None = None,
+    current_cloud_exceptions_issued_at: str | None = None,
 ) -> str | None:
-    """Reject replay, same-version substitution, and unsigned rollback semantics."""
+    """Reject replay, same-version substitution, and unsigned rollback semantics.
 
-    signed = {key: policy_bundle[key] for key in ("bundleVersion", "bundleHash", "rollback") if key in policy_bundle}
+    ``current_cloud_exceptions_issued_at`` is the signed issue time of the Cloud
+    exception set already accepted for this bundle. The same bundle may come
+    back with a newer set, never an older one or none.
+    """
+
+    signed = {
+        key: policy_bundle[key]
+        for key in ("bundleVersion", "bundleHash", "rollback", "cloudExceptionsIssuedAt")
+        if key in policy_bundle
+    }
     try:
         policy_bundle_verdict(
             "v2_transition",
@@ -44,6 +54,7 @@ def validate_policy_bundle_v2_transition(
                 "current_hash": current_bundle_hash,
                 "expected_last_good_version": expected_last_good_bundle_version,
                 "expected_last_good_hash": expected_last_good_bundle_hash,
+                "current_cloud_exceptions_issued_at": current_cloud_exceptions_issued_at,
             },
         )
     except PolicyBundleNativeError as error:

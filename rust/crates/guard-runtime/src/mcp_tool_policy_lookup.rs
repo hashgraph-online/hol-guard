@@ -139,6 +139,7 @@ impl Prober<'_> {
             local_once_integrity_key_b64: input.local_once_integrity_key_b64.clone(),
             local_once_integrity_key_id: input.local_once_integrity_key_id.clone(),
             policy_bundle_decision_identities: input.policy_bundle_decision_identities.clone(),
+            policy_bundle_rules_lifted: false,
             probe_groups: None,
             portable_workspace: None,
             evidence_binding: None,
