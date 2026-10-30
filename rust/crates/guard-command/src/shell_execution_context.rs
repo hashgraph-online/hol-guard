@@ -497,14 +497,18 @@ fn apply_group_boundaries_before_segment(
                     reason = Some(SHELL_CWD_UNRESOLVED_SYNTAX);
                 } else {
                     let frame = group_states.pop().expect("the bracket matched a frame");
-                    let child_shell = frame.own_shell
-                        || matches!(
-                            first_flow_operator(&controls[index + 1..]).map(String::as_str),
-                            Some("|") | Some("|&") | Some("&")
-                        );
+                    let after = first_flow_operator(&controls[index + 1..]).map(String::as_str);
+                    let child_shell =
+                        frame.own_shell || matches!(after, Some("|") | Some("|&") | Some("&"));
+                    // A `||` after the group runs what follows only when the
+                    // group failed, which for a group that moved the shell
+                    // means the move itself failed. The command after it is
+                    // read without a directory for the same reason
+                    // `cd app || ls` is, rather than in the directory only the
+                    // branch that did not reach it would have opened.
                     if child_shell {
                         state = frame.entry;
-                    } else if frame.conditional
+                    } else if (frame.conditional || after == Some("||"))
                         && leaves_a_different_directory(&state, &frame.entry)
                     {
                         state.cwd = None;

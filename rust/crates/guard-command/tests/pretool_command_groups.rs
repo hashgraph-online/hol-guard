@@ -319,6 +319,10 @@ fn a_brace_group_the_shell_may_not_have_run_carries_no_directory_out_of_it() {
             (format!("false && {{ cd {inside}; }} && cat one.txt"), false),
             (format!("false && {{ cd {inside}; }}; cat one.txt"), false),
             (format!("false || {{ cd {inside}; }}; cat one.txt"), false),
+            // `||` after the group runs what follows only when the group
+            // failed, so the directory the list opened is not the one the
+            // next command stands in.
+            (format!("{{ cd {inside}; }} || cat one.txt"), false),
             // A pipeline or a background job runs the list in a child shell,
             // which leaves the directory exactly as `(` does.
             (format!("{{ cd {inside}; }} | cat; cat one.txt"), false),
