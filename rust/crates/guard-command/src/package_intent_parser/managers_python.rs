@@ -127,7 +127,7 @@ pub(super) fn parse_uv_intent(
             "uv",
             "install",
             tokens,
-            collect_package_specs_with(&working_tokens[2..], UV_VALUE_OPTIONS)
+            collect_package_specs_with(&working_tokens[2..], UV_ADD_VALUE_OPTIONS)
                 .iter()
                 .map(|s| python_target(s, false, None, Vec::new()))
                 .collect(),
@@ -143,7 +143,7 @@ pub(super) fn parse_uv_intent(
             "uv",
             "install",
             tokens,
-            collect_package_specs_with(&working_tokens[3..], UV_VALUE_OPTIONS)
+            collect_package_specs_with(&working_tokens[3..], UV_PIP_INSTALL_VALUE_OPTIONS)
                 .iter()
                 .map(|s| python_target(s, false, None, Vec::new()))
                 .collect(),

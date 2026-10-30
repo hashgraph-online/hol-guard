@@ -212,13 +212,13 @@ pub(super) fn parse_package_manager(
                     {
                         crate::package_intent_common::collect_package_specs_with(
                             &normalized[3..],
-                            crate::package_intent_common::UV_VALUE_OPTIONS,
+                            crate::package_intent_common::UV_PIP_INSTALL_VALUE_OPTIONS,
                         )
                     } else {
                         specs_after_with(
                             &normalized,
                             &["add"],
-                            crate::package_intent_common::UV_VALUE_OPTIONS,
+                            crate::package_intent_common::UV_ADD_VALUE_OPTIONS,
                         )
                     }
                 }

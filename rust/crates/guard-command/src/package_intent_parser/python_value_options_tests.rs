@@ -18,14 +18,8 @@ fn uv_value_options_do_not_become_package_targets() {
         "--python .venv/bin/python",
         "--python=.venv/bin/python",
         "-p 3.12",
-        "-c constraints.txt",
-        "--constraint constraints.txt",
-        "--override overrides.txt",
         "-f ./wheels",
         "--find-links ./wheels",
-        "--target ./vendor",
-        "--python-version 3.12",
-        "--python-platform linux",
         "--index-strategy unsafe-best-match",
         "-C key=value",
         "--extra cli",
@@ -35,6 +29,38 @@ fn uv_value_options_do_not_become_package_targets() {
             let command = format!("uv {verb} {options} evil-pkg");
             assert_eq!(target_names(&command), ["evil-pkg"], "{command}");
         }
+    }
+    for options in [
+        "-c constraints.txt",
+        "--constraint constraints.txt",
+        "--override overrides.txt",
+        "--target ./vendor",
+        "--python-version 3.12",
+        "--python-platform linux",
+        "--no-binary :all:",
+        "--only-binary :all:",
+    ] {
+        let command = format!("uv pip install {options} evil-pkg");
+        assert_eq!(target_names(&command), ["evil-pkg"], "{command}");
+    }
+    for options in [
+        "--no-binary-package left-pad",
+        "--no-build-package left-pad",
+        "--group dev",
+        "--branch main",
+    ] {
+        let command = format!("uv add {options} evil-pkg");
+        assert_eq!(target_names(&command), ["evil-pkg"], "{command}");
+    }
+}
+
+#[test]
+fn uv_add_switches_keep_the_package_after_them() {
+    // `uv add --no-binary` is a switch; only `uv pip install --no-binary`
+    // takes a value.
+    for options in ["--no-binary", "--no-build", "--dev", "--frozen"] {
+        let command = format!("uv add {options} evil-pkg");
+        assert_eq!(target_names(&command), ["evil-pkg"], "{command}");
     }
 }
 
