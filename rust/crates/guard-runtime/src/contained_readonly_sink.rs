@@ -8,12 +8,12 @@
 //! the command stands behind, plans the run, and asks the live resident
 //! again — for the call as issued and, except for Git and pytest, for the
 //! planned argv — before it starts the planned argv under a read-only
-//! Seatbelt profile with a private home and temporary directory. This replays those steps for the plain
-//! shape, a call with no wrapper or directory change in front of the
-//! program, and for one with settings in front: the call as issued draws
-//! the receipt and the plain run behind the settings runs with the inert
-//! ones carried. The edge routes nothing else here. Linux keeps Guard's own
-//! sink, whose read-only namespace this does not build.
+//! sandbox with a private home and temporary directory. This replays those
+//! steps for the plain shape, a call with no wrapper or directory change in
+//! front of the program, and for one with settings in front: the call as
+//! issued draws the receipt and the plain run behind the settings runs with
+//! the inert ones carried. The edge routes nothing else here. On Linux it
+//! runs the Python runs only (`backend`).
 //!
 //! Rust owns every verdict: the resident's receipts, the operations' plan.
 
@@ -21,6 +21,9 @@ use serde::Deserialize;
 
 use super::program::{carried_program, plain_program, Carried, Kind, Program};
 use super::*;
+
+#[path = "contained_readonly_backend.rs"]
+mod backend;
 
 /// The read-only routes: the reason the resident gives and the profile it
 /// requires.
@@ -112,7 +115,11 @@ pub(crate) fn readonly_route(response: &Map<String, Value>) -> Option<Route> {
 /// builds, with no `cwd` argument for Guard's own sink to turn into a
 /// directory change.
 pub(crate) fn readonly_shape(response: &Value, original: &Map<String, Value>) -> bool {
-    HOST_BACKEND == Some(SEATBELT) && plain_call(response, original)
+    response
+        .as_object()
+        .and_then(readonly_route)
+        .is_some_and(backend::host_runs)
+        && plain_call(response, original)
 }
 
 fn plain_call(response: &Value, original: &Map<String, Value>) -> bool {
@@ -172,7 +179,7 @@ pub(super) fn run(
     route: Route,
     signals: &process::Signals,
 ) -> Outcome<i32> {
-    if HOST_BACKEND != Some(SEATBELT) {
+    if !backend::host_runs(route) {
         return Err(Failure::unauthorized());
     }
     let command = payload
@@ -374,7 +381,7 @@ fn prepare(
     if !ROUTES
         .iter()
         .any(|(_, profile)| *profile == plan.profile_version)
-        || plan.backend != SEATBELT
+        || HOST_BACKEND != Some(plan.backend.as_str())
         || plan.command.is_empty()
         || !plan.allowed_executables.contains(&plan.executable)
         || plan.output_roots.is_empty() == (plan.profile_version == NODE_BUILD_PROFILE)
@@ -432,31 +439,7 @@ pub(super) fn launch(
     timeout: u64,
     notes: process::Notes<'_>,
 ) -> Outcome<i32> {
-    let profile = native(
-        "macos_profile",
-        json!({
-            "profile_version": plan.profile_version,
-            "workspace": plan.workspace,
-            "cwd": plan.cwd,
-            "allowed_executables": plan.allowed_executables,
-            "read_only_roots": plan.read_only_roots,
-            "output_roots": plan.output_roots,
-            "command": plan.command,
-            "backend_executable": plan.backend_executable,
-            "private_root": path_text(&private.path)?,
-            "user_site_root": plan.user_site_root,
-        }),
-    )?;
-    let Value::String(profile) = profile else {
-        return Err(unavailable("invalid_reply"));
-    };
-    let mut backend = vec![
-        plan.backend_executable.clone(),
-        "-p".to_owned(),
-        profile,
-        "--".to_owned(),
-    ];
-    backend.extend(plan.command.iter().cloned());
+    let backend = backend::argv(plan, private)?;
     process::run_backend(
         &backend,
         environment,
