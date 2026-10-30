@@ -40,6 +40,7 @@ use crate::guard_store_claude_review::{
     add_claude_approval_request, add_claude_native_review_approval_request,
 };
 use crate::guard_store_clients as clients;
+use crate::guard_store_cloud_events as cloud_events;
 use crate::guard_store_cmd_activity as activity;
 use crate::guard_store_cmd_api as api;
 use crate::guard_store_cmd_feedback as feedback;
@@ -393,6 +394,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "get_guard_operation"
         | "list_guard_operations"
         | "get_guard_operation_for_approval_request"
+        | "count_guard_events_v1"
         | "list_guard_operation_items"
         | "get_guard_client_attachment"
         | "list_guard_client_attachments"
@@ -510,6 +512,10 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "receipt_summary_between"
         | "receipt_analytics"
         | "reconcile_receipt_events"
+        | "add_event"
+        | "add_guard_event_v1"
+        | "list_guard_events_v1"
+        | "mark_guard_events_v1_uploaded"
         | "maintain_storage"
         | "managed_keyring_reconcile"
         | "record_local_cli_observation"
@@ -803,6 +809,11 @@ fn dispatch(
         "receipt_analytics" => receipt_reads::analytics(connection, args),
         "receipt_decision_counts" => receipt_reads::decision_counts(connection, args),
         "reconcile_receipt_events" => receipt_reads::reconcile_events(connection, args),
+        "add_event" => cloud_events::add_event(connection, args),
+        "add_guard_event_v1" => cloud_events::add(connection, args),
+        "list_guard_events_v1" => cloud_events::list(connection, args),
+        "count_guard_events_v1" => cloud_events::count(connection, args),
+        "mark_guard_events_v1_uploaded" => cloud_events::mark_uploaded(connection, args),
         "maintain_storage" => storage_maintenance::maintain(connection, args),
         "run_storage_housekeeping" => storage_maintenance::housekeeping(connection),
         _ if connect::handles(method) => connect::dispatch(connection, method, args),
