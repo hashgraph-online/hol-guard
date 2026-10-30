@@ -300,6 +300,12 @@ jobs:
           ulimit -n 256
           uv run --no-sync pytest -q tests/test_guard_daemon_chaos_gate.py --tb=short
 
+      - name: Soak the daemon at full volume
+        env:
+          HOL_GUARD_DAEMON_SOAK: full
+        timeout-minutes: 60
+        run: uv run --no-sync pytest -q tests/test_guard_daemon_soak_gate.py --tb=short
+
   native-platform:
     name: Native workspace and hook client (${{ matrix.os }})
     strategy:
