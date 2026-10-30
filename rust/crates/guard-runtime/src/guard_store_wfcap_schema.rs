@@ -1,6 +1,7 @@
 //! Crash-safe validated SQLite schema for the workflow-capability authority:
 //! the retired-index drop, the savepointed create-and-validate pass and the
-//! strict owned-object equality check of the Python startup.
+//! strict owned-object equality check, run before every workflow-capability
+//! operation.
 
 use std::collections::BTreeMap;
 
@@ -88,7 +89,7 @@ fn migrate(connection: &Connection, applied_at: &str) -> WfResult<()> {
     Ok(())
 }
 
-/// `ensure_workflow_capability_schema`.
+/// Drops the retired index, then creates, validates and records the schema.
 pub(crate) fn ensure_schema(connection: &Connection, applied_at: &str) -> WfResult<()> {
     connection.execute(
         &format!("drop index if exists {RETIRED_RECEIPT_EVENT_INDEX}"),

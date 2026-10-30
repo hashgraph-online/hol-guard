@@ -69,10 +69,6 @@ from .store_storage_maintenance import (
     storage_maintenance_schema_statements,
 )
 from .store_watch_only_approval_schema import WATCH_ONLY_APPROVAL_MIGRATION_VERSION, ensure_watch_only_approval_schema
-from .store_workflow_capabilities_schema import (
-    WORKFLOW_CAPABILITY_RECEIPT_EVENT_INDEX_MIGRATION_VERSION,
-    ensure_workflow_capability_schema,
-)
 from .store_workspace_assessment_schema import (
     WORKSPACE_ASSESSMENT_MIGRATION_VERSION,
     WORKSPACE_FIX_PROPOSAL_MIGRATION_VERSION,
@@ -191,9 +187,15 @@ _POLICY_INDEX_STATEMENTS = (
 )
 
 _RECEIPT_WARN_ROLLUP_MIGRATION_VERSION = 16
-_REQUIRED_SCHEMA_MIGRATION_VERSIONS = (  # Keep retired-index databases on the path that reaps the index.
-    *range(2, STORAGE_QUERY_INDEX_MIGRATION_VERSION + 1),
-    WORKFLOW_CAPABILITY_RECEIPT_EVENT_INDEX_MIGRATION_VERSION,
+# The native workflow-capability store records its own migration when it first
+# creates its tables, so a database that never used one never has it.
+_NATIVE_WORKFLOW_CAPABILITY_MIGRATION_VERSION = 14
+_REQUIRED_SCHEMA_MIGRATION_VERSIONS = (
+    *(
+        version
+        for version in range(2, STORAGE_QUERY_INDEX_MIGRATION_VERSION + 1)
+        if version != _NATIVE_WORKFLOW_CAPABILITY_MIGRATION_VERSION
+    ),
     WATCH_ONLY_APPROVAL_MIGRATION_VERSION,
     store_review_event_outbox_schema.REVIEW_EVENT_OUTBOX_MIGRATION_VERSION,
     COMMAND_ACTIVITY_DISPLAY_SCHEMA_MIGRATION_VERSION,
@@ -1150,7 +1152,6 @@ class StoreConnectionSchemaMixin:
             ensure_bash_operation_schema(connection, applied_at=_now())
             ensure_workspace_assessment_schema(connection, applied_at=_now())
             ensure_workspace_fix_proposal_schema(connection, applied_at=_now())
-            ensure_workflow_capability_schema(connection, applied_at=_now())
             ensure_command_shadow_schema(connection, applied_at=_now())
             ensure_mcp_policy_request_schema(connection)
             if not self._schema_version_applied(connection, version=4):
