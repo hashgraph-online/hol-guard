@@ -197,7 +197,7 @@ fn a_rewrite_with_unknown_inputs_is_refused() {
 }
 
 #[test]
-fn cursor_keeps_the_sink_its_shell_check_admits() {
+fn cursor_runs_the_runtime_sink_its_shell_check_admits() {
     let workspace = tempfile::tempdir().expect("workspace");
     let mut inputs = rewrite_inputs(workspace.path(), "make build");
     inputs["harness"] = json!("cursor");
@@ -218,14 +218,21 @@ fn cursor_keeps_the_sink_its_shell_check_admits() {
     )
     .expect("the rewrite answers");
 
-    // Cursor's `beforeShellExecution` admits Guard's sink argv alone, so a
-    // probe naming the runtime's own sink would be reviewed rather than run.
+    // A Cursor scope that admits the runtime's own sink on
+    // `beforeShellExecution` routes the probe there, as Codex does.
     let response = rewritten.response.expect("the call is routed");
     let command = response["hookSpecificOutput"]["updatedInput"]["command"]
         .as_str()
         .expect("command is text");
     let argv = crate::mcp_proxy_shlex::split(command).expect("the sink command is quoted");
-    assert_eq!(argv[3..5], ["guard", "execute-contained-test"]);
+    if cfg!(unix) {
+        assert_eq!(
+            argv[..2],
+            ["/opt/hol guard/runtime", "contained-workspace-sink"]
+        );
+    } else {
+        assert_eq!(argv[3..5], ["guard", "execute-contained-test"]);
+    }
     assert_eq!(argument_after(&argv, "--harness"), "cursor");
     discard(Path::new(argument_after(&argv, "--request-file")));
 }

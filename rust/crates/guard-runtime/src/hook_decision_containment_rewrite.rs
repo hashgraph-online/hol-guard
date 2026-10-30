@@ -32,8 +32,6 @@ const ROUTED_REASON: &str = "native_contained_execution_routed";
 /// Codex on Windows may run the sink in PowerShell or Git Bash; every other
 /// harness runs it in a POSIX shell.
 const BRIDGE_HARNESS: &str = "codex";
-/// Cursor's `beforeShellExecution` admits Guard's sink argv and no other.
-const CURSOR: &str = "cursor";
 
 /// What lets a rewrite run the runtime's own sink: the receipt's `reason`,
 /// which names a chain whose host step that sink does not run, and the sink.
@@ -116,16 +114,14 @@ fn rewrite(inputs: &ContainmentRewriteInputsV1, native: Option<Native<'_>>) -> O
         return None;
     };
     let digest = hex::encode(Sha256::digest(&serialized));
-    let native = native
-        .filter(|_| inputs.harness != CURSOR)
-        .and_then(|native| {
-            let answer = json!({
-                "reason_code": inputs.reason_code,
-                "required_execution_profile": inputs.required_execution_profile,
-                "reason": native.reason,
-            });
-            unprojected_sink_command(&answer, original, &workspace, &inputs.home, native.sink)
+    let native = native.and_then(|native| {
+        let answer = json!({
+            "reason_code": inputs.reason_code,
+            "required_execution_profile": inputs.required_execution_profile,
+            "reason": native.reason,
         });
+        unprojected_sink_command(&answer, original, &workspace, &inputs.home, native.sink)
+    });
     let mut command = native.unwrap_or_else(|| {
         let mut command = inputs.sink_command.clone();
         command.extend(["guard", "execute-contained-test"].map(str::to_owned));

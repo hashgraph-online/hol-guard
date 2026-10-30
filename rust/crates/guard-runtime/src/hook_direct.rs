@@ -433,7 +433,8 @@ fn answer(
                 &request_home,
                 &request.guard_home,
                 binding.contained_sink_command.as_deref(),
-            )?;
+            )?
+            .with_native_sink();
             if route == cursor::Route::Sink {
                 return cursor::admit_sink(&payload, &scope);
             }

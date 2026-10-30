@@ -93,10 +93,15 @@ fn rewrite(
     let rendered = harness_response.as_ref()?.as_object()?;
     let payload = envelope.raw_payload.as_object()?;
     let inputs = inputs(envelope, harness, payload, rendered, &sink.sink_command);
-    let native = rendered.get("reason").map(|reason| Native {
-        reason,
-        sink: native,
-    });
+    // Cursor's shell check admits the runtime's sink only for a probe its
+    // own scope routes, so any other Cursor call keeps Guard's sink.
+    let native = rendered
+        .get("reason")
+        .filter(|_| harness != CURSOR)
+        .map(|reason| Native {
+            reason,
+            sink: native,
+        });
     match containment_rewrite_with(&inputs, native).ok()?.response {
         Some(routed) => {
             *harness_response = Some(routed);

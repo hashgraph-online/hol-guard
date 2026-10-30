@@ -43,6 +43,8 @@ _PROBE_FIELD = "cursor_route_probe"
 _BEFORE_SHELL = "beforeShellExecution"
 _RECEIPT_ONLY_FIELD = "guard_containment_receipt_only"
 _SINK_VERB = "execute-contained-test"
+# The runtime's own workspace sandbox sink, which a probe may name instead.
+_NATIVE_SINK_VERB = "contained-workspace-sink"
 _ALLOW: dict[str, object] = {"policy_action": "allow"}
 _SINK_ROUTE = "sink"
 # A resident that advertises this answers the probe in its edge when the
@@ -110,7 +112,7 @@ def is_cursor_shell_probe(payload: Mapping[str, object]) -> bool:
 def _names_sink(payload: Mapping[str, object]) -> bool:
     tool_input = payload.get("tool_input")
     command = tool_input.get("command") if isinstance(tool_input, dict) else None
-    return isinstance(command, str) and _SINK_VERB in command
+    return isinstance(command, str) and (_SINK_VERB in command or _NATIVE_SINK_VERB in command)
 
 
 def _probe_response(
@@ -184,6 +186,8 @@ def _resident_route(
         "home_dir": str(home_dir),
         "guard_home": str(guard_home),
         "sink_command": list(contained_sink_command_prefix()),
+        # This daemon admits the runtime's own sink command too.
+        "native_sink": True,
     }
     if edge is not None:
         params["edge"] = {key: edge[key] for key in _EDGE_FIELDS if key in edge}
