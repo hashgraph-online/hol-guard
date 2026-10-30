@@ -7,7 +7,8 @@ rust-version.workspace = true
 
 [dependencies]
 base64ct.workspace = true
-blst = "=0.3.17"
+# Guard verifies one signature at a time; no worker threads.
+blst = { version = "=0.3.17", features = ["no-threads"] }
 hex.workspace = true
 hmac.workspace = true
 ring.workspace = true

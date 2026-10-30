@@ -67,12 +67,34 @@ pub struct ActionSummary {
     pub action_count: Option<usize>,
 }
 
-/// One line of display text: control characters dropped, whitespace
-/// collapsed, cut to `MAX_SUMMARY_VALUE_CHARS`. `None` when nothing is left.
+/// Invisible characters that change how text is drawn without being seen:
+/// bidirectional controls, which can reorder a name on screen, and
+/// zero-width characters.
+fn is_invisible_format(c: char) -> bool {
+    matches!(
+        c,
+        '\u{061C}'
+            | '\u{180E}'
+            | '\u{200B}'..='\u{200F}'
+            | '\u{202A}'..='\u{202E}'
+            | '\u{2060}'..='\u{2069}'
+            | '\u{FEFF}'
+    )
+}
+
+/// One line of display text: control and invisible format characters
+/// dropped, whitespace collapsed, cut to `MAX_SUMMARY_VALUE_CHARS`. `None`
+/// when nothing is left.
 pub fn summary_value(value: &str) -> Option<String> {
     let collapsed = value
         .chars()
-        .map(|c| if c.is_control() { ' ' } else { c })
+        .map(|c| {
+            if c.is_control() || is_invisible_format(c) {
+                ' '
+            } else {
+                c
+            }
+        })
         .collect::<String>()
         .split_whitespace()
         .collect::<Vec<_>>()
@@ -152,6 +174,9 @@ pub fn match_code(digest_hex: &str) -> String {
 /// Deterministic, durable `consumer_token` for one receipt, so a retried
 /// consume reuses the same value without Guard writing it down first.
 pub fn consumer_token(key: &[u8], jti: &str) -> Result<String, PulseError> {
+    if key.len() < 32 {
+        return Err(PulseError::InvalidRequest("binding_key"));
+    }
     let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(key)
         .map_err(|_| PulseError::InvalidRequest("binding_key"))?;
     mac.update(CONSUMER_DOMAIN);
@@ -365,6 +390,31 @@ mod tests {
         assert_eq!(long.chars().count(), MAX_SUMMARY_VALUE_CHARS);
         assert!(long.ends_with('…'));
         assert_eq!(summary_value("\n\t"), None);
+    }
+
+    #[test]
+    fn invisible_format_characters_cannot_disguise_a_name() {
+        assert_eq!(
+            summary_value("rm\u{202E}fdp.exe").as_deref(),
+            Some("rm fdp.exe")
+        );
+        assert_eq!(summary_value("g\u{200B}it").as_deref(), Some("g it"));
+        assert_eq!(
+            summary_value("\u{2066}curl\u{2069} \u{FEFF}").as_deref(),
+            Some("curl")
+        );
+        assert_eq!(summary_value("\u{200E}\u{200F}"), None);
+    }
+
+    #[test]
+    fn consumer_tokens_need_a_full_length_key() {
+        assert!(consumer_token(&KEY, "azr_1").is_ok());
+        for short in [&[][..], &[7; 31][..]] {
+            assert_eq!(
+                consumer_token(short, "azr_1").unwrap_err(),
+                PulseError::InvalidRequest("binding_key")
+            );
+        }
     }
 
     #[test]

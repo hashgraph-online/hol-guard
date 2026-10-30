@@ -2,10 +2,15 @@
 
 use serde_json::{json, Value};
 
+use crate::client::UserKeys;
 use crate::jws::JwkSet;
-use crate::receipt::{verify_receipt, ReceiptPolicy, RegisteredUserKey, DEFAULT_MAX_AGE_SECONDS};
+use crate::receipt::{
+    verify_receipt, ReceiptPolicy, DEFAULT_MAX_AGE_SECONDS, SIGNED_AT_ALLOWANCE_SECONDS,
+};
 use crate::terms::{build_terms, ActionBinding};
-use crate::testkit::{mint_receipt, ReceiptSpec, UserKey, YanezKey, AGENT_KEY_ID, ISSUER, YID};
+use crate::testkit::{
+    mint_receipt, mint_receipt_edited, ReceiptSpec, UserKey, YanezKey, AGENT_KEY_ID, ISSUER, YID,
+};
 use crate::{AssuranceTier, PulseError};
 
 const NOW: i64 = 1_790_467_200;
@@ -32,7 +37,8 @@ struct World {
     yanez: YanezKey,
     user: UserKey,
     jwks: JwkSet,
-    registered: Vec<RegisteredUserKey>,
+    registry: UserKeys,
+    pinned: Vec<String>,
     terms: Value,
 }
 
@@ -40,26 +46,32 @@ fn world() -> World {
     let yanez = YanezKey::new("k1", 1);
     let user = UserKey::new(2);
     let jwks = JwkSet::parse(&json!({"keys": [yanez.jwk()]})).unwrap();
-    let registered = vec![user.registered(Some(AssuranceTier::High))];
+    let registry = UserKeys {
+        yid: YID.to_owned(),
+        keys: vec![user.registered(Some(AssuranceTier::High))],
+    };
     World {
+        pinned: vec![user.public_hex()],
         yanez,
         user,
         jwks,
-        registered,
+        registry,
         terms: terms(),
     }
 }
 
 fn policy<'a>(w: &'a World, now: i64) -> ReceiptPolicy<'a> {
     ReceiptPolicy {
-        expected_issuer: Some(ISSUER),
+        expected_issuer: ISSUER,
         expected_yid: YID,
         expected_agent_key_id: Some(AGENT_KEY_ID),
         expected_request_id: REQUEST,
         expected_terms: &w.terms,
+        expected_consent_not_after: NOW + 300,
         min_tier: AssuranceTier::Medium,
         max_age_seconds: DEFAULT_MAX_AGE_SECONDS,
-        registered_keys: &w.registered,
+        registry: &w.registry,
+        pinned_user_keys: Some(&w.pinned),
         now_epoch: now,
     }
 }
@@ -185,6 +197,46 @@ fn stale_and_consent_expired_receipts_are_refused() {
 }
 
 #[test]
+fn an_old_signature_inside_a_fresh_receipt_is_refused() {
+    let w = world();
+    // The outer edge: the oldest decision, signed by a phone running slow.
+    let (mut s, late) = (spec(&w), NOW + DEFAULT_MAX_AGE_SECONDS);
+    s.signed_at = Some(NOW - SIGNED_AT_ALLOWANCE_SECONDS);
+    s.consent_not_after = late;
+    let artifact = mint_receipt(&s, &w.yanez, &w.user);
+    let oldest = ReceiptPolicy {
+        expected_consent_not_after: late,
+        ..policy(&w, late)
+    };
+    verify_receipt(&artifact, &w.jwks, &oldest).expect("within both bounds");
+    for (signed_at, ok) in [
+        (NOW - SIGNED_AT_ALLOWANCE_SECONDS, true),
+        (NOW + SIGNED_AT_ALLOWANCE_SECONDS, true),
+        (NOW - SIGNED_AT_ALLOWANCE_SECONDS - 1, false),
+        (NOW - DEFAULT_MAX_AGE_SECONDS * 4, false),
+        (NOW + SIGNED_AT_ALLOWANCE_SECONDS + 1, false),
+    ] {
+        let mut s = spec(&w);
+        s.signed_at = Some(signed_at);
+        let result = check(&w, &s);
+        if ok {
+            assert!(
+                result.is_ok(),
+                "signed_at {signed_at} is within the allowance"
+            );
+        } else {
+            assert!(
+                matches!(
+                    result,
+                    Err(PulseError::UserSignatureInvalid("envelope_signed_at"))
+                ),
+                "signed_at {signed_at} is refused"
+            );
+        }
+    }
+}
+
+#[test]
 fn a_decision_dated_in_the_future_is_refused() {
     let w = world();
     let mut s = spec(&w);
@@ -254,19 +306,19 @@ fn forged_user_signature_is_refused() {
 #[test]
 fn revoked_or_downgraded_user_keys_are_refused() {
     let mut w = world();
-    w.registered.clear();
+    w.registry.keys.clear();
     let artifact = mint_receipt(&spec(&w), &w.yanez, &w.user);
     assert_eq!(
         verify_receipt(&artifact, &w.jwks, &policy(&w, NOW)).unwrap_err(),
         PulseError::UserKeyNotRegistered
     );
-    w.registered = vec![w.user.registered(None)];
+    w.registry.keys = vec![w.user.registered(None)];
     assert_eq!(
         verify_receipt(&artifact, &w.jwks, &policy(&w, NOW)).unwrap_err(),
         PulseError::UserKeyNotRegistered
     );
     // A key registered at medium cannot vouch for a high-tier signature.
-    w.registered = vec![w.user.registered(Some(AssuranceTier::Medium))];
+    w.registry.keys = vec![w.user.registered(Some(AssuranceTier::Medium))];
     assert_eq!(
         verify_receipt(&artifact, &w.jwks, &policy(&w, NOW)).unwrap_err(),
         PulseError::UserKeyNotRegistered
@@ -274,12 +326,23 @@ fn revoked_or_downgraded_user_keys_are_refused() {
 }
 
 #[test]
-fn user_key_rotation_accepts_the_new_registered_key() {
+fn a_new_device_counts_only_once_guard_pins_it() {
     let mut w = world();
     let new_device = UserKey::new(3);
-    w.registered = vec![new_device.registered(Some(AssuranceTier::High))];
+    w.registry.keys = vec![new_device.registered(Some(AssuranceTier::High))];
     let artifact = mint_receipt(&spec(&w), &w.yanez, &new_device);
-    verify_receipt(&artifact, &w.jwks, &policy(&w, NOW)).expect("new device verifies");
+    // Registered at Yanez is not enough: Yanez alone cannot add a key.
+    assert_eq!(
+        verify_receipt(&artifact, &w.jwks, &policy(&w, NOW)).unwrap_err(),
+        PulseError::UserKeyNotPinned
+    );
+    let enrollment = ReceiptPolicy {
+        pinned_user_keys: None,
+        ..policy(&w, NOW)
+    };
+    verify_receipt(&artifact, &w.jwks, &enrollment).expect("enrollment pins the key");
+    w.pinned.push(new_device.public_hex());
+    verify_receipt(&artifact, &w.jwks, &policy(&w, NOW)).expect("confirmed device verifies");
     let old = mint_receipt(&spec(&w), &w.yanez, &w.user);
     assert_eq!(
         verify_receipt(&old, &w.jwks, &policy(&w, NOW)).unwrap_err(),
@@ -302,5 +365,136 @@ fn tampered_payload_and_wrong_alg_are_refused() {
     assert_eq!(
         verify_receipt(&forged, &w.jwks, &policy(&w, NOW)).unwrap_err(),
         PulseError::ReceiptInvalid("alg")
+    );
+}
+
+/// Verify a receipt whose JSON text was rewritten before signing.
+fn check_edited(
+    w: &World,
+    edit_envelope: impl Fn(&mut String),
+    edit_token: impl Fn(&mut String, &mut String),
+) -> Result<crate::receipt::VerifiedReceipt, PulseError> {
+    let artifact = mint_receipt_edited(&spec(w), &w.yanez, &w.user, edit_envelope, edit_token);
+    verify_receipt(&artifact, &w.jwks, &policy(w, NOW + 5))
+}
+
+fn replace_once(text: &mut String, from: &str, to: &str) {
+    assert!(text.contains(from), "{from} not in {text}");
+    *text = text.replacen(from, to, 1);
+}
+
+#[test]
+fn duplicate_keys_are_refused_in_the_claims_and_the_envelope() {
+    let w = world();
+    let claims = check_edited(
+        &w,
+        |_| {},
+        |_, c| {
+            replace_once(
+                c,
+                r#""yanez_decision":"approved""#,
+                r#""yanez_decision":"rejected","yanez_decision":"approved""#,
+            );
+        },
+    );
+    assert_eq!(
+        claims.unwrap_err(),
+        PulseError::ReceiptInvalid("claims_json")
+    );
+    let envelope = check_edited(
+        &w,
+        |e| {
+            replace_once(
+                e,
+                r#""decision":"approve""#,
+                r#""decision":"reject","decision":"approve""#,
+            )
+        },
+        |_, _| {},
+    );
+    assert_eq!(
+        envelope.unwrap_err(),
+        PulseError::UserSignatureInvalid("envelope_json")
+    );
+}
+
+#[test]
+fn a_header_with_crit_is_refused() {
+    let w = world();
+    let result = check_edited(
+        &w,
+        |_| {},
+        |h, _| replace_once(h, r#""kid":"#, r#""crit":["exp"],"kid":"#),
+    );
+    assert_eq!(result.unwrap_err(), PulseError::ReceiptInvalid("crit"));
+}
+
+#[test]
+fn the_envelope_must_be_an_approval_decision() {
+    let w = world();
+    let rejected = check_edited(
+        &w,
+        |e| replace_once(e, r#""decision":"approve""#, r#""decision":"reject""#),
+        |_, _| {},
+    );
+    assert_eq!(
+        rejected.unwrap_err(),
+        PulseError::UserSignatureInvalid("envelope_decision")
+    );
+    let other_action = check_edited(
+        &w,
+        |e| {
+            replace_once(
+                e,
+                r#""action":"agent_authorizations.decision""#,
+                r#""action":"agent_keys.enroll""#,
+            )
+        },
+        |_, _| {},
+    );
+    assert_eq!(
+        other_action.unwrap_err(),
+        PulseError::UserSignatureInvalid("envelope_action")
+    );
+}
+
+#[test]
+fn iat_must_equal_the_decision_time() {
+    let w = world();
+    let result = check_edited(
+        &w,
+        |_| {},
+        |_, c| {
+            replace_once(
+                c,
+                &format!(r#""iat":{NOW}"#),
+                &format!(r#""iat":{}"#, NOW - 1),
+            );
+        },
+    );
+    assert_eq!(result.unwrap_err(), PulseError::ReceiptInvalid("iat"));
+}
+
+#[test]
+fn a_registry_answer_for_another_yid_cannot_vouch() {
+    let mut w = world();
+    w.registry.yid = "yid_other".into();
+    assert_eq!(check(&w, &spec(&w)).unwrap_err(), PulseError::WrongYid);
+}
+
+#[test]
+fn the_consent_bound_cannot_be_later_than_guard_asked() {
+    let w = world();
+    let mut later = spec(&w);
+    later.consent_not_after = NOW + 301;
+    assert_eq!(
+        check(&w, &later).unwrap_err(),
+        PulseError::ReceiptInvalid("consent")
+    );
+    let mut earlier = spec(&w);
+    earlier.consent_not_after = NOW + 60;
+    assert!(
+        check(&w, &earlier).is_ok(),
+        "an earlier bound is the user's choice"
     );
 }

@@ -648,9 +648,10 @@
     "rust/crates/guard-seatbelt/**",
     "rust/crates/guard-contained-process/**",
     "rust/crates/guard-runtime-windows-process/**",
-    "rust/crates/guard-google-identity/**"
+    "rust/crates/guard-google-identity/**",
+    "rust/crates/guard-yanez-pulse/**"
    ],
-   "current": "PostToolUse output extraction, source validation, secure reads, identity, hashing, equivalence, scanning, OS-bound containment primitives, and bounded fixed-endpoint HTTPS Google signing-key retrieval and registered code exchange with native identity verification and private credential retention",
+   "current": "PostToolUse output extraction, source validation, secure reads, identity, hashing, equivalence, scanning, OS-bound containment primitives, and bounded fixed-endpoint HTTPS Google signing-key retrieval and registered code exchange with native identity verification and private credential retention, and fixed-endpoint HTTPS Yanez Pulse receipt retrieval with native verification of the Yanez and approver signatures",
    "target": "all decision-critical hook content and source I/O"
   }
  ],

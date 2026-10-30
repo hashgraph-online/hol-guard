@@ -182,6 +182,13 @@ pub struct HttpPulseTransport {
 
 /// Agent keys are `yak_` credentials; anything else is refused before it is
 /// stored or sent.
+/// A response body as JSON, with duplicate keys refused like the receipt
+/// path, so `{"consumed_now":false,"consumed_now":true}` cannot depend on
+/// parser order. Anything unreadable is `Null`, which every parser refuses.
+pub fn parse_body(bytes: &[u8]) -> Value {
+    crate::strict_json::parse_no_duplicates(bytes).unwrap_or(Value::Null)
+}
+
 pub fn valid_agent_key(key: &str) -> bool {
     key.starts_with("yak_")
         && (8..=512).contains(&key.len())
@@ -223,8 +230,7 @@ impl HttpPulseTransport {
             .limit(MAX_BODY_BYTES)
             .read_to_vec()
             .map_err(|_| PulseError::Unavailable)?;
-        let body = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
-        Ok((status, body))
+        Ok((status, parse_body(&bytes)))
     }
 
     fn agent_status(status: u16) -> Result<(), PulseError> {
@@ -331,6 +337,17 @@ impl PulseTransport for HttpPulseTransport {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn duplicate_keys_in_a_response_fail_closed() {
+        let body = parse_body(br#"{"valid":true,"consumed_now":false,"consumed_now":true}"#);
+        assert_eq!(body, Value::Null);
+        assert!(parse_consume(&body).is_err(), "nothing is consumed");
+        assert_eq!(
+            parse_body(br#"{"valid":true,"consumed_now":true}"#),
+            json!({"valid": true, "consumed_now": true})
+        );
+    }
 
     #[test]
     fn consume_acts_only_on_consumed_now() {

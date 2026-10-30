@@ -2,11 +2,12 @@
 //!
 //! The order follows Pulse's enforcement checklist: the Yanez signature, the
 //! claims, the approver's signature and envelope, the terms, the user key
-//! registry, the assurance floor, then freshness. Single-use consumption is
+//! registry and Guard's pinned keys, the assurance floor, then freshness. Single-use consumption is
 //! the caller's last step, after this returns `Ok`.
 
 use serde_json::{Map, Value};
 
+use crate::client::UserKeys;
 use crate::jws::{self, JwkSet};
 use crate::strict_json::{safe_integer, terms_equal};
 use crate::user_sig;
@@ -17,6 +18,16 @@ pub const MAX_FUTURE_SKEW_SECONDS: i64 = 60;
 /// Oldest approval Guard accepts: Pulse's recommended `max_age_seconds`.
 /// Guard verifies a receipt seconds after it arrives, so this is a backstop.
 pub const DEFAULT_MAX_AGE_SECONDS: i64 = 900;
+/// How far the device's `signed_at` may sit from `yanez_decided_at`: the
+/// time Yanez takes to record a decision, plus device clock drift. Pulse
+/// bounds the two against each other, so an old signature cannot ride inside
+/// a fresh receipt. Guard also holds `signed_at` to its own age and
+/// future-skew limits, widened by this allowance for the phone's clock.
+pub const SIGNED_AT_ALLOWANCE_SECONDS: i64 = 300;
+/// Issuer of production Pulse receipts. Pulse treats the issuer as
+/// deployment configuration, so Guard pins it up front instead of learning
+/// it from the first receipt it sees.
+pub const YANEZ_ISSUER: &str = "https://yid.yanez.ai";
 
 /// One key from `GET /api/agent/user_keys`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -30,18 +41,26 @@ pub struct RegisteredUserKey {
 /// Everything Guard pins or expects for one receipt.
 #[derive(Debug, Clone)]
 pub struct ReceiptPolicy<'a> {
-    /// Pinned issuer. `None` only for the enrollment receipt, which is where
-    /// Guard learns the issuer it pins from then on.
-    pub expected_issuer: Option<&'a str>,
+    /// Pinned issuer, [`YANEZ_ISSUER`] unless Guard is configured otherwise.
+    pub expected_issuer: &'a str,
     pub expected_yid: &'a str,
     /// Pinned agent key id. `None` only for the enrollment receipt.
     pub expected_agent_key_id: Option<&'a str>,
     pub expected_request_id: &'a str,
     pub expected_terms: &'a Value,
+    /// The consent bound Guard asked for when it created the request. A
+    /// receipt may carry this bound or an earlier one, never a later one.
+    pub expected_consent_not_after: i64,
     pub min_tier: AssuranceTier,
     pub max_age_seconds: i64,
-    /// Keys the registry lists for the pinned YID, read at verification time.
-    pub registered_keys: &'a [RegisteredUserKey],
+    /// The registry's answer, read at verification time. It must be for the
+    /// pinned YID.
+    pub registry: &'a UserKeys,
+    /// Approver keys (lower-case hex) Guard pinned at enrollment. `None`
+    /// only for the enrollment receipt. The registry and the receipt come
+    /// from the same Yanez service, so a key Yanez adds later does not count
+    /// until the user confirms it in Guard.
+    pub pinned_user_keys: Option<&'a [String]>,
     pub now_epoch: i64,
 }
 
@@ -105,6 +124,7 @@ pub fn verify_receipt(
     // Guard always sets a consent bound when it creates a request, so a
     // receipt without one was not created by this Guard.
     let consent_not_after = int_claim(claims, "yanez_consent_not_after")
+        .filter(|bound| *bound <= policy.expected_consent_not_after)
         .ok_or(PulseError::ReceiptInvalid("consent"))?;
     let terms = claims
         .get("yanez_terms")
@@ -118,13 +138,12 @@ pub fn verify_receipt(
 
     // Pinned identities. The issuer is compared with Guard's configured
     // value, never one read from the token.
-    if policy
-        .expected_issuer
-        .is_some_and(|expected| iss != expected)
-    {
+    if iss != policy.expected_issuer {
         return Err(PulseError::WrongIssuer);
     }
-    if sub != policy.expected_yid {
+    // The registry answer must be for the same identity, so a key list read
+    // for another YID, or cached from before re-enrollment, cannot vouch.
+    if sub != policy.expected_yid || policy.registry.yid != policy.expected_yid {
         return Err(PulseError::WrongYid);
     }
     if policy
@@ -159,6 +178,17 @@ pub fn verify_receipt(
         consent_not_after,
         terms,
     )?;
+    // The device's own timestamp, bounded against Yanez's decision time and
+    // against Guard's clock, with room for the phone's clock drift.
+    match envelope.fields.get("signed_at").and_then(safe_integer) {
+        Some(signed_at)
+            if (signed_at - decided_at).abs() <= SIGNED_AT_ALLOWANCE_SECONDS
+                && signed_at - policy.now_epoch
+                    <= MAX_FUTURE_SKEW_SECONDS + SIGNED_AT_ALLOWANCE_SECONDS
+                && policy.now_epoch - signed_at
+                    <= policy.max_age_seconds + SIGNED_AT_ALLOWANCE_SECONDS => {}
+        _ => return Err(PulseError::UserSignatureInvalid("envelope_signed_at")),
+    }
 
     // Terms: the receipt, the signed envelope and Guard's own copy all agree.
     if !terms_equal(terms, policy.expected_terms) {
@@ -169,13 +199,20 @@ pub fn verify_receipt(
     // that covers the one it signed. A key removed from the registry (a lost
     // or rotated device) stops verifying here.
     let registered = policy
-        .registered_keys
+        .registry
+        .keys
         .iter()
         .find(|k| k.public_key_hex == envelope.public_key_hex)
         .ok_or(PulseError::UserKeyNotRegistered)?;
     match registered.tier {
         Some(max) if max >= tier => {}
         _ => return Err(PulseError::UserKeyNotRegistered),
+    }
+    if policy
+        .pinned_user_keys
+        .is_some_and(|pinned| !pinned.contains(&envelope.public_key_hex))
+    {
+        return Err(PulseError::UserKeyNotPinned);
     }
 
     if tier < policy.min_tier {
@@ -233,9 +270,6 @@ fn check_envelope(
     }
     if fields.get("consent_not_after").and_then(safe_integer) != Some(consent_not_after) {
         return Err(bad("envelope_consent"));
-    }
-    if fields.get("signed_at").and_then(safe_integer).is_none() {
-        return Err(bad("envelope_signed_at"));
     }
     match fields.get("terms") {
         Some(signed) if terms_equal(signed, terms) => Ok(()),
