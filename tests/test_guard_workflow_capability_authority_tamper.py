@@ -12,6 +12,7 @@ import sqlite3
 import pytest
 
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.store_workflow_capabilities_schema import ensure_workflow_capability_schema
 from codex_plugin_scanner.guard.store_workflow_capability_common import WORKFLOW_CAPABILITY_STORE_CLOCK
 from codex_plugin_scanner.guard.workflow_capabilities import (
     WorkflowCapabilityError,
@@ -306,9 +307,9 @@ def test_legacy_owned_schema_object_is_reaped_on_reopen(tmp_path) -> None:
     claim = _claim(capability_id="wc-legacy-orphan", max_uses=2)
     _issue(store, claim)
     # Simulate a database created under an older schema version that still owns
-    # the retired receipt-event index. The native schema ensure step (run before
-    # every workflow-capability operation) must reap it so the strict owned-object
-    # equality check passes.
+    # the retired receipt-event index. The schema ensure step (run by every
+    # GuardStore initialization) must reap it so the strict owned-object equality
+    # check passes.
     with sqlite3.connect(store.path) as connection:
         connection.execute("drop index if exists idx_guard_workflow_receipt_event")
         connection.execute(
@@ -318,7 +319,10 @@ def test_legacy_owned_schema_object_is_reaped_on_reopen(tmp_path) -> None:
             "select count(*) from sqlite_master where name = 'idx_guard_workflow_receipt_event'"
         ).fetchone()[0]
     assert present_before == 1
-    store.lookup_workflow_capability(claim.capability_id)
+    ensure_workflow_capability_schema(
+        sqlite3.connect(store.path),
+        applied_at=_now(),
+    )
     with sqlite3.connect(store.path) as connection:
         present_after = connection.execute(
             "select count(*) from sqlite_master where name = 'idx_guard_workflow_receipt_event'"

@@ -377,9 +377,8 @@ def test_existing_invalid_schema_fails_closed(tmp_path) -> None:
     database = home / "guard.db"
     with sqlite3.connect(database) as connection:
         connection.execute("create table guard_workflow_capabilities (capability_id text primary key)")
-    store = GuardStore(home, prime_policy_integrity=False)
     with pytest.raises(RuntimeError, match="invalid_workflow_capability_schema"):
-        store.lookup_workflow_capability("wc-schema-probe")
+        GuardStore(home, prime_policy_integrity=False)
     with sqlite3.connect(database) as connection:
         version = connection.execute("select 1 from schema_migrations where version = 14").fetchone()
     assert version is None
@@ -387,8 +386,7 @@ def test_existing_invalid_schema_fails_closed(tmp_path) -> None:
 
 def test_extra_owned_schema_object_fails_closed(tmp_path) -> None:
     store = _store(tmp_path)
-    store.lookup_workflow_capability("wc-schema-probe")
     with sqlite3.connect(store.path) as connection:
         connection.execute("create index idx_guard_workflow_hostile on guard_workflow_capabilities (key_id)")
     with pytest.raises(RuntimeError, match="owned_objects"):
-        store.lookup_workflow_capability("wc-schema-probe")
+        GuardStore(store.guard_home, prime_policy_integrity=False)

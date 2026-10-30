@@ -1,6 +1,7 @@
-//! Source of truth for the workflow-capability schema: the statements the
-//! native store runs and the exact set of objects it owns. Changing statement
-//! text changes the validated object set, so edit both together.
+//! The workflow-capability schema: the statements the native store runs and
+//! the exact set of objects it owns. Both mirror
+//! `guard/contracts/workflow-capability-schema.v1.json`, which the Python store
+//! reads, and the test below fails when they drift apart.
 
 pub(crate) const STATEMENTS: [&str; 21] = [
     r##"create table if not exists guard_workflow_capabilities (
@@ -147,3 +148,41 @@ pub(crate) const OBJECTS: [(&str, &str); 21] = [
     ("trigger", "trg_guard_workflow_transition_immutable_delete"),
     ("trigger", "trg_guard_workflow_transition_require_parents"),
 ];
+
+#[cfg(test)]
+mod tests {
+    use super::{OBJECTS, STATEMENTS};
+    use serde_json::Value;
+
+    const CONTRACT: &str = include_str!(
+        "../../../../src/codex_plugin_scanner/guard/contracts/workflow-capability-schema.v1.json"
+    );
+
+    #[test]
+    fn statements_and_objects_match_the_shared_contract() {
+        let contract: Value = serde_json::from_str(CONTRACT).expect("contract json");
+        assert_eq!(
+            contract["schema"],
+            "hol-guard.workflow-capability-schema.v1"
+        );
+        let statements: Vec<&str> = contract["statements"]
+            .as_array()
+            .expect("statements")
+            .iter()
+            .map(|statement| statement.as_str().expect("statement text"))
+            .collect();
+        assert_eq!(statements, STATEMENTS);
+        let objects: Vec<(&str, &str)> = contract["objects"]
+            .as_array()
+            .expect("objects")
+            .iter()
+            .map(|object| {
+                (
+                    object[0].as_str().expect("object kind"),
+                    object[1].as_str().expect("object name"),
+                )
+            })
+            .collect();
+        assert_eq!(objects, OBJECTS);
+    }
+}
