@@ -36,7 +36,7 @@ const RUST_LINT_LEVELS: &[&str] = &["-A", "-D", "-F", "-W"];
 /// A setting whose value the runtime can read, carrying only options that
 /// change how a run reports or repeats. The caller has already decided the
 /// word is a literal assignment in front of a command.
-pub(super) fn inert_tool_setting(name: &str, value: &str) -> bool {
+pub(crate) fn inert_tool_setting(name: &str, value: &str) -> bool {
     match name.to_ascii_uppercase().as_str() {
         "GOFLAGS" => every_word(value, go_flag_inert),
         "PYTEST_ADDOPTS" => pytest_addopts_inert(value),

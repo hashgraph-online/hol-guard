@@ -462,9 +462,15 @@ fn inert_assignment(name: &str, value: &str) -> bool {
 /// the caller asked to rerun. Keeping it on the proof side leaves the
 /// value screen in `env_prefix_values` free to say so.
 fn ordinary_project_setting(name: &str, value: &str) -> bool {
-    super::inert_tool_settings::inert_tool_setting(name, value)
+    inert_tool_setting(name, value)
         || plain_scalar(value)
             && crate::command_compatibility::environment::ordinary_setting_name(name)
+}
+
+/// [`super::inert_tool_settings::inert_tool_setting`], reachable from the
+/// `reviewed` child module beside this one.
+pub(super) fn inert_tool_setting(name: &str, value: &str) -> bool {
+    super::inert_tool_settings::inert_tool_setting(name, value)
 }
 
 fn plain_scalar(value: &str) -> bool {
@@ -505,6 +511,15 @@ fn inert_unset(name: &str) -> bool {
 /// A setting that may change behavior but leaves the program, its loader and
 /// its credentials alone, so a human can review the command it prefixes.
 fn reviewable_assignment(name: &str, value: &str, context: PathContext<'_>) -> bool {
+    // `GOFLAGS`, `RUSTFLAGS` and `PYTEST_ADDOPTS` are spelled like loader
+    // settings, so the name test below refuses them outright and the command
+    // keeps no reviewable form at all. Their values are read against a closed
+    // list first, and one that passes it only chooses how the run reports,
+    // how often it repeats or which lint it refuses -- nothing a reviewer
+    // could not read off the command as written.
+    if inert_tool_setting(name, value) {
+        return true;
+    }
     let upper = name.to_ascii_uppercase();
     if upper == "NODE_PATH" {
         return trusted_node_path(value, context);
