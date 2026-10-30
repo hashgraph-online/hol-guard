@@ -18,14 +18,17 @@ and runs the counts the hardening plan asks for.
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import socket
+import subprocess
+import sys
 import threading
 import time
 import urllib.parse
 import urllib.request
-from collections.abc import Generator
+from collections.abc import Generator, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, suppress
 from pathlib import Path
@@ -34,8 +37,9 @@ import pytest
 
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager
 from codex_plugin_scanner.guard.daemon import server as daemon_server
-from codex_plugin_scanner.guard.daemon.runtime_hook_scheduler_contracts import RuntimeHookAdmission
+from codex_plugin_scanner.guard.daemon.runtime_hook_scheduler import RuntimeHookScheduler
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from codex_plugin_scanner.guard.native_hook_evidence_writer import NativeHookEvidenceWriter
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.coverage_ci import under_coverage_scale
 
@@ -155,21 +159,136 @@ def _hook_query(daemon: GuardDaemonServer, workspace: Path) -> str:
     )
 
 
-def _refuse_every_hook_permit(daemon: GuardDaemonServer, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        daemon._server.runtime_hook_scheduler,
-        "acquire",
-        lambda **_kwargs: RuntimeHookAdmission(permit=None, reason_code="daemon_hook_queue_capacity"),
+@contextmanager
+def _saturated_hook_queue(daemon: GuardDaemonServer) -> Generator[None]:
+    """Fill the real scheduler so its own code refuses, instead of stubbing it.
+
+    Patching ``acquire`` to answer every call with a refusal proves only that
+    the patch refuses. This installs a real :class:`RuntimeHookScheduler` whose
+    single queue slot is held by a parked request and which admits nothing, so
+    every hook the daemon then receives is turned away by the scheduler's own
+    capacity check. A deny under this block is the code a saturated daemon
+    runs.
+    """
+    scheduler = RuntimeHookScheduler(
+        active_limit=0,
+        per_harness_active_limit=1,
+        queued_limit=1,
+        per_harness_queued_limit=1,
+        per_client_queued_limit=1,
     )
+    original = daemon._server.runtime_hook_scheduler
+    daemon._server.runtime_hook_scheduler = scheduler
+    release = threading.Event()
+    parked = threading.Thread(
+        target=lambda: scheduler.acquire(
+            harness="pi",
+            client_key="chaos-parked",
+            lane="decision",
+            payload_bytes=1,
+            deadline=time.monotonic() + 600.0,
+            cancellation=release,
+        ),
+        daemon=True,
+    )
+    parked.start()
+    deadline = time.monotonic() + 10.0
+    while scheduler.stats()["queued"] < 1 and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert scheduler.stats()["queued"] == 1, "the parked request never occupied the queue"
+    try:
+        yield
+    finally:
+        release.set()
+        parked.join(timeout=10.0)
+        daemon._server.runtime_hook_scheduler = original
+
+
+#: A daemon in its own process, so a case can end it the way a crash would.
+_DAEMON_CHILD_PROGRAM = """
+import json
+import sys
+import time
+from pathlib import Path
+
+from codex_plugin_scanner.guard.daemon import manager as daemon_manager
+from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from codex_plugin_scanner.guard.store import GuardStore
+
+daemon_manager._guard_daemon_process_inventory_for_guard_home = lambda _guard_home: []
+daemon = GuardDaemonServer(
+    GuardStore(Path(sys.argv[1])),
+    host="127.0.0.1",
+    port=0,
+    idle_timeout_seconds=0,
+)
+daemon.start()
+print(json.dumps({"port": daemon.port, "token": daemon._server.auth_token}), flush=True)
+while True:
+    time.sleep(3600)
+"""
+
+
+@contextmanager
+def _daemon_subprocess(guard_home: Path) -> Generator[tuple[subprocess.Popen[str], int, str]]:
+    """Run a real daemon in its own process so a case can kill it outright.
+
+    ``GuardDaemonServer.stop()`` is an orderly shutdown: it drains, closes and
+    returns. It says nothing about a daemon that dies with requests in flight,
+    which is the failure this file is here to provoke. Only a separate process
+    can be killed that way.
+    """
+    repository_root = Path(__file__).resolve().parents[1]
+    environment = dict(os.environ)
+    environment["PYTHONPATH"] = os.pathsep.join(
+        part
+        for part in (
+            str(repository_root / "src"),
+            str(repository_root),
+            environment.get("PYTHONPATH", ""),
+        )
+        if part
+    )
+    process = subprocess.Popen(
+        [sys.executable, "-c", _DAEMON_CHILD_PROGRAM, str(guard_home)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=environment,
+    )
+    watchdog = threading.Timer(120.0, process.kill)
+    watchdog.start()
+    try:
+        assert process.stdout is not None
+        announcement = process.stdout.readline()
+        watchdog.cancel()
+        if not announcement.strip():
+            process.kill()
+            _, errors = process.communicate(timeout=60)
+            pytest.fail(f"the daemon child never announced itself: {errors[-2000:]}")
+        decoded = json.loads(announcement)
+        yield process, int(decoded["port"]), str(decoded["token"])
+    finally:
+        watchdog.cancel()
+        if process.poll() is None:
+            process.kill()
+        _ = process.wait(timeout=60)
+        for stream in (process.stdout, process.stderr):
+            if stream is not None:
+                stream.close()
 
 
 def _authenticated_hook(daemon: GuardDaemonServer, query: str, *, timeout: float = 10.0) -> dict[str, object]:
+    return _authenticated_hook_at(daemon.port, daemon._server.auth_token, query, timeout=timeout)
+
+
+def _authenticated_hook_at(port: int, token: str, query: str, *, timeout: float = 10.0) -> dict[str, object]:
     request = urllib.request.Request(
-        f"http://127.0.0.1:{daemon.port}/v1/hooks/pi?{query}",
+        f"http://127.0.0.1:{port}/v1/hooks/pi?{query}",
         data=json.dumps(PRETOOL_PAYLOAD).encode(),
         headers={
             "Content-Type": "application/json",
-            "X-Guard-Token": daemon._server.auth_token,
+            "X-Guard-Token": token,
         },
         method="POST",
     )
@@ -258,8 +377,8 @@ def test_an_authentication_flood_never_admits_a_request_or_rotates_the_token(
 
         remaining = _drain(daemon)
         surviving_token = daemon._server.auth_token
-        _refuse_every_hook_permit(daemon, monkeypatch)
-        answer = _authenticated_hook(daemon, _hook_query(daemon, tmp_path))
+        with _saturated_hook_queue(daemon):
+            answer = _authenticated_hook(daemon, _hook_query(daemon, tmp_path))
 
     assert set(statuses) == {401}
     assert len(statuses) == AUTH_FLOOD_REQUESTS
@@ -304,9 +423,8 @@ def test_sixty_four_mixed_clients_each_get_the_answer_their_shape_earns(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(daemon_server, "_DAEMON_REQUEST_READ_TIMEOUT_SECONDS", 0.2)
-    with _chaos_daemon(tmp_path, monkeypatch) as daemon:
+    with _chaos_daemon(tmp_path, monkeypatch) as daemon, _saturated_hook_queue(daemon):
         handler_errors = _watch_handler_errors(daemon, monkeypatch)
-        _refuse_every_hook_permit(daemon, monkeypatch)
         token = daemon._server.auth_token
         port = daemon.port
         query = _hook_query(daemon, tmp_path)
@@ -345,7 +463,10 @@ def test_sixty_four_mixed_clients_each_get_the_answer_their_shape_earns(
     assert hooks and all(isinstance(answer, dict) and answer["decision"] == "deny" for answer in hooks)
     assert malformed and all(pair[0] == pair[1] for pair in malformed if isinstance(pair, tuple))
     assert forged and set(forged) == {401}
-    assert trickled and set(trickled) <= {408}
+    # A trickling client earns no decision. Under load the daemon may answer
+    # 408, refuse it with 503 when request capacity is reached, or drop it
+    # before a status line (recorded as 0). None of those is an answer.
+    assert trickled and set(trickled) <= {0, 408, 503}
     assert handler_errors == []
     assert remaining == 0
     assert still_serving
@@ -356,9 +477,8 @@ def test_saturated_fallback_answers_every_hook_with_a_deny_and_never_an_allow(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    with _chaos_daemon(tmp_path, monkeypatch) as daemon:
+    with _chaos_daemon(tmp_path, monkeypatch) as daemon, _saturated_hook_queue(daemon):
         handler_errors = _watch_handler_errors(daemon, monkeypatch)
-        _refuse_every_hook_permit(daemon, monkeypatch)
         query = _hook_query(daemon, tmp_path)
 
         with ThreadPoolExecutor(max_workers=WORKER_THREADS) as pool:
@@ -374,21 +494,21 @@ def test_saturated_fallback_answers_every_hook_with_a_deny_and_never_an_allow(
 
 
 def _press_until_stopped(
-    daemon: GuardDaemonServer,
+    port: int,
+    token: str,
     query: str,
     stop_now: threading.Event,
-    allowed: list[object],
+    answers: list[dict[str, object]],
 ) -> None:
     """Hammer the hook route until the daemon stops answering or the caller says stop."""
     while not stop_now.is_set():
         try:
-            answer = _authenticated_hook(daemon, query, timeout=2.0)
+            answers.append(_authenticated_hook_at(port, token, query, timeout=2.0))
         except Exception:
-            # A daemon killed mid-flight is allowed to break its clients. It is
-            # never allowed to answer with an allow, which is what `allowed` records.
+            # A daemon killed mid-flight is allowed to break its clients. What
+            # it may never do is answer after its death, which the refused port
+            # the caller checks afterwards is what establishes.
             return
-        if answer.get("decision") != "deny":
-            allowed.append(answer)
 
 
 @pytest.mark.security_critical
@@ -396,35 +516,50 @@ def test_a_daemon_killed_under_load_leaves_a_home_a_fresh_daemon_can_serve(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Kill a loaded daemon outright and ask what the home and the port say afterwards.
+
+    Nothing here is stubbed: every request is evaluated by the daemon the way
+    a harness would, and the kill is a real kill of a real process. The three
+    properties the case asserts are that the daemon answered while it lived,
+    that its port answers nothing once it is dead, and that the home it leaves
+    behind is one a fresh daemon can serve.
+    """
     monkeypatch.setattr(
         daemon_manager,
         "_guard_daemon_process_inventory_for_guard_home",
         lambda _guard_home: [],
     )
     guard_home = tmp_path / "guard-home"
-    allowed: list[object] = []
+    answers: list[dict[str, object]] = []
+    query = urllib.parse.urlencode({"guard-home": str(guard_home), "workspace": str(tmp_path)})
 
     for _round in range(3):
-        daemon = _started_daemon(guard_home)
-        _refuse_every_hook_permit(daemon, monkeypatch)
-        query = _hook_query(daemon, tmp_path)
-        stop_now = threading.Event()
+        with _daemon_subprocess(guard_home) as (process, port, token):
+            # One answer before the load proves the round reached a live daemon,
+            # so an empty `answers` later cannot be mistaken for a quiet kill.
+            answers.append(_authenticated_hook_at(port, token, query, timeout=60.0))
+            stop_now = threading.Event()
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                running = [pool.submit(_press_until_stopped, port, token, query, stop_now, answers) for _ in range(4)]
+                time.sleep(0.5)
+                process.kill()
+                _ = process.wait(timeout=60)
+                stop_now.set()
+                for future in running:
+                    future.result(timeout=60)
 
-        with ThreadPoolExecutor(max_workers=4) as pool:
-            running = [pool.submit(_press_until_stopped, daemon, query, stop_now, allowed) for _ in range(4)]
-            time.sleep(0.2)
-            daemon.stop()
-            stop_now.set()
-            for future in running:
-                future.result(timeout=20)
+        # The port a killed daemon held is a closed port, not a quiet one.
+        with pytest.raises(OSError):
+            _ = _exchange(port, _frame(token, b"Content-Length: 0\r\n", b""), timeout=2.0)
+
+    for answer in answers:
+        assert isinstance(answer.get("decision"), str), answer
 
     revived = _started_daemon(guard_home)
     try:
         assert _healthy(revived.port)
     finally:
         revived.stop()
-
-    assert allowed == []
 
 
 @pytest.mark.skipif(os.name == "nt", reason="requires POSIX directory permission semantics")
@@ -449,9 +584,14 @@ def test_a_read_only_guard_home_never_turns_into_an_allow(
         except OSError:
             return
         try:
-            _refuse_every_hook_permit(daemon, monkeypatch)
-            answer = _authenticated_hook(daemon, _hook_query(daemon, tmp_path))
+            with _saturated_hook_queue(daemon):
+                answer = _authenticated_hook(daemon, _hook_query(daemon, tmp_path))
+            # A home it cannot write to is one more reason to refuse, never a
+            # reason to wave the hook through because the refusal could not be
+            # recorded.
             assert answer["decision"] == "deny"
+            assert answer["reason_code"] == "daemon_hook_queue_capacity"
+            assert _healthy(daemon.port)
         finally:
             daemon.stop()
     finally:
@@ -470,11 +610,14 @@ def test_a_corrupt_state_file_neither_authenticates_nor_stops_the_daemon(
     )
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir(parents=True, exist_ok=True)
-    corrupt = guard_home / "daemon-state.json"
-    _ = corrupt.write_text("{not json at all", encoding="utf-8")
 
     daemon = _started_daemon(guard_home)
     try:
+        # Corrupted while the daemon is already serving. Writing it beforehand
+        # would only ask whether startup copes; the daemon that has to survive
+        # a truncated write is the one already answering hooks.
+        corrupt = guard_home / "daemon-state.json"
+        _ = corrupt.write_text("{not json at all", encoding="utf-8")
         handler_errors = _watch_handler_errors(daemon, monkeypatch)
         body = json.dumps(PRETOOL_PAYLOAD).encode()
         headers = f"Content-Type: application/json\r\nContent-Length: {len(body)}\r\n".encode()
@@ -484,6 +627,55 @@ def test_a_corrupt_state_file_neither_authenticates_nor_stops_the_daemon(
         assert handler_errors == []
     finally:
         daemon.stop()
+
+
+@pytest.mark.security_critical
+def test_a_full_disk_never_changes_a_hook_answer_or_stops_the_daemon(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Exhaust the disk under the evidence writer and keep asking for decisions.
+
+    Every write the daemon makes while answering a hook goes through the
+    evidence writer, so refusing that one call with ``ENOSPC`` is a full disk
+    as the hook path meets one. The hook still has to answer, the answer still
+    has to be a decision, and the daemon still has to be serving afterwards:
+    evidence the daemon could not record is not permission to stop recording
+    decisions.
+    """
+    with _chaos_daemon(tmp_path, monkeypatch) as daemon:
+        handler_errors = _watch_handler_errors(daemon, monkeypatch)
+        attempted: list[str] = []
+
+        def _no_space_left(
+            _self: NativeHookEvidenceWriter,
+            action: Mapping[str, object],
+            *,
+            timeout_seconds: float,
+        ) -> dict[str, object]:
+            _ = timeout_seconds
+            attempted.append(str(action.get("action", "")))
+            raise OSError(errno.ENOSPC, os.strerror(errno.ENOSPC))
+
+        monkeypatch.setattr(NativeHookEvidenceWriter, "_call", _no_space_left)
+
+        query = _hook_query(daemon, tmp_path)
+        answers = [_authenticated_hook(daemon, query, timeout=60.0) for _ in range(8)]
+
+        # Evidence is submitted behind the response, so give the dispatch the
+        # chance to reach the writer before reading what it attempted.
+        dispatch = getattr(daemon._server, "runtime_hook_evidence_dispatch", None)
+        if dispatch is not None:
+            _ = dispatch.flush(10.0)
+        deadline = time.monotonic() + 10.0
+        while not attempted and time.monotonic() < deadline:
+            time.sleep(0.05)
+
+        assert attempted, "no hook ever reached the evidence writer"
+        for answer in answers:
+            assert isinstance(answer.get("decision"), str), answer
+        assert _healthy(daemon.port)
+        assert handler_errors == []
 
 
 @pytest.mark.skipif(os.name == "nt", reason="requires a POSIX descriptor budget")
