@@ -84,7 +84,7 @@ def test_a_workspace_receipt_runs_what_the_read_only_parsers_reject(
     def reject(*args: object, **kwargs: object) -> None:
         raise RestrictedPytestError("pytest_restricted_invalid_command", "read-only parser")
 
-    kinds = dict.fromkeys(("inline_eval", "node_test", "vitest", "git", "node_tool"), False)
+    kinds = dict.fromkeys(("inline_eval", "node_test", "vitest", "git", "node_tool", "package_test"), False)
     if kind is not None:
         kinds[kind] = True
     ran: list[object] = []

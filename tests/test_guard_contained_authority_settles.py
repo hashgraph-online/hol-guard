@@ -132,6 +132,7 @@ def test_a_silent_runtime_is_reported_as_silent_not_as_a_refusal(
             "vitest": False,
             "git": False,
             "node_tool": False,
+            "package_test": False,
         },
     )
     monkeypatch.setattr(sink, "prepare_restricted_pytest", _not_a_pytest)
@@ -215,6 +216,7 @@ def test_only_a_command_that_never_named_pytest_loses_the_planner_error(
             "vitest": False,
             "git": False,
             "node_tool": False,
+            "package_test": False,
         }
 
     monkeypatch.setattr(contained_authority.time, "sleep", lambda _seconds: None)
@@ -254,6 +256,7 @@ def test_a_later_contained_receipt_waits_for_the_resident(tmp_path: Path, monkey
             "vitest": False,
             "git": False,
             "node_tool": False,
+            "package_test": False,
         },
     )
     monkeypatch.setattr(

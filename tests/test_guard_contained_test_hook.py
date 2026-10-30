@@ -165,6 +165,7 @@ def test_authorized_original_input_runs_only_with_readonly_profile(
             "vitest": False,
             "git": False,
             "node_tool": False,
+            "package_test": False,
         },
     )
     monkeypatch.setattr(
