@@ -51,6 +51,7 @@ use crate::guard_store_composio_catalog as composio_catalog;
 use crate::guard_store_connect as connect;
 use crate::guard_store_connector_context as connector_context;
 use crate::guard_store_db::{exec, query_all, query_one, text, StoreError, StoreResult};
+use crate::guard_store_evidence as evidence;
 use crate::guard_store_inventory as inventory;
 use crate::guard_store_local_cli as local_cli;
 use crate::guard_store_local_cli_catalog as local_cli_catalog;
@@ -440,6 +441,8 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "command_activity_analytics"
         | "list_command_activity_invalidations"
         | "command_activity_diagnostics"
+        | "list_evidence"
+        | "count_evidence"
         | "list_command_shadow_observations"
         | "observed_mcp_tool_actions"
         | "read_mcp_provider_choices"
@@ -494,6 +497,8 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "rebuild_command_activity_rollups"
         | "record_command_activity_feedback"
         | "clear_command_activity_evidence"
+        | "add_evidence"
+        | "clear_evidence"
         | "upsert_guard_session"
         | "upsert_guard_operation"
         | "link_codex_live_wait"
@@ -633,6 +638,10 @@ fn dispatch(
         "record_command_activity_feedback" => feedback::record_feedback(connection, args),
         "list_command_activity_invalidations" => feedback::list_invalidations(connection, args),
         "clear_command_activity_evidence" => privacy::clear_evidence(connection),
+        "add_evidence" => evidence::add(connection, args),
+        "list_evidence" => evidence::list(connection, args),
+        "count_evidence" => evidence::count(connection, args),
+        "clear_evidence" => evidence::clear(connection, args),
         "command_activity_diagnostics" => privacy::diagnostics(connection, args),
         "count_command_shadow_observations" => privacy::count_shadow(connection),
         "list_command_shadow_observations" => privacy::list_shadow(connection, args),
@@ -787,7 +796,7 @@ fn dispatch(
             crate::guard_store_claimed_native_allow::settle(connection, guard_home, args)
         }
         "codex_live_allow_authority" => {
-            crate::guard_store_codex_live_authority::resolve(connection, guard_home, args)
+            crate::guard_store_codex_live_authority::op(connection, guard_home, args, owner)
         }
         "complete_codex_live_decision" => {
             crate::guard_store_codex_live_completion::complete(connection, guard_home, args, owner)

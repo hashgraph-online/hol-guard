@@ -45,29 +45,160 @@ pub(super) fn skip_inert_options(manager: &str, arguments: &[&str]) -> usize {
 }
 
 /// Whether `value` is one an inert option may carry: a log level, a reporter
-/// name, or a package name or glob naming the workspace's own projects.
+/// name, or a package name, glob or directory naming the workspace's own
+/// projects.
 ///
-/// A value that names a path is refused. pnpm and npm both select a project
-/// by directory as well as by name — `--filter ./packages/web` — and a
-/// directory operand is how a selector would reach a project the workspace
-/// does not hold, whose scripts the sandbox would then run unreviewed. So
-/// every spelling of a directory is read: a leading `.`, `/` or `~`, a parent
-/// step, a Windows separator, a drive letter in `C:/other`, and the braces of
-/// pnpm's own `{<dir>}` selector, whose contents are a directory by
-/// definition. The braces are not only a prefix. pnpm accepts the directory
+/// What is refused is a value that reaches *out* of the workspace. pnpm and
+/// npm both select a project by directory as well as by name — `--filter
+/// ./packages/web` — and a directory operand is how a selector would reach a
+/// project the workspace does not hold, whose scripts the sandbox would then
+/// run unreviewed. A directory below where the command was typed is not that
+/// reach: `packages/web` already carried the verb past this walk, and
+/// `./packages/web` names the same project. So the test is where the value
+/// can land, not whether it looks like a path. An absolute path, a `~` home
+/// spelling, a drive letter in `C:/other` and a `..` step back are each
+/// refused, under either separator.
+///
+/// The braces of pnpm's own `{<dir>}` selector hold a directory by
+/// definition, and they are not only a prefix: pnpm accepts the directory
 /// selector after a name pattern, a changed-since ref or an exclusion, as in
-/// `web{/opt/other}`, `[origin/main]{/opt/other}` and `!{/opt/other}`, so a
-/// brace anywhere in the value is a directory. A value carrying `$` is
-/// refused with them, since what it names is not in the text. A scoped name
-/// such as `@acme/web` still passes, and so does a changed-since selector
-/// such as `[origin/main]`, which names a git ref rather than a place on disk.
+/// `web{/opt/other}`, `[origin/main]{/opt/other}` and `!{/opt/other}`. So
+/// each piece a brace separates is read on its own, and one of them reaching
+/// out refuses the whole value. A comma separates pieces for the same reason,
+/// one step earlier: the shell expands `--filter={web,../sibling}` into two
+/// words before pnpm sees either, so the second selector never appears in the
+/// text this reads. Splitting on the comma reads it anyway.
+///
+/// Reading the alternatives one at a time is not enough on its own, because
+/// the shell joins each of them to the text around the group: `{.,}./other`
+/// holds the pieces `.` and `./other`, neither of which climbs, and stands
+/// for the words `../other` and `./other`. So the value is read both ways,
+/// as the pieces it is written from and as the words it stands for, and
+/// either reading reaching out refuses it.
+///
+/// A value carrying `$` is refused outright, since what it names is not in
+/// the text. A scoped name such as `@acme/web` still passes, and so does a
+/// changed-since selector such as `[origin/main]`, which names a git ref
+/// rather than a place on disk.
 pub(super) fn inert_value(value: &str) -> bool {
     !value.is_empty()
-        && !value.starts_with(['-', '.', '/', '~'])
-        && !value.contains("..")
-        && !value.contains(['\\', '$', '{', '}'])
-        && !is_drive_prefixed(value)
+        && !value.starts_with('-')
+        && !value.contains('$')
         && !value.chars().any(char::is_whitespace)
+        && value
+            .split(['{', '}', ','])
+            .filter(|piece| !piece.is_empty())
+            .all(stays_below_the_workspace)
+        && expanded_words(value)
+            .is_some_and(|words| words.iter().all(|word| stays_below_the_workspace(word)))
+}
+
+/// The most words a brace expansion may stand for before the value is read as
+/// one this route cannot settle.
+const BRACE_WORDS: usize = 64;
+
+/// The words the shell expands `value` into, or `None` when there are more of
+/// them than this reads.
+///
+/// Only a brace group holding a top-level comma expands; the shell leaves
+/// `{<dir>}` and an unbalanced brace as the literal text they are, which is
+/// the text pnpm's own directory selector is written in. Every alternative
+/// carries the text around its group, and each expansion drops a group, so
+/// the walk ends.
+fn expanded_words(value: &str) -> Option<Vec<String>> {
+    let mut words = Vec::new();
+    expand_into(value, &mut words).then_some(words)
+}
+
+fn expand_into(value: &str, words: &mut Vec<String>) -> bool {
+    if words.len() == BRACE_WORDS {
+        return false;
+    }
+    let Some((prefix, alternatives, suffix)) = alternative_group(value) else {
+        words.push(value.to_owned());
+        return true;
+    };
+    alternatives
+        .iter()
+        .all(|alternative| expand_into(&format!("{prefix}{alternative}{suffix}"), words))
+}
+
+/// The first balanced brace group holding a top-level comma, as the text
+/// before it, the alternatives inside it and the text after it.
+fn alternative_group(value: &str) -> Option<(&str, Vec<&str>, &str)> {
+    let open = value.find('{')?;
+    let mut depth = 0usize;
+    let mut alternatives = Vec::new();
+    let mut start = open + 1;
+    for (index, character) in value[open..]
+        .char_indices()
+        .map(|(offset, character)| (offset + open, character))
+    {
+        match character {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    if alternatives.is_empty() {
+                        // A group with no comma is literal text, so the next
+                        // group is the one to read.
+                        let (prefix, alternatives, suffix) =
+                            alternative_group(&value[index + 1..])?;
+                        let prefix = &value[..index + 1 + prefix.len()];
+                        return Some((prefix, alternatives, suffix));
+                    }
+                    alternatives.push(&value[start..index]);
+                    return Some((&value[..open], alternatives, &value[index + 1..]));
+                }
+            }
+            ',' if depth == 1 => {
+                alternatives.push(&value[start..index]);
+                start = index + 1;
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+/// Whether `piece` can only name a place below where the command runs.
+///
+/// A selector is not all path: a name pattern, an exclusion mark and a
+/// changed-since ref in brackets are read here too. Reading each of them as a
+/// relative path is what makes one test enough — a name never climbs
+/// anywhere, so the only pieces this can refuse are the directory spellings
+/// it is here to bound.
+///
+/// pnpm removes its own decorations before it decides whether what is left
+/// names a place, so this removes them first too. `...../other` is the `...`
+/// that adds a project's dependents in front of `../other`, and pnpm resolves
+/// that against the directory the command ran in. Read whole, its components
+/// are `.....` and `other` and neither is a step back, so the value has to be
+/// read the way pnpm reads it as well as the way it is written.
+fn stays_below_the_workspace(piece: &str) -> bool {
+    climbs_nowhere(piece) && climbs_nowhere(undecorated(piece))
+}
+
+/// `piece` with pnpm's selector decorations removed: a leading exclusion, the
+/// `...` or `...^` that adds dependents, and the trailing `...` or `^...`
+/// that adds dependencies.
+fn undecorated(piece: &str) -> &str {
+    let piece = piece.strip_prefix('!').unwrap_or(piece);
+    let piece = match piece.strip_prefix("...") {
+        Some(rest) => rest.strip_prefix('^').unwrap_or(rest),
+        None => piece,
+    };
+    match piece.strip_suffix("...") {
+        Some(rest) => rest.strip_suffix('^').unwrap_or(rest),
+        None => piece,
+    }
+}
+
+/// Whether `piece` names no place above where the command runs.
+fn climbs_nowhere(piece: &str) -> bool {
+    !piece.starts_with(['/', '\\', '~'])
+        && !is_drive_prefixed(piece)
+        && !piece.split(['/', '\\']).any(|component| component == "..")
 }
 
 /// Whether `value` opens with a Windows drive letter, as `C:/other` does.

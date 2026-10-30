@@ -363,6 +363,7 @@ mod guard_store_connect_effective;
 mod guard_store_connect_vectors_tests;
 mod guard_store_connector_context;
 mod guard_store_db;
+mod guard_store_evidence;
 mod guard_store_exact_cloud_apply;
 mod guard_store_exact_cloud_peek;
 mod guard_store_guard_event;

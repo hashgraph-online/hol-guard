@@ -19,6 +19,14 @@ from codex_plugin_scanner.guard.runtime.restricted_pytest_model import Restricte
         ["git", "diff", "--ext-diff"],
         ["git", "diff", "--output=x"],
         ["git", "show", ";", "sh"],
+        ["git", "stash", "push"],
+        ["git", "submodule", "status"],
+        ["git", "notes", "add", "-m", "x"],
+        ["git", "blame", "--textconv", "example.txt"],
+        ["git", "grep", "-nO", "needle"],
+        ["git", "grep", "--open", "needle"],
+        ["git", "cat-file", "--filters", "HEAD:example.txt"],
+        ["git", "-c", "core.pager=sh", "log"],
     ],
 )
 def test_mutation_helpers_and_shell_effects_rejected(command, tmp_path):
@@ -54,6 +62,77 @@ def test_linux_git_uses_the_filtered_readonly_profile(monkeypatch, tmp_path):
     assert plan.allowed_executables == (executable,)
     assert "--no-ext-diff" in plan.command and "--no-textconv" in plan.command
     assert plan.command[plan.command.index("-c") + 1] == "core.fsmonitor=false"
+
+
+@pytest.mark.usefixtures("native_context_digest")
+@pytest.mark.parametrize(
+    ("command", "arguments"),
+    [
+        (["git", "blame", "example.txt"], ("--no-textconv", "example.txt")),
+        (["git", "grep", "needle"], ("--no-textconv", "needle")),
+        # `git grep -o` prints only the matching text; nothing is opened by it.
+        (["git", "grep", "-o", "needle"], ("--no-textconv", "-o", "needle")),
+        # `stash show` prints a diff, and its screens follow its own word.
+        (["git", "stash", "show", "-p"], ("show", "--no-ext-diff", "--no-textconv", "-p")),
+        # A bare `git reflog` is `git reflog show`, which is the log walk
+        # under another name, so it carries the log walk's two screens.
+        (["git", "reflog"], ("--no-ext-diff", "--no-textconv")),
+        (["git", "stash", "list", "-p"], ("list", "--no-ext-diff", "--no-textconv", "-p")),
+        (["git", "rev-list", "--count", "HEAD"], ("--count", "HEAD")),
+    ],
+)
+def test_the_everyday_reads_authority_contains_are_planned_here_too(monkeypatch, tmp_path, command, arguments):
+    """A read Guard sends to containment is a read this sink can plan.
+
+    The sink used to carry `diff`, `log` and `show` alone, so a `git blame`
+    that authority had already decided to contain reached a planner that
+    refused it and failed the whole run. The grammar is native now, so both
+    sides answer from one list.
+    """
+
+    (tmp_path / ".git").mkdir()
+    executable = tmp_path / "git"
+    executable.write_text("synthetic image")
+    monkeypatch.setattr(git, "_select_backend", lambda **kwargs: ("linux-bubblewrap", tmp_path / "bwrap"))
+    monkeypatch.setattr(git, "_resolve_executable", lambda *args, **kwargs: executable)
+    monkeypatch.setattr(git, "git_binary_path_is_trusted", lambda *args, **kwargs: True)
+    plan = git.prepare_restricted_git(command, workspace=tmp_path)
+    assert plan.command[:5] == (str(executable), "--no-pager", "-c", "core.fsmonitor=false", command[1])
+    assert plan.command[5:] == arguments
+    assert "--ext-diff" not in plan.command and "--textconv" not in plan.command
+
+
+@pytest.mark.usefixtures("native_context_digest")
+def test_a_routed_read_runs_in_the_directory_it_named(monkeypatch, tmp_path):
+    """`git -C subdir` is a read authority contains, so the sink plans it.
+
+    Git's own `-C` would move the run out from under the metadata roots this
+    plan grants, so the directory is resolved inside the approved workspace
+    here and the option never reaches the vector Git executes.
+    """
+
+    (tmp_path / ".git").mkdir()
+    (tmp_path / "subdir").mkdir()
+    executable = tmp_path / "git"
+    executable.write_text("synthetic image")
+    monkeypatch.setattr(git, "_select_backend", lambda **kwargs: ("linux-bubblewrap", tmp_path / "bwrap"))
+    monkeypatch.setattr(git, "_resolve_executable", lambda *args, **kwargs: executable)
+    monkeypatch.setattr(git, "git_binary_path_is_trusted", lambda *args, **kwargs: True)
+    plan = git.prepare_restricted_git(["git", "-C", "subdir", "grep", "needle"], workspace=tmp_path)
+    assert plan.cwd == (tmp_path / "subdir").resolve()
+    assert plan.command[4:] == ("grep", "--no-textconv", "needle")
+    assert "-C" not in plan.command and "subdir" not in plan.command
+
+
+@pytest.mark.usefixtures("native_context_digest")
+def test_a_routed_read_cannot_step_outside_the_approved_workspace(monkeypatch, tmp_path):
+    workspace = tmp_path / "project"
+    workspace.mkdir()
+    (workspace / ".git").mkdir()
+    monkeypatch.setattr(git, "_select_backend", lambda **kwargs: ("linux-bubblewrap", tmp_path / "bwrap"))
+    monkeypatch.setattr(git, "git_binary_path_is_trusted", lambda *args, **kwargs: True)
+    with pytest.raises(RestrictedPytestError):
+        git.prepare_restricted_git(["git", "-C", "..", "grep", "needle"], workspace=workspace)
 
 
 @pytest.mark.usefixtures("native_context_digest")
@@ -97,7 +176,13 @@ def test_actual_git_inspection_does_not_invoke_helpers(tmp_path, capfd, linked):
     helper.chmod(0o700)
     invoke("config", "diff.external", str(helper))
     invoke("config", "core.fsmonitor", str(helper))
-    for operation in (("diff", "--stat"), ("diff", "--check"), ("log", "--oneline", "-1")):
+    for operation in (
+        ("diff", "--stat"),
+        ("diff", "--check"),
+        ("log", "--oneline", "-1"),
+        ("blame", "example.txt"),
+        ("reflog",),
+    ):
         plan = git.prepare_restricted_git(["git", *operation], workspace=workspace)
         if linked:
             assert repository not in plan.read_only_roots

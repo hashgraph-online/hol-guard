@@ -21,7 +21,13 @@ WORKSPACE_JEST_CASE = "omp-native-workspace-npx-jest"
 # installed entry point relative to the workspace root rather than through
 # ``node_modules/.bin``.
 WORKSPACE_NODE_ENTRY_CASE = "omp-native-workspace-node-jest-entry"
-WORKSPACE_RUNNER_CASES = frozenset({WORKSPACE_JEST_CASE, WORKSPACE_NODE_ENTRY_CASE})
+# The same install, launched through npm's own exec spelling with the install
+# prompt already answered. ``--no`` forbids fetching anything, so the run only
+# finishes if the workspace's own runner is what npm resolves.
+WORKSPACE_NPM_EXEC_CASE = "omp-native-workspace-npm-exec-inert-option"
+WORKSPACE_RUNNER_CASES = frozenset(
+    {WORKSPACE_JEST_CASE, WORKSPACE_NODE_ENTRY_CASE, WORKSPACE_NPM_EXEC_CASE}
+)
 # The same installed build, launched through the Bun the installer leaves in the
 # caller's home, spelled by the path its install instructions print.
 HOME_BUN_ENTRY_CASE = "omp-native-shell-home-spelled-bun-entry"

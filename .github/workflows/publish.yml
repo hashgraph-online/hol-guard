@@ -3445,9 +3445,22 @@ jobs:
             python scripts/ci/verify_release_asset_inventory.py "$existing_dir" dist "$VERSION" alpha
             bundle="$existing_dir/hol-guard-v${VERSION}.intoto.jsonl"
             [[ -s "$bundle" ]]
+            # A pull request alpha builds the pull request head from a run on main, so
+            # its provenance names main's commit. The asset bytes were compared with
+            # this run's build of SOURCE_SHA above; the attestation then has to come
+            # from this workflow on a hosted runner at the commit that ran it.
             for remote_file in "$existing_dir"/hol_guard-*; do
-              GH_TOKEN="$WORKFLOW_GH_TOKEN" gh attestation verify "$remote_file" --repo "$GITHUB_REPOSITORY" \
-                --bundle "$bundle" --source-digest "$SOURCE_SHA" >/dev/null
+              if ! GH_TOKEN="$WORKFLOW_GH_TOKEN" gh attestation verify "$remote_file" --repo "$GITHUB_REPOSITORY" \
+                --bundle "$bundle" --source-digest "$SOURCE_SHA" >/dev/null; then
+                if [[ "$SOURCE_SHA" == "$GITHUB_SHA" ]]; then
+                  exit 1
+                fi
+                GH_TOKEN="$WORKFLOW_GH_TOKEN" gh attestation verify "$remote_file" --repo "$GITHUB_REPOSITORY" \
+                  --bundle "$bundle" \
+                  --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/publish.yml" \
+                  --deny-self-hosted-runners \
+                  --source-digest "$GITHUB_SHA" >/dev/null
+              fi
             done
             [[ -s "$RUNNER_TEMP/release-notes.md" ]]
             gh release edit "$tag" --title "Guard ${VERSION} alpha" --notes-file "$RUNNER_TEMP/release-notes.md"

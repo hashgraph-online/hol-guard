@@ -132,6 +132,37 @@ fn only_a_bare_pnpm_exec_reads_as_vitest() {
     }
 }
 
+/// The route that admits `npm exec` peels npm's own exec options, so the sink
+/// has to read the same argv or the run it planned is not the run that was
+/// admitted.
+#[test]
+fn npm_exec_reads_the_runner_behind_its_own_options() {
+    for command in [
+        json!(["npm", "exec", "--no", "--", "vitest", "run"]),
+        json!(["npm", "exec", "--prefer-offline", "vitest", "run"]),
+        json!(["npm", "x", "-y", "--silent", "vitest", "run"]),
+    ] {
+        let kind = evaluate("contained_kind", &json!({ "command": command })).unwrap();
+        assert_eq!(kind["value"]["vitest"], true, "{command} {kind}");
+        assert_eq!(kind["value"]["node_tool"], false, "{command} {kind}");
+        let arguments = evaluate("vitest_arguments", &json!({ "command": command })).unwrap();
+        assert_eq!(arguments["value"], json!(["run"]), "{command}");
+    }
+    for command in [
+        // `--workspace` chooses which package the run reaches, so it is not
+        // one of the options that only precede the tool.
+        json!(["npm", "exec", "--workspace", "app", "vitest", "run"]),
+        // pnpm's and yarn's exec options select packages too, and neither is
+        // read from npx's table.
+        json!(["pnpm", "exec", "--no", "vitest", "run"]),
+        json!(["yarn", "exec", "--no", "vitest", "run"]),
+        json!(["npm", "exec", "--no", "--"]),
+    ] {
+        let result = evaluate("vitest_arguments", &json!({ "command": command })).unwrap();
+        assert!(result.get("value").is_none(), "{command} {result}");
+    }
+}
+
 /// The sink plans the call again from its own snapshot, so it has to be able
 /// to ask for the same reading the pre-tool pass made of an activation or a
 /// trailing group.

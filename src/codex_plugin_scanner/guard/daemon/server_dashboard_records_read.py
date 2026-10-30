@@ -193,22 +193,21 @@ class _DashboardRecordsReadRoutes:
                 limit_v = min(max(int(limit_q), 1), 500)
             except (ValueError, TypeError):
                 limit_v = 100
-            with store._connect() as conn:
-                records = list_evidence(
-                    conn,
-                    harness=harness_q if isinstance(harness_q, str) else None,
-                    category=category_q if isinstance(category_q, str) else None,
-                    severity=severity_q if isinstance(severity_q, str) else None,
-                    before_cursor=before_q if isinstance(before_q, str) else None,
-                    limit=limit_v,
-                    include_details=False,
-                )
-                total = count_evidence(
-                    conn,
-                    harness=harness_q if isinstance(harness_q, str) else None,
-                    category=category_q if isinstance(category_q, str) else None,
-                    severity=severity_q if isinstance(severity_q, str) else None,
-                )
+            records = list_evidence(
+                store,
+                harness=harness_q if isinstance(harness_q, str) else None,
+                category=category_q if isinstance(category_q, str) else None,
+                severity=severity_q if isinstance(severity_q, str) else None,
+                before_cursor=before_q if isinstance(before_q, str) else None,
+                limit=limit_v,
+                include_details=False,
+            )
+            total = count_evidence(
+                store,
+                harness=harness_q if isinstance(harness_q, str) else None,
+                category=category_q if isinstance(category_q, str) else None,
+                severity=severity_q if isinstance(severity_q, str) else None,
+            )
             self._write_json(
                 {
                     "items": [evidence_record_to_dict(record) for record in records],
@@ -219,16 +218,15 @@ class _DashboardRecordsReadRoutes:
         if parsed.path == "/v1/evidence/export":
             query = parse_qs(parsed.query)
             format_q = query.get("format", ["json"])[-1]
-            with store._connect() as conn:
-                if format_q == "json":
-                    export_body = export_evidence_json(conn, limit=10_000)
-                    content_type = "application/json"
-                elif format_q == "csv":
-                    export_body = export_evidence_csv(conn, limit=10_000)
-                    content_type = "text/csv; charset=utf-8"
-                else:
-                    self._write_json({"error": "invalid_export_format"}, status=400)
-                    return True
+            if format_q == "json":
+                export_body = export_evidence_json(store, limit=10_000)
+                content_type = "application/json"
+            elif format_q == "csv":
+                export_body = export_evidence_csv(store, limit=10_000)
+                content_type = "text/csv; charset=utf-8"
+            else:
+                self._write_json({"error": "invalid_export_format"}, status=400)
+                return True
             self.send_response(200)
             self.send_header("Content-Type", content_type)
             self.end_headers()

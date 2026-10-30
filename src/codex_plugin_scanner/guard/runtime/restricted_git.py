@@ -9,6 +9,7 @@ import tempfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+from ..native_restricted_pytest import restricted_native
 from .git_execution_safety import git_binary_path_is_trusted
 from .restricted_pytest_model import GIT_READ_ONLY_PROFILE_VERSION, RestrictedPytestError, RestrictedPytestPlan
 from .restricted_pytest_sandbox import _backend_argv, _restricted_environment, _run_backend_process
@@ -74,39 +75,39 @@ def prepare_restricted_git(
     command: Sequence[str], *, workspace: Path, cwd: Path | None = None, home_dir: Path | None = None
 ) -> RestrictedPytestPlan:
     argv = _normalized_command(command)
-    # Native authority validates the complete original command. This local gate
-    # independently excludes mutation, helper selection, and shell operators.
+    # The same grammar authority reads the command against names the operation
+    # here, so a read it contains is a read this sink can plan.
+    reading = restricted_native("git_read_only_argv", {"command": list(argv)}, dict)
+    operation, arguments, directories = (
+        reading.get("operation"),
+        reading.get("arguments"),
+        reading.get("directories"),
+    )
     if (
-        len(argv) < 2
-        or Path(argv[0]).name != "git"
-        or argv[1] not in {"diff", "log", "show"}
-        or any(
-            value in {";", "&&", "||", "|", "&", "--ext-diff", "--textconv", "--output", "-o"}
-            or value.startswith(("--output=", "--exec-path="))
-            for value in argv[2:]
-        )
+        type(operation) is not str
+        or type(arguments) is not list
+        or type(directories) is not list
+        or not all(type(word) is str for word in (*arguments, *directories))
     ):
         raise RestrictedPytestError("git_restricted_invalid_command", "Protected Git requires direct read-only argv.")
     root = _resolve_workspace(workspace, home_dir=home_dir)
     directory = _resolve_cwd(cwd or root, workspace=root)
+    # Git's own -C would move the run out from under the roots this plan
+    # grants, so the sink walks the same path and starts the run there. Each
+    # one is resolved against the last, as Git resolves them, and each has to
+    # land inside the approved workspace on its own.
+    for named in directories:
+        step = Path(named)
+        directory = _resolve_cwd(step if step.is_absolute() else directory / step, workspace=root)
     backend, backend_path = _select_backend(platform=sys.platform, backend_executable=None)
     if backend not in {"macos-seatbelt", "linux-bubblewrap"}:
         raise RestrictedPytestError("git_restricted_sandbox_unavailable", "Protected Git filtering is unavailable.")
     executable = _resolve_executable(argv[0], cwd=directory)
     if not git_binary_path_is_trusted(executable, cwd=directory):
         raise RestrictedPytestError("git_restricted_invalid_command", "Git does not resolve to a trusted executable.")
-    # Options precede '--' so option-shaped filenames cannot override the floor.
-    operation = argv[1]
-    transformed = (
-        str(executable),
-        "--no-pager",
-        "-c",
-        "core.fsmonitor=false",
-        operation,
-        "--no-ext-diff",
-        "--no-textconv",
-        *argv[2:],
-    )
+    # The reading writes each helper screen ahead of the caller's own words, so
+    # an option-shaped pathname cannot push one past '--'.
+    transformed = (str(executable), "--no-pager", "-c", "core.fsmonitor=false", operation, *arguments)
     return RestrictedPytestPlan(
         profile_version=GIT_READ_ONLY_PROFILE_VERSION,
         backend=backend,

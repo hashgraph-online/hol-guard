@@ -8,7 +8,7 @@
 #[path = "restricted_test_commands_tests.rs"]
 mod tests;
 
-use crate::contained_argv::{contained_runner_call, jest_contained_call};
+use crate::contained_argv::{contained_runner_call, jest_contained_call, npm_exec_inert_option};
 use crate::contained_node_tool::{
     entry_tool, local_package_entry, supported_tool, writes_or_chains, ToolMode,
 };
@@ -413,11 +413,27 @@ pub(crate) fn manager_local_bin_arguments<'a>(
     manager: &str,
     arguments: &'a [String],
 ) -> Option<&'a [String]> {
-    let rest = match (manager, arguments) {
+    let mut rest = match (manager, arguments) {
         ("npm", [subcommand, rest @ ..]) if subcommand == "exec" || subcommand == "x" => rest,
         ("pnpm" | "yarn", [subcommand, rest @ ..]) if subcommand == "exec" => rest,
         _ => return None,
     };
+    // `npx` is npm's own name for `npm exec`, and the two take the same
+    // options before the tool: they answer the install prompt, choose between
+    // the cache and the registry, or set how much the runner prints. None of
+    // them names a package, so the tool behind them is still the workspace's
+    // own one and the run is the same local-bin run either spelling makes.
+    // `pnpm exec` and `yarn exec` keep reading only the separator, because
+    // their own options (`--recursive`, `--filter`, `--parallel`) choose
+    // which packages the run reaches.
+    if manager == "npm" {
+        while let [option, tail @ ..] = rest {
+            if !npm_exec_inert_option(option) {
+                break;
+            }
+            rest = tail;
+        }
+    }
     let rest = match rest {
         [separator, rest @ ..] if separator == "--" => rest,
         rest => rest,
