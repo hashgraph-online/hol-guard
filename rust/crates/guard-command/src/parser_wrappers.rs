@@ -371,7 +371,10 @@ fn carries_script(words: &[String]) -> Option<&[String]> {
             return None;
         }
         let (flags, closes) = match word.find('c') {
-            Some(position) => (format!("{}{}", &word[..position], &word[position + 1..]), true),
+            Some(position) => (
+                format!("{}{}", &word[..position], &word[position + 1..]),
+                true,
+            ),
             None => (word.to_string(), false),
         };
         if !flags.chars().all(|flag| INERT_SHELL_FLAGS.contains(flag)) {
