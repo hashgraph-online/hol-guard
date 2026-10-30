@@ -74,7 +74,10 @@ def test_linux_git_uses_the_filtered_readonly_profile(monkeypatch, tmp_path):
         (["git", "grep", "-o", "needle"], ("--no-textconv", "-o", "needle")),
         # `stash show` prints a diff, and its screens follow its own word.
         (["git", "stash", "show", "-p"], ("show", "--no-ext-diff", "--no-textconv", "-p")),
-        (["git", "reflog"], ()),
+        # A bare `git reflog` is `git reflog show`, which is the log walk
+        # under another name, so it carries the log walk's two screens.
+        (["git", "reflog"], ("--no-ext-diff", "--no-textconv")),
+        (["git", "stash", "list", "-p"], ("list", "--no-ext-diff", "--no-textconv", "-p")),
         (["git", "rev-list", "--count", "HEAD"], ("--count", "HEAD")),
     ],
 )
