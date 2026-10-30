@@ -206,8 +206,17 @@ class TestFallbackCliCommandMigration:
             "2026-01-01T00:00:00Z",
         )
         legacy = sqlite3.connect(guard_home / "guard.db")
-        # Recreate a pre-upgrade table: same row, no fallback column.
+        # Recreate a pre-upgrade table: same row, no fallback column. Triggers
+        # added after the column read it, so they go first.
+        triggers = legacy.execute(
+            "select name from sqlite_master where type = 'trigger' and sql like '%fallback_cli_command%'"
+        ).fetchall()
+        for (trigger,) in triggers:
+            legacy.execute(f'drop trigger "{trigger}"')
         legacy.execute("alter table approval_requests drop column fallback_cli_command")
+        # A store that old is also missing later migrations, so reopening it runs
+        # the full schema pass that adds the column back with no value.
+        legacy.execute("delete from schema_migrations where version = 20")
         legacy.commit()
         legacy.close()
 
