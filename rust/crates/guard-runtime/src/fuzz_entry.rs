@@ -112,8 +112,9 @@ pub fn prompt_text(data: &[u8]) {
 /// corpus carries seeds of all these shapes, so a campaign reaches the lexer
 /// behind the string-reading ones too.
 ///
-/// A seed names its screen by this list's index, so adding one in the middle
-/// renumbers every seed after it and the screens behind them stop being read.
+/// A seed names its screen by this list's index, so adding or removing one in
+/// the middle renumbers every seed after it and the screens behind them stop
+/// being read unless the seeds are renumbered with it.
 ///
 /// `contained_target` is deliberately absent. It resolves a virtual-environment
 /// activation against the filesystem, so a campaign would be probing the
@@ -123,19 +124,15 @@ pub const CONTAINED_ARGV_OPERATIONS: &[&str] = &[
     "node_runtime_args",
     "python_runtime_args",
     "inline_eval",
-    "test_script",
     "bun_vitest_invocation",
     "tsx_test_invocation",
     "vitest_arguments",
     "contained_kind",
-    "launcher_program",
-    "transparent_prefix",
     "command_prefix_split",
     "run_prefix_peel",
     "node_tool_route",
     "pytest_command",
     "package_test_resolve",
-    "git_read_only_argv",
     "script_words",
     "command_words",
     "command_absolute_words",

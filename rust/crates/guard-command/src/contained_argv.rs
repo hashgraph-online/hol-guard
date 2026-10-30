@@ -652,19 +652,15 @@ pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
         "node_runtime_args"
             | "python_runtime_args"
             | "inline_eval"
-            | "test_script"
             | "bun_vitest_invocation"
             | "tsx_test_invocation"
             | "vitest_arguments"
             | "contained_kind"
-            | "launcher_program"
-            | "transparent_prefix"
             | "command_prefix_split"
             | "run_prefix_peel"
             | "node_tool_route"
             | "pytest_command"
             | "package_test_resolve"
-            | "git_read_only_argv"
     ) {
         return None;
     }
@@ -681,19 +677,10 @@ pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
         "node_runtime_args" => node_runtime_args(&command).map(|v| json!(v)),
         "python_runtime_args" => Ok(json!(python_runtime_args(&command))),
         "inline_eval" => inline_eval(&command).map(|v| json!(v)),
-        "test_script" => Ok(json!(named_test_script(
-            input.get("value").and_then(Value::as_str).unwrap_or(""),
-            input.get("node").and_then(Value::as_bool).unwrap_or(false)
-        ))),
         "bun_vitest_invocation" => Ok(json!(bun_vitest_invocation(&command))),
         "tsx_test_invocation" => tsx_test_invocation(&command).map(|value| json!(value)),
         "vitest_arguments" => vitest_arguments(&command).map(|v| json!(v)),
         "contained_kind" => contained_kind(&command),
-        "launcher_program" => Ok(json!(crate::parser_wrappers::launcher_program(&command, 0))),
-        "transparent_prefix" => {
-            let prefix = crate::parser_wrappers::transparent_prefix(&command, 0);
-            Ok(json!(prefix.map(|(index, _)| index)))
-        }
         "node_tool_route" => crate::contained_node_tool::route_request(input, &command),
         "pytest_command" => Ok(json!(crate::pytest_argv::command_targets_pytest(&command))),
         "package_test_resolve" => crate::contained_package_test::resolve(
@@ -722,20 +709,6 @@ pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
                 "dropped_data": dropped_data,
             }))
         }
-        "git_read_only_argv" => crate::contained_git::read_only_invocation(&command)
-            .map(|reading| {
-                json!({
-                    "operation": reading.operation,
-                    "arguments": reading.arguments,
-                    "directories": reading.directories,
-                })
-            })
-            .ok_or_else(|| {
-                RestrictedPytestError::new(
-                    "git_restricted_invalid_command",
-                    "Protected Git requires direct read-only argv.",
-                )
-            }),
         _ => unreachable!(),
     };
     Some(match result {

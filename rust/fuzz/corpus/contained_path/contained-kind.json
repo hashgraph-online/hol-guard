@@ -1,1 +1,1 @@
-{"command":["npx","jest","-ic../outside/jest.config.js"]}
+{"command":["npx","jest","-ic../outside/jest.config.js"]}

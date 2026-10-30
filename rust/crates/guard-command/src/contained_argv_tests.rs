@@ -72,6 +72,18 @@ fn original_portable_contained_argv_vectors() {
     .unwrap();
     let mut count = 0;
     for case in vectors["cases"].as_array().unwrap() {
+        // No caller asks for the test-script screen as an operation any more,
+        // so its recorded vectors read the screen the planners still use.
+        if case["operation"] == "test_script" {
+            let input = &case["input"];
+            let named = named_test_script(
+                input["value"].as_str().unwrap(),
+                input["node"].as_bool().unwrap_or(false),
+            );
+            assert_eq!(json!({ "value": named }), case["expected"], "case={case}");
+            count += 1;
+            continue;
+        }
         if let Some(result) = evaluate(case["operation"].as_str().unwrap(), &case["input"]) {
             assert_eq!(result, case["expected"], "case={case}");
             count += 1;
@@ -256,20 +268,16 @@ fn contained_target_answers_the_sink() {
 
 #[test]
 fn launcher_program_reports_where_the_parser_reads_the_program() {
-    let offset =
-        |command: &[&str]| evaluate("launcher_program", &json!({ "command": command })).unwrap();
-    assert_eq!(
-        offset(&["nice", "-n", "10", "pytest", "-q"]),
-        json!({"value": 3})
-    );
-    assert_eq!(offset(&["nice", "pytest", "-q"]), json!({"value": 1}));
-    assert_eq!(
-        offset(&["stdbuf", "-oL", "pytest", "-q"]),
-        json!({"value": 2})
-    );
+    let offset = |command: &[&str]| {
+        let command: Vec<String> = command.iter().map(|word| (*word).to_owned()).collect();
+        crate::parser_wrappers::launcher_program(&command, 0)
+    };
+    assert_eq!(offset(&["nice", "-n", "10", "pytest", "-q"]), Some(3));
+    assert_eq!(offset(&["nice", "pytest", "-q"]), Some(1));
+    assert_eq!(offset(&["stdbuf", "-oL", "pytest", "-q"]), Some(2));
     // The shell's `exec` is read here too. The sink keeps no list of launcher
-    // names of its own, so every name this op answers for is one it peels.
-    assert_eq!(offset(&["exec", "pytest", "-q"]), json!({"value": 1}));
+    // names of its own, so every name this answers for is one it peels.
+    assert_eq!(offset(&["exec", "pytest", "-q"]), Some(1));
     // The sink refuses every shape the native parser leaves in place.
     for command in [
         &["./nice", "-n", "10", "pytest"][..],
@@ -282,31 +290,24 @@ fn launcher_program_reports_where_the_parser_reads_the_program() {
         &["exec", "-a", "name", "pytest"],
         &["exec", "./deploy.sh"],
     ] {
-        assert_eq!(offset(command), json!({"value": null}), "{command:?}");
+        assert_eq!(offset(command), None, "{command:?}");
     }
 }
 
 #[test]
 fn transparent_prefix_reports_where_the_parser_reads_the_program() {
-    let offset =
-        |command: &[&str]| evaluate("transparent_prefix", &json!({ "command": command })).unwrap();
-    assert_eq!(offset(&["command", "pytest", "-q"]), json!({"value": 1}));
-    assert_eq!(offset(&["time", "pytest", "-q"]), json!({"value": 1}));
-    assert_eq!(
-        offset(&["env", "CI=1", "pytest", "-q"]),
-        json!({"value": 2})
-    );
+    let offset = |command: &[&str]| {
+        let command: Vec<String> = command.iter().map(|word| (*word).to_owned()).collect();
+        crate::parser_wrappers::transparent_prefix(&command, 0).map(|(index, _)| index)
+    };
+    assert_eq!(offset(&["command", "pytest", "-q"]), Some(1));
+    assert_eq!(offset(&["time", "pytest", "-q"]), Some(1));
+    assert_eq!(offset(&["env", "CI=1", "pytest", "-q"]), Some(2));
     // The parser reads the two system paths as the `env` they name, so the
     // sink peels them too rather than planning `/usr/bin/env` as the program.
-    assert_eq!(
-        offset(&["/usr/bin/env", "CI=1", "pytest", "-q"]),
-        json!({"value": 2})
-    );
-    assert_eq!(offset(&["/bin/env", "CI=1", "pytest"]), json!({"value": 2}));
-    assert_eq!(
-        offset(&["env", "CI=1", "TZ=UTC", "pytest"]),
-        json!({"value": 3})
-    );
+    assert_eq!(offset(&["/usr/bin/env", "CI=1", "pytest", "-q"]), Some(2));
+    assert_eq!(offset(&["/bin/env", "CI=1", "pytest"]), Some(2));
+    assert_eq!(offset(&["env", "CI=1", "TZ=UTC", "pytest"]), Some(3));
     for command in [
         // An `env` carrying no assignment only bypasses shell functions, and
         // extension floors key on that spelling, so it stays the executable.
@@ -320,7 +321,7 @@ fn transparent_prefix_reports_where_the_parser_reads_the_program() {
         &["nice", "pytest"],
         &["pytest", "-q"],
     ] {
-        assert_eq!(offset(command), json!({"value": null}), "{command:?}");
+        assert_eq!(offset(command), None, "{command:?}");
     }
 }
 
