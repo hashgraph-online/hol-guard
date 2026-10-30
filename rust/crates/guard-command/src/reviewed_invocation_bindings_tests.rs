@@ -81,7 +81,7 @@ fn a_value_taking_option_carrying_its_value_is_accepted() {
 #[test]
 fn an_option_written_ahead_of_the_operation_path_is_refused() {
     let operations = [operation("items-list", &["items", "list"], &[], &[])];
-    let rows = [row("items-list", &["--evil=/x", "items", "list"])];
+    let rows = [row("items-list", &["--evil=x", "items", "list"])];
     assert_eq!(
         validate(&operations, &rows, &[]),
         Ok(Some(ReviewedBindingRefusal {
