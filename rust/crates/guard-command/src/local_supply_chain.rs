@@ -2861,7 +2861,7 @@ pub fn resolve_supply_chain_audit_workspace_dir(
     Ok(None)
 }
 
-/// `_audit_lockfile_warnings` — `parse_manifest_dependencies` is the shared
+/// `_audit_lockfile_warnings` — `try_parse_manifest_dependencies_ordered` is the shared
 /// `package_manifest_diff` port; `path` is the relative lockfile path.
 #[allow(dead_code)]
 fn audit_lockfile_warnings(
@@ -2896,13 +2896,14 @@ fn audit_lockfile_warnings(
             }));
             continue;
         };
-        let dependency_map = crate::package_manifest_diff::parse_manifest_dependencies(
+        // A lockfile that parses and lists no packages is complete, not a warning.
+        let dependency_map = crate::package_manifest_diff::try_parse_manifest_dependencies_ordered(
             lockfile_path,
             &lockfile_text,
             2_097_152,
             50,
         );
-        if dependency_map.is_empty() {
+        if dependency_map.is_none() {
             warnings.push(json!({
                 "code": "lockfile_parse_warning",
                 "message": format!("Guard could not parse {lockfile_name} for workspace audit."),

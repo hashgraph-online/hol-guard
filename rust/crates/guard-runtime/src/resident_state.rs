@@ -489,3 +489,7 @@ mod tests;
 #[cfg(test)]
 #[path = "resident_state_discovery_tests.rs"]
 mod discovery_tests;
+
+#[cfg(test)]
+#[path = "resident_state_manifest_tests.rs"]
+mod manifest_tests;
