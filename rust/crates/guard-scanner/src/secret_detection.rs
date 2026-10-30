@@ -635,18 +635,29 @@ impl PartialEq for SecretFinding {
     }
 }
 
-/// Raised when a fingerprint is requested without a key, mirroring the Python
-/// `ValueError("secret fingerprint key must not be empty")`.
+/// Raised when a finding cannot be fingerprinted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct EmptyFingerprintKeyError;
+pub enum FingerprintError {
+    /// No key was supplied, mirroring the Python
+    /// `ValueError("secret fingerprint key must not be empty")`.
+    EmptyKey,
+    /// The candidate was already scrubbed. Hashing what is left would bind the
+    /// identity to the rule alone, so every scrubbed finding of one rule would
+    /// answer to the same fingerprint.
+    CandidateScrubbed,
+}
 
-impl fmt::Display for EmptyFingerprintKeyError {
+impl fmt::Display for FingerprintError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("secret fingerprint key must not be empty")
+        match self {
+            Self::EmptyKey => formatter.write_str("secret fingerprint key must not be empty"),
+            Self::CandidateScrubbed => formatter
+                .write_str("secret fingerprint is unavailable once the candidate is scrubbed"),
+        }
     }
 }
 
-impl Error for EmptyFingerprintKeyError {}
+impl Error for FingerprintError {}
 
 impl Drop for SecretFinding {
     fn drop(&mut self) {
@@ -656,9 +667,15 @@ impl Drop for SecretFinding {
 
 impl SecretFinding {
     /// Tenant/caller-scoped HMAC of the finding, never exposing candidate bytes.
-    pub fn fingerprint(&self, key: &[u8]) -> Result<String, EmptyFingerprintKeyError> {
+    pub fn fingerprint(&self, key: &[u8]) -> Result<String, FingerprintError> {
         if key.is_empty() {
-            return Err(EmptyFingerprintKeyError);
+            return Err(FingerprintError::EmptyKey);
+        }
+        // A detected candidate is never empty, so an empty one here means the
+        // caller already scrubbed it. Refuse rather than return the identity of
+        // the rule wearing this finding's name.
+        if self.candidate.is_empty() {
+            return Err(FingerprintError::CandidateScrubbed);
         }
         // Fed in three pieces rather than joined into one string: the bytes
         // the HMAC sees are the same, and the candidate is never copied into a
@@ -685,7 +702,7 @@ impl SecretFinding {
     pub fn to_public_dict(
         &self,
         fingerprint_key: Option<&[u8]>,
-    ) -> Result<PublicFinding, EmptyFingerprintKeyError> {
+    ) -> Result<PublicFinding, FingerprintError> {
         let fingerprint = match fingerprint_key {
             Some(key) => Some(self.fingerprint(key)?),
             None => None,
@@ -751,7 +768,7 @@ impl SecretScanSummary {
     pub fn to_public_dict(
         &self,
         fingerprint_key: Option<&[u8]>,
-    ) -> Result<PublicScanSummary<'_>, EmptyFingerprintKeyError> {
+    ) -> Result<PublicScanSummary<'_>, FingerprintError> {
         let mut findings = Vec::with_capacity(self.findings.len());
         for finding in &self.findings {
             findings.push(finding.to_public_dict(fingerprint_key)?);
@@ -1747,7 +1764,7 @@ mod tests {
         // An explicitly empty key is an error, mirroring the Python ValueError.
         assert_eq!(
             summary.findings[0].fingerprint(b""),
-            Err(EmptyFingerprintKeyError)
+            Err(FingerprintError::EmptyKey)
         );
         assert!(summary.to_public_dict(Some(b"")).is_err());
     }
@@ -1939,6 +1956,19 @@ mod tests {
         assert_eq!(finding.rule_id, rule_id);
         assert_eq!(finding.line, line);
         assert_eq!(finding.path, "config/prod.env");
+        // The rest of the finding survives, but its identity does not: a
+        // fingerprint taken now would name the rule, not the secret.
+        assert_eq!(
+            finding.fingerprint(b"tenant-key"),
+            Err(FingerprintError::CandidateScrubbed)
+        );
+        assert_eq!(
+            finding.to_public_dict(Some(b"tenant-key")).err(),
+            Some(FingerprintError::CandidateScrubbed)
+        );
+        // Without a key the public payload carries no fingerprint, so it is
+        // still the honest way to report a scrubbed finding.
+        assert!(finding.to_public_dict(None).is_ok());
     }
 
     #[test]

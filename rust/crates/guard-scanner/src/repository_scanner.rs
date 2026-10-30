@@ -19,8 +19,8 @@ use serde::Serialize;
 
 use crate::git_read::{run_git, run_git_os, GIT_TIMEOUT_SECONDS};
 use crate::secret_detection::{
-    candidate_digest, detector_version, scan_secret_text, CandidateDigest,
-    EmptyFingerprintKeyError, PublicFinding, SecretFinding,
+    candidate_digest, detector_version, scan_secret_text, CandidateDigest, FingerprintError,
+    PublicFinding, SecretFinding,
 };
 
 /// `DEFAULT_MAX_FILES` from the Python module.
@@ -162,9 +162,7 @@ impl RepositorySecretScanResult {
     /// Public, non-sensitive payload matching Python `to_public_dict`.
     /// Fingerprints are omitted exactly like `finding.to_public_dict()` called
     /// with no key.
-    pub fn to_public_dict(
-        &self,
-    ) -> Result<PublicRepositorySecretScanResult<'_>, EmptyFingerprintKeyError> {
+    pub fn to_public_dict(&self) -> Result<PublicRepositorySecretScanResult<'_>, FingerprintError> {
         let mut findings = Vec::with_capacity(self.findings.len());
         for finding in &self.findings {
             findings.push(finding.to_public_dict(None)?);
