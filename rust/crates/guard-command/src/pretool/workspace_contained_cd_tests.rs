@@ -204,7 +204,9 @@ fn a_move_the_walk_cannot_read_as_the_shell_does_is_refused() {
     std::fs::create_dir_all(ws.join("a/b")).unwrap();
     std::fs::create_dir_all(ws.join("app")).unwrap();
     std::fs::create_dir_all(ws.join("x*")).unwrap();
+    std::fs::create_dir_all(ws.join("{1..1}")).unwrap();
     std::os::unix::fs::symlink(ws.join("a/b"), ws.join("deep")).unwrap();
+    std::os::unix::fs::symlink(Path::new("/etc"), ws.join("1")).unwrap();
     for command in [
         // `deep` names a link to `a/b`, so the shell stands two steps from
         // the workspace root by its own reckoning and one by the resolved
@@ -214,6 +216,11 @@ fn a_move_the_walk_cannot_read_as_the_shell_does_is_refused() {
         // cannot take for the literal directory of that name.
         "cd x* && ls",
         "cd app && ls && cd ../x*",
+        // A brace list is rewritten before the file system is consulted at
+        // all, so the walk clears the literal directory `{1..1}` while the
+        // run enters `1`, which is a link out of the workspace.
+        "cd {1..1} && ls",
+        "cd app && ls && cd ../{1..1}",
         // bash's `lastpipe` and zsh's default both run the last element of a
         // pipeline in the shell that read it, so this `cd ..` may be the
         // shell's own move and the climb after it a second one.

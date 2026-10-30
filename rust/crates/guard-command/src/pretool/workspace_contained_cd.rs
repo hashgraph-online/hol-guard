@@ -26,7 +26,7 @@ pub(super) fn below(target: &str, workspace: &Path) -> bool {
     !target.is_empty()
         && !target.starts_with(['~', '-'])
         && !target.contains('$')
-        && !expands_by_glob(target)
+        && !rewritten_before_cd(target)
         && path
             .components()
             .all(|component| !matches!(component, std::path::Component::ParentDir))
@@ -187,17 +187,21 @@ pub(super) fn walked(target: &str) -> bool {
     !target.is_empty()
         && !target.contains('$')
         && !target.starts_with(['~', '-', '+'])
-        && !expands_by_glob(target)
+        && !rewritten_before_cd(target)
 }
 
-/// Whether the shell expands `target` against the file system before `cd`
-/// ever sees it. Both readings above take the operand for the name of the
-/// directory entered, which a pattern is not: `cd ../x*` is the directory
-/// `x*` here and whatever the pattern matched there, and a `GLOBIGNORE` or a
-/// second entry decides which name that is. A pattern matching more than one
-/// name gives `cd` two operands and fails, so nothing ordinary is lost.
-fn expands_by_glob(target: &str) -> bool {
-    target.contains(['*', '?', '['])
+/// Whether the shell rewrites `target` before `cd` ever sees it. Both
+/// readings above take the operand for the name of the directory entered,
+/// which a pattern is not: `cd ../x*` is the directory `x*` here and whatever
+/// the pattern matched there, and a `GLOBIGNORE` or a second entry decides
+/// which name that is. A brace list is rewritten earlier still and without
+/// consulting the file system at all, so `cd ../{1..1}` is the directory
+/// `{1..1}` to the walk and `../1` to the shell; where both names exist the
+/// walk can clear one while the run enters the other. A rewrite standing for
+/// more than one name gives `cd` two operands and fails, so nothing ordinary
+/// is lost.
+fn rewritten_before_cd(target: &str) -> bool {
+    target.contains(['*', '?', '[', '{', '}'])
 }
 
 /// Whether every temporary stand-in in the command is the only operand of a
