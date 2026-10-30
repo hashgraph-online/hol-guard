@@ -276,7 +276,7 @@ class StoreInventoryMixin:
         # A chosen label is kept even when it reads like a default ("Local machine");
         # clearing the label hands the name back to the host name.
         self.set_sync_payload(DEVICE_LABEL_CHOICE_KEY, {"label": normalized_label if label.strip() else None}, now)
-        return _device_metadata(metadata)
+        return metadata
 
     def device_display_name(self, label: str) -> str:
         """``effective_device_label`` for the stored label, honouring an explicit choice.
@@ -293,10 +293,9 @@ class StoreInventoryMixin:
         return effective_device_label(label, chosen=chosen)
 
     def rotate_installation_id(self, now: str) -> dict[str, str]:
-        metadata = self._native_store_call(
+        return self._native_store_call(
             "rotate_installation_id", {**self._device_row_args(), "installation_id": uuid4().hex, "now": now}
         )
-        return _device_metadata(metadata)
 
     def get_device_metadata(self) -> dict[str, str]:
         with self._connect() as connection:
@@ -318,12 +317,3 @@ class StoreInventoryMixin:
 
     def next_aibom_trust_attestation_sequence(self, now: str) -> int:
         return int(self._native_store_call("next_aibom_trust_attestation_sequence", {"now": now}))
-
-
-def _device_metadata(metadata: object) -> dict[str, str]:
-    if not isinstance(metadata, dict):
-        raise RuntimeError("Guard local device metadata is unavailable.")
-    return {
-        "installation_id": str(metadata["installation_id"]),
-        "device_label": str(metadata["device_label"]),
-    }
