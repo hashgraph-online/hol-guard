@@ -46,23 +46,50 @@ fn an_unknown_option_still_hides_the_verb() {
     }
 }
 
-/// A selector naming a directory is refused, so a filter cannot reach a
-/// project the workspace does not hold.
+/// A selector reaching out of the workspace is refused, so a filter cannot
+/// reach a project the workspace does not hold.
 #[test]
-fn a_path_selector_is_not_an_inert_value() {
+fn a_path_selector_leaving_the_workspace_is_not_an_inert_value() {
     for arguments in [
-        vec!["--filter", "./packages/web", "build"],
         vec!["--filter", "../sibling", "build"],
-        vec!["--filter=./packages/web", "build"],
         vec!["--filter", "/opt/other", "build"],
         vec!["--filter", "~/other", "build"],
         vec!["--filter", "web/../../other", "build"],
         vec!["--filter", "..\\other", "build"],
+        vec!["--filter", "web\\..\\..\\other", "build"],
+        vec!["--filter=../sibling", "build"],
+        vec!["-F", "/opt/other", "build"],
         // A missing value leaves the option itself in front of the verb.
         vec!["--filter"],
         vec!["--filter", "--silent", "build"],
     ] {
         assert_eq!(skip_inert_options("pnpm", &arguments), 0, "{arguments:?}");
+    }
+}
+
+/// A selector naming a directory below where the command runs selects one of
+/// the workspace's own projects, exactly as the bare name does, so it carries
+/// the verb past the walk rather than hiding it.
+#[test]
+fn a_selector_that_stays_in_the_workspace_is_an_inert_value() {
+    for (arguments, skipped) in [
+        (vec!["--filter", "./packages/web", "build"], 2),
+        (vec!["--filter=./packages/web", "build"], 1),
+        (vec!["-F", "./packages/web", "build"], 2),
+        // pnpm's `...` suffix adds the project's dependents to the same
+        // selection; it names no other place.
+        (vec!["--filter", "./packages/web...", "build"], 2),
+        (vec!["--filter", "packages/web", "build"], 2),
+        (vec!["--filter", ".", "build"], 2),
+        // The `{<dir>}` selector holds a directory, and this one is inside.
+        (vec!["--filter", "{packages/web}", "build"], 2),
+        (vec!["--filter", "@scope/*{components/**}", "build"], 2),
+    ] {
+        assert_eq!(
+            skip_inert_options("pnpm", &arguments),
+            skipped,
+            "{arguments:?}"
+        );
     }
 }
 
@@ -75,21 +102,23 @@ fn a_scoped_name_is_an_inert_value() {
     );
 }
 
-/// pnpm's `{<dir>}` selector names a directory, a drive letter opens one on
-/// Windows, and a `$` hides what the value names, so none of the three is a
-/// value an option may carry past the verb.
+/// pnpm's `{<dir>}` selector holds a directory wherever in the value it sits,
+/// a drive letter opens one on Windows, and a `$` hides what the value names,
+/// so a directory operand reaching out refuses the whole value whatever
+/// precedes it.
 #[test]
-fn a_directory_selector_is_not_an_inert_value() {
+fn a_directory_selector_leaving_the_workspace_is_not_an_inert_value() {
     for arguments in [
         vec!["--filter", "{/opt/other}", "build"],
-        vec!["--filter", "{packages/web}", "build"],
+        vec!["--filter", "{../sibling}", "build"],
         vec!["--filter", "web{/opt/other}", "build"],
-        vec!["--filter", "@scope/*{components/**}", "build"],
+        vec!["--filter", "web{../../other}", "build"],
         vec!["--filter", "[origin/main]{/opt/other}", "build"],
         vec!["--filter", "!{/opt/other}", "build"],
         vec!["--filter=C:/other", "build"],
         vec!["--filter", "C:\\other", "build"],
         vec!["--filter", "$HOME/other", "build"],
+        vec!["--filter", "{$HOME/other}", "build"],
     ] {
         assert_eq!(skip_inert_options("pnpm", &arguments), 0, "{arguments:?}");
     }
