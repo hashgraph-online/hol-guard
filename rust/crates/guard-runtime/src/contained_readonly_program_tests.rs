@@ -51,3 +51,42 @@ fn a_package_test_the_runner_cannot_read_is_refused() {
         assert_eq!(failure.reason, "package_test_invalid_command", "{manifest}");
     }
 }
+
+fn pairs(settings: &[(&str, &str)]) -> Vec<(String, String)> {
+    settings
+        .iter()
+        .map(|(name, value)| ((*name).to_owned(), (*value).to_owned()))
+        .collect()
+}
+
+#[test]
+fn inert_settings_are_carried_into_the_plain_run_behind_them() {
+    let (carried, program) = carried_program("CI=1 NODE_ENV=test vitest run").unwrap();
+    assert_eq!(
+        carried.settings,
+        pairs(&[("CI", "1"), ("NODE_ENV", "test")])
+    );
+    assert_eq!(carried.behind, words(&["vitest", "run"]));
+    assert_eq!(program, (words(&["vitest", "run"]), None, Kind::Vitest));
+    let (carried, program) = carried_program("CI=true timeout 30 node --test").unwrap();
+    assert_eq!(carried.behind, words(&["timeout", "30", "node", "--test"]));
+    assert_eq!(
+        program,
+        (words(&["node", "--test"]), Some(30), Kind::NodeTest)
+    );
+}
+
+#[test]
+fn a_plain_data_setting_is_dropped_and_carries_nothing() {
+    let (carried, program) = carried_program("REPORT_DIR=/tmp/r npm test").unwrap();
+    assert!(carried.settings.is_empty());
+    assert_eq!(carried.behind, words(&["npm", "test"]));
+    assert_eq!(program.2, Kind::Package);
+}
+
+#[test]
+fn a_command_with_nothing_to_carry_is_not_a_carried_run() {
+    // A plain run has nothing to carry, and settings alone run nothing.
+    assert_eq!(carried_program("vitest run"), None);
+    assert_eq!(carried_program("CI=1"), None);
+}

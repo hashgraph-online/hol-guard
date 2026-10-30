@@ -9,15 +9,17 @@
 //! again — for the call as issued and, except for Git and pytest, for the
 //! planned argv — before it starts the planned argv under a read-only
 //! Seatbelt profile with a private home and temporary directory. This replays those steps for the plain
-//! shape, a call with no settings, wrapper or directory change in front of
-//! the program: the edge routes nothing else here. Linux keeps Guard's own
+//! shape, a call with no wrapper or directory change in front of the
+//! program, and for one with settings in front: the call as issued draws
+//! the receipt and the plain run behind the settings runs with the inert
+//! ones carried. The edge routes nothing else here. Linux keeps Guard's own
 //! sink, whose read-only namespace this does not build.
 //!
 //! Rust owns every verdict: the resident's receipts, the operations' plan.
 
 use serde::Deserialize;
 
-use super::program::{plain_program, Kind};
+use super::program::{carried_program, plain_program, Carried, Kind, Program};
 use super::*;
 
 /// The read-only routes: the reason the resident gives and the profile it
@@ -121,8 +123,17 @@ fn plain_call(response: &Value, original: &Map<String, Value>) -> bool {
         && original
             .get("command")
             .and_then(Value::as_str)
-            .and_then(plain_program)
-            .is_some_and(|(_, _, kind)| kind == Kind::of(route))
+            .and_then(program)
+            .is_some_and(|(_, (_, _, kind))| kind == Kind::of(route))
+}
+
+/// The read-only run `command` starts, with the settings carried in front
+/// of it when there are any.
+fn program(command: &str) -> Option<(Option<Carried>, Program)> {
+    match plain_program(command) {
+        Some(program) => Some((None, program)),
+        None => carried_program(command).map(|(carried, program)| (Some(carried), program)),
+    }
 }
 
 /// A profile-bound plan, field for field what the planner answers.
@@ -147,6 +158,10 @@ pub(super) struct ReadonlyPlan {
     /// private home for reading.
     #[serde(skip)]
     user_site_root: Option<String>,
+    /// The inert settings carried in front of the program, exported to the
+    /// run's source environment before the native filter reads it.
+    #[serde(skip)]
+    pub(super) settings: Vec<(String, String)>,
 }
 
 /// Run the read-only call `route` names for `payload` in `workspace`.
@@ -165,10 +180,27 @@ pub(super) fn run(
         .and_then(|input| input.get("command"))
         .and_then(Value::as_str)
         .ok_or_else(|| Failure::invalid("Invalid restricted execution request."))?;
-    let (mut argv, seconds, mut kind) = plain_program(command).ok_or_else(Failure::unauthorized)?;
+    let (carried, (mut argv, seconds, mut kind)) =
+        program(command).ok_or_else(Failure::unauthorized)?;
     if kind != Kind::of(route) {
         return Err(Failure::unauthorized());
     }
+    // Settings in front of the program: like a wrapper, the call as issued
+    // draws the receipt, then the command behind them is asked and run as
+    // the plain run it is, with the inert settings carried into its
+    // environment.
+    let behind;
+    let (payload, settings) = match carried {
+        Some(Carried {
+            settings,
+            behind: words,
+        }) => {
+            authorize_route(authority, payload, route)?;
+            behind = with_command(payload, &words, None);
+            (&behind, settings)
+        }
+        None => (payload, Vec::new()),
+    };
     // A package test runs as the runner its script spells, under that
     // runner's route once the call as issued names the package route again.
     let package = kind == Kind::Package;
@@ -192,6 +224,7 @@ pub(super) fn run(
     if profile.is_some_and(|profile| plan.profile_version != profile) {
         return Err(Failure::new(SANDBOX_UNAVAILABLE, INVALID_PLAN));
     }
+    plan.settings = settings;
     let underlying;
     let (payload, route) = if package {
         authorize_route(authority, payload, route)?;
@@ -386,6 +419,7 @@ pub(super) fn environment(
         &path_text(&private.path)?,
         &plan.allowed_executables,
         plan.user_site_root.as_deref(),
+        &plan.settings,
     )
 }
 

@@ -20,11 +20,15 @@ pub(crate) enum Kind {
     Package,
 }
 
+/// The program a read-only run starts, the seconds a system `timeout` in
+/// front of it allows, and its kind.
+pub(crate) type Program = (Vec<String>, Option<u64>, Kind);
+
 /// The program a plain read-only run starts, the seconds a system `timeout`
 /// in front of it allows, and its kind, read with the operations Guard's
 /// own sink reads it with. `None` for anything else: a setting, carried or
 /// dropped, or a program of another kind.
-pub(crate) fn plain_program(command: &str) -> Option<(Vec<String>, Option<u64>, Kind)> {
+pub(crate) fn plain_program(command: &str) -> Option<Program> {
     let words = strings(native("command_words", json!({ "command_text": command })).ok()?)?;
     let peeled = native(
         "command_prefix_split",
@@ -51,6 +55,41 @@ pub(crate) fn plain_program(command: &str) -> Option<(Vec<String>, Option<u64>, 
     };
     let kind = kind(&core)?;
     Some((core, seconds, kind))
+}
+
+/// The settings an inert prefix carries into a read-only run, and the
+/// command behind them, which must itself be a plain read-only run.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct Carried {
+    pub(crate) settings: Vec<(String, String)>,
+    pub(crate) behind: Vec<String>,
+}
+
+/// The program a read-only run starts behind settings in front of it, read
+/// as Guard's own sink reads it: inert settings such as `CI=1` are carried
+/// into the run's environment, a plain-data setting is dropped, and the
+/// command behind them is read again as a plain run. `None` for a command
+/// with no setting in front, or whose remainder is not a plain read-only run.
+pub(crate) fn carried_program(command: &str) -> Option<(Carried, Program)> {
+    let words = strings(native("command_words", json!({ "command_text": command })).ok()?)?;
+    let peeled = native(
+        "command_prefix_split",
+        json!({ "command": words, "drop_data": true }),
+    )
+    .ok()?;
+    let settings: Vec<(String, String)> =
+        serde_json::from_value(peeled.get("assignments")?.clone()).ok()?;
+    let dropped = peeled.get("dropped_data")?.as_bool()?;
+    if settings.is_empty() && !dropped {
+        return None;
+    }
+    let index = usize::try_from(peeled.get("core_index")?.as_u64()?).ok()?;
+    let behind = words
+        .get(index..)
+        .filter(|behind| !behind.is_empty())?
+        .to_vec();
+    let program = plain_program(&crate::mcp_proxy_shlex::join(&behind))?;
+    Some((Carried { settings, behind }, program))
 }
 
 /// The kind of run `core` is, as native authority reads it.

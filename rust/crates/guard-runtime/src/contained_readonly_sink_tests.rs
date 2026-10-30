@@ -37,6 +37,7 @@ fn plan(profile: &str) -> ReadonlyPlan {
         output_roots: Vec::new(),
         denied_capabilities: Vec::new(),
         user_site_root: None,
+        settings: Vec::new(),
     }
 }
 
@@ -83,7 +84,7 @@ fn a_plain_evaluation_is_the_program_and_its_clock() {
 }
 
 #[test]
-fn anything_but_the_plain_shape_stays_with_guards_own_sink() {
+fn a_setting_or_directory_change_is_not_the_plain_shape() {
     for command in [
         "CI=1 python3 -c 0",
         "cd x && python3 -c 0",
@@ -103,7 +104,12 @@ fn the_edge_routes_only_a_plain_evaluation_without_a_cwd_argument() {
     let mut anchored = call("python3 -c 0");
     anchored.insert("cwd".into(), json!("/w/sub"));
     assert!(!plain_call(&denial, &anchored));
-    assert!(!plain_call(&denial, &call("CI=1 python3 -c 0")));
+    // Settings in front are carried; the run behind them must still be of
+    // the route's kind.
+    assert!(plain_call(&denial, &call("CI=1 python3 -c 0")));
+    assert!(plain_call(&denial, &call("REPORT_DIR=out python3 -c 0")));
+    assert!(!plain_call(&denial, &call("CI=1 vitest run")));
+    assert!(!plain_call(&denial, &call("CI=1 cd x && python3 -c 0")));
     assert!(!plain_call(&denial, &Map::new()));
     let workspace = Value::Object(response("native_workspace_containment_required", profile));
     assert!(!plain_call(&workspace, &call("python3 -c 0")));
@@ -194,7 +200,7 @@ fn a_plain_lint_typecheck_or_build_run_is_a_node_tool() {
     assert_eq!(Kind::of(ROUTES[8]), Kind::NodeTool);
     let build = Value::Object(response(ROUTES[8].0, ROUTES[8].1));
     assert!(plain_call(&build, &call("npx vite build")));
-    assert!(!plain_call(&build, &call("CI=1 npx vite build")));
+    assert!(plain_call(&build, &call("CI=1 npx vite build")));
 }
 
 #[test]
@@ -209,7 +215,7 @@ fn a_package_test_is_routed_by_the_package_route() {
     assert_eq!(Kind::of(ROUTES[9]), Kind::Package);
     let package = Value::Object(response(ROUTES[9].0, ROUTES[9].1));
     assert!(plain_call(&package, &call("npm test")));
-    assert!(!plain_call(&package, &call("CI=1 npm test")));
+    assert!(plain_call(&package, &call("CI=1 npm test")));
     assert!(!plain_call(&package, &call("node --test")));
 }
 

@@ -35,6 +35,7 @@ impl Launch<'_> {
             &private_root,
             &[],
             None,
+            &[],
         )?;
         let empty_config = self.private.path.join("gitconfig");
         std::fs::write(&empty_config, b"").map_err(|_| {
@@ -180,19 +181,20 @@ impl Launch<'_> {
 }
 
 /// The environment the native filter leaves a contained run started from
-/// `cwd` in `workspace`, with its private home and temporary directory under
-/// `private_root` and any linked `user_site_root`. `PYTHONPATH` and
-/// `VIRTUAL_ENV` keep the host's spelling, `~` expanded, as Guard's own sink
-/// hands them over.
+/// `cwd` in `workspace`: a private home and temporary directory under
+/// `private_root`, any linked `user_site_root`, and `settings` exported over
+/// the process environment. `PYTHONPATH` and `VIRTUAL_ENV` keep the host's
+/// spelling, `~` expanded, as Guard's own sink hands them over.
 pub(super) fn restricted_environment(
     workspace: &str,
     cwd: &str,
     private_root: &str,
     allowed_executables: &[String],
     user_site_root: Option<&str>,
+    settings: &[(String, String)],
 ) -> Outcome<BTreeMap<String, String>> {
     let mut source: Map<String, Value> = Map::new();
-    for (name, value) in environment() {
+    for (name, value) in environment().into_iter().chain(settings.iter().cloned()) {
         let value = match name.as_str() {
             "PYTHONPATH" => value
                 .split(':')
@@ -225,10 +227,7 @@ pub(super) fn restricted_environment(
     match launch_environment {
         Value::Object(entries) => entries
             .into_iter()
-            .map(|(name, value)| match value {
-                Value::String(value) => Some((name, value)),
-                _ => None,
-            })
+            .map(|(name, value)| Some((name, value.as_str()?.to_owned())))
             .collect::<Option<_>>(),
         _ => None,
     }
