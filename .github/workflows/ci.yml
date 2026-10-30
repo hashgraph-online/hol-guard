@@ -45,7 +45,7 @@ jobs:
   plan:
     name: plan
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: read
@@ -142,7 +142,7 @@ jobs:
           retention-days: 7
 
   quality:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -153,7 +153,7 @@ jobs:
   # Rust validation is required, but is not on the artifact/Python fan-out critical path.
   native-workspace:
     name: Rust workspace (${{ matrix.check }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     # Required main consumers are the archive producers. Only the two runtime
     # shards share an archive; core/command and PR/Clippy work stay independent.
@@ -334,7 +334,7 @@ jobs:
           retention-days: 1
 
   native-command-evaluators:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     outputs:
       shard-indices: ${{ steps.shard-indices.outputs.indices }}
       shard-count: ${{ steps.shard-indices.outputs.count }}
@@ -404,7 +404,7 @@ jobs:
 
   native-offline-previous:
     name: native-offline-previous
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -499,7 +499,7 @@ jobs:
   native-offline-upgrade:
     name: native-offline-upgrade
     needs: [native-command-evaluators, native-offline-previous]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -549,7 +549,7 @@ jobs:
   native-gates:
     name: native-gates (${{ matrix.shard-index }})
     needs: native-command-evaluators
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Includes checkout/setup plus the shard. The gate gains cases with each
     # false-positive fix, so a slower runner cancelled shards whose tests had
     # all passed. The cap stays well above the measured shard so that keeps
@@ -633,7 +633,7 @@ jobs:
       needs.native-command-evaluators.result == 'success' &&
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Includes checkout/setup plus the instrumented shard. Five minutes can
     # cancel a healthy shard before it produces the coverage artifact Sonar needs.
     # Planning lags a newly slower test by one main run; the headroom lets that
@@ -742,7 +742,7 @@ jobs:
       needs.coverage.result == 'success' &&
       needs.native-command-evaluators.result == 'success'
     needs: [coverage, native-command-evaluators]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -783,7 +783,7 @@ jobs:
     # PRs already run the full behavioral suite above; Sonar consumes the
     # authoritative instrumented main run and stays off the contributor path.
     if: vars.SONAR_CI_ENABLED == 'true' && github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 2
     outputs:
       has-token: ${{ steps.token-presence.outputs.has-token }}
@@ -804,7 +804,7 @@ jobs:
     name: Rust coverage (${{ matrix.partition }})
     needs: sonar-context
     if: needs.sonar-context.outputs.has-token == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -826,7 +826,7 @@ jobs:
       needs.sonar-rust-coverage.result == 'success' &&
       needs.native-workspace.result == 'success' &&
       needs.coverage.result == 'success'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: read
@@ -851,7 +851,7 @@ jobs:
       needs.native-command-evaluators.result == 'success' &&
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -875,7 +875,7 @@ jobs:
       needs.native-command-evaluators.result == 'success' &&
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     strategy:
       fail-fast: false
@@ -915,7 +915,7 @@ jobs:
       !cancelled() &&
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -945,7 +945,7 @@ jobs:
       !cancelled() &&
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -1029,7 +1029,7 @@ jobs:
       needs.dashboard-integration-wheel.result == 'success' &&
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -1081,7 +1081,7 @@ jobs:
       needs.native-command-evaluators.result == 'success' &&
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
@@ -1261,7 +1261,7 @@ jobs:
     name: hol-guard / required
     if: always()
     needs: [plan, native-workspace, native-command-evaluators, native-offline-previous, native-offline-upgrade, native-gates, quality, coverage, compatibility, scheduling-sensitive, dashboard, dashboard-integration-wheel, dashboard-integration, cisco-full, pi-exact-continuation, cross-platform, windows-native-runtime, windows-shim-admin, windows-packaged-daemon, macos-native-runtime, macos-skill-identity, macos-gates]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 2
     permissions:
       contents: read

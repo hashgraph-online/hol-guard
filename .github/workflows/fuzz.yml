@@ -31,7 +31,7 @@ concurrency:
 jobs:
   code-change:
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: read
@@ -52,7 +52,7 @@ jobs:
 
   batch:
     if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: ${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 40 || 5 }}
     permissions:
       contents: read
@@ -78,7 +78,7 @@ jobs:
     # pull request replays the committed corpus instead, as an ordinary test in
     # the Rust suite (`guard-runtime`'s `fuzz_entry` tests).
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
       fail-fast: false
