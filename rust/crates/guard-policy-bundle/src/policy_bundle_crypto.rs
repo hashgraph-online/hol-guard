@@ -41,7 +41,7 @@ impl ParsedRsaKey {
     }
 }
 
-fn pem_body(pem: &str) -> Option<(String, Vec<u8>)> {
+pub(crate) fn pem_body(pem: &str) -> Option<(String, Vec<u8>)> {
     use base64ct::{Base64, Encoding};
     let mut lines = pem.trim().lines().map(str::trim);
     let begin = lines.next()?;

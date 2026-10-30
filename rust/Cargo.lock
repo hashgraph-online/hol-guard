@@ -908,6 +908,7 @@ dependencies = [
  "guard-contracts",
  "guard-policy-snapshot",
  "hex",
+ "ring",
  "rsa",
  "serde_json",
  "sha2",
