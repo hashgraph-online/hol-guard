@@ -124,6 +124,8 @@
                         "--quiet",
                         "--silent",
                         "--yes",
+                        "-q",
+                        "-s",
                         "-y"
                       ],
                       "interspersed_options_with_values": [
@@ -468,6 +470,32 @@
     {
       "id": "npx-silent-publish",
       "command": "npx --silent mcpforge publish --slug sample-api",
+      "enabled_extensions": [
+        "command.mcpforge"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "rule_id": "command.mcpforge.publish"
+    },
+    {
+      "id": "npx-quiet-short-publish",
+      "command": "npx -q mcpforge publish --slug sample-api",
+      "enabled_extensions": [
+        "command.mcpforge"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "rule_id": "command.mcpforge.publish"
+    },
+    {
+      "id": "npx-silent-short-publish",
+      "command": "npx -s mcpforge publish --slug sample-api",
       "enabled_extensions": [
         "command.mcpforge"
       ],

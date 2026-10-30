@@ -118,6 +118,8 @@
                   "--quiet",
                   "--silent",
                   "--yes",
+                  "-q",
+                  "-s",
                   "-y"
                 ],
                 "interspersed_options_with_values": [
