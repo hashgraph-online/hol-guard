@@ -629,6 +629,7 @@
       "src/restricted_pytest/environment.rs",
       "src/restricted_pytest/executables.rs",
       "src/restricted_pytest/framework_grants.rs",
+      "src/restricted_pytest/git_plan.rs",
       "src/restricted_pytest/launch_roots.rs",
       "src/restricted_pytest/launch_shebang.rs",
       "src/restricted_pytest/mapping.rs",
