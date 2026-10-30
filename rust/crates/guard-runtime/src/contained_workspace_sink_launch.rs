@@ -18,6 +18,9 @@ pub(super) struct Launch<'a> {
     pub(super) plan: &'a Plan,
     pub(super) workspace: &'a Path,
     pub(super) workspace_text: &'a str,
+    /// Read by the Seatbelt profile; Linux runs in a fresh namespace instead,
+    /// where no part of the home directory is mounted.
+    #[cfg_attr(target_os = "linux", allow(dead_code))]
     pub(super) home: &'a str,
     pub(super) private: &'a PrivateRoot,
     pub(super) exec_roots: &'a [String],

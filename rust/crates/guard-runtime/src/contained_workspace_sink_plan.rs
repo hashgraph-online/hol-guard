@@ -9,6 +9,9 @@ use super::*;
 
 /// A plan `prepare_workspace_contained` returned and the checks admitted.
 pub(super) struct Plan {
+    /// Checked on every host, because the plan is one contract; read only by
+    /// the Seatbelt profile this host builds from it.
+    #[cfg_attr(target_os = "linux", allow(dead_code))]
     pub(super) profile_version: String,
     pub(super) capabilities: Value,
     pub(super) argv: Vec<String>,
