@@ -88,7 +88,31 @@ def test_a_workspace_receipt_runs_what_the_read_only_parsers_reject(
     if kind is not None:
         kinds[kind] = True
     ran: list[object] = []
-    monkeypatch.setattr(native, "restricted_native", lambda *args, **kwargs: kinds)
+
+    def answer(operation: str, fields: dict[str, object], expected: object) -> object:
+        # Each reading this run makes is answered as itself. A catch-all that
+        # handed the kinds back to every question would quietly pass a screen
+        # the test never thought about, so an unexpected one fails here instead.
+        if operation == "contained_target":
+            return None
+        if operation == "command_words":
+            return str(fields["command_text"]).split()
+        if operation == "command_prefix_split":
+            # The command carries no prefix, so its own program stands first
+            # and nothing is peeled off it.
+            return {"core_index": 0, "assignments": [], "dropped_data": False}
+        if operation == "run_prefix_peel":
+            # No launcher stands ahead of the program either, so the whole
+            # command is its own core and it carries no timeout.
+            return {"core": list(fields["command"]), "seconds": None}
+        if operation == "pytest_command":
+            # The command names a script of its own, so no pytest run stands
+            # behind it.
+            return False
+        assert operation == "contained_kind", operation
+        return kinds
+
+    monkeypatch.setattr(native, "restricted_native", answer)
     for parser in ("prepare_restricted_pytest", "prepare_restricted_inline_eval"):
         monkeypatch.setattr(sink, parser, reject)
     monkeypatch.setattr(sink.restricted_git, "prepare_restricted_git", reject)
@@ -491,6 +515,12 @@ def test_a_cd_below_a_sibling_root_without_a_workspace_receipt_never_runs_there(
 
 
 def test_read_grants_need_a_launched_single_canonical_script(tmp_path: Path) -> None:
+    """The words the grant is read against come from native authority.
+
+    `;`, `>` and `|` end the word that names the script even with no space in
+    front of them, and `#` spells a directory rather than starting a comment.
+    """
+
     from codex_plugin_scanner.guard.runtime.restricted_workspace_grants import read_grants_valid
 
     root = tmp_path.resolve()
@@ -509,3 +539,42 @@ def test_read_grants_need_a_launched_single_canonical_script(tmp_path: Path) -> 
     (hashed / "good.py").write_text("x")
     assert read_grants_valid([str(hashed / "good.py")], f"python3 {hashed}/good.py")
     assert not read_grants_valid([str(good)], f"python3 {good}#x")
+
+
+def test_a_grant_is_read_against_the_words_that_admitted_the_run(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Python once lexed the command a second time to find the script it names.
+
+    Native authority read that same text when it drew the plan this grant
+    belongs to. Two readings of one command can part on where a word ends, and
+    a grant admitted against the reading that did not draw the plan is a read
+    root nothing authorized.
+    """
+
+    from codex_plugin_scanner.guard.runtime.restricted_workspace_grants import read_grants_valid
+
+    good = tmp_path.resolve() / "good.py"
+    good.write_text("x")
+    asked: list[str] = []
+
+    def answer(operation: str, fields: dict[str, object], expected: object) -> list[str]:
+        assert operation == "command_absolute_words", operation
+        asked.append(str(fields["command_text"]))
+        return [str(good)]
+
+    monkeypatch.setattr(native, "restricted_native", answer)
+    assert read_grants_valid([str(good)], f"python3 {good};echo ok")
+    assert asked == [f"python3 {good};echo ok"]
+
+
+def test_an_answer_that_is_not_words_admits_no_grant(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A reply that is not a list of words is no reading, so it refuses loudly."""
+
+    from codex_plugin_scanner.guard.runtime.restricted_workspace_grants import read_grants_valid
+
+    good = tmp_path.resolve() / "good.py"
+    good.write_text("x")
+    monkeypatch.setattr(native, "restricted_native", lambda *args, **kwargs: [str(good), 7])
+    with pytest.raises(RestrictedPytestError, match=r"Invalid restricted execution request\."):
+        read_grants_valid([str(good)], f"python3 {good}")

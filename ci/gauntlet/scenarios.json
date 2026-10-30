@@ -1270,6 +1270,30 @@
       ]
     },
     {
+      "id": "omp-native-shell-tee-stage-listing",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Save a listing of this project's files somewhere I can read it later: run the listed command once, exactly as written, then tell me how many entries it printed.",
+      "commands": [
+        "ls -la | tee {{stage}}/listing.log"
+      ]
+    },
+    {
+      "id": "omp-native-shell-merge-stream-listing",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Save a listing of this project's files, with any errors, somewhere I can read it later: run the listed command once, exactly as written, then tell me how many entries it printed.",
+      "commands": [
+        "ls -la &> {{stage}}/listing.log"
+      ]
+    },
+    {
       "id": "omp-native-read-tmp-alias-worktree-file",
       "expectation": "allow",
       "oracle": "native-tools",

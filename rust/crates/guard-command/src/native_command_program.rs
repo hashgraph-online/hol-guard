@@ -483,7 +483,7 @@ impl NativeCommandProgram {
     }
 }
 
-fn basename(value: &str) -> &str {
+pub(crate) fn basename(value: &str) -> &str {
     value.rsplit(['/', '\\']).next().unwrap_or(value)
 }
 

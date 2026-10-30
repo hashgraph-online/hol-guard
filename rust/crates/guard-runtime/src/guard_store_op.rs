@@ -421,6 +421,9 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "list_cached_advisories"
         | "policy_source_contexts"
         | "matching_native_review_block" => Kind::Read,
+        // Its lookup runs on the shared connection and its claim takes the
+        // write lock itself, so no transaction is held around them.
+        "settle_claimed_native_allow" => Kind::Read,
         "list_command_activity_page"
         | "command_activity_analytics"
         | "list_command_activity_invalidations"
@@ -440,7 +443,8 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "get_next_pending_request"
         | "get_approval_extension_allow_hint"
         | "approval_desktop_notified_at"
-        | "oldest_approval_request_created_at" => Kind::Snapshot,
+        | "oldest_approval_request_created_at"
+        | "peek_exact_cloud_local_once_approval" => Kind::Snapshot,
         "workflow_capability_commit" => Kind::Write,
         "consume_native_review_approval"
         | "settle_native_review_reuse"
@@ -761,6 +765,12 @@ fn dispatch(
         }
         "apply_temporary_mcp_grant_resolution" => {
             apply_temporary_mcp_grant(connection, guard_home, args, owner)
+        }
+        "settle_claimed_native_allow" => {
+            crate::guard_store_claimed_native_allow::settle(connection, guard_home, args)
+        }
+        "peek_exact_cloud_local_once_approval" => {
+            crate::guard_store_exact_cloud_peek::peek(connection, args)
         }
         "apply_signed_remote_exact_result" => {
             crate::guard_store_exact_cloud_apply::apply_signed_remote_exact_result(
