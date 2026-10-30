@@ -6,6 +6,8 @@ import hashlib
 import re
 from collections.abc import Iterable, Mapping, Sequence
 
+from ..native_context import _resolve_digest_home, native_context_digest
+from ..native_local_cli_identity import record_local_cli_identity_failure
 from ..runtime.custom_extension_profiles import (
     KNOWN_CLI_PROFILES,
     KnownCliProfile,
@@ -17,7 +19,6 @@ from ..runtime.local_cli_commands import (
     LocalCliCommand,
     merge_discovered_commands,
 )
-from ..runtime.local_cli_runner import runner_name, runner_target
 
 SEEDED_PROFILE_PREFIX = "local-cli.profile-"
 _VERSION_OR_TAG = re.compile(r"[A-Za-z0-9.^~<>=*+_-]+")
@@ -47,19 +48,45 @@ def profiled_cli_package_launch(tokens: Sequence[str]) -> bool:
     would spawn the CLI and then reject the paste as a built-in launcher.
     Selector forms (``npx --package wrangler other``) and scoped packages
     (``@other/wrangler``) are not the profiled CLI, so they keep MCP discovery.
+    The native runtime reads which bin the runner launches; when it cannot
+    answer, the paste is treated as a profiled launch so nothing is spawned.
     """
 
     if not tokens:
         return False
-    runner = runner_name(tokens[0])
-    target = runner_target(runner, tuple(tokens[1:])) if runner is not None else None
-    if target is None:
+    target = _native_runner_target(tokens)
+    if target is _UNREADABLE:
+        return True
+    if not isinstance(target, str):
         return False
     package_name, _, version_spec = target.rpartition("@") if target.rfind("@") > 0 else (target, "", "")
     # ``wrangler@npm:other`` or a URL spec can install a different package.
     if version_spec and not _VERSION_OR_TAG.fullmatch(version_spec):
         return False
     return profile_for_executable(package_name) is not None
+
+
+_UNREADABLE = object()
+
+
+def _native_runner_target(tokens: Sequence[str]) -> object:
+    """Return the launched bin's name, ``None``, or ``_UNREADABLE``."""
+
+    result = native_context_digest(
+        "package_runner_target",
+        {"tokens": [str(token) for token in tokens]},
+        guard_home=_resolve_digest_home(None),
+    )
+    if not isinstance(result, dict) or result.get("status") != "ok":
+        record_local_cli_identity_failure("native_package_runner_target_unavailable")
+        return _UNREADABLE
+    target = result.get("package_runner_target")
+    if target is None:
+        return None
+    if not isinstance(target, str) or not target:
+        record_local_cli_identity_failure("native_package_runner_target_malformed")
+        return _UNREADABLE
+    return target
 
 
 _MCP_CLI_ID_PREFIX = "local-cli.mcp-"

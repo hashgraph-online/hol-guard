@@ -83,6 +83,7 @@ _RESULT_OPTIONAL_KEYS = {
     "claude_guard_question",
     "memory_pattern",
     "guard_run_launch",
+    "package_runner_target",
 }
 _RESULT_CODES = {
     "ok",

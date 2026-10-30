@@ -23,15 +23,30 @@ from codex_plugin_scanner.guard.runtime.local_cli_commands import (
     LocalCliCommand,
 )
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
-from codex_plugin_scanner.guard.runtime.local_cli_runner import _split_runner_arguments
 from codex_plugin_scanner.guard.runtime.package_json_scripts import _native_package_scripts
+
+# Only these options may precede a runner target. Package selectors such as
+# ``--package``/``-p`` or ``--call``/``-c`` make the runner execute something
+# other than the named bin, so any other pre-target option is not unwrapped.
+_PRETARGET_OPTIONS = frozenset({"-y", "--yes"})
+_EXEC_SUBCOMMANDS = frozenset({"exec", "x"})
+_EXEC_SUBCOMMAND_RUNNERS = frozenset({"npm", "pnpm", "yarn"})
 
 
 def _runner_inner_arguments(runner: str, arguments: list[str] | tuple[str, ...]) -> list[str] | None:
     """Return the arguments passed through to the runner's target CLI."""
 
-    split = _split_runner_arguments(runner, arguments)
-    return split[1] if split is not None else None
+    exec_subcommand_allowed = runner in _EXEC_SUBCOMMAND_RUNNERS
+    for index, argument in enumerate(arguments):
+        if argument == "--" or argument in _PRETARGET_OPTIONS:
+            continue
+        if argument.startswith("-"):
+            return None
+        if exec_subcommand_allowed and argument in _EXEC_SUBCOMMANDS:
+            exec_subcommand_allowed = False
+            continue
+        return list(arguments[index + 1 :])
+    return None
 
 
 class LocalCliIdentityUnavailableError(RuntimeError):

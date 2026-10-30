@@ -64,6 +64,7 @@ pub(crate) fn kind_name(kind: &Kind) -> &'static str {
         Kind::McpToolCatalogFingerprint { .. } => "mcp_tool_catalog_fingerprint",
         Kind::RuntimeHookApprovalContext { .. } => "runtime_hook_approval_context",
         Kind::GenericHookApprovalContext { .. } => "generic_hook_approval_context",
+        Kind::PackageRunnerTarget { .. } => "package_runner_target",
     }
 }
 
@@ -103,7 +104,7 @@ fn nullable_output(kind: &str) -> Option<&'static str> {
 }
 
 /// Fields that only make sense for exactly one request kind.
-const KIND_GATED_FIELDS: [(&str, &str); 11] = [
+const KIND_GATED_FIELDS: [(&str, &str); 12] = [
     ("native_bash_reply_valid", "native_bash_reply_validation"),
     (
         "native_decision_receipt_valid",
@@ -124,6 +125,7 @@ const KIND_GATED_FIELDS: [(&str, &str); 11] = [
     ("custom_extension_continuity", "custom_extension_continuity"),
     ("claude_guard_question", "claude_guard_question"),
     ("memory_pattern", "memory_pattern"),
+    ("package_runner_target", "package_runner_target"),
 ];
 
 fn is_sha256(value: &Value) -> bool {
