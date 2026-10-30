@@ -195,10 +195,7 @@ fn a_negated_item_flattens_to_the_pipeline_it_negates() {
             "if ! cargo test; then echo retry; else echo ok; fi",
             "cargo test; echo retry; echo ok",
         ),
-        (
-            "case $1 in check) ! pytest -q;; esac",
-            "pytest -q",
-        ),
+        ("case $1 in check) ! pytest -q;; esac", "pytest -q"),
         (
             "while read name; do ! wc -l README.md; done < README.md",
             "cat README.md; wc -l README.md",
