@@ -51,9 +51,51 @@ fn a_subcommand_that_prints_a_diff_is_screened_after_its_own_word() {
             vector(&["show", "--no-ext-diff", "--no-textconv", "-p"])
         ))
     );
+}
+
+#[test]
+fn a_log_walk_under_another_name_is_screened_and_refused_as_the_log_family_is() {
+    // `git reflog show` and `git stash list` hand their words to the log walk,
+    // so `-p` prints a patch and the helpers run unless they are screened.
     assert_eq!(
-        read(&["git", "stash", "list"]),
-        Some(("stash".to_owned(), vector(&["list"])))
+        read(&["git", "stash", "list", "-p"]),
+        Some((
+            "stash".to_owned(),
+            vector(&["list", "--no-ext-diff", "--no-textconv", "-p"])
+        ))
+    );
+    assert_eq!(
+        read(&["git", "reflog", "show", "-p"]),
+        Some((
+            "reflog".to_owned(),
+            vector(&["show", "--no-ext-diff", "--no-textconv", "-p"])
+        ))
+    );
+    assert_eq!(
+        read(&["git", "reflog"]),
+        Some((
+            "reflog".to_owned(),
+            vector(&["--no-ext-diff", "--no-textconv"])
+        ))
+    );
+    for words in [
+        &["git", "reflog", "show", "-p", "--ext-diff"][..],
+        &["git", "reflog", "show", "--textconv"][..],
+        &["git", "reflog", "show", "--output=/tmp/out"][..],
+        &["git", "stash", "list", "-p", "--textconv"][..],
+        &["git", "stash", "list", "--ext-diff"][..],
+        &["git", "stash", "list", "--output=/tmp/out"][..],
+    ] {
+        assert!(read(words).is_none(), "{words:?}");
+    }
+    // A pickaxe value that spells a refused letter is the value, as it is for
+    // the verbs this one is an alias of.
+    assert!(read(&["git", "reflog", "show", "-Sorigin"]).is_some());
+    // `reflog exists` answers about a ref and takes no log option, so it is
+    // left as it was written.
+    assert_eq!(
+        read(&["git", "reflog", "exists", "HEAD"]),
+        Some(("reflog".to_owned(), vector(&["exists", "HEAD"])))
     );
 }
 

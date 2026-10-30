@@ -94,7 +94,10 @@ pub struct ReadOnlyInvocation {
 /// a file, for the verbs that define them.
 fn refused_long_options(verb: &str, subcommand: &str) -> &'static [&'static str] {
     match (verb, subcommand) {
-        ("diff" | "log" | "show", _) | ("stash", "show") => {
+        // `git reflog show` and `git stash list` are `git log` written another
+        // way: both hand their words to the log walk, so both define the whole
+        // log option set and are read for it here.
+        ("diff" | "log" | "show" | "reflog", _) | ("stash", "show" | "list") => {
             &["--ext-diff", "--output", "--textconv"]
         }
         ("blame", _) => &["--textconv"],
@@ -124,7 +127,7 @@ fn spelled_in_full(verb: &str) -> &'static [&'static str] {
 fn short_value_letters(verb: &str) -> &'static str {
     match verb {
         "grep" => "efmABCO",
-        "diff" | "log" | "show" | "stash" => "USGlLnOBCM",
+        "diff" | "log" | "show" | "stash" | "reflog" => "USGlLnOBCM",
         "blame" => "LCMS",
         _ => "",
     }
@@ -134,9 +137,12 @@ fn short_value_letters(verb: &str) -> &'static str {
 /// own words so an option-shaped pathname cannot push them past `--`.
 fn disabled_helpers(verb: &str, subcommand: &str) -> &'static [&'static str] {
     match (verb, subcommand) {
-        // `stash show` prints a diff, so it reads the same two helpers the
-        // diff family does.
-        ("diff" | "log" | "show", _) | ("stash", "show") => &["--no-ext-diff", "--no-textconv"],
+        // `stash show` prints a diff, and `stash list` and `reflog show` print
+        // one for `-p`, so all three read the same two helpers the diff family
+        // does. `reflog exists` answers about a ref and defines neither.
+        ("diff" | "log" | "show", _) | ("stash", "show" | "list") | ("reflog", "" | "show") => {
+            &["--no-ext-diff", "--no-textconv"]
+        }
         ("blame" | "grep", _) => &["--no-textconv"],
         _ => &[],
     }
