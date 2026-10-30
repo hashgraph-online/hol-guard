@@ -31,6 +31,11 @@ fn manifest(digest: &str, token: &[u8]) -> ResidentState {
     state
 }
 
+/// One named way a manifest field can be wrong, paired with the edit that puts
+/// it that way. The name is what a failure reports, so it reads as the field an
+/// operator would look at rather than the line of the table it came from.
+type FieldMutation = (&'static str, Box<dyn Fn(&mut ResidentState)>);
+
 #[test]
 fn a_correctly_signed_manifest_with_a_wrong_field_is_still_refused() {
     let token = [5u8; crate::AUTH_TOKEN_BYTES];
@@ -39,7 +44,7 @@ fn a_correctly_signed_manifest_with_a_wrong_field_is_still_refused() {
 
     assert!(validate_state(scope, &manifest(&digest, &token), &digest).is_ok());
 
-    let mutations: Vec<(&str, Box<dyn Fn(&mut ResidentState)>)> = vec![
+    let mutations: Vec<FieldMutation> = vec![
         (
             "schema",
             Box::new(|state: &mut ResidentState| state.schema = "resident-state.v0".to_owned()),
