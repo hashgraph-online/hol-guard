@@ -173,7 +173,6 @@ pub(super) struct ReadonlyPlan {
     backend_executable: String,
     pub(super) workspace: String,
     pub(super) cwd: String,
-    #[allow(dead_code)]
     executable: String,
     pub(super) command: Vec<String>,
     pub(super) allowed_executables: Vec<String>,
@@ -344,7 +343,7 @@ fn prepare(
         .any(|(_, profile)| *profile == plan.profile_version)
         || plan.backend != SEATBELT
         || plan.command.is_empty()
-        || plan.allowed_executables.is_empty()
+        || !plan.allowed_executables.contains(&plan.executable)
     {
         return Err(Failure::new(SANDBOX_UNAVAILABLE, INVALID_PLAN));
     }
@@ -440,16 +439,28 @@ const WRITE_DENIAL_MARKERS: [&[u8]; 4] = [
     b"read-only file system",
 ];
 
-/// Whether a run's output names a write the read-only profile denied.
+/// Whether a run's output names a write the read-only profile denied, as a
+/// word of its own.
 pub(super) fn names_denied_write(outputs: &[&[u8]]) -> bool {
     outputs.iter().any(|output| {
         let lowered = output.to_ascii_lowercase();
         WRITE_DENIAL_MARKERS.iter().any(|marker| {
             lowered
                 .windows(marker.len())
-                .any(|window| window == *marker)
+                .enumerate()
+                .any(|(start, window)| {
+                    window == *marker
+                        && !word_byte(start.checked_sub(1).map(|at| lowered[at]))
+                        && !word_byte(lowered.get(start + marker.len()).copied())
+                })
         })
     })
+}
+
+/// Whether `byte` would continue a word, so a marker beside it is only part
+/// of a longer name such as `filePermissions`.
+fn word_byte(byte: Option<u8>) -> bool {
+    byte.is_some_and(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
 }
 
 #[cfg(test)]

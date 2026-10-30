@@ -175,4 +175,9 @@ fn a_denied_write_is_named_in_any_case_on_either_stream() {
     assert!(names_denied_write(&[b"Operation not permitted", b""]));
     assert!(names_denied_write(&[b"x", b"EPERM: open 'report.xml'"]));
     assert!(!names_denied_write(&[b"1 failed", b"AssertionError"]));
+    assert!(!names_denied_write(&[
+        b"checks filePermissions",
+        b"STEPERMIT"
+    ]));
+    assert!(!names_denied_write(&[b"skip_erofs_test passed"]));
 }
