@@ -17,6 +17,7 @@ members = [
     "crates/guard-rule-contract",
     "crates/guard-runtime",
     "crates/guard-runtime-windows-process",
+    "crates/guard-yanez-pulse",
 ]
 resolver = "2"
 
