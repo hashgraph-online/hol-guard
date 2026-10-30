@@ -123,7 +123,12 @@ pub(in crate::pretool) fn exact_safe_absolute_cd_chain(
         // absolute, so the reads after it are proved where they run. `||`
         // is not here: it skips the `cd` when the step before it succeeds,
         // leaving the reads in a directory this proof did not verify.
-        if index > 0 && !matches!(separator_operator(model, index).as_deref(), Some("&&" | ";")) {
+        if index > 0
+            && !matches!(
+                separator_operator(model, index).as_deref(),
+                Some("&&" | ";")
+            )
+        {
             return false;
         }
         let cd = &model.segments[index];

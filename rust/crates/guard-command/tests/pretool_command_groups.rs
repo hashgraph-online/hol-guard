@@ -234,7 +234,10 @@ fn a_list_of_brace_groups_is_read_as_the_lists_inside_them() {
                 format!("{{ cd {web} && cat two.txt; }} && cat two.txt"),
                 true,
             ),
-            (format!("{{ cd {web} && cat two.txt; }} && cat one.txt"), false),
+            (
+                format!("{{ cd {web} && cat two.txt; }} && cat one.txt"),
+                false,
+            ),
             // What one list is refused for, the command is refused for.
             (
                 format!("{{ cd {api} && cat .env; }} && cat {web}/two.txt"),
