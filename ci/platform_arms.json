@@ -915,6 +915,14 @@
    "body": "8ebb1bb3d55c"
   },
   {
+   "verdict": "windows-unsupported",
+   "note": "Windows has no stale-copy hand-off yet: a stale Cursor bridge that misses the resident keeps the hook and takes the daemon path, exactly as before this arm existed. Nothing is decided differently; the hook only stays on the slower route. The Unix arm is pinned by hook_bridge_successor_tests.rs.",
+   "file": "rust/crates/guard-runtime/src/cursor_hook_bridge.rs",
+   "item": "fn successor_reply(_client: &Client, _python_argv: &[String], _raw: &[u8]) -> Option<Reply>",
+   "cfg": "not(unix)",
+   "body": "e1db85fb6831"
+  },
+  {
    "verdict": "other-platform",
    "note": "Windows reads the file through its own private-open arm; elsewhere `None` refuses the read rather than reading a file whose privacy is unproven.",
    "file": "rust/crates/guard-runtime/src/daemon_policy_authority.rs",
