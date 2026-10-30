@@ -40,8 +40,6 @@ from .review_oauth_binding import (
 )
 from .review_signature_verification import (
     _anchored_review_verification_keys,  # noqa: F401 - compatibility re-export
-    _resolve_anchored_signing_key,  # noqa: F401 - compatibility re-export
-    _verification_keys_from_payload,  # noqa: F401 - compatibility re-export
     _verify_signed_payload,
     validated_review_verification_keys_from_sync,  # noqa: F401 - public compatibility re-export
 )

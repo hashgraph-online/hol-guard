@@ -16,6 +16,9 @@ mod policy_bundle_op_keys;
 mod policy_bundle_op_page;
 #[cfg(test)]
 mod policy_bundle_op_page_tests;
+mod policy_bundle_op_review;
+#[cfg(test)]
+mod policy_bundle_op_review_tests;
 mod policy_bundle_op_synced;
 #[cfg(test)]
 mod policy_bundle_op_tests;
