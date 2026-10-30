@@ -1,57 +1,34 @@
-"""Request read-state persistence for the local Guard store."""
+"""Request read-state persistence for the local Guard store.
+
+The native resident (``guard_store`` op) owns the SQL and keeps only the
+newest read marks.
+"""
 
 from __future__ import annotations
 
-import sqlite3
-from contextlib import AbstractContextManager
-
-# pyright: reportAttributeAccessIssue=false
+from collections.abc import Mapping
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 
 class StoreReadStateMixin:
-    """SQLite-backed read-state for approval requests viewed by the user."""
-
-    READ_STATE_LIMIT = 50000
+    """Read-state for approval requests viewed by the user."""
 
     if TYPE_CHECKING:
 
-        def _connect(self) -> AbstractContextManager[sqlite3.Connection]: ...
+        def _native_store_call(self, method: str, args: Mapping[str, object]) -> Any: ...
 
     def mark_requests_read(self, request_ids: list[str]) -> None:
         if not request_ids:
             return
         now = datetime.now(timezone.utc).isoformat()
-        unique_ids = list(dict.fromkeys(request_ids))
-        with self._connect() as connection:
-            for rid in unique_ids:
-                connection.execute(
-                    "insert into guard_request_read_state (request_id, read_at) values (?, ?) "
-                    "on conflict(request_id) do update set read_at = excluded.read_at",
-                    (rid, now),
-                )
-            connection.execute(
-                "delete from guard_request_read_state where request_id not in "
-                "(select request_id from guard_request_read_state order by read_at desc limit ?)",
-                (self.READ_STATE_LIMIT,),
-            )
+        self._native_store_call("mark_requests_read", {"request_ids": list(request_ids), "now": now})
 
     def mark_request_unread(self, request_id: str) -> None:
-        with self._connect() as connection:
-            connection.execute(
-                "delete from guard_request_read_state where request_id = ?",
-                (request_id,),
-            )
+        self._native_store_call("mark_request_unread", {"request_id": request_id})
 
     def get_read_state(self) -> list[str]:
-        with self._connect() as connection:
-            rows = connection.execute(
-                "select request_id from guard_request_read_state order by read_at desc limit ?",
-                (self.READ_STATE_LIMIT,),
-            ).fetchall()
-        return [str(row["request_id"]) for row in rows]
+        return [str(request_id) for request_id in self._native_store_call("get_read_state", {})]
 
     def clear_read_state(self) -> None:
-        with self._connect() as connection:
-            connection.execute("delete from guard_request_read_state")
+        self._native_store_call("clear_read_state", {})

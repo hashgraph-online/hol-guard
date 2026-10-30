@@ -75,6 +75,7 @@ use crate::guard_store_outbox_requeue::{repair_rejected_correlation, requeue_met
 use crate::guard_store_policy_source_context::policy_source_contexts;
 use crate::guard_store_policy_upsert::upsert_policy;
 use crate::guard_store_queue_live_wait::queue_with_live_wait;
+use crate::guard_store_read_state as read_state;
 use crate::guard_store_receipt_reads as receipt_reads;
 use crate::guard_store_receipt_rollups as receipt_rollups;
 use crate::guard_store_receipt_writes as receipt_writes;
@@ -393,6 +394,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "get_guard_operation"
         | "list_guard_operations"
         | "get_guard_operation_for_approval_request"
+        | "get_read_state"
         | "list_guard_operation_items"
         | "get_guard_client_attachment"
         | "list_guard_client_attachments"
@@ -510,6 +512,9 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "receipt_summary_between"
         | "receipt_analytics"
         | "reconcile_receipt_events"
+        | "mark_requests_read"
+        | "mark_request_unread"
+        | "clear_read_state"
         | "maintain_storage"
         | "managed_keyring_reconcile"
         | "record_local_cli_observation"
@@ -803,6 +808,10 @@ fn dispatch(
         "receipt_analytics" => receipt_reads::analytics(connection, args),
         "receipt_decision_counts" => receipt_reads::decision_counts(connection, args),
         "reconcile_receipt_events" => receipt_reads::reconcile_events(connection, args),
+        "mark_requests_read" => read_state::mark_read(connection, args),
+        "mark_request_unread" => read_state::mark_unread(connection, args),
+        "get_read_state" => read_state::ids(connection, args),
+        "clear_read_state" => read_state::clear(connection, args),
         "maintain_storage" => storage_maintenance::maintain(connection, args),
         "run_storage_housekeeping" => storage_maintenance::housekeeping(connection),
         _ if connect::handles(method) => connect::dispatch(connection, method, args),
