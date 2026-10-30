@@ -393,6 +393,8 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "get_guard_operation"
         | "list_guard_operations"
         | "get_guard_operation_for_approval_request"
+        | "get_request_resume"
+        | "get_latest_request_resume"
         | "list_guard_operation_items"
         | "get_guard_client_attachment"
         | "list_guard_client_attachments"
@@ -691,6 +693,8 @@ fn dispatch(
         "get_guard_operation_for_approval_request" => {
             sessions::operation_for_approval_request(connection, args)
         }
+        "get_request_resume" => crate::codex_request_resume_store::get(connection, args),
+        "get_latest_request_resume" => crate::codex_request_resume_store::latest(connection, args),
         "add_guard_operation_item" => sessions::add_operation_item(connection, args),
         "list_guard_operation_items" => sessions::list_operation_items(connection, args),
         "attach_guard_client" => clients::attach_client(connection, args),
