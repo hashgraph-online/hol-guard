@@ -203,7 +203,7 @@ def _misspelled_reads(scenario: Scenario, case: dict[str, Any], calls: list[dict
     """Reads excused as the model's corrected typo, only in a run that raised no approval at all."""
     if scenario.oracle != "native-tools" or case.get("approval_delta") != 0 or case.get("approval_rows"):
         return frozenset()
-    return misspelled_fixture_reads(scenario, calls, case.get("guard_observations", []))
+    return misspelled_fixture_reads(scenario, calls, case.get("guard_observations", []), case.get("events", []))
 
 
 def _interruptions(

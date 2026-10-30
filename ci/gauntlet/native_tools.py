@@ -274,15 +274,19 @@ MISSPELLED_FIXTURE_READ = "the model misspelled a fixture path outside the fixtu
 
 
 def misspelled_fixture_reads(
-    scenario: Scenario, calls: list[dict[str, Any]], observations: list[dict[str, Any]]
+    scenario: Scenario,
+    calls: list[dict[str, Any]],
+    observations: list[dict[str, Any]],
+    events: list[dict[str, Any]],
 ) -> frozenset[str]:
     """The reads the model sent to a misspelled copy of a fixture path and then made correctly.
 
     Evidence spells every path inside the disposable fixture with a placeholder root, so an
     absolute path the redactor left alone lies outside it. A failed read there that Guard denied
-    only as missing is the model's own typo when a later read of a file the prompt names, under
-    its own fixture root, succeeded at the same relative path: the deny never stood between the
-    model and the file the scenario asked for.
+    only as missing is the model's own typo when a read of a file the prompt names, under its own
+    fixture root, succeeded at the same relative path in a later model turn: the model saw the
+    deny, fixed the path, and the deny never stood between it and the file the scenario asked for.
+    A read from the same turn was chosen before the deny arrived, so it cannot be the correction.
 
     The run is excused only as a whole. Any other failed or denied call leaves this empty, so a
     corrected typo never hides a deny Guard made on ordinary work.
@@ -293,20 +297,24 @@ def misspelled_fixture_reads(
     for row in observations:
         if isinstance(row, dict) and isinstance(row.get("tool_call_id"), str):
             rows.setdefault(row["tool_call_id"], []).append(row)
+    turns = {
+        request.get("id"): turn
+        for turn, event in enumerate(event for event in events if event.get("type") == "model_turn")
+        for request in event.get("calls", [])
+    }
     spelled = [(call, _write_path(call["args"]).replace("\\", "/")) for call in calls]
     excused: set[str] = set()
-    for index, (call, path) in enumerate(spelled):
-        denied = [
-            row
-            for row in rows.get(call["id"], [])
-            if row.get("event") == "PreToolUse" and row.get("decision") == "deny"
-        ]
+    for call, path in spelled:
+        denied = [row for row in rows.get(call["id"], []) if row.get("decision") == "deny"]
         if call["is_error"] is not True and not denied:
             continue
+        turn = turns.get(call["id"])
         corrected = {
             later[match.end() :]
-            for other, later in spelled[index + 1 :]
-            if other["name"] == "read"
+            for other, later in spelled
+            if turn is not None
+            and turns.get(other["id"], -1) > turn
+            and other["name"] == "read"
             and other["is_error"] is False
             and later in scenario.prompt
             and (match := _FIXTURE_ROOT.match(later))
@@ -316,7 +324,9 @@ def misspelled_fixture_reads(
             and call["is_error"] is True
             and _ABSOLUTE.match(path)
             and denied
-            and all(row.get("reason_code") == "native_missing_path" for row in denied)
+            and all(
+                row.get("event") == "PreToolUse" and row.get("reason_code") == "native_missing_path" for row in denied
+            )
             and any(path.endswith("/" + tail) for tail in corrected)
         ):
             return frozenset()

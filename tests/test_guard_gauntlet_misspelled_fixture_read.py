@@ -81,15 +81,20 @@ def _read(call_id: str, path: str, *, failed: bool) -> dict:
     return {"id": call_id, "name": "read", "args": {"path": path}, "is_error": failed}
 
 
-def _deny(call_id: str, reason_code: str = "native_missing_path") -> dict:
-    return {"tool_call_id": call_id, "event": "PreToolUse", "decision": "deny", "reason_code": reason_code}
+def _deny(call_id: str, reason_code: str = "native_missing_path", event: str = "PreToolUse") -> dict:
+    return {"tool_call_id": call_id, "event": event, "decision": "deny", "reason_code": reason_code}
 
 
-def test_only_a_later_read_corrects_a_missing_path_deny() -> None:
-    later = [_read("stray", STRAY_README, failed=True), _read("fixed", FIXTURE_README, failed=False)]
-    earlier = list(reversed(later))
-    assert misspelled_fixture_reads(SCENARIO, later, [_deny("stray")]) == {"stray"}
-    assert misspelled_fixture_reads(SCENARIO, earlier, [_deny("stray")]) == frozenset()
+def _turns(*turns: list[str]) -> list[dict]:
+    return [{"type": "model_turn", "calls": [{"id": call_id} for call_id in ids]} for ids in turns]
+
+
+def test_only_a_read_from_a_later_model_turn_corrects_a_missing_path_deny() -> None:
+    calls = [_read("stray", STRAY_README, failed=True), _read("fixed", FIXTURE_README, failed=False)]
+    assert misspelled_fixture_reads(SCENARIO, calls, [_deny("stray")], _turns(["stray"], ["fixed"])) == {"stray"}
+    # The model picked both paths before Guard answered, so the good read did not respond to the deny.
+    assert misspelled_fixture_reads(SCENARIO, calls, [_deny("stray")], _turns(["stray", "fixed"])) == frozenset()
+    assert misspelled_fixture_reads(SCENARIO, calls, [_deny("stray")], _turns(["fixed"], ["stray"])) == frozenset()
 
 
 def test_a_correction_must_be_the_file_the_prompt_names_under_its_own_root() -> None:
@@ -98,7 +103,7 @@ def test_a_correction_must_be_the_file_the_prompt_names_under_its_own_root() -> 
         _read("stray", STRAY_README, failed=True),
         _read("other", "{{home}}/console/src/lib/auth/README.md", failed=False),
     ]
-    assert misspelled_fixture_reads(SCENARIO, calls, [_deny("stray")]) == frozenset()
+    assert misspelled_fixture_reads(SCENARIO, calls, [_deny("stray")], _turns(["stray"], ["other"])) == frozenset()
 
 
 def test_any_other_deny_in_the_run_keeps_the_whole_run_a_false_positive() -> None:
@@ -108,4 +113,11 @@ def test_any_other_deny_in_the_run_keeps_the_whole_run_a_false_positive() -> Non
         _read("session", "{{workspace}}/console/src/lib/auth/session.ts", failed=True),
     ]
     observations = [_deny("stray"), _deny("session", "native_read_review")]
-    assert misspelled_fixture_reads(SCENARIO, calls, observations) == frozenset()
+    turns = _turns(["stray"], ["fixed", "session"])
+    assert misspelled_fixture_reads(SCENARIO, calls, observations, turns) == frozenset()
+
+
+def test_a_post_tool_deny_on_a_successful_call_keeps_the_run_a_false_positive() -> None:
+    calls = [_read("stray", STRAY_README, failed=True), _read("fixed", FIXTURE_README, failed=False)]
+    observations = [_deny("stray"), _deny("fixed", "native_output_review", event="PostToolUse")]
+    assert misspelled_fixture_reads(SCENARIO, calls, observations, _turns(["stray"], ["fixed"])) == frozenset()
