@@ -844,6 +844,17 @@
       "enabled_extensions": [
         "command.kubefwd"
       ]
+    },
+    {
+      "id": "sudo-preserve-environment-block",
+      "command": "sudo -E kubefwd svc -n staging",
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "rule_id": "command.kubefwd.service-forward",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.kubefwd"
+      ]
     }
   ]
 }
