@@ -381,6 +381,75 @@ fn a_manifest_script_reads_the_way_the_route_that_admits_it_reads_it() {
 }
 
 #[test]
+fn the_grant_a_workspace_plan_carries_is_read_against_the_words_the_command_spells() {
+    // A script outside the workspace earns a read root only when the command
+    // names it, and `;` ends the word that names it even with no space in
+    // front.
+    assert_eq!(
+        evaluate(
+            "command_absolute_words",
+            &json!({ "command_text": "python3 /tmp/run/good.py;echo ok" })
+        )
+        .unwrap()["value"],
+        json!(["/tmp/run/good.py"])
+    );
+    // `>` and `|` end a word the same way, and the file a redirect writes is
+    // relative, so it names no grant.
+    assert_eq!(
+        evaluate(
+            "command_absolute_words",
+            &json!({ "command_text": "python3 /tmp/run/good.py>out.log|head" })
+        )
+        .unwrap()["value"],
+        json!(["/tmp/run/good.py"])
+    );
+    // `#` is an ordinary character here, so a directory spelled with one is
+    // read whole and a command that writes one onto a path names a different
+    // file than the plan's grant.
+    assert_eq!(
+        evaluate(
+            "command_absolute_words",
+            &json!({ "command_text": "python3 /tmp/run#2/good.py" })
+        )
+        .unwrap()["value"],
+        json!(["/tmp/run#2/good.py"])
+    );
+    assert_eq!(
+        evaluate(
+            "command_absolute_words",
+            &json!({ "command_text": "python3 /tmp/run/good.py#x" })
+        )
+        .unwrap()["value"],
+        json!(["/tmp/run/good.py#x"])
+    );
+    // A relative word names no file the plan could have granted.
+    assert_eq!(
+        evaluate(
+            "command_absolute_words",
+            &json!({ "command_text": "python3 run/good.py" })
+        )
+        .unwrap()["value"],
+        json!([])
+    );
+    // An unterminated quote is not a reading of the command, so no grant is
+    // admitted against a partial parse.
+    assert_eq!(
+        evaluate(
+            "command_absolute_words",
+            &json!({ "command_text": "python3 '/tmp/run" })
+        )
+        .unwrap()["reason_code"],
+        json!("pytest_restricted_invalid_command")
+    );
+    // A request without the text names nothing to read.
+    assert_eq!(
+        evaluate("command_absolute_words", &json!({ "command": ["python3"] })).unwrap()
+            ["reason_code"],
+        json!("pytest_restricted_invalid_command")
+    );
+}
+
+#[test]
 fn a_hook_command_reads_the_way_the_screen_that_admitted_it_read_it() {
     // `pretool` lexes the hook's command text with this lexer when it decides
     // the run is contained, so the sink asks for that same reading rather than

@@ -67,3 +67,28 @@ fn a_stderr_merging_pipe_still_reads_as_a_pipe_to_an_interpreter() {
     let tail: String = chars[segments[1].start..segments[1].end].iter().collect();
     assert_eq!(tail.trim(), "sh");
 }
+
+/// `&>` is one token, the redirect that sends both streams to a file. Reading
+/// its `&` as a job separator gave `npm test &> out.log` a background split
+/// while `npm test > out.log 2>&1` and `npm test & > out.log` both modelled a
+/// redirect, so the same work decided three different ways.
+#[test]
+fn a_stream_merging_redirect_reads_as_the_redirect_it_is() {
+    for (merged, spelled) in [
+        ("npm test &> out.log", "npm test > out.log 2>&1"),
+        ("npx vitest run &> v.log", "npx vitest run > v.log 2>&1"),
+        ("pytest -q &>> p.log", "pytest -q >> p.log 2>&1"),
+        ("cargo test &>build.log", "cargo test >build.log 2>&1"),
+    ] {
+        assert_eq!(
+            split_execution_segments(merged, false).err(),
+            split_execution_segments(spelled, false).err(),
+            "{merged} and {spelled} read alike",
+        );
+        assert_eq!(
+            split_execution_segments(merged, false).err(),
+            Some("command_redirect_not_yet_supported"),
+            "{merged} names a redirect",
+        );
+    }
+}

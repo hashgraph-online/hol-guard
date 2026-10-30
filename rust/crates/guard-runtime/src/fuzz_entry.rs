@@ -107,9 +107,10 @@ pub fn prompt_text(data: &[u8]) {
 
 /// The containment screens a contained run is admitted by. Each reads a
 /// `command` array out of the request it is given, except `script_words`,
-/// which reads a manifest `script` string, and `command_words`, which reads a
-/// hook's whole `command_text`; the corpus carries seeds of all three shapes,
-/// so a campaign reaches the lexer behind the string-reading ones too.
+/// which reads a manifest `script` string, and `command_words` and
+/// `command_absolute_words`, which read a hook's whole `command_text`; the
+/// corpus carries seeds of all these shapes, so a campaign reaches the lexer
+/// behind the string-reading ones too.
 ///
 /// `contained_target` is deliberately absent. It resolves a virtual-environment
 /// activation against the filesystem, so a campaign would be probing the
@@ -134,6 +135,7 @@ pub const CONTAINED_ARGV_OPERATIONS: &[&str] = &[
     "git_read_only_argv",
     "script_words",
     "command_words",
+    "command_absolute_words",
 ];
 
 /// The containment argument screens, which decide whether a contained run's

@@ -335,6 +335,7 @@ mod guard_store_approval_row;
 mod guard_store_approval_sweep;
 mod guard_store_approval_write;
 mod guard_store_args;
+mod guard_store_claimed_native_allow;
 mod guard_store_claude_review;
 mod guard_store_clients;
 mod guard_store_cmd_activity;
@@ -349,6 +350,7 @@ mod guard_store_cmd_rollups;
 #[cfg(test)]
 mod guard_store_cmd_vectors_tests;
 mod guard_store_cmd_wire;
+mod guard_store_codex_live_authority;
 mod guard_store_composio_catalog;
 #[cfg(test)]
 mod guard_store_composio_catalog_tests;

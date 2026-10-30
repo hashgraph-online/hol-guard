@@ -429,12 +429,17 @@ fn remove_redirect(
     let input = chars[start] == '<';
     let mut index = start + 1;
     let descriptor = trailing_word(out).to_owned();
+    let merged_streams = !input && descriptor == "&";
     match descriptor.as_str() {
         "" => {}
         "1" | "2" if !input => out.truncate(out.len() - 1),
         "0" if input => out.truncate(out.len() - 1),
         _ if descriptor.chars().all(|value| value.is_ascii_digit()) => return None,
-        // `&>` means background-then-redirect under POSIX `sh`.
+        // `&>` sends both streams to the file. POSIX `sh` reads it as the
+        // job separator followed by a redirect, which writes the same file
+        // after starting the same program, so both readings name the same
+        // write and the spelling decides with `> f 2>&1`.
+        "&" if !input => out.truncate(out.len() - 1),
         _ if descriptor.ends_with('&') => return None,
         _ => {}
     }
@@ -467,6 +472,22 @@ fn remove_redirect(
     let target: String = chars[target_start..index].iter().collect();
     if !literal_target(&target) {
         return None;
+    }
+    if merged_streams {
+        // The two readings of `&>` only name the same work while the
+        // redirect ends its segment. A word after the target is an argument
+        // to the same program in `bash` and the start of a second command in
+        // POSIX `sh`, which runs it after backgrounding the first. The
+        // sandbox runs the raw bytes, so a projection that modelled only the
+        // `bash` reading would hand the classifier a command the other shell
+        // never runs and hide the one it does.
+        let mut after = index;
+        while matches!(chars.get(after), Some(' ' | '\t')) {
+            after += 1;
+        }
+        if !matches!(chars.get(after), None | Some(';' | '|' | '&' | '\n' | ')')) {
+            return None;
+        }
     }
     *names_files |= target != "/dev/null";
     out.push(' ');
