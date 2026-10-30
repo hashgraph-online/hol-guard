@@ -1,0 +1,244 @@
+{
+  "extension": {
+    "action_classes": [
+      "MCPForge remote registry publication"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews MCPForge CLI registry publication commands, including the --allow-unverified override. This optional rule does not verify generated servers or grant registry permissions.",
+    "ecosystem_ids": [
+      "mcpforge"
+    ],
+    "executables": [
+      "mcpforge"
+    ],
+    "extension_id": "command.mcpforge",
+    "homepage": "https://github.com/lorenzosaraiva/mcpforge",
+    "icon": {
+      "kind": "none"
+    },
+    "license": "MIT",
+    "name": "MCPForge registry publish protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "MCPForge remote registry publication"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Reviews mcpforge publish, which submits a generated MCP server to a remote registry or opens a publication pull request. The --allow-unverified option bypasses the normal prior verification requirement.",
+        "example_command": "mcpforge publish --slug example-api",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "MCPForge registry publication",
+        "permission_id": "command.mcpforge.permission.publish",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Verify the registry destination, project slug, account and selected tools before publishing.",
+          "Run the supported MCPForge mock compatibility test first; --allow-unverified skips the normal verification gate.",
+          "Use a draft publication when appropriate, and inspect the generated project before publishing."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "display_name": "Michael Kantor",
+      "id": "community.kantorcodes",
+      "url": "https://github.com/kantorcodes"
+    },
+    "reference_urls": [
+      "https://github.com/lorenzosaraiva/mcpforge/blob/main/packages/cli/src/commands/publish.ts",
+      "https://github.com/lorenzosaraiva/mcpforge/blob/main/README.md",
+      "https://github.com/lorenzosaraiva/mcpforge/blob/main/packages/cli/package.json"
+    ],
+    "required": false,
+    "risk_classes": [
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "MCPForge remote registry publication"
+        ],
+        "default_mode": "review",
+        "description": "Reviews mcpforge publish, which submits a generated MCP server to a remote registry or opens a publication pull request. The --allow-unverified option bypasses the normal prior verification requirement.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "mcpforge",
+                  "mcpforge.cmd",
+                  "mcpforge.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--slug",
+                  "--tags",
+                  "--dir"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "publish"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "op": "versioned-package-subcommand.v1",
+              "config": {
+                "executables": [
+                  "npx",
+                  "npx.cmd",
+                  "npx.exe"
+                ],
+                "interspersed_flags": [
+                  "--yes",
+                  "-y",
+                  "--no-install"
+                ],
+                "interspersed_options_with_values": [
+                  "--package",
+                  "-p",
+                  "--cache"
+                ],
+                "leading_subcommands": [],
+                "package": "mcpforge",
+                "required_flags": [],
+                "subcommands": [
+                  "publish"
+                ]
+              }
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.mcpforge.permission.publish",
+        "risk_classes": [
+          "network_egress"
+        ],
+        "rule_id": "command.mcpforge.publish",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mcpforge",
+                      "mcpforge.cmd",
+                      "mcpforge.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--slug",
+                      "--tags",
+                      "--dir"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "publish"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "MCPForge publish command help",
+            "variant_id": "help"
+          },
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "mcpforge",
+                      "mcpforge.cmd",
+                      "mcpforge.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--slug",
+                      "--tags",
+                      "--dir"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "publish"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "MCPForge publish command help",
+            "variant_id": "short-help"
+          }
+        ],
+        "safer_alternatives": [
+          "Verify the registry destination, project slug, account and selected tools before publishing.",
+          "Run the supported MCPForge mock compatibility test first; --allow-unverified skips the normal verification gate.",
+          "Use a draft publication when appropriate, and inspect the generated project before publishing."
+        ],
+        "severity": "high",
+        "title": "MCPForge registry publication"
+      }
+    ],
+    "safer_alternatives": [
+      "Verify the registry destination, project slug, account and selected tools before publishing.",
+      "Run the supported MCPForge mock compatibility test first; --allow-unverified skips the normal verification gate.",
+      "Use a draft publication when appropriate, and inspect the generated project before publishing."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}
