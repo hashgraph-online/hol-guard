@@ -13,7 +13,6 @@ from .native_approval_queue_identity import (
     native_approval_queue_identities,
     queue_identity_item,
 )
-from .store_approval_projection import _optional_json_object
 
 APPROVAL_QUEUE_BACKFILL_BATCH_SIZE = 500
 
@@ -156,6 +155,16 @@ def _legacy_queue_rows(connection: sqlite3.Connection, *, after: tuple[str, str]
             parameters,
         ).fetchall()
     )
+
+
+def _optional_json_object(value: object) -> dict[str, object] | None:
+    if value is None:
+        return None
+    try:
+        parsed = json.loads(str(value))
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return None
+    return dict(parsed) if isinstance(parsed, dict) else None
 
 
 def _identity_items(rows: list[sqlite3.Row]) -> list[dict[str, object]]:
