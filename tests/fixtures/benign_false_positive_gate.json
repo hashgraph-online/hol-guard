@@ -10465,6 +10465,63 @@
       "expect": "not_allow"
     },
     {
+      "id": "grok-grep-edge-clone-root-plain-pattern",
+      "fix_area": "search",
+      "harnesses": [
+        "grok"
+      ],
+      "tool": "grep",
+      "tool_input": {
+        "pattern": "edge_session_marker",
+        "path": "${HOME}/edge-clone"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "grok-grep-edge-clone-docs-plain-pattern-with-glob",
+      "fix_area": "search",
+      "harnesses": [
+        "grok"
+      ],
+      "tool": "grep",
+      "tool_input": {
+        "pattern": "edge_session_marker",
+        "path": "${HOME}/edge-clone",
+        "glob": "*.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-grok-grep-edge-clone-env-backup-value",
+      "fix_area": "negative",
+      "harnesses": [
+        "grok"
+      ],
+      "tool": "grep",
+      "tool_input": {
+        "pattern": "edge_previous_setting",
+        "path": "${HOME}/edge-clone"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-grok-grep-edge-clone-regex-over-env-backup",
+      "fix_area": "negative",
+      "harnesses": [
+        "grok"
+      ],
+      "tool": "grep",
+      "tool_input": {
+        "pattern": "edge.*setting",
+        "path": "${HOME}/edge-clone"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "gauntlet-grep-rln-checkout-from-parent-directory",
       "fix_area": "shell",
       "harnesses": [
