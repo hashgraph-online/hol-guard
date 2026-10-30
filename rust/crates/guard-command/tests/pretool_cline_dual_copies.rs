@@ -229,7 +229,10 @@ fn the_canarys_encoded_empty_target_list_names_no_file() {
     );
     let value = serde_json::to_value(&result).expect("result serializes");
     assert_eq!(value["decision"], json!("allow"));
-    assert_eq!(value["reason_code"], json!("native_empty_file_read_request"));
+    assert_eq!(
+        value["reason_code"],
+        json!("native_empty_file_read_request")
+    );
 }
 
 /// A target list that names a file keeps it. Only the empty encoding is read
