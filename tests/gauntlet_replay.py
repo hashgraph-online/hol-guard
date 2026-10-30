@@ -59,6 +59,11 @@ FIXED = {
 }
 # Abstract tools upstream Pi also ships; omp-only tools (eval, task, todo, glob, ...) are not mirrored.
 PI_TOOLS = frozenset({"shell", "read", "write", "grep", "ls"})
+# The harnesses this lane records a payload shape for, and whose attack coverage it carries (see
+# `test_every_harness_and_attack_class_is_covered`). A benign gate case naming any other harness is
+# left to the gate itself, which drives the native runtime directly rather than through a recorded
+# hook payload; replaying it here would claim a coverage this lane does not have.
+REPLAYED = frozenset({"codex", "zcode", "claude-code", "omp", "pi", "cursor", "muse"})
 FAMILIES = {"shell": SHELL, "read": READ, "glob": GLOB, "grep": GREP, "write": WRITE}
 ENVIRONMENTS = ("clean", "realistic")
 # Profile and reason pairs the shipped OMP extension runs in Guard's sandbox instead of showing the
@@ -128,7 +133,9 @@ def expand() -> list[ReplayCase]:
             continue
         # Pi's read tool takes files; an entry that reads a folder says so and is not mirrored.
         mirror_pi = "omp" in entry["harnesses"] and entry["tool"] in PI_TOOLS and entry.get("mirror_pi", True)
-        harnesses = list(entry["harnesses"]) + (["pi"] if mirror_pi else [])
+        harnesses = [h for h in entry["harnesses"] if h in REPLAYED] + (["pi"] if mirror_pi else [])
+        if not harnesses:
+            continue
         # A setup case keeps its expectation: a generic review there is a regression, not a block.
         expect = {"allow": "quiet", "setup": "setup", "allow_or_review": "quiet_or_always"}.get(
             entry["expect"], "block"
