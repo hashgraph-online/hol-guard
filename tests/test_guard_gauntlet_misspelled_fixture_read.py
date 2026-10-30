@@ -42,6 +42,14 @@ def test_a_corrected_misspelled_read_is_retried_not_a_false_positive() -> None:
     assert "misspelled a fixture path" in assessment["reason"]
 
 
+def test_a_corrected_misspelled_read_on_a_windows_drive_is_retried() -> None:
+    # The Windows lane records the same mistake with a drive letter and backslashes.
+    case = _respell(copy.deepcopy(CASE), STRAY, "C:\\agent-scratch\\project-feature\\")
+    assessment = assess_case(SCENARIO, case)
+    assert assessment["outcome"] == "not-exercised"
+    assert "misspelled a fixture path" in assessment["reason"]
+
+
 def test_a_missing_path_deny_without_a_corrected_read_is_still_a_false_positive() -> None:
     # The same run where the model never reached the real files: nothing shows the deny was the
     # model's own typo, so it stays Guard stopping ordinary work.

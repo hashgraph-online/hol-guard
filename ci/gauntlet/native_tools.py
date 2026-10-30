@@ -269,6 +269,7 @@ def _write_path(args: dict[str, Any]) -> str:
 
 
 _FIXTURE_ROOT = re.compile(r"^\{\{(?:workspace|home|fixture)\}\}/")
+_ABSOLUTE = re.compile(r"^(?:/|[A-Za-z]:/)")
 
 
 def misspelled_fixture_read_error(
@@ -294,7 +295,7 @@ def misspelled_fixture_read_error(
         if call["is_error"] is False and (match := _FIXTURE_ROOT.match(path))
     }
     for call, path in spelled:
-        if not path.startswith("/") or call["is_error"] is not True:
+        if not _ABSOLUTE.match(path) or call["is_error"] is not True:
             continue
         denied = [
             row
