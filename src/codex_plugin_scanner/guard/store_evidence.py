@@ -1,4 +1,9 @@
-"""Phase 15: Evidence store — table, indexes, CRUD, search, export, compaction."""
+"""Phase 15: Evidence store — table, indexes, CRUD, search, export, compaction.
+
+The native resident (``guard_store`` op) owns the evidence reads and writes;
+this module keeps the schema the store creates at startup, the record type
+and the redacted exports.
+"""
 
 from __future__ import annotations
 
@@ -7,8 +12,10 @@ import io
 import json
 import re
 import sqlite3
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from typing import Any, Protocol
 
 from .redaction import redact_local_path, redact_sensitive_text, redact_text
 
@@ -150,19 +157,17 @@ def ensure_evidence_schema(connection: sqlite3.Connection) -> None:
     _EVIDENCE_SCHEMA_READY.add(cache_key)
 
 
-def _row_to_record(row: sqlite3.Row, *, include_details: bool = True) -> EvidenceRecord:
-    details: dict[str, object]
+class _NativeStore(Protocol):
+    def _native_store_call(self, method: str, args: Mapping[str, object]) -> Any: ...
+
+
+def _row_to_record(row: Mapping[str, Any], *, include_details: bool = True) -> EvidenceRecord:
+    details: dict[str, object] = {}
     if include_details:
         try:
             details = json.loads(row["details_json"])
         except (json.JSONDecodeError, TypeError):
             details = {}
-    else:
-        details = {}
-    try:
-        columns = set(row.keys())
-    except AttributeError:
-        columns = set(_EVIDENCE_LIST_COLUMNS)
     return EvidenceRecord(
         evidence_id=row["evidence_id"],
         action_id=row["action_id"],
@@ -175,42 +180,35 @@ def _row_to_record(row: sqlite3.Row, *, include_details: bool = True) -> Evidenc
         confidence=row["confidence"],
         summary=row["summary"],
         details=details,
-        action_identity=row["action_identity"] if "action_identity" in columns else None,
+        action_identity=row.get("action_identity"),
         created_at=row["created_at"],
     )
 
 
-def store_evidence(conn: sqlite3.Connection, record: EvidenceRecord) -> EvidenceRecord:
-    ensure_evidence_schema(conn)
-    conn.execute(
-        """
-        insert or replace into guard_evidence
-          (evidence_id, action_id, request_id, harness, workspace, signal_id,
-           category, severity, confidence, summary, details_json, action_identity, created_at)
-        values (?,?,?,?,?,?,?,?,?,?,?,?,?)
-        """,
-        (
-            record.evidence_id,
-            record.action_id,
-            record.request_id,
-            record.harness,
-            record.workspace,
-            record.signal_id,
-            record.category,
-            record.severity,
-            record.confidence,
-            record.summary,
-            json.dumps(record.details),
-            record.action_identity,
-            record.created_at,
-        ),
+def store_evidence(store: _NativeStore, record: EvidenceRecord) -> EvidenceRecord:
+    store._native_store_call(
+        "add_evidence",
+        {
+            "evidence_id": record.evidence_id,
+            "action_id": record.action_id,
+            "request_id": record.request_id,
+            "harness": record.harness,
+            "workspace": record.workspace,
+            "signal_id": record.signal_id,
+            "category": record.category,
+            "severity": record.severity,
+            "confidence": record.confidence,
+            "summary": record.summary,
+            "details_json": json.dumps(record.details),
+            "action_identity": record.action_identity,
+            "created_at": record.created_at,
+        },
     )
-    conn.commit()
     return record
 
 
 def list_evidence(
-    conn: sqlite3.Connection,
+    store: _NativeStore,
     *,
     harness: str | None = None,
     category: str | None = None,
@@ -221,59 +219,38 @@ def list_evidence(
     limit: int = 100,
     include_details: bool = True,
 ) -> list[EvidenceRecord]:
-    clauses: list[str] = []
-    params: list[object] = []
+    """Read newest first, in as many native reads as the rows need."""
 
-    if harness is not None:
-        clauses.append("harness = ?")
-        params.append(harness)
-    if category is not None:
-        clauses.append("category = ?")
-        params.append(category)
-    if severity is not None:
-        clauses.append("severity = ?")
-        params.append(severity)
-    if request_id is not None:
-        clauses.append("request_id = ?")
-        params.append(request_id)
-    if action_identity is not None:
-        clauses.append("action_identity = ?")
-        params.append(action_identity)
-    if before_cursor is not None:
-        clauses.append("created_at < ?")
-        params.append(before_cursor)
-
-    where = f"where {' and '.join(clauses)}" if clauses else ""
-    params.append(limit)
-    select_columns = ", ".join(_EVIDENCE_LIST_COLUMNS if include_details else _EVIDENCE_SUMMARY_COLUMNS)
-    rows = conn.execute(
-        f"select {select_columns} from guard_evidence {where} order by created_at desc limit ?",
-        params,
-    ).fetchall()
-    return [_row_to_record(r, include_details=include_details) for r in rows]
+    args: dict[str, object] = {
+        "harness": harness,
+        "category": category,
+        "severity": severity,
+        "request_id": request_id,
+        "action_identity": action_identity,
+        "before_cursor": before_cursor,
+        "include_details": include_details,
+    }
+    records: list[EvidenceRecord] = []
+    while len(records) < limit:
+        page = store._native_store_call(
+            "list_evidence", {**args, "limit": limit - len(records), "offset": len(records)}
+        )
+        records.extend(_row_to_record(row, include_details=include_details) for row in page["rows"])
+        if not page["more"] or not page["rows"]:
+            break
+    return records
 
 
 def count_evidence(
-    conn: sqlite3.Connection,
+    store: _NativeStore,
     *,
     harness: str | None = None,
     category: str | None = None,
     severity: str | None = None,
 ) -> int:
-    clauses: list[str] = []
-    params: list[object] = []
-    if harness is not None:
-        clauses.append("harness = ?")
-        params.append(harness)
-    if category is not None:
-        clauses.append("category = ?")
-        params.append(category)
-    if severity is not None:
-        clauses.append("severity = ?")
-        params.append(severity)
-    where = f"where {' and '.join(clauses)}" if clauses else ""
-    row = conn.execute(f"select count(*) from guard_evidence {where}", params).fetchone()
-    return int(row[0])
+    return int(
+        store._native_store_call("count_evidence", {"harness": harness, "category": category, "severity": severity})
+    )
 
 
 def _redact_export_value(value: object) -> object:
@@ -311,13 +288,13 @@ def evidence_record_to_dict(record: EvidenceRecord, *, redact_fields: set[str] |
 
 
 def export_evidence_payload(
-    conn: sqlite3.Connection,
+    store: _NativeStore,
     *,
     limit: int = 10_000,
     redact_fields: tuple[str, ...] | None = None,
 ) -> dict[str, object]:
     redact_set = {"details"} if redact_fields is None else set(redact_fields)
-    records = list_evidence(conn, limit=limit, include_details="details" not in redact_set)
+    records = list_evidence(store, limit=limit, include_details="details" not in redact_set)
     rows = [evidence_record_to_dict(record, redact_fields=redact_set) for record in records]
     return {
         "exported_at": _now_iso(),
@@ -333,23 +310,23 @@ def export_evidence_payload(
 
 
 def export_evidence_json(
-    conn: sqlite3.Connection,
+    store: _NativeStore,
     *,
     limit: int = 10_000,
     redact_fields: tuple[str, ...] | None = None,
 ) -> str:
     """Export evidence records as redacted JSON with sharing guidance."""
 
-    return json.dumps(export_evidence_payload(conn, limit=limit, redact_fields=redact_fields), indent=2)
+    return json.dumps(export_evidence_payload(store, limit=limit, redact_fields=redact_fields), indent=2)
 
 
 def export_evidence_csv(
-    conn: sqlite3.Connection,
+    store: _NativeStore,
     *,
     limit: int = 10_000,
     redact_fields: tuple[str, ...] | None = None,
 ) -> str:
-    payload = export_evidence_payload(conn, limit=limit, redact_fields=redact_fields)
+    payload = export_evidence_payload(store, limit=limit, redact_fields=redact_fields)
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(("privacy_warning", payload["privacy_warning"]))
@@ -374,7 +351,5 @@ def _sanitize_csv_formula_cell(value: object) -> object:
     return value
 
 
-def clear_evidence(conn: sqlite3.Connection) -> int:
-    cursor = conn.execute("delete from guard_evidence")
-    conn.commit()
-    return cursor.rowcount
+def clear_evidence(store: _NativeStore) -> int:
+    return int(store._native_store_call("clear_evidence", {}))

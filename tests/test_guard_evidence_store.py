@@ -5,8 +5,10 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
+from collections.abc import Mapping
 from pathlib import Path
 
+from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_evidence import (
     EvidenceRecord,
     _sanitize_csv_formula_cell,
@@ -18,6 +20,10 @@ from codex_plugin_scanner.guard.store_evidence import (
     list_evidence,
     store_evidence,
 )
+
+
+def _store(tmp_path: Path) -> GuardStore:
+    return GuardStore(tmp_path / "guard-home")
 
 
 def _db(tmp_path: Path) -> sqlite3.Connection:
@@ -89,187 +95,241 @@ class TestSchema:
 
 class TestStoreEvidence:
     def test_store_basic(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
-        store_evidence(conn, _rec())
-        rows = conn.execute("select * from guard_evidence").fetchall()
+        store = _store(tmp_path)
+        store_evidence(store, _rec())
+        with store._connect() as conn:
+            rows = conn.execute("select * from guard_evidence").fetchall()
         assert len(rows) == 1
 
     def test_store_returns_record(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
-        result = store_evidence(conn, _rec(evidence_id="ev-999"))
+        store = _store(tmp_path)
+        result = store_evidence(store, _rec(evidence_id="ev-999"))
         assert result.evidence_id == "ev-999"
 
     def test_store_details_serialized(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
-        store_evidence(conn, _rec(details={"x": 1, "y": [2, 3]}))
-        row = conn.execute("select details_json from guard_evidence").fetchone()
+        store = _store(tmp_path)
+        store_evidence(store, _rec(details={"x": 1, "y": [2, 3]}))
+        with store._connect() as conn:
+            row = conn.execute("select details_json from guard_evidence").fetchone()
         assert json.loads(row[0]) == {"x": 1, "y": [2, 3]}
 
     def test_store_multiple(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
+        store = _store(tmp_path)
         for i in range(5):
-            store_evidence(conn, _rec(evidence_id=f"e{i}", action_id=f"a{i}"))
-        assert count_evidence(conn) == 5
+            store_evidence(store, _rec(evidence_id=f"e{i}", action_id=f"a{i}"))
+        assert count_evidence(store) == 5
 
 
 class TestListEvidence:
     def test_list_all(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
+        store = _store(tmp_path)
         for i in range(3):
-            store_evidence(conn, _rec(evidence_id=f"e{i}", action_id=f"a{i}"))
-        records = list_evidence(conn)
+            store_evidence(store, _rec(evidence_id=f"e{i}", action_id=f"a{i}"))
+        records = list_evidence(store)
         assert len(records) == 3
 
     def test_list_limit(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
+        store = _store(tmp_path)
         for i in range(10):
-            store_evidence(conn, _rec(evidence_id=f"e{i}", action_id=f"a{i}"))
-        records = list_evidence(conn, limit=3)
+            store_evidence(store, _rec(evidence_id=f"e{i}", action_id=f"a{i}"))
+        records = list_evidence(store, limit=3)
         assert len(records) == 3
 
     def test_list_filter_harness(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
-        store_evidence(conn, _rec(evidence_id="e1", harness="codex"))
-        store_evidence(conn, _rec(evidence_id="e2", harness="claude"))
-        records = list_evidence(conn, harness="codex")
+        store = _store(tmp_path)
+        store_evidence(store, _rec(evidence_id="e1", harness="codex"))
+        store_evidence(store, _rec(evidence_id="e2", harness="claude"))
+        records = list_evidence(store, harness="codex")
         assert len(records) == 1
         assert records[0].harness == "codex"
 
     def test_list_filter_category(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
-        store_evidence(conn, _rec(evidence_id="e1", category="exfiltration"))
-        store_evidence(conn, _rec(evidence_id="e2", category="injection"))
-        records = list_evidence(conn, category="injection")
+        store = _store(tmp_path)
+        store_evidence(store, _rec(evidence_id="e1", category="exfiltration"))
+        store_evidence(store, _rec(evidence_id="e2", category="injection"))
+        records = list_evidence(store, category="injection")
         assert len(records) == 1
         assert records[0].category == "injection"
 
     def test_list_filter_severity(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
-        store_evidence(conn, _rec(evidence_id="e1", severity="high"))
-        store_evidence(conn, _rec(evidence_id="e2", severity="low"))
-        records = list_evidence(conn, severity="high")
+        store = _store(tmp_path)
+        store_evidence(store, _rec(evidence_id="e1", severity="high"))
+        store_evidence(store, _rec(evidence_id="e2", severity="low"))
+        records = list_evidence(store, severity="high")
         assert len(records) == 1
 
     def test_list_cursor_pagination(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
+        store = _store(tmp_path)
         for i in range(10):
-            store_evidence(conn, _rec(evidence_id=f"e{i:02d}", action_id=f"a{i}"))
+            store_evidence(store, _rec(evidence_id=f"e{i:02d}", action_id=f"a{i}"))
             time.sleep(0.01)
-        page1 = list_evidence(conn, limit=5)
+        page1 = list_evidence(store, limit=5)
         assert len(page1) == 5
         cursor = page1[-1].created_at
-        page2 = list_evidence(conn, limit=10, before_cursor=cursor)
+        page2 = list_evidence(store, limit=10, before_cursor=cursor)
         assert len(page2) == 5
         combined_ids = {r.evidence_id for r in page1} | {r.evidence_id for r in page2}
         assert len(combined_ids) == 10
 
     def test_list_filter_request_id(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
-        store_evidence(conn, _rec(evidence_id="e1", request_id="req-A"))
-        store_evidence(conn, _rec(evidence_id="e2", request_id="req-B"))
-        records = list_evidence(conn, request_id="req-A")
+        store = _store(tmp_path)
+        store_evidence(store, _rec(evidence_id="e1", request_id="req-A"))
+        store_evidence(store, _rec(evidence_id="e2", request_id="req-B"))
+        records = list_evidence(store, request_id="req-A")
         assert len(records) == 1
 
     def test_list_can_skip_details_json_for_redacted_api_rows(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
-        store_evidence(conn, _rec(evidence_id="e1", details={"secret": "not loaded"}))
+        store = _store(tmp_path)
+        store_evidence(store, _rec(evidence_id="e1", details={"secret": "not loaded"}))
 
-        records = list_evidence(conn, include_details=False)
+        records = list_evidence(store, include_details=False)
 
         assert len(records) == 1
         assert records[0].details == {}
 
     def test_list_order_desc(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
+        store = _store(tmp_path)
         for i in range(5):
-            store_evidence(conn, _rec(evidence_id=f"e{i}", action_id=f"a{i}"))
+            store_evidence(store, _rec(evidence_id=f"e{i}", action_id=f"a{i}"))
             time.sleep(0.01)
-        records = list_evidence(conn)
+        records = list_evidence(store)
         created_ats = [r.created_at for r in records]
         assert created_ats == sorted(created_ats, reverse=True)
 
 
+class _PagedStore:
+    """Answers each native read with the next page, as a full budget would."""
+
+    def __init__(self, pages: list[dict[str, object]]) -> None:
+        self.pages = pages
+        self.calls: list[dict[str, object]] = []
+
+    def _native_store_call(self, method: str, args: Mapping[str, object]) -> object:
+        assert method == "list_evidence"
+        self.calls.append(dict(args))
+        return self.pages.pop(0)
+
+
+def _row(evidence_id: str) -> dict[str, object]:
+    return {
+        "evidence_id": evidence_id,
+        "action_id": "a1",
+        "request_id": "r1",
+        "harness": "codex",
+        "workspace": "/ws",
+        "signal_id": "s1",
+        "category": "exfiltration",
+        "severity": "high",
+        "confidence": 0.9,
+        "summary": "secret leaked",
+        "details_json": '{"z": 1, "a": 2}',
+        "action_identity": None,
+        "created_at": "2024-01-01T00:00:00Z",
+    }
+
+
+class TestNativeReadPages:
+    def test_a_read_that_fills_its_budget_continues_from_the_next_offset(self) -> None:
+        store = _PagedStore(
+            [
+                {"rows": [_row("e1"), _row("e2")], "more": True},
+                {"rows": [_row("e3")], "more": False},
+            ]
+        )
+        records = list_evidence(store, harness="codex", limit=10)
+        assert [record.evidence_id for record in records] == ["e1", "e2", "e3"]
+        assert [(call["offset"], call["limit"]) for call in store.calls] == [(0, 10), (2, 8)]
+        assert all(call["harness"] == "codex" for call in store.calls)
+        assert list(records[0].details) == ["z", "a"]
+
+    def test_a_read_stops_once_it_has_the_limit(self) -> None:
+        store = _PagedStore([{"rows": [_row("e1"), _row("e2")], "more": True}])
+        records = list_evidence(store, limit=2)
+        assert len(records) == 2
+        assert len(store.calls) == 1
+
+
 class TestCountEvidence:
     def test_count_zero(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
-        assert count_evidence(conn) == 0
+        store = _store(tmp_path)
+        assert count_evidence(store) == 0
 
     def test_count_with_records(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
+        store = _store(tmp_path)
         for i in range(7):
-            store_evidence(conn, _rec(evidence_id=f"e{i}", action_id=f"a{i}"))
-        assert count_evidence(conn) == 7
+            store_evidence(store, _rec(evidence_id=f"e{i}", action_id=f"a{i}"))
+        assert count_evidence(store) == 7
 
     def test_count_filter_harness(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
-        store_evidence(conn, _rec(evidence_id="e1", harness="codex"))
-        store_evidence(conn, _rec(evidence_id="e2", harness="claude"))
-        store_evidence(conn, _rec(evidence_id="e3", harness="codex"))
-        assert count_evidence(conn, harness="codex") == 2
+        store = _store(tmp_path)
+        store_evidence(store, _rec(evidence_id="e1", harness="codex"))
+        store_evidence(store, _rec(evidence_id="e2", harness="claude"))
+        store_evidence(store, _rec(evidence_id="e3", harness="codex"))
+        assert count_evidence(store, harness="codex") == 2
 
     def test_count_filter_category(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
-        store_evidence(conn, _rec(evidence_id="e1", category="exfiltration"))
-        store_evidence(conn, _rec(evidence_id="e2", category="injection"))
-        assert count_evidence(conn, category="exfiltration") == 1
+        store = _store(tmp_path)
+        store_evidence(store, _rec(evidence_id="e1", category="exfiltration"))
+        store_evidence(store, _rec(evidence_id="e2", category="injection"))
+        assert count_evidence(store, category="exfiltration") == 1
 
     def test_count_filter_harness_category_severity(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
-        store_evidence(conn, _rec(evidence_id="e1", harness="codex", category="secret", severity="high"))
-        store_evidence(conn, _rec(evidence_id="e2", harness="codex", category="secret", severity="low"))
-        store_evidence(conn, _rec(evidence_id="e3", harness="claude", category="secret", severity="high"))
+        store = _store(tmp_path)
+        store_evidence(store, _rec(evidence_id="e1", harness="codex", category="secret", severity="high"))
+        store_evidence(store, _rec(evidence_id="e2", harness="codex", category="secret", severity="low"))
+        store_evidence(store, _rec(evidence_id="e3", harness="claude", category="secret", severity="high"))
 
-        assert count_evidence(conn, harness="codex", category="secret", severity="high") == 1
+        assert count_evidence(store, harness="codex", category="secret", severity="high") == 1
 
 
 class TestExportEvidence:
     def test_export_returns_privacy_envelope(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
+        store = _store(tmp_path)
         for i in range(3):
-            store_evidence(conn, _rec(evidence_id=f"e{i}", action_id=f"a{i}"))
-        exported = export_evidence_json(conn)
+            store_evidence(store, _rec(evidence_id=f"e{i}", action_id=f"a{i}"))
+        exported = export_evidence_json(store)
         data = json.loads(exported)
         assert data["privacy_warning"]
         assert data["total_rows"] == 3
         assert len(data["items"]) == 3
 
     def test_export_fields_present(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
-        store_evidence(conn, _rec(evidence_id="ev-X", category="exfil", summary="found token"))
-        data = json.loads(export_evidence_json(conn))
+        store = _store(tmp_path)
+        store_evidence(store, _rec(evidence_id="ev-X", category="exfil", summary="found token"))
+        data = json.loads(export_evidence_json(store))
         record = data["items"][0]
         assert record["evidence_id"] == "ev-X"
         assert record["category"] == "exfil"
         assert record["summary"] == "found token"
 
     def test_export_limit(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
+        store = _store(tmp_path)
         for i in range(20):
-            store_evidence(conn, _rec(evidence_id=f"e{i}", action_id=f"a{i}"))
-        data = json.loads(export_evidence_json(conn, limit=5))
+            store_evidence(store, _rec(evidence_id=f"e{i}", action_id=f"a{i}"))
+        data = json.loads(export_evidence_json(store, limit=5))
         assert data["total_rows"] == 5
         assert len(data["items"]) == 5
 
     def test_export_csv_includes_warning_and_redacted_rows(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
+        store = _store(tmp_path)
         store_evidence(
-            conn,
+            store,
             _rec(
                 evidence_id="csv-1",
                 workspace="/Users/alice/private/project",
                 summary="token sk-live-secret-value in /Users/alice/private/project/.env",
             ),
         )
-        exported = export_evidence_csv(conn)
+        exported = export_evidence_csv(store)
         assert "privacy_warning" in exported
         assert "sk-live-secret-value" not in exported
         assert "/Users/alice" not in exported
         assert "csv-1" in exported
 
     def test_export_csv_sanitizes_formula_prefixed_cells(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
+        store = _store(tmp_path)
         store_evidence(
-            conn,
+            store,
             _rec(
                 evidence_id="csv-formula-1",
                 summary='=HYPERLINK("https://evil.example")',
@@ -278,7 +338,7 @@ class TestExportEvidence:
             ),
         )
 
-        exported = export_evidence_csv(conn)
+        exported = export_evidence_csv(store)
 
         assert "'=HYPERLINK(" in exported
         assert "'@formula" in exported
@@ -294,24 +354,24 @@ class TestExportEvidence:
 
 class TestActionIdentityField:
     def test_store_and_retrieve_action_identity(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
+        store = _store(tmp_path)
         rec = _rec(evidence_id="e-ai-1", action_identity="codex:tool:bash")
-        store_evidence(conn, rec)
-        results = list_evidence(conn, action_identity="codex:tool:bash")
+        store_evidence(store, rec)
+        results = list_evidence(store, action_identity="codex:tool:bash")
         assert len(results) == 1
         assert results[0].action_identity == "codex:tool:bash"
 
     def test_action_identity_none_by_default(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
-        store_evidence(conn, _rec(evidence_id="e-ai-2"))
-        results = list_evidence(conn)
+        store = _store(tmp_path)
+        store_evidence(store, _rec(evidence_id="e-ai-2"))
+        results = list_evidence(store)
         assert results[0].action_identity is None
 
     def test_filter_by_action_identity_excludes_others(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
-        store_evidence(conn, _rec(evidence_id="e-ai-3", action_identity="tool:a"))
-        store_evidence(conn, _rec(evidence_id="e-ai-4", action_identity="tool:b"))
-        results = list_evidence(conn, action_identity="tool:a")
+        store = _store(tmp_path)
+        store_evidence(store, _rec(evidence_id="e-ai-3", action_identity="tool:a"))
+        store_evidence(store, _rec(evidence_id="e-ai-4", action_identity="tool:b"))
+        results = list_evidence(store, action_identity="tool:a")
         assert len(results) == 1
         assert results[0].evidence_id == "e-ai-3"
 
@@ -326,32 +386,33 @@ class TestLargeScalePagination:
         cases = [
             (
                 "harness",
-                query_prefix + "where harness = ? order by created_at desc limit ?",
-                ("codex", 100),
+                query_prefix + "where harness = ? order by created_at desc limit ? offset ?",
+                ("codex", 100, 0),
                 "idx_evidence_harness_created",
             ),
             (
                 "category/severity",
-                query_prefix + "where category = ? and severity = ? order by created_at desc limit ?",
-                ("secret", "high", 100),
+                query_prefix + "where category = ? and severity = ? order by created_at desc limit ? offset ?",
+                ("secret", "high", 100, 0),
                 "idx_evidence_category_severity_created",
             ),
             (
                 "harness/category/severity",
-                query_prefix + "where harness = ? and category = ? and severity = ? order by created_at desc limit ?",
-                ("codex", "secret", "high", 100),
+                query_prefix
+                + "where harness = ? and category = ? and severity = ? order by created_at desc limit ? offset ?",
+                ("codex", "secret", "high", 100, 0),
                 "idx_evidence_harness_category_severity_created",
             ),
             (
                 "request",
-                query_prefix + "where request_id = ? order by created_at desc limit ?",
-                ("req-1", 100),
+                query_prefix + "where request_id = ? order by created_at desc limit ? offset ?",
+                ("req-1", 100, 0),
                 "idx_evidence_request_created",
             ),
             (
                 "identity",
-                query_prefix + "where action_identity = ? order by created_at desc limit ?",
-                ("codex:tool:bash", 100),
+                query_prefix + "where action_identity = ? order by created_at desc limit ? offset ?",
+                ("codex:tool:bash", 100, 0),
                 "idx_evidence_identity_created",
             ),
         ]
@@ -362,7 +423,7 @@ class TestLargeScalePagination:
             assert "USE TEMP B-TREE" not in detail, f"{label} plan sorted in a temp b-tree: {detail}"
 
     def test_first_page_reads_bounded_slice_from_100k_records(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
+        store = _store(tmp_path)
         total = 100_000
         rows = [
             (
@@ -382,36 +443,37 @@ class TestLargeScalePagination:
             )
             for i in range(total)
         ]
-        conn.executemany(
-            """
-            insert into guard_evidence
-              (evidence_id, action_id, request_id, harness, workspace, signal_id, category,
-               severity, confidence, summary, details_json, action_identity, created_at)
-            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            rows,
-        )
-        conn.commit()
+        with store._connect() as conn:
+            conn.executemany(
+                """
+                insert into guard_evidence
+                  (evidence_id, action_id, request_id, harness, workspace, signal_id, category,
+                   severity, confidence, summary, details_json, action_identity, created_at)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                rows,
+            )
+            conn.commit()
 
-        page = list_evidence(conn, limit=50)
+        page = list_evidence(store, limit=50)
 
-        assert count_evidence(conn) == total
+        assert count_evidence(store) == total
         assert len(page) == 50
         assert page[0].created_at >= page[-1].created_at
 
     def test_cursor_pagination_covers_all_records(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
+        store = _store(tmp_path)
         total = 250
         for i in range(total):
             ts = f"2024-01-{(i // 28) + 1:02d}T{(i % 24):02d}:00:{(i % 60):02d}Z"
-            store_evidence(conn, _rec(evidence_id=f"bulk-{i:04d}", created_at=ts))
+            store_evidence(store, _rec(evidence_id=f"bulk-{i:04d}", created_at=ts))
 
         page_size = 50
         seen: list[str] = []
         cursor: str | None = None
 
         for _ in range(total // page_size + 2):
-            page = list_evidence(conn, before_cursor=cursor, limit=page_size)
+            page = list_evidence(store, before_cursor=cursor, limit=page_size)
             if not page:
                 break
             seen.extend(r.evidence_id for r in page)
@@ -420,10 +482,10 @@ class TestLargeScalePagination:
         assert len(seen) == total
 
     def test_first_page_returns_most_recent(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
+        store = _store(tmp_path)
         for i in range(10):
-            store_evidence(conn, _rec(evidence_id=f"p-{i}", created_at=f"2024-01-01T{i:02d}:00:00Z"))
-        page = list_evidence(conn, limit=3)
+            store_evidence(store, _rec(evidence_id=f"p-{i}", created_at=f"2024-01-01T{i:02d}:00:00Z"))
+        page = list_evidence(store, limit=3)
         assert page[0].evidence_id == "p-9"
         assert page[1].evidence_id == "p-8"
         assert page[2].evidence_id == "p-7"
@@ -431,38 +493,38 @@ class TestLargeScalePagination:
 
 class TestExportRedaction:
     def test_export_omits_details_by_default(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
-        store_evidence(conn, _rec(evidence_id="ex-1", details={"secret": "password123"}))
-        exported = json.loads(export_evidence_json(conn))
+        store = _store(tmp_path)
+        store_evidence(store, _rec(evidence_id="ex-1", details={"secret": "password123"}))
+        exported = json.loads(export_evidence_json(store))
         assert len(exported["items"]) == 1
         assert "details" not in exported["items"][0]
         assert "password123" not in json.dumps(exported)
 
     def test_export_includes_details_when_redact_empty(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
-        store_evidence(conn, _rec(evidence_id="ex-2", details={"key": "val"}))
-        exported = json.loads(export_evidence_json(conn, redact_fields=()))
+        store = _store(tmp_path)
+        store_evidence(store, _rec(evidence_id="ex-2", details={"key": "val"}))
+        exported = json.loads(export_evidence_json(store, redact_fields=()))
         assert len(exported["items"]) == 1
         assert exported["items"][0]["details"] == {"key": "val"}
 
     def test_export_includes_action_identity(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
-        store_evidence(conn, _rec(evidence_id="ex-3", action_identity="tool:bash"))
-        exported = json.loads(export_evidence_json(conn))
+        store = _store(tmp_path)
+        store_evidence(store, _rec(evidence_id="ex-3", action_identity="tool:bash"))
+        exported = json.loads(export_evidence_json(store))
         assert exported["items"][0]["action_identity"] == "tool:bash"
 
     def test_export_fields_include_required_keys(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
-        store_evidence(conn, _rec(evidence_id="ex-4"))
-        exported = json.loads(export_evidence_json(conn))
+        store = _store(tmp_path)
+        store_evidence(store, _rec(evidence_id="ex-4"))
+        exported = json.loads(export_evidence_json(store))
         row = exported["items"][0]
         for key in ("evidence_id", "action_id", "request_id", "harness", "category", "severity", "summary"):
             assert key in row, f"missing key: {key}"
 
     def test_export_redacts_paths_and_tokens_from_all_strings(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
+        store = _store(tmp_path)
         store_evidence(
-            conn,
+            store,
             _rec(
                 evidence_id="ex-5",
                 workspace="/Users/alice/private/project",
@@ -471,14 +533,14 @@ class TestExportRedaction:
                 details={"path": "/Users/alice/private/project/.env", "token": "sk-test-secret-value"},
             ),
         )
-        exported = json.loads(export_evidence_json(conn, redact_fields=()))
+        exported = json.loads(export_evidence_json(store, redact_fields=()))
         encoded = json.dumps(exported)
         assert "/Users/alice" not in encoded
         assert "secret-value" not in encoded
         assert "sk-test-secret-value" not in encoded
 
     def test_export_redacts_oauth_secret_fields_from_evidence_strings(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
+        store = _store(tmp_path)
         oauth_blob = (
             'sync_state.credentials={"access_token":"eyJtest.payload.signature",'
             '"refresh_token":"refresh-secret-value",'
@@ -487,7 +549,7 @@ class TestExportRedaction:
             '"dpop_private_key_pem":"dpop-private-key-secret"}'
         )
         store_evidence(
-            conn,
+            store,
             _rec(
                 evidence_id="ex-oauth-redaction",
                 summary=f"oauth debug dump {oauth_blob}",
@@ -495,7 +557,7 @@ class TestExportRedaction:
             ),
         )
 
-        exported = json.loads(export_evidence_json(conn, redact_fields=()))
+        exported = json.loads(export_evidence_json(store, redact_fields=()))
         encoded = json.dumps(exported)
 
         assert "sync_state.credentials" not in encoded
@@ -506,7 +568,7 @@ class TestExportRedaction:
         assert "dpop-private-key-secret" not in encoded
 
     def test_export_redacts_nested_oauth_secret_fields_from_evidence_strings(self, tmp_path: Path) -> None:
-        conn = _db(tmp_path)
+        store = _store(tmp_path)
         oauth_blob = (
             'sync_state.credentials={"access_token":"eyJtest.payload.signature",'
             '"metadata":{"refresh_token":"refresh-secret-value",'
@@ -515,7 +577,7 @@ class TestExportRedaction:
             '"user_code":"ABCD-EFGH"}'
         )
         store_evidence(
-            conn,
+            store,
             _rec(
                 evidence_id="ex-oauth-redaction-nested",
                 summary=f"nested oauth debug dump {oauth_blob}",
@@ -523,7 +585,7 @@ class TestExportRedaction:
             ),
         )
 
-        exported = json.loads(export_evidence_json(conn, redact_fields=()))
+        exported = json.loads(export_evidence_json(store, redact_fields=()))
         encoded = json.dumps(exported)
 
         assert "sync_state.credentials" not in encoded
