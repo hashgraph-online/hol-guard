@@ -56,6 +56,8 @@ mod pure_eval;
 mod read_note;
 #[path = "redirect_projection.rs"]
 mod redirect_projection;
+#[path = "redirect_tee.rs"]
+mod redirect_tee;
 #[path = "generic_result.rs"]
 mod result;
 #[path = "venv_activation_projection.rs"]
@@ -724,6 +726,35 @@ fn evaluate_envelope(
                 return projected;
             }
         }
+    }
+
+    // `cmd | tee PATH` writes the same file `cmd > PATH` writes, but the
+    // stage keeps its path operand inside the pipeline, where the redirect
+    // projection never looks at it. The command then carries an unmodelled
+    // write and falls through to review, while the redirect spelling of the
+    // same work is modelled and bounded. Evaluating that spelling puts both
+    // forms on the same target checks.
+    if let Some(rewritten) = signals
+        .command
+        .as_deref()
+        .filter(|_| project_redirects && !search_scope_proven && !apply_patch_proven)
+        .and_then(redirect_tee::as_redirects)
+    {
+        let rewritten_payload = payload_with_command(
+            payload,
+            signals.command.as_deref().unwrap_or_default(),
+            &rewritten,
+        );
+        return evaluate_envelope(
+            harness,
+            event,
+            &rewritten_payload,
+            controls,
+            deadline,
+            context,
+            execution_environment,
+            project_redirects,
+        );
     }
 
     if let Some(projection) = signals
