@@ -13,6 +13,8 @@ import hashlib
 import json
 import re
 from collections.abc import Callable, Mapping
+from contextlib import AbstractContextManager
+from typing import Protocol
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import Request, urlopen
@@ -24,7 +26,12 @@ _SEVERITIES = ("critical", "high", "medium", "low", "info")
 _FOLDER_PATTERN = re.compile(r"^[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$")
 _TIMEOUT_SECONDS = 10
 
-Opener = Callable[..., object]
+
+class _Readable(Protocol):
+    def read(self) -> bytes: ...
+
+
+Opener = Callable[..., AbstractContextManager[_Readable]]
 
 
 def report_folder(plugin_dir: str) -> str:
@@ -76,7 +83,7 @@ def _request_oidc_token(*, request_url: str, request_token: str, audience: str, 
         f"{request_url}{separator}audience={quote(audience, safe='')}",
         headers={"Authorization": f"Bearer {request_token}", "Accept": "application/json"},
     )
-    with opener(request, timeout=_TIMEOUT_SECONDS) as response:  # type: ignore[attr-defined]
+    with opener(request, timeout=_TIMEOUT_SECONDS) as response:
         payload = json.loads(response.read().decode("utf-8"))
     token = payload.get("value") if isinstance(payload, dict) else None
     if not isinstance(token, str) or not token:
@@ -108,7 +115,7 @@ def send_ci_report(
             method="POST",
             headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
         )
-        with opener(request, timeout=_TIMEOUT_SECONDS) as response:  # type: ignore[attr-defined]
+        with opener(request, timeout=_TIMEOUT_SECONDS) as response:
             receipt = json.loads(response.read().decode("utf-8") or "{}")
         listings = receipt.get("listings") if isinstance(receipt, dict) else None
         return f"sent ({listings} HOL listing(s) updated)" if isinstance(listings, int) else "sent"
