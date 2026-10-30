@@ -242,3 +242,34 @@ fn literal_credentials_beside_references_still_match() {
         assert!(credential_assignment(&text), "{text:?}");
     }
 }
+
+#[test]
+fn actions_workflow_expressions_are_not_credentials() {
+    let workflow = "jobs:\n  release:\n    steps:\n      - uses: actions/checkout@v4\n        \
+        with:\n          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}\n      - run: gh pr list\n        \
+        env:\n          GH_TOKEN: ${{ github.token }}\n          \
+        NODE_AUTH_TOKEN: ${{secrets.NODE_AUTH_TOKEN}}\n          \
+        API_KEY: \"${{ secrets.API_KEY }}\"\n          \
+        DEPLOY_PASSWORD: '${{ secrets.DEPLOY_PASSWORD }}'  # rotated monthly\n          \
+        SIGNING_SECRET: ${{ steps.mint.outputs.secret }}\n          \
+        ACCESS_KEY: ${{ needs.build.outputs.keys[0] }}\n";
+    assert!(!credential_assignment(workflow));
+}
+
+#[test]
+fn actions_expressions_do_not_hide_literals() {
+    let secret = literal();
+    for text in [
+        format!("TOKEN: ${{{{ '{secret}' }}}}"),
+        format!("TOKEN: ${{{{ secrets.TOKEN || '{secret}' }}}}"),
+        format!("TOKEN: ${{{{ format('{{0}}', '{secret}') }}}}"),
+        format!("TOKEN: ${{{{ secrets.TOKEN }}}}{secret}"),
+        format!("TOKEN: ${{{{ secrets.TOKEN }}}} '{secret}'"),
+        format!("TOKEN: \"${{{{ secrets.TOKEN }}}}{secret}\""),
+        format!("TOKEN: ${{{{ {secret} }}}}"),
+        format!("TOKEN: ${{{{ secrets.TOKEN {secret}"),
+        "TOKEN: ${{ secrets.TOKEN".to_owned(),
+    ] {
+        assert!(credential_assignment(&text), "{text:?}");
+    }
+}
