@@ -95,6 +95,8 @@ def test_a_workspace_receipt_runs_what_the_read_only_parsers_reject(
         # the test never thought about, so an unexpected one fails here instead.
         if operation == "contained_target":
             return None
+        if operation == "command_words":
+            return str(fields["command_text"]).split()
         assert operation == "contained_kind", operation
         return kinds
 
