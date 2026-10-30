@@ -75,6 +75,70 @@ fn a_block_rule_saved_after_the_publish_still_answers_a_command_without_a_cli() 
 }
 
 #[test]
+fn a_saved_block_on_the_exact_command_defers_a_command_the_edge_allows() {
+    let exact_id = |command: &str| {
+        crate::memory_pattern::verdict(&crate::memory_pattern::MemoryRequest {
+            command: Some(command),
+            artifact_type: Some("shell_command"),
+            artifact_id: None,
+            artifact_name: None,
+            harness: None,
+        })
+        .exact_artifact_ids
+        .remove(0)
+    };
+    let seed = |lane: &Lane, harness: &str, command: &str, action: &str| {
+        let connection = rusqlite::Connection::open(lane.fixture.root.join("guard.db")).unwrap();
+        connection
+            .execute_batch(
+                "create table if not exists policy_decisions (
+                     harness text not null, scope text not null,
+                     artifact_id text, action text not null
+                 );
+                 delete from policy_decisions;",
+            )
+            .unwrap();
+        connection
+            .execute(
+                "insert into policy_decisions values (?1, 'artifact', ?2, ?3)",
+                rusqlite::params![harness, exact_id(command), action],
+            )
+            .unwrap();
+    };
+    let lane = allowing_lane("exact-block", json!({}));
+    assert_eq!(run(&lane, allowed_payload(&lane))["outcome"], "answer");
+    for (harness, command, action, expected_defer) in [
+        ("*", "pwd", "block", true),
+        ("codex", "pwd", "block", true),
+        // Another agent's rule, another command and an allow leave the
+        // edge's answer in place.
+        ("claude-code", "pwd", "block", false),
+        ("*", "pwd -P", "block", false),
+        ("*", "pwd", "allow", false),
+    ] {
+        seed(&lane, harness, command, action);
+        let result = run(&lane, allowed_payload(&lane));
+        if expected_defer {
+            assert_eq!(
+                deferred(&result),
+                "direct_hook_saved_decision",
+                "{harness} {command} {action}"
+            );
+        } else {
+            assert_eq!(result["outcome"], "answer", "{harness} {command} {action}");
+        }
+    }
+
+    // Watch records the call and lets it run.
+    let watch = allowing_lane(
+        "exact-block-watch",
+        json!({ "harness_postures": { "codex": "watch" } }),
+    );
+    seed(&watch, "*", "pwd", "block");
+    assert_eq!(run(&watch, allowed_payload(&watch))["outcome"], "answer");
+}
+
+#[test]
 fn a_hook_for_an_app_guard_does_not_protect_defers() {
     let lane = lane("unmanaged", json!({}));
     let connection = rusqlite::Connection::open(lane.fixture.root.join("guard.db")).unwrap();

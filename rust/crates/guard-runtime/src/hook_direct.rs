@@ -386,9 +386,15 @@ fn answer(
     // A change saved since then lives only in the store, so read it there
     // too. An unreadable store counts as holding rules, as a failed daemon
     // probe does.
-    let store =
-        crate::local_store_read::hook_store_probe(Path::new(&request.guard_home), &request.harness)
-            .map_err(|_| HookDirectDefer::LocalCliRules)?;
+    let command = pre_tool
+        .then(|| crate::local_store_read::pre_tool_command(&payload))
+        .flatten();
+    let store = crate::local_store_read::hook_store_probe(
+        Path::new(&request.guard_home),
+        &request.harness,
+        command,
+    )
+    .map_err(|_| HookDirectDefer::LocalCliRules)?;
     if store.harness_unmanaged {
         // The daemon passes such a hook through and leaves the harness its
         // own permission flow; a direct answer would replace that flow.
@@ -408,6 +414,12 @@ fn answer(
         Some(posture) => posture == "watch",
         None => snapshot.mode == "observe",
     };
+    // A saved or Guard Cloud block on this exact command is the daemon's to
+    // apply, ahead of the edge's allow and any saved allow; Watch only
+    // records it.
+    if store.exact_command_block && !recording_only {
+        return Err(HookDirectDefer::SavedDecision);
+    }
     if binding.evidence_drain != Some(true) {
         return Err(HookDirectDefer::EvidenceUndrained);
     }
