@@ -551,9 +551,15 @@ mod tests {
             (format!("rg -ln x {r}/missing/.env"), false),
             // A peer step that could put a file, directory or link at the
             // root takes the proof away: `rg` walks whatever appears there.
-            (format!("mkdir -p {r}/missing && rg -ln x {r}/missing"), false),
+            (
+                format!("mkdir -p {r}/missing && rg -ln x {r}/missing"),
+                false,
+            ),
             (format!("touch {r}/missing && rg -n x {r}/missing"), false),
-            (format!("ln -s {r}/src {r}/missing && rg -ln x {r}/missing"), false),
+            (
+                format!("ln -s {r}/src {r}/missing && rg -ln x {r}/missing"),
+                false,
+            ),
             (format!("rg -ln x {r}/missing; mkdir -p {r}/missing"), false),
         ] {
             let model = crate::parse_command(&crate::CommandModelRequestV1 {
