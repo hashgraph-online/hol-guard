@@ -344,6 +344,12 @@ fn collect(
 /// Join the collected items, giving each one the redirection that followed
 /// the construct. The construct applied that redirection to every command it
 /// ran, so each flattened item carries it too.
+///
+/// A `!` in front of an item inverts that pipeline's exit status and runs
+/// nothing of its own, so the item stands for the same work without it. It is
+/// dropped only where nothing reads the outcome it inverts, which the item's
+/// own separator says: a `;` successor runs either way, while a `&&` or `||`
+/// successor runs on the opposite outcome once the `!` is gone and keeps it.
 fn assemble(parts: &[(String, &'static str)], tail: &str) -> Option<String> {
     let tail = redirect_tail(tail)?;
     if parts.is_empty() {
@@ -351,7 +357,7 @@ fn assemble(parts: &[(String, &'static str)], tail: &str) -> Option<String> {
     }
     let mut out = String::new();
     for (text, separator) in parts {
-        out.push_str(text);
+        out.push_str(&unnegated_part(text, separator));
         if !tail.is_empty() {
             out.push(' ');
             out.push_str(&tail);
@@ -362,6 +368,15 @@ fn assemble(parts: &[(String, &'static str)], tail: &str) -> Option<String> {
         }
     }
     Some(out.trim_end_matches([' ', ';']).to_owned())
+}
+
+/// The item the flat list runs, with a leading `!` dropped where the
+/// separator after it shows that nothing reads the outcome it inverts.
+pub(super) fn unnegated_part(text: &str, separator: &str) -> String {
+    if separator != "; " {
+        return text.to_owned();
+    }
+    super::list_wrapper::unnegated_item(text).unwrap_or_else(|| text.to_owned())
 }
 
 /// Consume `keyword` followed by whitespace.

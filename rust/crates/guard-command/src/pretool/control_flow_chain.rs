@@ -15,7 +15,9 @@
 //! or a background job anywhere in the command. Anything else this does not
 //! fully understand returns `None` and keeps the existing review.
 
-use super::control_flow_flatten::{conditional_parts, keyword, MAX_FLATTENED_BYTES};
+use super::control_flow_flatten::{
+    conditional_parts, keyword, unnegated_part, MAX_FLATTENED_BYTES,
+};
 
 /// Commands that change the state later commands in the same shell run with.
 const STATE_CHANGING: &[&str] = &[
@@ -103,9 +105,14 @@ pub(super) fn spliced(command: &str) -> Option<String> {
         }
         let last = parts.len() - 1;
         for (index, (item, separator)) in parts.iter().enumerate() {
-            out.push_str(item);
+            // The last item keeps any `!` it carries: the splice drops its
+            // separator and the text around the conditional reads the
+            // outcome in its place.
             if index < last {
+                out.push_str(&unnegated_part(item, separator));
                 out.push_str(separator);
+            } else {
+                out.push_str(item);
             }
         }
         if !tail.is_empty() {
