@@ -24,11 +24,15 @@ fn outcome(harness: &str, command: &str, cwd: &std::path::Path) -> (String, Stri
 /// A PHP project whose packages are installed beside the manifest.
 fn php_project(name: &str) -> std::path::PathBuf {
     let ws = workspace(name, true);
-    std::fs::write(
-        ws.join("composer.json"),
-        "{\"name\": \"app/portal\", \"require\": {}}\n",
-    )
-    .unwrap();
+    // The manifest declares the scripts a PHP project runs its suite with:
+    // `run` and `run-script` name one, so the work they reach is the
+    // manifest's and has to be there to be read.
+    let manifest = serde_json::json!({
+        "name": "app/portal",
+        "require": {},
+        "scripts": {"test": "phpunit", "lint": "php-cs-fixer fix --dry-run"},
+    });
+    std::fs::write(ws.join("composer.json"), manifest.to_string()).unwrap();
     std::fs::write(ws.join("composer.lock"), "{\"packages\": []}\n").unwrap();
     std::fs::create_dir_all(ws.join("vendor/bin")).unwrap();
     std::fs::write(ws.join("vendor/autoload.php"), "<?php\n").unwrap();
