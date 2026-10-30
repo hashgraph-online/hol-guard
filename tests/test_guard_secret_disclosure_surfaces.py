@@ -69,8 +69,11 @@ def _plant(root: Path, samples: dict[str, str]) -> Path:
     _git(root, "init")
     _git(root, "config", "user.email", "guard@example.invalid")
     _git(root, "config", "user.name", "Guard Test")
-    # A developer's global core.hooksPath must not leak into this repository.
+    # A developer's global core.hooksPath must not leak into this repository,
+    # and a global commit.gpgsign would fail the commit before any assertion
+    # here ever runs.
     _git(root, "config", "core.hooksPath", "")
+    _git(root, "config", "commit.gpgsign", "false")
     target = root / "config.env"
     target.write_text("".join(f"{name}={value}\n" for name, value in samples.items()), encoding="utf-8")
     return target
@@ -96,6 +99,12 @@ def _run(args: list[str], *, home: Path, scratch: Path) -> subprocess.CompletedP
     environment = dict(os.environ)
     environment["HOME"] = str(home)
     environment["TMPDIR"] = str(scratch)
+    # Windows reads the profile and temporary directory from its own names, so
+    # leaving them inherited would let a file land where the sweep below never
+    # looks.
+    environment["USERPROFILE"] = str(home)
+    environment["TEMP"] = str(scratch)
+    environment["TMP"] = str(scratch)
     return subprocess.run(
         [sys.executable, "-m", "codex_plugin_scanner.guard.secrets.cli", *args],
         capture_output=True,
@@ -118,8 +127,14 @@ def _assert_absent(samples: dict[str, str], *, texts: dict[str, str], roots: dic
             for path in _files_under(root):
                 try:
                     content = path.read_bytes()
-                except OSError:  # pragma: no cover - a file the run already removed
-                    continue
+                except OSError as error:
+                    # The run has already exited, so a file that cannot be read
+                    # is a file this check did not cover. Saying so beats
+                    # passing over a secret written somewhere locked down.
+                    where = f"{surface}:{path.relative_to(root)}"
+                    raise AssertionError(
+                        f"{where} could not be read, so {name} was not checked there: {error}"
+                    ) from error
                 assert value.encode("utf-8") not in content, f"{name} reached {surface}:{path.relative_to(root)}"
 
 
@@ -188,13 +203,29 @@ def test_staged_failing_scan_discloses_no_secret(
     repo, home, scratch, samples = sandbox
     _git(repo, "add", "config.env")
 
-    completed = _run(["scan", str(repo), "--staged", "--fail-on-findings"], home=home, scratch=scratch)
+    rendered = _run(["scan", str(repo), "--staged", "--fail-on-findings"], home=home, scratch=scratch)
 
-    assert completed.returncode == 3, completed.stderr
-    assert "GitHub token" in completed.stdout
+    assert rendered.returncode == 3, rendered.stderr
+    assert "GitHub token" in rendered.stdout
+
+    # The staged path is a scanner of its own, so it has to be shown holding
+    # all six secrets itself; the working-tree run proves nothing about it.
+    payload_run = _run(
+        ["scan", str(repo), "--staged", "--fail-on-findings", "--format", "json"],
+        home=home,
+        scratch=scratch,
+    )
+
+    assert payload_run.returncode == 3, payload_run.stderr
+    _assert_found_every_family(json.loads(payload_run.stdout))
     _assert_absent(
         samples,
-        texts={"stdout": completed.stdout, "stderr": completed.stderr},
+        texts={
+            "stdout": rendered.stdout,
+            "stderr": rendered.stderr,
+            "json stdout": payload_run.stdout,
+            "json stderr": payload_run.stderr,
+        },
         roots={"home": home, "scratch": scratch},
     )
 
@@ -214,7 +245,11 @@ def test_history_scan_discloses_no_secret(
     payload = json.loads(completed.stdout)
     assert payload["history_enabled"] is True
     assert payload["commits_scanned"] >= 1
-    assert all(finding["commit"] for finding in payload["findings"] if finding["source"] == "history")
+    # The scanner labels a committed finding `git_history`; filtering on
+    # anything else leaves an empty list that every assertion passes.
+    history = [finding for finding in payload["findings"] if finding["source"] == "git_history"]
+    assert {finding["rule_id"] for finding in history} == _EXPECTED_RULES, history
+    assert all(finding["commit"] for finding in history)
     _assert_found_every_family(payload)
     _assert_absent(
         samples,
