@@ -1682,16 +1682,17 @@ pub fn scan_secret_text(
 
     for rule in SECRET_RULES.iter() {
         for captures in rule.pattern.captures_iter(text) {
-            let candidate = captures
+            // The finding is anchored on the secret itself, not on the whole
+            // match. A rule may consume a character ahead of the secret to
+            // prove it starts where a word does, and when that character is
+            // the newline ending the line above, the whole match begins on the
+            // previous line. Reporting from there would name the wrong line
+            // and score the wrong line's text.
+            let matched = captures
                 .name("secret")
-                .map(|m| m.as_str())
-                .unwrap_or_else(|| {
-                    captures
-                        .get(0)
-                        .expect("whole match always present")
-                        .as_str()
-                });
-            let match_start = captures.get(0).expect("whole match always present").start();
+                .unwrap_or_else(|| captures.get(0).expect("whole match always present"));
+            let candidate = matched.as_str();
+            let match_start = matched.start();
             let finding = finding_from_match(
                 &RuleMeta::of(rule),
                 candidate,
@@ -2482,6 +2483,36 @@ mod tests {
                 .collect();
             assert!(!claimed.contains(&"mailgun-api-key"), "{name}: {claimed:?}");
         }
+    }
+
+    #[test]
+    fn a_mailgun_key_opening_a_line_is_reported_on_its_own_line() {
+        // The rule consumes the character before the key to prove the key
+        // starts where a word does. On every line but the first that
+        // character is the newline that ended the line above, so a finding
+        // anchored on the whole match would name the previous line and score
+        // that line's text.
+        // The line above carries a sample marker and the key's own line carries
+        // a credential name, so the scoring reasons say which line was read.
+        let digest = format!("{}{}", "9f3b7c2a1d4e8f60b", "5a9c7d3e1f2a4b6");
+        let text = format!("# example configuration\nMAILGUN_API_KEY = key-{digest}\n");
+        let summary = scan_secret_text(&text, "config/prod.env", "working_tree", None, 200);
+        let finding = summary
+            .findings
+            .iter()
+            .find(|finding| finding.rule_id == "mailgun-api-key")
+            .expect("the key on the second line is still a finding");
+        assert_eq!(finding.line, 2);
+        assert!(
+            finding.context_reasons.contains(&"credential-name-context"),
+            "{:?}",
+            finding.context_reasons
+        );
+        assert!(
+            !finding.context_reasons.contains(&"sample-marker-context"),
+            "{:?}",
+            finding.context_reasons
+        );
     }
 
     #[test]
