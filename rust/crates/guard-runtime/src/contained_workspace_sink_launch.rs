@@ -7,6 +7,12 @@ use std::os::unix::fs::DirBuilderExt;
 use super::plan_check::Plan;
 use super::*;
 
+/// Where an overlay's layers are made. Pinned rather than taken from the
+/// environment: the kernel needs a filesystem that carries the extended
+/// attributes an overlay's upper layer records whiteouts in.
+#[cfg(any(target_os = "linux", all(unix, test)))]
+const OVERLAY_PARENT: &str = "/tmp";
+
 /// Everything one contained run needs besides its argv.
 pub(super) struct Launch<'a> {
     pub(super) plan: &'a Plan,
@@ -88,6 +94,12 @@ impl Launch<'_> {
         if let Some(git) = trusted_git(self.workspace) {
             environment.extend(identity(self.workspace, &git, self.private));
         }
+        self.sandboxed(argv, &environment)
+    }
+
+    /// Run the command under this host's sandbox: a Seatbelt profile.
+    #[cfg(not(target_os = "linux"))]
+    fn sandboxed(&self, argv: &[String], environment: &BTreeMap<String, String>) -> Outcome<i32> {
         let profile = native(
             "macos_profile",
             json!({
@@ -96,7 +108,7 @@ impl Launch<'_> {
                 "home": self.home,
                 "workspace": self.workspace_text,
                 "cwd": self.workspace_text,
-                "private_root": private_root,
+                "private_root": path_text(&self.private.path)?,
                 "allowed_executables": [],
                 "read_only_roots": self.plan.read_only_roots,
                 "output_roots": [],
@@ -119,13 +131,146 @@ impl Launch<'_> {
         backend.extend(argv.iter().cloned());
         process::run_backend(
             &backend,
-            &environment,
+            environment,
             self.workspace,
             &self.private.path,
             self.signals,
             RUN_TIMEOUT_SECONDS,
             &|| self.loopback.keep(),
         )
+    }
+
+    /// Run the command under this host's sandbox: a bubblewrap overlay.
+    ///
+    /// Linux has no profile to compile. The run gets fresh namespaces with
+    /// the workspace as an overlay's lower layer, so every write it makes
+    /// lands in a private upper layer, and the writes the plan's denials
+    /// admit are copied back after it exits. Both halves are the operations
+    /// `guard-command` already owns — the argv and the copy back — so the
+    /// sink reaches them in process rather than through a Python launcher,
+    /// and a failed run copies nothing back.
+    #[cfg(target_os = "linux")]
+    fn sandboxed(&self, argv: &[String], environment: &BTreeMap<String, String>) -> Outcome<i32> {
+        let workspace = std::fs::canonicalize(self.workspace).map_err(|_| {
+            Failure::new(
+                SANDBOX_UNAVAILABLE,
+                "The workspace sandbox directory is unavailable.",
+            )
+        })?;
+        let linked = !self.plan.linked_git.is_null();
+        let overlay = OverlayRoot::create(linked).ok_or_else(|| {
+            Failure::new(
+                SANDBOX_UNAVAILABLE,
+                "The workspace sandbox directory is unavailable.",
+            )
+        })?;
+        let workspace_text = path_text(&workspace)?;
+        let upper = path_text(&overlay.upper())?;
+        let mut request = json!({
+            "backend_executable": wire_path(Path::new(&self.plan.backend_executable)),
+            "workspace": workspace_text,
+            "private_root": path_text(&self.private.path)?,
+            "upper": upper,
+            "work": path_text(&overlay.work())?,
+            "exec_roots": self.exec_roots,
+            "read_files": plan_paths(&self.plan.read_only_roots)?,
+            "command": argv,
+        });
+        if linked {
+            request["linked_git"] = self.plan.linked_git.clone();
+            request["shared_upper"] = Value::String(path_text(&overlay.shared_upper())?);
+            request["shared_work"] = Value::String(path_text(&overlay.shared_work())?);
+        }
+        let Value::Array(words) = native("workspace_bubblewrap_argv", request)? else {
+            return Err(unavailable("invalid_reply"));
+        };
+        let backend: Vec<String> = words
+            .into_iter()
+            .map(|word| match word {
+                Value::String(word) => Some(word),
+                _ => None,
+            })
+            .collect::<Option<_>>()
+            .ok_or_else(|| unavailable("invalid_reply"))?;
+        let exit_code = process::run_backend(
+            &backend,
+            environment,
+            &workspace,
+            &self.private.path,
+            self.signals,
+            RUN_TIMEOUT_SECONDS,
+            &|| self.loopback.keep(),
+        )?;
+        let mut applied = json!({
+            "workspace": workspace_text,
+            "upper": upper,
+            "write_denials": self.write_denials,
+        });
+        if linked {
+            applied["linked_git"] = self.plan.linked_git.clone();
+            applied["shared_upper"] = Value::String(path_text(&overlay.shared_upper())?);
+        }
+        native("apply_workspace_overlay", applied)?;
+        Ok(exit_code)
+    }
+}
+
+/// The overlay layers one contained Linux run writes through, removed when
+/// dropped.
+///
+/// The kernel needs an overlay's upper and work directories on one
+/// filesystem, so both are made inside a single owner-only directory. A
+/// linked worktree's shared `.git` takes a second pair beside them, because
+/// it is mounted as an overlay of its own.
+#[cfg(any(target_os = "linux", all(unix, test)))]
+pub(super) struct OverlayRoot {
+    pub(super) path: PathBuf,
+}
+
+#[cfg(any(target_os = "linux", all(unix, test)))]
+impl OverlayRoot {
+    pub(super) fn create(linked: bool) -> Option<Self> {
+        let template = Path::new(OVERLAY_PARENT).join("hol-guard-overlay-XXXXXX");
+        let created = nix::unistd::mkdtemp(&template).ok()?;
+        let Ok(path) = std::fs::canonicalize(&created) else {
+            let _ = std::fs::remove_dir(&created);
+            return None;
+        };
+        // One owner only: its drop removes the directory.
+        let root = Self { path };
+        let mut builder = std::fs::DirBuilder::new();
+        builder.mode(0o700);
+        builder.create(root.upper()).ok()?;
+        builder.create(root.work()).ok()?;
+        if linked {
+            builder.create(root.path.join("shared")).ok()?;
+            builder.create(root.shared_upper()).ok()?;
+            builder.create(root.shared_work()).ok()?;
+        }
+        Some(root)
+    }
+
+    pub(super) fn upper(&self) -> PathBuf {
+        self.path.join("upper")
+    }
+
+    pub(super) fn work(&self) -> PathBuf {
+        self.path.join("work")
+    }
+
+    pub(super) fn shared_upper(&self) -> PathBuf {
+        self.path.join("shared").join("upper")
+    }
+
+    pub(super) fn shared_work(&self) -> PathBuf {
+        self.path.join("shared").join("work")
+    }
+}
+
+#[cfg(any(target_os = "linux", all(unix, test)))]
+impl Drop for OverlayRoot {
+    fn drop(&mut self) {
+        guard_command::restricted_pytest::remove_workspace_overlay_root(&self.path);
     }
 }
 

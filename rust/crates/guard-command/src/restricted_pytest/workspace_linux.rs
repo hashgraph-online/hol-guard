@@ -412,7 +412,7 @@ fn shared_layers(
 
 /// Remove an overlay root. The kernel leaves the work directory's inner
 /// directory unreadable, so it is made traversable first.
-pub(super) fn remove_overlay_root(root: &Path) {
+pub fn remove_overlay_root(root: &Path) {
     let inner = root.join("work").join("work");
     if inner
         .symlink_metadata()
