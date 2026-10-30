@@ -8,26 +8,15 @@
 #[path = "contained_package_test_tests.rs"]
 mod tests;
 
-use crate::contained_argv::jest_contained_call;
+use crate::contained_argv::{jest_contained_call, program_name};
 use crate::restricted_command::{normalized_command, RestrictedPytestError};
 use crate::sfrs_shlex::{split_with, SCRIPT_LEXER};
 use serde_json::{Map, Value};
-use std::path::Path;
 
 const INVALID: &str = "package_test_invalid_command";
 
 fn invalid(message: &str) -> RestrictedPytestError {
     RestrictedPytestError::new(INVALID, message)
-}
-
-/// The program a word names, as the sink reads it: the file name on this
-/// platform, so a path-spelled manager names the tool its bare spelling does
-/// while a name that only looks like a path on another platform stays whole.
-fn file_name(value: &str) -> &str {
-    Path::new(value)
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or(value)
 }
 
 /// Python truthiness of a manifest value.
@@ -54,7 +43,7 @@ pub(crate) fn lifecycle(scripts: &Map<String, Value>, task: &str) -> bool {
 /// `test` script. `bun test` is Bun's own runner rather than the script, so
 /// for Bun only the explicit `run test` spelling names the script.
 pub(crate) fn is_package_test(command: &[String]) -> bool {
-    let Some(manager) = command.first().map(|value| file_name(value)) else {
+    let Some(manager) = command.first().map(|value| program_name(value)) else {
         return false;
     };
     if !matches!(manager, "npm" | "pnpm" | "bun" | "yarn") {
@@ -113,10 +102,10 @@ pub(crate) fn script_tokens(
     let runner = tokens[0].as_str();
     let rest = &tokens[1..];
     let flag = rest.first();
-    let node =
-        matches!(file_name(runner), "node" | "nodejs") && flag.is_some_and(|flag| flag == "--test");
-    let vitest = runner == "vitest" && flag.is_some_and(|flag| flag == "run");
-    let jest = runner == "jest" && {
+    let node = matches!(program_name(runner), "node" | "nodejs")
+        && flag.is_some_and(|flag| flag == "--test");
+    let vitest = program_name(runner) == "vitest" && flag.is_some_and(|flag| flag == "run");
+    let jest = program_name(runner) == "jest" && {
         let call: Vec<String> = rest.iter().chain(passthrough.iter()).cloned().collect();
         jest_contained_call(&call)
     };

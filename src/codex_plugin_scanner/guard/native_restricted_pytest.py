@@ -29,6 +29,7 @@ _REASONS = {
     "inline_eval_invalid_command",
     "node_tool_invalid_command",
     "node_build_invalid_output",
+    "package_test_invalid_command",
     "linux_mapping_unavailable",
     PYTEST_EXTERNAL_PYTHONPATH_REASON_CODE,
     PYTEST_INVALID_COMMAND_REASON_CODE,

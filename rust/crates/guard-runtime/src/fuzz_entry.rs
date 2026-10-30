@@ -127,7 +127,6 @@ pub const CONTAINED_ARGV_OPERATIONS: &[&str] = &[
     "run_prefix_peel",
     "node_tool_route",
     "pytest_command",
-    "package_test_command",
     "package_test_resolve",
 ];
 

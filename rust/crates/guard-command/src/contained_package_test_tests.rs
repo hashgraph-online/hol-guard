@@ -24,6 +24,28 @@ fn package_managers_name_their_own_test_script() {
 }
 
 #[test]
+fn a_windows_spelled_manager_names_the_same_script() {
+    // The pre-tool parser reads `npm.exe` as `npm`, so the sink must read the
+    // same program; otherwise a Windows spelling walks past the alias route.
+    assert_eq!(is_package_test(&words(&["npm.exe", "test"])), cfg!(windows));
+    assert_eq!(
+        is_package_test(&words(&[
+            "C:\\Program Files\\nodejs\\npm.exe",
+            "run",
+            "test"
+        ])),
+        cfg!(windows)
+    );
+    // A script the manifest spells with the extension names the same runner,
+    // so the declared `node --test` run is recognised rather than refused.
+    let manifest = scripts(json!({"test": "node.exe --test"}));
+    assert_eq!(
+        resolve(&words(&["npm", "test"]), Some(&manifest)).is_ok(),
+        cfg!(windows)
+    );
+}
+
+#[test]
 fn supported_runners_resolve_with_their_passed_arguments() {
     let manifest = scripts(json!({"test": "node --test"}));
     assert_eq!(
@@ -109,12 +131,9 @@ fn arguments_need_an_explicit_separator() {
 fn the_request_reads_the_command_the_sink_sends() {
     let manifest = json!({"test": "node --test"});
     assert_eq!(
-        crate::contained_argv::evaluate(
-            "package_test_command",
-            &json!({"command": ["npm", "test"]})
-        )
-        .unwrap(),
-        json!({"value": true})
+        crate::contained_argv::evaluate("contained_kind", &json!({"command": ["npm", "test"]}))
+            .unwrap()["value"]["package_test"],
+        json!(true)
     );
     assert_eq!(
         crate::contained_argv::evaluate(

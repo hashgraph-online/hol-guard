@@ -20,15 +20,15 @@ pub(crate) fn local_vitest_entry(argument: &str) -> bool {
         || local_package_entry(argument, "vitest/dist/cli.js")
 }
 
-/// The program name; on Windows without `.exe`, as the pre-tool parser reads
-/// it, so `node.exe` and a resolved `C:\...\python.exe` plan like `node` and
-/// `python`.
-fn basename(command: &[String]) -> &str {
-    let name = command
-        .first()
-        .and_then(|v| Path::new(v).file_name())
+/// The program a word names; on Windows without `.exe`, as the pre-tool parser
+/// reads it, so `node.exe` and a resolved `C:\...\python.exe` name `node` and
+/// `python`. Every reading of a program name goes through here, so a
+/// Windows-spelled tool names the same program wherever it is read.
+pub(crate) fn program_name(value: &str) -> &str {
+    let name = Path::new(value)
+        .file_name()
         .and_then(|v| v.to_str())
-        .unwrap_or("");
+        .unwrap_or(value);
     match name.len().checked_sub(4) {
         Some(stem)
             if cfg!(windows)
@@ -40,6 +40,11 @@ fn basename(command: &[String]) -> &str {
         }
         _ => name,
     }
+}
+
+/// The program the command runs, as [`program_name`] reads its first word.
+fn basename(command: &[String]) -> &str {
+    command.first().map(|v| program_name(v)).unwrap_or("")
 }
 
 pub fn node_runtime_args(command: &[String]) -> Result<Vec<String>, RestrictedPytestError> {
@@ -532,7 +537,6 @@ pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
             | "run_prefix_peel"
             | "node_tool_route"
             | "pytest_command"
-            | "package_test_command"
             | "package_test_resolve"
     ) {
         return None;
@@ -565,9 +569,6 @@ pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
         }
         "node_tool_route" => crate::contained_node_tool::route_request(input, &command),
         "pytest_command" => Ok(json!(crate::pytest_argv::command_targets_pytest(&command))),
-        "package_test_command" => Ok(json!(crate::contained_package_test::is_package_test(
-            &command
-        ))),
         "package_test_resolve" => crate::contained_package_test::resolve(
             &command,
             input.get("scripts").and_then(Value::as_object),
@@ -647,7 +648,15 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
                     .iter()
                     .any(|entry| local_package_entry(v, entry))
                 })));
-    Ok(
-        json!({"inline_eval":inline,"node_test":node_test,"vitest":vitest,"git":name=="git","node_tool":node_tool}),
-    )
+    // The package-test alias travels with the other kinds so the sink reads
+    // every route a command can take in one answer, and an ordinary contained
+    // run never pays for a second reading to learn it is not an alias.
+    Ok(json!({
+        "inline_eval": inline,
+        "node_test": node_test,
+        "vitest": vitest,
+        "git": name == "git",
+        "node_tool": node_tool,
+        "package_test": crate::contained_package_test::is_package_test(command),
+    }))
 }

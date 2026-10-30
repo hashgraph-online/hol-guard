@@ -26,9 +26,9 @@ from .contained_run_directory import as_directory_change, as_run_root
 from .contained_wrapper import anchored_sibling_root, bounded_output, peel_contained_wrapper, sibling_project_root
 from .restricted_inline_eval import prepare_restricted_inline_eval, run_restricted_inline_eval
 from .restricted_package_test import (
+    KIND_NAMES,
     PACKAGE_TEST_PROFILE,
     PACKAGE_TEST_REASON,
-    is_package_test,
     resolve_package_test,
 )
 from .restricted_pytest import RestrictedPytestError, prepare_restricted_pytest, run_restricted_pytest
@@ -426,17 +426,23 @@ def run_authorized_contained_test(
         command, clock = peel_run_prefixes(command)
         if clock is not None:
             timeout_seconds = min(timeout_seconds, clock)
-        package_test = is_package_test(command)
-        if package_test:
-            command = list(resolve_package_test(command, workspace=workspace, cwd=cwd))
-        planned_command = command
         from ..native_restricted_pytest import restricted_native
 
-        kinds = restricted_native("contained_kind", {"command": command}, dict)
-        if set(kinds) != {"inline_eval", "node_test", "vitest", "git", "node_tool"} or any(
-            type(value) is not bool for value in kinds.values()
-        ):
-            raise _reject()
+        def _kinds(words: list[str]) -> dict[str, bool]:
+            answer = restricted_native("contained_kind", {"command": words}, dict)
+            if set(answer) != KIND_NAMES or any(type(value) is not bool for value in answer.values()):
+                raise _reject()
+            return answer
+
+        # The package-test alias travels with the other kinds, so an ordinary
+        # contained run asks native authority once. Only the alias pays for a
+        # second reading, of the words its script actually spells.
+        kinds = _kinds(command)
+        package_test = kinds["package_test"]
+        if package_test:
+            command = list(resolve_package_test(command, workspace=workspace, cwd=cwd))
+            kinds = _kinds(command)
+        planned_command = command
         inline_eval, node_test, vitest, git, node_tool = (
             kinds[key] for key in ("inline_eval", "node_test", "vitest", "git", "node_tool")
         )

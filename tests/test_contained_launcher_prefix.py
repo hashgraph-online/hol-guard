@@ -19,6 +19,7 @@ from codex_plugin_scanner.guard.runtime.contained_command_prefix import (
     _split_command_prefix,
     peel_run_prefixes,
 )
+from codex_plugin_scanner.guard.runtime.restricted_package_test import KIND_NAMES
 from codex_plugin_scanner.guard.runtime.restricted_pytest_model import (
     PYTEST_INVALID_COMMAND_REASON_CODE,
     RestrictedPytestError,
@@ -52,7 +53,7 @@ _SPLIT: dict[tuple[tuple[str, ...], bool], dict[str, object]] = {
     },
 }
 _WHOLE: dict[str, object] = {"core_index": 0, "assignments": [], "dropped_data": False}
-_KINDS = dict.fromkeys(("inline_eval", "node_test", "vitest", "git", "node_tool"), False)
+_KINDS = dict.fromkeys(sorted(KIND_NAMES), False)
 
 
 def _native(operation: str, fields: dict[str, object], expected: object) -> object:
