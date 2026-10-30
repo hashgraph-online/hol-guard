@@ -22,6 +22,8 @@ use serde_json::{json, Map, Value};
 
 #[path = "contained_workspace_sink_denial.rs"]
 mod denial;
+#[path = "contained_esbuild_image.rs"]
+mod esbuild_image;
 #[path = "contained_workspace_sink_grant.rs"]
 mod grant;
 #[cfg(any(target_os = "linux", all(unix, test)))]
@@ -33,12 +35,16 @@ mod paths;
 mod plan_check;
 #[path = "contained_workspace_sink_process.rs"]
 mod process;
+#[path = "contained_readonly_sink.rs"]
+mod readonly;
 #[path = "contained_workspace_sink_launch.rs"]
 mod runner;
 #[path = "contained_workspace_sink_request.rs"]
 mod snapshot;
 #[path = "contained_workspace_sink_split.rs"]
 mod split;
+#[path = "contained_vitest_sink.rs"]
+mod vitest;
 
 use paths::{expand_user, py_normal, search_path, wire_path};
 use plan_check::{plan_paths, sibling_root, validated_plan};
@@ -47,6 +53,7 @@ use snapshot::read_request;
 
 pub(crate) use plan_check::entered_sibling;
 pub(crate) use process::launch;
+pub(crate) use readonly::readonly_shape;
 pub(crate) use split::host_split;
 use split::publishes;
 #[cfg(test)]
@@ -229,6 +236,9 @@ fn sink(arguments: &Arguments, signals: &process::Signals) -> Outcome<i32> {
     let receipt = authority
         .authorize(&payload)
         .ok_or_else(Failure::unauthorized)?;
+    if let Some(route) = readonly::readonly_route(&receipt) {
+        return readonly::run(&payload, &workspace, &authority, route, signals);
+    }
     if !receipt_matches(&receipt) || host_split(receipt.get("reason")) {
         return Err(Failure::unauthorized());
     }

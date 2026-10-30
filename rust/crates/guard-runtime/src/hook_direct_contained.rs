@@ -268,6 +268,9 @@ fn native_shape(
     let Some(command) = original.get("command").and_then(Value::as_str) else {
         return false;
     };
+    if crate::contained_workspace_sink::readonly_shape(response, original) {
+        return true;
+    }
     text("reason_code") == Some(WORKSPACE_REASON)
         && text("required_execution_profile") == Some(WORKSPACE_PROFILE)
         && !host_split(response.get("reason"))
