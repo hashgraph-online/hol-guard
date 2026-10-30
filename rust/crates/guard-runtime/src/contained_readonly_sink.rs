@@ -13,7 +13,8 @@
 //! front of the program, and for one with settings in front: the call as
 //! issued draws the receipt and the plain run behind the settings runs with
 //! the inert ones carried. The edge routes nothing else here. On Linux it
-//! runs the Python runs only (`backend`).
+//! runs the Python runs and the Node evaluations, tests and tools
+//! (`backend`).
 //!
 //! Rust owns every verdict: the resident's receipts, the operations' plan.
 
@@ -24,6 +25,8 @@ use super::*;
 
 #[path = "contained_readonly_backend.rs"]
 mod backend;
+#[path = "contained_readonly_node.rs"]
+mod node_runtime;
 
 /// The read-only routes: the reason the resident gives and the profile it
 /// requires.
@@ -276,14 +279,21 @@ pub(super) fn run(
     }
     let mut environment = environment(&plan, &private)?;
     match kind {
-        Kind::Eval => {
-            environment.insert("PYTHONDONTWRITEBYTECODE".into(), "1".into());
-        }
-        Kind::NodeTest | Kind::NodeTool => {
-            // Node preloads and search paths from the host are not
-            // repository test input.
-            environment.remove("NODE_OPTIONS");
-            environment.remove("NODE_PATH");
+        Kind::Eval | Kind::NodeTest | Kind::NodeTool => {
+            if kind == Kind::Eval {
+                environment.insert("PYTHONDONTWRITEBYTECODE".into(), "1".into());
+            }
+            if plan.profile_version != PYTHON_EVAL_PROFILE {
+                node_runtime::settle(
+                    payload,
+                    workspace,
+                    authority,
+                    &plan,
+                    &mut environment,
+                    signals,
+                    timeout,
+                )?;
+            }
         }
         Kind::Git => {
             environment.remove("PYTHONPATH");
@@ -439,7 +449,10 @@ pub(super) fn launch(
     timeout: u64,
     notes: process::Notes<'_>,
 ) -> Outcome<i32> {
-    let backend = backend::argv(plan, private)?;
+    let mut backend = backend::argv(plan, private)?;
+    if backend::node_memory(plan) {
+        backend.insert(0, process::NODE_MEMORY.to_owned());
+    }
     process::run_backend(
         &backend,
         environment,

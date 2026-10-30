@@ -3,10 +3,11 @@
 //! macOS compiles the plan's Seatbelt profile and hands it to the backend.
 //! Linux has no profile: the operation Guard's own sink asks builds the
 //! bubblewrap namespace, pins the plan in the run's private directory and
-//! starts this binary inside it to enforce that plan. Linux runs only the
-//! Python runs here, pytest, a Git inspection and a Python evaluation: a
-//! Node run there first asks the runtime, inside the same namespace, which
-//! options it takes, and keeps Guard's own sink.
+//! starts this binary inside it to enforce that plan. Linux runs pytest, a
+//! Git inspection, an evaluation, a `node --test` run and a lint or
+//! typecheck tool here; a Vitest run, a build and a package test keep
+//! Guard's own sink. A Node run there is launched with Node's memory bounds
+//! (`process::NODE_MEMORY`).
 
 use super::*;
 
@@ -16,9 +17,31 @@ pub(super) const BUBBLEWRAP: &str = "linux-bubblewrap";
 pub(super) fn host_runs(route: Route) -> bool {
     match HOST_BACKEND {
         Some(SEATBELT) => true,
-        Some(BUBBLEWRAP) => matches!(route.1, PYTEST_PROFILE | GIT_PROFILE | PYTHON_EVAL_PROFILE),
+        Some(BUBBLEWRAP) => matches!(
+            route.1,
+            PYTEST_PROFILE
+                | GIT_PROFILE
+                | PYTHON_EVAL_PROFILE
+                | NODE_EVAL_PROFILE
+                | NODE_TEST_PROFILE
+                | NODE_TOOL_PROFILE
+        ),
         _ => false,
     }
+}
+
+/// Whether `plan` runs Node under Linux's sandbox, which bounds its
+/// writable memory rather than its address space.
+pub(super) fn node_memory(plan: &ReadonlyPlan) -> bool {
+    plan.backend == BUBBLEWRAP
+        && matches!(
+            plan.profile_version.as_str(),
+            NODE_EVAL_PROFILE
+                | VITEST_PROFILE
+                | NODE_TEST_PROFILE
+                | NODE_TOOL_PROFILE
+                | NODE_BUILD_PROFILE
+        )
 }
 
 /// The argv that starts `plan` under its read-only sandbox.

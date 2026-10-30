@@ -27,13 +27,12 @@ use super::{envelope, Failure, Outcome, LAUNCH_COMMAND, SANDBOX_UNAVAILABLE};
 
 const OUTPUT_LIMIT: usize = 1024 * 1024;
 const TRUNCATED: &str = "\n[HOL Guard truncated restricted pytest output]\n";
-const CPU_SECONDS: u64 = 1200;
-const ADDRESS_SPACE_BYTES: u64 = 4 * 1024 * 1024 * 1024;
-const FILE_SIZE_BYTES: u64 = 256 * 1024 * 1024;
-const OPEN_FILES: u64 = 256;
 const CEILING_BUDGET: Duration = Duration::from_secs(5);
 /// The launcher's `CEILING` for a host step, which runs without limits.
 pub(super) const HOST_STEP: &str = "host";
+/// The word in front of a Node run's argv: the launcher bounds its writable
+/// memory instead of its whole address space (`limits`).
+pub(super) const NODE_MEMORY: &str = "node-memory";
 /// Lowers the process ceiling the launcher passes as `$1`, then runs the
 /// rest: Apple targets expose `RLIMIT_NPROC` only through the shell.
 #[cfg(target_vendor = "apple")]
@@ -157,10 +156,7 @@ pub(super) fn run_backend(
     timeout_seconds: u64,
     notes: Notes<'_>,
 ) -> Outcome<i32> {
-    let deadline = std::time::Instant::now() + CEILING_BUDGET;
-    let ceiling = envelope(crate::restricted_process_ceiling::evaluate(deadline))?
-        .as_u64()
-        .ok_or_else(|| super::unavailable("invalid_reply"))?;
+    let ceiling = ceiling()?;
     let launcher = std::env::current_exe().map_err(|error| not_started(&error))?;
     let stdout = capture_file(scratch, "stdout")?;
     let stderr = capture_file(scratch, "stderr")?;
@@ -206,6 +202,27 @@ pub(super) fn run_backend(
         let _ = stderr.flush();
     }
     Ok(code)
+}
+
+/// The process ceiling the launcher lowers a sandboxed command to.
+fn ceiling() -> Outcome<u64> {
+    let deadline = std::time::Instant::now() + CEILING_BUDGET;
+    envelope(crate::restricted_process_ceiling::evaluate(deadline))?
+        .as_u64()
+        .ok_or_else(|| super::unavailable("invalid_reply"))
+}
+
+/// The argv that starts `backend` through the launcher, under the
+/// sandbox's resource limits, for a caller that captures its output.
+pub(super) fn launcher_argv(backend: &[String]) -> Outcome<Vec<String>> {
+    let launcher = std::env::current_exe().map_err(|error| not_started(&error))?;
+    let launcher = launcher
+        .into_os_string()
+        .into_string()
+        .map_err(|_| super::unavailable("launcher_path"))?;
+    let mut argv = vec![launcher, LAUNCH_COMMAND.to_owned(), ceiling()?.to_string()];
+    argv.extend(backend.iter().cloned());
+    Ok(argv)
 }
 
 /// Start `command`, which the launcher makes a session of its own, and wait
@@ -395,9 +412,10 @@ fn read_all(mut file: File) -> Vec<u8> {
     raw
 }
 
-/// `contained-workspace-launch CEILING ARGV...`: start a session, apply the
-/// sandbox's resource limits, and exec `ARGV`. With `host` for `CEILING`,
-/// a host step: the session only. Returns only on failure.
+/// `contained-workspace-launch CEILING [node-memory] ARGV...`: start a
+/// session, apply the sandbox's resource limits, and exec `ARGV`. With
+/// `host` for `CEILING`, a host step: the session only. Returns only on
+/// failure.
 pub(crate) fn launch(args: &[String]) -> i32 {
     let Some((ceiling, argv)) = args.split_first() else {
         return launch_failed("missing command");
@@ -408,12 +426,18 @@ pub(crate) fn launch(args: &[String]) -> i32 {
         let error = Command::new(program).args(arguments).exec();
         return launch_failed(&error.to_string());
     }
+    let (node, argv) = match argv.split_first() {
+        Some((word, rest)) if word == NODE_MEMORY => (true, rest),
+        _ => (false, argv),
+    };
     let (Ok(ceiling), Some(_)) = (ceiling.parse::<u64>(), argv.first()) else {
         return launch_failed("invalid launch arguments");
     };
     let _ = nix::unistd::setsid();
     release_forwarded_signals();
-    limit_resources(ceiling);
+    if !limits::apply(ceiling, node) {
+        return launch_failed("Linux Node memory limits are unavailable");
+    }
     #[cfg(target_vendor = "apple")]
     let error = Command::new("/bin/sh")
         .arg("-c")
@@ -451,42 +475,8 @@ fn launch_failed(detail: &str) -> i32 {
     126
 }
 
-fn limit_resources(ceiling: u64) {
-    use nix::sys::resource::Resource;
-    lower(Resource::RLIMIT_CPU, CPU_SECONDS);
-    lower(Resource::RLIMIT_AS, ADDRESS_SPACE_BYTES);
-    lower(Resource::RLIMIT_FSIZE, FILE_SIZE_BYTES);
-    lower(Resource::RLIMIT_NOFILE, OPEN_FILES);
-    #[cfg(not(target_vendor = "apple"))]
-    lower(Resource::RLIMIT_NPROC, ceiling);
-    #[cfg(target_vendor = "apple")]
-    let _ = ceiling;
-}
-
-/// Lower `resource` to `requested` without raising either limit; a limit
-/// the platform refuses is left as it is.
-fn lower(resource: nix::sys::resource::Resource, requested: u64) {
-    let Ok((soft, hard)) = nix::sys::resource::getrlimit(resource) else {
-        return;
-    };
-    let (soft, hard) = lowered(soft, hard, requested);
-    let _ = nix::sys::resource::setrlimit(resource, soft, hard);
-}
-
-fn lowered(soft: u64, hard: u64, requested: u64) -> (u64, u64) {
-    let infinite = libc::RLIM_INFINITY;
-    let hard = if hard == infinite {
-        requested
-    } else {
-        requested.min(hard)
-    };
-    let soft = if soft == infinite {
-        hard
-    } else {
-        requested.min(soft).min(hard)
-    };
-    (soft, hard)
-}
+#[path = "contained_workspace_sink_limits.rs"]
+mod limits;
 
 #[cfg(test)]
 #[path = "contained_workspace_sink_process_tests.rs"]
