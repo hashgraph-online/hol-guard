@@ -240,8 +240,6 @@ def test_rule_revision_changes_with_review_not_only_source(tmp_path: Path) -> No
 @pytest.mark.parametrize(
     "argv",
     [
-        [],
-        ["items", "list", "x" * 65],
         ["items", "list", "long-value" * 5, "long-value" * 5, "long-value" * 5],
         ["items", "list; rm", "-rf", "/tmp/x"],
     ],
@@ -249,7 +247,7 @@ def test_rule_revision_changes_with_review_not_only_source(tmp_path: Path) -> No
 def test_reviewed_literal_grammar_enforces_its_own_bounds(tmp_path: Path, argv: list[str]) -> None:
     """The grammar the compiler applies is the one review reports against.
 
-    The last vector would also fail its scope check, since `rm` names no
+    The second vector would also fail its scope check, since `rm` names no
     operation this discovery carries. An author who wrote a second command is
     told that, rather than told to file it under a different operation.
     """
@@ -258,4 +256,20 @@ def test_reviewed_literal_grammar_enforces_its_own_bounds(tmp_path: Path, argv: 
     payload, entry = reviewed_entry(discovery, ("items", "list"))
     entry["safeArgv"] = [argv]
     with pytest.raises(BuilderError, match="bounded exact literal invocation"):
+        load_review(payload, discovery)
+
+
+@pytest.mark.parametrize("argv", [[], ["items", "list", "x" * 65]])
+def test_a_vector_the_authoring_contract_rejects_never_reaches_the_grammar(tmp_path: Path, argv: list[str]) -> None:
+    """An empty vector and an over-long token are refused by the document schema.
+
+    Both bounds are also the grammar's, which `reviewed_invocation_bindings`
+    pins in Rust. Review reads the document first, so the author hears about the
+    shape of the file they wrote rather than about the matcher it would compile.
+    """
+
+    discovery = make_discovery(tmp_path)
+    payload, entry = reviewed_entry(discovery, ("items", "list"))
+    entry["safeArgv"] = [argv]
+    with pytest.raises(BuilderError, match="versioned extension authoring contract"):
         load_review(payload, discovery)
