@@ -585,3 +585,114 @@ fn a_manifest_cannot_reach_a_composer_command_by_naming_a_script_after_it() {
         assert!(!run("composer", &ws, &[verb]), "{verb}");
     }
 }
+
+#[test]
+fn a_script_named_after_an_alias_reaches_the_command_the_alias_stands_for() {
+    // Composer 2.8 answers to `uninstall` for `remove`, and newer releases
+    // add `repository`, `repo` and `policy`. A manifest declaring a script
+    // under one of those names never reaches it: Composer runs the command.
+    let ws = php_project_with_scripts(
+        "php-script-alias",
+        serde_json::json!({
+            "uninstall": "phpunit",
+            "repository": "phpunit",
+            "repo": "phpunit",
+            "policy": "phpunit",
+        }),
+    );
+    for words in [
+        &["uninstall", "vendor/package"][..],
+        &["repository", "add"],
+        &["repo", "add"],
+        &["policy"],
+    ] {
+        assert!(!run("composer", &ws, words), "{words:?}");
+    }
+}
+
+#[test]
+fn a_script_whose_own_line_runs_a_package_manager_keeps_its_review() {
+    // The work a script name runs is the manifest's, not the line's, so the
+    // line alone cannot say whether a package manager is in it. A script that
+    // installs changes the project's dependencies, which is the work the
+    // package firewall is here to observe, under either spelling.
+    let ws = php_project_with_scripts(
+        "php-script-installs",
+        serde_json::json!({
+            "deps": "composer install --no-scripts",
+            "setup": ["phpunit --version", "npm ci"],
+            "bootstrap": "@composer update",
+            "ci": "@deps",
+            "lint": ["@php vendor/bin/php-cs-fixer fix", "phpunit"],
+            "loop": "@cycle",
+            "cycle": "@loop",
+            "callable": "Acme\\Tests::run",
+        }),
+    );
+    for words in [
+        &["deps"][..],
+        &["setup"],
+        &["bootstrap"],
+        &["ci"],
+        &["run-script", "deps"],
+        &["run", "ci"],
+    ] {
+        assert!(!run("composer", &ws, words), "{words:?}");
+    }
+    // A script that stays with the project's own tools still runs, including
+    // one spelled as a list, one reached through `@php`, and a PHP callable.
+    // A pair of scripts that stand for each other name no manager either;
+    // Composer is the one that has to answer for the cycle.
+    for words in [
+        &["lint"][..],
+        &["callable"],
+        &["loop"],
+        &["run-script", "lint"],
+    ] {
+        assert!(run("composer", &ws, words), "{words:?}");
+    }
+}
+
+#[test]
+fn a_project_that_lets_a_plugin_run_keeps_the_review_on_a_script_name() {
+    // Composer registers a plugin's commands before the project's scripts and
+    // the plugin wins a name collision, so a declared name is only the script
+    // while the project admits no plugin. `config.allow-plugins` is where the
+    // project says which it admits.
+    for (name, allow) in [
+        ("php-plugins-all", serde_json::json!(true)),
+        (
+            "php-plugins-named",
+            serde_json::json!({"bamarni/composer-bin-plugin": true}),
+        ),
+    ] {
+        let ws = php_project(name);
+        std::fs::write(
+            ws.join("composer.json"),
+            serde_json::json!({
+                "name": "app/portal",
+                "config": {"allow-plugins": allow},
+                "scripts": {"test": "phpunit"},
+            })
+            .to_string(),
+        )
+        .unwrap();
+        assert!(!run("composer", &ws, &["test"]), "{name}");
+        // The longer spelling names the script itself, which no plugin command
+        // stands in front of.
+        assert!(run("composer", &ws, &["run-script", "test"]), "{name}");
+    }
+    // A project that admits none keeps the shortcut.
+    let ws = php_project("php-plugins-denied");
+    std::fs::write(
+        ws.join("composer.json"),
+        serde_json::json!({
+            "name": "app/portal",
+            "config": {"allow-plugins": {"bamarni/composer-bin-plugin": false}},
+            "scripts": {"test": "phpunit"},
+        })
+        .to_string(),
+    )
+    .unwrap();
+    assert!(run("composer", &ws, &["test"]));
+}

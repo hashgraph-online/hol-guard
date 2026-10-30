@@ -232,7 +232,8 @@ def _vendored_toolchain(workspace: Path) -> None:
     _write(
         workspace / "composer.json",
         '{\n  "name": "fixture/app",\n  "require": {},\n'
-        '  "scripts": {\n    "test": "phpunit",\n    "lint": "php-cs-fixer fix --dry-run"\n  }\n}\n',
+        '  "scripts": {\n    "test": "phpunit",\n    "lint": "php-cs-fixer fix --dry-run",\n'
+        '    "deps": "composer install --no-scripts",\n    "uninstall": "phpunit"\n  }\n}\n',
     )
     _write(workspace / "composer.lock", '{\n  "packages": [],\n  "packages-dev": []\n}\n')
     _write(workspace / "vendor" / "autoload.php", "<?php\n")

@@ -138,10 +138,13 @@ const COMPOSER_RESERVED_VERBS: &[&str] = &[
     "licenses",
     "list",
     "outdated",
+    "policy",
     "prohibits",
     "r",
     "reinstall",
     "remove",
+    "repo",
+    "repository",
     "require",
     "rm",
     "run",
@@ -153,6 +156,7 @@ const COMPOSER_RESERVED_VERBS: &[&str] = &[
     "status",
     "suggests",
     "u",
+    "uninstall",
     "update",
     "upgrade",
     "validate",
@@ -309,14 +313,96 @@ fn composer_manifest(directory: &Path) -> Option<serde_json::Value> {
     }
 }
 
-/// Whether the manifest declares `name` among the project's own scripts.
-/// Composer turns each of those names into a command of its own, so a line
-/// that names one runs the work `composer run-script NAME` runs.
-fn declares_script(manifest: &serde_json::Value, name: &str) -> bool {
-    manifest
+/// Whether the manifest lets a plugin bring commands of its own. Composer
+/// registers a plugin's commands before it turns the project's scripts into
+/// commands, and the plugin wins a name collision, so a declared script name
+/// is only that script while no plugin may run. Since Composer 2.2 a plugin
+/// runs only where the project's own `config.allow-plugins` admits it, which
+/// is what this reads: an absent or false setting is the project telling
+/// Composer to run none.
+fn allows_plugins(manifest: &serde_json::Value) -> bool {
+    match manifest
+        .get("config")
+        .and_then(|config| config.get("allow-plugins"))
+    {
+        None | Some(serde_json::Value::Null) => false,
+        Some(serde_json::Value::Bool(allowed)) => *allowed,
+        Some(serde_json::Value::Object(entries)) => entries
+            .values()
+            .any(|entry| entry != &serde_json::Value::Bool(false)),
+        Some(_) => true,
+    }
+}
+
+/// How many scripts are read before the shortcut gives up. One script stands
+/// for another by name, and a manifest can spell a chain or a cycle.
+const SCRIPT_DEPTH: usize = 8;
+
+/// Whether the manifest declares `name` among the project's own scripts and
+/// the work it declares is the project's own. Composer turns each script name
+/// into a command of its own, so a line that names one runs the work
+/// `composer run-script NAME` runs -- and that work is the manifest's, not the
+/// line's, so the line alone cannot say whether a package manager is in it.
+///
+/// A script is a line, a list of lines, or `@other` standing for another of
+/// the project's scripts, which is followed here the way Composer follows it.
+/// `@php` and `@putenv` are Composer's own spellings for a program and a
+/// variable; `@composer` is Composer itself, which is the manager this is
+/// looking for. Anything else the manifest spells is left to the review.
+fn script_is_local(manifest: &serde_json::Value, name: &str) -> bool {
+    let Some(scripts) = manifest
         .get("scripts")
         .and_then(serde_json::Value::as_object)
-        .is_some_and(|scripts| scripts.contains_key(name))
+    else {
+        return false;
+    };
+    let mut read: Vec<&str> = Vec::new();
+    let mut pending: Vec<&str> = vec![name];
+    while let Some(current) = pending.pop() {
+        if read.contains(&current) {
+            continue;
+        }
+        if read.len() == SCRIPT_DEPTH {
+            return false;
+        }
+        read.push(current);
+        let lines = match scripts.get(current) {
+            Some(serde_json::Value::String(line)) => vec![line.as_str()],
+            Some(serde_json::Value::Array(entries)) => {
+                let mut lines = Vec::with_capacity(entries.len());
+                for entry in entries {
+                    match entry.as_str() {
+                        Some(line) => lines.push(line),
+                        None => return false,
+                    }
+                }
+                lines
+            }
+            _ => return false,
+        };
+        for line in lines {
+            let Some(reference) = line.trim_start().strip_prefix('@') else {
+                if names_a_package_tool(&[line]) {
+                    return false;
+                }
+                continue;
+            };
+            let (head, rest) = match reference.split_once(char::is_whitespace) {
+                Some((head, rest)) => (head, rest),
+                None => (reference, ""),
+            };
+            match head {
+                "php" | "putenv" => {
+                    if names_a_package_tool(&[rest]) {
+                        return false;
+                    }
+                }
+                "composer" => return false,
+                other => pending.push(other),
+            }
+        }
+    }
+    true
 }
 
 /// The directory Composer reads this project's packages from, when the
@@ -440,7 +526,8 @@ fn local_composer_work(arguments: &[&str], directory: &Path, workspace: &Path) -
         // own line, read here the way a delegated line is read above.
         return !verb.starts_with('-')
             && !COMPOSER_RESERVED_VERBS.contains(&verb)
-            && declares_script(&manifest, verb)
+            && !allows_plugins(&manifest)
+            && script_is_local(&manifest, verb)
             && composer_tree(&manifest, directory, workspace).is_some()
             && !names_a_package_tool(&arguments[index + 1..]);
     }
@@ -455,7 +542,13 @@ fn local_composer_work(arguments: &[&str], directory: &Path, workspace: &Path) -
         // it hands the work to a package manager.
         let line = &arguments[index + 1..];
         return line.first().is_some_and(|word| !word.starts_with('-'))
-            && !names_a_package_tool(line);
+            && !names_a_package_tool(line)
+            // `run` and `run-script` name a script, so the work is the
+            // manifest's here too, read under the longer spelling.
+            && (verb == "exec"
+                || line
+                    .first()
+                    .is_some_and(|script| script_is_local(&manifest, script)));
     }
     words[index + 1..]
         .iter()
