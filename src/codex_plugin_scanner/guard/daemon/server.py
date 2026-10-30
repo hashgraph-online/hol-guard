@@ -1640,9 +1640,7 @@ class _GuardDaemonHandler(
             self._write_json(store.clear_command_activity_evidence())
             return
         if parsed.path == "/v1/evidence":
-            with store._connect() as conn:
-                deleted = clear_evidence(conn)
-            self._write_json({"deleted": deleted})
+            self._write_json({"deleted": clear_evidence(store)})
             return
         if parsed.path == "/v1/read-state":
             body = self._read_delete_body()

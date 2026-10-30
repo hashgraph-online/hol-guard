@@ -430,6 +430,22 @@ def test_repair_runs_reuse_attested_release_wheels_instead_of_rebuilt_ones() -> 
     assert script.index("gh attestation verify") < script.index('cp -f "${release_files[@]}" "$DIST_DIR/"')
 
 
+def test_pull_request_alpha_prerelease_accepts_provenance_from_the_run_on_main() -> None:
+    steps = _workflow(PUBLISH_WORKFLOW)["jobs"]["release-alpha"]["steps"]
+    script = next(step["run"] for step in steps if step.get("name") == "Create discoverable alpha prerelease")
+    verify = script[script.index('for remote_file in "$existing_dir"/hol_guard-*') :]
+    verify = verify[: verify.index("done")]
+    assert '--source-digest "$SOURCE_SHA"' in verify
+    # A normal alpha builds the commit that ran, so a mismatch there still fails.
+    assert verify.index('[[ "$SOURCE_SHA" == "$GITHUB_SHA" ]]') < verify.index('--source-digest "$GITHUB_SHA"')
+    fallback = verify[verify.index('[[ "$SOURCE_SHA" == "$GITHUB_SHA" ]]') :]
+    assert "exit 1" in fallback[: fallback.index("fi")]
+    assert '--signer-workflow "$GITHUB_REPOSITORY/.github/workflows/publish.yml"' in fallback
+    assert "--deny-self-hosted-runners" in fallback
+    # The fallback only checks provenance; the asset bytes were compared with this build first.
+    assert script.index('cmp --silent "$local_file" "$remote_file"') < script.index(verify)
+
+
 def test_stable_repair_reuses_original_plugin_scanner_files() -> None:
     workflow = yaml.safe_load(PUBLISH_WORKFLOW.read_text(encoding="utf-8"))
     job = workflow["jobs"]["publish-main-pypi"]

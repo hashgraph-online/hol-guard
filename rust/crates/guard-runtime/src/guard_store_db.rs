@@ -112,6 +112,22 @@ pub(crate) fn query_all(
     sql: &str,
     params: &[Value],
 ) -> StoreResult<Vec<Row>> {
+    let mut out = Vec::new();
+    query_each(connection, sql, params, |row| {
+        out.push(row);
+        Ok(true)
+    })?;
+    Ok(out)
+}
+
+/// `for row in execute(sql, params)`, stopping once `visit` returns false,
+/// so a caller that only wants a budget's worth never holds the rest.
+pub(crate) fn query_each(
+    connection: &Connection,
+    sql: &str,
+    params: &[Value],
+    mut visit: impl FnMut(Row) -> StoreResult<bool>,
+) -> StoreResult<()> {
     let mut statement = connection.prepare_cached(sql)?;
     let names: Vec<String> = statement
         .column_names()
@@ -120,15 +136,16 @@ pub(crate) fn query_all(
         .collect();
     let bound: Vec<rusqlite::types::Value> = params.iter().map(bind).collect();
     let mut rows = statement.query(rusqlite::params_from_iter(bound))?;
-    let mut out = Vec::new();
     while let Some(row) = rows.next()? {
         let mut map = Row::new();
         for (index, name) in names.iter().enumerate() {
             map.insert(name.clone(), cell(row.get_ref(index)?)?);
         }
-        out.push(map);
+        if !visit(map)? {
+            break;
+        }
     }
-    Ok(out)
+    Ok(())
 }
 
 /// `execute(sql, params).fetchone()`.

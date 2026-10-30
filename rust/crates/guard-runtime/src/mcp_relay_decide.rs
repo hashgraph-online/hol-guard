@@ -1054,7 +1054,7 @@ mod saved;
 #[path = "mcp_relay_decide_session.rs"]
 mod session;
 #[path = "mcp_relay_decide_store.rs"]
-mod store;
+pub(crate) mod store;
 #[path = "mcp_relay_decide_subject.rs"]
 mod subject;
 #[path = "mcp_relay_decide_view.rs"]

@@ -41,7 +41,7 @@ fn resolve_with(lookup: Option<Value>) -> StoreResult<Value> {
     if let Some(lookup) = lookup {
         args.insert("lookup".into(), lookup);
     }
-    resolve(&connection, "/nonexistent-guard-home", &Args(&args))
+    resolve(&connection, "/nonexistent-guard-home", &Args(&args), None)
 }
 
 #[test]
@@ -121,4 +121,63 @@ fn a_workspace_without_a_name_has_no_portable_identity() {
         identity(Some(&named), None),
         PortableIdentity::Identity(named)
     );
+}
+
+fn native_with(extra: &[(&str, Value)]) -> StoreResult<Value> {
+    let connection = Connection::open_in_memory().unwrap();
+    let mut args = Map::new();
+    args.insert("request_id".into(), json!("req-1"));
+    args.insert("now".into(), json!(NOW));
+    args.insert("native_evidence".into(), json!(true));
+    for (field, value) in extra {
+        args.insert((*field).into(), value.clone());
+    }
+    resolve(&connection, "/nonexistent-guard-home", &Args(&args), None)
+}
+
+#[test]
+fn native_evidence_without_a_published_binding_asks_the_caller_for_it() {
+    assert!(matches!(
+        native_with(&[]),
+        Err(StoreError::Invalid(EVIDENCE_REQUIRED))
+    ));
+}
+
+#[test]
+fn native_evidence_refuses_a_caller_key_or_lookup() {
+    for field in ["lookup", "integrity_key_b64"] {
+        let value = if field == "lookup" {
+            lookup(&[])
+        } else {
+            json!("a2V5")
+        };
+        assert!(
+            matches!(
+                native_with(&[(field, value)]),
+                Err(StoreError::Invalid("codex_live_authority_lookup_invalid"))
+            ),
+            "{field}"
+        );
+    }
+}
+
+#[test]
+fn the_op_reports_a_missing_binding_with_a_code_the_transport_passes_on() {
+    let connection = Connection::open_in_memory().unwrap();
+    let mut args = Map::new();
+    args.insert("request_id".into(), json!("req-1"));
+    args.insert("now".into(), json!(NOW));
+    args.insert("native_evidence".into(), json!(true));
+    assert!(matches!(
+        op(&connection, "/nonexistent-guard-home", &Args(&args), None),
+        Err(StoreError::Invalid(NATIVE_EVIDENCE_REQUIRED))
+    ));
+    // `native_guard_store.py` keeps a resident reason only in this shape.
+    let suffix = NATIVE_EVIDENCE_REQUIRED
+        .strip_prefix("native_guard_store_")
+        .unwrap();
+    assert!(suffix.len() <= 48);
+    assert!(suffix
+        .bytes()
+        .all(|byte| byte.is_ascii_lowercase() || byte == b'_'));
 }
