@@ -23,6 +23,13 @@
 //! out as well, because Composer's `show --latest` and `--available` turn a
 //! local listing into a registry query.
 //!
+//! Composer also answers to the names a project's own manifest gives it: with
+//! a `test` script declared, `composer test` runs what `composer run-script
+//! test` runs, and that short spelling is the one a PHP developer types. It is
+//! admitted on the same terms, and only for a name Composer has no command of,
+//! so a manifest cannot reach `install` or `update` by declaring a script
+//! under their names.
+//!
 //! Three more things decide which project and which tree a run reads, and
 //! each keeps the command out when it cannot be read as a plain path under the
 //! workspace:
@@ -95,6 +102,63 @@ const COMPOSER_INERT_FLAGS: &[&str] = &[
 /// Composer verbs that hand the rest of the line to a project tool. What that
 /// tool reads is the workspace the sandbox already bounds.
 const COMPOSER_PROGRAM_VERBS: &[&str] = &["exec", "run", "run-script"];
+
+/// Composer's own command names, including the abbreviations and aliases its
+/// dispatcher answers to. A manifest that declares a script under one of these
+/// never reaches it from the line, because Composer runs its own command
+/// first, and that is where `install`, `update` and `require` reach a
+/// registry. The script shortcut below therefore reads only a name Composer
+/// has no command of.
+const COMPOSER_RESERVED_VERBS: &[&str] = &[
+    "about",
+    "archive",
+    "audit",
+    "browse",
+    "bump",
+    "cc",
+    "check-platform-reqs",
+    "clear-cache",
+    "clearcache",
+    "completion",
+    "config",
+    "create-project",
+    "depends",
+    "diagnose",
+    "dump-autoload",
+    "dumpautoload",
+    "exec",
+    "fund",
+    "global",
+    "help",
+    "home",
+    "i",
+    "info",
+    "init",
+    "install",
+    "licenses",
+    "list",
+    "outdated",
+    "prohibits",
+    "r",
+    "reinstall",
+    "remove",
+    "require",
+    "rm",
+    "run",
+    "run-script",
+    "search",
+    "self-update",
+    "selfupdate",
+    "show",
+    "status",
+    "suggests",
+    "u",
+    "update",
+    "upgrade",
+    "validate",
+    "why",
+    "why-not",
+];
 
 /// Bundler verbs that read the bundle the project owns. `exec` starts a
 /// project tool; the rest report what the bundle already holds.
@@ -235,14 +299,34 @@ fn read_config(path: &Path) -> Option<Option<String>> {
     String::from_utf8(text).ok().map(Some)
 }
 
+/// This project's own `composer.json`: `Value::Null` when the directory has
+/// none, and `None` when it cannot be read whole or is not the object
+/// Composer reads.
+fn composer_manifest(directory: &Path) -> Option<serde_json::Value> {
+    match read_config(&directory.join("composer.json"))? {
+        Some(text) => serde_json::from_str(&text).ok(),
+        None => Some(serde_json::Value::Null),
+    }
+}
+
+/// Whether the manifest declares `name` among the project's own scripts.
+/// Composer turns each of those names into a command of its own, so a line
+/// that names one runs the work `composer run-script NAME` runs.
+fn declares_script(manifest: &serde_json::Value, name: &str) -> bool {
+    manifest
+        .get("scripts")
+        .and_then(serde_json::Value::as_object)
+        .is_some_and(|scripts| scripts.contains_key(name))
+}
+
 /// The directory Composer reads this project's packages from, when the
 /// project's own configuration puts it, or leaves it, under the workspace and
 /// the packages are installed there.
-fn composer_tree(directory: &Path, workspace: &Path) -> Option<PathBuf> {
-    let manifest = match read_config(&directory.join("composer.json"))? {
-        Some(text) => serde_json::from_str::<serde_json::Value>(&text).ok()?,
-        None => serde_json::Value::Null,
-    };
+fn composer_tree(
+    manifest: &serde_json::Value,
+    directory: &Path,
+    workspace: &Path,
+) -> Option<PathBuf> {
     let setting = |key: &str| -> Option<Option<String>> {
         match manifest.get("config").and_then(|config| config.get(key)) {
             None => Some(None),
@@ -345,10 +429,24 @@ fn local_composer_work(arguments: &[&str], directory: &Path, workspace: &Path) -
         return false;
     };
     let verb = words[index];
+    let manifest = match composer_manifest(directory) {
+        Some(manifest) => manifest,
+        None => return false,
+    };
     if !COMPOSER_LOCAL_VERBS.contains(&verb) {
-        return false;
+        // A name Composer has no command of is one the project's own manifest
+        // gave it: Composer runs that script, which is the work `run-script`
+        // runs under a longer spelling. What follows the name is the script's
+        // own line, read here the way a delegated line is read above.
+        return !verb.starts_with('-')
+            && !COMPOSER_RESERVED_VERBS.contains(&verb)
+            && declares_script(&manifest, verb)
+            && composer_tree(&manifest, directory, workspace).is_some()
+            && !names_a_package_tool(&arguments[index + 1..]);
     }
-    if COMPOSER_VENDOR_VERBS.contains(&verb) && composer_tree(directory, workspace).is_none() {
+    if COMPOSER_VENDOR_VERBS.contains(&verb)
+        && composer_tree(&manifest, directory, workspace).is_none()
+    {
         return false;
     }
     if COMPOSER_PROGRAM_VERBS.contains(&verb) {
