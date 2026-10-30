@@ -162,6 +162,10 @@ fn a_chain_that_climbs_back_into_the_workspace_is_still_bounded() {
     for command in [
         "cd app && ls && cd ..",
         "cd app && cd ..",
+        // A pipeline is one element of the list: the `&&` at its head governs
+        // every segment in it, so the climb after it still starts one
+        // directory down.
+        "cd app && ls 2>&1 | tail -5 && cd ..",
         "cd app && ls && cd ../web && ls",
         "cd app/src && ls && cd ../..",
     ] {
@@ -173,6 +177,7 @@ fn a_chain_that_climbs_back_into_the_workspace_is_still_bounded() {
     let outside = Path::new("/etc").display();
     for command in [
         "ls && cd ..".to_owned(),
+        "ls 2>&1 | tail -5 && cd ..".to_owned(),
         "cd app && ls && cd ../..".to_owned(),
         format!("cd app && ls && cd {outside}"),
         "cd app && ls && cd ../missing-name".to_owned(),

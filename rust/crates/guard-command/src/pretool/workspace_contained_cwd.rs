@@ -20,6 +20,11 @@ fn moves_the_shell(executable: Option<&str>) -> bool {
 pub(super) fn locations(model: &CanonicalCommandV1, workspace: &Path) -> Option<Vec<Vec<PathBuf>>> {
     let mut states = vec![(workspace.to_path_buf(), true)];
     let mut result = Vec::new();
+    // The operator that decided whether the pipeline now being read runs at
+    // all. A `|` joins a segment to the one before it rather than to the list,
+    // so the `&&` or `||` at the head of the pipeline is what governs every
+    // element of it.
+    let mut opened_pipeline = String::new();
     for (index, segment) in model.segments.iter().enumerate() {
         let connector: String = if index == 0 {
             String::new()
@@ -36,6 +41,17 @@ pub(super) fn locations(model: &CanonicalCommandV1, workspace: &Path) -> Option<
         if !matches!(connector, "" | "&&" | "||" | ";" | "|" | "\n") {
             return None;
         }
+        // `false && work | tail` runs neither element, so reading `tail` as
+        // unconditional would resume the directory the failed `cd` left and
+        // credit a later climb to a shell that never descended.
+        if connector != "|" {
+            opened_pipeline = connector.to_owned();
+        }
+        let connector = if connector == "|" {
+            opened_pipeline.as_str()
+        } else {
+            connector
+        };
         let name = segment.executable.as_deref()?;
         let mut executing = Vec::new();
         let mut next = Vec::new();
