@@ -225,6 +225,7 @@ fn probe<'a>(artifact: &'a GuardArtifact, artifact_hash: &'a str, workspace: &'a
         // The package lookup selects on the saved row, not on an exact command
         // match, so it binds no exact-match context.
         exact_match_context: None,
+        exception_workspace: None,
     }
 }
 

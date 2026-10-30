@@ -278,14 +278,36 @@ fn cloud_exceptions_error(bundle: &Obj) -> bool {
         (None, None) => false,
         (Some(_), Some(issued)) => {
             !cloud_exceptions_are_valid(bundle)
+                || !cloud_exception_effects_are_allow(bundle)
                 || cloud_exceptions_issued_at(Some(issued)).is_none()
         }
         _ => true,
     }
 }
 
+/// A v2 entry may leave its effect out, but one it names is `allow`: a falsy
+/// `false`, `0` or `null` is malformed, not an absent effect read as allow.
+fn cloud_exception_effects_are_allow(bundle: &Obj) -> bool {
+    let Some(Value::Array(items)) = bundle.get("cloudExceptions") else {
+        return true;
+    };
+    items.iter().all(|item| {
+        item.get("effect")
+            .is_none_or(|effect| effect.as_str() == Some("allow"))
+    })
+}
+
 fn cloud_exceptions_issued_at(value: Option<&Value>) -> Option<i64> {
     value.and_then(Value::as_str).and_then(strict_utc_micros)
+}
+
+/// The identity of a signed exception set: the SHA-256 of its canonical JSON.
+/// A device keeps it beside the issue time, so a different set signed at the
+/// same instant cannot stand in for the one it accepted.
+pub(crate) fn cloud_exceptions_hash(bundle: &Obj) -> Option<String> {
+    let exceptions = bundle.get("cloudExceptions")?;
+    let encoded = v2_canonical_bytes(exceptions).ok()?;
+    Some(format!("sha256:{}", sha256_hex(&encoded)))
 }
 
 /// `validated_policy_bundle_v2_payload`. `NeedsEvidence` asks the caller for the
@@ -345,6 +367,7 @@ pub(crate) struct Transition<'a> {
     pub(crate) expected_last_good_version: Option<&'a Value>,
     pub(crate) expected_last_good_hash: Option<&'a Value>,
     pub(crate) current_cloud_exceptions_issued_at: Option<&'a Value>,
+    pub(crate) current_cloud_exceptions_hash: Option<&'a Value>,
 }
 
 pub(crate) fn transition_error(bundle: &Obj, state: &Transition) -> Option<&'static str> {
@@ -367,11 +390,24 @@ pub(crate) fn transition_error(bundle: &Obj, state: &Transition) -> Option<&'sta
                 return Some("bundle_version_conflict");
             }
             // The same bundle may come back with a newer exception set, never
-            // with an older one or with none once a set was accepted.
+            // with an older one or with none once a set was accepted. At the
+            // same issue time it must be the set already accepted; a device
+            // that recorded only the time keeps accepting it as before.
             let accepted = cloud_exceptions_issued_at(state.current_cloud_exceptions_issued_at);
             let incoming = cloud_exceptions_issued_at(bundle.get("cloudExceptionsIssuedAt"));
             return match (accepted, incoming) {
-                (Some(accepted), Some(incoming)) if incoming >= accepted => None,
+                (Some(accepted), Some(incoming)) if incoming > accepted => None,
+                (Some(accepted), Some(incoming)) if incoming == accepted => {
+                    match state.current_cloud_exceptions_hash {
+                        None => None,
+                        Some(Value::String(hash))
+                            if cloud_exceptions_hash(bundle).as_deref() == Some(hash) =>
+                        {
+                            None
+                        }
+                        Some(_) => Some("cloud_exceptions_replay"),
+                    }
+                }
                 (Some(_), _) => Some("cloud_exceptions_replay"),
                 (None, _) => None,
             };

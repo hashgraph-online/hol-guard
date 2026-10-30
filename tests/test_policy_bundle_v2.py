@@ -14,6 +14,10 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 from codex_plugin_scanner.guard.models import PolicyDecision
+from codex_plugin_scanner.guard.policy_bundle_parser import (
+    policy_bundle_acceptance_checkpoint,
+    policy_bundle_cloud_exceptions_hash,
+)
 from codex_plugin_scanner.guard.policy_bundle_trusted_keys import (
     PolicyBundleVerificationKey,
     validate_synced_policy_bundle,
@@ -428,6 +432,13 @@ def test_v2_cloud_exceptions_are_signed_but_leave_the_bundle_hash_alone() -> Non
         {"cloudExceptions": []},
         {"cloudExceptionsIssuedAt": "2026-07-16T09:30:00Z"},
         {"cloudExceptions": [], "cloudExceptionsIssuedAt": "yesterday"},
+        *(
+            {
+                "cloudExceptions": [{**_cloud_exception(), "effect": effect}],
+                "cloudExceptionsIssuedAt": "2026-07-16T09:30:00Z",
+            }
+            for effect in (False, 0, None, "deny")
+        ),
     ],
 )
 def test_v2_bundle_rejects_malformed_cloud_exceptions(fields: dict[str, object]) -> None:
@@ -472,6 +483,42 @@ def test_v2_transition_rejects_an_older_or_missing_cloud_exception_set() -> None
         )
         is None
     )
+
+
+def test_v2_transition_binds_an_equal_issue_time_to_the_accepted_exception_set() -> None:
+    bundle_hash = "sha256:" + "a" * 64
+    issued_at = "2026-07-16T09:30:00Z"
+    accepted_set = [_cloud_exception()]
+    other_set = [{**_cloud_exception(), "artifactId": "npm:left-pad"}]
+    accepted_hash = policy_bundle_cloud_exceptions_hash({"cloudExceptions": accepted_set})
+    assert accepted_hash is not None
+    assert accepted_hash != policy_bundle_cloud_exceptions_hash({"cloudExceptions": other_set})
+    assert (
+        policy_bundle_acceptance_checkpoint(
+            {"bundleVersion": 8, "cloudExceptions": accepted_set, "cloudExceptionsIssuedAt": issued_at}
+        )["cloudExceptionsHash"]
+        == accepted_hash
+    )
+
+    def transition(exceptions: list[dict[str, object]], accepted: str | None = accepted_hash) -> str | None:
+        return validate_policy_bundle_v2_transition(
+            {
+                "bundleVersion": 8,
+                "bundleHash": bundle_hash,
+                "cloudExceptions": exceptions,
+                "cloudExceptionsIssuedAt": issued_at,
+            },
+            current_bundle_version=8,
+            current_bundle_hash=bundle_hash,
+            current_cloud_exceptions_issued_at=issued_at,
+            current_cloud_exceptions_hash=accepted,
+        )
+
+    assert transition(accepted_set) is None
+    assert transition(other_set) == "cloud_exceptions_replay"
+    # A checkpoint written before the set identity was kept still accepts the
+    # same issue time, then records the identity on the next acceptance.
+    assert transition(other_set, accepted=None) is None
 
 
 def test_v2_transition_accepts_only_authorized_monotonic_rollback() -> None:

@@ -1,27 +1,37 @@
 //! An approved Guard Cloud exception lifts the signed bundle's own rules for the
-//! target it covers (`lift_cloud_excepted_policy_bundle_identities`,
+//! target it covers (`cloud_exception_lifting_policy_bundle`,
 //! `cloud_exceptions.py`).
 //!
-//! The lookup honors a saved `policy-bundle` row only while its identity is
-//! listed, so leaving the bundle's non-allow identities out of one lookup lifts
-//! its Cloud blocks and reviews there, and the lookup ranks the remaining local
-//! rows as it would without them.
+//! The policy lookup asks once per probe, against the bundle stored in the
+//! same connection it reads rows from, and leaves the bundle's blocks and
+//! reviews out of that probe when an exception covers it. Its allows and every
+//! other source still apply, and the remaining rows rank as they would without
+//! them.
 
 use std::collections::HashMap;
 
 use guard_contracts::utc_timestamp_micros;
+use rusqlite::Connection;
 use serde_json::{Map, Value};
 
-use crate::policy_bundle_store_identities::Identity;
+use crate::policy_bundle_store_identities::cached_bundle_authority;
+#[cfg(test)]
+use crate::policy_bundle_store_identities::BundleAuthority;
 
 #[cfg(test)]
 #[path = "cloud_exception_lift_tests.rs"]
 mod tests;
 
+#[cfg(test)]
+thread_local! {
+    /// The validated bundle authority a test reads in place of the cached
+    /// bundle, whose RSA signature tests have no key to make.
+    pub(crate) static VALIDATED_BUNDLE: std::cell::RefCell<Option<BundleAuthority>> =
+        const { std::cell::RefCell::new(None) };
+}
+
 /// `_CLOUD_EXCEPTION_SCOPES` (`cloud_exceptions.py`).
 const SCOPES: [&str; 5] = ["artifact", "publisher", "harness", "workspace", "global"];
-/// Position of the action in a decision identity.
-const ACTION_INDEX: usize = 6;
 
 /// The evaluated target of one lookup.
 pub(crate) struct LiftTarget<'a> {
@@ -32,26 +42,22 @@ pub(crate) struct LiftTarget<'a> {
     pub(crate) now: &'a str,
 }
 
-/// The identities to ship for this lookup: all of them, or only the bundle's
-/// allow identities when an active exception in `bundle` covers `target`.
-pub(crate) fn lift_cloud_excepted_identities(
-    identities: &[Identity],
-    bundle: Option<&Map<String, Value>>,
+/// Whether an active exception in the bundle stored in `connection` covers
+/// `target`. A bundle that is missing, or that the resident cannot validate
+/// the way the Python store would, lifts nothing.
+pub(crate) fn stored_cloud_exception_covers(
+    connection: &Connection,
     target: &LiftTarget<'_>,
-) -> Vec<Identity> {
-    if identities.is_empty() || !bundle.is_some_and(|bundle| covered(bundle, target)) {
-        return identities.to_vec();
+) -> bool {
+    #[cfg(test)]
+    if let Some((_, bundle)) = VALIDATED_BUNDLE.with(|cell| cell.borrow().clone()) {
+        return cloud_exception_covers(bundle.as_ref(), target);
     }
-    identities
-        .iter()
-        .filter(|identity| identity.get(ACTION_INDEX).and_then(Value::as_str) == Some("allow"))
-        .cloned()
-        .collect()
+    cached_bundle_authority(connection, target.now)
+        .is_some_and(|(_, bundle)| cloud_exception_covers(bundle.as_ref(), target))
 }
 
-/// Whether an active exception in `bundle` covers `target`, which lifts the
-/// bundle's canonical (v2) non-allow rules for that lookup
-/// (`policy_bundle_rules_lifted`).
+/// Whether an active exception in `bundle` covers `target`.
 pub(crate) fn cloud_exception_covers(
     bundle: Option<&Map<String, Value>>,
     target: &LiftTarget<'_>,

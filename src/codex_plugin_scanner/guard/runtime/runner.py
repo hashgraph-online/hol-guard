@@ -74,6 +74,7 @@ from ..policy_bundle_parser import (
     CANONICAL_COMPILE_REJECTION_PREFIX,
     non_empty_string,
     policy_bundle_acceptance_checkpoint,
+    policy_bundle_cloud_exceptions_hash,
     policy_bundle_is_enforceable,
     policy_bundle_is_version_downgrade,
     policy_bundle_rejection_message,
@@ -298,6 +299,9 @@ def _policy_bundle_is_version_downgrade(
             expected_last_good_bundle_hash=(expected_hash if isinstance(expected_hash, str) else None),
             current_cloud_exceptions_issued_at=(
                 current_exceptions_issued_at if isinstance(current_exceptions_issued_at, str) else None
+            ),
+            current_cloud_exceptions_hash=(
+                policy_bundle_cloud_exceptions_hash(existing_bundle) if isinstance(existing_bundle, dict) else None
             ),
         )
         if transition_error == NATIVE_UNAVAILABLE_REJECTION:

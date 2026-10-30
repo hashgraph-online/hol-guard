@@ -102,12 +102,12 @@ pub struct PolicyDecisionLookupRequestV1 {
     /// bundle source is unset → identity compare short-circuits.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub policy_bundle_decision_identities: Option<Vec<Vec<Value>>>,
-    /// An approved Cloud exception in the validated bundle covers this
-    /// lookup's target, so the bundle's canonical (v2) non-allow rules do not
-    /// apply to it. Canonical rows carry no identity gate, so the lift that
-    /// `policy_bundle_decision_identities` gives v1 rows travels as this flag.
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub policy_bundle_rules_lifted: bool,
+    /// The working directory a Cloud exception is matched against when it
+    /// differs from `workspace`. Portable composition probes the portable
+    /// alias of the same project, so the exception still names the local path.
+    /// Set only inside the resident; never on the wire.
+    #[serde(skip)]
+    pub exception_workspace: Option<String>,
     /// Non-consuming saved-decision read over several probe groups. Each group
     /// is one artifact hash and its candidate ids (direct, exact-command, then
     /// memory-pattern); the payload is the most restrictive group's decision.

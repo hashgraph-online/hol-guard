@@ -80,7 +80,7 @@ pub(crate) fn settle(
         local_once_integrity_key_b64: Some(key_b64.to_owned()),
         local_once_integrity_key_id: Some(key_id.to_owned()),
         policy_bundle_decision_identities: None,
-        policy_bundle_rules_lifted: false,
+        exception_workspace: None,
         probe_groups: None,
         portable_workspace: None,
         evidence_binding: None,

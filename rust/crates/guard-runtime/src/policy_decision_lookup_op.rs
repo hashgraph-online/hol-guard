@@ -34,6 +34,7 @@ use guard_policy_snapshot::policy_integrity::{
 
 use super::context_digest_json::write_canonical_json_with_limit;
 use crate::claim_reuse::approval_authority_revision;
+use crate::cloud_exception_lift::{stored_cloud_exception_covers, LiftTarget};
 use crate::guard_store_json::dumps_sorted;
 
 pub(crate) const LOCAL_ONCE_LEGACY_AUTHORITY_KIND: &str = "legacy";
@@ -873,6 +874,14 @@ pub(crate) fn materialized_policy_bundle_row_identity(row: &Value) -> Value {
     ])
 }
 
+/// A signed-bundle row (v1 or canonical v2) that blocks or asks.
+fn is_bundle_restriction(row: &Value) -> bool {
+    matches!(
+        row_value(row, "source").as_str(),
+        Some(POLICY_BUNDLE_SOURCE | POLICY_BUNDLE_CANONICAL_SOURCE)
+    ) && row_value(row, "action").as_str() != Some("allow")
+}
+
 /// `_runtime_policy_row_is_eligible`.
 #[allow(clippy::too_many_arguments)]
 fn runtime_policy_row_is_eligible(
@@ -889,12 +898,9 @@ fn runtime_policy_row_is_eligible(
     if source == "cloud-sync" || source == "team-policy" {
         return false;
     }
-    // An approved Cloud exception lifts the bundle's canonical blocks and
-    // reviews for this target; its allows still apply.
-    if source == POLICY_BUNDLE_CANONICAL_SOURCE
-        && bundle_rules_lifted
-        && row_value(row, "action").as_str() != Some("allow")
-    {
+    // An approved Cloud exception lifts the bundle's blocks and reviews for
+    // this target; its allows still apply.
+    if bundle_rules_lifted && is_bundle_restriction(row) {
         return false;
     }
     if source == POLICY_BUNDLE_SOURCE {
@@ -1650,6 +1656,19 @@ fn evaluate_in_connection(
     } else {
         Vec::new()
     };
+    // Asked per probe against the bundle stored in this connection, so every
+    // grouped artifact and portable alias reads its own answer.
+    let bundle_rules_lifted = rows.iter().any(is_bundle_restriction)
+        && stored_cloud_exception_covers(
+            conn,
+            &LiftTarget {
+                harness,
+                artifact_id,
+                publisher,
+                workspace: request.exception_workspace.as_deref().or(workspace),
+                now: current_time,
+            },
+        );
     let has_local_rows = rows
         .iter()
         .any(|c| !is_remote_policy_source(row_value(c, "source").as_str()));
@@ -1699,7 +1718,7 @@ fn evaluate_in_connection(
             if !runtime_policy_row_is_eligible(
                 candidate,
                 &bundle_identities,
-                request.policy_bundle_rules_lifted,
+                bundle_rules_lifted,
                 artifact_id,
                 artifact_hash,
                 runtime_exact_match_key.as_deref(),
@@ -1797,7 +1816,7 @@ fn evaluate_in_connection(
         if !runtime_policy_row_is_eligible(
             candidate,
             &bundle_identities,
-            request.policy_bundle_rules_lifted,
+            bundle_rules_lifted,
             artifact_id,
             artifact_hash,
             runtime_exact_match_key.as_deref(),

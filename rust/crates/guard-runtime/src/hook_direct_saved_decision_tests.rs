@@ -7,15 +7,9 @@ use crate::policy_store::policy_store_direct_lane::DirectLaneIntegrityKey;
 use guard_contracts::NativeExactActionQueryV1;
 use guard_policy_snapshot::{DirectLaneEnvironmentV1, DirectLanePolicyIntegrityStateV1};
 use rusqlite::params;
-use std::cell::RefCell;
 use std::collections::BTreeMap;
 
-thread_local! {
-    /// The validated bundle authority a test reads in place of the cached
-    /// bundle, whose RSA signature these tests have no key to make.
-    pub(crate) static VALIDATED_BUNDLE: RefCell<Option<BundleAuthority>> =
-        const { RefCell::new(None) };
-}
+pub(crate) use crate::cloud_exception_lift::VALIDATED_BUNDLE;
 
 const VECTORS: &str = include_str!("../tests/fixtures/hook_direct_saved_decision_vectors.json");
 pub(crate) const KEY: [u8; 32] = [7u8; 32];

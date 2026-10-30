@@ -228,15 +228,26 @@ fn status_under_bundle(
 
 #[test]
 fn a_cloud_exception_for_the_checkout_lifts_the_cloud_block_from_its_portable_lookup_too() {
-    let (home, connection) = store("portable-exception");
-    let checkout = directory("exception", Some(REMOTE));
+    checkout_exception_lifts_the_cloud_block("policy-bundle");
+}
+
+/// A v2 bundle compiles to canonical rows and materializes no identities; its
+/// exception still lifts them in the hook's own lookup.
+#[test]
+fn a_cloud_exception_lifts_a_v2_canonical_block_in_the_hook() {
+    checkout_exception_lifts_the_cloud_block("policy-bundle-canonical");
+}
+
+fn checkout_exception_lifts_the_cloud_block(source: &str) {
+    let (home, connection) = store(&format!("portable-exception-{source}"));
+    let checkout = directory(&format!("exception-{source}"), Some(REMOTE));
     connection
         .execute(
             "insert into policy_decisions (harness, scope, artifact_id, action, reason, owner,
                source, created_at, updated_at)
              values ('claude-code', 'artifact', ?1, 'block', 'managed', 'pkg-block',
-               'policy-bundle', ?2, ?2)",
-            params![ARTIFACT, SIGNED_AT],
+               ?3, ?2, ?2)",
+            params![ARTIFACT, SIGNED_AT, source],
         )
         .unwrap();
     sign_decision(&connection, connection.last_insert_rowid());

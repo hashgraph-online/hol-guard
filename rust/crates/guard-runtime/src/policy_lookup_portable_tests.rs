@@ -39,7 +39,7 @@ fn request(store: &std::path::Path, workspace: Option<&str>) -> PolicyDecisionLo
         local_once_integrity_key_b64: Some(key_b64()),
         local_once_integrity_key_id: Some(KEY_ID.to_owned()),
         policy_bundle_decision_identities: None,
-        policy_bundle_rules_lifted: false,
+        exception_workspace: None,
         probe_groups: None,
         portable_workspace: Some(PORTABLE.to_owned()),
         evidence_binding: None,
@@ -201,4 +201,48 @@ fn a_consuming_composition_strips_the_preview_only_revision() {
     let lookup = evaluate(&request, PORTABLE).unwrap();
     assert_eq!(action_of(&lookup).as_deref(), Some("review"));
     assert_eq!(lookup["decision"].get("_approval_authority_revision"), None);
+}
+
+/// Runs `body` while the stored bundle carries `exceptions`.
+fn with_cloud_exceptions<T>(exceptions: Value, body: impl FnOnce() -> T) -> T {
+    let bundle = json!({ "workspaceId": "workspace-1", "cloudExceptions": exceptions });
+    crate::cloud_exception_lift::VALIDATED_BUNDLE
+        .with(|cell| *cell.borrow_mut() = Some((Vec::new(), bundle.as_object().cloned())));
+    let answered = body();
+    crate::cloud_exception_lift::VALIDATED_BUNDLE.with(|cell| *cell.borrow_mut() = None);
+    answered
+}
+
+/// A Cloud exception names the checkout path, and the portable key aliases
+/// that same checkout, so the exception lifts the bundle's block from the
+/// portable probe too; one for another directory lifts nothing.
+#[test]
+fn a_cloud_exception_for_the_checkout_lifts_the_portable_bundle_block() {
+    let (store, connection) = local_store("portable-cloud-exception");
+    connection
+        .execute(
+            "insert into policy_decisions (harness, scope, artifact_id, action, artifact_hash,
+               workspace, source, created_at, updated_at)
+             values ('claude-code', 'workspace', ?1, 'block', NULL, ?2,
+               'policy-bundle-canonical', ?3, ?3)",
+            params![ARTIFACT, PORTABLE, SIGNED_AT],
+        )
+        .unwrap();
+    let exception = |directory: &str| {
+        json!([{
+            "exceptionId": "exception-1",
+            "scope": "workspace",
+            "owner": "owner@example.test",
+            "expiresAt": "2099-01-01T00:00:00+00:00",
+            "workingDirectory": directory,
+        }])
+    };
+    let lookup = with_cloud_exceptions(exception(LOCAL), || {
+        evaluate(&request(&store, Some(LOCAL)), PORTABLE).unwrap()
+    });
+    assert_eq!(action_of(&lookup), None);
+    let lookup = with_cloud_exceptions(exception("/workspace/other"), || {
+        evaluate(&request(&store, Some(LOCAL)), PORTABLE).unwrap()
+    });
+    assert_eq!(action_of(&lookup).as_deref(), Some("block"));
 }
