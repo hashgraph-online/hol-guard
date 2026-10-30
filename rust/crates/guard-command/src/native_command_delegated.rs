@@ -8,8 +8,16 @@ fn basename(value: &str) -> &str {
     value.rsplit(['/', '\\']).next().unwrap_or(value)
 }
 
+/// A lone inspection flag is the whole argument list, so it names no package
+/// and no subcommand: the manager prints its version or its usage and exits.
+/// `-v` and `-V` are the short spellings of that, and the ones agents reach
+/// for first; a manager that reads either as "verbose" still has nothing to
+/// resolve without a verb.
 fn inspection_only(arguments: &[String]) -> bool {
-    matches!(arguments, [only] if matches!(only.as_str(), "--version" | "--help" | "-h"))
+    matches!(
+        arguments,
+        [only] if matches!(only.as_str(), "--version" | "-v" | "-V" | "--help" | "-h")
+    )
 }
 
 pub(crate) fn normalized_tool(value: &str) -> String {

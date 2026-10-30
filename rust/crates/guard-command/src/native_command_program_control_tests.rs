@@ -175,3 +175,41 @@ fn native_mcp_defaults_are_opt_in_tightening_only_and_redacted() {
         }));
     }
 }
+
+#[test]
+fn a_lone_short_version_flag_is_the_same_inspection_as_the_long_one() {
+    let unrestricted = binding(&[], false);
+    for command in [
+        "npx -v",
+        "bunx -v",
+        "npm -V",
+        "uv -v",
+        "go -v",
+        "mvn -v",
+        "composer -v",
+        "bundle -v",
+        "gradle -V",
+        "cargo -v",
+    ] {
+        let observations = decision(command, &unrestricted).command_extensions.unwrap();
+        assert!(
+            !observations
+                .permission_observations
+                .iter()
+                .any(|item| item.extension_id.starts_with("command.package.")),
+            "{command}"
+        );
+    }
+    // A flag is only an inspection while it is the whole argument list: a
+    // second word can name the package the manager would fetch.
+    for command in ["npx -v left-pad", "npx --no-install -v", "uv add -v httpx"] {
+        let observations = decision(command, &unrestricted).command_extensions.unwrap();
+        assert!(
+            observations
+                .permission_observations
+                .iter()
+                .any(|item| item.extension_id.starts_with("command.package.")),
+            "{command}"
+        );
+    }
+}
