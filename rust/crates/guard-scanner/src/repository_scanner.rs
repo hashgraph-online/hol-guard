@@ -19,7 +19,8 @@ use serde::Serialize;
 
 use crate::git_read::{run_git, run_git_os, GIT_TIMEOUT_SECONDS};
 use crate::secret_detection::{
-    detector_version, scan_secret_text, EmptyFingerprintKeyError, PublicFinding, SecretFinding,
+    candidate_digest, detector_version, scan_secret_text, CandidateDigest,
+    EmptyFingerprintKeyError, PublicFinding, SecretFinding,
 };
 
 /// `DEFAULT_MAX_FILES` from the Python module.

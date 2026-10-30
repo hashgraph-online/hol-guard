@@ -1943,8 +1943,6 @@ mod tests {
 
     #[test]
     fn feeding_the_fingerprint_in_pieces_matches_the_joined_form() {
-        use hmac::Mac;
-
         let summary = scan_secret_text(
             &fixture_text(),
             "config/prod.env",
