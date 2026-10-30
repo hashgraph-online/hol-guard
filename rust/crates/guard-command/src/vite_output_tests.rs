@@ -340,3 +340,29 @@ fn modules_a_parent_component_reaches_outside_the_workspace_is_not_granted() {
     let modules = cwd.join("node_modules");
     assert_eq!(bundle_directory(&cwd, &workspace, &modules), None);
 }
+
+#[cfg(unix)]
+#[test]
+fn a_workspace_spelled_behind_a_link_still_grants_its_own_modules() {
+    let project = Project::new("bundle-link");
+    let real = project.workspace().join("real");
+    let workspace = real.join("ws");
+    let app = workspace.join("app");
+    fs::create_dir_all(app.join("node_modules")).expect("modules");
+    std::os::unix::fs::symlink(&real, project.workspace().join("link")).expect("link");
+    // The caller reached the project through the link and names the workspace
+    // as it was written. Both spellings are one directory, so the project's
+    // own `node_modules` is granted.
+    let reached = project.workspace().join("link/ws/app");
+    let modules = reached.join("node_modules");
+    assert_eq!(
+        bundle_directory(&reached, &workspace, &modules),
+        Some(modules.join(".vite-temp"))
+    );
+    // A link standing between the modules and the workspace is still refused,
+    // whichever spelling the workspace carries.
+    let linked_app = workspace.join("linked-app");
+    std::os::unix::fs::symlink(&app, &linked_app).expect("app link");
+    let behind = linked_app.join("node_modules");
+    assert_eq!(bundle_directory(&linked_app, &workspace, &behind), None);
+}

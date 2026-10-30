@@ -340,8 +340,16 @@ pub fn bundle_directory(cwd: &Path, workspace: &Path, modules: &Path) -> Option<
     if reached != asked || !reached.starts_with(&root) {
         return None;
     }
+    // The climb ends on the resolved workspace, because the spelling it was
+    // asked about need not be the one `cwd` carries: a link stands above both
+    // in `/tmp` against `/private/tmp`, and Windows spells the same directory
+    // in either case. Comparing the written spellings there would walk past
+    // the workspace to the filesystem root and refuse the project's own
+    // `node_modules`, which is the grant this reader exists to make. Each
+    // step is still read as it was written, so a link standing between the
+    // two is refused rather than followed.
     let mut current = nearest.as_path();
-    while current != workspace {
+    while current.canonicalize().ok()? != root {
         if is_symlink(current) {
             return None;
         }
