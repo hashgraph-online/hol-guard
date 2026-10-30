@@ -185,11 +185,13 @@ class _OneCallStore(StoreExactCloudLocalOnceMixin):
         degraded: bool = False,
         evidence_error: Exception | None = None,
         reply: object = None,
+        replies: list[object] | None = None,
     ) -> None:
         self.key = key
         self.degraded = degraded
         self.evidence_error = evidence_error
         self.reply = reply
+        self.replies = replies or []
         self.steps: list[object] = []
 
     def _policy_integrity_secret_material(self, *, create: bool) -> tuple[bytes | None, str | None]:
@@ -228,6 +230,8 @@ class _OneCallStore(StoreExactCloudLocalOnceMixin):
 
     def _native_store_call(self, method: str, args: Mapping[str, object]) -> object:
         self.steps.append((method, dict(args)))
+        if self.replies:
+            return self.replies.pop(0)
         if self.reply is None:
             raise NativeGuardStoreUnavailable("dropped")
         return self.reply
@@ -308,17 +312,27 @@ def _complete(store: _OneCallStore, *, action: str, fresh: bool) -> dict[str, ob
     return store.complete_codex_live_decision(request, now="2026-10-30T00:00:00+00:00", fresh_allow_authorized=fresh)
 
 
+_EVIDENCE_REQUIRED = {"completed": False, "error": "codex_live_evidence_required"}
+_BASE_ARGS = {"request_id", "now", "cwd", "fresh_allow_authorized"}
+
+
+def _completion_calls(store: _OneCallStore) -> list[dict[str, object]]:
+    return [step[1] for step in store.steps if isinstance(step, tuple) and step[0] == "complete_codex_live_decision"]
+
+
 def _completion_call(store: _OneCallStore) -> dict[str, object]:
-    (call,) = [step for step in store.steps if isinstance(step, tuple) and step[0] == "complete_codex_live_decision"]
-    return call[1]
+    (call,) = _completion_calls(store)
+    return call
 
 
 def test_live_completion_of_a_fresh_allow_carries_its_authority_lookup() -> None:
-    store = _OneCallStore(reply={"completed": True, "action": "allow"})
+    store = _OneCallStore(replies=[_EVIDENCE_REQUIRED, {"completed": True, "action": "allow"}])
 
     assert _complete(store, action="allow", fresh=True) == {"completed": True, "action": "allow"}
-    args = _completion_call(store)
+    first, args = _completion_calls(store)
+    assert set(first) == _BASE_ARGS
     assert args["fresh_allow_authorized"] is True
+    assert args["authority_gathered"] is True
     assert args["integrity_key_id"] == "key-1"
     assert args["lookup"] == {
         "schema": "guard-policy-decision-lookup-request.v1",
@@ -332,18 +346,28 @@ def test_live_completion_of_a_block_sends_no_authority() -> None:
 
     _complete(store, action="block", fresh=True)
     args = _completion_call(store)
-    assert set(args) == {"request_id", "now", "cwd", "fresh_allow_authorized"}
+    assert set(args) == _BASE_ARGS
+    assert not any(isinstance(step, tuple) and step[0] in {"evidence", "lookup", "provision"} for step in store.steps)
+
+
+def test_a_replayed_allow_reads_no_authority_evidence() -> None:
+    replay = {"completed": True, "action": "allow", "replayed": True}
+    store = _OneCallStore(key=False, evidence_error=OSError("policy store unreadable"), reply=replay)
+
+    assert _complete(store, action="allow", fresh=True) == replay
+    assert set(_completion_call(store)) == _BASE_ARGS
     assert not any(isinstance(step, tuple) and step[0] in {"evidence", "lookup", "provision"} for step in store.steps)
 
 
 def test_live_completion_without_an_exact_allow_reports_the_evidence_failure() -> None:
     store = _OneCallStore(
         evidence_error=OSError("policy store unreadable"),
-        reply={"completed": False, "error": "exact_approval_authority_missing"},
+        replies=[_EVIDENCE_REQUIRED, {"completed": False, "error": "exact_approval_authority_missing"}],
     )
 
     with pytest.raises(OSError, match="policy store unreadable"):
         _complete(store, action="allow", fresh=True)
+    assert len(_completion_calls(store)) == 2
 
 
 def test_live_completion_without_a_resident_reply_is_not_recorded() -> None:

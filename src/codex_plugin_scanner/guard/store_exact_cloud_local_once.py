@@ -48,16 +48,25 @@ class StoreExactCloudLocalOnceMixin:
         now: str,
         fresh_allow_authorized: bool,
     ) -> dict[str, object]:
-        # The resident checks the decision, reads an allow's exact authority,
-        # spends it and records the waiting hook's continuation in one call.
-        evidence_error: Exception | None = None
-        if fresh_allow_authorized and request.get("resolution_action") == "allow":
-            args, evidence_error = _live_authority_args(self, request, now=now)
-        else:
-            args = {"request_id": request["request_id"], "now": now, "cwd": _process_directory()}
-        args["fresh_allow_authorized"] = fresh_allow_authorized
-        # Never retried: the lookup records a refused row's integrity audit.
+        # The resident checks the decision, replays a recorded resume, reads
+        # an allow's exact authority, spends it and records the waiting hook's
+        # continuation. A fresh allow's evidence is gathered only once the
+        # resident asks for it, so a replay never reads the policy store or
+        # the keyring.
+        args: dict[str, object] = {
+            "request_id": request["request_id"],
+            "now": now,
+            "cwd": _process_directory(),
+            "fresh_allow_authorized": fresh_allow_authorized,
+        }
         result = self._native_store_call("complete_codex_live_decision", args)
+        evidence_error: Exception | None = None
+        if isinstance(result, Mapping) and result.get("error") == "codex_live_evidence_required":
+            args, evidence_error = _live_authority_args(self, request, now=now)
+            args["fresh_allow_authorized"] = fresh_allow_authorized
+            args["authority_gathered"] = True
+            # Never retried: the lookup records a refused row's integrity audit.
+            result = self._native_store_call("complete_codex_live_decision", args)
         if not isinstance(result, Mapping):
             return {"completed": False, "error": "continuation_not_recorded"}
         if evidence_error is not None and result.get("error") == "exact_approval_authority_missing":

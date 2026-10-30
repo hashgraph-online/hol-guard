@@ -2,7 +2,8 @@
 //!
 //! `complete_codex_live_decision` checks that the request still holds a
 //! terminal reviewed decision, replays a terminal resume already recorded for
-//! it, reads an allow's exact one-shot authority, and records the hook's
+//! it, asks for a fresh allow's authority evidence when the caller has not
+//! sent it, reads that allow's exact one-shot authority, and records the hook's
 //! continuation: the offer it was waiting under, the resume, the operation,
 //! the continuation events and the spent authority, all in one write.
 //! `record_codex_live_completion` records the continuation alone, without
@@ -61,6 +62,12 @@ pub(crate) fn complete(
         }
         if let Some(replayed) = replayed {
             return Ok(replayed);
+        }
+        if !args.flag("authority_gathered")? {
+            // Nothing is written yet: the caller reads the policy store and
+            // the keyring only once no recorded resume answers, then asks
+            // again with the authority's evidence.
+            return Ok(failure("codex_live_evidence_required"));
         }
         let decision =
             crate::guard_store_codex_live_authority::resolve(connection, guard_home, args)?;
@@ -121,9 +128,11 @@ fn record_with(
         _ => return Err(StoreError::Value("continuation_action_invalid".to_owned())),
     };
     let now = args.str("now")?;
-    let observed = add_micros_aware_isoformat(now, 0)
-        .and_then(|_| add_seconds_utc_isoformat(now, 0))
-        .ok_or_else(|| StoreError::Value("continuation_time_invalid".to_owned()))?;
+    let invalid = || StoreError::Value("continuation_time_invalid".to_owned());
+    // The result keeps the caller's offset, as `datetime.fromisoformat(now)`
+    // did; the offer reads the same instant in UTC.
+    let completed_at = add_micros_aware_isoformat(now, 0).ok_or_else(invalid)?;
+    let observed = add_seconds_utc_isoformat(now, 0).ok_or_else(invalid)?;
     let harness = request["harness"].as_str().map(py_strip).unwrap_or("");
     if harness.to_lowercase() != "codex" {
         return Ok(Value::Null);
@@ -158,7 +167,7 @@ fn record_with(
     };
     let result = json!({
         "correlation_id": offer["correlation_id"], "capability": offer["capability"],
-        "status": status, "reason": reason, "completed_at": observed, "evidence_id": evidence_id()?,
+        "status": status, "reason": reason, "completed_at": completed_at, "evidence_id": evidence_id()?,
     });
     let finalizing = Finalizing {
         request_id,

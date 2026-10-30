@@ -428,7 +428,9 @@ fn method_kind(method: &str) -> Option<Kind> {
         // own connection, so no transaction is held around them.
         "codex_live_allow_authority" => Kind::Read,
         // Its authority lookup opens its own connection, so it takes the
-        // write lock itself only to record the continuation.
+        // write lock itself only to record the continuation. That commit is
+        // its own, so the call reports no committed write: no caller retries
+        // it, and the outbox generation still follows its changes.
         "complete_codex_live_decision" | "record_codex_live_completion" => Kind::Read,
         "list_command_activity_page"
         | "command_activity_analytics"

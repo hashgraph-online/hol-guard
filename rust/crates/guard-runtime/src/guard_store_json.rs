@@ -192,7 +192,8 @@ fn parse_iso(text: &str) -> Option<Parsed> {
                 break;
             }
         }
-        if text.as_bytes().get(at) == Some(&b'.') {
+        // CPython 3.11+ takes a comma before the fraction too.
+        if matches!(text.as_bytes().get(at), Some(b'.' | b',')) {
             let mut end = at + 1;
             while text.as_bytes().get(end).is_some_and(u8::is_ascii_digit) {
                 end += 1;
@@ -338,6 +339,20 @@ mod tests {
             dumps_sorted(&parsed).unwrap(),
             r#"{"a":0.1,"b":1e-07,"c":1.5e+300,"d":-0.0,"e":2.0,"f":1e+16,"g":1.2345678901234568e+17,"h":[0.0001,1e-05]}"#
         );
+    }
+
+    #[test]
+    fn a_comma_fraction_reads_like_a_dot() {
+        assert_eq!(
+            add_micros_aware_isoformat("2026-10-30T12:05:00,5+00:00", 0).unwrap(),
+            "2026-10-30T12:05:00.500000+00:00"
+        );
+        assert_eq!(
+            add_micros_aware_isoformat("2026-10-30T12:05:00,5+00:00", 0),
+            add_micros_aware_isoformat("2026-10-30T12:05:00.5+00:00", 0)
+        );
+        assert!(add_micros_aware_isoformat("2026-10-30T12:05:00,+00:00", 0).is_none());
+        assert!(add_micros_aware_isoformat("2026-10-30T12:05:00;5+00:00", 0).is_none());
     }
 
     #[test]
