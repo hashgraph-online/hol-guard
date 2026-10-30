@@ -62,6 +62,10 @@ pub(super) fn parse_pip_intent(
             index += 2;
             continue;
         }
+        if PIP_INSTALL_VALUE_OPTIONS.contains(&token.as_str()) {
+            index += 2;
+            continue;
+        }
         if token.starts_with("--hash=") || token.starts_with('-') {
             index += 1;
             continue;
@@ -123,7 +127,7 @@ pub(super) fn parse_uv_intent(
             "uv",
             "install",
             tokens,
-            collect_package_specs(&working_tokens[2..])
+            collect_package_specs_with(&working_tokens[2..], UV_VALUE_OPTIONS)
                 .iter()
                 .map(|s| python_target(s, false, None, Vec::new()))
                 .collect(),
@@ -139,7 +143,7 @@ pub(super) fn parse_uv_intent(
             "uv",
             "install",
             tokens,
-            collect_package_specs(&working_tokens[3..])
+            collect_package_specs_with(&working_tokens[3..], UV_VALUE_OPTIONS)
                 .iter()
                 .map(|s| python_target(s, false, None, Vec::new()))
                 .collect(),

@@ -128,10 +128,6 @@ pub(super) fn package_target(
     ))
 }
 
-pub(super) fn collect_package_specs(values: &[String]) -> Vec<String> {
-    crate::package_intent_common::collect_package_specs(values)
-}
-
 pub(super) fn package_manager_request(
     command: &[String],
     ecosystem: &str,
@@ -192,7 +188,11 @@ pub(super) fn parse_package_manager(
             match ecosystem {
                 "npm" => specs_after(&normalized, &["install", "add", "i"]),
                 "pnpm" => specs_after(&normalized, &["add", "install"]),
-                "pip" => specs_after(&normalized, &["install"]),
+                "pip" => specs_after_with(
+                    &normalized,
+                    &["install"],
+                    crate::package_intent_common::PIP_INSTALL_VALUE_OPTIONS,
+                ),
                 "yarn" => {
                     let working = if normalized.len() >= 4 && normalized[1] == "workspace" {
                         std::iter::once(normalized[0].clone())
@@ -210,9 +210,16 @@ pub(super) fn parse_package_manager(
                 _ => {
                     if normalized.len() >= 3 && normalized[1] == "pip" && normalized[2] == "install"
                     {
-                        collect_package_specs(&normalized[3..])
+                        crate::package_intent_common::collect_package_specs_with(
+                            &normalized[3..],
+                            crate::package_intent_common::UV_VALUE_OPTIONS,
+                        )
                     } else {
-                        specs_after(&normalized, &["add"])
+                        specs_after_with(
+                            &normalized,
+                            &["add"],
+                            crate::package_intent_common::UV_VALUE_OPTIONS,
+                        )
                     }
                 }
             }
