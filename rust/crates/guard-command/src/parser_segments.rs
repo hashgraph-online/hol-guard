@@ -12,6 +12,15 @@ pub(crate) use tokens::{shell_tokens, shell_tokens_preserving_redirects};
 mod shapes;
 
 use shapes::{blank_top_level_groups, sole_command_group};
+
+/// A list of top-level groups the splitter can blank, rather than one group
+/// that is the whole command. The decision may read that list. A sandbox plan
+/// may not: a directory change inside one group does not move the next element.
+pub(crate) fn command_has_top_level_group_list(command: &str) -> bool {
+    let chars: Vec<char> = command.chars().collect();
+    sole_command_group(&chars).is_none() && blank_top_level_groups(&chars).is_some()
+}
+
 pub(super) use shapes::{is_stderr_to_null_redirect, is_stderr_to_stdout_redirect};
 // Only the redirect tests in `command_compatibility` read the sink directly.
 #[cfg(test)]
