@@ -24874,6 +24874,214 @@
       "expect": "allow"
     },
     {
+      "id": "redirect-tee-private-temp-listing",
+      "fix_area": "redirect",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la | tee ${PRIVATE_TMP}/listing.log"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "redirect-tee-private-temp-git-status",
+      "fix_area": "redirect",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git status --short | tee ${PRIVATE_TMP}/status.txt"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "redirect-tee-private-temp-git-log-head",
+      "fix_area": "redirect",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git log --oneline -5 | tee ${PRIVATE_TMP}/log.txt | head -3"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "redirect-tee-private-temp-search-hits",
+      "fix_area": "redirect",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -n sample tests | tee ${PRIVATE_TMP}/hits.txt"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "redirect-tee-append-private-temp-note",
+      "fix_area": "redirect",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "echo done | tee -a ${PRIVATE_TMP}/notes.log"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "redirect-tee-stage-listing",
+      "fix_area": "redirect",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la | tee ${STAGE}/listing.log"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "redirect-tee-shell-profile",
+      "fix_area": "redirect",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat .tmp/build.log | tee ${HOME}/.zshrc"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "redirect-merge-stream-stage-listing",
+      "fix_area": "redirect",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la &> ${STAGE}/listing.log"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "redirect-merge-stream-package-test-log",
+      "fix_area": "redirect",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm test &> .tmp/test.log"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "redirect-merge-stream-vitest-log",
+      "fix_area": "redirect",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npx vitest run &> .tmp/vitest.log"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "redirect-merge-stream-append-pytest-log",
+      "fix_area": "redirect",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pytest -q &>> .tmp/pytest.log"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "redirect-merge-stream-glued-target",
+      "fix_area": "redirect",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm test &>.tmp/glued.log"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-redirect-merge-stream-shell-profile",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm test &> ${HOME}/.zshrc"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "git-blame-source-range",
       "fix_area": "git",
       "harnesses": [

@@ -4,7 +4,7 @@
 mod tests;
 use crate::contained_node_tool::local_package_entry;
 use crate::restricted_command::{normalized_command, RestrictedPytestError};
-use crate::sfrs_shlex::{split_with, PLAIN_LEXER};
+use crate::sfrs_shlex::{split_with, PLAIN_LEXER, STRICT_LEXER};
 use regex::Regex;
 use serde_json::{json, Value};
 use std::path::Path;
@@ -570,9 +570,46 @@ fn command_words(input: &Value) -> Result<Vec<String>, RestrictedPytestError> {
     })
 }
 
+/// The absolute words a command spells, read with the lexer that knows where
+/// one command in the text ends and the next begins.
+///
+/// A workspace plan may carry a read root for a script that lives outside the
+/// workspace, and that grant is admitted only when the command names the file.
+/// Deciding whether it does is a reading of the same text this runtime
+/// admitted: `python3 /tmp/a.py;echo ok` names `/tmp/a.py`, while `python3
+/// /tmp/a.py#x` names a file of its own and no grant. Reading it a second time
+/// in Python is a second grammar over a command authority has already read.
+fn command_absolute_words(input: &Value) -> Result<Vec<String>, RestrictedPytestError> {
+    let text = input
+        .get("command_text")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            RestrictedPytestError::new(
+                "pytest_restricted_invalid_command",
+                "Invalid restricted execution request.",
+            )
+        })?;
+    let words = split_with(STRICT_LEXER, text).map_err(|_| {
+        RestrictedPytestError::new(
+            "pytest_restricted_invalid_command",
+            "Invalid restricted execution request.",
+        )
+    })?;
+    Ok(words
+        .into_iter()
+        .filter(|word| word.starts_with('/'))
+        .collect())
+}
+
 pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
     if operation == "contained_target" {
         return Some(json!({ "value": contained_target(input) }));
+    }
+    if operation == "command_absolute_words" {
+        return Some(match command_absolute_words(input) {
+            Ok(words) => json!({ "value": words }),
+            Err(error) => crate::restricted_command::error_reply(error),
+        });
     }
     if operation == "command_words" {
         return Some(match command_words(input) {
