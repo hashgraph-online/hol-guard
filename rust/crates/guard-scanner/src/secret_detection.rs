@@ -22,7 +22,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::error::Error;
 use std::fmt;
 use std::sync::LazyLock;
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -578,9 +578,11 @@ const GENERIC_RULE_META: RuleMeta = RuleMeta {
 /// mirroring `field(repr=False, compare=False)` on the Python dataclass so the
 /// raw secret can never leak through formatting or equality, and it is
 /// overwritten when the finding is dropped so it does not sit in a freed
-/// allocation for the rest of the process. Nothing else in this module keeps a
-/// second copy of those bytes: the scan keys its deduplication on a digest, and
-/// the fingerprint hashes the field in place.
+/// allocation for the rest of the process. The detector keeps no second copy of
+/// those bytes that outlives the scan: deduplication keys on a digest, the
+/// fingerprint hashes the field in place, and the line and context strings the
+/// matching path builds are zeroized when they go out of scope. The text handed
+/// to the scan is the caller's own allocation and stays the caller's to manage.
 #[derive(Clone)]
 pub struct SecretFinding {
     pub rule_id: &'static str,
@@ -1285,7 +1287,7 @@ fn python_splitlines(text: &str) -> Vec<&str> {
 
 /// Python `_surrounding_context`: the three lines on each side of the match
 /// line (counted by `\n`, sliced from `splitlines()`), capped at 4096 chars.
-fn surrounding_context(text: &str, match_start: usize) -> String {
+fn surrounding_context(text: &str, match_start: usize) -> Zeroizing<String> {
     let lines = python_splitlines(text);
     let line_index = text.as_bytes()[..match_start]
         .iter()
@@ -1293,13 +1295,13 @@ fn surrounding_context(text: &str, match_start: usize) -> String {
         .count();
     let start = line_index.saturating_sub(3);
     let end = (line_index + 4).min(lines.len());
-    let joined = if start < end {
+    let joined = Zeroizing::new(if start < end {
         lines[start..end].join("\n")
     } else {
         String::new()
-    };
+    });
     match joined.char_indices().nth(4096) {
-        Some((index, _)) => joined[..index].to_string(),
+        Some((index, _)) => Zeroizing::new(joined.as_str()[..index].to_string()),
         None => joined,
     }
 }
@@ -1378,12 +1380,12 @@ fn line_number(text: &str, match_start: usize) -> usize {
     text[..match_start].bytes().filter(|b| *b == b'\n').count() + 1
 }
 
-fn line_text(text: &str, match_start: usize) -> String {
+fn line_text(text: &str, match_start: usize) -> Zeroizing<String> {
     let start = text[..match_start].rfind('\n').map_or(0, |index| index + 1);
     let end = text[match_start..]
         .find('\n')
         .map_or(text.len(), |index| match_start + index);
-    text[start..end].chars().take(1024).collect()
+    Zeroizing::new(text[start..end].chars().take(1024).collect::<String>())
 }
 
 #[allow(clippy::too_many_arguments)] // Mirrors the Python keyword arguments verbatim.
@@ -1406,10 +1408,10 @@ fn finding_from_match(
                 return None;
             }
         }
-    } else if obvious_sample(candidate, &line_text, path) {
+    } else if obvious_sample(candidate, line_text.as_str(), path) {
         return None;
     }
-    let (score, reasons) = context_score(candidate, path, &line_text, rule.strong_format);
+    let (score, reasons) = context_score(candidate, path, line_text.as_str(), rule.strong_format);
     let minimum_score = if rule.strong_format { 0.56 } else { 0.64 };
     if score < minimum_score {
         return None;
