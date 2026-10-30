@@ -239,6 +239,9 @@ class _DroppingPeekStore(StoreExactCloudLocalOnceMixin):
     def _policy_integrity_secret_material(self, *, create: bool) -> tuple[bytes | None, str | None]:
         return b"k" * 32, "key-1"
 
+    def _provision_resident_verifier(self, key: bytes | None = None) -> None:
+        assert key == b"k" * 32
+
     def _native_store_call(self, method: str, args: Mapping[str, object]) -> object:
         assert method == "peek_exact_cloud_local_once_approval"
         self.calls += 1

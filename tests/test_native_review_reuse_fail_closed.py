@@ -137,12 +137,34 @@ def test_claimed_allow_denies_when_the_resident_gives_no_answer(
 
     monkeypatch.setattr(store, "_native_store_call", unavailable)
 
-    # A read-only settle gets one more round trip; a claim never repeats.
-    assert _claimed(store, tmp_path, claim=False) is False
-    assert calls == ["settle_claimed_native_allow"] * 2
-    calls.clear()
-    assert _claimed(store, tmp_path, claim=True) is False
-    assert calls == ["settle_claimed_native_allow"]
+    # Neither a claim nor a live completion repeats a call that may have landed.
+    for claim in (False, True):
+        calls.clear()
+        assert _claimed(store, tmp_path, claim=claim) is False
+        assert calls == ["settle_claimed_native_allow"]
+
+
+def test_claimed_allow_provisions_the_resident_verifier_before_settling(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _record_once(store, tmp_path)
+    key, _key_id = store._policy_integrity_secret_material(create=False)
+    assert key is not None
+
+    steps: list[object] = []
+    monkeypatch.setattr(store, "_provision_resident_verifier", lambda given=None: steps.append(given))
+
+    def settle(method: str, _args: object) -> object:
+        steps.append(method)
+        return True
+
+    monkeypatch.setattr(store, "_native_store_call", settle)
+
+    # A resident that restarted without its verifier is served again from the
+    # keyring key the settle already read, as the policy lookup does.
+    assert _claimed(store, tmp_path, claim=False) is True
+    assert steps == [key, "settle_claimed_native_allow"]
 
 
 def _record_once(store: GuardStore, tmp_path: Path, *, request_id: str = "r1") -> None:

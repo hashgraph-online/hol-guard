@@ -16,6 +16,8 @@ class _NativeStoreOwner(Protocol):
 
     def _policy_integrity_secret_material(self, *, create: bool) -> tuple[bytes | None, str | None]: ...
 
+    def _provision_resident_verifier(self, key: bytes | None = None) -> None: ...
+
 
 class StoreExactCloudLocalOnceMixin:
     def peek_exact_cloud_local_once_approval(
@@ -30,6 +32,7 @@ class StoreExactCloudLocalOnceMixin:
         key, key_id = self._policy_integrity_secret_material(create=False)
         if key is None or key_id is None:
             return None
+        self._provision_resident_verifier(key)
         args = {
             "request_id": request_id,
             "now": now,
@@ -57,6 +60,9 @@ class StoreExactCloudLocalOnceMixin:
         key, key_id = self._policy_integrity_secret_material(create=False)
         if key is None or key_id is None:
             return False
+        # The resident serves only once its verifier exists; a restart that
+        # lost it is restored from the keyring key, as the lookup does.
+        self._provision_resident_verifier(key)
         args = {
             "harness": harness,
             "artifact_id": artifact_id,
@@ -69,10 +75,10 @@ class StoreExactCloudLocalOnceMixin:
             "integrity_key_b64": encode_key(key),
             "integrity_key_id": key_id,
         }
-        if claim_saved_approval:
-            # A claim spends the approval; the first call may have landed.
-            return self._native_store_call("settle_claimed_native_allow", args) is True
-        return _read(self, "settle_claimed_native_allow", args) is True
+        # Never retried: a claim spends the approval, and even a live
+        # completion's lookup records a refused row's integrity audit, so a
+        # call whose reply was lost may already have landed.
+        return self._native_store_call("settle_claimed_native_allow", args) is True
 
 
 def _read(owner: _NativeStoreOwner, method: str, args: Mapping[str, object]) -> Any:
