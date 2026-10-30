@@ -23,11 +23,10 @@ use std::process::{Command, Stdio};
 use std::sync::mpsc;
 use std::time::{Duration, Instant, SystemTime};
 
+use crate::hook_env_stamp::HOOK_HANDED_OFF_ENV;
 use crate::resident_process_identity::durable_digest_for;
 use crate::resident_state::{discover_same_executable_states, validate_process_start_marker};
 
-/// Set on the successor so it answers the hook itself.
-pub(crate) const HANDED_OFF_ENV: &str = "HOL_GUARD_HOOK_HANDED_OFF";
 const POLL_INTERVAL: Duration = Duration::from_millis(1);
 /// A hook answer is a few kilobytes; nothing past this is read.
 const MAX_OUTPUT_BYTES: u64 = 1 << 20;
@@ -44,7 +43,7 @@ pub(crate) enum HandOff {
 /// The newer durable copy whose bridge should answer a hook this bridge
 /// could not take to a resident, or `None` to keep the hook here.
 pub(crate) fn successor(state_base: &Path) -> Option<PathBuf> {
-    if std::env::var_os(HANDED_OFF_ENV).is_some() {
+    if std::env::var_os(HOOK_HANDED_OFF_ENV).is_some() {
         return None;
     }
     let executable = std::env::current_exe().and_then(fs::canonicalize).ok()?;
@@ -113,7 +112,7 @@ pub(crate) fn hand_off(
     }
     let mut child = Command::new(successor)
         .args(arguments)
-        .env(HANDED_OFF_ENV, "1")
+        .env(HOOK_HANDED_OFF_ENV, "1")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())

@@ -11,7 +11,7 @@
 //! range the two can no longer be told apart, and the stamp is refused
 //! rather than guessed.
 
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::sync::OnceLock;
 
 use regex::Regex;
@@ -20,6 +20,9 @@ use crate::guard_store_wfcap_frame::sha256_hex;
 use crate::pyjson::{self, in_surrogate_plane, JsonFailure, PyVal, SURROGATE_PLANE_BASE};
 
 pub(crate) const HOOK_EXECUTION_ENVIRONMENT_KEY: &str = "guard_execution_environment";
+/// Set on a newer bridge that answers a stale bridge's hook, so it never
+/// hands the hook on again. Guard sets it, never the harness.
+pub(crate) const HOOK_HANDED_OFF_ENV: &str = "HOL_GUARD_HOOK_HANDED_OFF";
 pub(crate) const MAX_STAMPED_HOOK_INPUT_BYTES: usize = 1_000_000;
 const PAGER_NAMES: [&str; 2] = ["GIT_PAGER", "PAGER"];
 const GIT_TRUE_VALUES: [&str; 4] = ["1", "true", "yes", "on"];
@@ -54,7 +57,17 @@ pub(crate) struct DecodedEnvironment {
 }
 
 pub(crate) fn current_environment() -> DecodedEnvironment {
-    decode_environment(std::env::vars_os())
+    decode_environment(harness_variables(std::env::vars_os()))
+}
+
+/// The variables the harness set. Guard's own hand-off marker is dropped, so
+/// a handed-off hook is stamped exactly as the stale bridge would stamp it.
+fn harness_variables(
+    variables: impl IntoIterator<Item = (OsString, OsString)>,
+) -> impl Iterator<Item = (OsString, OsString)> {
+    variables
+        .into_iter()
+        .filter(|(name, _)| name.as_os_str() != OsStr::new(HOOK_HANDED_OFF_ENV))
 }
 
 pub(crate) fn decode_environment(

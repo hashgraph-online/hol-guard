@@ -240,3 +240,15 @@ fn oversized_stamp_and_hint_forward_input_unchanged() {
         ))
     );
 }
+
+#[test]
+fn the_hand_off_marker_is_never_stamped_as_a_harness_variable() {
+    let variables = [
+        (OsString::from("PATH"), OsString::from("/bin")),
+        (OsString::from(HOOK_HANDED_OFF_ENV), OsString::from("1")),
+    ];
+
+    let kept: Vec<_> = harness_variables(variables).collect();
+
+    assert_eq!(kept, [(OsString::from("PATH"), OsString::from("/bin"))]);
+}
