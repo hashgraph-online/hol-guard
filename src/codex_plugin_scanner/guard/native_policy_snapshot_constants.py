@@ -99,7 +99,6 @@ _REQUIRED_PUBLISH_FEATURES = frozenset(
         "native-command-control-fence-v1",
     }
 )
-_VALID_ACTIONS = frozenset({"allow", "warn", "review", "require-reapproval", "sandbox-required", "block"})
 _VALID_INPUT_MODES = frozenset({"observe", "prompt", "enforce"})
 _MAX_U64 = (1 << 64) - 1
 
@@ -140,14 +139,6 @@ _WINDOWS_ACCESS_ALLOWED_ACE_TYPE = 0
 _WINDOWS_INHERITED_ACE = 0x10
 _WINDOWS_FILE_ALL_ACCESS = 0x001F01FF
 _WINDOWS_SYSTEM_SID = "S-1-5-18"
-_ACTION_SEVERITY = {
-    "allow": 0,
-    "warn": 1,
-    "review": 2,
-    "require-reapproval": 3,
-    "sandbox-required": 4,
-    "block": 5,
-}
 
 
 class NativePolicySnapshotError(RuntimeError):

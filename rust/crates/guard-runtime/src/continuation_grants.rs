@@ -126,3 +126,7 @@ pub(crate) fn consume(
         params![now,signature.integrity_version,signature.payload_hash,signature.payload_mac,signature.integrity_key_id,signature.signed_at,id])?;
     Ok(changed == 1)
 }
+
+#[cfg(test)]
+#[path = "continuation_grants_tests.rs"]
+mod tests;

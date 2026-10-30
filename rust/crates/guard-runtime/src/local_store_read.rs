@@ -7,6 +7,7 @@
 use std::path::{Path, PathBuf};
 
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
+use serde_json::{Map, Value};
 
 #[path = "local_store_read_cache.rs"]
 mod cache;
@@ -140,6 +141,10 @@ pub(crate) struct HookStoreProbe {
     /// here, while the daemon would review it: that only sends the hook to
     /// the daemon.
     pub(crate) harness_unmanaged: bool,
+    /// An artifact-scoped block names the exact command this hook runs, such
+    /// as a Guard Cloud rule for one command. The daemon applies it before
+    /// any saved allow or edge allow, so the hook goes to the daemon.
+    pub(crate) exact_command_block: bool,
 }
 
 /// Read the store state the daemon checks for one hook of `harness`. A
@@ -148,10 +153,12 @@ pub(crate) struct HookStoreProbe {
 pub(crate) fn hook_store_probe(
     guard_home: &Path,
     harness: &str,
+    command: Option<&str>,
 ) -> Result<HookStoreProbe, StoreReadError> {
     let mut probe = HookStoreProbe {
         local_cli_block_rules: false,
         harness_unmanaged: false,
+        exact_command_block: false,
     };
     let Some(connection) = open_read_only(&guard_home.join(STORE_FILE_NAME))? else {
         return Ok(probe);
@@ -191,7 +198,65 @@ pub(crate) fn hook_store_probe(
             )
             .map_err(|_| StoreReadError::StoreUnavailable)?;
     }
+    if let Some(command) = command {
+        probe.exact_command_block = exact_command_block(&connection, harness, command)?;
+    }
     Ok(probe)
+}
+
+/// Whether an artifact-scoped block for `harness` or every harness names one
+/// of `command`'s exact-command ids, as `native_exact_command_block_response`
+/// probes it.
+fn exact_command_block(
+    connection: &Connection,
+    harness: &str,
+    command: &str,
+) -> Result<bool, StoreReadError> {
+    if !table_exists(connection, "policy_decisions")? {
+        return Ok(false);
+    }
+    let candidates = crate::memory_pattern::verdict(&crate::memory_pattern::MemoryRequest {
+        command: Some(command),
+        artifact_type: Some("shell_command"),
+        artifact_id: None,
+        artifact_name: None,
+        harness: None,
+    });
+    for id in &candidates.exact_artifact_ids {
+        let found = connection
+            .query_row(
+                "select exists(select 1 from policy_decisions where harness in (?1, '*') \
+                 and scope = 'artifact' and action = 'block' and artifact_id = ?2)",
+                params![harness, id],
+                |row| row.get::<_, bool>(0),
+            )
+            .map_err(|_| StoreReadError::StoreUnavailable)?;
+        if found {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// `pre_tool_command` (`hook_request_parsing.py`): the command line a
+/// `PreToolUse` payload carries, read from the same places in the same order.
+pub(crate) fn pre_tool_command(payload: &Map<String, Value>) -> Option<&str> {
+    let input = ["tool_input", "toolInput"]
+        .into_iter()
+        .find_map(|key| payload.get(key).and_then(Value::as_object));
+    [
+        input,
+        payload.get("arguments").and_then(Value::as_object),
+        Some(payload),
+    ]
+    .into_iter()
+    .flatten()
+    .find_map(|candidate| {
+        ["command", "cmd", "shell_command", "shellCommand"]
+            .into_iter()
+            .filter_map(|key| candidate.get(key).and_then(Value::as_str))
+            .find(|value| !crate::context_digest::python_strip(value).is_empty())
+    })
 }
 
 /// Whether `sync_state` holds a Claude Code permission notice for

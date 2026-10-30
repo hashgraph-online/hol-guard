@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters import zcode_contained_tests
+from codex_plugin_scanner.guard.daemon import hook_worker_native
 from codex_plugin_scanner.guard.daemon.hook_worker_native import HookWorkerNativeMixin
 from codex_plugin_scanner.guard.native_hook_decision import NativeHookDecisionError
 from codex_plugin_scanner.guard.native_hook_edge import (
@@ -180,6 +181,12 @@ def test_the_envelope_carries_the_sink_argv_only_for_a_tool_call_a_resident_can_
         assert sink is None
 
 
+@pytest.fixture(autouse=True)
+def _no_saved_command_blocks(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The fixture daemon has no store; saved command blocks are tested elsewhere.
+    monkeypatch.setattr(hook_worker_native, "native_exact_command_block_response", lambda *_a, **_k: None)
+
+
 class _Metrics:
     def record_route(self, _route: str) -> None:
         return None
@@ -192,6 +199,7 @@ class _SinkRouteFixture(HookWorkerNativeMixin):
     edge: dict[str, object]
     captured: list[dict[str, object]] = field(default_factory=list)
     activity_writer: object | None = None
+    store: object | None = None
     metrics: _Metrics = field(default_factory=_Metrics)
 
     def _review_raw_hook_native(self, **kwargs: object) -> dict[str, object]:

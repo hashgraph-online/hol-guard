@@ -4,10 +4,6 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import datetime
-from types import MappingProxyType
-from typing import Final
-
-from codex_plugin_scanner.guard.models import GuardAction
 
 from .command_activity_contract import (
     ActivityApprovalReuseStatus,
@@ -19,41 +15,6 @@ from .command_activity_contract import (
     CommandProofLevel,
     CorrelationHandle,
     ReceiptLinkStatus,
-)
-from .effect_contract import EffectKind, UncertaintyKind
-from .extension_evidence import EvidenceSeverity
-from .generated_command_catalog import CommandRuleMode
-
-_RULE_MODE_FLOOR: Final[dict[CommandRuleMode, GuardAction]] = {
-    "disabled": "allow",
-    "monitor": "warn",
-    "review": "review",
-    "enforce": "block",
-    "required": "review",
-}
-_SEVERITY: Final = {
-    "low": EvidenceSeverity.LOW,
-    "medium": EvidenceSeverity.MEDIUM,
-    "high": EvidenceSeverity.HIGH,
-    "critical": EvidenceSeverity.CRITICAL,
-}
-
-# The decision plane claims `process-execution` for a risk class the effect
-# vocabulary does not name (`effect_claims`, command_decision_adapter.rs), and
-# this record says what that plane decided. Raising here instead dropped the
-# whole activity: the only caller records best effort, so an unmapped class on
-# a shipped rule left a `pre_record_failed` count and no evidence at all.
-_UNMAPPED_RISK_CLASS_EFFECTS: Final = frozenset({EffectKind.PROCESS_EXECUTION})
-
-_UNCERTAINTY_REASON: Final = MappingProxyType(
-    {
-        "command_byte_limit_exceeded": UncertaintyKind.PARSER_BUDGET_EXHAUSTED,
-        "command_segment_limit_exceeded": UncertaintyKind.PARSER_BUDGET_EXHAUSTED,
-        "command_token_limit_exceeded": UncertaintyKind.PARSER_BUDGET_EXHAUSTED,
-        "embedded_command_limit_exceeded": UncertaintyKind.PARSER_BUDGET_EXHAUSTED,
-        "malformed_shell_quoting": UncertaintyKind.MALFORMED_INPUT,
-        "wrapper_normalization_limit_exceeded": UncertaintyKind.PARSER_BUDGET_EXHAUSTED,
-    }
 )
 
 

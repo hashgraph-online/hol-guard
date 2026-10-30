@@ -161,7 +161,7 @@ pub(super) fn answer(
         .direct_lane_home_dir()
         .ok_or(HookDirectDefer::BindingIncomplete)?;
     // The daemon passes a hook through for a harness Guard does not manage.
-    let store = crate::local_store_read::hook_store_probe(Path::new(guard_home), harness)
+    let store = crate::local_store_read::hook_store_probe(Path::new(guard_home), harness, None)
         .map_err(|_| HookDirectDefer::HarnessUnmanaged)?;
     if store.harness_unmanaged {
         return Err(HookDirectDefer::HarnessUnmanaged);
