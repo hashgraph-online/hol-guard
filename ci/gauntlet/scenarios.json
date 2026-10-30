@@ -1413,6 +1413,9 @@
       "commands": [
         "npx -v",
         "uv -v"
+      ],
+      "benign_exit_commands": [
+        "uv -v"
       ]
     },
     {

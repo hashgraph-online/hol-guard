@@ -188,8 +188,8 @@ fn a_lone_short_version_flag_is_the_same_inspection_as_the_long_one() {
         "mvn -v",
         "composer -v",
         "bundle -v",
-        "gradle -V",
-        "cargo -v",
+        "gradle -v",
+        "cargo -V",
     ] {
         let observations = decision(command, &unrestricted).command_extensions.unwrap();
         assert!(
@@ -201,8 +201,21 @@ fn a_lone_short_version_flag_is_the_same_inspection_as_the_long_one() {
         );
     }
     // A flag is only an inspection while it is the whole argument list: a
-    // second word can name the package the manager would fetch.
-    for command in ["npx -v left-pad", "npx --no-install -v", "uv add -v httpx"] {
+    // second word can name the package the manager would fetch. And `-V` is
+    // not that flag everywhere: Gradle and Maven spell `--show-version` with
+    // it, which prints the version and then runs the build, and Bundler reads
+    // it as `--verbose`, where a bare `bundle` installs.
+    for command in [
+        "npx -v left-pad",
+        "npx --no-install -v",
+        "uv add -v httpx",
+        "gradle -V",
+        "gradlew -V",
+        "mvn -V",
+        "mvnw -V",
+        "bundle -V",
+        "bundler -V",
+    ] {
         let observations = decision(command, &unrestricted).command_extensions.unwrap();
         assert!(
             observations
