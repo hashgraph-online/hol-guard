@@ -701,13 +701,19 @@ def test_a_full_disk_never_changes_a_hook_answer_or_stops_the_daemon(
         baseline = _authenticated_hook(daemon, query, timeout=60.0)["decision"]
         assert isinstance(baseline, str), baseline
 
+        # The baseline's own evidence is submitted behind its response. Let it
+        # reach the real writer while the disk still has room, so every attempt
+        # recorded below belongs to a hook that ran with no space left.
+        dispatch = getattr(daemon._server, "runtime_hook_evidence_dispatch", None)
+        if dispatch is not None:
+            assert dispatch.flush(10.0), "the baseline's evidence never drained"
+
         monkeypatch.setattr(NativeHookEvidenceWriter, "_call", _no_space_left)
 
         answers = [_authenticated_hook(daemon, query, timeout=60.0) for _ in range(8)]
 
         # Evidence is submitted behind the response, so give the dispatch the
         # chance to reach the writer before reading what it attempted.
-        dispatch = getattr(daemon._server, "runtime_hook_evidence_dispatch", None)
         if dispatch is not None:
             _ = dispatch.flush(10.0)
         deadline = time.monotonic() + 10.0
