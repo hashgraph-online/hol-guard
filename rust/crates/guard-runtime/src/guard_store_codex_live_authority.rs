@@ -227,6 +227,7 @@ fn native_read(
         workspace: text("workspace"),
         publisher: text("publisher"),
         exact_match_context: None,
+        exception_workspace: None,
     }))))
 }
 

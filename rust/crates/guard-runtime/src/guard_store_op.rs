@@ -51,6 +51,7 @@ use crate::guard_store_composio_catalog as composio_catalog;
 use crate::guard_store_connect as connect;
 use crate::guard_store_connector_context as connector_context;
 use crate::guard_store_db::{exec, query_all, query_one, text, StoreError, StoreResult};
+use crate::guard_store_devices as devices;
 use crate::guard_store_evidence as evidence;
 use crate::guard_store_inventory as inventory;
 use crate::guard_store_local_cli as local_cli;
@@ -529,6 +530,8 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "mark_requests_read"
         | "mark_request_unread"
         | "clear_read_state"
+        | "set_device_label"
+        | "rotate_installation_id"
         | "add_event"
         | "add_guard_event_v1"
         | "list_guard_events_v1"
@@ -842,6 +845,8 @@ fn dispatch(
         "mark_request_unread" => read_state::mark_unread(connection, args),
         "get_read_state" => read_state::ids(connection, args),
         "clear_read_state" => read_state::clear(connection, args),
+        "set_device_label" => devices::set_label(connection, args),
+        "rotate_installation_id" => devices::rotate(connection, args),
         "add_event" => cloud_events::add_event(connection, args),
         "add_guard_event_v1" => cloud_events::add(connection, args),
         "list_guard_events_v1" => cloud_events::list(connection, args),

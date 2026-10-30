@@ -741,7 +741,6 @@
           "src/codex_plugin_scanner/guard/business_policy_document_import.py",
           "src/codex_plugin_scanner/guard/consumer/service.py",
           "src/codex_plugin_scanner/guard/consumer/native_decision_projection.py",
-          "src/codex_plugin_scanner/guard/store_approval_projection.py",
           "src/codex_plugin_scanner/guard/inventory_item_description.py",
           "src/codex_plugin_scanner/guard/local_cli_hook.py",
           "src/codex_plugin_scanner/guard/local_cli_trust.py",

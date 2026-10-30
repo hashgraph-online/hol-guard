@@ -292,6 +292,11 @@ fn a_poetry_verb_that_writes_or_moves_the_project_keeps_its_review() {
         "poetry check --unknown-option",
         "poetry run -C ../dashboard pytest",
         "poetry run --project=../dashboard pytest",
+        // A reporting flag in front of a project mover does not make the
+        // mover one: the project it names is still one these checks never
+        // looked at.
+        "poetry run --quiet -C ../dashboard pytest",
+        "poetry run --quiet --project=../dashboard pytest",
         "poetry -C ../dashboard run pytest",
         "poetry --directory ../dashboard check",
         "poetry --project ../dashboard version",
@@ -320,6 +325,13 @@ fn a_runner_launching_the_project_environment_runs_inside_the_sandbox() {
         "poetry run -- pytest -q",
         "poetry run ruff check src",
         "poetry --no-interaction run pytest -q",
+        // Poetry reads its own reporting flags on either side of the verb,
+        // so one standing between `run` and the program is still Poetry's and
+        // the program behind it is still the program.
+        "poetry run --quiet pytest -q",
+        "poetry run -q pytest -q",
+        "poetry run --no-interaction --quiet pytest -q",
+        "poetry run --no-ansi -- pytest -q",
         "poetry run pip install ./local-package",
         "poetry run python -m pip install ./local-package",
         "pipenv run pytest -q",
@@ -344,6 +356,12 @@ fn a_runner_verb_that_names_no_program_keeps_its_review() {
     for command in [
         "poetry run",
         "poetry run --",
+        // Reporting flags alone leave no program behind them.
+        "poetry run --quiet",
+        "poetry run -q --no-ansi",
+        // And after `--` the words are the program's, so a flag standing
+        // there is a program name rather than one of Poetry's own.
+        "poetry run -- --quiet",
         "pipenv run",
         "pipenv run --",
         "pipenv run --help",

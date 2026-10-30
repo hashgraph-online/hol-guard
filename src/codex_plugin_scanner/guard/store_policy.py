@@ -9,7 +9,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal, cast
 
-from .cloud_exceptions import lift_cloud_excepted_policy_bundle_identities
 from .managed_controls_policy_bundle import (
     MANAGED_CONTROLS_ACTIVE_STATE_KEY,
     MANAGED_CONTROLS_LAST_GOOD_STATE_KEY,
@@ -95,9 +94,6 @@ class PolicyLookupEvidence:
     local_once_integrity_key_b64: str | None = None
     local_once_integrity_key_id: str | None = None
     policy_bundle_decision_identities: list[list[Any]] | None = None
-    # The workspace id and Cloud exceptions of the bundle those identities came
-    # from, so each lookup lifts Cloud rules only against that same bundle.
-    policy_bundle_cloud_exceptions: dict[str, Any] | None = None
     # The store-resident sources this evidence was gathered against, named
     # before it was derived. Only a lookup that may claim ships one.
     evidence_binding: dict[str, Any] | None = None
@@ -1103,17 +1099,10 @@ class StorePolicyMixin:
             "local_once_integrity_key_b64": evidence.local_once_integrity_key_b64,
             "local_once_integrity_key_id": evidence.local_once_integrity_key_id,
         }
-        identities = lift_cloud_excepted_policy_bundle_identities(
-            evidence.policy_bundle_decision_identities,
-            evidence.policy_bundle_cloud_exceptions,
-            harness=harness,
-            artifact_id=artifact_id,
-            publisher=publisher,
-            workspace=workspace,
-            now=evidence.now,
-        )
-        if identities:
-            request["policy_bundle_decision_identities"] = identities
+        # The resident lifts the bundle's rules for each target an approved
+        # Cloud exception in the stored bundle covers, so the full set ships.
+        if evidence.policy_bundle_decision_identities:
+            request["policy_bundle_decision_identities"] = evidence.policy_bundle_decision_identities
         if portable_workspace is not None:
             request["portable_workspace"] = portable_workspace
             # Unset options are omitted, never sent as null: the resident
@@ -1290,7 +1279,7 @@ class StorePolicyMixin:
             # ignored_local_integrity evidence.
             return _degraded_lookup_evidence(current_time, integrity_state, has_saved_rows=has_saved_rows)
 
-        bundle_identities, bundle_cloud_exceptions = self._lookup_bundle_identities(current_time)
+        bundle_identities = self._lookup_bundle_identities(current_time)
         return PolicyLookupEvidence(
             now=current_time,
             integrity_state=integrity_state,
@@ -1307,18 +1296,17 @@ class StorePolicyMixin:
             ),
             local_once_integrity_key_id=local_once_key_id,
             policy_bundle_decision_identities=bundle_identities,
-            policy_bundle_cloud_exceptions=bundle_cloud_exceptions,
             evidence_binding=evidence_binding,
             has_saved_rows=has_saved_rows,
         )
 
-    def _lookup_bundle_identities(self, current_time: str) -> tuple[list[list[Any]] | None, dict[str, Any] | None]:
-        identities, cloud_exceptions = self._cached_policy_bundle_authority(
+    def _lookup_bundle_identities(self, current_time: str) -> list[list[Any]] | None:
+        identities = self._cached_policy_bundle_decision_identities(
             now=_parse_utc_timestamp(current_time).timestamp(),
         )
         if not identities:
-            return None, None
-        return [[field for field in identity] for identity in identities], cloud_exceptions
+            return None
+        return [[field for field in identity] for identity in identities]
 
     def resolve_policy_decision(
         self,

@@ -14,11 +14,13 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_approvals import (
+from tests.native_approval_writes import (
+    add_approval_request,
     get_approval_request,
     list_approval_requests,
+    native_approval_connection,
+    native_store,
 )
-from tests.native_approval_writes import add_approval_request, native_approval_connection, native_store
 
 
 def _make_conn() -> sqlite3.Connection:

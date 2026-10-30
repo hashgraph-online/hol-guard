@@ -46,23 +46,68 @@ fn an_unknown_option_still_hides_the_verb() {
     }
 }
 
-/// A selector naming a directory is refused, so a filter cannot reach a
-/// project the workspace does not hold.
+/// A selector reaching out of the workspace is refused, so a filter cannot
+/// reach a project the workspace does not hold.
 #[test]
-fn a_path_selector_is_not_an_inert_value() {
+fn a_path_selector_leaving_the_workspace_is_not_an_inert_value() {
     for arguments in [
-        vec!["--filter", "./packages/web", "build"],
         vec!["--filter", "../sibling", "build"],
-        vec!["--filter=./packages/web", "build"],
         vec!["--filter", "/opt/other", "build"],
         vec!["--filter", "~/other", "build"],
         vec!["--filter", "web/../../other", "build"],
         vec!["--filter", "..\\other", "build"],
+        vec!["--filter", "web\\..\\..\\other", "build"],
+        vec!["--filter=../sibling", "build"],
+        // pnpm removes the `...` that adds dependents before it decides
+        // whether what is left names a place, so these resolve to
+        // `../other` against the directory the command ran in.
+        vec!["--filter", "...../other", "build"],
+        vec!["--filter", "...^../other", "build"],
+        vec!["--filter", "!...../other", "build"],
+        vec!["--filter=...../other", "build"],
+        vec!["--filter", "...^..\\other", "build"],
+        // The shell expands a brace alternative into one word per
+        // alternative, so pnpm is handed `--filter=../sibling` of its own.
+        vec!["--filter={web,../sibling}", "build"],
+        vec!["--filter", "{web,../sibling}", "build"],
+        vec!["--filter", "web,/opt/other", "build"],
+        vec!["-F", "/opt/other", "build"],
         // A missing value leaves the option itself in front of the verb.
         vec!["--filter"],
         vec!["--filter", "--silent", "build"],
     ] {
         assert_eq!(skip_inert_options("pnpm", &arguments), 0, "{arguments:?}");
+    }
+}
+
+/// A selector naming a directory below where the command runs selects one of
+/// the workspace's own projects, exactly as the bare name does, so it carries
+/// the verb past the walk rather than hiding it.
+#[test]
+fn a_selector_that_stays_in_the_workspace_is_an_inert_value() {
+    for (arguments, skipped) in [
+        (vec!["--filter", "./packages/web", "build"], 2),
+        (vec!["--filter=./packages/web", "build"], 1),
+        (vec!["-F", "./packages/web", "build"], 2),
+        // pnpm's `...` suffix adds the project's dependents to the same
+        // selection; it names no other place.
+        (vec!["--filter", "./packages/web...", "build"], 2),
+        (vec!["--filter", "packages/web", "build"], 2),
+        (vec!["--filter", ".", "build"], 2),
+        // The `{<dir>}` selector holds a directory, and this one is inside.
+        (vec!["--filter", "{packages/web}", "build"], 2),
+        (vec!["--filter", "@scope/*{components/**}", "build"], 2),
+        // The same `...` prefix in front of a name is a name, not a place.
+        (vec!["--filter", "...web", "build"], 2),
+        (vec!["--filter", "...^web", "build"], 2),
+        (vec!["--filter", "...packages/web", "build"], 2),
+        (vec!["--filter", "!...web", "build"], 2),
+    ] {
+        assert_eq!(
+            skip_inert_options("pnpm", &arguments),
+            skipped,
+            "{arguments:?}"
+        );
     }
 }
 
@@ -75,21 +120,23 @@ fn a_scoped_name_is_an_inert_value() {
     );
 }
 
-/// pnpm's `{<dir>}` selector names a directory, a drive letter opens one on
-/// Windows, and a `$` hides what the value names, so none of the three is a
-/// value an option may carry past the verb.
+/// pnpm's `{<dir>}` selector holds a directory wherever in the value it sits,
+/// a drive letter opens one on Windows, and a `$` hides what the value names,
+/// so a directory operand reaching out refuses the whole value whatever
+/// precedes it.
 #[test]
-fn a_directory_selector_is_not_an_inert_value() {
+fn a_directory_selector_leaving_the_workspace_is_not_an_inert_value() {
     for arguments in [
         vec!["--filter", "{/opt/other}", "build"],
-        vec!["--filter", "{packages/web}", "build"],
+        vec!["--filter", "{../sibling}", "build"],
         vec!["--filter", "web{/opt/other}", "build"],
-        vec!["--filter", "@scope/*{components/**}", "build"],
+        vec!["--filter", "web{../../other}", "build"],
         vec!["--filter", "[origin/main]{/opt/other}", "build"],
         vec!["--filter", "!{/opt/other}", "build"],
         vec!["--filter=C:/other", "build"],
         vec!["--filter", "C:\\other", "build"],
         vec!["--filter", "$HOME/other", "build"],
+        vec!["--filter", "{$HOME/other}", "build"],
     ] {
         assert_eq!(skip_inert_options("pnpm", &arguments), 0, "{arguments:?}");
     }
@@ -102,6 +149,42 @@ fn a_changed_since_selector_is_an_inert_value() {
         skip_inert_options("pnpm", &["--filter", "[origin/main]", "build"]),
         2
     );
+}
+
+/// A brace expansion stands for the words the shell joins from it, not for
+/// the alternatives read on their own: `{.,}./other` holds two pieces that
+/// climb nowhere and expands to `../other`.
+#[test]
+fn a_brace_expansion_building_a_step_back_is_not_an_inert_value() {
+    for arguments in [
+        vec!["--filter", "{.,}./other", "build"],
+        vec!["--filter={.,}./other", "build"],
+        vec!["--filter", "{.,x}./other", "build"],
+        vec!["--filter", "{web,.}./other", "build"],
+        vec!["--filter", "..{/web,}/other", "build"],
+    ] {
+        assert_eq!(skip_inert_options("pnpm", &arguments), 0, "{arguments:?}");
+    }
+}
+
+/// An expansion whose every word stays below the workspace is still inert,
+/// and a brace group holding no comma is the literal text pnpm's own
+/// directory selector is written in rather than an expansion.
+#[test]
+fn a_brace_expansion_that_stays_below_the_workspace_is_an_inert_value() {
+    for (arguments, skipped) in [
+        (vec!["--filter", "{web,api}", "build"], 2),
+        (vec!["--filter={web,api}", "build"], 1),
+        (vec!["--filter", "packages/{web,api}", "build"], 2),
+        (vec!["--filter", "{web,{api,docs}}", "build"], 2),
+        (vec!["--filter", "{web,api", "build"], 2),
+    ] {
+        assert_eq!(
+            skip_inert_options("pnpm", &arguments),
+            skipped,
+            "{arguments:?}"
+        );
+    }
 }
 
 /// An option that only asks the manager to do less — stay on the cache it

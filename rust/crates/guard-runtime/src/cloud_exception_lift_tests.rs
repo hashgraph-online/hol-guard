@@ -5,25 +5,6 @@ use super::*;
 const NOW: &str = "2026-10-29T12:00:00+00:00";
 const ARTIFACT: &str = "codex:project:package-request:left-pad";
 
-fn identity(action: &str) -> Identity {
-    json!([
-        "codex",
-        "harness",
-        "family:package-request",
-        null,
-        null,
-        null,
-        action,
-        "r",
-        "rule",
-        "policy-bundle",
-        null
-    ])
-    .as_array()
-    .unwrap()
-    .clone()
-}
-
 fn exception(fields: Value) -> Value {
     let mut entry = json!({
         "exceptionId": "exception-1",
@@ -61,10 +42,7 @@ fn target<'a>(harness: &'a str, artifact_id: &'a str) -> LiftTarget<'a> {
 }
 
 fn lifted(exceptions: Vec<Value>, target: &LiftTarget<'_>) -> bool {
-    let identities = vec![identity("block"), identity("allow")];
-    let kept = lift_cloud_excepted_identities(&identities, Some(&bundle(exceptions)), target);
-    assert!(kept.contains(&identity("allow")));
-    !kept.contains(&identity("block"))
+    cloud_exception_covers(Some(&bundle(exceptions)), target)
 }
 
 #[test]
@@ -76,12 +54,8 @@ fn an_active_exception_drops_the_bundle_rules_that_restrict() {
 }
 
 #[test]
-fn identities_stay_without_a_bundle_or_a_covering_exception() {
-    let identities = vec![identity("block")];
-    assert_eq!(
-        lift_cloud_excepted_identities(&identities, None, &target("codex", ARTIFACT)),
-        identities
-    );
+fn nothing_lifts_without_a_bundle_or_a_covering_exception() {
+    assert!(!cloud_exception_covers(None, &target("codex", ARTIFACT)));
     assert!(!lifted(
         vec![exception(json!({}))],
         &target("codex", "codex:project:other")

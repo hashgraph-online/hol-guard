@@ -64,7 +64,10 @@ pub(super) fn local_python_work(
 }
 
 /// Flags that report differently without changing what Poetry runs, so the
-/// verb standing behind one is still the verb.
+/// verb standing behind one is still the verb, and so is the program standing
+/// behind one after `run`. Poetry reads its own options wherever they fall on
+/// the line, so `poetry run --quiet pytest` runs the same `pytest` that
+/// `poetry run pytest` runs.
 const POETRY_INERT_FLAGS: &[&str] = &["--no-ansi", "--no-interaction", "-n", "--quiet", "-q"];
 
 /// Poetry verbs the sandbox bounds: the two reads that are provable without
@@ -88,7 +91,18 @@ fn local_poetry_work(arguments: &[String], directory: &Path) -> bool {
     let tail: Vec<&str> = rest.collect();
 
     match verb {
-        "run" => launches_a_materialized_environment(&tail, directory),
+        "run" => {
+            // The program is the first word after the verb that is not one of
+            // Poetry's own reporting flags. The project-moving options are
+            // not among them, so `poetry run -C ../other pytest` still stops
+            // here rather than reaching a project these checks never saw.
+            let launched: Vec<&str> = tail
+                .iter()
+                .copied()
+                .skip_while(|word| POETRY_INERT_FLAGS.contains(word))
+                .collect();
+            launches_a_materialized_environment(&launched, directory)
+        }
         "check" => bounded_read(&tail, "--lock", POETRY_INERT_FLAGS),
         "version" => bounded_read(&tail, "--short", POETRY_INERT_FLAGS),
         _ => false,

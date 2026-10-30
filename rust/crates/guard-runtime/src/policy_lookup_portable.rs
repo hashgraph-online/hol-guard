@@ -80,6 +80,12 @@ fn compose(
     let mut probe = |workspace: Option<&str>| -> Result<Value, String> {
         let probe = PolicyDecisionLookupRequestV1 {
             workspace: workspace.map(str::to_owned),
+            // The portable key aliases the same checkout, so a Cloud exception
+            // naming its path covers both probes.
+            exception_workspace: request
+                .exception_workspace
+                .clone()
+                .or_else(|| request.workspace.clone()),
             consume_one_shot: false,
             portable_workspace: None,
             evidence_binding: None,

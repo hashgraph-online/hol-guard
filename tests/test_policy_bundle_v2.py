@@ -14,6 +14,10 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 from codex_plugin_scanner.guard.models import PolicyDecision
+from codex_plugin_scanner.guard.policy_bundle_parser import (
+    policy_bundle_acceptance_checkpoint,
+    policy_bundle_cloud_exceptions_hash,
+)
 from codex_plugin_scanner.guard.policy_bundle_trusted_keys import (
     PolicyBundleVerificationKey,
     validate_synced_policy_bundle,
@@ -86,6 +90,8 @@ def _signed_bundle(
     payload_base: dict[str, object] | None = None,
     payload_extensions: dict[str, object] | None = None,
     payload_hash: str | None = None,
+    cloud_exceptions: list[dict[str, object]] | None = None,
+    cloud_exceptions_issued_at: str | None = None,
 ) -> dict[str, object]:
     document = parse_policy_document_yaml(_FIXTURE.read_bytes())
     payload = dict(payload_base) if payload_base is not None else document.to_mapping()
@@ -111,8 +117,16 @@ def _signed_bundle(
         "payload": payload,
         "rollback": rollback,
     }
+    if cloud_exceptions is not None:
+        bundle["cloudExceptions"] = cloud_exceptions
+    if cloud_exceptions_issued_at is not None:
+        bundle["cloudExceptionsIssuedAt"] = cloud_exceptions_issued_at
     bundle["payloadHash"] = payload_hash if payload_hash is not None else _reference_payload_hash(payload)
     bundle["bundleHash"] = computed_policy_bundle_v2_hash(bundle)
+    return _signed(private_key, bundle)
+
+
+def _signed(private_key: rsa.RSAPrivateKey, bundle: dict[str, object]) -> dict[str, object]:
     signature = private_key.sign(
         canonical_policy_bundle_v2_payload(bundle),
         padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
@@ -364,6 +378,147 @@ def test_v2_transition_rejects_replay_and_same_version_substitution() -> None:
         )
         == "bundle_version_conflict"
     )
+
+
+def _cloud_exception() -> dict[str, object]:
+    return {
+        "exceptionId": "artifact:codex:left-pad",
+        "effect": "allow",
+        "scope": "artifact",
+        "harness": "codex",
+        "artifactId": "codex:project:package-request:left-pad",
+        "owner": "owner@example.com",
+        "expiresAt": "2099-01-01T00:00:00+00:00",
+    }
+
+
+def test_v2_cloud_exceptions_are_signed_but_leave_the_bundle_hash_alone() -> None:
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    verification_key = _verification_key(private_key)
+    published = _signed_bundle(private_key, verification_key)
+    with_exceptions = _signed_bundle(
+        private_key,
+        verification_key,
+        cloud_exceptions=[_cloud_exception()],
+        cloud_exceptions_issued_at="2026-07-16T09:30:00Z",
+    )
+
+    assert with_exceptions["bundleHash"] == published["bundleHash"]
+    assert validated_policy_bundle_v2_payload(
+        with_exceptions,
+        trusted_verification_keys=(verification_key,),
+        anchored_verification_keys=(verification_key,),
+        now=datetime(2026, 7, 16, 12, tzinfo=timezone.utc),
+    ) == (with_exceptions, None)
+
+    widened = copy.deepcopy(with_exceptions)
+    cast(list[dict[str, object]], widened["cloudExceptions"])[0]["artifactId"] = "codex:project:package-request:*"
+    stripped = copy.deepcopy(with_exceptions)
+    stripped["cloudExceptions"] = []
+    for tampered in (widened, stripped):
+        assert validated_policy_bundle_v2_payload(
+            tampered,
+            trusted_verification_keys=(verification_key,),
+            anchored_verification_keys=(verification_key,),
+            now=datetime(2026, 7, 16, 12, tzinfo=timezone.utc),
+        ) == (None, "bundle_signature_invalid")
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"cloudExceptions": [{"exceptionId": "x"}], "cloudExceptionsIssuedAt": "2026-07-16T09:30:00Z"},
+        {"cloudExceptions": {}, "cloudExceptionsIssuedAt": "2026-07-16T09:30:00Z"},
+        {"cloudExceptions": []},
+        {"cloudExceptionsIssuedAt": "2026-07-16T09:30:00Z"},
+        {"cloudExceptions": [], "cloudExceptionsIssuedAt": "yesterday"},
+        *(
+            {
+                "cloudExceptions": [{**_cloud_exception(), "effect": effect}],
+                "cloudExceptionsIssuedAt": "2026-07-16T09:30:00Z",
+            }
+            for effect in (False, 0, None, "deny")
+        ),
+    ],
+)
+def test_v2_bundle_rejects_malformed_cloud_exceptions(fields: dict[str, object]) -> None:
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    verification_key = _verification_key(private_key)
+    bundle = _signed_bundle(private_key, verification_key)
+    bundle.update(fields)
+    bundle = _signed(private_key, bundle)
+
+    assert validated_policy_bundle_v2_payload(
+        bundle,
+        trusted_verification_keys=(verification_key,),
+        anchored_verification_keys=(verification_key,),
+        now=datetime(2026, 7, 16, 12, tzinfo=timezone.utc),
+    ) == (None, "invalid_cloud_exceptions")
+
+
+def test_v2_transition_rejects_an_older_or_missing_cloud_exception_set() -> None:
+    bundle_hash = "sha256:" + "a" * 64
+    accepted_at = "2026-07-16T09:30:00Z"
+
+    def transition(incoming: dict[str, object], accepted: str | None = accepted_at) -> str | None:
+        return validate_policy_bundle_v2_transition(
+            {"bundleVersion": 8, "bundleHash": bundle_hash, **incoming},
+            current_bundle_version=8,
+            current_bundle_hash=bundle_hash,
+            current_cloud_exceptions_issued_at=accepted,
+        )
+
+    assert transition({"cloudExceptionsIssuedAt": "2026-07-16T09:29:59Z"}) == "cloud_exceptions_replay"
+    assert transition({}) == "cloud_exceptions_replay"
+    assert transition({"cloudExceptionsIssuedAt": accepted_at}) is None
+    assert transition({"cloudExceptionsIssuedAt": "2026-07-16T10:00:00Z"}) is None
+    assert transition({}, accepted=None) is None
+    assert transition({"cloudExceptionsIssuedAt": "2026-07-16T09:00:00Z"}, accepted=None) is None
+    assert (
+        validate_policy_bundle_v2_transition(
+            {"bundleVersion": 9, "bundleHash": "sha256:" + "b" * 64},
+            current_bundle_version=8,
+            current_bundle_hash=bundle_hash,
+            current_cloud_exceptions_issued_at=accepted_at,
+        )
+        is None
+    )
+
+
+def test_v2_transition_binds_an_equal_issue_time_to_the_accepted_exception_set() -> None:
+    bundle_hash = "sha256:" + "a" * 64
+    issued_at = "2026-07-16T09:30:00Z"
+    accepted_set = [_cloud_exception()]
+    other_set = [{**_cloud_exception(), "artifactId": "npm:left-pad"}]
+    accepted_hash = policy_bundle_cloud_exceptions_hash({"cloudExceptions": accepted_set})
+    assert accepted_hash is not None
+    assert accepted_hash != policy_bundle_cloud_exceptions_hash({"cloudExceptions": other_set})
+    assert (
+        policy_bundle_acceptance_checkpoint(
+            {"bundleVersion": 8, "cloudExceptions": accepted_set, "cloudExceptionsIssuedAt": issued_at}
+        )["cloudExceptionsHash"]
+        == accepted_hash
+    )
+
+    def transition(exceptions: list[dict[str, object]], accepted: str | None = accepted_hash) -> str | None:
+        return validate_policy_bundle_v2_transition(
+            {
+                "bundleVersion": 8,
+                "bundleHash": bundle_hash,
+                "cloudExceptions": exceptions,
+                "cloudExceptionsIssuedAt": issued_at,
+            },
+            current_bundle_version=8,
+            current_bundle_hash=bundle_hash,
+            current_cloud_exceptions_issued_at=issued_at,
+            current_cloud_exceptions_hash=accepted,
+        )
+
+    assert transition(accepted_set) is None
+    assert transition(other_set) == "cloud_exceptions_replay"
+    # A checkpoint written before the set identity was kept still accepts the
+    # same issue time, then records the identity on the next acceptance.
+    assert transition(other_set, accepted=None) is None
 
 
 def test_v2_transition_accepts_only_authorized_monotonic_rollback() -> None:

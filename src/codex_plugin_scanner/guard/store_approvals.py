@@ -4,52 +4,21 @@ from __future__ import annotations
 
 import base64
 import json
-import logging
-import re
 import sqlite3
-from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from .approval_resolution import approval_resolution_block_reason, approval_resolution_block_reasons
 from .native_approval_queue_identity import (
     ApprovalQueueIdentityUnavailableError,
     connection_guard_home,
     native_approval_queue_identities,
     queue_identity_item,
 )
-from .store_approval_projection import (
-    _optional_json_object as _optional_json_object,
-)
-from .store_approval_projection import (
-    _project_listing_rows as _project_listing_rows,
-)
-from .store_approval_projection import (
-    _row_to_approval_summary as _row_to_approval_summary,
-)
-from .store_approval_projection import (
-    _row_to_draft as _row_to_draft,
-)
-from .store_approval_projection import (
-    _row_to_payload as _row_to_payload,
-)
-from .store_approval_projection import (
-    _rows_to_payloads as _rows_to_payloads,
-)
-
-logger = logging.getLogger(__name__)
 
 APPROVAL_QUEUE_BACKFILL_BATCH_SIZE = 500
-_APPROVAL_RESOLUTION_BATCH_SIZE = 500
 
 
 class InvalidApprovalCursorError(ValueError):
     pass
-
-
-def _begin_immediate(connection: sqlite3.Connection) -> None:
-    if connection.in_transaction:
-        return
-    connection.execute("begin immediate")
 
 
 def approval_schema_statement() -> str:
@@ -109,132 +78,6 @@ def approval_schema_statement() -> str:
         """
 
 
-_APPROVAL_COLUMNS = """
-    request_id, harness, artifact_id, artifact_name, artifact_type, artifact_hash, publisher, policy_action,
-    recommended_scope, changed_fields_json, source_scope, oauth_source, config_path, workspace, launch_target,
-    normalized_identity_key, action_identity, queue_group_id, dedupe_count, last_seen_at, transport,
-    risk_summary, risk_signals_json, artifact_label, source_label, trigger_summary, why_now,
-    launch_summary, risk_headline, action_envelope_json, decision_v2_json,
-    fallback_cli_command, scanner_evidence_json, watch_only_observation,
-    browser_intent_json, continuation_snapshot_json, review_command,
-    approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at,
-    raw_command_text, guard_version, first_seen_guard_version, last_seen_guard_version
-"""
-_SUMMARY_COLUMNS = """
-    request_id, harness, artifact_id, artifact_name, artifact_type, policy_action, decision_v2_json,
-    action_envelope_json, changed_fields_json, source_scope, config_path, workspace, launch_target,
-    risk_summary, risk_headline, action_identity, queue_group_id, dedupe_count, raw_command_text,
-    fallback_cli_command, watch_only_observation, review_command, created_at, last_seen_at, status
-"""
-_REMAINING_SUMMARIES = 10
-_SUPERSEDED_PREFIX = "superseded_by_fresh_review:"
-
-
-def list_approval_requests(
-    connection: sqlite3.Connection,
-    *,
-    status: str | None = "pending",
-    harness: str | None = None,
-    limit: int | None = 50,
-) -> list[dict[str, object]]:
-    """Queue payloads read inside a caller's transaction; `GuardStore` reads natively."""
-
-    filters = [(column, value) for column, value in (("status", status), ("harness", harness)) if value is not None]
-    where_clause = f"where {' and '.join(f'{column} = ?' for column, _ in filters)}" if filters else ""
-    params: list[object] = [value for _, value in filters]
-    query = (
-        f"select {_APPROVAL_COLUMNS} from approval_requests {where_clause} order by last_seen_at desc, request_id desc"
-    )
-    if limit is not None:
-        query += " limit ?"
-        params.append(limit)
-    rows = connection.execute(query, params).fetchall()
-    return _rows_to_payloads(rows, guard_home=connection_guard_home(connection))
-
-
-def get_approval_request(
-    connection: sqlite3.Connection, request_id: str, *, derive_scope: bool = True
-) -> dict[str, object] | None:
-    columns = _approval_columns(connection)
-    row = connection.execute(
-        f"""
-        select request_id, harness, artifact_id, artifact_name, artifact_type, artifact_hash, publisher, policy_action,
-               recommended_scope, changed_fields_json, source_scope,
-                {_column_expr(columns, "oauth_source", "NULL")}, config_path, workspace, launch_target,
-                {_column_expr(columns, "normalized_identity_key", "NULL")},
-                {_column_expr(columns, "action_identity", "NULL")},
-                {_column_expr(columns, "queue_group_id", "NULL")},
-                {_column_expr(columns, "dedupe_count", "1")},
-                {_column_expr(columns, "last_seen_at", "created_at")},
-                transport,
-                risk_summary, risk_signals_json, artifact_label, source_label, trigger_summary, why_now,
-                launch_summary, risk_headline, action_envelope_json, decision_v2_json,
-                {_column_expr(columns, "fallback_cli_command", "NULL")},
-                {_column_expr(columns, "raw_command_text", "NULL")},
-                {_column_expr(columns, "guard_version", "NULL")},
-                {_column_expr(columns, "first_seen_guard_version", "NULL")},
-                {_column_expr(columns, "last_seen_guard_version", "NULL")},
-                {_column_expr(columns, "scanner_evidence_json", "'[]'")},
-                {_column_expr(columns, "watch_only_observation", "0")},
-                {_column_expr(columns, "browser_intent_json", "NULL")}, review_command,
-                {_column_expr(columns, "continuation_snapshot_json", "NULL")},
-                {_column_expr(columns, "extension_allow_hint_json", "NULL")},
-                approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at
-        from approval_requests
-        where request_id = ?
-        """,
-        (request_id,),
-    ).fetchone()
-    if row is None:
-        return None
-    guard_home = connection_guard_home(connection)
-    if derive_scope:
-        payload = _row_to_payload(row, guard_home=guard_home)
-    else:
-        payload, contract_error = _row_to_draft(row, _project_listing_rows([row], guard_home=guard_home)[0])
-        if contract_error is not None:
-            payload["decision_contract_error"] = contract_error
-    reason = row["reason"]
-    if (
-        row["status"] == "expired"
-        and isinstance(reason, str)
-        and reason.startswith(_SUPERSEDED_PREFIX)
-        and {"oauth_source", "queue_group_id"} <= columns
-    ):
-        replacement = reason.removeprefix(_SUPERSEDED_PREFIX)
-        if re.fullmatch(r"[A-Za-z0-9-]{1,64}", replacement):
-            candidate = connection.execute(
-                """select policy_action, decision_v2_json, action_envelope_json from approval_requests
-                where request_id = ? and status = 'pending' and harness = ?
-                and artifact_id = ? and workspace IS ? and oauth_source IS ? and queue_group_id IS ?""",
-                (
-                    replacement,
-                    row["harness"],
-                    row["artifact_id"],
-                    row["workspace"],
-                    row["oauth_source"],
-                    row["queue_group_id"],
-                ),
-            ).fetchone()
-            if (
-                candidate is not None
-                and _project_listing_rows([candidate], guard_home=guard_home)[0].contract_error is None
-            ):
-                payload["superseded_by_request_id"] = replacement
-    return payload
-
-
-def _approval_columns(connection: sqlite3.Connection) -> set[str]:
-    rows = connection.execute("pragma table_info(approval_requests)").fetchall()
-    return {str(row["name"]) for row in rows}
-
-
-def _column_expr(existing: set[str], column_name: str, fallback_sql: str) -> str:
-    if column_name in existing:
-        return column_name
-    return f"{fallback_sql} as {column_name}"
-
-
 def approval_index_statements() -> list[str]:
     return [
         "create index if not exists idx_approval_status_created on approval_requests(status, created_at desc)",
@@ -268,114 +111,6 @@ def approval_index_statements() -> list[str]:
         ),
         "create index if not exists idx_approval_resolution on approval_requests(resolution_action, resolved_at)",
     ]
-
-
-def _pending_summaries(connection: sqlite3.Connection) -> tuple[list[dict[str, object]], int]:
-    """The first pending summaries and the pending count, read inside a caller's transaction."""
-
-    rows = connection.execute(
-        f"select {_SUMMARY_COLUMNS} from approval_requests where status = 'pending' "
-        "order by last_seen_at desc, request_id desc limit ?",
-        (_REMAINING_SUMMARIES + 1,),
-    ).fetchall()
-    # Every fetched row is projected, as the page read that came before did.
-    projections = _project_listing_rows(rows, guard_home=connection_guard_home(connection))
-    summaries = [_row_to_approval_summary(row, projection) for row, projection in zip(rows, projections, strict=True)]
-    total = connection.execute("select count(*) from approval_requests where status = 'pending'").fetchone()
-    return summaries[:_REMAINING_SUMMARIES], int(total[0])
-
-
-def get_next_pending_request(
-    connection: sqlite3.Connection,
-    *,
-    exclude_ids: set[str] | None = None,
-) -> dict[str, object] | None:
-    excluded = exclude_ids or set()
-    rows = list_approval_requests(connection, status="pending", limit=10)
-    for row in rows:
-        if str(row["request_id"]) not in excluded:
-            return row
-    return None
-
-
-def resolve_one_request_only(
-    connection: sqlite3.Connection,
-    request_id: str,
-    *,
-    resolution_action: str,
-    resolution_scope: str,
-    reason: str | None,
-    resolved_at: str,
-) -> bool:
-    cursor = connection.execute(
-        """
-        update approval_requests
-        set status = 'resolved',
-            resolution_action = ?,
-            resolution_scope = ?,
-            reason = ?,
-            resolved_at = ?
-        where request_id = ?
-          and status = 'pending'
-        """,
-        (resolution_action, resolution_scope, reason, resolved_at, request_id),
-    )
-    return int(cursor.rowcount if cursor.rowcount is not None else 0) == 1
-
-
-def resolve_request_with_queue_result(
-    connection: sqlite3.Connection,
-    request_id: str,
-    *,
-    resolution_action: str,
-    resolution_scope: str,
-    reason: str | None,
-    resolved_at: str,
-) -> dict[str, object]:
-    _begin_immediate(connection)
-    request = get_approval_request(connection, request_id)
-    if request is None:
-        return _unresolved_queue_result(connection, error="not_found")
-    if request["status"] != "pending":
-        return _unresolved_queue_result(connection, error="already_resolved", item=request)
-    resolution_block_reason = approval_resolution_block_reason(request, guard_home=connection_guard_home(connection))
-    if resolution_block_reason is not None:
-        return _unresolved_queue_result(connection, error=resolution_block_reason, item=request)
-    did_resolve = resolve_one_request_only(
-        connection,
-        request_id,
-        resolution_action=resolution_action,
-        resolution_scope=resolution_scope,
-        reason=reason,
-        resolved_at=resolved_at,
-    )
-    if not did_resolve:
-        return _unresolved_queue_result(connection, error="already_resolved", item=request)
-    queue_group_id = request.get("queue_group_id")
-    duplicate_ids = resolve_matching_duplicate_requests(
-        connection,
-        queue_group_id=str(queue_group_id) if isinstance(queue_group_id, str) else None,
-        oauth_source=str(request["oauth_source"]) if isinstance(request.get("oauth_source"), str) else None,
-        request_id=request_id,
-        resolution_action=resolution_action,
-        resolution_scope=resolution_scope,
-        reason=reason,
-        resolved_at=resolved_at,
-    )
-    updated = get_approval_request(connection, request_id)
-    next_request = get_next_pending_request(connection, exclude_ids={request_id, *duplicate_ids})
-    remaining_summaries, remaining_count = _pending_summaries(connection)
-    return {
-        "resolved": True,
-        "item": updated,
-        "resolved_request": updated,
-        "remaining_pending_count": remaining_count,
-        "next_selectable_request_id": next_request["request_id"] if next_request is not None else None,
-        "remaining_pending_summaries": remaining_summaries,
-        "resolved_duplicate_ids": duplicate_ids,
-        "resolution_summary": _resolution_summary(remaining_count),
-        "retry_hint": "Retry the action in your AI assistant if you approved it.",
-    }
 
 
 def _backfill_queue_counters(connection: sqlite3.Connection) -> None:
@@ -420,6 +155,16 @@ def _legacy_queue_rows(connection: sqlite3.Connection, *, after: tuple[str, str]
             parameters,
         ).fetchall()
     )
+
+
+def _optional_json_object(value: object) -> dict[str, object] | None:
+    if value is None:
+        return None
+    try:
+        parsed = json.loads(str(value))
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return None
+    return dict(parsed) if isinstance(parsed, dict) else None
 
 
 def _identity_items(rows: list[sqlite3.Row]) -> list[dict[str, object]]:
@@ -535,91 +280,6 @@ def backfill_approval_queue_columns(connection: sqlite3.Connection) -> bool:
         after = (str(rows[-1]["created_at"]), str(rows[-1]["request_id"]))
 
 
-def resolve_matching_duplicate_requests(
-    connection: sqlite3.Connection,
-    *,
-    queue_group_id: str | None,
-    oauth_source: str | None,
-    request_id: str,
-    resolution_action: str,
-    resolution_scope: str,
-    reason: str | None,
-    resolved_at: str,
-) -> list[str]:
-    if queue_group_id is None:
-        return []
-    _begin_immediate(connection)
-    rows = connection.execute(
-        """
-        select request_id, policy_action, decision_v2_json, action_envelope_json
-        from approval_requests
-        where queue_group_id = ?
-          and oauth_source is ?
-          and request_id != ?
-          and status = 'pending'
-        order by last_seen_at desc, request_id desc
-        """,
-        (queue_group_id, oauth_source, request_id),
-    ).fetchall()
-    resolvable_ids = resolvable_approval_request_ids(connection, rows)
-    _resolve_request_ids(
-        connection,
-        resolvable_ids,
-        resolution_action=resolution_action,
-        resolution_scope=resolution_scope,
-        reason=reason,
-        resolved_at=resolved_at,
-    )
-    return resolvable_ids
-
-
-def resolvable_approval_request_ids(connection: sqlite3.Connection, rows: Sequence[sqlite3.Row]) -> list[str]:
-    """Return, in order, the pending rows whose persisted surfaces are resolvable.
-
-    One batched projection in the connection's Guard home covers every row, so a
-    scope sweep holds the write lock for a bounded number of resident calls and an
-    unreadable row reads as inconsistent instead of aborting the sweep.
-    """
-
-    guard_home = connection_guard_home(connection)
-    projections = _project_listing_rows(list(rows), guard_home=guard_home)
-    requests: list[Mapping[str, object]] = []
-    for projection in projections:
-        request: dict[str, object] = {"policy_action": projection.policy_action}
-        if projection.contract_error is not None:
-            request["decision_contract_error"] = projection.contract_error
-        requests.append(request)
-    reasons = approval_resolution_block_reasons(requests, guard_home=guard_home)
-    return [str(row["request_id"]) for row, reason in zip(rows, reasons, strict=True) if reason is None]
-
-
-def _resolve_request_ids(
-    connection: sqlite3.Connection,
-    request_ids: list[str],
-    *,
-    resolution_action: str,
-    resolution_scope: str,
-    reason: str | None,
-    resolved_at: str,
-) -> None:
-    for offset in range(0, len(request_ids), _APPROVAL_RESOLUTION_BATCH_SIZE):
-        chunk = request_ids[offset : offset + _APPROVAL_RESOLUTION_BATCH_SIZE]
-        placeholders = ", ".join("?" for _ in chunk)
-        connection.execute(
-            f"""
-            update approval_requests
-            set status = 'resolved',
-                resolution_action = ?,
-                resolution_scope = ?,
-                reason = ?,
-                resolved_at = ?
-            where request_id in ({placeholders})
-              and status = 'pending'
-            """,
-            (resolution_action, resolution_scope, reason, resolved_at, *chunk),
-        )
-
-
 def _decode_page_cursor(cursor: str) -> dict[str, str] | None:
     try:
         padded = cursor + ("=" * (-len(cursor) % 4))
@@ -634,32 +294,3 @@ def _decode_page_cursor(cursor: str) -> dict[str, str] | None:
     if isinstance(last_seen_at, str) and isinstance(request_id, str):
         return {"last_seen_at": last_seen_at, "request_id": request_id}
     return None
-
-
-def _resolution_summary(remaining_count: int) -> str:
-    if remaining_count == 0:
-        return "Decision saved. No blocked actions remain."
-    if remaining_count == 1:
-        return "Decision saved. 1 blocked action remains."
-    return f"Decision saved. {remaining_count} blocked actions remain."
-
-
-def _unresolved_queue_result(
-    connection: sqlite3.Connection,
-    *,
-    error: str,
-    item: dict[str, object] | None = None,
-) -> dict[str, object]:
-    remaining_summaries, remaining_count = _pending_summaries(connection)
-    next_request = get_next_pending_request(connection)
-    return {
-        "resolved": False,
-        "error": error,
-        "item": item,
-        "remaining_pending_count": remaining_count,
-        "next_selectable_request_id": next_request["request_id"] if next_request is not None else None,
-        "remaining_pending_summaries": remaining_summaries,
-        "resolved_duplicate_ids": [],
-        "resolution_summary": "Request was not resolved.",
-        "retry_hint": "Refresh the approval queue and choose an active request.",
-    }

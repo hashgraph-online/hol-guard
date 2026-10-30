@@ -198,3 +198,38 @@ fn candidates_lead_with_the_subject_then_its_remembered_ids() {
     assert_eq!(candidate_ids(&subject), expected);
     assert!(candidate_ids(&subject).len() <= MAX_CANDIDATES);
 }
+
+/// An approved Cloud exception for the MCP tool lifts the bundle's canonical
+/// block from this lookup too; without one the block stands.
+#[test]
+fn a_cloud_exception_lifts_the_bundle_block_from_a_tool_lookup() {
+    let store = tmp_store("mcp-lookup-cloud-exception");
+    seed_store(&store);
+    let conn = rusqlite::Connection::open(&store).expect("open");
+    conn.execute(
+        "insert into policy_decisions (harness, scope, artifact_id, action, source,
+           created_at, updated_at)
+         values ('codex', 'artifact', 'npm:lodash', 'block', 'policy-bundle-canonical',
+           '2029-01-01T00:00:00+00:00', '2029-01-01T00:00:00+00:00')",
+        [],
+    )
+    .expect("insert");
+    let lookup = input(&store);
+    let observed = lookup_ids(&lookup, &["npm:lodash"]).expect("lookup");
+    assert_eq!(observed["decision"]["action"], "block");
+    let bundle = json!({
+        "workspaceId": "workspace-1",
+        "cloudExceptions": [{
+            "exceptionId": "artifact:npm:lodash",
+            "scope": "artifact",
+            "harness": "codex",
+            "owner": "owner@example.test",
+            "expiresAt": "2099-01-01T00:00:00+00:00",
+        }],
+    });
+    crate::cloud_exception_lift::VALIDATED_BUNDLE
+        .with(|cell| *cell.borrow_mut() = Some((Vec::new(), bundle.as_object().cloned())));
+    let observed = lookup_ids(&lookup, &["npm:lodash"]);
+    crate::cloud_exception_lift::VALIDATED_BUNDLE.with(|cell| *cell.borrow_mut() = None);
+    assert_eq!(observed.expect("lookup")["decision"], Value::Null);
+}

@@ -154,8 +154,30 @@ def policy_bundle_acceptance_checkpoint(policy_bundle: dict[str, object]) -> dic
         "issuedAt": policy_bundle.get("issuedAt"),
         "payloadHash": policy_bundle.get("payloadHash"),
         "workspaceId": policy_bundle.get("workspaceId"),
+        "cloudExceptionsIssuedAt": policy_bundle.get("cloudExceptionsIssuedAt"),
+        "cloudExceptionsHash": policy_bundle_cloud_exceptions_hash(policy_bundle),
     }
     return {key: value for key, value in checkpoint.items() if value is not None}
+
+
+def policy_bundle_cloud_exceptions_hash(policy_bundle: dict[str, object]) -> str | None:
+    """Return the identity of the bundle's signed Cloud exception set, if any.
+
+    A checkpoint keeps it beside the issue time, so a different set signed at
+    the same instant is a replay rather than the set the device accepted.
+    """
+
+    stored = policy_bundle.get("cloudExceptionsHash")
+    if isinstance(stored, str):
+        return stored
+    if "cloudExceptions" not in policy_bundle:
+        return None
+    result = native_policy_bundle(
+        "v2_cloud_exceptions_hash",
+        {"bundle_chunks": policy_bundle_chunks({"cloudExceptions": policy_bundle["cloudExceptions"]})},
+    )
+    value = result.get("value")
+    return value if isinstance(value, str) else None
 
 
 _ORDERING_KEYS = ("bundleVersion", "bundleHash", "payloadHash", "issuedAt", "workspaceId")

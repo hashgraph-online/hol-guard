@@ -92,3 +92,50 @@ fn oversized_documents_fail_closed() {
     assert_eq!(result["status"], "ok");
     assert_eq!(result["result"], json!({"error": "limit_bytes"}));
 }
+
+#[test]
+fn an_equal_exception_issue_time_must_carry_the_accepted_set() {
+    let set = |artifact: &str| json!([{"artifactId": artifact, "effect": "allow"}]);
+    let hash_of = |exceptions: Value| {
+        let document = json!({ "cloudExceptions": exceptions }).to_string();
+        good(
+            "v2_cloud_exceptions_hash",
+            json!({ "bundle_chunks": [document] }),
+        )["result"]["value"]
+            .clone()
+    };
+    let accepted = hash_of(set("npm:lodash"));
+    assert!(accepted.as_str().unwrap().starts_with("sha256:"));
+    let transition = |exceptions: Value, accepted_hash: Value| {
+        let bundle = json!({
+            "bundleVersion": 8,
+            "bundleHash": "sha256:current",
+            "cloudExceptions": exceptions,
+            "cloudExceptionsIssuedAt": "2026-07-16T09:30:00Z",
+        })
+        .to_string();
+        good(
+            "v2_transition",
+            json!({
+                "bundle_chunks": [bundle],
+                "current_version": 8,
+                "current_hash": "sha256:current",
+                "current_cloud_exceptions_issued_at": "2026-07-16T09:30:00Z",
+                "current_cloud_exceptions_hash": accepted_hash,
+            }),
+        )["result"]
+            .clone()
+    };
+    assert_eq!(
+        transition(set("npm:lodash"), accepted.clone()),
+        json!({"ok": true})
+    );
+    assert_eq!(
+        transition(set("npm:left-pad"), accepted),
+        json!({"error": "cloud_exceptions_replay"})
+    );
+    assert_eq!(
+        transition(set("npm:left-pad"), Value::Null),
+        json!({"ok": true})
+    );
+}

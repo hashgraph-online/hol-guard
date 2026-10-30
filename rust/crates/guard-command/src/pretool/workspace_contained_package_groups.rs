@@ -54,10 +54,10 @@ pub(super) fn reads(behind: &[&str]) -> bool {
 /// Every word here is a flag, so a second positional — the package `bun pm
 /// cache rm` empties or `pnpm store add` fetches — is refused by the leading
 /// dash alone. An inline value is read the way the options before a verb are
-/// read, so one naming a place on disk keeps the command out rather than
-/// moving the report somewhere the sandbox does not bound. A value given as
-/// the next word needs no rule of its own: it carries no dash, so it is
-/// refused as a positional.
+/// read, so one naming a place outside the directory the command runs in
+/// keeps the command out rather than moving the report somewhere the sandbox
+/// does not bound. A value given as the next word needs no rule of its own:
+/// it carries no dash, so it is refused as a positional.
 fn inert(option: &str) -> bool {
     option.starts_with('-')
         && match option.split_once('=') {
