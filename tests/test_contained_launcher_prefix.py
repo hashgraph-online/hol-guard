@@ -8,6 +8,7 @@ read reaches the planners without a second edit here.
 
 from __future__ import annotations
 
+import os
 import shlex
 from pathlib import Path
 
@@ -52,6 +53,8 @@ _SPLIT: dict[tuple[tuple[str, ...], bool], dict[str, object]] = {
         "dropped_data": True,
     },
 }
+# Every command text the sink handed to the native lexer, in order.
+_WORDS_ASKED: list[str] = []
 _WHOLE: dict[str, object] = {"core_index": 0, "assignments": [], "dropped_data": False}
 _KINDS = dict.fromkeys(sorted(KIND_NAMES), False)
 
@@ -62,12 +65,12 @@ def _native(operation: str, fields: dict[str, object], expected: object) -> obje
         return {"core": command, "seconds": None} | _PEEL.get(tuple(command), {})
     if operation == "command_words":
         # Standing in for the native lexer, whose grammar is tested in
-        # `guard-command` (`contained_argv_tests.rs`). This reading keeps a
-        # backslash the way the native lexer keeps it where the platform
-        # spells paths with it, and Python's `shlex` eats it, so a test can
-        # tell which of the two readings the sink used.
+        # `guard-command` (`contained_argv_tests.rs`). It reads a backslash
+        # the way that lexer reads it: a path separator where the platform
+        # spells paths with one, an escape everywhere else.
         text: str = fields["command_text"]  # type: ignore[assignment]
-        return shlex.split(text.replace("\\", "\\\\"), posix=True)
+        _WORDS_ASKED.append(text)
+        return shlex.split(text.replace("\\", "\\\\") if os.name == "nt" else text, posix=True)
     if operation == "command_prefix_split":
         key = (tuple(fields["command"]), bool(fields["drop_data"]))  # type: ignore[arg-type]
         return _WHOLE | _SPLIT.get(key, {})
@@ -82,6 +85,7 @@ def _native(operation: str, fields: dict[str, object], expected: object) -> obje
 
 @pytest.fixture(autouse=True)
 def _native_authority(monkeypatch: pytest.MonkeyPatch) -> None:
+    _WORDS_ASKED.clear()
     monkeypatch.setattr(native_restricted_pytest, "restricted_native", _native)
 
 
@@ -262,16 +266,18 @@ def test_a_native_failure_with_no_workspace_receipt_refuses(monkeypatch: pytest.
     assert refused.value.reason_code == "native_contained_argv_unavailable"
 
 
-def test_the_sink_reads_the_command_the_way_native_authority_read_it(
+def test_the_sink_reads_the_command_once_the_way_native_authority_read_it(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """One command, one reading.
+    """One command, one reading, one ask.
 
     `pretool` lexed this text when it decided the run is contained. Splitting
-    it a second time here is a second grammar: this process escapes a
-    backslash, the native lexer leaves it alone where the platform spells
-    paths with it, so the two part on `tests\\a.py` and a receipt drawn over
-    the escaped words would not name the run that executes.
+    it again here would be a second grammar: the two part on `tests\\a.py`,
+    which this process reads as an escape and the native lexer reads as a path
+    separator where the platform spells paths with one, so a receipt drawn
+    over the escaped words would not name the run that executes. Both the
+    receipt peel and the planner take the words from the one ask, because the
+    text between them does not change and the hook pays for every round trip.
     """
     executed: list[list[str]] = []
     monkeypatch.setattr(sink, "prepare_restricted_pytest", _plan_only_pytest)
@@ -289,6 +295,7 @@ def test_the_sink_reads_the_command_the_way_native_authority_read_it(
         )
         == 0
     )
-    assert executed == [["pytest", "tests\\a.py"]]
-    # And the sink keeps no reading of its own to fall back on.
-    assert shlex.split(text, posix=True) == ["pytest", "testsa.py"]
+    # The sink asked for the words once and ran what the answer named. A
+    # second split of its own would show as no ask at all.
+    assert [text] == _WORDS_ASKED
+    assert executed == [["pytest", "tests\\a.py"] if os.name == "nt" else ["pytest", "testsa.py"]]

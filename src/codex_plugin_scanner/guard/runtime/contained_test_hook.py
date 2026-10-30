@@ -384,15 +384,27 @@ def run_authorized_contained_test(
             timeout_seconds=timeout_seconds,
             merge_stderr=merge_stderr,
         )
+    words: list[str] | None = None
+    unreadable: Exception | None = None
     try:
-        core, assignments, dropped = _peel_for_receipt(command_words(tool_input["command"]))
-    # Both the words and the peel come from native authority, so a transport
-    # failure or a resident too old to know either operation raises here,
-    # before any receipt is drawn. Nothing is peeled then, and the command goes
-    # on to the guarded planner block, which already answers a native failure
-    # the same way it does for `run_prefix_peel`.
-    except (ValueError, RestrictedPytestError):
+        # One reading serves both the receipt peel below and the planner split
+        # further down: the text between them does not change, and every
+        # resident round trip here is on the hook's hot path.
+        words = command_words(tool_input["command"])
+    except (ValueError, RestrictedPytestError) as error:
+        unreadable = error
+    if words is None:
+        # A transport failure, or a resident too old to know the operation,
+        # leaves the command unread: nothing is peeled, no receipt is drawn
+        # over words native authority never gave, and the command goes on to
+        # the guarded planner block, which answers that failure the way it
+        # answers one from `run_prefix_peel`.
         core, assignments, dropped = [], {}, False
+    else:
+        try:
+            core, assignments, dropped = _peel_for_receipt(words)
+        except (ValueError, RestrictedPytestError):
+            core, assignments, dropped = [], {}, False
     if assignments or dropped:
         # Like a wrapper: the original carries the receipt, then the core is
         # authorized again and runs with the assignments exported (a dropped
@@ -417,10 +429,12 @@ def run_authorized_contained_test(
     planned_command: list[str] | None = None
     try:
         # Both the words and the split are native authority's reading. A
-        # command it cannot read raises `RestrictedPytestError` here, which
-        # the handler below answers the way it answers an unreadable split:
-        # only a live workspace receipt still runs the command.
-        command, _ = _split_command_prefix(command_words(tool_input["command"]))
+        # command it could not read raises here, and the handler below answers
+        # that the way it answers an unreadable split: only a live workspace
+        # receipt still runs the command.
+        if words is None:
+            raise unreadable or _reject()
+        command, _ = _split_command_prefix(words)
         # Native authority reads a system `timeout` and each launcher it
         # knows through to the program they run, so the planners below are
         # handed that program. A clock still bounds this run: it only ever
