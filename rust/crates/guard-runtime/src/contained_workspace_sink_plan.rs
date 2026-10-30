@@ -158,3 +158,22 @@ pub(super) fn plan_paths(value: &Value) -> Outcome<Vec<String>> {
         .collect::<Option<_>>()
         .ok_or_else(|| Failure::invalid(INVALID_PLAN))
 }
+
+/// The sibling repository one plain command's absolute script or tool lies
+/// in. The edge roots that call's sandbox there, as after `cd <root> &&`, so
+/// the sink plans and runs it from that root, as Guard's own sink does.
+pub(super) fn sibling_root(
+    payload: &Map<String, Value>,
+    workspace: &str,
+    home: &Path,
+) -> Option<PathBuf> {
+    let command = payload.get("tool_input")?.get("command")?.as_str()?;
+    let home = Some(home.to_str()?);
+    guard_command::pretool::contained_wrapper_plan(command, workspace, None, home, None)
+        .anchored_sibling_root
+        .filter(|root| root.is_dir())
+}
+
+#[cfg(test)]
+#[path = "contained_workspace_sink_sibling_tests.rs"]
+mod sibling_tests;
