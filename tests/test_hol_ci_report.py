@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+from http.client import BadStatusLine, IncompleteRead
 from urllib.error import HTTPError, URLError
 
 import pytest
@@ -73,7 +74,19 @@ def test_body_holds_only_the_summary() -> None:
 
 @pytest.mark.parametrize(
     ("plugin_dir", "expected"),
-    [(".", ""), ("", ""), ("plugins/a", "plugins/a"), ("../x", ""), ("/abs", ""), ("a/$(x)", "")],
+    [
+        (".", ""),
+        ("", ""),
+        ("plugins/a", "plugins/a"),
+        ("plugins\\a", "plugins/a"),
+        ("../x", ""),
+        ("/abs", ""),
+        ("a/$(x)", ""),
+        ("\\\\server\\share\\plugin", ""),
+        ("\\plugin", ""),
+        ("C:\\work\\plugin", ""),
+        ("c:plugin", ""),
+    ],
 )
 def test_report_folder(plugin_dir: str, expected: str) -> None:
     assert report_folder(plugin_dir) == expected
@@ -107,6 +120,8 @@ def test_send_skips_without_id_token_permission() -> None:
         HTTPError(HOL_CI_REPORT_URL, 429, "slow", {}, None),  # type: ignore[arg-type]
         URLError("offline"),
         TimeoutError(),
+        IncompleteRead(b"{"),
+        BadStatusLine("garbled"),
     ],
 )
 def test_send_never_raises(failure: Exception) -> None:

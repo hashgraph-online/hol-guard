@@ -83,6 +83,8 @@ def test_public_repository_summary_links_to_hol_plugins(monkeypatch, tmp_path) -
         pytest.param(".", "", id="root"),
         pytest.param("plugins/../secret", "", id="traversal"),
         pytest.param("/home/runner/work/tool", "", id="absolute"),
+        pytest.param("\\\\server\\share\\plugin", "", id="unc"),
+        pytest.param("C:\\work\\tool", "", id="drive-letter"),
         pytest.param("plugins/$(id)", "", id="shell-characters"),
     ],
 )

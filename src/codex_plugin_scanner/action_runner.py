@@ -26,7 +26,7 @@ from .github_reporting import (
     should_manage_pr_comment,
     upsert_pr_comment,
 )
-from .hol_ci_report import build_ci_report_body, send_ci_report
+from .hol_ci_report import build_ci_report_body, report_folder, send_ci_report
 from .models import GRADE_LABELS, SEVERITY_ORDER, Finding, max_severity
 from .quality_artifact import build_quality_artifact, write_quality_artifact
 from .reporting import build_json_payload, format_markdown, format_sarif, should_fail_for_severity
@@ -255,7 +255,6 @@ def _build_findings_summary_lines(findings: tuple[Finding, ...]) -> tuple[str, .
 
 HOL_PLUGINS_CONNECT_URL = "https://hol.org/plugins/connect"
 HOL_PLUGINS_PREFLIGHT_URL = "https://hol.org/plugins/preflight"
-_PREFLIGHT_FOLDER_PATTERN = re.compile(r"^[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$")
 
 
 def _public_repository_for_publish_hint(*, repository: str, server_url: str, event_path: str) -> str:
@@ -280,14 +279,7 @@ def _public_repository_for_publish_hint(*, repository: str, server_url: str, eve
 
 def _preflight_folder(plugin_dir: str) -> str:
     """Return the scanned folder relative to the repository root, or "" for the root or anything unusual."""
-    candidate = plugin_dir.strip().replace("\\", "/").strip("/")
-    while candidate.startswith("./"):
-        candidate = candidate[2:]
-    if candidate in {"", "."} or plugin_dir.strip().startswith("/") or len(candidate) > 200:
-        return ""
-    if not _PREFLIGHT_FOLDER_PATTERN.match(candidate) or any(part in {".", ".."} for part in candidate.split("/")):
-        return ""
-    return candidate
+    return report_folder(plugin_dir)
 
 
 def _build_publish_hint_lines(repository: str, plugin_dir: str = "") -> list[str]:

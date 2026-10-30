@@ -14,6 +14,7 @@ import json
 import re
 from collections.abc import Callable, Mapping
 from contextlib import AbstractContextManager
+from http.client import HTTPException
 from typing import Protocol
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
@@ -24,6 +25,7 @@ HOL_CI_REPORT_SCHEMA = "hol.plugin-ci-report.v1"
 HOL_CI_REPORT_AUDIENCE_PREFIX = "hol-plugin-ci-report:"
 _SEVERITIES = ("critical", "high", "medium", "low", "info")
 _FOLDER_PATTERN = re.compile(r"^[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$")
+_DRIVE_PATTERN = re.compile(r"^[A-Za-z]:")
 _TIMEOUT_SECONDS = 10
 
 
@@ -35,10 +37,15 @@ Opener = Callable[..., AbstractContextManager[_Readable]]
 
 
 def report_folder(plugin_dir: str) -> str:
-    candidate = plugin_dir.strip().replace("\\", "/").strip("/")
+    """Return the scanned folder relative to the repository root, or "" for the root or anything unusual."""
+    raw = plugin_dir.strip()
+    # Absolute paths (POSIX, UNC, root-relative or drive-letter Windows) are host paths, not repository folders.
+    if raw.startswith(("/", "\\")) or _DRIVE_PATTERN.match(raw):
+        return ""
+    candidate = raw.replace("\\", "/").strip("/")
     while candidate.startswith("./"):
         candidate = candidate[2:]
-    if candidate in {"", "."} or plugin_dir.strip().startswith("/") or len(candidate) > 200:
+    if candidate in {"", "."} or len(candidate) > 200:
         return ""
     if not _FOLDER_PATTERN.match(candidate) or any(part in {".", ".."} for part in candidate.split("/")):
         return ""
@@ -121,5 +128,5 @@ def send_ci_report(
         return f"sent ({listings} HOL listing(s) updated)" if isinstance(listings, int) else "sent"
     except HTTPError as error:
         return f"not sent: HOL answered {error.code}"
-    except (URLError, OSError, RuntimeError, ValueError) as error:
+    except (URLError, OSError, HTTPException, RuntimeError, ValueError) as error:
         return f"not sent: {type(error).__name__}"
