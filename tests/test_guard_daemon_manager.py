@@ -1835,8 +1835,8 @@ def test_ensure_guard_daemon_timeout_does_not_kill_unattributed_descendant_proce
 
 
 @pytest.mark.skipif(os.name == "nt", reason="requires POSIX setsid subprocesses")
-def test_real_timeout_keeps_escaped_helper_and_blocks_replacement_until_receipt_is_resolved(tmp_path):
-    """An unreported setsid child keeps the launch receipt permanently fail closed."""
+def test_real_timeout_blocks_replacement_until_escaped_helper_exits(tmp_path):
+    """An unreported setsid child keeps the launch receipt fail closed while it runs."""
 
     guard_home = tmp_path / "guard-home"
     home_dir = tmp_path / "user-home"
@@ -1895,17 +1895,98 @@ def test_real_timeout_keeps_escaped_helper_and_blocks_replacement_until_receipt_
                 owner=helper_identity[2],
             )
 
-    # The current launch protocol has no controlled child receipt to prove
-    # that this separately-created session belonged to the launch. Exact
-    # helper death therefore does not make replacement safe by itself.
+    # With the root and the escaped helper gone, no process carries the launch
+    # nonce any more, so the next start retires the receipt and replaces it.
     assert not daemon_manager_module._guard_daemon_pending_launch_state_is_resolved(guard_home)
-    with pytest.raises(RuntimeError, match="previous Guard daemon launch could not be retired safely"):
-        daemon_manager_module.ensure_guard_daemon(
+    replacement = _write_subprocess_launch_wrapper(
+        tmp_path / "replacement-with-matching-handoff",
+        source_root=Path(daemon_manager_module.__file__).resolve().parents[3],
+        publish_handoff=True,
+    )
+    replacement_process: tuple[int, str, str] | None = None
+    try:
+        url = daemon_manager_module.ensure_guard_daemon(
             guard_home,
             home_dir=home_dir,
-            executable=wrapper,
-            start_timeout=5.0,
+            executable=replacement,
+            start_timeout=20.0,
         )
+        assert url.startswith("http://127.0.0.1:")
+        state = load_authenticated_daemon_state(guard_home)
+        assert state is not None
+        replacement_process = (int(state["pid"]), state["process_start_marker"], state.get("owner", state["user"]))
+        assert daemon_manager_module._guard_daemon_pending_launch_state_is_resolved(guard_home)
+    finally:
+        if replacement_process is not None:
+            _terminate_verified_posix_process(
+                replacement_process[0],
+                start_marker=replacement_process[1],
+                owner=replacement_process[2],
+            )
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX launch receipts only")
+@pytest.mark.parametrize("holder_running", [True, None])
+def test_exited_launch_receipt_stays_while_a_nonce_holder_may_run(tmp_path, monkeypatch, holder_running):
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    launch_nonce = "b" * daemon_manager_module._GUARD_DAEMON_LAUNCH_NONCE_HEX_LENGTH
+    pending = {
+        "pid": 64_321,
+        "process_start_marker": "posix:launch",
+        "launch_nonce": launch_nonce,
+        "launch_generation": launch_nonce,
+        "generation": launch_nonce,
+    }
+    cleared: list[int] = []
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pending_launch_state_is_resolved", lambda _home: False)
+    monkeypatch.setattr(daemon_manager_module, "load_authenticated_guard_daemon_pending_launch", lambda _home: pending)
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_proven_dead", lambda _pid: True)
+    monkeypatch.setattr(daemon_manager_module, "_launch_nonce_holder_is_running", lambda _nonce: holder_running)
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_clear_guard_daemon_pending_launch_if_current",
+        lambda _home, **kwargs: cleared.append(kwargs["pid"]) or True,
+    )
+
+    assert daemon_manager_module._retire_exited_posix_pending_launch(guard_home) is False
+    assert cleared == []
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX launch receipts only")
+def test_launch_receipt_stays_while_its_root_runs(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    launch_nonce = "c" * daemon_manager_module._GUARD_DAEMON_LAUNCH_NONCE_HEX_LENGTH
+    pending = {
+        "pid": 64_322,
+        "process_start_marker": "posix:launch",
+        "launch_nonce": launch_nonce,
+        "launch_generation": launch_nonce,
+        "generation": launch_nonce,
+    }
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pending_launch_state_is_resolved", lambda _home: False)
+    monkeypatch.setattr(daemon_manager_module, "load_authenticated_guard_daemon_pending_launch", lambda _home: pending)
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_proven_dead", lambda _pid: False)
+    monkeypatch.setattr(daemon_manager_module, "process_start_token", lambda _pid, **_kwargs: "posix:launch")
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_launch_nonce_holder_is_running",
+        lambda _nonce: (_ for _ in ()).throw(AssertionError("a live root needs no inventory")),
+    )
+
+    assert daemon_manager_module._retire_exited_posix_pending_launch(guard_home) is False
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="reads Linux procfs")
+def test_linux_environment_search_finds_only_the_exact_entry(tmp_path):
+    proc_root = tmp_path / "proc"
+    for pid, environment in ((101, b"A=1\0LAUNCH=abc\0"), (102, b"LAUNCH=abcd\0")):
+        (proc_root / str(pid)).mkdir(parents=True)
+        (proc_root / str(pid) / "environ").write_bytes(environment)
+
+    assert daemon_manager_module._linux_proc_environment_contains(b"LAUNCH=abc", proc_root) is True
+    assert daemon_manager_module._linux_proc_environment_contains(b"LAUNCH=ab", proc_root) is False
 
 
 @pytest.mark.skipif(os.name == "nt", reason="requires POSIX subprocess identity markers")
@@ -3728,6 +3809,7 @@ def test_late_generation_bound_pending_launch_blocks_replacement_inside_start_lo
         return None if len(pending_reads) == 1 else pending
 
     monkeypatch.setattr(daemon_manager_module, "_schedule_stale_ephemeral_guard_daemon_reap", lambda **_kwargs: None)
+    monkeypatch.setattr(daemon_manager_module, "_retire_exited_posix_pending_launch", lambda _home: False)
     monkeypatch.setattr(daemon_manager_module, "_live_or_newer_daemon_url", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(daemon_manager_module, "_adopt_existing_guard_daemon", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_start_in_progress", lambda _home: False)

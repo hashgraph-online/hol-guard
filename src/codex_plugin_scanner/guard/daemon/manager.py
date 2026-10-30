@@ -117,6 +117,7 @@ _START_CLASSIFICATION_RESERVE_FRACTION = 0.25
 _SPAWNED_URL_POLL_LIFECYCLE_SECONDS = 5.0
 _GUARD_DAEMON_PROCESS_QUERY_TIMEOUT_SECONDS = 5.0
 _GUARD_DAEMON_PROCESS_QUERY_OUTPUT_LIMIT_BYTES = 1024 * 1024
+_GUARD_DAEMON_LAUNCH_ENVIRONMENT_QUERY_LIMIT_BYTES = 16 * 1024 * 1024
 _GUARD_DAEMON_PROCESS_QUERY_MONITOR_INTERVAL_SECONDS = 0.01
 _GUARD_DAEMON_PROCESS_QUERY_TERMINATE_GRACE_SECONDS = 0.25
 _RUNTIME_FINGERPRINT_CACHE_MAX_BYTES = 4096
@@ -614,6 +615,7 @@ def _ensure_guard_daemon_body(
     if background_maintenance:
         _schedule_stale_ephemeral_guard_daemon_reap(exclude_guard_home=guard_home)
     state_path = _state_path(guard_home)
+    _retire_exited_posix_pending_launch(guard_home)
     initial_pending = load_authenticated_guard_daemon_pending_launch(guard_home)
     initial_progress = load_authenticated_guard_daemon_start_progress(guard_home)
     # A live still-starting record is adopted or waited on under the start lock
@@ -717,6 +719,7 @@ def _ensure_guard_daemon_body(
             retire_all_guard_daemons_for_home(guard_home, deadline=start_deadline)
             if not guard_daemon_retirement_is_complete(guard_home):
                 raise RuntimeError("In-progress Guard daemon launch could not be retired safely.")
+        _retire_exited_posix_pending_launch(guard_home)
         pending_path_exists = _pending_launch_path(guard_home).is_file()
         pending_launch = load_authenticated_guard_daemon_pending_launch(guard_home)
         if pending_path_exists or pending_launch is not None:
@@ -2405,6 +2408,70 @@ def _guard_daemon_pending_launch_state_is_resolved(guard_home: Path) -> bool:
     return not path.is_file() or _daemon_lifecycle_artifact_is_exact_tombstone(path)
 
 
+def _retire_exited_posix_pending_launch(guard_home: Path) -> bool:
+    """Clear an unresolved POSIX launch receipt once nothing from that launch is running.
+
+    A launch that dies before its handoff otherwise blocks every later daemon start for
+    the home. The receipt stays while its root process lives, or while any process this
+    user can inspect still carries the launch nonce: every descendant inherits it, even
+    one that left the launch's session. An unreadable inventory keeps the receipt.
+    """
+
+    if os.name == "nt" or _guard_daemon_pending_launch_state_is_resolved(guard_home):
+        return False
+    pending = load_authenticated_guard_daemon_pending_launch(guard_home)
+    if not _guard_daemon_pending_launch_is_generation_bound(pending):
+        return False
+    assert pending is not None
+    pid = pending.get("pid")
+    start_marker = pending.get("process_start_marker")
+    launch_nonce = pending.get("launch_nonce")
+    if type(pid) is not int or pid <= 0 or not isinstance(start_marker, str) or not start_marker:
+        return False
+    if not isinstance(launch_nonce, str):
+        return False
+    if not _guard_daemon_pid_is_proven_dead(pid):
+        current_marker = process_start_token(pid)
+        if current_marker is None or secrets.compare_digest(current_marker, start_marker):
+            return False
+    if _launch_nonce_holder_is_running(launch_nonce) is not False:
+        return False
+    if not _clear_guard_daemon_pending_launch_if_current(
+        guard_home,
+        pid=pid,
+        creation_time=None,
+        launch_nonce=launch_nonce,
+        process_start_marker=start_marker,
+    ):
+        return False
+    with suppress(Exception):
+        record_daemon_lifecycle_event(
+            guard_home,
+            event="pending_launch_retired",
+            reason="launch_processes_exited",
+            pid=pid,
+        )
+    return True
+
+
+def _launch_nonce_holder_is_running(launch_nonce: str) -> bool | None:
+    """Return whether a process this user can inspect carries the launch nonce; ``None`` if unknown."""
+
+    entry = f"{_GUARD_DAEMON_LAUNCH_NONCE_ENV}={launch_nonce}"
+    if sys.platform.startswith("linux"):
+        return _linux_proc_environment_contains(entry.encode("utf-8"))
+    ps_path = _trusted_posix_ps_path()
+    if ps_path is None:
+        return None
+    output = _bounded_process_query_stdout(
+        [ps_path, "-E", "-ww", "-U", str(os.getuid()), "-o", "command="],
+        output_limit_bytes=_GUARD_DAEMON_LAUNCH_ENVIRONMENT_QUERY_LIMIT_BYTES,
+    )
+    if output is None:
+        return None
+    return entry in output
+
+
 def _remove_invalid_daemon_discovery_key(guard_home: Path) -> bool:
     if load_daemon_discovery_key(guard_home) is not None:
         return False
@@ -3455,6 +3522,7 @@ from .manager_ephemeral_reap import (  # noqa: E402, F401
 from .manager_process_query import (  # noqa: E402, F401
     _bounded_process_query_stdout,
     _capture_bounded_process_query_stdout,
+    _linux_proc_environment_contains,
     _linux_proc_process_entries,
     _process_query_environment,
     _spawn_bounded_process_query,

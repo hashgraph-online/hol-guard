@@ -108,6 +108,34 @@ def _linux_proc_process_entries(proc_root: Path = Path("/proc")) -> list[tuple[i
     return entries
 
 
+def _linux_proc_environment_contains(entry: bytes, proc_root: Path = Path("/proc")) -> bool | None:
+    """Search this user's readable procfs environments for one exact ``NAME=value`` entry."""
+
+    remaining_bytes = m._GUARD_DAEMON_LAUNCH_ENVIRONMENT_QUERY_LIMIT_BYTES
+    user_id = m.os.getuid()
+    try:
+        for process_dir in proc_root.iterdir():
+            if not process_dir.name.isdigit():
+                continue
+            try:
+                if process_dir.stat().st_uid != user_id:
+                    continue
+                with (process_dir / "environ").open("rb") as stream:
+                    raw_environment = stream.read(remaining_bytes + 1)
+            except (FileNotFoundError, ProcessLookupError, PermissionError):
+                continue
+            except OSError:
+                return None
+            if len(raw_environment) > remaining_bytes:
+                return None
+            remaining_bytes -= len(raw_environment)
+            if entry in raw_environment.split(b"\0"):
+                return True
+    except OSError:
+        return None
+    return False
+
+
 def _terminate_bounded_process_query(process: subprocess.Popen[bytes]) -> None:
     pid = getattr(process, "pid", None)
     wait = getattr(process, "wait", None)
