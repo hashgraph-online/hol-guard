@@ -420,7 +420,7 @@ pub(super) fn benign_prompt_text(text: &str) -> bool {
         .get_or_init(|| Regex::new(r"(?i)\.env\.example\b").expect("bounded template reference"));
     remainder = env_template.replace_all(&remainder, " ").into_owned();
     let risky_action = RISK_ACTION.get_or_init(|| {
-        Regex::new(r"(?i)\b(?:rm\s+-[a-z]*[rf]\b|delete\b|erase\b|wipe\b|format\b|kill\b|upload\b|exfiltrat[a-z]*\b|transfer\b|curl\b|wget\b|sudo\b|bash\s+-c\b|sh\s+-c\b|powershell\b|cmd\s+/c\b|subprocess\b|spawn\s*\(|exec\s*\(|send\s+(?:data|payload|file|secret|token|credential)\b|post\s+(?:payload|data|file|secret)\b|sync\s+(?:output|data)\b|(?:send|post|sync|transfer)\s+(?:to|over|via|at)\s+(?:webhook|server|slack|discord|https?://)\b|then\s+(?:read|open|print|summari[sz]e|show|dump|include|use|grab|upload|send)\s+(?:it|them|those|files|secrets)\b)")
+        Regex::new(r"(?i)\b(?:rm\s+-[a-z]*[rf]\b|(?:delete|erase|wipe|upload)\b[^.!?;\n]{0,60}\b(?:files?|director(?:y|ies)|folders?|repos?|repositor(?:y|ies)|workspace|contents?|disks?|drives?|volumes?|partitions?|databases?|tables?|backups?|dumps?|data|payload|secrets?|tokens?|credentials?|keys?|config|logs?|history|branch|everything)\b|kill\b[^.!?;\n]{0,60}\b(?:process(?:es)?|pids?|daemons?|containers?|sessions?)\b|format\b|exfiltrat[a-z]*\b|transfer\b|curl\b|wget\b|sudo\b|bash\s+-c\b|sh\s+-c\b|powershell\b|cmd\s+/c\b|subprocess\b|spawn\s*\(|exec\s*\(|send\s+(?:data|payload|file|secret|token|credential)\b|post\s+(?:payload|data|file|secret)\b|sync\s+(?:output|data)\b|(?:send|post|sync|transfer)\s+(?:to|over|via|at)\s+(?:webhook|server|slack|discord|https?://)\b|then\s+(?:read|open|print|summari[sz]e|show|dump|include|use|grab|upload|send)\s+(?:it|them|those|files|secrets)\b)")
             .expect("bounded risky prompt action")
     });
     let referential = REFERENTIAL_INSTRUCTION.get_or_init(|| {
@@ -468,14 +468,16 @@ fn mask_transfer_encoding(value: &str) -> String {
         .into_owned()
 }
 
-/// `--format`, `-format` and the `format:` value of `--pretty=format:` choose
-/// how a command prints its output; the bare word, or an assignment such as
-/// `operation=format`, still asks to format a disk.
+/// `--format`, `-format`, the `format:` value of `--pretty=format:` and
+/// `format` applied to what a program prints all choose how output is shaped;
+/// the bare word, or an assignment such as `operation=format`, still asks to
+/// format a disk.
 fn mask_format_options(value: &str) -> String {
     static OPTION: OnceLock<Regex> = OnceLock::new();
     OPTION
         .get_or_init(|| {
-            Regex::new(r"(?i)(^|[^a-z0-9-])--?format\b|=format:").expect("bounded format option")
+            Regex::new(r"(?i)(^|[^a-z0-9-])--?format\b|=format:|\bformat(?:s|ted|ting)?\s+(?:the\s+|this\s+|that\s+|its\s+|your\s+)?(?:output|response|reply|message|json|yaml|xml|html|markdown|code|text|table|date|time|number|string|currency|logs?|diff|results?|summary|report)\b")
+                .expect("bounded format option")
         })
         .replace_all(value, "${1}output-layout")
         .into_owned()
