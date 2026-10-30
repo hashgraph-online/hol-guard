@@ -327,3 +327,26 @@ def test_ordinary_access_time_changes_do_not_count_as_protected_mutation(tmp_pat
     checks = filesystem_checks(fixture, "blocked-command", "linked-destination-touch")
     assert checks["protected:.env:metadata"] is True
     assert secret.stat().st_mtime_ns == before.st_mtime_ns
+
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="the case's commands are bash command lines")
+def test_sibling_climb_case_reads_a_real_checkout_beside_the_project(tmp_path):
+    """The case's cd lands in a repository, so Git answers instead of failing before Guard's read."""
+    scenario = CATALOG["git-read-after-sibling-climb"]
+    fixture = create_fixture(tmp_path / "fixture", scenario_id=scenario.id)
+    environment = {
+        "PATH": os.environ["PATH"],
+        "HOME": str(fixture.home),
+        "GIT_CONFIG_NOSYSTEM": "1",
+    }
+    for command in scenario.commands:
+        result = subprocess.run(
+            ["bash", "-c", command],
+            cwd=fixture.workspace,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr

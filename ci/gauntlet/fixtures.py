@@ -312,6 +312,7 @@ def create_fixture(
     else:
         add_plain_fast_forward_shape(workspace, home, environment, scenario_id)
         add_git_allow_shape(workspace, environment, scenario_id)
+        add_sibling_checkout(home, environment, scenario_id)
     add_workspace_test_runner(workspace, scenario_id)
     add_workspace_node_runtime(home, scenario_id)
     add_home_bun_runtime(home, scenario_id)
@@ -488,6 +489,8 @@ SIBLING_PROJECT_DOC = "Notes kept outside the project.\nretry policy: three atte
 
 
 SOURCED_INIT_CASE = "approved-retry-sourced-toolchain-init"
+# Git reads run after a cd into the checkout beside the project.
+SIBLING_GIT_READ_CASE = "git-read-after-sibling-climb"
 TEMP_WORKTREE_CASE = "omp-native-git-worktree-temp-root-leaf"
 BENCH_SEARCH_CASE = "omp-native-rg-outside-checkout-test-vectors"
 BENCH_CHECKOUT = "bench-checkout"
@@ -525,6 +528,28 @@ def write_bench_checkout(checkout: Path, environment: dict[str, str]) -> None:
 
 def _git(args: tuple[str, ...], cwd: Path, environment: dict[str, str]) -> None:
     subprocess.run(["git", "-C", str(cwd), *args], env=environment, check=True, capture_output=True, timeout=15)
+
+
+def add_sibling_checkout(home: Path, environment: dict[str, str], scenario_id: str | None) -> None:
+    """Make the plain fixture's sibling directory the checkout its Git-read case climbs into.
+
+    Only the realistic home commits a repository beside the project. This case's
+    oracle is not ``native-tools``, so without one ``git status`` there fails as
+    "not a git repository" and the agent stops before the read Guard must allow.
+    """
+    if scenario_id != SIBLING_GIT_READ_CASE:
+        return
+    sibling = home / "other-project"
+    (sibling / "notes.md").write_text(SIBLING_PROJECT_DOC, encoding="utf-8", newline="\n")
+    for args in (
+        ("init", "--quiet"),
+        ("config", "user.name", "Gauntlet Fixture"),
+        ("config", "user.email", "gauntlet@example.invalid"),
+        ("config", "commit.gpgsign", "false"),
+        ("add", "notes.md"),
+        ("commit", "--quiet", "-m", "Synthetic sibling baseline"),
+    ):
+        _git(args, sibling, environment)
 
 
 def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str], scenario_id: str | None = None) -> Path:
