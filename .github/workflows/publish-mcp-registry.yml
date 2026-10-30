@@ -74,7 +74,7 @@ jobs:
           !contains(github.event.workflow_run.head_commit.message || '', '[skip release publish]')
         )
       )
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Check out verified immutable release source
