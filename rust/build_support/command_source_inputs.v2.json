@@ -88,6 +88,7 @@
       "src/command_tokens.rs",
       "src/contained_argv.rs",
       "src/contained_node_tool.rs",
+      "src/contained_package_test.rs",
       "src/contained_prefix.rs",
       "src/contained_run_prefix.rs",
       "src/contained_runner/common.rs",

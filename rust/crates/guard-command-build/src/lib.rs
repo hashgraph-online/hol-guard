@@ -77,6 +77,8 @@ mod command_tokens;
 pub mod contained_argv;
 #[path = "../../guard-command/src/contained_node_tool.rs"]
 mod contained_node_tool;
+#[path = "../../guard-command/src/contained_package_test.rs"]
+pub mod contained_package_test;
 #[path = "../../guard-command/src/contained_prefix.rs"]
 mod contained_prefix;
 #[path = "../../guard-command/src/contained_run_prefix.rs"]
