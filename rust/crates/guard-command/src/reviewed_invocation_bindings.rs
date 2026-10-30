@@ -20,10 +20,12 @@ use std::time::Instant;
 use serde_json::json;
 
 use crate::command_ascii_comparison::lowercase_for_ascii_comparison;
+use crate::command_reviewed_literal::reviewed_literal_spelling;
 use crate::native_command_program::ExecutableInvocationMatcher;
 use crate::{parse_command, CommandModelRequestV1};
 
 /// Refusal codes, in the vocabulary the extension builder already reports.
+pub const UNSAFE_VARIANT: &str = "unsafe_variant";
 pub const SAFE_VARIANT_SCOPE: &str = "safe_variant_scope";
 pub const SAFE_VARIANT_OPTION: &str = "safe_variant_option";
 pub const SAFE_VARIANT_CONFLICT: &str = "safe_variant_conflict";
@@ -84,6 +86,15 @@ pub fn validate_reviewed_invocations(
             .position(|operation| operation.operation_id == row.operation_id)
             .ok_or("native_reviewed_invocation_operation_unknown")?;
         let owner = &operations[owner_index];
+        // The spelling screen comes first: a vector carrying shell syntax is not
+        // a literal invocation at all, and reporting its options or its owner
+        // would answer a question about a command the matcher will never hold.
+        if reviewed_literal_spelling(executable, &row.argv).is_none() {
+            return Ok(Some(ReviewedBindingRefusal {
+                index,
+                code: UNSAFE_VARIANT,
+            }));
+        }
         if let Some(code) = unknown_options(&vocabularies[owner_index], &row.argv) {
             return Ok(Some(ReviewedBindingRefusal { index, code }));
         }

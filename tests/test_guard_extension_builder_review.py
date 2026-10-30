@@ -13,9 +13,6 @@ from codex_plugin_scanner.guard.extension_builder.io import canonical_json
 from codex_plugin_scanner.guard.extension_builder.kit import build_kit
 from codex_plugin_scanner.guard.extension_builder.models import Discovery
 from codex_plugin_scanner.guard.extension_builder.review import default_review, load_review
-from codex_plugin_scanner.guard.runtime.command_reviewed_literal_matcher import (
-    validate_reviewed_literal_argv,
-)
 from tests.extension_builder_support import make_discovery, make_kit, use_built_native_source_compiler
 
 
@@ -241,9 +238,24 @@ def test_rule_revision_changes_with_review_not_only_source(tmp_path: Path) -> No
 
 
 @pytest.mark.parametrize(
-    "executable,argv",
-    [("../demo", ("status",)), ("demo", ()), ("demo", ("x" * 65,)), ("demo", ("long-value" * 5,) * 3)],
+    "argv",
+    [
+        [],
+        ["items", "list", "x" * 65],
+        ["items", "list", "long-value" * 5, "long-value" * 5, "long-value" * 5],
+        ["items", "list; rm", "-rf", "/tmp/x"],
+    ],
 )
-def test_reviewed_literal_grammar_enforces_its_own_bounds(executable: str, argv: tuple[str, ...]) -> None:
-    with pytest.raises(ValueError):
-        validate_reviewed_literal_argv(executable, argv)
+def test_reviewed_literal_grammar_enforces_its_own_bounds(tmp_path: Path, argv: list[str]) -> None:
+    """The grammar the compiler applies is the one review reports against.
+
+    The last vector would also fail its scope check, since `rm` names no
+    operation this discovery carries. An author who wrote a second command is
+    told that, rather than told to file it under a different operation.
+    """
+
+    discovery = make_discovery(tmp_path)
+    payload, entry = reviewed_entry(discovery, ("items", "list"))
+    entry["safeArgv"] = [argv]
+    with pytest.raises(BuilderError, match="bounded exact literal invocation"):
+        load_review(payload, discovery)
