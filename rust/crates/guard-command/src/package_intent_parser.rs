@@ -249,7 +249,8 @@ struct CommandSegment {
 /// `<manager> <install verb...> -h|--help`: the manager prints usage and
 /// exits. Only the install verbs themselves may come before the flag, so a
 /// runner such as `npx some-pkg --help`, which passes the flag to the package
-/// it runs, is still an install.
+/// it runs, is still an install, and so is any form that names a package or
+/// carries an option whose value the flag could be.
 fn is_install_help(name: &str, tokens: &[String]) -> bool {
     let Some((last, rest)) = tokens.split_last() else {
         return false;
@@ -257,16 +258,32 @@ fn is_install_help(name: &str, tokens: &[String]) -> bool {
     if !matches!(last.as_str(), "-h" | "--help") {
         return false;
     }
-    let verbs: Vec<&str> = rest.iter().skip(1).map(String::as_str).collect();
+    let lowered: Vec<String> = rest
+        .iter()
+        .skip(1)
+        .map(|token| token.to_lowercase())
+        .collect();
+    let verbs: Vec<&str> = lowered.iter().map(String::as_str).collect();
     matches!(
         (name, verbs.as_slice()),
-        ("uv", ["pip", "install"] | ["add"])
+        ("uv", ["pip", "install"] | ["add"] | ["sync"])
             | ("pip" | "pip3", ["install"])
+            | ("pipenv", ["install" | "sync"])
+            | ("poetry", ["install" | "add"])
             | ("npm", ["install" | "i" | "add"])
             | ("pnpm", ["add" | "install" | "i"])
             | ("yarn", ["add" | "install"])
             | ("bun", ["add" | "install" | "i"])
             | ("go", ["get" | "install"])
+            | ("cargo", ["add" | "install"])
+            | ("composer", ["require" | "install" | "update"])
+            | ("bundle" | "bundler", ["install" | "add"])
+            | ("gem", ["install"])
+            | ("brew", ["install"])
+            | ("apt" | "apt-get" | "dnf" | "yum", ["install"])
+            | ("zypper", ["install" | "in"])
+            | ("apk", ["add"])
+            | ("pacman", ["-s" | "-sy" | "-syu" | "-suy"])
     )
 }
 
