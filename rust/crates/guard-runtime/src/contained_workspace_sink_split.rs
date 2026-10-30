@@ -26,6 +26,19 @@ pub(crate) const PUBLISH_REASON: &str = concat!(
 );
 const STEPS_UNPROVEN: &str =
     "Guard could not prove the Git steps again after the checks ran; they did not run.";
+/// Reason codes that say the runtime never reached a decision, rather than
+/// deciding against the steps.
+const AUTHORITY_UNAVAILABLE: [&str; 4] = [
+    "native_hook_render_unavailable",
+    "native_hook_worker_exception",
+    "native_hook_worker_unavailable",
+    "native_pre_tool_unavailable",
+];
+const SETTLE_ATTEMPTS: usize = 3;
+const SETTLE_PAUSE: Duration = Duration::from_millis(750);
+/// An ask that took longer than this already waited out the resident's
+/// readiness window; asking again would only delay the same answer.
+const SETTLE_RETRY_WITHIN: Duration = Duration::from_secs(5);
 /// The variables that would point a host Git at another repository than the
 /// one its directory holds.
 const GIT_LOCATION: [&str; 7] = [
@@ -81,7 +94,8 @@ pub(super) fn run_publish_steps(
     tool_input.insert("command".to_owned(), Value::String(suffix.to_owned()));
     let mut asked = payload.clone();
     asked.insert("tool_input".to_owned(), Value::Object(tool_input));
-    let proven = authority.authorize(&asked).is_some_and(|response| {
+    let answer = settled(|| authority.authorize(&asked), std::thread::sleep);
+    let proven = answer.is_some_and(|response| {
         let text = |name: &str| response.get(name).and_then(Value::as_str);
         text("decision") == Some("allow")
             && text("policy_action") == Some("allow")
@@ -99,6 +113,34 @@ pub(super) fn run_publish_steps(
         signals,
         RUN_TIMEOUT_SECONDS,
     )
+}
+
+/// The resident's answer from `authorize`, asked again while it cannot
+/// answer. The checks already ran, so a resident that is restarting for a
+/// moment would otherwise cancel the steps they were run for. A decision is
+/// deterministic and arrives on the first ask; only a missing answer is
+/// asked again, and only while asking stays quick.
+fn settled(
+    mut authorize: impl FnMut() -> Option<Map<String, Value>>,
+    pause: impl Fn(Duration),
+) -> Option<Map<String, Value>> {
+    let mut started = Instant::now();
+    let mut response = authorize();
+    for _ in 1..SETTLE_ATTEMPTS {
+        let unavailable = response.as_ref().is_none_or(|response| {
+            response
+                .get("reason_code")
+                .and_then(Value::as_str)
+                .is_some_and(|code| AUTHORITY_UNAVAILABLE.contains(&code))
+        });
+        if !unavailable || started.elapsed() > SETTLE_RETRY_WITHIN {
+            break;
+        }
+        pause(SETTLE_PAUSE);
+        started = Instant::now();
+        response = authorize();
+    }
+    response
 }
 
 /// Run `script` with `/bin/sh` on the host, in `cwd`, in its own session:

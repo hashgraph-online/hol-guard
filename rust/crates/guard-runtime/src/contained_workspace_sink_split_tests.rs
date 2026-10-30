@@ -82,3 +82,61 @@ fn a_host_step_runs_without_git_location_and_with_the_outside_path() {
     );
     assert_eq!(slow.map_err(|failure| failure.exit_code), Err(124));
 }
+
+#[test]
+fn an_unavailable_resident_is_asked_again_and_a_decision_is_not() {
+    use std::cell::{Cell, RefCell};
+    let answer = |code: &str| {
+        let mut response = Map::new();
+        response.insert("reason_code".to_owned(), Value::String(code.to_owned()));
+        Some(response)
+    };
+    let code = |response: &Option<Map<String, Value>>| {
+        response
+            .as_ref()
+            .map(|response| response["reason_code"].clone())
+    };
+    // Unavailable, then missing, then a decision: three asks, two pauses.
+    let replies = RefCell::new(vec![
+        answer("native_workspace_containment_required"),
+        None,
+        answer("native_pre_tool_unavailable"),
+    ]);
+    let pauses = Cell::new(0);
+    let response = settled(
+        || replies.borrow_mut().pop().unwrap(),
+        |_| pauses.set(pauses.get() + 1),
+    );
+    assert_eq!(
+        code(&response),
+        Some(Value::String(
+            "native_workspace_containment_required".to_owned()
+        ))
+    );
+    assert_eq!(pauses.get(), 2);
+    // A decision is never asked again, even one against the steps.
+    let asks = Cell::new(0);
+    let response = settled(
+        || {
+            asks.set(asks.get() + 1);
+            answer("native_policy_block")
+        },
+        |_| panic!("a decision was asked again"),
+    );
+    assert_eq!(asks.get(), 1);
+    assert_eq!(
+        code(&response),
+        Some(Value::String("native_policy_block".to_owned()))
+    );
+    // A resident that stays away is asked three times, then given up on.
+    let asks = Cell::new(0);
+    let response = settled(
+        || {
+            asks.set(asks.get() + 1);
+            None
+        },
+        |_| {},
+    );
+    assert_eq!(asks.get(), 3);
+    assert!(response.is_none());
+}
