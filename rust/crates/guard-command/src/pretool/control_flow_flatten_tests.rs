@@ -236,4 +236,16 @@ fn a_negated_directory_change_keeps_the_negation_its_branch_reads() {
         flatten("if ! cd src; then echo in; else echo out; fi").as_deref(),
         Some("! cd src; echo in; echo out")
     );
+    // A quote, a backslash or an expansion hides the same builtin. `then`
+    // still runs only when that command fails, from the directory it did not
+    // enter.
+    for command in [
+        "if ! \\cd src; then touch ../escape.txt; fi",
+        "if ! 'cd' src; then touch ../escape.txt; fi",
+        "if ! \"cd\" src; then touch ../escape.txt; fi",
+        "if ! c\\d src; then touch ../escape.txt; fi",
+    ] {
+        let flat = flatten(command).unwrap_or_default();
+        assert!(flat.starts_with('!'), "{command} flattened to {flat}");
+    }
 }

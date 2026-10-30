@@ -16,8 +16,8 @@
 //! fully understand returns `None` and keeps the existing review.
 
 use super::control_flow_flatten::{
-    command_head, conditional_parts, keyword, rendered_separator, unnegated_part,
-    MAX_FLATTENED_BYTES, STATE_CHANGING,
+    command_head, command_word_changes_shell_state, conditional_parts, keyword, rendered_separator,
+    unnegated_part, MAX_FLATTENED_BYTES,
 };
 
 /// Keywords that open or continue a construct this splice does not read.
@@ -196,14 +196,9 @@ fn starts_with_word(text: &str, word: &str) -> bool {
 fn changes_shell_state(item: &str) -> bool {
     item.split('|').any(|stage| {
         let first = command_head(stage);
-        STATE_CHANGING.contains(&first)
+        command_word_changes_shell_state(stage)
             || first == "if"
             || OTHER_CONSTRUCTS.contains(&first)
-            || first.contains(['\'', '"', '\\', '$'])
-            || (first == "printf" && stage.split_whitespace().any(|word| word.starts_with("-v")))
-            || first.split_once('=').is_some_and(|(name, _)| {
-                !name.is_empty() && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
-            })
     })
 }
 

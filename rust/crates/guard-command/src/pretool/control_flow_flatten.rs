@@ -473,6 +473,10 @@ pub(super) fn unnegated_part(text: &str, separator: &str) -> String {
 }
 
 /// A leading `!` in front of a command whose success changes later commands.
+///
+/// A head the shell rewrites before it runs (`\cd`, `'cd'`, `"cd"`, `$cd`)
+/// is the same kind of change: the word here is not the word that runs, so
+/// dropping the `!` would describe `then` as running after the change.
 fn negated_state_change(text: &str) -> bool {
     let trimmed = text.trim();
     let Some(rest) = trimmed.strip_prefix('!') else {
@@ -481,10 +485,16 @@ fn negated_state_change(text: &str) -> bool {
     if !rest.starts_with([' ', '\t', '\n']) {
         return false;
     }
-    let rest = rest.trim();
-    let head = command_head(rest);
+    command_word_changes_shell_state(rest.trim())
+}
+
+/// Whether this stage's command word changes what a later command sees, or is
+/// written so the shell rewrites the word before its name is known.
+pub(super) fn command_word_changes_shell_state(stage: &str) -> bool {
+    let head = command_head(stage);
     STATE_CHANGING.contains(&head)
-        || (head == "printf" && rest.split_whitespace().any(|word| word.starts_with("-v")))
+        || head.contains(['\'', '"', '\\', '$'])
+        || (head == "printf" && stage.split_whitespace().any(|word| word.starts_with("-v")))
         || head.split_once('=').is_some_and(|(name, _)| {
             !name.is_empty()
                 && name
