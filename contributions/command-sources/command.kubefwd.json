@@ -101,8 +101,26 @@
                   "--namespace",
                   "-l",
                   "--selector",
+                  "-x",
                   "--context",
-                  "--kubeconfig"
+                  "-c",
+                  "--kubeconfig",
+                  "-f",
+                  "--field-selector",
+                  "-d",
+                  "--domain",
+                  "-m",
+                  "--mapping",
+                  "-r",
+                  "--reserve",
+                  "-t",
+                  "--timeout",
+                  "-z",
+                  "--fwd-conf",
+                  "--hosts-path",
+                  "--resync-interval",
+                  "--retry-interval",
+                  "--theme"
                 ],
                 "required_flags_anywhere": []
               }
@@ -126,8 +144,26 @@
                   "--namespace",
                   "-l",
                   "--selector",
+                  "-x",
                   "--context",
-                  "--kubeconfig"
+                  "-c",
+                  "--kubeconfig",
+                  "-f",
+                  "--field-selector",
+                  "-d",
+                  "--domain",
+                  "-m",
+                  "--mapping",
+                  "-r",
+                  "--reserve",
+                  "-t",
+                  "--timeout",
+                  "-z",
+                  "--fwd-conf",
+                  "--hosts-path",
+                  "--resync-interval",
+                  "--retry-interval",
+                  "--theme"
                 ],
                 "required_flags_anywhere": []
               }
@@ -151,8 +187,26 @@
                   "--namespace",
                   "-l",
                   "--selector",
+                  "-x",
                   "--context",
-                  "--kubeconfig"
+                  "-c",
+                  "--kubeconfig",
+                  "-f",
+                  "--field-selector",
+                  "-d",
+                  "--domain",
+                  "-m",
+                  "--mapping",
+                  "-r",
+                  "--reserve",
+                  "-t",
+                  "--timeout",
+                  "-z",
+                  "--fwd-conf",
+                  "--hosts-path",
+                  "--resync-interval",
+                  "--retry-interval",
+                  "--theme"
                 ],
                 "required_flags_anywhere": []
               }
@@ -171,8 +225,26 @@
                   "--namespace",
                   "-l",
                   "--selector",
+                  "-x",
                   "--context",
-                  "--kubeconfig"
+                  "-c",
+                  "--kubeconfig",
+                  "-f",
+                  "--field-selector",
+                  "-d",
+                  "--domain",
+                  "-m",
+                  "--mapping",
+                  "-r",
+                  "--reserve",
+                  "-t",
+                  "--timeout",
+                  "-z",
+                  "--fwd-conf",
+                  "--hosts-path",
+                  "--resync-interval",
+                  "--retry-interval",
+                  "--theme"
                 ]
               }
             },
@@ -190,8 +262,26 @@
                   "--namespace",
                   "-l",
                   "--selector",
+                  "-x",
                   "--context",
-                  "--kubeconfig"
+                  "-c",
+                  "--kubeconfig",
+                  "-f",
+                  "--field-selector",
+                  "-d",
+                  "--domain",
+                  "-m",
+                  "--mapping",
+                  "-r",
+                  "--reserve",
+                  "-t",
+                  "--timeout",
+                  "-z",
+                  "--fwd-conf",
+                  "--hosts-path",
+                  "--resync-interval",
+                  "--retry-interval",
+                  "--theme"
                 ]
               }
             },
@@ -209,8 +299,26 @@
                   "--namespace",
                   "-l",
                   "--selector",
+                  "-x",
                   "--context",
-                  "--kubeconfig"
+                  "-c",
+                  "--kubeconfig",
+                  "-f",
+                  "--field-selector",
+                  "-d",
+                  "--domain",
+                  "-m",
+                  "--mapping",
+                  "-r",
+                  "--reserve",
+                  "-t",
+                  "--timeout",
+                  "-z",
+                  "--fwd-conf",
+                  "--hosts-path",
+                  "--resync-interval",
+                  "--retry-interval",
+                  "--theme"
                 ]
               }
             },
@@ -228,8 +336,26 @@
                   "--namespace",
                   "-l",
                   "--selector",
+                  "-x",
                   "--context",
-                  "--kubeconfig"
+                  "-c",
+                  "--kubeconfig",
+                  "-f",
+                  "--field-selector",
+                  "-d",
+                  "--domain",
+                  "-m",
+                  "--mapping",
+                  "-r",
+                  "--reserve",
+                  "-t",
+                  "--timeout",
+                  "-z",
+                  "--fwd-conf",
+                  "--hosts-path",
+                  "--resync-interval",
+                  "--retry-interval",
+                  "--theme"
                 ]
               }
             },
@@ -247,8 +373,26 @@
                   "--namespace",
                   "-l",
                   "--selector",
+                  "-x",
                   "--context",
-                  "--kubeconfig"
+                  "-c",
+                  "--kubeconfig",
+                  "-f",
+                  "--field-selector",
+                  "-d",
+                  "--domain",
+                  "-m",
+                  "--mapping",
+                  "-r",
+                  "--reserve",
+                  "-t",
+                  "--timeout",
+                  "-z",
+                  "--fwd-conf",
+                  "--hosts-path",
+                  "--resync-interval",
+                  "--retry-interval",
+                  "--theme"
                 ]
               }
             },
@@ -266,8 +410,26 @@
                   "--namespace",
                   "-l",
                   "--selector",
+                  "-x",
                   "--context",
-                  "--kubeconfig"
+                  "-c",
+                  "--kubeconfig",
+                  "-f",
+                  "--field-selector",
+                  "-d",
+                  "--domain",
+                  "-m",
+                  "--mapping",
+                  "-r",
+                  "--reserve",
+                  "-t",
+                  "--timeout",
+                  "-z",
+                  "--fwd-conf",
+                  "--hosts-path",
+                  "--resync-interval",
+                  "--retry-interval",
+                  "--theme"
                 ]
               }
             },
@@ -285,8 +447,100 @@
                   "--namespace",
                   "-l",
                   "--selector",
+                  "-x",
                   "--context",
-                  "--kubeconfig"
+                  "-c",
+                  "--kubeconfig",
+                  "-f",
+                  "--field-selector",
+                  "-d",
+                  "--domain",
+                  "-m",
+                  "--mapping",
+                  "-r",
+                  "--reserve",
+                  "-t",
+                  "--timeout",
+                  "-z",
+                  "--fwd-conf",
+                  "--hosts-path",
+                  "--resync-interval",
+                  "--retry-interval",
+                  "--theme"
+                ]
+              }
+            },
+            {
+              "op": "zero-operand-flags.v1",
+              "config": {
+                "executables": [
+                  "kubefwd"
+                ],
+                "required_flags": [
+                  "-A"
+                ],
+                "options_with_values": [
+                  "-n",
+                  "--namespace",
+                  "-l",
+                  "--selector",
+                  "-x",
+                  "--context",
+                  "-c",
+                  "--kubeconfig",
+                  "-f",
+                  "--field-selector",
+                  "-d",
+                  "--domain",
+                  "-m",
+                  "--mapping",
+                  "-r",
+                  "--reserve",
+                  "-t",
+                  "--timeout",
+                  "-z",
+                  "--fwd-conf",
+                  "--hosts-path",
+                  "--resync-interval",
+                  "--retry-interval",
+                  "--theme"
+                ]
+              }
+            },
+            {
+              "op": "zero-operand-flags.v1",
+              "config": {
+                "executables": [
+                  "kubefwd"
+                ],
+                "required_flags": [
+                  "--all-namespaces"
+                ],
+                "options_with_values": [
+                  "-n",
+                  "--namespace",
+                  "-l",
+                  "--selector",
+                  "-x",
+                  "--context",
+                  "-c",
+                  "--kubeconfig",
+                  "-f",
+                  "--field-selector",
+                  "-d",
+                  "--domain",
+                  "-m",
+                  "--mapping",
+                  "-r",
+                  "--reserve",
+                  "-t",
+                  "--timeout",
+                  "-z",
+                  "--fwd-conf",
+                  "--hosts-path",
+                  "--resync-interval",
+                  "--retry-interval",
+                  "--theme"
                 ]
               }
             }
