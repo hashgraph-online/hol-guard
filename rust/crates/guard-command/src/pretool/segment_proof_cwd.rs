@@ -103,82 +103,148 @@ fn cwd_list_context(
     Some(cwd)
 }
 
-/// `cd <dir> && <reads> && cd <absolute> && <reads>`.
+/// `cd <dir> && <reads>`, then more of the same, with a read outside a group
+/// proved in the directory that group leaves behind.
 ///
-/// Each later `cd` is absolute, so it names the same directory whether or not
-/// an earlier group was a subshell. The reads are proved in the directory
-/// that `cd` names, and only `&&` joins the steps, so a `cd` that fails does
-/// not leave them in the directory they started in.
+/// A later `cd` is absolute, so it names the same directory whether or not an
+/// earlier group was a subshell. `||` does not start that `cd`: it skips the
+/// `cd` when the step before it succeeds, and a later `&&` read would then
+/// run in a directory this proof did not verify. A read after a `)` is
+/// outside the subshell, so it is proved in the directory the command started
+/// in. A read after a brace group stays with the `cd`, because `{ ...; }`
+/// does not restore the directory and the `;` before `}` is not the join.
 pub(in crate::pretool) fn exact_safe_absolute_cd_chain(
     model: &CanonicalCommandV1,
     allow_git_helper_context: bool,
     context: PathContext<'_>,
 ) -> bool {
-    if model.segments.len() < 4 || model.confidence != "exact" {
+    if model.segments.len() < 2 || model.confidence != "exact" {
         return false;
     }
+    let mut saw_directory = false;
     let mut index = 0usize;
     while index < model.segments.len() {
-        // `;` runs the next `cd` whatever came before it, and the `cd` is
-        // absolute, so the reads after it are proved where they run. `||`
-        // is not here: it skips the `cd` when the step before it succeeds,
-        // leaving the reads in a directory this proof did not verify.
-        if index > 0
-            && !matches!(
-                separator_operator(model, index).as_deref(),
-                Some("&&" | ";")
-            )
-        {
+        if index > 0 && !reaches_segment(model, index) {
             return false;
         }
-        let cd = &model.segments[index];
-        if cd.executable.as_deref() != Some("cd")
-            || !cd.environment_names.is_empty()
-            || cd.pipeline_index != 0
-            || !directory_targets::drive_targets_quoted(cd)
-            || !directory_targets::home_targets_unquoted(cd)
-        {
+        if model.segments[index].executable.as_deref() == Some("cd") {
+            if !take_cd_chunk(model, allow_git_helper_context, context, &mut index) {
+                return false;
+            }
+            saw_directory = true;
+            continue;
+        }
+        if !read_in_context(model, index, allow_git_helper_context, context) {
             return false;
         }
-        let [target] = cd.arguments.as_slice() else {
-            return false;
-        };
-        if index > 0 && !std::path::Path::new(target).is_absolute() {
-            return false;
-        }
-        let Some(cwd) = safe_reads::verified_cwd_target(target, context) else {
-            return false;
-        };
         index += 1;
-        let mut reads = 0usize;
-        while index < model.segments.len()
-            && model.segments[index].executable.as_deref() != Some("cd")
+    }
+    saw_directory
+}
+
+/// `&&` or `;` may start an absolute `cd`. A read that is not a `cd` may also
+/// follow `||`: that operator only chooses whether the read runs.
+fn reaches_segment(model: &CanonicalCommandV1, index: usize) -> bool {
+    let Some(operator) = separator_operator(model, index) else {
+        return false;
+    };
+    if model.segments[index].executable.as_deref() == Some("cd") {
+        matches!(operator.as_str(), "&&" | ";")
+    } else {
+        matches!(operator.as_str(), "&&" | "||" | ";")
+    }
+}
+
+fn take_cd_chunk(
+    model: &CanonicalCommandV1,
+    allow_git_helper_context: bool,
+    context: PathContext<'_>,
+    index: &mut usize,
+) -> bool {
+    let cd = &model.segments[*index];
+    if !cd.environment_names.is_empty()
+        || cd.pipeline_index != 0
+        || !directory_targets::drive_targets_quoted(cd)
+        || !directory_targets::home_targets_unquoted(cd)
+    {
+        return false;
+    }
+    let [target] = cd.arguments.as_slice() else {
+        return false;
+    };
+    if *index > 0 && !std::path::Path::new(target).is_absolute() {
+        return false;
+    }
+    let Some(cwd) = safe_reads::verified_cwd_target(target, context) else {
+        return false;
+    };
+    let proved = PathContext {
+        cwd: Some(&cwd),
+        ..context
+    };
+    *index += 1;
+    let mut reads = 0usize;
+    while *index < model.segments.len()
+        && model.segments[*index].executable.as_deref() != Some("cd")
+    {
+        // A `)` closes the subshell the `cd` ran in. The next command is back
+        // in the directory the command started in, so it is not a read there.
+        if separator_operator(model, *index).as_deref() != Some("&&")
+            || gap_closes_subshell(model, *index)
         {
-            if separator_operator(model, index).as_deref() != Some("&&") {
-                return false;
-            }
-            let segment = &model.segments[index];
-            if cwd_effectful_segment(segment)
-                || !exact_safe_segment_with_context(
-                    model,
-                    segment,
-                    allow_git_helper_context,
-                    PathContext {
-                        cwd: Some(&cwd),
-                        ..context
-                    },
-                )
-            {
-                return false;
-            }
-            reads += 1;
-            index += 1;
+            break;
         }
-        if reads == 0 {
+        if !read_in_context(model, *index, allow_git_helper_context, proved) {
             return false;
         }
+        reads += 1;
+        *index += 1;
     }
-    true
+    reads > 0
+}
+
+fn read_in_context(
+    model: &CanonicalCommandV1,
+    index: usize,
+    allow_git_helper_context: bool,
+    context: PathContext<'_>,
+) -> bool {
+    let segment = &model.segments[index];
+    !cwd_effectful_segment(segment)
+        && exact_safe_segment_with_context(model, segment, allow_git_helper_context, context)
+        && segment.arguments.iter().all(|argument| {
+            // An absent name inside a repository is still a safe read on its
+            // own. Here the directory was chosen by `cd`, so the operand has
+            // to be the file in that directory: `cat one.txt` after
+            // `cd web` is not the `one.txt` that sits beside `web`.
+            if argument.starts_with('-') {
+                return true;
+            }
+            let path = std::path::Path::new(argument);
+            let resolved = if path.is_absolute() {
+                path.to_path_buf()
+            } else {
+                let Some(cwd) = context.cwd else {
+                    return false;
+                };
+                std::path::Path::new(cwd).join(path)
+            };
+            resolved.is_file()
+        })
+}
+
+fn gap_closes_subshell(model: &CanonicalCommandV1, index: usize) -> bool {
+    let previous = &model.segments[index - 1];
+    let next = &model.segments[index];
+    let Some(length) = next.span.start.checked_sub(previous.span.end) else {
+        return false;
+    };
+    model
+        .normalized_text
+        .chars()
+        .skip(previous.span.end)
+        .take(length)
+        .any(|character| character == ')')
 }
 
 /// The control operator joining the segment at `index` to the one before it.
