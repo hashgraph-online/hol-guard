@@ -873,9 +873,10 @@
           "src/codex_plugin_scanner/guard/codex_hook_integrity.py",
           "src/codex_plugin_scanner/guard/codex_hook_manifest.py",
           "src/codex_plugin_scanner/guard/codex_hook_package_identity.py",
-          "src/codex_plugin_scanner/guard/codex_install_transaction.py"
+          "src/codex_plugin_scanner/guard/codex_install_transaction.py",
+          "src/codex_plugin_scanner/guard/local_authority_integrity.py"
         ],
-        "reason": "Reviewed: Codex hook event names, manifest, integrity, compatibility and install transaction modules. The Codex hook bridge no longer imports them at load; launch validation and the installer load them lazily. The event-name tuple was previously imported eagerly by the Python binding-capture modules, which now run natively, and the manifest still loads it when launch trust reads the hook manifest. They stay counted as runtime because launch trust still runs them until the native resident owns that lane."
+        "reason": "Reviewed: Codex hook event names, manifest, integrity, compatibility and install transaction modules. The Codex hook bridge no longer imports them at load; launch validation and the installer load them lazily. The event-name tuple was previously imported eagerly by the Python binding-capture modules, which now run natively, and the manifest still loads it when launch trust reads the hook manifest. They stay counted as runtime because launch trust still runs them until the native resident owns that lane. local_authority_integrity.py signs and verifies the local authority payloads those modules write and read, and codex_hook_recovery, codex_hook_repair_request, codex_publication_inverse and runtime_transition reach it the same way; it is now reached only lazily because the one-shot approval mint moved into the native store, so it is named here to stay counted rather than drop out of the measurement."
       },
       {
         "path": "src/codex_plugin_scanner/guard/protection_coverage.py",
