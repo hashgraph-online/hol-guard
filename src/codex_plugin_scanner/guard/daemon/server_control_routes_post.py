@@ -123,12 +123,6 @@ class _ControlPostRoutes:
         if parsed.path == "/v1/command-activity/feedback":
             handle_command_activity_feedback(self, payload)
             return
-        if parsed.path == "/v1/clients/attach":
-            self._handle_client_attach(payload)
-            return
-        if parsed.path == "/v1/clients/heartbeat":
-            self._handle_client_heartbeat(payload)
-            return
         if parsed.path == "/v1/sessions/start":
             self._handle_session_start(payload)
             return

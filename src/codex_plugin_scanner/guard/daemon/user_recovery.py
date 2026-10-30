@@ -2151,33 +2151,14 @@ def _default_inspect_service(
     )
 
 
-def inspect_recovery(guard_home: Path, **kwargs: object) -> dict[str, object]:
-    """Functional facade for read-only capability inspection."""
-
-    return UserRecoveryCoordinator(guard_home, **cast(dict[str, Any], kwargs)).inspect()
-
-
-def restart_guard(guard_home: Path, request_id: str | uuid.UUID | None = None, **kwargs: object) -> dict[str, object]:
-    """Functional facade for one bounded user recovery attempt."""
-
-    return UserRecoveryCoordinator(guard_home, **cast(dict[str, Any], kwargs)).restart(request_id=request_id)
-
-
-RecoveryCoordinator = UserRecoveryCoordinator
-CoordinatorHooks = RecoveryHooks
-
 __all__ = [
     "AuthorizationDecision",
-    "CoordinatorHooks",
     "ProcessIdentity",
     "ProtectionResult",
     "ReadyResult",
-    "RecoveryCoordinator",
     "RecoveryHooks",
     "ServiceInspection",
     "StartResult",
     "StopResult",
     "UserRecoveryCoordinator",
-    "inspect_recovery",
-    "restart_guard",
 ]
