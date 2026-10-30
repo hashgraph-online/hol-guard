@@ -340,10 +340,20 @@ fn rg_arguments_pass(
             // pass rather than refused here: `--files` may be spelled after
             // its operands, and what it leaves is a listing, which owes the
             // proof a listing owes.
+            //
+            // A root that is not there walks nothing: `rg` prints its own
+            // "No such file or directory" and exits, the way `ls` of the
+            // same path does. Agents pass a fixed list of roots
+            // (`rg PATTERN src tests docs`) whether or not each one exists,
+            // and probe for an optional directory the same way. The
+            // listing proof screens the nearest existing ancestor and every
+            // missing name, and `allow_absent` keeps it to commands whose
+            // other steps cannot put a file, directory or link there first.
             if unsafe_search_value(SearchValueRole::Path, argument, context)
                 && !tree::rg_root_inside_cwd(argument, context)
                 && !sibling::rg_sibling_repository_root(argument, context)
                 && !sibling::named_path(argument, context, allow_absent)
+                && !(allow_absent && super::grep::absent_target(argument, context))
                 && !tree::safe_recursive_search_target(argument, context)
                 && !tree::safe_literal_bracket_search_target(argument, context)
                 && (!argument.contains(['*', '?', '['])
@@ -492,10 +502,82 @@ fn inclusion_globs(arguments: &[String]) -> Vec<&str> {
 
 #[cfg(test)]
 mod tests {
-    use super::{config_option_present, safe_rg_stdin_arguments};
+    use super::{config_option_present, safe_rg_segment, safe_rg_stdin_arguments};
 
     fn arguments(line: &str) -> Vec<String> {
         line.split_whitespace().map(str::to_owned).collect()
+    }
+
+    /// A root with nothing at it opens no file and walks no directory, so
+    /// `rg` reads it the way `grep -r` and `ls` already read the same path.
+    /// The screens stay: a missing name inside a credential location is
+    /// still refused, and a step that could create the root first takes the
+    /// proof away.
+    #[test]
+    fn a_missing_root_is_proven_unless_a_step_could_create_it() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/rg-absent-roots")
+            .join(std::process::id().to_string());
+        let home = root.join("home");
+        let repo = home.join("work/app");
+        std::fs::create_dir_all(repo.join("src")).unwrap();
+        std::fs::create_dir_all(home.join(".ssh")).unwrap();
+        std::fs::write(repo.join("src/index.ts"), "export const x = 1;\n").unwrap();
+        let (home, repo) = (
+            crate::runtime_read_paths::canonicalize_text(&home).unwrap(),
+            crate::runtime_read_paths::canonicalize_text(&repo).unwrap(),
+        );
+        let context = crate::pretool::PathContext {
+            home_dir: home.to_str(),
+            cwd: repo.to_str(),
+            ripgrep_config_absent: true,
+            ..Default::default()
+        };
+        let r = repo.display();
+        let h = home.display();
+        for (command, allowed) in [
+            (format!("rg -ln x {r}/src"), true),
+            // The operand is not there: the search prints an error and
+            // exits, alone as much as beside a real root.
+            (format!("rg -ln x {r}/missing"), true),
+            (format!("rg -ln x {r}/src {r}/missing"), true),
+            (format!("rg --files {r}/missing"), true),
+            (format!("rg -ln x {r}/missing || echo none"), true),
+            (format!("rg -ln x {r}/missing | head -5"), true),
+            // A missing name may not spell a credential location, and the
+            // ancestor it hangs from must be one a listing could name.
+            (format!("rg -ln x {h}/.ssh/missing"), false),
+            (format!("rg -ln x {r}/missing/id_rsa"), false),
+            (format!("rg -ln x {r}/missing/.env"), false),
+            // A peer step that could put a file, directory or link at the
+            // root takes the proof away: `rg` walks whatever appears there.
+            (format!("mkdir -p {r}/missing && rg -ln x {r}/missing"), false),
+            (format!("touch {r}/missing && rg -n x {r}/missing"), false),
+            (format!("ln -s {r}/src {r}/missing && rg -ln x {r}/missing"), false),
+            (format!("rg -ln x {r}/missing; mkdir -p {r}/missing"), false),
+        ] {
+            let model = crate::parse_command(&crate::CommandModelRequestV1 {
+                command: command.clone(),
+                dialect: "posix".to_owned(),
+                transport: "shell_string".to_owned(),
+                extraction_provenance: "guard-shell".to_owned(),
+            })
+            .unwrap();
+            let Some(segment) = model
+                .segments
+                .iter()
+                .find(|segment| segment.executable.as_deref() == Some("rg"))
+            else {
+                assert!(!allowed, "{command}");
+                continue;
+            };
+            assert_eq!(
+                safe_rg_segment(&model, segment, context),
+                allowed,
+                "{command}"
+            );
+        }
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

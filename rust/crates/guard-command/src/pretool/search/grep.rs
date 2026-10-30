@@ -456,7 +456,7 @@ fn recursive_targets_proven(
 /// does: its nearest existing ancestor must be a readable directory and every
 /// missing name visible and clear of the sensitive screens. Agents pass a
 /// fixed list of roots (`src tests lib`) whether or not each one exists.
-fn absent_target(value: &str, context: ReadContext<'_>) -> bool {
+pub(super) fn absent_target(value: &str, context: ReadContext<'_>) -> bool {
     crate::pretool::listing_reads::absent_listing_operand(value, context)
 }
 
