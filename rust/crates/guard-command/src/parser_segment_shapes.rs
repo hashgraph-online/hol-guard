@@ -175,6 +175,26 @@ pub(super) fn blank_top_level_groups(chars: &[char]) -> Option<Vec<char>> {
                 continue;
             }
             ')' => return None,
+            '{' => {
+                let Some(close) = brace_group_close(chars, index, last_significant) else {
+                    if !chars[index].is_whitespace() {
+                        last_significant = Some(index);
+                    }
+                    index += 1;
+                    continue;
+                };
+                let terminator = brace_list_terminator(chars, index, close)?;
+                if !ends_a_list_element(chars, close) {
+                    return None;
+                }
+                blanked[index] = ' ';
+                blanked[terminator] = ' ';
+                blanked[close] = ' ';
+                found = true;
+                last_significant = Some(close);
+                index = close + 1;
+                continue;
+            }
             value => {
                 if !value.is_whitespace() || value == '\n' {
                     last_significant = Some(index);
@@ -239,6 +259,56 @@ fn group_close(chars: &[char], open: usize) -> Option<usize> {
         index += 1;
     }
     None
+}
+
+/// The index of the `}` closing the brace group opened at `open`, or `None`
+/// unless the text there is a brace group this pass reads. `{` is a word
+/// unless whitespace separates it from the list, so `{ls; }` runs a program
+/// named `{ls` and `a{1,2}.txt` is one word: neither opens a group. A group
+/// holding a bracket of its own, an expansion, a redirect or a substitution is
+/// left to the splitter's own error, and so is one that never closes.
+fn brace_group_close(
+    chars: &[char],
+    open: usize,
+    last_significant: Option<usize>,
+) -> Option<usize> {
+    if !opens_a_list_element(chars, last_significant) {
+        return None;
+    }
+    if !is_shell_token_whitespace(*chars.get(open + 1)?) {
+        return None;
+    }
+    let mut index = open + 2;
+    while index < chars.len() {
+        match chars[index] {
+            '\\' => index += 1,
+            '\'' | '"' => index = quoted_word_end(chars, index)?,
+            '`' | '<' | '>' | '$' | '(' | ')' | '{' => return None,
+            '}' => return Some(index),
+            _ => {}
+        }
+        index += 1;
+    }
+    None
+}
+
+/// The index of the `;` that ends the list of the brace group running from
+/// `open` to `close`. A brace group runs its list in the current shell, so the
+/// list it holds is what the text after the group already builds on, and
+/// blanking the brackets leaves every command pointing at the text it came
+/// from. The terminator goes with them, because `{ ls; } && pwd` blanked
+/// without it would leave a `;` where the `&&` belongs.
+///
+/// Only `;` is read. A list a newline ends would leave that newline between
+/// the list and the operator after the group, and a list `&` ends backgrounds
+/// its last command rather than the group, which is the child the blanked
+/// text no longer has.
+fn brace_list_terminator(chars: &[char], open: usize, close: usize) -> Option<usize> {
+    let last = chars[open + 1..close]
+        .iter()
+        .rposition(|value| !matches!(*value, ' ' | '\t' | '\r'))?;
+    let terminator = open + 1 + last;
+    (chars[terminator] == ';').then_some(terminator)
 }
 
 /// The index of the quote that closes the word opened at `open`.

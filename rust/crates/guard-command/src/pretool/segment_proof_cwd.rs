@@ -119,7 +119,11 @@ pub(in crate::pretool) fn exact_safe_absolute_cd_chain(
     }
     let mut index = 0usize;
     while index < model.segments.len() {
-        if index > 0 && !separator_is_and(model, index) {
+        // `;` runs the next `cd` whatever came before it, and the `cd` is
+        // absolute, so the reads after it are proved where they run. `||`
+        // is not here: it skips the `cd` when the step before it succeeds,
+        // leaving the reads in a directory this proof did not verify.
+        if index > 0 && !matches!(separator_operator(model, index).as_deref(), Some("&&" | ";")) {
             return false;
         }
         let cd = &model.segments[index];
@@ -145,7 +149,7 @@ pub(in crate::pretool) fn exact_safe_absolute_cd_chain(
         while index < model.segments.len()
             && model.segments[index].executable.as_deref() != Some("cd")
         {
-            if !separator_is_and(model, index) {
+            if separator_operator(model, index).as_deref() != Some("&&") {
                 return false;
             }
             let segment = &model.segments[index];
@@ -172,23 +176,36 @@ pub(in crate::pretool) fn exact_safe_absolute_cd_chain(
     true
 }
 
-fn separator_is_and(model: &CanonicalCommandV1, index: usize) -> bool {
+/// The control operator joining the segment at `index` to the one before it.
+///
+/// The gap between two segments keeps whatever brackets the text had, as in
+/// `) && (` or `; } && {`. Brackets are not operators: the shape proof reads
+/// each group's own list, and the directory model decides what a bracket does
+/// to the directory. The `;` that ends a brace group's list goes with them,
+/// because it terminates that list rather than joining the two groups.
+fn separator_operator(model: &CanonicalCommandV1, index: usize) -> Option<String> {
     let previous = &model.segments[index - 1];
     let next = &model.segments[index];
-    let Some(length) = next.span.start.checked_sub(previous.span.end) else {
-        return false;
-    };
-    let separator: String = model
+    let length = next.span.start.checked_sub(previous.span.end)?;
+    let gap: Vec<char> = model
         .normalized_text
         .chars()
         .skip(previous.span.end)
         .take(length)
         .collect();
-    // The gap keeps the group brackets, as in `) && (`.
-    separator
-        .chars()
-        .filter(|character| !character.is_whitespace() && *character != '(' && *character != ')')
-        .eq(['&', '&'])
+    let mut operator = String::new();
+    for (position, character) in gap.iter().enumerate() {
+        match character {
+            value if value.is_whitespace() => {}
+            '(' | ')' | '{' | '}' => {}
+            ';' if gap[position + 1..]
+                .iter()
+                .find(|value| !value.is_whitespace())
+                == Some(&'}') => {}
+            value => operator.push(*value),
+        }
+    }
+    Some(operator)
 }
 
 pub(in crate::pretool) fn exact_safe_cwd_compound(

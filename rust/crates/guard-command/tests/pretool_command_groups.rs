@@ -180,3 +180,108 @@ fn a_list_of_command_groups_is_read_as_the_lists_inside_them() {
     }
     std::fs::remove_dir_all(root).unwrap();
 }
+
+/// A list whose elements are brace groups: `{ cd api && npm test; } && echo ok`
+/// and the `cmd || { echo failed; exit 1; }` fallback a test script writes.
+/// A brace group runs its list in the current shell, so the list it holds is
+/// what the text after the group already builds on. Only a subshell list was
+/// read that way, so these spellings stayed at the compound-shell refusal and
+/// asked, whatever the lists were.
+#[test]
+fn a_list_of_brace_groups_is_read_as_the_lists_inside_them() {
+    let nonce = crate::unique_nanos::unique_nanos();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/command-group-fixtures")
+        .join(format!("fixture-{}-{nonce}", std::process::id()));
+    std::fs::create_dir_all(root.join("api")).unwrap();
+    std::fs::create_dir_all(root.join("web")).unwrap();
+    let root = std::fs::canonicalize(root).unwrap();
+    let api = root.join("api");
+    let web = root.join("web");
+    std::fs::write(api.join("one.txt"), "ordinary fixture\n").unwrap();
+    std::fs::write(api.join(".env"), "SYNTHETIC_ONLY=fixture\n").unwrap();
+    std::fs::write(web.join("two.txt"), "ordinary fixture\n").unwrap();
+    let api = api.display().to_string();
+    let web = web.display().to_string();
+
+    for harness in ["omp", "zcode", "claude-code", "codex", "cursor"] {
+        for (command, allowed) in [
+            // Every element is the list its brackets hold.
+            (
+                format!("{{ cd {api} && cat one.txt; }} && cat {web}/two.txt"),
+                true,
+            ),
+            (
+                format!("{{ cd {api} && cat one.txt; }} && {{ cd {web} && cat two.txt; }}"),
+                true,
+            ),
+            (
+                format!("{{ cd {api} && cat one.txt; }}; {{ cd {web} && cat two.txt; }}"),
+                true,
+            ),
+            (
+                format!("cat {web}/two.txt && {{ cd {api} && cat one.txt; }}"),
+                true,
+            ),
+            (
+                format!("cat {api}/one.txt || {{ cat {web}/two.txt; }}"),
+                true,
+            ),
+            // A brace group leaves its directory change behind it, so the
+            // text after the group is read in the directory the group
+            // reached, not the one the command started in.
+            (
+                format!("{{ cd {web} && cat two.txt; }} && cat two.txt"),
+                true,
+            ),
+            (format!("{{ cd {web} && cat two.txt; }} && cat one.txt"), false),
+            // What one list is refused for, the command is refused for.
+            (
+                format!("{{ cd {api} && cat .env; }} && cat {web}/two.txt"),
+                false,
+            ),
+            (
+                format!("{{ cd {api} && cat one.txt; }} && {{ cd {api} && rm one.txt; }}"),
+                false,
+            ),
+            (
+                format!("{{ cd {api} && cat $(echo one.txt); }} && cat {web}/two.txt"),
+                false,
+            ),
+            // A single `|` or `&` after the group keeps the stage or the
+            // child the blanked text no longer has.
+            (format!("{{ cd {api} && cat one.txt; }} | cat"), false),
+            (
+                format!("{{ cd {api} && cat one.txt; }} & cat {web}/two.txt"),
+                false,
+            ),
+            // `{` is a word unless whitespace separates it from the list, and
+            // the list has to be terminated for `}` to be a bracket.
+            (
+                format!("{{cd {api} && cat one.txt; }} && cat {web}/two.txt"),
+                false,
+            ),
+            (
+                format!("{{ cd {api} && cat one.txt }} && cat {web}/two.txt"),
+                false,
+            ),
+            // A bracket of its own, a redirect or an expansion inside the
+            // group is text this pass has not read.
+            (
+                format!("{{ (cd {api} && cat one.txt); }} && cat {web}/two.txt"),
+                false,
+            ),
+            (
+                format!("{{ cd {api} && cat one.txt > out.txt; }} && cat {web}/two.txt"),
+                false,
+            ),
+        ] {
+            assert_eq!(
+                evaluate(harness, &command, &root) == "allow",
+                allowed,
+                "{harness}: {command}"
+            );
+        }
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}
