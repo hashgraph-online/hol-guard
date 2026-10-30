@@ -36,6 +36,18 @@ pub const DEFAULT_MAX_FINDINGS: usize = 500;
 /// `DEFAULT_MAX_COMMITS` from the Python module.
 pub const DEFAULT_MAX_COMMITS: usize = 500;
 
+/// Most findings a caller may ask a bounded scan for.
+///
+/// The detector keeps one finding of headroom above this so a scan running at
+/// the ceiling can still probe one past its budget and notice a file that was
+/// cut. The assertion below holds that headroom open.
+pub const MAX_FINDINGS_CEILING: usize = 10_000;
+
+const _: () = assert!(
+    crate::secret_detection::MAX_FINDINGS_PER_TEXT > MAX_FINDINGS_CEILING,
+    "the detector must leave room for the one-past-budget probe the scan loops rely on"
+);
+
 /// Python `_TRUNCATION_REASON_ORDER`.
 const TRUNCATION_REASON_ORDER: [&str; 4] = [
     "max_files",
@@ -515,7 +527,11 @@ pub fn scan_repository_secrets(
         DEFAULT_MAX_TOTAL_BYTES,
         4 * 1024 * 1024 * 1024,
     );
-    let max_findings = bounded_positive(options.max_findings, DEFAULT_MAX_FINDINGS, 10_000);
+    let max_findings = bounded_positive(
+        options.max_findings,
+        DEFAULT_MAX_FINDINGS,
+        MAX_FINDINGS_CEILING,
+    );
 
     let (scan_root, git_repo, working_paths) = if root.is_file() {
         let scan_root = root
@@ -990,6 +1006,28 @@ mod tests {
         assert_eq!(result.findings.len(), 2);
         assert!(!result.truncated);
         assert!(result.truncation_reasons.is_empty());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_file_that_overfills_the_budget_does_not_break_the_next_file_s_probe() {
+        // The probe is `max_findings - findings.len() + 1`, and the blob above
+        // may return one more finding than the budget allowed. Reaching that
+        // subtraction with a full tally would underflow, so the loop has to
+        // stop before opening another file. Two files and a budget of one is
+        // the smallest shape that walks into it.
+        let dir = temp_root("findingoverfill");
+        let body = format!("{SECRET_LINE}\n{SECRET_LINE}\n");
+        fs::write(dir.join("first.env"), &body).unwrap();
+        fs::write(dir.join("second.env"), &body).unwrap();
+        let options = RepositoryScanOptions {
+            max_findings: 1,
+            ..RepositoryScanOptions::default()
+        };
+        let result = scan_repository_secrets(&dir, &options).unwrap();
+        assert_eq!(result.findings.len(), 1);
+        assert!(result.truncated);
+        assert_eq!(result.truncation_reasons, ["max_findings"]);
         let _ = fs::remove_dir_all(&dir);
     }
 

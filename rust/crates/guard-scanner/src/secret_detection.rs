@@ -45,6 +45,17 @@ const GENERIC_CANDIDATE_POLICY_VERSION: &str = "credential-expression-filter-v2"
 /// `max_findings` default mirroring `scan_secret_text(..., max_findings=200)`.
 pub const DEFAULT_MAX_FINDINGS: usize = 200;
 
+/// Most findings the detector will return from a single text.
+///
+/// This sits one above `repository_scanner::MAX_FINDINGS_CEILING`, the most a
+/// caller's own `max_findings` can be. A scanner that has filled its budget
+/// cannot tell a file that ended exactly on the cap from one that held more, so
+/// it asks for one finding past its budget and reads the extra as the cut. A
+/// caller sitting on the ceiling has to be able to ask for that one too, which
+/// is what the headroom here is for; clamping it away is what let a repository
+/// scanned at the ceiling report complete coverage over a file that was cut.
+pub const MAX_FINDINGS_PER_TEXT: usize = 10_001;
+
 // Python `re` flag integers captured verbatim for `detector_version` parity:
 // plain `re.compile` on a `str` pattern reports UNICODE(32); MULTILINE adds 8;
 // IGNORECASE adds 2; the assignment rule compiles with `(?im)` -> 42.
@@ -1468,7 +1479,7 @@ pub fn scan_secret_text(
             findings: Vec::new(),
         };
     }
-    let bounded_max = max_findings.clamp(1, 10_000);
+    let bounded_max = max_findings.clamp(1, MAX_FINDINGS_PER_TEXT);
     let mut findings: Vec<SecretFinding> = Vec::new();
     let mut seen: HashSet<(&'static str, usize, CandidateDigest)> = HashSet::new();
 

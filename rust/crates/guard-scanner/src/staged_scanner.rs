@@ -16,7 +16,7 @@ use crate::git_read::run_git_os;
 use crate::git_read::{run_git, GIT_TIMEOUT_SECONDS};
 use crate::repository_scanner::{
     bounded_positive, expand_tilde, scan_blob, RepositorySecretScanResult, DEFAULT_MAX_FILES,
-    DEFAULT_MAX_FILE_BYTES, DEFAULT_MAX_FINDINGS, DEFAULT_MAX_TOTAL_BYTES,
+    DEFAULT_MAX_FILE_BYTES, DEFAULT_MAX_FINDINGS, DEFAULT_MAX_TOTAL_BYTES, MAX_FINDINGS_CEILING,
 };
 use crate::secret_detection::SecretFinding;
 use crate::secret_detection::{candidate_digest, CandidateDigest};
@@ -277,7 +277,11 @@ pub fn scan_staged_secrets(
         DEFAULT_MAX_TOTAL_BYTES,
         4 * 1024 * 1024 * 1024,
     );
-    let max_findings = bounded_positive(options.max_findings, DEFAULT_MAX_FINDINGS, 10_000);
+    let max_findings = bounded_positive(
+        options.max_findings,
+        DEFAULT_MAX_FINDINGS,
+        MAX_FINDINGS_CEILING,
+    );
 
     let mut findings: Vec<SecretFinding> = Vec::new();
     let mut errors: Vec<String> = Vec::new();
