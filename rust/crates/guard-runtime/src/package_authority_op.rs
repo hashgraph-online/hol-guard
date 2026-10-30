@@ -1562,11 +1562,13 @@ impl GuardSyncRunnerApi for ResidentGuardSyncRunner {
         request: &GuardSyncRequest,
         timeout_seconds: u64,
         retry_timeout_seconds: u64,
+        budget: &guard_command::guard_sync_transport::SyncBudget,
     ) -> EvalResult<Map<String, Value>> {
-        let payload = guard_command::guard_sync_transport::urlopen_json_with_timeout_retry(
+        let payload = guard_command::guard_sync_transport::urlopen_json_within_budget(
             request,
             timeout_seconds as f64,
             retry_timeout_seconds as f64,
+            budget,
         )?;
         match payload {
             Value::Object(map) => Ok(map),
