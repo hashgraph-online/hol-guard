@@ -111,6 +111,10 @@ def test_submit_mode_summary_omits_publish_hint() -> None:
 PR_COMMENT_LINK = (
     "https://hol.org/plugins/connect?repo=acme%2Ftool&utm_source=hol_marketplace&utm_medium=plugins_pr_comment"
 )
+SCAN_LIMITS_LINK = (
+    "https://hol.org/plugins/trust-score/scan-limits"
+    "?utm_source=hol_marketplace&utm_medium=plugins_pr_comment&utm_content=scan_limits"
+)
 
 
 def _scan_comment_body(monkeypatch, tmp_path, *, event: object, publish_hint: str | None = None) -> str:
@@ -138,6 +142,9 @@ def test_public_repository_pr_comment_links_to_listing(monkeypatch, tmp_path) ->
     body = _scan_comment_body(monkeypatch, tmp_path, event=PUBLIC_EVENT)
 
     assert PR_COMMENT_LINK in body
+    assert "published advisories matched to it" in body
+    assert f"[What it checks and cannot catch]({SCAN_LIMITS_LINK})" in body
+    assert "safe" not in body.lower()
 
 
 @pytest.mark.parametrize(
@@ -169,4 +176,5 @@ def test_verify_pr_comment_carries_listing_link_only_when_given() -> None:
     )
 
     assert PR_COMMENT_LINK in with_link
+    assert SCAN_LIMITS_LINK in with_link
     assert "hol.org/plugins" not in without_link

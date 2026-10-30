@@ -1,6 +1,5 @@
 //! Restricted execution admission, environment filtering and runtime read grants.
 
-use std::collections::HashSet;
 use std::env;
 use std::ffi::OsStr;
 use std::fs;
@@ -27,11 +26,9 @@ pub const PYTEST_EXTERNAL_PYTHONPATH_REASON_CODE: &str = "pytest_restricted_exte
 /// `RestrictedPytestBackend` (:37).
 pub type RestrictedPytestBackend = &'static str;
 
-static PYTEST_EXECUTABLE_NAMES: LazyLock<HashSet<&'static str>> =
-    LazyLock::new(|| HashSet::from(["pytest", "py.test", "pytest.exe", "py.test.exe"]));
-
-static PYTHON_EXECUTABLE_PATTERN: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?i)^(?:python|pythonw)(?:\d+(?:\.\d+)*)?(?:\.exe)?$").unwrap());
+// The launcher names this module admits are the ones `pytest_argv` reads a
+// whole command with, so both answer the same question from one declaration.
+pub(crate) use crate::pytest_argv::{PYTEST_EXECUTABLE_NAMES, PYTHON_EXECUTABLE_PATTERN};
 
 const PROJECT_WORKSPACE_MARKERS: &[&str] = &[
     ".git",

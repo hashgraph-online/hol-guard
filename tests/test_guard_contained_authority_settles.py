@@ -171,6 +171,7 @@ def test_unavailable_wording_never_leaks_into_independent_rejections() -> None:
         ("python3 scripts/report.py", "contained_run_authorization_failed"),
         ("pytest -q", PYTEST_INVALID_COMMAND_REASON_CODE),
         ("python3 -m pytest -q", PYTEST_INVALID_COMMAND_REASON_CODE),
+        ("python3 -Im pytest -q", PYTEST_INVALID_COMMAND_REASON_CODE),
     ],
 )
 def test_only_a_command_that_never_named_pytest_loses_the_planner_error(
@@ -179,8 +180,14 @@ def test_only_a_command_that_never_named_pytest_loses_the_planner_error(
     """The pytest planner is the last shape tried, and it uses one reason code.
 
     A script that never named pytest must not be told to fix a pytest
-    invocation. A real pytest command, including `python -m pytest`, keeps
-    the planner's own refusal.
+    invocation. Which commands name pytest is the native argv reader's answer
+    and never this sink's, so the stand-in below answers from a fixed table
+    rather than reading the grammar a second time. That grammar is pinned in
+    `pytest_argv_tests.rs`, the `-Im` cluster included, which the Python copy
+    this replaced read as something other than a module option. What turns on
+    the answer here is the routing alone: a command native authority reads as
+    pytest keeps the planner's own refusal, and every other one reports the
+    authorization that failed.
     """
     scripts = tmp_path / "scripts"
     scripts.mkdir()
@@ -193,18 +200,25 @@ def test_only_a_command_that_never_named_pytest_loses_the_planner_error(
     from codex_plugin_scanner.guard import native_restricted_pytest
     from codex_plugin_scanner.guard.runtime import contained_authority
 
-    monkeypatch.setattr(contained_authority.time, "sleep", lambda _seconds: None)
-    monkeypatch.setattr(
-        native_restricted_pytest,
-        "restricted_native",
-        lambda *_args, **_kwargs: {
+    # The commands under test that native authority reads as pytest. A table,
+    # not a grammar: a fake that re-read the argv would answer for itself and
+    # leave the reader it stands in for untested.
+    names_pytest = (("pytest",), ("python3", "-m", "pytest"), ("python3", "-Im", "pytest"))
+
+    def native(operation: str, fields: dict[str, object], _expected: object) -> object:
+        if operation == "pytest_command":
+            words: list[str] = fields["command"]  # type: ignore[assignment]
+            return any(tuple(words[: len(named)]) == named for named in names_pytest)
+        return {
             "inline_eval": False,
             "node_test": False,
             "vitest": False,
             "git": False,
             "node_tool": False,
-        },
-    )
+        }
+
+    monkeypatch.setattr(contained_authority.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(native_restricted_pytest, "restricted_native", native)
     monkeypatch.setattr(sink, "prepare_restricted_pytest", not_a_pytest)
     with pytest.raises(RestrictedPytestError) as failure:
         _ = sink.run_authorized_contained_test(

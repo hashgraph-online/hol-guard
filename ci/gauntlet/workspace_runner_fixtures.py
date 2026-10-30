@@ -23,7 +23,7 @@ WORKSPACE_JEST_CASE = "omp-native-workspace-npx-jest"
 WORKSPACE_NODE_ENTRY_CASE = "omp-native-workspace-node-jest-entry"
 WORKSPACE_RUNNER_CASES = frozenset({WORKSPACE_JEST_CASE, WORKSPACE_NODE_ENTRY_CASE})
 # The same installed build, launched through the Bun the installer leaves in the
-# caller's home rather than one a login shell put on PATH.
+# caller's home, spelled by the path its install instructions print.
 HOME_BUN_ENTRY_CASE = "omp-native-shell-home-spelled-bun-entry"
 # Where Bun's own installer puts it, and the path its instructions tell you to run.
 _BUN_BIN = ".bun/bin"
@@ -110,17 +110,37 @@ def add_workspace_node_runtime(home: Path, scenario_id: str | None) -> None:
     shutil.copy2(source, target)
 
 
+def home_bun_bin(home: Path) -> Path | None:
+    """The fixture's own Bun directory, once a case has planted one.
+
+    Bun's installer adds this directory to the login shell's PATH, so a
+    developer shell that runs ``~/.bun/bin/bun`` also has it on PATH.
+    """
+    directory = home / _BUN_BIN
+    return directory if (directory / "bun").is_file() else None
+
+
+def _host_bun() -> str | None:
+    """The host's Bun, skipping a Guard package shim that stands in front of it.
+
+    A shim is a script that hands the launch to Guard's own runtime, so a copy
+    of it would plant Guard's launcher, not Bun, where the case runs Bun.
+    """
+    entries = os.environ.get("PATH", "").split(os.pathsep)
+    search = [entry for entry in entries if Path(entry).parts[-2:] != ("package-shims", "bin")]
+    return shutil.which("bun", path=os.pathsep.join(search))
+
+
 def add_home_bun_runtime(home: Path, scenario_id: str | None) -> None:
     """Install Bun where its own installer puts it, so a case can name it from home.
 
-    An agent whose login shell has not put Bun on PATH runs the launcher the
-    install instructions give it, ``~/.bun/bin/bun``. The host's binary is
-    copied rather than linked, so nothing the fixture does can reach the file
-    the host runs.
+    An agent runs the launcher the install instructions give it,
+    ``~/.bun/bin/bun``. The host's binary is copied rather than linked, so
+    nothing the fixture does can reach the file the host runs.
     """
     if scenario_id != HOME_BUN_ENTRY_CASE:
         return
-    located = shutil.which("bun")
+    located = _host_bun()
     if located is None:
         raise RuntimeError("Gauntlet prerequisite is missing: bun")
     target = home / _BUN_BIN / "bun"

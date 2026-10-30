@@ -1,4 +1,5 @@
 use super::*;
+use std::collections::HashSet;
 
 pub(super) fn allowed_executables(
     executable: &Path,

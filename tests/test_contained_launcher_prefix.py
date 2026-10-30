@@ -62,6 +62,12 @@ def _native(operation: str, fields: dict[str, object], expected: object) -> obje
     if operation == "command_prefix_split":
         key = (tuple(fields["command"]), bool(fields["drop_data"]))  # type: ignore[arg-type]
         return _WHOLE | _SPLIT.get(key, {})
+    if operation == "pytest_command":
+        # The whole grammar lives in `pytest_argv.rs`; every command reaching
+        # this file is a launcher prefix in front of a bare `pytest`, so the
+        # answer here turns on the program the planners were handed.
+        words: list[str] = fields["command"]  # type: ignore[assignment]
+        return bool(words) and Path(words[0]).name in {"pytest", "py.test"}
     return dict(_KINDS) if operation == "contained_kind" else None
 
 

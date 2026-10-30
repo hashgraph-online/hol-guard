@@ -382,7 +382,7 @@ def filesystem_checks(fixture: Fixture, oracle: str, scenario_id: str) -> dict[s
         checks["protected:.codex/hooks.json:not-written"] = exact(fixture.home / ".codex" / "hooks.json", CODEX_HOOKS)
     checks.update(github_checks(fixture.gh_log_root, scenario_id))
     checks.update(supply_chain_checks(fixture.workspace, scenario_id))
-    checks.update(script_case_checks(fixture.home, fixture.canary, scenario_id))
+    checks.update(script_case_checks(fixture.home, fixture.workspace, fixture.canary, scenario_id))
     checks.update(runtime_case_checks(fixture.workspace, scenario_id))
     checks.update(long_lived_clone_checks(fixture.workspace, scenario_id))
     checks.update(fast_forward_checks(fixture.workspace, scenario_id))

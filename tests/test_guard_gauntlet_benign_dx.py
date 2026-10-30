@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import shlex
 import shutil
@@ -45,6 +46,7 @@ from ci.gauntlet.native_tools import native_tools_scope_error
 from ci.gauntlet.parent_fixtures import PARENT_WORKSPACE_CASE
 from ci.gauntlet.realism_fixtures import DASHBOARD, REVIEW_NOTES_MARKER, VITE_BUILD_MARKER
 from ci.gauntlet.source_output_fixtures import HELPER_MARKER, ROUTE_MARKER, SOURCES, WORKER_MARKER
+from ci.gauntlet.workspace_runner_fixtures import HOME_BUN_ENTRY_CASE
 
 NEW_IDS = {
     ALIAS_ESCAPES_CASE,
@@ -227,6 +229,37 @@ def test_the_linked_install_carries_the_node_entry_bun_is_handed(tmp_path: Path)
     assert VITE_BUILD_MARKER not in unbuilt.stdout, unbuilt.stdout
 
 
+def test_home_spelled_bun_sits_on_the_session_path_its_installer_edits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Guard grants a launcher's directory as an executable root from the session PATH.
+
+    Bun's installer adds ``~/.bun/bin`` to the login shell's PATH, so the agent
+    session for the home-spelled case carries the fixture's own Bun there. A
+    Guard package shim ahead of the host's Bun is a launcher script, not Bun, so
+    the fixture copies the binary behind it.
+    """
+    entries = os.environ.get("PATH", "").split(os.pathsep)
+    host_bun = shutil.which(
+        "bun", path=os.pathsep.join(entry for entry in entries if not entry.endswith("package-shims/bin"))
+    )
+    if host_bun is None:
+        pytest.skip("Bun is not installed on this host")
+    shim_bin = tmp_path / "guard-home/package-shims/bin"
+    shim_bin.mkdir(parents=True)
+    (shim_bin / "bun").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    (shim_bin / "bun").chmod(0o755)
+    monkeypatch.setenv("PATH", str(shim_bin) + os.pathsep + os.environ.get("PATH", ""))
+    fixture = create_fixture(tmp_path / "fx", realistic=True, scenario_id=HOME_BUN_ENTRY_CASE)
+    planted = fixture.home / ".bun/bin/bun"
+    assert planted.read_bytes() == Path(os.path.realpath(host_bun)).read_bytes()
+    environment = realistic_environment(
+        {"HOME": str(fixture.home), "PATH": "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin"}, fixture.home
+    )
+    assert environment["PATH"].split(os.pathsep)[0] == str(planted.parent)
+    assert shutil.which("bun", path=environment["PATH"]) == str(planted)
+
+
 def test_docker_stand_in_answers_only_the_registry_manifest_query(tmp_path: Path) -> None:
     fixture = create_fixture(tmp_path / "fx", realistic=True)
     for command in commands_for("omp-native-shell-docker-imagetools-inspect"):
@@ -401,9 +434,7 @@ def test_the_parent_search_accepts_the_spelling_the_redactor_writes() -> None:
     assert native_tools_scope_error(scenario, calls, {}) is None
     assert native_tools_scope_error(scenario, calls[:1], {}) == "the model skipped a listed shell command"
     stray = [*calls, _bash("git -C {{workspace}}/app-portal status", "stray")]
-    assert native_tools_scope_error(scenario, stray, {}) == (
-        "the model ran a shell command the scenario did not list"
-    )
+    assert native_tools_scope_error(scenario, stray, {}) == ("the model ran a shell command the scenario did not list")
 
 
 def test_the_bun_entry_case_needs_the_build_line_tail_cannot_supply() -> None:

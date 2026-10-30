@@ -16,6 +16,7 @@ PR_COMMENT_MARKER = "<!-- hol-guard-pr-comment -->"
 VALID_PR_COMMENT_MODES = frozenset({"auto", "always", "off"})
 VALID_PR_COMMENT_STYLES = frozenset({"concise", "detailed"})
 HOL_PLUGINS_LISTING_URL = "https://hol.org/plugins/connect"
+HOL_PLUGINS_SCAN_LIMITS_URL = "https://hol.org/plugins/trust-score/scan-limits"
 
 
 @dataclass(frozen=True, slots=True)
@@ -125,10 +126,16 @@ def build_scan_pr_comment_body(
 
 
 def _render_listing_hint(repository: str) -> list[str]:
-    query = urlencode({"repo": repository, "utm_source": "hol_marketplace", "utm_medium": "plugins_pr_comment"})
+    attribution = {"utm_source": "hol_marketplace", "utm_medium": "plugins_pr_comment"}
+    query = urlencode({"repo": repository, **attribution})
+    limits_query = urlencode({**attribution, "utm_content": "scan_limits"})
     return [
         "",
-        f"This repository's HOL Plugins listing: [{HOL_PLUGINS_LISTING_URL}]({HOL_PLUGINS_LISTING_URL}?{query})",
+        f"This repository's HOL Plugins listing and the published advisories matched to it: "
+        f"[{HOL_PLUGINS_LISTING_URL}]({HOL_PLUGINS_LISTING_URL}?{query})",
+        "",
+        "HOL's plugin scan reads files without running them. "
+        f"[What it checks and cannot catch]({HOL_PLUGINS_SCAN_LIMITS_URL}?{limits_query})",
     ]
 
 

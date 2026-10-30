@@ -126,6 +126,7 @@ pub const CONTAINED_ARGV_OPERATIONS: &[&str] = &[
     "command_prefix_split",
     "run_prefix_peel",
     "node_tool_route",
+    "pytest_command",
 ];
 
 /// The containment argument screens, which decide whether a contained run's
