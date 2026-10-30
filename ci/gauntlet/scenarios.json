@@ -1677,6 +1677,18 @@
       ]
     },
     {
+      "id": "omp-native-shell-subshell-group-list",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Build the dashboard and then list the source folder, using the one listed command: run it once, exactly as written, and tell me whether the build finished and what the listing shows.",
+      "commands": [
+        "(cd dashboard && ./node_modules/.bin/vite build) && (cd src && ls)"
+      ]
+    },
+    {
       "id": "omp-native-shell-linked-modules-bun-entry",
       "expectation": "allow",
       "oracle": "native-tools",
