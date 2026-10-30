@@ -1,9 +1,12 @@
 //! An evaluation that panics must not be the end of the conversation. The
 //! worker catches the unwind and settles it like any other failure, so the
-//! client that asked gets a fixed answer it will not retry against, the panic
-//! is counted where health can see it, and the worker stays up for the next
-//! request. These cases drive `settle_evaluation`, which is the whole of that
-//! contract and the only thing either panic site does with a caught unwind.
+//! client that asked gets a fixed answer it will not retry against, and the
+//! panic is counted where health can see it. That the worker itself survives
+//! is a property of where the `catch_unwind` sits — inside the loop body, so
+//! the unwind never reaches the thread — rather than of anything these cases
+//! can observe. What they do drive is `settle_evaluation`, the one function
+//! both panic sites hand a caught unwind to, and the whole of what either does
+//! with it.
 
 use super::*;
 
@@ -52,8 +55,11 @@ fn settling_leaves_an_ordinary_answer_alone_and_redacts_an_unknown_reason() {
     assert_eq!(failed["retryable"], false);
 }
 
+/// Settling a panic must not leave anything behind that colours the next
+/// answer. This says nothing about worker dispatch — it never reaches one —
+/// only that the function the worker calls carries no state between requests.
 #[test]
-fn a_worker_settles_the_request_after_a_panicking_one() {
+fn settling_a_panic_leaves_the_next_answer_untouched() {
     assert_eq!(
         answer(caught(|| panic!("first request panicked")))["error"],
         "native_runtime_panicked"
