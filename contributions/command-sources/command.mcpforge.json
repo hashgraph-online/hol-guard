@@ -114,9 +114,11 @@
                   "npx.exe"
                 ],
                 "interspersed_flags": [
+                  "--no-install",
+                  "--quiet",
+                  "--silent",
                   "--yes",
-                  "-y",
-                  "--no-install"
+                  "-y"
                 ],
                 "interspersed_options_with_values": [
                   "--package",
