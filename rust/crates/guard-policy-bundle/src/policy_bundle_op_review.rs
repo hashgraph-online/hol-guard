@@ -36,8 +36,13 @@ const STRIPPED_FIELDS: [&str; 5] = [
 
 /// `base64.b64decode(value)`: CPython drops characters outside the alphabet and
 /// ends the stream on a pad sequence, so a line-wrapped signature still decodes
-/// and a short final quad is still an error.
+/// and a short final quad is still an error. It reaches the alphabet through
+/// `str.encode("ascii")`, so one non-ASCII character is not a stray character
+/// to drop: it refuses the whole string before any of it is read.
 pub(crate) fn lenient_base64_decode(value: &str) -> Option<Vec<u8>> {
+    if !value.is_ascii() {
+        return None;
+    }
     let mut out = Vec::with_capacity(value.len() / 4 * 3);
     let (mut carried, mut quad_pos, mut pads) = (0u8, 0u8, 0usize);
     for byte in value.bytes() {

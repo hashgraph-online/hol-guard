@@ -369,6 +369,19 @@ fn the_decoder_reads_a_signature_the_way_cpython_does() {
     assert_eq!(hex("=AAA"), None);
     assert_eq!(hex("AAAAAA"), None);
     assert_eq!(hex("A==="), None);
+    // `str.encode("ascii")` refuses the string before the alphabet is read.
+    assert_eq!(hex("AAAA\u{e9}"), None);
+    assert_eq!(hex("\u{e9}"), None);
+}
+
+#[test]
+fn a_signature_with_a_non_ascii_character_is_refused() {
+    let mut payload = envelope();
+    payload.as_object_mut().unwrap()["signature"] = json!(format!("{SIGNATURE}\u{e9}"));
+    assert_eq!(
+        error_of(&verify(&payload, json!([signing_key()]))),
+        "invalid_signature"
+    );
 }
 
 #[test]
