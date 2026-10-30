@@ -20,7 +20,7 @@ permissions:
 jobs:
   validate:
     name: Validate Cline install contract
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Check out immutable source

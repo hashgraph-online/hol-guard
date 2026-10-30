@@ -78,7 +78,7 @@ def test_same_repo_post_publish_matrix_covers_all_supported_operating_systems() 
     assert "github.event.pull_request.head.repo.full_name == github.repository" in _text(job["if"])
     strategy = _mapping(job["strategy"])
     assert strategy["fail-fast"] is False
-    assert _mapping(strategy["matrix"])["os"] == ["ubuntu-latest", "macos-latest", "windows-latest"]
+    assert _mapping(strategy["matrix"])["os"] == ["ubuntu-24.04", "macos-latest", "windows-latest"]
     steps = _steps(job)
     checkout = _action_step(steps, "actions/checkout")
     assert _mapping(checkout["with"])["ref"] == "${{ needs.build.outputs.source_sha }}"
