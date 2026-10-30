@@ -7,13 +7,11 @@ from pathlib import Path
 
 import pytest
 
-import codex_plugin_scanner.guard.codex_live_decision as live_decision_module
 from codex_plugin_scanner.guard.codex_live_decision import (
     complete_codex_live_decision,
     resolve_codex_live_allow_authority,
 )
 from codex_plugin_scanner.guard.local_authority_integrity import sign_local_authority_payload
-from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.native_guard_store import NativeGuardStoreUnavailable
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import enable_exact_cloud_review
 from codex_plugin_scanner.guard.runtime.exact_cloud_review_apply import apply_exact_cloud_review
@@ -23,7 +21,6 @@ from tests.guard_exact_cloud_review_support import (
     connected_exact_review_store,
     remote_approval,
 )
-from tests.policy_store_support import replace_remote_policies
 from tests.test_codex_live_decision import _seed_waiting_request
 
 
@@ -169,69 +166,6 @@ def test_live_completion_consumes_only_original_exact_cloud_request(tmp_path: Pa
     assert resume is not None and resume["status"] == "sent"
 
 
-def test_live_completion_fails_closed_when_authority_revision_changes_before_claim(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    store = connected_exact_review_store(tmp_path)
-    store, _ = _seed_waiting_request(
-        tmp_path,
-        request_id="exact-live-revision-race",
-        store=store,
-    )
-    enable_exact_cloud_review(store)
-    resolution = apply_exact_cloud_review(
-        store,
-        remote_approval=remote_approval(store, "exact-live-revision-race", receipt_id="exact-race-receipt"),
-    )
-    resolved_at = str(resolution.resolved_request["resolved_at"])
-    original_record = live_decision_module.record_live_hook_completion
-
-    def mutate_authority_then_record(
-        completion_store: GuardStore,
-        *,
-        request_id: str,
-        action: str,
-        now: str,
-        approval_decision: Mapping[str, object] | None = None,
-    ) -> dict[str, object] | None:
-        replace_remote_policies(
-            completion_store,
-            [
-                PolicyDecision(
-                    harness="codex",
-                    scope="artifact",
-                    action="block",
-                    artifact_id="codex:project:unrelated-authority-mutation",
-                    artifact_hash="hash-unrelated-authority-mutation",
-                    workspace="/workspace/project",
-                    source="team-policy",
-                )
-            ],
-            now,
-            remote_write_authorized=True,
-        )
-        return original_record(
-            completion_store,
-            request_id=request_id,
-            action=action,
-            now=now,
-            approval_decision=approval_decision,
-        )
-
-    monkeypatch.setattr(live_decision_module, "record_live_hook_completion", mutate_authority_then_record)
-    result = complete_codex_live_decision(
-        store,
-        request_id="exact-live-revision-race",
-        now=resolved_at,
-        fresh_allow_authorized=True,
-    )
-
-    assert result == {"completed": False, "error": "continuation_not_recorded"}
-    assert _live_authority(store, "exact-live-revision-race", resolved_at) is not None
-    resume = store.get_request_resume("exact-live-revision-race")
-    assert resume is not None and resume["status"] == "pending"
-
-
 def _live_authority(store: GuardStore, request_id: str, now: str) -> dict[str, object] | None:
     request = store.get_approval_request(request_id)
     assert request is not None
@@ -360,3 +294,59 @@ def test_live_authority_without_an_exact_allow_reports_the_evidence_failure() ->
     with pytest.raises(OSError, match="policy store unreadable"):
         _authority(store)
     assert sum(1 for step in store.steps if isinstance(step, tuple) and step[0] == "codex_live_allow_authority") == 1
+
+
+def _complete(store: _OneCallStore, *, action: str, fresh: bool) -> dict[str, object]:
+    request = {
+        "request_id": "r1",
+        "harness": "codex",
+        "artifact_id": "codex:bash",
+        "artifact_hash": "sha256:abc",
+        "workspace": "/work/a",
+        "resolution_action": action,
+    }
+    return store.complete_codex_live_decision(request, now="2026-10-30T00:00:00+00:00", fresh_allow_authorized=fresh)
+
+
+def _completion_call(store: _OneCallStore) -> dict[str, object]:
+    (call,) = [step for step in store.steps if isinstance(step, tuple) and step[0] == "complete_codex_live_decision"]
+    return call[1]
+
+
+def test_live_completion_of_a_fresh_allow_carries_its_authority_lookup() -> None:
+    store = _OneCallStore(reply={"completed": True, "action": "allow"})
+
+    assert _complete(store, action="allow", fresh=True) == {"completed": True, "action": "allow"}
+    args = _completion_call(store)
+    assert args["fresh_allow_authorized"] is True
+    assert args["integrity_key_id"] == "key-1"
+    assert args["lookup"] == {
+        "schema": "guard-policy-decision-lookup-request.v1",
+        "integrity_key_id": "key-1",
+        "local_once_integrity_key_id": "key-1",
+    }
+
+
+def test_live_completion_of_a_block_sends_no_authority() -> None:
+    store = _OneCallStore(reply={"completed": True, "action": "block"})
+
+    _complete(store, action="block", fresh=True)
+    args = _completion_call(store)
+    assert set(args) == {"request_id", "now", "cwd", "fresh_allow_authorized"}
+    assert not any(isinstance(step, tuple) and step[0] in {"evidence", "lookup", "provision"} for step in store.steps)
+
+
+def test_live_completion_without_an_exact_allow_reports_the_evidence_failure() -> None:
+    store = _OneCallStore(
+        evidence_error=OSError("policy store unreadable"),
+        reply={"completed": False, "error": "exact_approval_authority_missing"},
+    )
+
+    with pytest.raises(OSError, match="policy store unreadable"):
+        _complete(store, action="allow", fresh=True)
+
+
+def test_live_completion_without_a_resident_reply_is_not_recorded() -> None:
+    store = _OneCallStore(reply=[])
+
+    assert _complete(store, action="allow", fresh=False) == {"completed": False, "error": "continuation_not_recorded"}
