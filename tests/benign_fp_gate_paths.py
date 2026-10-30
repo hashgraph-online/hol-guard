@@ -191,6 +191,13 @@ PROBES_FOR_ABSENCE = frozenset(
         "tree-recursive-absent-nested-module",
         "grep-recursive-absent-probe-fallback",
         "ls-recursive-absent-probe-fallback",
+        # The same absent roots read through ``rg``. Building them would make
+        # these ordinary recursive searches of a populated tree, which the
+        # sibling-directory cases already cover.
+        "rg-recursive-absent-plain-sibling-dir",
+        "rg-recursive-absent-probe-fallback",
+        "rg-recursive-absent-home-dir",
+        "rg-files-absent-plain-sibling-dir",
     }
 )
 

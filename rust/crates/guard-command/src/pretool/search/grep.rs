@@ -456,8 +456,16 @@ fn recursive_targets_proven(
 /// does: its nearest existing ancestor must be a readable directory and every
 /// missing name visible and clear of the sensitive screens. Agents pass a
 /// fixed list of roots (`src tests lib`) whether or not each one exists.
+///
+/// The shell expands `~` from its own `HOME` while this screen reads the
+/// declared one, so a `~` root is proven absent only once `shell_home_matches`
+/// says the two name one directory. Without that, the search could open a tree
+/// that is there under the shell's home while the proof measured a name that
+/// is not there under the declared one. The recursive listing screen draws the
+/// same line.
 pub(super) fn absent_target(value: &str, context: ReadContext<'_>) -> bool {
-    crate::pretool::listing_reads::absent_listing_operand(value, context)
+    (!value.starts_with('~') || context.shell_home_matches)
+        && crate::pretool::listing_reads::absent_listing_operand(value, context)
 }
 
 /// A shell glob operand whose every expansion is screened, and whose matched

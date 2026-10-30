@@ -593,6 +593,54 @@ mod tests {
         std::fs::remove_dir_all(root).unwrap();
     }
 
+    /// The shell expands `~` from its own `HOME`, while the absent-root proof
+    /// reads the declared one. When the two name different directories the
+    /// search can walk a tree that is there under the shell's home although
+    /// the proof measured a name that is not there under the declared one, so
+    /// a `~` root keeps its review until `shell_home_matches` holds.
+    #[test]
+    fn a_tilde_root_is_proven_absent_only_once_the_shell_home_matches() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/rg-absent-tilde-roots")
+            .join(std::process::id().to_string());
+        let declared = root.join("declared");
+        let shell = root.join("shell");
+        std::fs::create_dir_all(declared.join("work/app/src")).unwrap();
+        // The same spelling names a real tree under the shell's home.
+        std::fs::create_dir_all(shell.join("work/notes")).unwrap();
+        std::fs::write(shell.join("work/notes/todo.md"), "fixture\n").unwrap();
+        let declared = crate::runtime_read_paths::canonicalize_text(&declared).unwrap();
+        let cwd = declared.join("work/app");
+        for (shell_home_matches, allowed) in [(false, false), (true, true)] {
+            let context = crate::pretool::PathContext {
+                home_dir: declared.to_str(),
+                cwd: cwd.to_str(),
+                ripgrep_config_absent: true,
+                shell_home_matches,
+                ..Default::default()
+            };
+            let command = "rg -ln fixture ~/work/notes".to_owned();
+            let model = crate::parse_command(&crate::CommandModelRequestV1 {
+                command: command.clone(),
+                dialect: "posix".to_owned(),
+                transport: "shell_string".to_owned(),
+                extraction_provenance: "guard-shell".to_owned(),
+            })
+            .unwrap();
+            let segment = model
+                .segments
+                .iter()
+                .find(|segment| segment.executable.as_deref() == Some("rg"))
+                .unwrap();
+            assert_eq!(
+                safe_rg_segment(&model, segment, context),
+                allowed,
+                "{command} with shell_home_matches={shell_home_matches}"
+            );
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn the_flag_counts_only_where_ripgrep_reads_it_as_an_option() {
         for line in [
