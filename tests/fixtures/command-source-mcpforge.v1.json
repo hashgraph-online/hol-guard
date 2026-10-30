@@ -120,9 +120,11 @@
                         "npx.exe"
                       ],
                       "interspersed_flags": [
+                        "--no-install",
+                        "--quiet",
+                        "--silent",
                         "--yes",
-                        "-y",
-                        "--no-install"
+                        "-y"
                       ],
                       "interspersed_options_with_values": [
                         "--package",
@@ -251,96 +253,9 @@
     ],
     "trust": {
       "classes": {
-        "external": [
-          "command.blitcp",
-          "command.cloudg",
-          "command.cogext",
-          "command.ctty",
-          "command.digline",
-          "command.errand",
-          "command.genclave",
-          "command.gitsync",
-          "command.mcp-filesystem",
-          "command.mcp-instapods",
-          "command.mcp-pr-ui-compare",
-          "command.mcp-reaper",
-          "command.mcpforge",
-          "command.noodle",
-          "command.ollama",
-          "command.probe",
-          "command.remote.essh",
-          "command.repo2nb",
-          "command.skill-base",
-          "command.skill-sunset",
-          "command.syngraphe",
-          "command.uivoid"
-        ],
-        "first-party": [
-          "command.container-runtime",
-          "command.data-protection",
-          "command.encoded-execution",
-          "command.filesystem",
-          "command.git",
-          "command.guard-self-protection",
-          "command.kubernetes-secrets",
-          "command.package.go",
-          "command.package.jvm",
-          "command.package.node",
-          "command.package.php",
-          "command.package.python",
-          "command.package.ruby",
-          "command.package.rust",
-          "command.package.system",
-          "command.shell-mutations",
-          "command.system",
-          "command.windows"
-        ],
-        "trusted-library": [
-          "command.api-gateway",
-          "command.backup.borg",
-          "command.backup.rclone",
-          "command.backup.restic",
-          "command.backup.velero",
-          "command.cdn",
-          "command.cicd.circleci",
-          "command.cicd.github",
-          "command.cicd.gitlab",
-          "command.cloud.aws",
-          "command.cloud.azure",
-          "command.cloud.gcp",
-          "command.database.mongodb",
-          "command.database.mysql",
-          "command.database.postgresql",
-          "command.database.redis",
-          "command.database.sqlite",
-          "command.database.supabase",
-          "command.dns.aws",
-          "command.dns.azure",
-          "command.dns.gcp",
-          "command.email",
-          "command.feature-flags",
-          "command.framework.laravel",
-          "command.github",
-          "command.infrastructure-as-code",
-          "command.kubernetes-operations",
-          "command.load-balancer",
-          "command.messaging.kafka",
-          "command.messaging.nats",
-          "command.messaging.rabbitmq",
-          "command.monitoring",
-          "command.payment",
-          "command.platform.heroku",
-          "command.platform.netlify",
-          "command.platform.vercel",
-          "command.remote.rsync",
-          "command.remote.scp",
-          "command.remote.ssh",
-          "command.search.elasticsearch",
-          "command.storage.aws-s3",
-          "command.storage.azure-blob",
-          "command.storage.google-cloud",
-          "command.storage.minio"
-        ]
+        "external": ["command.blitcp","command.cloudg","command.cogext","command.ctty","command.digline","command.errand","command.genclave","command.gitsync","command.mcp-filesystem","command.mcp-instapods","command.mcp-pr-ui-compare","command.mcp-reaper","command.mcpforge","command.noodle","command.ollama","command.probe","command.remote.essh","command.repo2nb","command.skill-base","command.skill-sunset","command.syngraphe","command.uivoid"],
+        "first-party": ["command.container-runtime","command.data-protection","command.encoded-execution","command.filesystem","command.git","command.guard-self-protection","command.kubernetes-secrets","command.package.go","command.package.jvm","command.package.node","command.package.php","command.package.python","command.package.ruby","command.package.rust","command.package.system","command.shell-mutations","command.system","command.windows"],
+        "trusted-library": ["command.api-gateway","command.backup.borg","command.backup.rclone","command.backup.restic","command.backup.velero","command.cdn","command.cicd.circleci","command.cicd.github","command.cicd.gitlab","command.cloud.aws","command.cloud.azure","command.cloud.gcp","command.database.mongodb","command.database.mysql","command.database.postgresql","command.database.redis","command.database.sqlite","command.database.supabase","command.dns.aws","command.dns.azure","command.dns.gcp","command.email","command.feature-flags","command.framework.laravel","command.github","command.infrastructure-as-code","command.kubernetes-operations","command.load-balancer","command.messaging.kafka","command.messaging.nats","command.messaging.rabbitmq","command.monitoring","command.payment","command.platform.heroku","command.platform.netlify","command.platform.vercel","command.remote.rsync","command.remote.scp","command.remote.ssh","command.search.elasticsearch","command.storage.aws-s3","command.storage.azure-blob","command.storage.google-cloud","command.storage.minio"]
       },
       "publishers": {
         "hol": {
@@ -532,6 +447,32 @@
         "command.mcpforge.permission.publish"
       ],
       "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "rule_id": "command.mcpforge.publish"
+    },
+    {
+      "id": "npx-quiet-publish",
+      "command": "npx --quiet mcpforge publish --slug sample-api",
+      "enabled_extensions": [
+        "command.mcpforge"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "rule_id": "command.mcpforge.publish"
+    },
+    {
+      "id": "npx-silent-publish",
+      "command": "npx --silent mcpforge publish --slug sample-api",
+      "enabled_extensions": [
+        "command.mcpforge"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
