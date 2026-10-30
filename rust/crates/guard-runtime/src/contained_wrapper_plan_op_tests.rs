@@ -222,7 +222,55 @@ fn a_new_worktree_chain_names_its_add_and_the_rest() {
         Value::from("cd ../app-fix && bun run build")
     );
     assert_eq!(
+        answer["worktree_add"]["checkout"],
+        Value::from(
+            root.path()
+                .parent()
+                .expect("parent")
+                .join("app-fix")
+                .to_string_lossy()
+                .into_owned()
+        )
+    );
+    assert_eq!(
         evaluate(&request("pytest -q", root.path()))["worktree_add"],
         Value::Null
     );
+}
+
+#[test]
+fn a_home_checkout_resolves_from_the_declared_home() {
+    let root = workspace();
+    let home = workspace();
+    let mut req = request(
+        "git worktree add --detach ~/app-fix HEAD && cd ~/app-fix && bun run build",
+        root.path(),
+    );
+    req.home_dir = Some(home.path().to_string_lossy().into_owned());
+    assert_eq!(
+        evaluate(&req)["worktree_add"]["checkout"],
+        Value::from(home.path().join("app-fix").to_string_lossy().into_owned())
+    );
+    // Without a declared home the sink is told nothing it could enter.
+    let mut undeclared = req.clone();
+    undeclared.home_dir = None;
+    let answer = evaluate(&undeclared);
+    assert_eq!(answer["worktree_add"]["checkout"], Value::Null);
+    assert_eq!(
+        answer["worktree_add"]["entered"],
+        Value::from("cd ~/app-fix && bun run build")
+    );
+}
+
+#[test]
+fn another_accounts_home_names_no_checkout() {
+    let root = workspace();
+    let home = workspace();
+    let mut req = request(
+        "git worktree add --detach ~other/app-fix HEAD && cd ~other/app-fix && bun run build",
+        root.path(),
+    );
+    req.home_dir = Some(home.path().to_string_lossy().into_owned());
+    let answer = evaluate(&req);
+    assert!(answer["worktree_add"].is_null() || answer["worktree_add"]["checkout"].is_null());
 }

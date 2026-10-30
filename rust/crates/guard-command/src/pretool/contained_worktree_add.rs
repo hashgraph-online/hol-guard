@@ -58,6 +58,8 @@ pub(crate) struct Parts {
     pub(crate) entered: String,
     /// The checks alone.
     pub(crate) checks: String,
+    /// The checkout as both the add and the `cd` spelled it.
+    pub(crate) destination: String,
 }
 
 /// `git worktree add [options] <checkout> [ref] && cd <checkout> && <checks>`,
@@ -124,6 +126,7 @@ pub(crate) fn split(text: &str) -> Option<Parts> {
         add: add.to_owned(),
         entered: entered.to_owned(),
         checks: checks.to_owned(),
+        destination: destination.to_owned(),
     })
 }
 
@@ -196,6 +199,29 @@ pub(crate) fn rejudge(
     mark_contained(&mut result);
     result.reason = REASON_TEXT.into();
     result
+}
+
+/// The directory `cd <destination>` enters from `workspace`, as the shell
+/// would reach it. The sink ran the command from `workspace`, so a relative
+/// checkout lands beside it; an unquoted `~/` comes from the declared home,
+/// which `split` has already proved, and `~other` names an account Guard
+/// never resolves.
+pub(crate) fn resolved_checkout(
+    destination: &str,
+    workspace: &str,
+    home_dir: Option<&str>,
+) -> Option<PathBuf> {
+    let target = if destination == "~" || destination.starts_with("~/") {
+        crate::home_path_text::expand_home(destination, Some(Path::new(home_dir?)))
+    } else if destination.starts_with('~') {
+        return None;
+    } else {
+        destination.to_owned()
+    };
+    Some(PathBuf::from(crate::home_path_text::normalize_path(
+        &target,
+        Some(Path::new(workspace)),
+    )))
 }
 
 fn request(text: &str) -> CommandModelRequestV1 {

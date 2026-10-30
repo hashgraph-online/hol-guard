@@ -72,7 +72,9 @@ def run_chain(
     """Route the chain through the workspace sink; return its exit, authorizations and rest calls."""
     asked: list[str] = []
     rested: list[dict[str, object]] = []
-    answer = {"worktree_add": {"add": ADD, "entered": entered}} if split is None else split
+    # Rust reads the checkout out of the chain; the sink only takes it from there.
+    native = {"add": ADD, "entered": entered, "checkout": str(workspace.parent / "app-fix")}
+    answer = {"worktree_add": native} if split is None else split
     monkeypatch.setattr(contained_worktree_add, "native_contained_wrapper_plan", lambda command, **kwargs: answer)
 
     def authorize(request: dict[str, object]) -> dict[str, object]:
@@ -139,6 +141,9 @@ def test_an_add_that_no_longer_passes_creates_nothing(
         # A resident too old to split the chain.
         ({}, None),
         ({"worktree_add": {"add": ADD}}, None),
+        # Rust named no checkout, so the sink has nothing it could keep out of the run.
+        ({"worktree_add": {"add": ADD, "entered": ENTERED}}, None),
+        ({"worktree_add": {"add": ADD, "entered": ENTERED, "checkout": ""}}, None),
         # The chain's evidence changed after it was routed here.
         (None, chain_receipt(command_binding_digest="b" * 64)),
         (None, receipt()),
@@ -182,25 +187,21 @@ def test_a_rest_that_is_refused_says_the_worktree_exists(monkeypatch: pytest.Mon
     assert ENTERED in str(caught.value)
 
 
-@pytest.mark.parametrize(
-    ("entered", "expected"),
-    [
-        ("cd ../app-fix && npm test", "org/app-fix"),
-        ("cd ~/app-fix && npm test", "app-fix"),
-        ("cd '../app fix' && npm test", "org/app fix"),
-        ("cd ../app#fix && npm test", "org/app#fix"),
-        ("cd ../app #fix && npm test", None),
-        ("cd ../app-fix; npm test", None),
-        ("cd ~other/app-fix && npm test", None),
-        ("cd '~/app-fix' && npm test", None),
-        ("npm test && cd ../app-fix && ls", None),
-        ("cd '../app-fix && npm test", None),
-    ],
-)
-def test_the_checkout_is_read_from_the_cd(tmp_path: Path, entered: str, expected: str | None) -> None:
-    workspace = tmp_path / "org" / "app"
-    checkout = contained_worktree_add.checkout_of(entered, workspace=workspace, home=tmp_path)
-    assert checkout == (None if expected is None else tmp_path / expected)
+def test_the_checkout_comes_from_the_native_answer(monkeypatch: pytest.MonkeyPatch, repository: Path) -> None:
+    """The sink keeps the directory Rust named out of the add, wherever it sits."""
+    elsewhere = repository.parent.parent / "elsewhere"
+    split = {"worktree_add": {"add": ADD, "entered": ENTERED, "checkout": str(elsewhere)}}
+    excluded: list[object] = []
+    real = contained_worktree_add.run_on_host
+
+    def record(command: str, **kwargs: object) -> int:
+        excluded.append(kwargs.get("excluded"))
+        return real(command, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(contained_worktree_add, "run_on_host", record)
+    exit_code, _, _ = run_chain(monkeypatch, repository, split=split)
+    assert exit_code == 0
+    assert excluded[0] == (elsewhere,)
 
 
 def test_host_steps_skip_the_new_checkout_on_path_and_find_git_from_the_checkout(

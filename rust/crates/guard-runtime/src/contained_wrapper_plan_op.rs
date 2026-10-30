@@ -76,10 +76,11 @@ fn encode(plan: &ContainedWrapperPlan) -> Value {
             .as_ref()
             .map(|root| root.to_string_lossy()),
         "project_root": plan.project_root.as_ref().map(|root| root.to_string_lossy()),
-        "worktree_add": plan
-            .worktree_add
-            .as_ref()
-            .map(|(add, entered)| json!({"add": add, "entered": entered})),
+        "worktree_add": plan.worktree_add.as_ref().map(|chain| json!({
+            "add": chain.add,
+            "entered": chain.entered,
+            "checkout": chain.checkout.as_ref().map(|path| path.to_string_lossy()),
+        })),
     })
 }
 

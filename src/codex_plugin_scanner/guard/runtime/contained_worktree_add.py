@@ -13,8 +13,6 @@ in the checkout runs unless that judgement holds.
 
 from __future__ import annotations
 
-import os
-import shlex
 import sys
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -40,41 +38,18 @@ def _reject(message: str) -> RestrictedPytestError:
     return RestrictedPytestError(PYTEST_INVALID_COMMAND_REASON_CODE, message)
 
 
-def worktree_add_parts(command: str, *, workspace: Path, home: Path | None) -> tuple[str, str] | None:
-    """The add and the `cd <checkout> && <checks>` after it, as Rust split them."""
+def worktree_add_parts(command: str, *, workspace: Path, home: Path | None) -> tuple[str, str, Path | None] | None:
+    """The add, the `cd <checkout> && <checks>` after it, and the checkout, as Rust read them."""
     answer = native_contained_wrapper_plan(command, workspace=workspace, cwd=workspace, home=home)
     parts = answer.get("worktree_add")
     if not isinstance(parts, Mapping):
         return None
-    add, entered = parts.get("add"), parts.get("entered")
+    add, entered, checkout = parts.get("add"), parts.get("entered"), parts.get("checkout")
     if not isinstance(add, str) or not isinstance(entered, str) or not add or not entered:
         return None
-    return add, entered
-
-
-def checkout_of(entered: str, *, workspace: Path, home: Path | None) -> Path | None:
-    """The directory `cd <checkout> && <checks>` enters, resolved from `workspace`."""
-    lexer = shlex.shlex(entered, posix=True, punctuation_chars=True)
-    lexer.whitespace_split = True
-    # The shell reads `#` inside a word as part of it, as in `../app#fix`.
-    lexer.commenters = ""
-    try:
-        tokens = list(lexer)
-    except ValueError:
-        return None
-    if len(tokens) < 4 or tokens[0] != "cd" or tokens[2] != "&&" or not tokens[1]:
-        return None
-    target = tokens[1]
-    # The shell expands only an unquoted `~`.
-    if target.startswith("~") and not entered[2:].lstrip().startswith("~"):
-        return None
-    if target == "~" or target.startswith("~/"):
-        if home is None:
-            return None
-        target = str(home) + target[1:]
-    elif target.startswith("~"):
-        return None
-    return Path(os.path.normpath(workspace / target))
+    # Rust leaves the checkout out when the spelling names a home it was not
+    # given; the sink then has no directory to keep out of the run.
+    return add, entered, Path(checkout) if isinstance(checkout, str) and checkout else None
 
 
 def _same_chain(receipt: object, first: Mapping[str, object]) -> bool:
@@ -120,8 +95,7 @@ def run_worktree_add(
         raise _reject("Guard could not split this command again; nothing ran.") from error
     if parts is None:
         raise _reject("Guard could not split this command again; nothing ran.")
-    add, entered = parts
-    checkout = checkout_of(entered, workspace=workspace, home=home_dir)
+    add, entered, checkout = parts
     if checkout is None:
         raise _reject("Guard could not read the new checkout from this command; nothing ran.")
     # The chain must still carry the receipt it was routed here with.
