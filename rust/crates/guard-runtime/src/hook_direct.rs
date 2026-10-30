@@ -665,7 +665,7 @@ mod emergency_safe;
 #[path = "hook_direct_fence.rs"]
 mod fence;
 #[path = "hook_direct_lifecycle.rs"]
-mod lifecycle;
+pub(crate) mod lifecycle;
 #[path = "hook_direct_local_cli.rs"]
 pub(crate) mod local_cli;
 #[path = "hook_direct_pi.rs"]

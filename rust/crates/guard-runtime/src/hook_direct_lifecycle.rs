@@ -90,7 +90,7 @@ fn event_name(payload: &Map<String, Value>) -> Result<&str, HookDirectDefer> {
 }
 
 /// The harness response `fail_closed_response` returns for `event`.
-fn constant_response(harness: &str, event: &str) -> Value {
+pub(crate) fn constant_response(harness: &str, event: &str) -> Value {
     // `fail_closed_response` answers every Grok lifecycle hook with `{}`.
     if harness == GROK {
         return json!({});

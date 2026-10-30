@@ -17,8 +17,12 @@ use crate::hook_direct::claude_permission_text::{
     notification_tool_name, permission_prompt_event, permission_prompt_notification_response,
     permission_request_response, PERMISSION_PROMPT_EVENT,
 };
+use crate::hook_direct::lifecycle::constant_response;
 
 const TURN_STOP_EVENT: &str = "claude/turn_stop";
+/// The harness and event `claude_turn_stop` answers.
+const CLAUDE_CODE: &str = "claude-code";
+const STOP: &str = "Stop";
 
 impl Env<'_> {
     /// `claude_permission_request_response`: Claude's dialog is denied in
@@ -50,7 +54,9 @@ impl Env<'_> {
 
     /// `claude_turn_stop`: the session's unanswered prompts are dropped, so the
     /// next turn reviews the call again instead of inheriting a block nobody
-    /// chose, and the turn's end is recorded with how many were dropped.
+    /// chose, and the turn's end is recorded with how many were dropped. The
+    /// reply carries the constant the direct lane answers `Stop` with, so the
+    /// daemon needs no second call to the edge for it.
     pub(super) fn claude_turn_stop(
         &self,
         session_id: Option<&str>,
@@ -65,7 +71,10 @@ impl Env<'_> {
                 "{{\"session_id\": {session}, \"discarded_pending_permissions\": {discarded}}}"
             ),
         )?;
-        Ok(json!({ "discarded": discarded }))
+        Ok(json!({
+            "discarded": discarded,
+            "harness_response": constant_response(CLAUDE_CODE, STOP),
+        }))
     }
 
     /// The session's notice for the tool the hook names, marked seen.

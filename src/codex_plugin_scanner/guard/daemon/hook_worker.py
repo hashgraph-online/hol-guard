@@ -363,7 +363,8 @@ class HookWorker(HookWorkerNativeMixin):
         reads the session's pending Guard review, marks it seen and records
         the prompt. ``Stop`` drops the session's unanswered prompts, so the
         next turn reviews the call again instead of inheriting a block nobody
-        chose, and the edge still answers it. A ``PostToolUse`` that answers
+        chose, and the same call returns its answer; a runtime too old to
+        return one leaves ``Stop`` to the edge. A ``PostToolUse`` that answers
         the HOL Guard approval question saves that answer.
         """
         if event_name == "PostToolUse":
@@ -397,10 +398,8 @@ class HookWorker(HookWorkerNativeMixin):
             session_id=_optional_string(payload.get("session_id")),
             payload={name: payload[name] for name in _CLAUDE_LIFECYCLE_FIELDS if name in payload},
         )
-        if op == "claude_turn_stop":
-            return None
         answered = object_field(reply, "harness_response")
-        if answered is not None:
+        if answered is not None or op == "claude_turn_stop":
             return answered
         if op == "claude_permission_request":
             from ..adapters.claude_hook_config import CLAUDE_GUARD_PERMISSION_PASSTHROUGH_KEY

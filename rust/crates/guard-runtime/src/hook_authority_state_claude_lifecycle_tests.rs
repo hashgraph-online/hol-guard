@@ -23,6 +23,17 @@ use crate::hook_direct::claude_permission_text::{
 const CLAUDE_NOTICE: &str = "claude_permission_notice:";
 
 /// `_optional_string` on a notice field.
+/// The daemon's `fail_closed_response` for Claude's `Stop`, which the op
+/// returns so the daemon answers the hook without asking the edge.
+fn stop_answer() -> Value {
+    json!({
+        "continue": true,
+        "policy_action": "allow",
+        "reason_code": "native_hook_event_unavailable",
+        "hookSpecificOutput": { "hookEventName": "Stop" },
+    })
+}
+
 fn field(notice: &Map<String, Value>, name: &str) -> Option<String> {
     let text = py_strip(notice.get(name)?.as_str()?);
     (!text.is_empty()).then(|| text.to_owned())
@@ -180,7 +191,7 @@ fn lifecycle_ops_match_the_sequences_they_replace() {
                                  \"discarded_pending_permissions\": {discarded}}}"
                             ),
                         );
-                        json!({ "discarded": discarded })
+                        json!({ "discarded": discarded, "harness_response": stop_answer() })
                     },
                     |at| {
                         base.call(
@@ -229,7 +240,10 @@ fn a_hook_without_a_session_reads_no_notice_and_still_records_its_event() {
         json!({ "payload": hook }),
     );
     let stopped = base.call(&path, "claude_turn_stop", json!({ "payload": {} }));
-    assert_eq!(stopped, json!({ "discarded": 0 }));
+    assert_eq!(
+        stopped,
+        json!({ "discarded": 0, "harness_response": stop_answer() })
+    );
     let names: Vec<String> = super::vectors::events(&connection)
         .into_iter()
         .map(|(name, _, _)| name)

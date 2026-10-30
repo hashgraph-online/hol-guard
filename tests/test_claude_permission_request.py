@@ -129,9 +129,32 @@ def test_a_permission_prompt_without_the_resident_still_tells_claude_to_wait(
     assert "HOL Guard" in str(response["systemMessage"])
 
 
-def test_stop_drops_the_sessions_prompts_and_leaves_the_answer_to_the_edge(
+def test_stop_is_answered_by_the_call_that_drops_the_sessions_prompts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    stop_answer = {
+        "continue": True,
+        "policy_action": "allow",
+        "reason_code": "native_hook_event_unavailable",
+        "hookSpecificOutput": {"hookEventName": "Stop"},
+    }
+    calls = _resident(monkeypatch, {"discarded": 1, "harness_response": stop_answer})
+    worker = HookWorker(store=GuardStore(tmp_path / "guard-home"), wait_for_native_policy=False)
+
+    def no_edge(**_kwargs: object) -> dict[str, object]:
+        raise AssertionError("Stop reached the edge")
+
+    monkeypatch.setattr(worker, "_review_native_edge", no_edge)
+    try:
+        response = _review(worker, tmp_path, {"session_id": "s", "hook_event_name": "Stop"})
+    finally:
+        worker.close()
+
+    assert response == stop_answer
+    assert [(op, fields["session_id"]) for op, fields in calls] == [("claude_turn_stop", "s")]
+
+
+def test_stop_from_an_older_runtime_is_left_to_the_edge(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     calls = _resident(monkeypatch, {"discarded": 1})
     worker = HookWorker(store=GuardStore(tmp_path / "guard-home"), wait_for_native_policy=False)
     try:
@@ -140,4 +163,4 @@ def test_stop_drops_the_sessions_prompts_and_leaves_the_answer_to_the_edge(
         worker.close()
 
     assert answered is None
-    assert [(op, fields["session_id"]) for op, fields in calls] == [("claude_turn_stop", "s")]
+    assert [op for op, _fields in calls] == ["claude_turn_stop"]
