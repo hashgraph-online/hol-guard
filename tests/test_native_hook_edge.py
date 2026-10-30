@@ -194,6 +194,12 @@ def test_edge_decoder_reads_whether_the_edge_recorded_its_receipt(recorded: obje
     assert _decode_edge(edge) == (edge if accepted else None)
 
 
+@pytest.mark.parametrize(("hint", "accepted"), [(True, True), (False, True), ("no", False), (0, False)])
+def test_edge_decoder_reads_whether_a_saved_block_may_name_the_command(hint: object, accepted: bool) -> None:
+    edge = {**_edge_result(), "exact_command_block": hint}
+    assert _decode_edge(edge) == (edge if accepted else None)
+
+
 _EVIDENCE = {"policy_binding_valid": True, "binding": "binding", "token": None, "once_only_reason": "reason"}
 
 
