@@ -99,6 +99,14 @@
    "body": "22fcfd5bf8a5"
   },
   {
+   "verdict": "other-platform",
+   "note": "Windows answers this in its own arm through `guard_runtime_windows_process::is_single_link_file`; this one covers a platform Guard does not ship for, and it answers `false` for every existing regular file. `existing_contents_admissible` then refuses the build output root, so an unshipped platform never grants a directory whose files may carry a second name outside it.",
+   "file": "rust/crates/guard-command/src/node_build_output.rs",
+   "item": "fn single_link_file -- non-Unix block",
+   "cfg": "all(not(unix), not(windows))",
+   "body": "bf7c0e200453"
+  },
+  {
    "file": "rust/crates/guard-command/src/package_intent_parser/local_files.rs",
    "item": "fn is_executable -- non-Unix block",
    "verdict": "posix-primitive",
@@ -1566,9 +1574,9 @@
    "file": "rust/crates/guard-runtime/src/restricted_pytest_op.rs",
    "item": "fn evaluate -- non-Unix block",
    "verdict": "windows-equivalent",
-   "note": "The `linux_*` operations and `process_ceiling` are answered before this block on every platform. Inside it, off Unix only `contained_argv`, `vite_output`, `normalized_command` and, on Windows, three planners answer: inline scripts and pytest get a read-only AppContainer plan (`windows_readonly`, `windows_pytest`), and `windows_node_build` stages Node tools into a private copy, running checking tools under `node-tool-readonly-v1` and Vite builds under `node-build-output-v1`, which publishes the declared output directories back after a clean exit. Any other operation here, and every one on a non-Windows platform without the Unix backend, answers `pytest_restricted_sandbox_unavailable` and nothing is started.",
+   "note": "The `linux_*` operations and `process_ceiling` are answered before this block on every platform. Inside it, off Unix only `contained_argv`, `vite_output`, `node_build_output`, `normalized_command` and, on Windows, three planners answer: inline scripts and pytest get a read-only AppContainer plan (`windows_readonly`, `windows_pytest`), and `windows_node_build` stages Node tools into a private copy, running checking tools under `node-tool-readonly-v1` and Vite builds under `node-build-output-v1`, which publishes the declared output directories back after a clean exit. Any other operation here, and every one on a non-Windows platform without the Unix backend, answers `pytest_restricted_sandbox_unavailable` and nothing is started.",
    "cfg": "not(unix)",
-   "body": "86ee28d15c7c"
+   "body": "06df1c2ee726"
   },
   {
    "verdict": "other-platform",

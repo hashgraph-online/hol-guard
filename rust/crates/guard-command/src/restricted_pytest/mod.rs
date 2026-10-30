@@ -243,6 +243,10 @@ pub use mapping::evidence as mapping_evidence;
 pub use validation::python_args_target_pytest;
 pub use workspace::workspace_script_reads;
 pub(crate) use workspace_linux::available as linux_workspace_sandbox_available;
+/// The runtime's own contained sink makes an overlay's layers and removes
+/// them, so it removes them the way the Linux backend's own probe does
+/// rather than keeping a second copy of the kernel's work-directory rule.
+pub use workspace_linux::remove_overlay_root as remove_workspace_overlay_root;
 #[cfg(test)]
 mod parity_tests;
 use executables::*;

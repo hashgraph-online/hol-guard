@@ -34,9 +34,13 @@ pub(crate) fn safe_grep_segment(
         .iter()
         .filter(|other| other.span != segment.span)
         .collect();
+    // Both absent routes read an operand as the command spells it, so a
+    // drive path whose backslashes the shell drops before `grep` runs names
+    // a different directory to the program than to the proof.
+    let quoted = crate::pretool::directory_targets::drive_targets_quoted(segment);
     let absent = AbsentOperands {
-        plain: others.iter().all(|other| creates_nothing(other, false)),
-        recursive: others.iter().all(|other| creates_nothing(other, true)),
+        plain: quoted && others.iter().all(|other| creates_nothing(other, false)),
+        recursive: quoted && others.iter().all(|other| creates_nothing(other, true)),
     };
     safe_arguments(&segment.arguments, context, false, absent)
 }
@@ -456,8 +460,16 @@ fn recursive_targets_proven(
 /// does: its nearest existing ancestor must be a readable directory and every
 /// missing name visible and clear of the sensitive screens. Agents pass a
 /// fixed list of roots (`src tests lib`) whether or not each one exists.
-fn absent_target(value: &str, context: ReadContext<'_>) -> bool {
-    crate::pretool::listing_reads::absent_listing_operand(value, context)
+///
+/// The shell expands `~` from its own `HOME` while this screen reads the
+/// declared one, so a `~` root is proven absent only once `shell_home_matches`
+/// says the two name one directory. Without that, the search could open a tree
+/// that is there under the shell's home while the proof measured a name that
+/// is not there under the declared one. The recursive listing screen draws the
+/// same line.
+pub(super) fn absent_target(value: &str, context: ReadContext<'_>) -> bool {
+    (!value.starts_with('~') || context.shell_home_matches)
+        && crate::pretool::listing_reads::absent_listing_operand(value, context)
 }
 
 /// A shell glob operand whose every expansion is screened, and whose matched

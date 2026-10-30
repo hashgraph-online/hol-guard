@@ -178,6 +178,7 @@ mod native_command_extension_evidence_tests;
 pub mod native_command_program;
 pub mod network_protection_bundle;
 pub mod network_url;
+pub mod node_build_output;
 pub mod npm_source_spec;
 pub mod ordered_json;
 #[cfg(unix)]

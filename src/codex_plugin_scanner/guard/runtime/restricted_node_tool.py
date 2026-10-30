@@ -23,9 +23,8 @@ from .restricted_pytest_model import (
 )
 from .restricted_pytest_sandbox import _run_backend_process
 from .restricted_pytest_validation import _normalized_command, _path_is_within
-from .restricted_vite_output import config_bundle_directory, declared_vite_output
+from .restricted_vite_output import config_bundle_directory
 from .restricted_vitest import run_restricted_node_plan
-from .secret_sensitivity import classify_secret_path
 
 # How much longer than the run's own deadline this waits for the native
 # runner. The runner counts that deadline against the tool alone: staging a
@@ -60,18 +59,6 @@ def _tool_entry(entries: Sequence[str], cwd: Path, workspace: Path) -> tuple[Pat
         return modules, relative
     first = entries[0]
     return nearest_project_root(cwd, workspace, "node_modules/" + first) / "node_modules", first
-
-
-def _package_directory(directory: Path, workspace: Path) -> bool:
-    """The workspace root, or a package directory below it reached without links."""
-    if directory == workspace:
-        return True
-    if not _path_is_within(directory, workspace) or not (directory / "package.json").is_file():
-        return False
-    parts = directory.relative_to(workspace).parts
-    if any(part.startswith(".") or part == "node_modules" for part in parts):
-        return False
-    return not any((workspace.joinpath(*parts[: index + 1])).is_symlink() for index in range(len(parts)))
 
 
 def _is_real_directory(path: Path) -> bool:
@@ -124,86 +111,49 @@ def _create_vite_temp_directory(root: Path, workspace: Path) -> None:
         )
 
 
-def _conventional_output(path: Path, workspace: Path) -> bool:
-    # A package below the workspace (a monorepo app reached with `cd`) builds
-    # into its own dist, next to its package.json.
-    return _package_directory(path.parent, workspace) and path.name in {"dist", "build", "out"}
+def validate_build_output_root(
+    path: Path,
+    *,
+    workspace: Path,
+    cwd: Path | None = None,
+    arguments: Sequence[str] | None = None,
+) -> None:
+    """Ask native authority whether a build may write this directory.
 
+    The reading is a verdict — a conventional `dist` beside a package
+    manifest, the config loader's own bundle directory, or the literal
+    directory the Vite config the command loads names, and nothing already
+    there that emptying the directory would destroy or write through. The
+    sandbox asks again just before it launches, so a plan cannot be granted
+    one directory and started against another, and both askings read the same
+    native answer.
 
-def validate_build_output_root(path: Path, *, workspace: Path, cwd: Path | None = None) -> None:
-    """Accept a conventional build directory, or the literal one the Vite config in `cwd` names."""
-    bundle = cwd is not None and not path.is_symlink() and config_bundle_directory(cwd, workspace, path.parent) == path
-    conventional = _conventional_output(path, workspace)
-    # A config that names a non-literal outDir raises. Check the bundle
-    # directory first so that recheck does not refuse a command-line --outDir.
-    declared = not bundle and not conventional and cwd is not None and declared_vite_output(cwd, workspace) == path
-    if path.is_symlink() or not (conventional or declared or bundle):
-        raise RestrictedPytestError(
-            "node_build_invalid_output", "Build output must be a dedicated generated directory."
-        )
-    if not path.exists():
-        return
-    if not path.is_dir():
-        raise RestrictedPytestError("node_build_invalid_output", "Build output is not a directory.")
-    visited = 0
-    for directory, folders, files in os.walk(path, followlinks=False):
-        for name in (*folders, *files):
-            visited += 1
-            candidate = Path(directory) / name
-            if classify_secret_path(str(candidate), cwd=workspace) is not None:
-                raise RestrictedPytestError("node_build_invalid_output", "Build output contains protected data.")
-            metadata = candidate.lstat()
-            if (
-                visited > 20_000
-                or stat.S_ISLNK(metadata.st_mode)
-                or (stat.S_ISREG(metadata.st_mode) and metadata.st_nlink != 1)
-            ):
-                raise RestrictedPytestError(
-                    "node_build_invalid_output", "Build output has unverified links or exceeds the discovery budget."
-                )
-
-
-def _explicit_vite_config(args: Sequence[str], cwd: Path) -> Path | None:
-    """The last `--config` file, relative to the build's working directory."""
-
-    chosen: str | None = None
-    index = 0
-    while index < len(args):
-        value = args[index]
-        if value in {"-c", "--config"}:
-            if index + 1 >= len(args) or args[index + 1].startswith("-"):
-                raise RestrictedPytestError("node_build_invalid_output", "Missing Vite config.")
-            chosen = args[index + 1]
-            index += 2
-            continue
-        if value.startswith("--config="):
-            chosen = value.removeprefix("--config=")
-            if not chosen:
-                raise RestrictedPytestError("node_build_invalid_output", "Missing Vite config.")
-        index += 1
-    if chosen is None:
-        return None
-    path = Path(chosen)
-    return path if path.is_absolute() else cwd / path
+    `arguments` are the command's own words. They travel with the question so
+    native authority reads the config the build names rather than the default
+    one beside it, which would refuse the directory the named config declares.
+    """
+    fields: dict[str, object] = {"path": path, "workspace": workspace}
+    if cwd is not None:
+        fields["cwd"] = cwd
+    if arguments is not None:
+        fields["arguments"] = list(arguments)
+    restricted_native("node_build_output_admissible", fields, (bool,))
 
 
 def _vite_output(args: Sequence[str], *, workspace: Path, cwd: Path) -> Path:
-    """The build's last `--outDir`, else the config's literal one, else `dist`."""
-    output_name = None
-    for index, value in enumerate(args):
-        if value.startswith("--outDir="):
-            output_name = value.removeprefix("--outDir=")
-        elif value == "--outDir":
-            if index + 1 >= len(args):
-                raise RestrictedPytestError("node_build_invalid_output", "Missing output directory.")
-            output_name = args[index + 1]
-    # `--outDir` wins. Otherwise read the config the command names, or the
-    # default vite.config.* when it names none. Skipping a named config used
-    # to grant `dist` while Vite wrote the directory that file declared.
-    declared = None if output_name else declared_vite_output(cwd, workspace, config=_explicit_vite_config(args, cwd))
-    output = declared or cwd / (output_name or "dist")
-    validate_build_output_root(output, workspace=workspace, cwd=None if declared is None else cwd)
-    return output
+    """The one directory this build may write, as native authority reads it.
+
+    The command's own `--outDir`, the config it names, and the admissibility
+    of what that reading lands on are one native answer, so the words the
+    build was given and the grant it receives cannot drift apart.
+    """
+    return Path(
+        restricted_native(
+            "node_build_output_root",
+            {"arguments": list(args), "workspace": workspace, "cwd": cwd},
+            (str,),
+        )
+    )
 
 
 def _prepare_windows_tool(

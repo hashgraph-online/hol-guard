@@ -83,6 +83,18 @@ def _route(
     }
 
 
+# Which directory a build's own words and the project's Vite config name is
+# one reading in native authority, tested there (`node_build_output_tests.rs`).
+# These are its answers for the builds under test, named rather than read, so
+# the stand-in below cannot answer for the reader it replaces. `None` is the
+# answer for a build that names a directory it may not write.
+_OUTPUTS: dict[tuple[str, ...], str | None] = {
+    ("build",): "dist",
+    ("build", "--outDir", "build"): "build",
+    ("build", "--outDir", "src"): None,
+}
+
+
 class _Resident:
     """Native authority's answers, and the questions the sink asked for them."""
 
@@ -90,12 +102,19 @@ class _Resident:
         self.route = route
         self.calls: list[tuple[str, dict[str, object]]] = []
 
-    def __call__(self, operation: str, fields: dict[str, object], _expected: object) -> dict[str, object]:
+    def __call__(self, operation: str, fields: dict[str, object], _expected: object) -> object:
         self.calls.append((operation, dict(fields)))
         if operation == "node_tool_route":
             if isinstance(self.route, RestrictedPytestError):
                 raise self.route
             return self.route
+        if operation == "node_build_output_root":
+            name = _OUTPUTS[tuple(str(word) for word in fields["arguments"])]
+            if name is None:
+                raise RestrictedPytestError(
+                    "node_build_invalid_output", "Build output must be a dedicated generated directory."
+                )
+            return str(Path(str(fields["cwd"])) / name)
         return _plan(
             Path(str(fields["workspace"])),
             Path(str(fields["cwd"])),
@@ -106,7 +125,9 @@ class _Resident:
     @property
     def staged(self) -> dict[str, object]:
         """The fields the one staging call carried, after the one route read."""
-        assert [operation for operation, _ in self.calls] == ["node_tool_route", "prepare_node_build"]
+        operations = [operation for operation, _ in self.calls]
+        assert operations[:2] == ["node_tool_route", "prepare_node_build"]
+        assert operations[2:] in ([], ["node_build_output_root"])
         return self.calls[1][1]
 
 

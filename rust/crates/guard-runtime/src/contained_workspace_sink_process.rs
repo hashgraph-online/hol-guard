@@ -5,7 +5,8 @@
 //! its output captured to private files that are replayed once it exits, as
 //! `guard execute-contained-test` did. An interrupt or termination the sink
 //! receives goes to the command's process group; with no command running the
-//! sink removes its scratch directory and exits as the signal would have.
+//! sink removes its scratch directory and any overlay layers a Linux run had
+//! already made, then exits as the signal would have.
 
 use std::collections::BTreeMap;
 use std::fs::File;
@@ -45,6 +46,7 @@ const PROCESS_LIMIT_SCRIPT: &str = concat!(
 struct Running {
     child: Option<i32>,
     scratch: Option<PathBuf>,
+    overlay: Option<PathBuf>,
 }
 
 /// Interrupts and terminations, held for the sink and forwarded to the
@@ -82,6 +84,18 @@ impl Signals {
         }
     }
 
+    /// Remove `overlay` should a signal end the sink before the command
+    /// starts. A run's layers are removed by the overlay root's own drop,
+    /// which an exit from the signal thread would skip; a root already gone
+    /// by then is removed again harmlessly, and a second run replaces this
+    /// path before it makes layers of its own.
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+    pub(super) fn clean_up_overlay(&self, overlay: PathBuf) {
+        if let Ok(mut running) = self.running.lock() {
+            running.overlay = Some(overlay);
+        }
+    }
+
     fn track(&self, child: Option<i32>) {
         if let Ok(mut running) = self.running.lock() {
             running.child = child;
@@ -102,6 +116,9 @@ fn forward(running: &Mutex<Running>, signal: Signal) {
         None => {
             if let Some(scratch) = &running.scratch {
                 let _ = std::fs::remove_dir_all(scratch);
+            }
+            if let Some(overlay) = &running.overlay {
+                guard_command::restricted_pytest::remove_workspace_overlay_root(overlay);
             }
             std::process::exit(128 + signal as i32);
         }
@@ -346,6 +363,7 @@ pub(crate) fn launch(args: &[String]) -> i32 {
         return launch_failed("invalid launch arguments");
     };
     let _ = nix::unistd::setsid();
+    release_forwarded_signals();
     limit_resources(ceiling);
     #[cfg(target_vendor = "apple")]
     let error = Command::new("/bin/sh")
@@ -358,6 +376,20 @@ pub(crate) fn launch(args: &[String]) -> i32 {
     #[cfg(not(target_vendor = "apple"))]
     let error = Command::new(&argv[0]).args(&argv[1..]).exec();
     launch_failed(&error.to_string())
+}
+
+/// Take `SIGINT` and `SIGTERM` back in the process the contained command
+/// will become.
+///
+/// The sink blocks both so its own thread can wait on them, and a blocked
+/// signal stays blocked across `exec`. Left that way, the signal the sink
+/// forwards to the command's process group would never be delivered and an
+/// interrupted run would wait for the timeout instead of stopping.
+pub(super) fn release_forwarded_signals() {
+    let mut held = SigSet::empty();
+    held.add(Signal::SIGINT);
+    held.add(Signal::SIGTERM);
+    let _ = held.thread_unblock();
 }
 
 fn launch_failed(detail: &str) -> i32 {

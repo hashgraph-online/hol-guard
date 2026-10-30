@@ -2,6 +2,7 @@ use std::os::unix::fs::PermissionsExt;
 
 use sha2::{Digest, Sha256};
 
+use super::overlay::OverlayRoot;
 use super::plan_check::linked_git;
 use super::snapshot::decode_request;
 use super::*;
@@ -403,4 +404,59 @@ fn private_home_holds_only_a_plain_safety_guide() {
         .unwrap();
     };
     assert_eq!(seeded(&oversized), None);
+}
+
+#[test]
+fn the_launcher_takes_back_the_signals_the_sink_holds() {
+    // The sink blocks both signals so its own thread can wait on them, and
+    // the launcher inherits that mask across `exec`. Run in a thread of its
+    // own, because a signal mask belongs to the thread that sets it.
+    let held = std::thread::spawn(|| {
+        let mut set = nix::sys::signal::SigSet::empty();
+        set.add(nix::sys::signal::Signal::SIGINT);
+        set.add(nix::sys::signal::Signal::SIGTERM);
+        set.thread_block().unwrap();
+        let blocked = nix::sys::signal::SigSet::thread_get_mask().unwrap();
+        assert!(blocked.contains(nix::sys::signal::Signal::SIGINT));
+        assert!(blocked.contains(nix::sys::signal::Signal::SIGTERM));
+
+        super::process::release_forwarded_signals();
+        nix::sys::signal::SigSet::thread_get_mask().unwrap()
+    })
+    .join()
+    .unwrap();
+    assert!(!held.contains(nix::sys::signal::Signal::SIGINT));
+    assert!(!held.contains(nix::sys::signal::Signal::SIGTERM));
+}
+
+#[test]
+fn an_overlay_root_holds_only_the_layers_its_run_needs() {
+    let plain = OverlayRoot::create(false).unwrap();
+    let path = plain.path.clone();
+    assert_eq!(std::fs::canonicalize(&path).unwrap(), path);
+    for layer in [plain.upper(), plain.work()] {
+        let mode = std::fs::metadata(&layer).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o700, "{}", layer.display());
+    }
+    assert!(!plain.shared_upper().exists());
+    drop(plain);
+    assert!(!path.exists());
+
+    let linked = OverlayRoot::create(true).unwrap();
+    let path = linked.path.clone();
+    for layer in [linked.shared_upper(), linked.shared_work()] {
+        let mode = std::fs::metadata(&layer).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o700, "{}", layer.display());
+    }
+    // A mounted overlay leaves its work directory's inner directory
+    // unreadable, and removing the root has to get past that rather than
+    // leave the layers behind. A linked worktree mounts a second overlay, so
+    // its shared work directory is left the same way.
+    for work in [linked.work(), linked.shared_work()] {
+        let inner = work.join("work");
+        std::fs::create_dir(&inner).unwrap();
+        std::fs::set_permissions(&inner, std::fs::Permissions::from_mode(0o000)).unwrap();
+    }
+    drop(linked);
+    assert!(!path.exists());
 }

@@ -4,7 +4,8 @@
 //! rewritten to run this sink on a private snapshot of the call. The sink
 //! reads and removes the snapshot, asks the live resident for the receipt
 //! again, prepares the sandbox plan, asks once more so the plan and the launch
-//! bind the same evidence, and runs the command under Seatbelt. It replaces
+//! bind the same evidence, and runs the command under the host's sandbox:
+//! Seatbelt on macOS, a bubblewrap overlay on Linux. It replaces
 //! `guard execute-contained-test` for that shape, step for step: every check
 //! that fails, fails closed with the reason that command printed, and nothing
 //! runs outside the sandbox except the `git init` a plan bootstraps.
@@ -22,6 +23,9 @@ use serde_json::{json, Map, Value};
 mod denial;
 #[path = "contained_workspace_sink_grant.rs"]
 mod grant;
+#[cfg(any(target_os = "linux", all(unix, test)))]
+#[path = "contained_workspace_sink_overlay.rs"]
+mod overlay;
 #[path = "contained_workspace_sink_plan.rs"]
 mod plan_check;
 #[path = "contained_workspace_sink_process.rs"]
@@ -107,7 +111,9 @@ const GIT_SNAPSHOT_NAMES: [&str; 8] = [
 ];
 #[cfg(target_os = "macos")]
 const HOST_BACKEND: Option<&str> = Some("macos-seatbelt");
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
+const HOST_BACKEND: Option<&str> = Some("linux-bubblewrap");
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 const HOST_BACKEND: Option<&str> = None;
 const HOST_PLATFORM: &str = if cfg!(target_os = "macos") {
     "darwin"
