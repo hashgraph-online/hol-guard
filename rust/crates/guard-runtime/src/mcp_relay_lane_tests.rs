@@ -1,6 +1,6 @@
 use super::{
-    ensure_argv, gate_line, hands_off, kickable, startup, Gate, Kick, LaneKick, DAEMON_REFUSED,
-    DAEMON_UNREACHABLE,
+    ensure_argv, gate_line, hands_off, kickable, startup, DaemonKick, Gate, Kick, LaneKick,
+    DAEMON_REFUSED, DAEMON_UNREACHABLE, KICK_INTERVAL,
 };
 use crate::mcp_relay_args::parse;
 use std::cell::Cell;
@@ -263,4 +263,49 @@ fn the_ensure_command_reuses_the_proxy_interpreter_and_guard_home() {
             "/h",
         ]
     );
+}
+
+/// A daemon kick with no daemon to reach, last asked at `last`.
+fn daemon_kick(last: Option<(Instant, Kick)>) -> DaemonKick {
+    DaemonKick {
+        guard_home: std::env::temp_dir()
+            .join(format!("hol-guard-no-daemon-{}", std::process::id())),
+        workspace: String::new(),
+        readiness_path: "/v1/hooks/codex/readiness".to_owned(),
+        ensure: None,
+        last,
+    }
+}
+
+/// Within the kick interval the daemon is not asked again, and the kick says
+/// whether its last answer is still worth waiting on: only a daemon that took
+/// the request may still be preparing the lane.
+#[test]
+fn a_kick_within_the_interval_is_pending_only_after_the_daemon_took_it() {
+    let deadline = Instant::now() + Duration::from_secs(1);
+    let mut kick = daemon_kick(Some((Instant::now(), Kick::Requested)));
+    assert_eq!(kick.kick(deadline), Kick::Pending);
+    assert_eq!(kick.kick(deadline), Kick::Pending);
+    for answer in [Kick::Refused, Kick::DaemonUnreachable] {
+        let mut kick = daemon_kick(Some((Instant::now(), answer)));
+        assert_eq!(kick.kick(deadline), Kick::Skipped);
+    }
+}
+
+/// The answer is recorded with the time the daemon was asked, so a daemon
+/// that could not be reached is not waited on for the rest of the interval.
+#[test]
+fn a_kick_records_the_daemon_answer_for_the_interval() {
+    let deadline = Instant::now() + Duration::from_secs(1);
+    let Some(expired) = Instant::now().checked_sub(KICK_INTERVAL + Duration::from_millis(10))
+    else {
+        return;
+    };
+    let mut kick = daemon_kick(Some((expired, Kick::Requested)));
+    assert_eq!(kick.kick(deadline), Kick::DaemonUnreachable);
+    assert!(matches!(kick.last, Some((_, Kick::DaemonUnreachable))));
+    assert_eq!(kick.kick(deadline), Kick::Skipped);
+    let mut kick = daemon_kick(None);
+    assert_eq!(kick.kick(Instant::now()), Kick::Skipped);
+    assert!(kick.last.is_none(), "a kick with no time left asks nothing");
 }
