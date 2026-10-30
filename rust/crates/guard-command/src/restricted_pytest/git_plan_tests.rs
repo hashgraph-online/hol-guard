@@ -119,7 +119,7 @@ fn everyday_reads_are_planned_behind_their_helper_screens() {
         let git = fixture.0.join("tools/git");
         assert_eq!(value["profile_version"], "git-readonly-v1", "{reply}");
         assert_eq!(
-            value["command"][..4],
+            value["command"].as_array().unwrap()[..4],
             json!([git, "--no-pager", "-c", "core.fsmonitor=false"])
                 .as_array()
                 .unwrap()[..]
@@ -135,6 +135,7 @@ fn everyday_reads_are_planned_behind_their_helper_screens() {
 
 #[test]
 fn a_routed_read_runs_in_the_directory_it_named_and_stays_inside() {
+    let outside = fixture();
     let fixture = fixture();
     let reply = plan(&fixture, &["-C", "subdir", "grep", "needle"], trusted);
     let value = &reply["value"];
@@ -146,7 +147,6 @@ fn a_routed_read_runs_in_the_directory_it_named_and_stays_inside() {
             .unwrap()[..]
     );
     assert!(!value["command"].as_array().unwrap().contains(&json!("-C")));
-    let outside = fixture();
     let reply = plan(&outside, &["-C", "..", "grep", "needle"], trusted);
     assert!(reply.get("value").is_none(), "{reply}");
 }
