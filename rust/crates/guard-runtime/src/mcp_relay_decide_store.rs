@@ -81,8 +81,20 @@ pub(crate) fn saved<'c>(
     guard_home: &str,
     harness: &str,
 ) -> Result<Option<Saved<'c>>, &'static str> {
-    let shape = Shape { connection };
     let now = utc_now().ok_or(SAVED_UNVERIFIABLE)?;
+    saved_at(connection, binding, guard_home, harness, now)
+}
+
+/// `saved`, judged at the caller's `now`: the cached bundle is validated at
+/// the same time the lookup is evaluated at.
+pub(crate) fn saved_at<'c>(
+    connection: &'c Connection,
+    binding: &DirectLaneBinding,
+    guard_home: &str,
+    harness: &str,
+    now: String,
+) -> Result<Option<Saved<'c>>, &'static str> {
+    let shape = Shape { connection };
     let has_local_policy = shape.any(
         "policy_decisions",
         &format!("select 1 from policy_decisions where source not in {REMOTE_SOURCES_SQL}"),

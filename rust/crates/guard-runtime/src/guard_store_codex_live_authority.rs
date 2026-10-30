@@ -214,12 +214,12 @@ fn native_read(
         // builds that lookup.
         return Err(StoreError::Invalid(EVIDENCE_REQUIRED));
     };
-    let Some(mut saved) = saved_store::saved(connection, binding, guard_home, harness)
-        .map_err(|_| StoreError::Invalid(EVIDENCE_REQUIRED))?
+    let Some(saved) =
+        saved_store::saved_at(connection, binding, guard_home, harness, now.to_owned())
+            .map_err(|_| StoreError::Invalid(EVIDENCE_REQUIRED))?
     else {
         return Ok(Native::NoLookup);
     };
-    saved.now = now.to_owned();
     Ok(Native::Lookup(Box::new(saved.lookup_request(&Probe {
         harness,
         artifact_id,

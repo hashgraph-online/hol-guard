@@ -298,6 +298,29 @@ fn a_cached_bundle_keeps_only_its_rows_and_remote_rows_are_read() {
     assert_eq!(answer(&home)["decision"]["action"], "block");
 }
 
+#[cfg(unix)]
+#[test]
+fn the_cached_bundle_is_judged_at_the_callers_time() {
+    let (home, connection) = guard_home("bundle-clock");
+    sync_state(&connection, "policy_bundle", r#"{"bundleVersion": 1}"#);
+    decide(&connection, "artifact", "block", None, "policy-bundle");
+    let read_at = |now: &str| {
+        let connection = store::open(&home).unwrap().expect("store");
+        store::saved_at(
+            &connection,
+            &binding(),
+            home.to_str().unwrap(),
+            HARNESS,
+            now.to_owned(),
+        )
+        .map(|saved| saved.map(|saved| saved.now.clone()))
+    };
+    assert_eq!(read_at(SIGNED_AT), Ok(Some(SIGNED_AT.to_owned())));
+    // A time the bundle check cannot read defers, so the caller's time, not
+    // the resident's clock, is the one the bundle was judged at.
+    assert_eq!(read_at("not a time"), Err("mcp_relay_saved_remote_policy"));
+}
+
 #[test]
 fn an_unpublished_or_moved_integrity_state_defers() {
     let (home, connection) = guard_home("unverifiable");
