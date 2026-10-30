@@ -65,6 +65,14 @@ fn read_only_loops_match_their_unrolled_form() {
             "for spec in \"1 aaaa\" \"2 bbbb\"; do echo \"$spec\"; done",
             "echo \"1 aaaa\"; echo \"2 bbbb\"",
         ),
+        // A `!` in front of a body item only inverts the exit status that
+        // item reports. The `;` after it runs the next item either way, so
+        // the written-out list runs the same work without it.
+        ("for f in a b; do ! wc -l $f; done", "wc -l a; wc -l b"),
+        (
+            "for f in a b; do echo $f; ! wc -l $f; done",
+            "echo a; wc -l a; echo b; wc -l b",
+        ),
         (
             "for flag in \"-l one\" \"-l two\"; do echo \"$flag\"; done",
             "echo \"-l one\"; echo \"-l two\"",

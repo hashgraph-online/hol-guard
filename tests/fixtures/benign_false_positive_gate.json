@@ -32407,6 +32407,38 @@
       "expect": "allow"
     },
     {
+      "id": "control-flow-for-loop-negated-line-counts",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "for f in src/*.ts; do ! wc -l $f; done"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "control-flow-for-loop-negated-package-tests",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "for f in a b; do echo $f; ! npm test; done"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "control-flow-conditional-negated-cargo-tests",
       "fix_area": "shell",
       "harnesses": [
