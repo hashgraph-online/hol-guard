@@ -471,6 +471,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "resolve_harness_native_approval_request"
         | "apply_temporary_mcp_grant_resolution"
         | "apply_signed_remote_exact_result"
+        | "record_local_once_approval"
         | "resolve_request_with_queue_result"
         | "resolve_native_workspace_review_request"
         | "resolve_matching_duplicate_requests"
@@ -816,6 +817,9 @@ fn dispatch(
             crate::guard_store_exact_cloud_apply::apply_signed_remote_exact_result(
                 connection, guard_home, args, owner,
             )
+        }
+        "record_local_once_approval" => {
+            crate::guard_store_local_once_mint::record_local_once_approval(connection, args)
         }
         "resolve_request_with_queue_result" => {
             queue_result::resolve_request_with_queue_result(connection, guard_home, args, owner)

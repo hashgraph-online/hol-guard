@@ -35,10 +35,7 @@ from codex_plugin_scanner.guard.live_process_identity import (
     process_start_token,
 )
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_local_once_authority import (
-    EXACT_CLOUD_AUTHORITY_KIND,
-    persist_local_once_approval,
-)
+from codex_plugin_scanner.guard.store_event_receipts import EXACT_CLOUD_AUTHORITY_KIND
 from tests.native_pretool_edge_fixtures import canonical_receipt_bytes
 from tests.native_review_evidence_support import with_review_evidence
 from tests.test_native_command_observations import _edge, _observations, _receipt
@@ -175,26 +172,20 @@ def _allow_from_cloud(store: GuardStore, request_id: str, workspace: Path) -> No
     )
     resolved = store.get_approval_request(request_id)
     assert resolved is not None
-    key, key_id = store._policy_integrity_secret_material(create=True)  # pyright: ignore[reportPrivateUsage]
-    assert key is not None and key_id is not None
     created_at = str(resolved["resolved_at"])
     expires_at = (datetime.fromisoformat(created_at) + timedelta(hours=1)).isoformat()
-    with store._connect() as connection:  # pyright: ignore[reportPrivateUsage]
-        approval_id = persist_local_once_approval(
-            connection,
-            request_id=request_id,
-            harness=_HARNESS,
-            artifact_id=str(resolved["artifact_id"]),
-            artifact_hash=str(resolved["artifact_hash"]),
-            workspace=str(resolved["workspace"]),
-            publisher=None,
-            action="allow",
-            created_at=created_at,
-            expires_at=expires_at,
-            integrity_key=key,
-            integrity_key_id=key_id,
-            authority_kind=EXACT_CLOUD_AUTHORITY_KIND,
-        )
+    approval_id = store.record_local_once_approval(
+        request_id=request_id,
+        harness=_HARNESS,
+        artifact_id=str(resolved["artifact_id"]),
+        artifact_hash=str(resolved["artifact_hash"]),
+        workspace=str(resolved["workspace"]),
+        publisher=None,
+        action="allow",
+        created_at=created_at,
+        expires_at=expires_at,
+        authority_kind=EXACT_CLOUD_AUTHORITY_KIND,
+    )
     assert approval_id is not None
 
 

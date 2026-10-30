@@ -16,6 +16,7 @@ use guard_policy_snapshot::local_authority_integrity::{
 };
 
 pub const LOCAL_ONCE_INTEGRITY_PURPOSE: &str = "guard-local-once-approval";
+pub const LOCAL_ONCE_LEGACY_AUTHORITY_KIND: &str = "legacy";
 pub const EXACT_CLOUD_AUTHORITY_KIND: &str = "exact-cloud";
 pub const EXACT_CLOUD_INTEGRITY_PURPOSE: &str = "guard-exact-cloud-local-once-v1";
 

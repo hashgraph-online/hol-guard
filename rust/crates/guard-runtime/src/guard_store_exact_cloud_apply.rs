@@ -18,17 +18,16 @@ use rusqlite::Connection;
 use serde_json::{json, Map, Value};
 use zeroize::Zeroizing;
 
-use guard_contracts::{canonical_utc_timestamp, timestamp_has_expired, utc_timestamp_micros};
-use guard_policy_snapshot::local_authority_integrity::sign_local_authority_payload;
+use guard_contracts::utc_timestamp_micros;
 
 use crate::guard_store_approval_queue_result::{block_reason, request};
 use crate::guard_store_approval_resolve::set_resolution;
 use crate::guard_store_args::Args;
 use crate::guard_store_db::{exec, query_one, value_error, StoreError, StoreResult};
 use crate::guard_store_json::dumps_sorted;
-use crate::local_once_store::{local_once_integrity_purpose, EXACT_CLOUD_AUTHORITY_KIND};
+use crate::guard_store_local_once_mint::{mint_local_once_approval, LocalOnceMint};
+use crate::local_once_store::EXACT_CLOUD_AUTHORITY_KIND;
 use crate::policy_bundle_time::micros_to_utc_isoformat;
-use crate::policy_decision_lookup_op::computed_workspace_policy_key;
 use crate::policy_store::PolicySnapshotStore;
 
 const CAPABILITY_KEY: &str = "guard_exact_cloud_review_capability";
@@ -190,16 +189,6 @@ fn changed_request_fields(
         .collect()
 }
 
-/// `uuid4().hex`.
-fn approval_id() -> StoreResult<String> {
-    let mut bytes = [0_u8; 16];
-    getrandom::fill(&mut bytes)
-        .map_err(|_| StoreError::Invalid("native_exact_cloud_random_failed"))?;
-    bytes[6] = (bytes[6] & 0x0f) | 0x40;
-    bytes[8] = (bytes[8] & 0x3f) | 0x80;
-    Ok(hex::encode(bytes))
-}
-
 /// `persist_local_once_approval` for the exact-cloud authority kind, inside
 /// the caller's transaction. Returns false where Python returned `None`: the
 /// request names no exact artifact to bind the authority to.
@@ -214,68 +203,28 @@ fn persist_local_once_approval(
 ) -> StoreResult<bool> {
     let artifact_id = optional_text(row, "artifact_id");
     let artifact_hash = optional_text(row, "artifact_hash");
-    if artifact_id.is_null() || artifact_hash.is_null() {
-        return Ok(false);
-    }
-    let created_at = canonical_utc_timestamp(created_at)
-        .ok_or(StoreError::Invalid("native_exact_cloud_timestamp_invalid"))?;
-    let expires_at = canonical_utc_timestamp(expires_at)
-        .ok_or(StoreError::Invalid("native_exact_cloud_timestamp_invalid"))?;
-    if timestamp_has_expired(&expires_at, &created_at) {
-        return value_error("local approval expiry must be after its creation time");
-    }
-    let workspace_path = optional_text(row, "workspace");
-    let workspace = Value::from(computed_workspace_policy_key(workspace_path.as_str()));
-    let signed = json!({
-        "approval_id": approval_id()?,
-        "request_id": request_id,
-        "harness": py_str(row.get("harness").unwrap_or(&Value::Null)),
-        "artifact_id": artifact_id,
-        "artifact_hash": artifact_hash,
-        "workspace": workspace,
-        "publisher": optional_text(row, "publisher"),
-        "action": "allow",
-        "created_at": created_at,
-        "expires_at": expires_at,
-        "claimed_at": Value::Null,
-        "authority_kind": EXACT_CLOUD_AUTHORITY_KIND,
-    });
-    let integrity = sign_local_authority_payload(
-        &signed,
+    let workspace = optional_text(row, "workspace");
+    let mint = LocalOnceMint {
+        request_id,
+        harness: Value::from(py_str(row.get("harness").unwrap_or(&Value::Null))),
+        artifact_id: artifact_id.as_str(),
+        artifact_hash: artifact_hash.as_str(),
+        workspace: workspace.as_str(),
+        publisher: optional_text(row, "publisher"),
+        action: Value::from("allow"),
+        created_at,
+        expires_at,
+        authority_kind: EXACT_CLOUD_AUTHORITY_KIND,
+    };
+    Ok(mint_local_once_approval(
+        connection,
+        &mint,
         key,
         key_id,
-        local_once_integrity_purpose(Some(EXACT_CLOUD_AUTHORITY_KIND)),
-        &created_at,
-    )
-    .map_err(StoreError::Invalid)?;
-    exec(
-        connection,
-        "insert into guard_local_once_approvals (
-           approval_id, request_id, harness, artifact_id, artifact_hash, workspace, publisher, action,
-           created_at, expires_at, claimed_at, integrity_version, payload_hash, payload_mac,
-           integrity_key_id, signed_at, authority_kind
-         )
-         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, null, ?, ?, ?, ?, ?, ?)",
-        &[
-            signed["approval_id"].clone(),
-            signed["request_id"].clone(),
-            signed["harness"].clone(),
-            signed["artifact_id"].clone(),
-            signed["artifact_hash"].clone(),
-            signed["workspace"].clone(),
-            signed["publisher"].clone(),
-            signed["action"].clone(),
-            signed["created_at"].clone(),
-            signed["expires_at"].clone(),
-            Value::from(integrity.integrity_version),
-            Value::from(integrity.payload_hash),
-            Value::from(integrity.payload_mac),
-            Value::from(integrity.integrity_key_id),
-            Value::from(integrity.signed_at),
-            Value::from(EXACT_CLOUD_AUTHORITY_KIND),
-        ],
-    )?;
-    Ok(true)
+        "native_exact_cloud_timestamp_invalid",
+        "native_exact_cloud_random_failed",
+    )?
+    .is_some())
 }
 
 /// A local-once signing key and the id it is stored under.
