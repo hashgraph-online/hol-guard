@@ -40,6 +40,7 @@ fn request(store: &std::path::Path, workspace: Option<&str>) -> PolicyDecisionLo
         local_once_integrity_key_id: Some(KEY_ID.to_owned()),
         policy_bundle_decision_identities: None,
         exception_workspace: None,
+        cloud_exception_bundle: Default::default(),
         probe_groups: None,
         portable_workspace: Some(PORTABLE.to_owned()),
         evidence_binding: None,

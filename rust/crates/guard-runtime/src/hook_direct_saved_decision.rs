@@ -313,6 +313,7 @@ fn saved_response(
         // The lookup lifts Cloud-excepted bundle rules itself; the local and
         // portable probes both match exceptions on the checkout path.
         exception_workspace: Some(context.workspace.to_owned()),
+        cloud_exception_bundle: Default::default(),
         probe_groups: None,
         portable_workspace: None,
         evidence_binding: None,

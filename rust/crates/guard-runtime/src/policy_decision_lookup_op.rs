@@ -34,7 +34,7 @@ use guard_policy_snapshot::policy_integrity::{
 
 use super::context_digest_json::write_canonical_json_with_limit;
 use crate::claim_reuse::approval_authority_revision;
-use crate::cloud_exception_lift::{stored_cloud_exception_covers, LiftTarget};
+use crate::cloud_exception_lift::{cloud_exception_covers, stored_exception_bundle, LiftTarget};
 use crate::guard_store_json::dumps_sorted;
 
 pub(crate) const LOCAL_ONCE_LEGACY_AUTHORITY_KIND: &str = "legacy";
@@ -1656,11 +1656,14 @@ fn evaluate_in_connection(
     } else {
         Vec::new()
     };
-    // Asked per probe against the bundle stored in this connection, so every
-    // grouped artifact and portable alias reads its own answer.
+    // Asked per probe, so every grouped artifact and portable alias reads its
+    // own answer; the bundle itself is validated once per request.
     let bundle_rules_lifted = rows.iter().any(is_bundle_restriction)
-        && stored_cloud_exception_covers(
-            conn,
+        && cloud_exception_covers(
+            request
+                .cloud_exception_bundle
+                .get_or_init(|| stored_exception_bundle(conn, current_time))
+                .as_ref(),
             &LiftTarget {
                 harness,
                 artifact_id,

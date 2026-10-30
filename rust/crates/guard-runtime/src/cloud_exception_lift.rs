@@ -42,19 +42,19 @@ pub(crate) struct LiftTarget<'a> {
     pub(crate) now: &'a str,
 }
 
-/// Whether an active exception in the bundle stored in `connection` covers
-/// `target`. A bundle that is missing, or that the resident cannot validate
-/// the way the Python store would, lifts nothing.
-pub(crate) fn stored_cloud_exception_covers(
+/// The bundle stored in `connection`, validated at `now`, that Cloud
+/// exceptions are matched against. A bundle that is missing, or that the
+/// resident cannot validate the way the Python store would, is `None` and
+/// lifts nothing.
+pub(crate) fn stored_exception_bundle(
     connection: &Connection,
-    target: &LiftTarget<'_>,
-) -> bool {
+    now: &str,
+) -> Option<Map<String, Value>> {
     #[cfg(test)]
     if let Some((_, bundle)) = VALIDATED_BUNDLE.with(|cell| cell.borrow().clone()) {
-        return cloud_exception_covers(bundle.as_ref(), target);
+        return bundle;
     }
-    cached_bundle_authority(connection, target.now)
-        .is_some_and(|(_, bundle)| cloud_exception_covers(bundle.as_ref(), target))
+    cached_bundle_authority(connection, now).and_then(|(_, bundle)| bundle)
 }
 
 /// Whether an active exception in `bundle` covers `target`.

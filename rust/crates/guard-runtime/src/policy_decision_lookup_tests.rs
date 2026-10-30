@@ -87,6 +87,7 @@ fn base_request(store_path: &std::path::Path) -> PolicyDecisionLookupRequestV1 {
         local_once_integrity_key_id: None,
         policy_bundle_decision_identities: None,
         exception_workspace: None,
+        cloud_exception_bundle: Default::default(),
         probe_groups: None,
         portable_workspace: None,
         evidence_binding: None,
@@ -623,6 +624,9 @@ fn a_grouped_lookup_lifts_each_candidate_on_its_own() {
         .unwrap(),
     );
     assert_eq!(lookup_action(&request), json!("block"));
+    // Every candidate probe shares the request's bundle cache, so the signed
+    // bundle is validated once for the whole group.
+    assert!(request.cloud_exception_bundle.get().is_some());
     request.probe_groups = Some(
         serde_json::from_value(json!({
             "groups": [{

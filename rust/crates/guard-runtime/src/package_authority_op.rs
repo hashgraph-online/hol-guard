@@ -1094,6 +1094,7 @@ impl SupplyChainStore for ResidentSupplyChainStore {
             local_once_integrity_key_id: key_id,
             policy_bundle_decision_identities: None,
             exception_workspace: None,
+            cloud_exception_bundle: Default::default(),
             probe_groups: None,
             portable_workspace: None,
             evidence_binding: None,

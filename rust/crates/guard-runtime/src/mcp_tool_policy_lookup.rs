@@ -141,6 +141,7 @@ impl Prober<'_> {
             policy_bundle_decision_identities: input.policy_bundle_decision_identities.clone(),
             // A portable probe still matches Cloud exceptions on the checkout.
             exception_workspace: self.subject.workspace.clone(),
+            cloud_exception_bundle: Default::default(),
             probe_groups: None,
             portable_workspace: None,
             evidence_binding: None,

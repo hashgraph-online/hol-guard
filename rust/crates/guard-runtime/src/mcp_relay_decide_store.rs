@@ -66,6 +66,9 @@ pub(super) struct Saved<'c> {
     /// The decision identities the cached signed bundle authorizes; empty
     /// when no policy-bundle row can reach this call.
     pub(super) bundle_identities: Vec<Vec<Value>>,
+    /// The validated bundle every lookup of this call matches Cloud
+    /// exceptions against, read on the first lookup that needs it.
+    pub(super) exception_bundle: guard_contracts::CloudExceptionBundle,
 }
 
 /// `None` when the store holds no saved row, so every lookup misses; the
@@ -123,6 +126,7 @@ pub(super) fn saved<'c>(
         key_b64: Zeroizing::new(Base64UrlUnpadded::encode_string(&key.key)),
         key_id: key.key_id.clone(),
         bundle_identities,
+        exception_bundle: Default::default(),
     }))
 }
 
@@ -254,6 +258,7 @@ impl Saved<'_> {
             local_once_integrity_key_id: Some(self.key_id.clone()),
             policy_bundle_decision_identities: (!identities.is_empty()).then_some(identities),
             exception_workspace: probe.exception_workspace.map(str::to_owned),
+            cloud_exception_bundle: self.exception_bundle.clone(),
             probe_groups: None,
             portable_workspace: None,
             evidence_binding: None,
