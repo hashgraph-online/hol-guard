@@ -25,8 +25,17 @@ WORKSPACE_NODE_ENTRY_CASE = "omp-native-workspace-node-jest-entry"
 # prompt already answered. ``--no`` forbids fetching anything, so the run only
 # finishes if the workspace's own runner is what npm resolves.
 WORKSPACE_NPM_EXEC_CASE = "omp-native-workspace-npm-exec-inert-option"
+# The same install, launched with the heap size a large suite needs written in
+# front of it. The setting only sizes the engine, so the run has to finish the
+# same way the unprefixed launch does.
+WORKSPACE_HEAP_PREFIX_CASE = "omp-native-workspace-node-options-heap-prefix"
 WORKSPACE_RUNNER_CASES = frozenset(
-    {WORKSPACE_JEST_CASE, WORKSPACE_NODE_ENTRY_CASE, WORKSPACE_NPM_EXEC_CASE}
+    {
+        WORKSPACE_JEST_CASE,
+        WORKSPACE_NODE_ENTRY_CASE,
+        WORKSPACE_NPM_EXEC_CASE,
+        WORKSPACE_HEAP_PREFIX_CASE,
+    }
 )
 # The same installed build, launched through the Bun the installer leaves in the
 # caller's home, spelled by the path its install instructions print.
