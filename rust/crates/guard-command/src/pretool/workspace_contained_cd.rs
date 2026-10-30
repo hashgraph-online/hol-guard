@@ -176,6 +176,16 @@ pub(super) fn bounded(target: &str, workspace: &Path, temp_fixed: bool) -> bool 
     below(target, workspace) || (temp_fixed && temp_cd::private_directory(target))
 }
 
+/// A literal operand the directory walk reads exactly as the shell would: no
+/// variable to expand, and no stand-in for the previous, home or stacked
+/// directory, which name a place the walk never joined. It is admitted only
+/// beside `cwd::moves_stay_inside`, whose own proof is that the move lands
+/// inside the workspace, so what this reading adds over [`below`] is the
+/// parent step that proof already covers.
+pub(super) fn walked(target: &str) -> bool {
+    !target.is_empty() && !target.contains('$') && !target.starts_with(['~', '-', '+'])
+}
+
 /// Whether every temporary stand-in in the command is the only operand of a
 /// `cd` or `pushd`, or the value of a private assignment. Anywhere else it
 /// would pass the path checks as a missing absolute path while the real

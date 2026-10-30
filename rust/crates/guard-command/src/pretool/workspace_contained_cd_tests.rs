@@ -144,3 +144,45 @@ fn the_launcher_runs_the_raw_text_that_assigns_a_private_directory() {
         );
     }
 }
+
+/// Going into a directory, working there and climbing back is how a developer
+/// visits one package of a checkout. The climb leaves no operand that reads
+/// as staying inside on its own, so each `cd` used to be judged alone and the
+/// whole chain fell out of containment. The walk reads the chain instead: it
+/// joins every move onto the directory before it, so a climb that lands back
+/// in the workspace is a directory the sandbox already bounds.
+#[test]
+fn a_chain_that_climbs_back_into_the_workspace_is_still_bounded() {
+    let ws = workspace("cd-return", true);
+    for name in ["app", "web"] {
+        std::fs::create_dir_all(ws.join(name)).unwrap();
+        std::fs::write(ws.join(name).join("package.json"), "{}").unwrap();
+    }
+    std::fs::create_dir_all(ws.join("app/src")).unwrap();
+    for command in [
+        "cd app && ls && cd ..",
+        "cd app && cd ..",
+        "cd app && ls && cd ../web && ls",
+        "cd app/src && ls && cd ../..",
+    ] {
+        assert!(shaped(command, &ws), "{command}");
+    }
+    // The walk proves where each move lands, so a climb out of the workspace,
+    // a move to a directory that is not there, and an operand naming a place
+    // the walk never joined are all refused as before.
+    let outside = Path::new("/etc").display();
+    for command in [
+        "ls && cd ..".to_owned(),
+        "cd app && ls && cd ../..".to_owned(),
+        format!("cd app && ls && cd {outside}"),
+        "cd app && ls && cd ../missing-name".to_owned(),
+        "cd app && ls && cd -".to_owned(),
+        "cd app && ls && cd $OLDPWD".to_owned(),
+        // A `;` leaves the shell of a failed `cd` where it started, and the
+        // climb from there is a step out, so both readings have to stay in.
+        "cd app && ls; cd ..".to_owned(),
+        "CDPATH=/ cd app && ls && cd ..".to_owned(),
+    ] {
+        assert!(!shaped(&command, &ws), "{command}");
+    }
+}

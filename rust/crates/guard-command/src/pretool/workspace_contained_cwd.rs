@@ -99,6 +99,25 @@ pub(super) fn locations(model: &CanonicalCommandV1, workspace: &Path) -> Option<
     Some(result)
 }
 
+/// Whether the walk reads every directory move this command makes and each
+/// one lands inside the workspace. A chain that goes in, works and comes back
+/// — `cd app && cargo test && cd ..` — ends where the sandbox already bounds
+/// it, so the climb it spends is one the walk has accounted for rather than a
+/// step out. Where a `CDPATH` could send a bare operand somewhere the walk
+/// does not join it, or the walk cannot read a move at all, this is false and
+/// the stricter literal reading of each operand decides on its own.
+pub(super) fn moves_stay_inside(model: &CanonicalCommandV1, workspace: &Path) -> bool {
+    model
+        .segments
+        .iter()
+        .any(|segment| moves_the_shell(segment.executable.as_deref()))
+        && !model
+            .normalized_text
+            .to_ascii_lowercase()
+            .contains("cdpath")
+        && locations(model, workspace).is_some()
+}
+
 /// How many directories below `workspace` every shell that could run each
 /// segment stands, segment by segment. A segment that runs one directory down
 /// resolves one leading `..` back inside the workspace, so the reach checks
