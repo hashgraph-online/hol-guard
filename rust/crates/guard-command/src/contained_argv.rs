@@ -603,6 +603,7 @@ pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
             | "node_tool_route"
             | "pytest_command"
             | "package_test_resolve"
+            | "git_read_only_argv"
     ) {
         return None;
     }
@@ -660,6 +661,19 @@ pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
                 "dropped_data": dropped_data,
             }))
         }
+        "git_read_only_argv" => crate::contained_git::read_only_invocation(&command)
+            .map(|(operation, arguments)| {
+                json!({
+                    "operation": operation,
+                    "arguments": arguments,
+                })
+            })
+            .ok_or_else(|| {
+                RestrictedPytestError::new(
+                    "git_restricted_invalid_command",
+                    "Protected Git requires direct read-only argv.",
+                )
+            }),
         _ => unreachable!(),
     };
     Some(match result {

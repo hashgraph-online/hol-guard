@@ -87,6 +87,7 @@
       "src/command_structured_matchers/mod.rs",
       "src/command_tokens.rs",
       "src/contained_argv.rs",
+      "src/contained_git.rs",
       "src/contained_node_tool.rs",
       "src/contained_package_test.rs",
       "src/contained_prefix.rs",

@@ -131,6 +131,7 @@ pub const CONTAINED_ARGV_OPERATIONS: &[&str] = &[
     "node_tool_route",
     "pytest_command",
     "package_test_resolve",
+    "git_read_only_argv",
     "script_words",
     "command_words",
 ];

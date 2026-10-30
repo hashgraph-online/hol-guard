@@ -504,6 +504,10 @@ fn git_inspections_require_protected_execution_not_helper_consent() {
         "git diff --check",
         "git log --oneline -1",
         "git show HEAD",
+        "git blame README.md",
+        "git grep needle",
+        "git stash show -p",
+        "git reflog",
     ] {
         let result = classify("omp", command);
         assert_eq!(result.decision, "deny");
