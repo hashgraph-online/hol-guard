@@ -101,6 +101,10 @@ def test_a_workspace_receipt_runs_what_the_read_only_parsers_reject(
             # The command carries no prefix, so its own program stands first
             # and nothing is peeled off it.
             return {"core_index": 0, "assignments": [], "dropped_data": False}
+        if operation == "run_prefix_peel":
+            # No launcher stands ahead of the program either, so the whole
+            # command is its own core and it carries no timeout.
+            return {"core": list(fields["command"]), "seconds": None}
         assert operation == "contained_kind", operation
         return kinds
 
