@@ -31,7 +31,13 @@ _REVIEW = {
 class _Store:
     """The two store reads the hook makes, over a real ``policy_decisions`` table."""
 
-    def __init__(self, rows: list[tuple[str, str, str, str]], *, lookup_error: Exception | None = None) -> None:
+    def __init__(
+        self,
+        rows: list[tuple[str, str, str, str]],
+        *,
+        lookup_error: Exception | None = None,
+        probe_error: Exception | None = None,
+    ) -> None:
         self._connection = sqlite3.connect(":memory:")
         self._connection.execute(
             "create table policy_decisions (harness text, scope text, artifact_id text, action text, source text)"
@@ -41,10 +47,13 @@ class _Store:
             rows,
         )
         self._lookup_error = lookup_error
+        self._probe_error = probe_error
         self.lookups: list[str] = []
 
     @contextlib.contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
+        if self._probe_error is not None:
+            raise self._probe_error
         yield self._connection
 
     def resolve_policy_decision_lookup(self, harness: str, artifact_id: str, **_kwargs: object) -> dict[str, Any]:
@@ -111,3 +120,14 @@ def test_a_block_the_store_cannot_read_still_denies() -> None:
     assert isinstance(response, dict)
     assert response["approval_reuse_status"] == "blocked"
     assert "could not read the saved block" in str(response)
+
+
+def test_a_failed_block_probe_denies_rather_than_letting_the_command_run() -> None:
+    store = _Store([], probe_error=sqlite3.OperationalError("database is locked"))
+
+    response = _respond(store)
+
+    assert isinstance(response, dict)
+    assert response["approval_reuse_status"] == "blocked"
+    assert "Try it again in a moment" in str(response)
+    assert store.lookups == []

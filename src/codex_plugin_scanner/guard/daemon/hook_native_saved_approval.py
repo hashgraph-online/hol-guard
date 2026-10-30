@@ -132,9 +132,16 @@ def native_exact_command_block_response(
         if not exact_ids or not policy_decision_block_exists(store, harness=harness, artifact_ids=exact_ids):
             return None
     except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error) as error:
-        # Without a probe result the action still goes to a human review.
+        # A failed probe cannot tell "no block" apart from a block it missed,
+        # and an allowed command would run on that answer, so it stops here.
         _LOGGER.warning("Native exact-command block probe failed (%s)", type(error).__name__)
-        return None
+        return _saved_block_response(
+            harness,
+            native_result,
+            reason_code="saved_exact_command_unreadable",
+            reason="HOL Guard could not check this command against saved blocks. Try it again in a moment.",
+            guard_home=store_guard_home(store),
+        )
     lookup = getattr(store, "resolve_policy_decision_lookup", None)
     if not callable(lookup):
         return None

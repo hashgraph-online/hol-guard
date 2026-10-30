@@ -35,7 +35,9 @@
 
 use crate::policy_store::policy_store_direct_lane::DirectLaneDefer;
 use crate::policy_store::PolicySnapshotStore;
-use edge::{direct_event, post_tool_answer, pre_tool_answer, prompt_answer, reviewed_edge};
+use edge::{
+    direct_event, post_tool_answer, pre_tool_answer, prompt_answer, reviewed_edge, shell_action,
+};
 use guard_contracts::{
     GuardExecutionEnvironmentV1, GuardHookEnvelopeV2, GuardHookSourceMetadataV2,
     GUARD_HOOK_ENVELOPE_V2_SCHEMA,
@@ -417,9 +419,7 @@ fn answer(
     // A saved or Guard Cloud block on this exact command is the daemon's to
     // apply, ahead of the edge's allow and any saved allow; Watch only
     // records it.
-    if store.exact_command_block && !recording_only {
-        return Err(HookDirectDefer::SavedDecision);
-    }
+    let exact_command_block = store.exact_command_block && !recording_only;
     if binding.evidence_drain != Some(true) {
         return Err(HookDirectDefer::EvidenceUndrained);
     }
@@ -488,6 +488,11 @@ fn answer(
         containment_sink: None,
     };
     let (edge, fence_wait) = fence::evaluate(envelope, policy_store)?;
+    // Only a shell action runs the blocked command; another tool that carries
+    // the same text keeps the direct answer, as the daemon would give it.
+    if exact_command_block && shell_action(&edge) {
+        return Err(HookDirectDefer::SavedDecision);
+    }
     if let Some(scope) = cursor_probe {
         return Ok(cursor::probe_answer(&edge, &evidence_payload, &scope));
     }

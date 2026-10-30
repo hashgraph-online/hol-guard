@@ -129,6 +129,16 @@ fn a_saved_block_on_the_exact_command_defers_a_command_the_edge_allows() {
         }
     }
 
+    // A tool that only carries the command text runs no shell command.
+    seed(&lane, "*", "pwd", "block");
+    let read = json!({
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": { "file_path": "README.md", "command": "pwd" },
+        "cwd": lane.workspace,
+    });
+    assert_eq!(run(&lane, read)["outcome"], "answer");
+
     // Watch records the call and lets it run.
     let watch = allowing_lane(
         "exact-block-watch",
