@@ -134,7 +134,7 @@ def _assert_graph(jobs: dict) -> None:
         assert condition == conditions[0].replace(prepared, "")
     assemble = jobs["assemble-native-guard-distributions"]
     assert assemble["needs"] == ["build", *wheel_ids, "publish-installed-bundle-assets"]
-    assert assemble["runs-on"] == "ubuntu-latest"
+    assert assemble["runs-on"] == "ubuntu-24.04"
     assert "needs.build.result == 'success'" in assemble["if"]
     assert "needs.publish-installed-bundle-assets.result == 'success'" in assemble["if"]
 
@@ -235,7 +235,7 @@ def test_single_wheel_callee_retains_all_fixed_native_hardware_tuples() -> None:
     assert list(table) == list(TARGETS)
     rows = [table[target][0] for target in TARGETS]
     assert [row["runner"] for row in rows] == [
-        "ubuntu-latest",
+        "ubuntu-24.04",
         "macos-15-intel",
         "macos-15",
         "windows-latest",

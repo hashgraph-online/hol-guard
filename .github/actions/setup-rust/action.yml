@@ -37,7 +37,7 @@ runs:
     - name: Stage external contribution trust defaults
       shell: bash
       # Compile and package the same conservative defaults as builder CI.
-      # ubuntu-latest exposes python3. setup-python jobs expose python.
+      # ubuntu-24.04 exposes python3. setup-python jobs expose python.
       run: |
         if command -v python3 >/dev/null 2>&1; then
           py=python3
