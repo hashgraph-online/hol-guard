@@ -52,7 +52,6 @@ def test_a_runtime_without_the_expansion_capability_is_never_sent_unexpanded_gro
             memory_command="echo",
             memory_artifact_type="unknown-artifact",
             memory_artifact_name="Bash",
-            consume_one_shot=False,
         )
     assert requested == [POLICY_LOOKUP_MEMORY_FEATURE]
 

@@ -429,6 +429,7 @@ mod guard_store_policy_source_labels;
 mod guard_store_policy_source_rows;
 mod guard_store_policy_upsert;
 mod guard_store_queue_live_wait;
+mod guard_store_read_state;
 mod guard_store_receipt_analytics;
 mod guard_store_receipt_approval;
 mod guard_store_receipt_decision;

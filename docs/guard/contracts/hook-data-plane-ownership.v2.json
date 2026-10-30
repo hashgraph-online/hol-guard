@@ -392,7 +392,6 @@
     "src/codex_plugin_scanner/guard/native_resident_decision.py",
     "src/codex_plugin_scanner/guard/native_hook_artifact_compose.py",
     "src/codex_plugin_scanner/guard/native_consumer_artifact_compose.py",
-    "src/codex_plugin_scanner/guard/native_trust_attestation.py",
     "src/codex_plugin_scanner/guard/native_consumer_artifact_project.py",
     "src/codex_plugin_scanner/guard/native_hook_adapter.py",
     "src/codex_plugin_scanner/guard/native_hook_adapter_wire.py",

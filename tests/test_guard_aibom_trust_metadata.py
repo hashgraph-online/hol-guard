@@ -24,14 +24,16 @@ from codex_plugin_scanner.guard.runtime.trust_attestation import (
     GuardTrustAttestationSigningConfig,
     GuardTrustAttestationVerificationKey,
     build_trust_attestation_payload,
-    build_trust_attestation_verification_key,
     resolve_guard_oauth_trust_attestation_signing_config,
     resolve_trust_attestation_signing_config,
     sign_trust_attestation,
-    verify_trust_attestation,
 )
 from codex_plugin_scanner.models import Finding, Severity
 from codex_plugin_scanner.trust_models import TrustDomainScore
+from tests.trust_attestation_verify_support import (
+    build_trust_attestation_verification_key,
+    verify_trust_attestation,
+)
 
 
 def _write_good_plugin(plugin_dir: Path) -> None:

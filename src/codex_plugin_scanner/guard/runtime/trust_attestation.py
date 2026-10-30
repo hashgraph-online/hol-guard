@@ -16,7 +16,6 @@ from cryptography.hazmat.primitives.asymmetric import ec, padding
 from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePrivateKey
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
 
-from ..native_trust_attestation import native_verify_trust_attestation
 from .evidence_hash import canonical_guard_evidence_payload, guard_evidence_hash
 
 GUARD_TRUST_ATTESTATION_PAYLOAD_VERSION_V3 = "guard-aibom-trust-attestation.v3"
@@ -43,18 +42,6 @@ class GuardTrustAttestationVerificationKey:
     public_key_pem: str
     fingerprint_sha256: str
     public_jwk_thumbprint: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class GuardTrustAttestationVerificationPolicy:
-    """Local verification state for rotation, revocation, and replay checks."""
-
-    revoked_key_ids: frozenset[str] = frozenset()
-    key_not_before: tuple[tuple[str, str], ...] = ()
-    minimum_sequence: int | None = None
-    seen_replay_keys: frozenset[str] = frozenset()
-    now: str | None = None
-    require_nonce: bool = True
 
 
 def canonical_trust_attestation_payload(payload: Mapping[str, object]) -> bytes:
@@ -89,27 +76,6 @@ def resolve_trust_attestation_signing_config(
     return GuardTrustAttestationSigningConfig(
         active_key_id=active_key_id,
         private_key_pem=private_key_pem,
-    )
-
-
-def build_trust_attestation_verification_key(
-    config: GuardTrustAttestationSigningConfig,
-) -> GuardTrustAttestationVerificationKey:
-    private_key = _load_private_key(config.private_key_pem)
-    public_key_pem = (
-        private_key.public_key()
-        .public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo,
-        )
-        .decode("utf-8")
-        .strip()
-    )
-    return GuardTrustAttestationVerificationKey(
-        key_id=config.active_key_id,
-        public_key_pem=public_key_pem,
-        fingerprint_sha256=_public_key_fingerprint(public_key_pem),
-        public_jwk_thumbprint=config.public_jwk_thumbprint,
     )
 
 
@@ -776,73 +742,6 @@ def sign_trust_attestation(
             else {}
         ),
     }
-
-
-def _verification_key_wire(key: GuardTrustAttestationVerificationKey) -> dict[str, object]:
-    """One trusted key under the names the verification contract reads."""
-
-    return {
-        "key_id": key.key_id,
-        "public_key_pem": key.public_key_pem,
-        "fingerprint_sha256": key.fingerprint_sha256,
-        "public_jwk_thumbprint": key.public_jwk_thumbprint,
-    }
-
-
-def verify_trust_attestation(
-    *,
-    payload: Mapping[str, object],
-    envelope: Mapping[str, object],
-    trusted_keys: tuple[GuardTrustAttestationVerificationKey, ...] | None = None,
-    policy: GuardTrustAttestationVerificationPolicy | None = None,
-    claim: Mapping[str, object] | None = None,
-) -> str:
-    """Return the replay identity of a verified attestation, or raise.
-
-    The verifier itself is the native runtime's; this call only puts the
-    attestation and the caller's own rotation, replay and expiry state on the
-    wire. A refusal comes back as ``ValueError`` carrying the runtime's
-    wording, and a runtime that cannot answer raises as well, so nothing here
-    can read an attestation as verified.
-    """
-
-    verification_policy = policy or GuardTrustAttestationVerificationPolicy(require_nonce=False)
-    return native_verify_trust_attestation(
-        payload=dict(payload),
-        envelope=dict(envelope),
-        claim=dict(claim) if claim is not None else None,
-        trusted_keys=([_verification_key_wire(key) for key in trusted_keys] if trusted_keys is not None else None),
-        policy={
-            "revoked_key_ids": sorted(verification_policy.revoked_key_ids),
-            "key_not_before": dict(verification_policy.key_not_before),
-            # The verifier reads the limit as digits, not as a fixed-width
-            # number: a Python integer has no width bound, and a limit it
-            # cannot decode would reach the caller as an unavailable runtime
-            # instead of the monotonic refusal the verifier owes it.
-            "minimum_sequence": (
-                None if verification_policy.minimum_sequence is None else str(verification_policy.minimum_sequence)
-            ),
-            "seen_replay_keys": sorted(verification_policy.seen_replay_keys),
-            "now": verification_policy.now,
-            "require_nonce": verification_policy.require_nonce,
-        },
-    )
-
-
-def trust_attestation_replay_key(payload: Mapping[str, object]) -> str:
-    """Return the stable verifier-side replay identity for an attestation."""
-
-    return guard_evidence_hash(
-        {
-            "domainSeparator": payload.get("domainSeparator"),
-            "nonce": payload.get("nonce"),
-            "itemId": payload.get("itemId"),
-            "scope": payload.get("scope"),
-            "layerId": payload.get("layerId"),
-            "workspaceId": payload.get("workspaceId"),
-            "repositoryId": payload.get("repositoryId"),
-        }
-    )
 
 
 def _load_private_key(private_key_pem: str) -> RSAPrivateKey | EllipticCurvePrivateKey:

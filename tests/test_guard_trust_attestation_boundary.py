@@ -14,15 +14,17 @@ from codex_plugin_scanner.guard.runtime.evidence_hash import guard_evidence_hash
 from codex_plugin_scanner.guard.runtime.trust_attestation import (
     GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM_ECDSA_P256,
     GuardTrustAttestationSigningConfig,
-    GuardTrustAttestationVerificationPolicy,
     apply_trust_attestation_metadata,
     build_trust_attestation_payload,
-    build_trust_attestation_verification_key,
     sign_trust_attestation,
     trust_claim_hash,
-    verify_trust_attestation,
 )
 from codex_plugin_scanner.guard.trust_metadata_boundary import separate_untrusted_adapter_trust_metadata
+from tests.trust_attestation_verify_support import (
+    GuardTrustAttestationVerificationPolicy,
+    build_trust_attestation_verification_key,
+    verify_trust_attestation,
+)
 
 
 def _signing_config(key_id: str = "test-key") -> GuardTrustAttestationSigningConfig:

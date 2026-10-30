@@ -23,8 +23,10 @@ import pytest
 
 from codex_plugin_scanner.guard.runtime.trust_attestation import (
     _parse_attestation_timestamp,
-    trust_attestation_replay_key,
     trust_claim_hash,
+)
+from tests.trust_attestation_verify_support import (
+    trust_attestation_replay_key,
 )
 
 FIXTURE = Path(__file__).parent / "fixtures" / "guard-trust-claim.v1.json"

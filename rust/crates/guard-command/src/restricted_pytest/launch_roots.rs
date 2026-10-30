@@ -171,6 +171,57 @@ fn unreachable_from(
 /// as they already are in `/usr/bin`.
 pub(super) const MAC_PROGRAM_ROOTS: &[&str] = &["/bin", "/usr/bin", "/usr/sbin", "/sbin"];
 
+/// Where macOS keeps its own frameworks. Nothing executes this tree whole:
+/// it is only where `mac_framework_program_directories` looks.
+pub(super) const MAC_FRAMEWORK_ROOT: &str = "/System/Library/Frameworks";
+
+/// More `usr/bin` directories than any macOS install ships, so a tree that is
+/// not the one this expects cannot turn the walk into an unbounded one.
+const MAX_FRAMEWORK_PROGRAM_DIRECTORIES: usize = 64;
+
+/// The sealed directories holding the interpreters macOS ships inside its own
+/// frameworks: `/System/Library/Frameworks/*.framework/Versions/*/usr/bin`.
+/// `/usr/bin/rake`, `/usr/bin/irb` and `/usr/bin/tclsh` are short scripts
+/// whose shebang names a program under one of them, so the interpreter a
+/// command as ordinary as `rake spec` runs on resolved outside every root the
+/// containment check knows and the run was reviewed instead of contained.
+/// Those directories sit on the signed system volume: they are read-only even
+/// for root, the profile already reads all of `/System`, and the capabilities
+/// this sandbox withholds - no writable path outside the workspace, no mach
+/// service but the user-database lookup, no root - stop a machine change
+/// wherever the program it runs happens to sit.
+///
+/// Only the `bin` directories are named, one by one. A framework's `Support`,
+/// `Helpers`, `XPCServices` and `MachServices` trees sit beside them and carry
+/// privileged helpers the interpreters are not, so a subpath of the frameworks
+/// directory would reach every one of them and the literal privilege denials
+/// name only `/usr/bin`, `/bin`, `/usr/sbin` and `/sbin`.
+pub(super) fn mac_framework_program_directories() -> Vec<PathBuf> {
+    let Ok(frameworks) = std::fs::read_dir(MAC_FRAMEWORK_ROOT) else {
+        return Vec::new();
+    };
+    let mut directories = Vec::new();
+    for framework in frameworks.filter_map(Result::ok) {
+        let Ok(versions) = std::fs::read_dir(framework.path().join("Versions")) else {
+            continue;
+        };
+        for version in versions.filter_map(Result::ok) {
+            let programs = version.path().join("usr/bin");
+            if programs.is_dir() {
+                directories.push(programs);
+            }
+            if directories.len() >= MAX_FRAMEWORK_PROGRAM_DIRECTORIES {
+                directories.sort();
+                return directories;
+            }
+        }
+    }
+    // The order two `read_dir` calls answer in is the filesystem's, and the
+    // profile these directories are written into is compared byte for byte.
+    directories.sort();
+    directories
+}
+
 /// The canonical form of a session `PATH` entry that is one of the system
 /// program directories above, which the sandbox executes from on every
 /// platform. The toolchain roots the sandbox PATH otherwise accepts leave out
@@ -202,6 +253,9 @@ pub(super) fn executable_roots(workspace: &Path, exec_roots: Vec<PathBuf>) -> Ve
             .map(PathBuf::from)
             .filter(|root| root.exists()),
     );
+    if cfg!(target_os = "macos") {
+        roots.extend(mac_framework_program_directories());
+    }
     roots.extend(exec_roots);
     roots
 }

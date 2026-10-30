@@ -15,6 +15,8 @@ import pytest
 
 from codex_plugin_scanner.guard.runtime.trust_attestation import (
     GuardTrustAttestationVerificationKey,
+)
+from tests.trust_attestation_verify_support import (
     GuardTrustAttestationVerificationPolicy,
     verify_trust_attestation,
 )

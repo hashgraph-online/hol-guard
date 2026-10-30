@@ -985,7 +985,6 @@ def test_non_consuming_runtime_lookup_composes_direct_allow_with_exact_command_b
         memory_artifact_type="tool_action_request",
         memory_artifact_name="shell",
         now="2026-07-17T12:02:00+00:00",
-        consume_one_shot=False,
     )
 
     assert lookup["decision"] is not None
@@ -1180,7 +1179,6 @@ def test_claim_rejects_direct_allow_when_memory_block_is_inserted_after_lookup(
         memory_artifact_type="tool_action_request",
         memory_artifact_name="shell",
         now="2026-07-17T12:01:00+00:00",
-        consume_one_shot=False,
     )
     selected = lookup["decision"]
     assert selected is not None

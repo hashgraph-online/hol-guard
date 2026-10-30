@@ -346,7 +346,6 @@ class _Effects:
             memory_command=need["memory_command"],
             memory_artifact_type=need["memory_artifact_type"],
             memory_artifact_name=need["memory_artifact_name"],
-            consume_one_shot=False,
         )
         decision = lookup["decision"]
         ignored = lookup["ignored_local_integrity"] is not None

@@ -450,3 +450,8 @@ fn a_project_package_shim_directory_stays_reachable() {
     assert!(!outside_at_home(&root, "pnpm", &search_path));
     let _ = fs::remove_dir_all(&root);
 }
+
+/// The macOS framework interpreter roots, in a file of their own.
+#[cfg(target_os = "macos")]
+#[path = "launch_roots_framework_tests.rs"]
+mod framework;
