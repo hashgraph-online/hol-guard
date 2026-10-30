@@ -59,6 +59,54 @@ fn cargo_builds_and_tests_the_package_inside_the_sandbox() {
     }
 }
 
+/// A subcommand cargo resolves to a `cargo-NAME` program drives cargo's own
+/// build of this workspace: a coverage run of the suite, a snapshot suite, an
+/// expansion, a read of the dependencies the crate declares. Each reaches no
+/// further than `cargo test` already does, so each is contained with it.
+#[test]
+fn the_named_workspace_subcommands_run_inside_the_sandbox_too() {
+    let ws = package("cargo-subcommands");
+    for command in [
+        "cargo llvm-cov --lcov --output-path lcov.info",
+        "cargo llvm-cov nextest",
+        "cargo tarpaulin --out Xml",
+        "cargo insta test",
+        "cargo expand --lib",
+        "cargo machete",
+        "cargo udeps --workspace",
+    ] {
+        for harness in ["codex", "claude-code", "omp"] {
+            let (reason, minimum) = outcome(harness, command, &ws);
+            assert_eq!(reason == CONTAINED, host(), "{reason} {harness}: {command}");
+            if !host() {
+                assert_eq!(
+                    minimum, "review",
+                    "{reason}: no sandbox must require review"
+                );
+            }
+        }
+    }
+}
+
+/// A name cargo has no program for is a program cargo would go and find, so a
+/// subcommand this module does not name keeps the review it has.
+#[test]
+fn an_unnamed_subcommand_keeps_its_review() {
+    let ws = package("cargo-unnamed");
+    for command in [
+        "cargo audit",
+        "cargo deny check",
+        "cargo fetch-the-world",
+        "cargo generate --git https://example.test/template",
+    ] {
+        for harness in ["codex", "claude-code", "omp"] {
+            let (reason, minimum) = outcome(harness, command, &ws);
+            assert_ne!(reason, CONTAINED, "{harness}: {command}");
+            assert_eq!(minimum, "review", "{harness}: {command} ({reason})");
+        }
+    }
+}
+
 #[test]
 fn the_registry_verbs_and_a_bare_directory_keep_their_review() {
     let ws = package("cargo-registry");

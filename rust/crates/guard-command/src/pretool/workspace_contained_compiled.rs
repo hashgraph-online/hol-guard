@@ -54,9 +54,38 @@ const GO_LOCAL_VERBS: &[&str] = &[
 // into a target directory the workspace owns. Only the verbs that stay there
 // are local: `install`, `add`, `update`, `publish` and the rest reach a
 // registry, and `vendor` and `fetch` exist to populate a cache.
+//
+// The second group is the subcommands cargo resolves to a `cargo-NAME`
+// program the host already has. Each one named here drives cargo's own build
+// of the workspace and reads what it produced -- a coverage run of the test
+// suite, a snapshot suite, an expansion, a read of which dependencies the
+// crate uses -- so the work reaches no further than `test` and `build`
+// already do. A name that is not on this list keeps its review, because
+// cargo would run whatever program carries it.
 const CARGO_LOCAL_VERBS: &[&str] = &[
-    "build", "b", "test", "t", "check", "c", "clippy", "fmt", "doc", "d", "run", "r", "bench",
-    "tree", "metadata", "version", "nextest",
+    "build",
+    "b",
+    "test",
+    "t",
+    "check",
+    "c",
+    "clippy",
+    "fmt",
+    "doc",
+    "d",
+    "run",
+    "r",
+    "bench",
+    "tree",
+    "metadata",
+    "version",
+    "nextest",
+    "llvm-cov",
+    "tarpaulin",
+    "insta",
+    "expand",
+    "machete",
+    "udeps",
 ];
 // Cargo's own options stand in front of the verb. These say only how cargo
 // reports what it does, and how strictly it treats the lockfile and the
