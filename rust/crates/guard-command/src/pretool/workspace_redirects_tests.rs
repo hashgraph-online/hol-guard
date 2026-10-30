@@ -18,6 +18,9 @@ fn literal_path_redirects_are_projected_away() {
         ("python3 app.py < input.txt", "python3 app.py"),
         ("python3 app.py 2>/dev/null", "python3 app.py"),
         ("python3 app.py >&2", "python3 app.py"),
+        ("python3 app.py &> out.txt", "python3 app.py"),
+        ("python3 app.py &>> log.txt", "python3 app.py"),
+        ("python3 app.py &> /dev/null", "python3 app.py"),
         ("python3 app.py>out.txt", "python3 app.py"),
         ("echo a > a.txt  &&  echo b", "echo a &&  echo b"),
         ("echo a\\ > a.txt\nrm -rf x", "echo a\\ \nrm -rf x"),
@@ -91,7 +94,6 @@ fn other_redirect_forms_are_not_projected() {
         "python3 app.py 3> out.txt",
         "python3 app.py 2>&3",
         "python3 app.py <&0",
-        "python3 app.py &> out.txt",
         "python3 app.py > ",
     ] {
         assert_eq!(project(raw), None, "{raw:?}");
@@ -282,9 +284,12 @@ fn only_the_one_ampersand_that_ends_the_command_is_read_off() {
     ] {
         assert_eq!(project(raw).as_deref(), Some(projected), "{raw}");
     }
-    // `&>` is background-then-redirect under POSIX `sh`, so it is refused
-    // before the trailing-`&` reading is reached.
-    assert_eq!(project("npm run build &> build.log"), None);
+    // `&>` is the one-token redirect that sends both streams to the file,
+    // not a job separator, so it is read off like `> build.log 2>&1`.
+    assert_eq!(
+        project("npm run build &> build.log").as_deref(),
+        Some("npm run build")
+    );
     // Nothing was projected away, so there is no projection to read.
     assert_eq!(project("npm run build &"), None);
 }
