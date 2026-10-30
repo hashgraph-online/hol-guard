@@ -86,6 +86,7 @@ def _decode_edge(payload: object) -> dict[str, Any] | None:
         "local_cli_rule",
         "review_evidence",
         "receipt_recorded",
+        "exact_command_block",
     }
     if not isinstance(payload, dict) or not required <= set(payload) or set(payload) - allowed:
         return None
@@ -104,6 +105,7 @@ def _decode_edge(payload: object) -> dict[str, Any] | None:
         or not isinstance(payload.get("result"), dict)
         or not isinstance(payload.get("harness_response"), dict)
         or not isinstance(payload.get("receipt_recorded", False), bool)
+        or not isinstance(payload.get("exact_command_block", False), bool)
     ):
         return None
     # Every resident stamps its containment route; an edge without one would

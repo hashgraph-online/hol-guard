@@ -435,6 +435,7 @@ class HookWorkerNativeMixin:
                     claimed_saved_allow_hash=claimed_saved_allow_hash,
                     claimed_approval_request_id=claimed_approval_request_id,
                     local_cli_rule=cast("Mapping[str, object] | None", edge.get("local_cli_rule")),
+                    exact_command_block=edge.get("exact_command_block"),
                     review_evidence=cast("Mapping[str, object] | None", edge.get("review_evidence")),
                 )
                 return (_record_native_pre_activity(self, native_harness, payload, response, accepted_receipt), True)
@@ -461,6 +462,7 @@ class HookWorkerNativeMixin:
                     command=pre_tool_command(payload),
                     native_result=native_result,
                     workspace=workspace,
+                    edge_hint=edge.get("exact_command_block"),
                 )
                 if command_block is not None:
                     return (

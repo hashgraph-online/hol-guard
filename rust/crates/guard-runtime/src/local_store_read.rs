@@ -238,6 +238,23 @@ fn exact_command_block(
     Ok(false)
 }
 
+/// Whether the store at `store_path` holds an artifact-scoped block that may
+/// name `command`'s exact-command ids, for the edge to tell the daemon. A
+/// store it cannot read may hold one, so the answer is then yes and the
+/// daemon's lookup decides, failing closed as before.
+pub(crate) fn exact_command_block_hint(store_path: &Path, harness: &str, command: &str) -> bool {
+    let read = || -> Result<bool, StoreReadError> {
+        let Some(connection) = open_read_only(store_path)? else {
+            return Ok(false);
+        };
+        connection
+            .busy_timeout(std::time::Duration::from_millis(HOOK_PROBE_BUSY_TIMEOUT_MS))
+            .map_err(|_| StoreReadError::StoreUnavailable)?;
+        exact_command_block(&connection, harness, command)
+    };
+    read().unwrap_or(true)
+}
+
 /// `pre_tool_command` (`hook_request_parsing.py`): the command line a
 /// `PreToolUse` payload carries, read from the same places in the same order.
 pub(crate) fn pre_tool_command(payload: &Map<String, Value>) -> Option<&str> {

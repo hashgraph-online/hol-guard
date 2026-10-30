@@ -117,6 +117,29 @@ fn settle_within(
     }))
 }
 
+/// Whether a saved block may name the exact command of a `PreToolUse` the
+/// daemon sent its rules for, outside Watch, where the daemon looks such a
+/// block up after the edge. `None` when the edge did not read the store: the
+/// daemon asked for no rules, the call is recorded only, or the edge found no
+/// command in the payload it holds. The daemon's lookup then decides.
+pub(super) fn exact_command_block(
+    envelope: &GuardHookEnvelopeV2,
+    harness: &str,
+    event_name: &str,
+) -> Option<bool> {
+    let rules = envelope.local_cli_rules.as_ref()?;
+    if event_name != "PreToolUse" || envelope.recording_only {
+        return None;
+    }
+    let command = crate::local_store_read::pre_tool_command(envelope.raw_payload.as_object()?)?;
+    // The daemon's own store, the one its lookup would read.
+    Some(crate::local_store_read::exact_command_block_hint(
+        Path::new(&rules.store_path),
+        harness,
+        command,
+    ))
+}
+
 /// The custom block for `result`, or, when the call is too large to render
 /// with it, the same block over none of the edge's own fields.
 fn custom_block(

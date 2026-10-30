@@ -440,7 +440,9 @@ fn evaluate_validated_envelope(
         guard_home,
         || edge_local_cli::settle(&envelope, &harness, &event_name, &result),
     );
+    let exact_command_block = edge_local_cli::exact_command_block(&envelope, &harness, &event_name);
     let mut edge = GuardHookEdgeResultV2 {
+        exact_command_block,
         review_evidence,
         // Every edge carries its route so no hook asks again; only PreToolUse is routed.
         containment_route: Some(edge_route(&event_name, &result, envelope.recording_only)),

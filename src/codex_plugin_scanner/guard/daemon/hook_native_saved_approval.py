@@ -15,7 +15,7 @@ from pathlib import Path
 
 from ..policy_integrity import REMOTE_POLICY_SOURCES
 from ..store_policy import memory_lookup_candidates
-from ..store_policy_decision import policy_decision_block_exists, policy_decision_hash_exists
+from ..store_policy_decision import policy_decision_hash_exists
 from .hook_fail_closed import render_accepted_allow, render_pre_tool
 
 _LOGGER = logging.getLogger(__name__)
@@ -108,6 +108,7 @@ def native_exact_command_block_response(
     command: str | None,
     native_result: Mapping[str, object],
     workspace: Path | None,
+    edge_hint: object = None,
 ) -> dict[str, object] | None:
     """Apply a saved block on this exact shell command; ``None`` keeps the review flow.
 
@@ -116,9 +117,13 @@ def native_exact_command_block_response(
     token never names. The store's lookup owns expiry, harness scope and
     integrity; this only asks it about those ids, so a block keeps the command
     from running whatever allow the review would otherwise reuse.
+
+    ``edge_hint`` is the edge's ``exact_command_block`` answer. The edge read
+    the store for a block that may name this command; ``False`` means none
+    can, so the lookup is skipped. ``True`` or no answer leaves it to decide.
     """
 
-    if command is None or not _is_shell_action(native_result):
+    if command is None or edge_hint is False or not _is_shell_action(native_result):
         return None
     try:
         exact_ids, _memory_id = memory_lookup_candidates(
@@ -129,11 +134,10 @@ def native_exact_command_block_response(
             memory_artifact_name=None,
             guard_home=store_guard_home(store),
         )
-        if not exact_ids or not policy_decision_block_exists(store, harness=harness, artifact_ids=exact_ids):
-            return None
     except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error) as error:
-        # A failed probe cannot tell "no block" apart from a block it missed,
-        # and an allowed command would run on that answer, so it stops here.
+        # Without the ids there is no telling "no block" apart from a block
+        # missed, and an allowed command would run on that answer, so it stops
+        # here.
         _LOGGER.warning("Native exact-command block probe failed (%s)", type(error).__name__)
         return _saved_block_response(
             harness,

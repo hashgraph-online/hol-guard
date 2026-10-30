@@ -1,4 +1,4 @@
-use super::{settle, settle_within};
+use super::{exact_command_block, settle, settle_within};
 use crate::context_digest_package_scripts::package_json_scripts;
 use guard_contracts::{
     GuardHookEnvelopeV2, GuardHookLocalCliRulesV1, GuardHookSourceMetadataV2,
@@ -356,5 +356,105 @@ fn a_custom_allow_too_large_to_render_leaves_the_review_standing() {
             &oversized(review("native_command_review_required"))
         ),
         Ok(None)
+    );
+}
+
+/// Saved decisions on `npm run build`'s first exact-command id, one
+/// artifact-scoped row per `(harness, action)`, in the envelope's store.
+fn with_decisions(envelope: &GuardHookEnvelopeV2, rows: &[(&str, &str)]) {
+    let ids = crate::memory_pattern::verdict(&crate::memory_pattern::MemoryRequest {
+        command: Some("npm run build"),
+        artifact_type: Some("shell_command"),
+        artifact_id: None,
+        artifact_name: None,
+        harness: None,
+    })
+    .exact_artifact_ids;
+    let store_path = Path::new(&envelope.source.guard_home).join("guard.db");
+    let connection = rusqlite::Connection::open(store_path).unwrap();
+    connection
+        .execute_batch(
+            "create table policy_decisions (harness text, scope text, artifact_id text, action text)",
+        )
+        .unwrap();
+    for (harness, action) in rows {
+        connection
+            .execute(
+                "insert into policy_decisions values (?1, 'artifact', ?2, ?3)",
+                [*harness, ids[0].as_str(), *action],
+            )
+            .unwrap();
+    }
+}
+
+#[test]
+fn a_saved_block_on_the_exact_command_reaches_the_daemon() {
+    let (envelope, _) = case("ecb-block", None, false);
+    with_decisions(&envelope, &[("*", "block")]);
+
+    assert_eq!(
+        exact_command_block(&envelope, "claude-code", "PreToolUse"),
+        Some(true)
+    );
+}
+
+#[test]
+fn a_command_no_saved_block_names_skips_the_daemon_lookup() {
+    let (envelope, _) = case("ecb-none", None, false);
+    // A store without saved decisions holds no block.
+    assert_eq!(
+        exact_command_block(&envelope, "claude-code", "PreToolUse"),
+        Some(false)
+    );
+    with_decisions(&envelope, &[("*", "allow"), ("codex", "block")]);
+
+    assert_eq!(
+        exact_command_block(&envelope, "claude-code", "PreToolUse"),
+        Some(false)
+    );
+}
+
+#[test]
+fn a_store_the_edge_cannot_read_may_hold_a_block() {
+    let (envelope, _) = case("ecb-unreadable", None, false);
+    fs::write(
+        Path::new(&envelope.source.guard_home).join("guard.db"),
+        b"not a database",
+    )
+    .unwrap();
+
+    assert_eq!(
+        exact_command_block(&envelope, "claude-code", "PreToolUse"),
+        Some(true)
+    );
+}
+
+#[test]
+fn the_edge_leaves_calls_it_does_not_read_to_the_daemon() {
+    let (recorded, _) = case("ecb-watch", None, true);
+    with_decisions(&recorded, &[("*", "block")]);
+    assert_eq!(
+        exact_command_block(&recorded, "claude-code", "PreToolUse"),
+        None
+    );
+
+    let (mut envelope, _) = case("ecb-scope", None, false);
+    with_decisions(&envelope, &[("*", "block")]);
+    assert_eq!(
+        exact_command_block(&envelope, "claude-code", "PostToolUse"),
+        None
+    );
+    envelope.raw_payload =
+        json!({ "tool_name": "Read", "tool_input": { "file_path": "notes.md" } });
+    assert_eq!(
+        exact_command_block(&envelope, "claude-code", "PreToolUse"),
+        None
+    );
+    envelope.raw_payload =
+        json!({ "tool_name": "Bash", "tool_input": { "command": "npm run build" } });
+    envelope.local_cli_rules = None;
+    assert_eq!(
+        exact_command_block(&envelope, "claude-code", "PreToolUse"),
+        None
     );
 }

@@ -76,6 +76,7 @@ def pause_native_pre_tool_for_approval(
     claimed_approval_request_id: str | None = None,
     local_cli_rule: Mapping[str, object] | None = None,
     review_evidence: Mapping[str, object] | None = None,
+    exact_command_block: object = None,
 ) -> dict[str, object]:
     """Answer a native review from the edge's custom extension rule and review evidence."""
     launch_target = _native_review_launch_target(payload)
@@ -104,6 +105,7 @@ def pause_native_pre_tool_for_approval(
         command=pre_tool_command(payload),
         native_result=native_result,
         workspace=workspace,
+        edge_hint=exact_command_block,
     )
     if command_block is not None:
         return command_block
