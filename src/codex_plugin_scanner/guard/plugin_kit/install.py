@@ -202,9 +202,16 @@ def _get(request: urllib.request.Request, *, allow_redirects: bool) -> bytes:
         return response.read(_SPEC_LIMIT_BYTES + 1)
 
 
-def fetch_spec(slug: str, endpoint: str = SPEC_URL, *, progress: TextIO | None = None) -> dict[str, Any]:
+def fetch_spec(
+    slug: str,
+    endpoint: str = SPEC_URL,
+    *,
+    progress: TextIO | None = None,
+    allow_redirects: bool | None = None,
+) -> dict[str, Any]:
     """Ask HOL for the listing's install spec. ``progress`` (a terminal) gets
-    one line if the answer takes longer than a second."""
+    one line if the answer takes longer than a second. ``allow_redirects``
+    defaults to following redirects only from HOL's own endpoint."""
 
     url = f"{endpoint}?{urllib.parse.urlencode({'slug': slug, 'schema': SPEC_SCHEMA})}"
     request = urllib.request.Request(
@@ -223,7 +230,8 @@ def fetch_spec(slug: str, endpoint: str = SPEC_URL, *, progress: TextIO | None =
         # An override was checked as given; a redirect would leave those checks behind.
         for attempt in (1, 2):
             try:
-                raw = _get(request, allow_redirects=endpoint == SPEC_URL)
+                follow = endpoint == SPEC_URL if allow_redirects is None else allow_redirects
+                raw = _get(request, allow_redirects=follow)
                 break
             except (ManagedNetworkError, urllib.error.URLError, OSError) as error:
                 if attempt == 1 and _retryable(error):

@@ -789,7 +789,9 @@ def _verify(args: argparse.Namespace) -> int:
         endpoint, listing_origin = install.spec_endpoint()
         if listing_origin:
             print(f"Warning: {install.SPEC_URL_ENV} is set. HOL answers come from {endpoint}.", file=sys.stderr)
-        spec = install.fetch_spec(slug, endpoint, progress=_progress_stream(args))
+        spec = verify.fetch_listing_spec(
+            slug, endpoint, overridden=bool(listing_origin), progress=_progress_stream(args)
+        )
         plugin_id = verify.claude_plugin_id(spec)
         installed = verify.claude_installed(install.claude_home(), plugin_id) if plugin_id else None
         if installed is None:
@@ -798,7 +800,8 @@ def _verify(args: argparse.Namespace) -> int:
                 exit_code=install.EXIT_NOTHING,
                 code="not_installed",
             )
-        result = verify.compare(installed, verify.fetch_ledger(slug, verify.ledger_endpoint(endpoint)))
+        ledger = verify.fetch_ledger(slug, verify.ledger_endpoint(endpoint), spec_slug=spec.get("slug"))
+        result = verify.compare(installed, ledger)
     except install.PluginInstallError as error:
         print(f"Error: {error}", file=sys.stderr)
         document["error"] = {"code": error.code, "message": str(error)}
@@ -809,8 +812,11 @@ def _verify(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps(document, indent=2, sort_keys=True))
     else:
+        # A differing commit goes to stderr whole, so its notes and releases
+        # link stay with the warning when stdout is piped away.
+        stream = sys.stderr if result["status"] == "differs" else sys.stdout
         for line in verify.render(slug, installed, result, verify.listing_releases_url(spec)):
-            print(line, file=sys.stderr if line.startswith("Warning:") else sys.stdout)
+            print(line, file=stream)
     return 0
 
 

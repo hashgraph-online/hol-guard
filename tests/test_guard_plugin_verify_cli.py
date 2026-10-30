@@ -82,7 +82,7 @@ def _installed(home: Path, entry: dict[str, Any] | None) -> None:
 
 def _serve(monkeypatch: pytest.MonkeyPatch, ledger: dict[str, Any] | BaseException) -> list[str]:
     asked: list[str] = []
-    monkeypatch.setattr(install, "fetch_spec", lambda slug, endpoint, progress=None: SPEC)
+    monkeypatch.setattr(install, "fetch_spec", lambda slug, endpoint, **_kwargs: SPEC)
 
     def urlopen(request: Any, **_kwargs: Any) -> Reply:
         asked.append(request.full_url)
@@ -124,9 +124,11 @@ def test_different_commit_warns_and_still_exits_zero(claude_home: Path, monkeypa
     code, out, err = run(["plugin", "verify", "acme/toolgate"], monkeypatch)
 
     assert code == 0
+    # The whole differing result goes to stderr, so piping stdout away keeps the notes with the warning.
+    assert out == ""
     assert "Warning: HOL recorded 0123456 (hol_catalog) for 1.2.0, not the commit Claude Code installed." in err
-    assert "HOL noted: 1.2.0 was re-tagged." in out
-    assert "Releases: https://hol.org/registry/plugins/acme%2Ftoolgate/releases" in out
+    assert "HOL noted: 1.2.0 was re-tagged." in err
+    assert "Releases: https://hol.org/registry/plugins/acme%2Ftoolgate/releases" in err
     # Warn only: Guard leaves Claude Code's record exactly as it was.
     assert (claude_home / "plugins" / "installed_plugins.json").read_bytes() == before
 
@@ -156,6 +158,8 @@ def test_json_document_names_status_and_recorded_commits(claude_home: Path, monk
             "no commit recorded for 1.3.0",
         ),
         ({"sourceCommand": "node setup.js"}, [_record(SCANNED)], "no_commit", "kept no commit for this install"),
+        # Without a version no recorded commit can be tied to the install, even one HOL saw for another version.
+        ({"gitCommitSha": OTHER}, [_record(OTHER, version="1.1.0")], "no_version", "kept no version for this install"),
     ],
 )
 def test_nothing_to_compare_is_said_plainly(
@@ -212,11 +216,104 @@ def test_unknown_listing_in_the_ledger_exits_three(claude_home: Path, monkeypatc
     assert "HOL has no integrity record for acme/toolgate." in err
 
 
-def test_ledger_url_follows_a_local_spec_override() -> None:
-    assert (
-        verify.ledger_endpoint("http://localhost:3017/api/guard/plugins/install-spec")
-        == "http://localhost:3017/api/guard/plugins/integrity-ledger"
-    )
+@pytest.mark.parametrize(
+    "override",
+    [
+        "http://localhost:3017/api/guard/plugins/install-spec",
+        "http://localhost:3017/api/guard/plugins/install-spec/",
+        "http://localhost:3017",
+        "http://localhost:3017/",
+    ],
+)
+def test_ledger_url_follows_a_local_spec_override(override: str) -> None:
+    assert verify.ledger_endpoint(override) == "http://localhost:3017/api/guard/plugins/integrity-ledger"
+
+
+def _spec_answer(monkeypatch: pytest.MonkeyPatch, error: BaseException) -> list[dict[str, Any]]:
+    calls: list[dict[str, Any]] = []
+
+    def urlopen(_request: Any, **kwargs: Any) -> Reply:
+        calls.append(kwargs)
+        raise error
+
+    monkeypatch.setattr(install, "managed_urlopen", urlopen)
+    return calls
+
+
+def test_unknown_listing_in_the_spec_lookup_exits_three(claude_home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _spec_answer(monkeypatch, urllib.error.HTTPError("u", 404, "Not Found", Message(), None))
+
+    code, out, err = run(["plugin", "verify", "acme/toolgate", "--json"], monkeypatch)
+
+    assert code == 3
+    assert json.loads(out)["error"]["code"] == "not_found"
+    assert "No plugin acme/toolgate is listed on HOL." in err
+
+
+def test_spec_lookup_does_not_follow_redirects(claude_home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _spec_answer(monkeypatch, urllib.error.HTTPError("u", 302, "Found", Message(), None))
+
+    code, _out, err = run(["plugin", "verify", "acme/toolgate"], monkeypatch)
+
+    assert code == 6
+    assert [call.get("allow_redirects") for call in calls] == [False]
+    assert "redirect, which verify does not follow" in err
+
+
+def test_ledger_for_another_listing_is_refused(claude_home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _installed(claude_home, {"version": "1.2.0", "gitCommitSha": SCANNED})
+    _serve(monkeypatch, {**_ledger(_record(SCANNED)), "slug": "acme/other"})
+
+    code, out, err = run(["plugin", "verify", "acme/toolgate"], monkeypatch)
+
+    assert code == 2
+    assert out == ""
+    assert "another listing's record" in err
+
+
+def test_canonical_slug_from_the_spec_is_accepted(claude_home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _installed(claude_home, {"version": "1.2.0", "gitCommitSha": SCANNED})
+    _serve(monkeypatch, {**_ledger(_record(SCANNED)), "slug": "Acme/ToolGate"})
+
+    code, out, _err = run(["plugin", "verify", "ACME/toolgate"], monkeypatch)
+
+    assert code == 0
+    assert "Matches what HOL recorded for 1.2.0." in out
+
+
+@pytest.mark.parametrize(
+    "ledger",
+    [
+        _ledger({**_record(SCANNED), "kind": 5}),
+        _ledger({**_record(SCANNED), "commitSha": ["x"]}),
+        _ledger(events=[{"kind": "republished", "version": "1.2.0", "sentence": {"text": "x"}}]),
+        _ledger(events=[{"kind": "republished", "version": 1, "sentence": "x"}]),
+        {**_ledger(), "records": {}},
+    ],
+)
+def test_malformed_ledger_entries_are_refused(
+    claude_home: Path, monkeypatch: pytest.MonkeyPatch, ledger: dict[str, Any]
+) -> None:
+    _installed(claude_home, {"version": "1.2.0", "gitCommitSha": SCANNED})
+    _serve(monkeypatch, ledger)
+
+    code, _out, err = run(["plugin", "verify", "acme/toolgate"], monkeypatch)
+
+    assert code == 2
+    assert "not in the expected shape" in err
+
+
+def test_ledger_text_cannot_drive_the_terminal(claude_home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _installed(claude_home, {"version": "1.2.0", "gitCommitSha": OTHER})
+    event = {"kind": "republished", "version": "1.2.0", "sentence": "\x1b]0;owned\x07 re-tagged"}
+    _serve(monkeypatch, _ledger(_record(SCANNED, channel="hol\x1b[2Jcatalog"), events=[event]))
+
+    code, out, err = run(["plugin", "verify", "acme/toolgate"], monkeypatch)
+
+    assert code == 0
+    assert "\x1b" not in out + err and "\x07" not in out + err
+    assert "HOL noted: \\u001b]0;owned\\u0007 re-tagged" in err
+    assert "(hol\\u001b[2Jcatalog)" in err
 
 
 def test_unexpected_ledger_shape_is_refused(claude_home: Path, monkeypatch: pytest.MonkeyPatch) -> None:

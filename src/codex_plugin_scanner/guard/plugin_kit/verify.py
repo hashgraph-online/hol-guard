@@ -22,6 +22,7 @@ from ..mdm.network import ManagedNetworkError, managed_urlopen
 from . import install
 
 LEDGER_SCHEMA = "hol.plugin-integrity-ledger.v1"
+LEDGER_PATH = "/api/guard/plugins/integrity-ledger"
 _LEDGER_LIMIT_BYTES = 512 * 1024
 _LEDGER_TIMEOUT_SECONDS = 10.0
 # Events that say something about one version's contents; the rest describe
@@ -31,13 +32,64 @@ _VERSION_EVENTS = {"differs", "republished", "version_withdrawn", "pinned_commit
 
 def ledger_endpoint(spec_endpoint: str) -> str:
     """The ledger lookup next to the install-spec endpoint, so an override
-    (a local portal) serves both."""
+    (a local portal) serves both. An override that names only an origin gets
+    HOL's own ledger path on that origin."""
 
-    base, _, _ = spec_endpoint.rstrip("/").rpartition("/")
-    return f"{base}/integrity-ledger"
+    parts = urllib.parse.urlsplit(spec_endpoint)
+    head, _, _ = parts.path.rstrip("/").rpartition("/")
+    path = f"{head}/integrity-ledger" if head else LEDGER_PATH
+    return urllib.parse.urlunsplit((parts.scheme, parts.netloc, path, "", ""))
 
 
-def fetch_ledger(slug: str, endpoint: str) -> dict[str, Any]:
+def fetch_listing_spec(slug: str, endpoint: str, *, overridden: bool, progress: Any = None) -> dict[str, Any]:
+    """The listing's install spec, fetched without following redirects so the
+    ledger request that follows stays on the origin the spec came from."""
+
+    try:
+        return install.fetch_spec(slug, endpoint, progress=progress, allow_redirects=False)
+    except install.PluginInstallError as error:
+        cause = error.__cause__
+        if not overridden and isinstance(cause, urllib.error.HTTPError) and 300 <= cause.code < 400:
+            raise install.PluginInstallError(
+                "HOL answered the install lookup with a redirect, which verify does not follow. Try again shortly.",
+                exit_code=install.EXIT_UNREACHABLE,
+                code="unreachable",
+            ) from error
+        if error.code == "not_found":
+            raise install.PluginInstallError(str(error), exit_code=install.EXIT_NOTHING, code="not_found") from error
+        raise
+
+
+def _optional_text(value: object) -> bool:
+    return value is None or isinstance(value, str)
+
+
+def _valid_record(item: object) -> bool:
+    return (
+        isinstance(item, Mapping)
+        and isinstance(item.get("kind"), str)
+        and isinstance(item.get("channel"), str)
+        and _optional_text(item.get("version"))
+        and _optional_text(item.get("commitSha"))
+    )
+
+
+def _valid_event(item: object) -> bool:
+    channels = item.get("channels") if isinstance(item, Mapping) else None
+    return (
+        isinstance(item, Mapping)
+        and isinstance(item.get("kind"), str)
+        and isinstance(item.get("sentence"), str)
+        and _optional_text(item.get("version"))
+        and (channels is None or (isinstance(channels, list) and all(isinstance(c, str) for c in channels)))
+    )
+
+
+def fetch_ledger(slug: str, endpoint: str, *, spec_slug: object = None) -> dict[str, Any]:
+    """HOL's integrity record for ``slug``. The answer must name the listing
+    asked for (or the canonical slug its install spec gave) and carry
+    well-formed records and events; anything else is refused."""
+
     url = f"{endpoint}?{urllib.parse.urlencode({'slug': slug})}"
     request = urllib.request.Request(
         url, headers={"User-Agent": f"hol-guard/{__version__}", "Accept": "application/json"}
@@ -69,8 +121,18 @@ def fetch_ledger(slug: str, endpoint: str) -> dict[str, Any]:
         ledger = json.loads(raw)
     except ValueError as error:
         raise install.PluginInstallError("The integrity record from HOL was not valid JSON.") from error
+    shape_error = install.PluginInstallError("The integrity record from HOL was not in the expected shape.")
     if not isinstance(ledger, dict) or ledger.get("schema") != LEDGER_SCHEMA:
-        raise install.PluginInstallError("The integrity record from HOL was not in the expected shape.")
+        raise shape_error
+    records, events = ledger.get("records"), ledger.get("events")
+    if not isinstance(records, list) or not all(_valid_record(item) for item in records):
+        raise shape_error
+    if not isinstance(events, list) or not all(_valid_event(item) for item in events):
+        raise shape_error
+    named = ledger.get("slug")
+    accepted = {value.casefold() for value in (slug, spec_slug) if isinstance(value, str) and value}
+    if not isinstance(named, str) or named.casefold() not in accepted:
+        raise install.PluginInstallError(f"HOL answered the integrity lookup for {slug} with another listing's record.")
     return ledger
 
 
@@ -111,9 +173,10 @@ def compare(installed: Mapping[str, str | None], ledger: Mapping[str, Any]) -> d
     """Hold the installed commit against what HOL recorded for its version.
 
     ``status`` is ``matches``, ``differs`` (HOL recorded other commits for this
-    version), ``not_recorded`` (HOL has no commit for this version yet) or
+    version), ``not_recorded`` (HOL has no commit for this version yet),
     ``no_commit`` (Claude Code kept no commit, as for a plugin installed by
-    running a declared command).
+    running a declared command) or ``no_version`` (Claude Code kept no
+    version, so no recorded commit can be tied to the install).
     """
 
     version, commit = installed.get("version"), installed.get("commit")
@@ -122,7 +185,7 @@ def compare(installed: Mapping[str, str | None], ledger: Mapping[str, Any]) -> d
     for item in records if isinstance(records, list) else []:
         if not isinstance(item, Mapping) or item.get("kind") != "git_commit":
             continue
-        if version is not None and item.get("version") != version:
+        if version is None or item.get("version") != version:
             continue
         sha, channel = item.get("commitSha"), item.get("channel")
         if isinstance(sha, str) and sha:
@@ -131,6 +194,8 @@ def compare(installed: Mapping[str, str | None], ledger: Mapping[str, Any]) -> d
                 channels.append(channel)
     if commit is None:
         status = "no_commit"
+    elif version is None:
+        status = "no_version"
     elif not commits:
         status = "not_recorded"
     elif commit in commits:
@@ -143,7 +208,7 @@ def compare(installed: Mapping[str, str | None], ledger: Mapping[str, Any]) -> d
         for event in (raw_events if isinstance(raw_events, list) else [])
         if isinstance(event, Mapping)
         and event.get("kind") in _VERSION_EVENTS
-        and (event.get("version") in (None, version) or version is None)
+        and event.get("version") in (None, version)
     ]
     return {
         "status": status,
@@ -160,12 +225,19 @@ def listing_releases_url(spec: Mapping[str, Any]) -> str | None:
 def render(
     slug: str, installed: Mapping[str, str | None], result: Mapping[str, Any], releases: str | None
 ) -> list[str]:
-    version = installed.get("version") or "an unknown version"
+    # Everything below but the slug came from a file or a network answer, so
+    # control characters are escaped before they reach the terminal.
+    version = install._printable(installed.get("version") or "an unknown version")
     commit = installed.get("commit")
-    lines = [f"{slug} in Claude Code: {version}" + (f" at commit {install._short(commit)}" if commit else "")]
+    lines = [
+        f"{slug} in Claude Code: {version}"
+        + (f" at commit {install._printable(install._short(commit))}" if commit else "")
+    ]
     recorded: Sequence[Mapping[str, Any]] = result.get("recorded") or []
     shown = ", ".join(
-        f"{install._short(item.get('commit'))} ({', '.join(item.get('channels') or [])})" for item in recorded
+        f"{install._printable(install._short(item.get('commit')))} "
+        f"({install._printable(', '.join(item.get('channels') or []))})"
+        for item in recorded
     )
     status = result.get("status")
     if status == "matches":
@@ -177,10 +249,12 @@ def render(
         )
     elif status == "not_recorded":
         lines.append(f"  HOL has no commit recorded for {version} yet, so there is nothing to compare.")
+    elif status == "no_version":
+        lines.append("  Claude Code kept no version for this install, so there is nothing to compare.")
     else:
         lines.append("  Claude Code kept no commit for this install, so there is nothing to compare.")
     for event in result.get("events") or []:
-        lines.append(f"  HOL noted: {event.get('sentence')}")
+        lines.append(f"  HOL noted: {install._printable(str(event.get('sentence')))}")
     if releases and (status == "differs" or result.get("events")):
-        lines.append(f"  Releases: {releases}")
+        lines.append(f"  Releases: {install._printable(releases)}")
     return lines
