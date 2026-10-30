@@ -219,3 +219,53 @@ def test_verify_pr_comment_carries_listing_link_only_when_given() -> None:
     assert PR_COMMENT_LINK in with_link
     assert SCAN_LIMITS_LINK in with_link
     assert "hol.org/plugins" not in without_link
+
+
+def _capture_ci_report(monkeypatch) -> list[str]:
+    sent: list[str] = []
+
+    def _fake_send(body: str, **_kwargs: object) -> str:
+        sent.append(body)
+        return "sent"
+
+    monkeypatch.setattr(action_runner, "send_ci_report", _fake_send)
+    return sent
+
+
+def test_report_to_hol_sends_the_summary_for_public_repositories(monkeypatch, tmp_path) -> None:
+    sent = _capture_ci_report(monkeypatch)
+    _run_scan(
+        monkeypatch,
+        tmp_path,
+        event=PUBLIC_EVENT,
+        REPORT_TO_HOL="true",
+        GITHUB_SHA="b" * 40,
+        GITHUB_RUN_ID="42",
+    )
+    assert len(sent) == 1
+    payload = json.loads(sent[0])
+    assert payload["repository"] == "acme/tool"
+    assert payload["workflow_run_id"] == "42"
+    assert payload["score"] == 97
+
+
+@pytest.mark.parametrize(
+    ("event", "report_to_hol"),
+    [
+        (PUBLIC_EVENT, "false"),
+        ({"repository": {"full_name": "acme/tool", "private": True}}, "true"),
+    ],
+)
+def test_report_to_hol_stays_off_by_default_and_for_private_repositories(
+    monkeypatch, tmp_path, event, report_to_hol
+) -> None:
+    sent = _capture_ci_report(monkeypatch)
+    _run_scan(
+        monkeypatch,
+        tmp_path,
+        event=event,
+        REPORT_TO_HOL=report_to_hol,
+        GITHUB_SHA="b" * 40,
+        GITHUB_RUN_ID="42",
+    )
+    assert sent == []

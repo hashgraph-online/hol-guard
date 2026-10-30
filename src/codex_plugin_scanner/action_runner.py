@@ -26,6 +26,7 @@ from .github_reporting import (
     should_manage_pr_comment,
     upsert_pr_comment,
 )
+from .hol_ci_report import build_ci_report_body, send_ci_report
 from .models import GRADE_LABELS, SEVERITY_ORDER, Finding, max_severity
 from .quality_artifact import build_quality_artifact, write_quality_artifact
 from .reporting import build_json_payload, format_markdown, format_sarif, should_fail_for_severity
@@ -374,6 +375,7 @@ def main() -> int:
     output_path = _read_env("OUTPUT")
     write_step_summary = _read_bool_env("WRITE_STEP_SUMMARY", default=True)
     publish_hint = _read_bool_env("PUBLISH_HINT", default=True)
+    report_to_hol = _read_bool_env("REPORT_TO_HOL")
     registry_payload_output = _read_env("REGISTRY_PAYLOAD_OUTPUT")
     upload_sarif = _read_bool_env("UPLOAD_SARIF")
     profile = _read_env("PROFILE", "default")
@@ -643,6 +645,32 @@ def main() -> int:
                 "findings_total": str(sum(result.severity_counts.values())),
             }
         )
+
+        if report_to_hol and mode == "scan" and scan_scope == "plugin":
+            ci_report_repository = _public_repository_for_publish_hint(
+                repository=github_repository,
+                server_url=github_server_url,
+                event_path=github_event_path,
+            )
+            if ci_report_repository and github_sha and github_run_id:
+                ci_report_status = send_ci_report(
+                    build_ci_report_body(
+                        repository=ci_report_repository,
+                        commit_sha=github_sha,
+                        workflow_run_id=github_run_id,
+                        scanner_version=__version__,
+                        plugin_dir=plugin_dir,
+                        score=result.score,
+                        grade=result.grade,
+                        max_severity=output_values["max_severity"],
+                        severity_counts=result.severity_counts,
+                    ),
+                    request_url=_read_env("ACTIONS_ID_TOKEN_REQUEST_URL"),
+                    request_token=_read_env("ACTIONS_ID_TOKEN_REQUEST_TOKEN"),
+                )
+            else:
+                ci_report_status = "skipped: only public github.com repositories can report"
+            print(f"HOL CI report: {ci_report_status}")
 
         if submission_enabled or registry_payload_output:
             metadata = resolve_submission_metadata(
