@@ -16,6 +16,15 @@ const PYTHON: &str = r"C:\Python\python.exe";
 const BOOTSTRAP: &str = r"import sys;sys.path.insert(0, 'C:\\Guard\\site-packages');from codex_plugin_scanner.cli import main;raise SystemExit(main(sys.argv[1:]))";
 const PYTHON_DENY: &str = r#"{"policy_action":"sandbox-required","decision":"deny","reason_code":"native_python_eval_readonly_containment_required","required_execution_profile":"python-eval-readonly-v1","hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny"}}"#;
 
+/// A host whose runtime runs no sink itself.
+fn no_native(
+    _: &serde_json::Value,
+    _: &serde_json::Map<String, serde_json::Value>,
+    _: &str,
+) -> Option<String> {
+    None
+}
+
 fn owned(values: &[&str]) -> Vec<String> {
     values.iter().map(|value| (*value).to_owned()).collect()
 }
@@ -207,6 +216,7 @@ fn a_contained_python_call_is_rewritten_to_a_sink_command_both_shells_run() {
         prefix: &installed,
         guard_home: r"C:\Users\a\.hol-guard",
         home: r"C:\Users\a",
+        native: no_native,
     };
     let deny = parse_mapping_lone_surrogates(PYTHON_DENY).unwrap().value;
     let routed = routed(&deny, &payload, false, &target).unwrap();
@@ -280,6 +290,7 @@ fn a_call_no_shell_can_quote_keeps_the_denial() {
         prefix: &installed,
         guard_home: r"C:\Users\a\.hol-guard",
         home: "C:\\Users\\a \"quoted\"",
+        native: no_native,
     };
     let deny = parse_mapping_lone_surrogates(PYTHON_DENY).unwrap().value;
     assert_eq!(routed(&deny, &payload, false, &target), None::<PyVal>);
