@@ -410,15 +410,19 @@ fn shared_layers(
     }
 }
 
-/// Remove an overlay root. The kernel leaves the work directory's inner
-/// directory unreadable, so it is made traversable first.
+/// Remove an overlay root. The kernel leaves a work directory's inner
+/// directory unreadable, so every one the root holds is made traversable
+/// first: a linked worktree mounts a second overlay beside the first, and a
+/// root whose shared layers are left behind keeps the whole run on disk.
 pub fn remove_overlay_root(root: &Path) {
-    let inner = root.join("work").join("work");
-    if inner
-        .symlink_metadata()
-        .is_ok_and(|metadata| metadata.is_dir())
-    {
-        let _ = fs::set_permissions(&inner, fs::Permissions::from_mode(0o700));
+    for work in [root.join("work"), root.join("shared").join("work")] {
+        let inner = work.join("work");
+        if inner
+            .symlink_metadata()
+            .is_ok_and(|metadata| metadata.is_dir())
+        {
+            let _ = fs::set_permissions(&inner, fs::Permissions::from_mode(0o700));
+        }
     }
     let _ = fs::remove_dir_all(root);
 }

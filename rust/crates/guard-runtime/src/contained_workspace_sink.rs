@@ -23,6 +23,9 @@ use serde_json::{json, Map, Value};
 mod denial;
 #[path = "contained_workspace_sink_grant.rs"]
 mod grant;
+#[cfg(any(target_os = "linux", all(unix, test)))]
+#[path = "contained_workspace_sink_overlay.rs"]
+mod overlay;
 #[path = "contained_workspace_sink_plan.rs"]
 mod plan_check;
 #[path = "contained_workspace_sink_process.rs"]
