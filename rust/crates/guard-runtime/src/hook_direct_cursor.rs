@@ -217,12 +217,15 @@ fn reviewed_probe(edge: &Value, payload: &Map<String, Value>, scope: &Scope) -> 
 /// The edge's own answer to Cursor's route probe, when the daemon sent the
 /// argv that starts Guard's CLI: the response `daemon_answer` gives for the
 /// edge just produced, so the daemon makes one resident call instead of two.
-/// `None` for any call that is not the probe.
+/// With `native_sink` the daemon admits the runtime's own sink as well, so
+/// a call that sink reproduces routes there. `None` for any call that is not
+/// the probe.
 pub(crate) fn edge_probe_answer(
     payload: &Map<String, Value>,
     edge: &Value,
     source: &GuardHookSourceMetadataV2,
     sink_command: &[String],
+    native_sink: bool,
     recording_only: bool,
 ) -> Option<Value> {
     if !matches!(route(payload), Ok(Route::Probe)) {
@@ -235,6 +238,11 @@ pub(crate) fn edge_probe_answer(
         Some(sink_command),
     )
     .ok()?;
+    let scope = if native_sink {
+        scope.with_native_sink()
+    } else {
+        scope
+    };
     let answer = unreviewed_probe(payload, &scope, recording_only)
         .unwrap_or_else(|| reviewed_probe(edge, payload, &scope));
     answer.get("harness_response").cloned()

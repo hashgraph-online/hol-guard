@@ -28,9 +28,12 @@ pub(super) fn admitted(payload: &Map<String, Value>, scope: &Scope) -> Result<()
     let native_head: Option<Vec<&str>> = executable
         .as_deref()
         .and_then(Path::to_str)
+        .filter(|_| scope.native)
         .map(|executable| vec![executable, NATIVE_SINK_VERB]);
     // The probe writes either Guard's sink or, for a call the runtime's own
-    // sink reproduces, this runtime's: both re-authorize the saved call.
+    // sink reproduces, this runtime's: both re-authorize the saved call. Only
+    // a scope that routes to the runtime's sink admits it, so a daemon that
+    // never asked for it reviews that command as usual.
     let start = if argv.get(guard_head.len() - 1).map(String::as_str) == Some(SINK_VERB) {
         guard_head
     } else {

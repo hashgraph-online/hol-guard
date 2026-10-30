@@ -47,6 +47,7 @@ fn envelope(workspace: &Path, sink: bool) -> GuardHookEnvelopeV2 {
         structured_output_config: None,
         containment_sink: sink.then(|| GuardHookContainmentSinkV1 {
             sink_command: SINK_COMMAND.map(str::to_owned).to_vec(),
+            native_sink: false,
         }),
     }
 }
@@ -342,6 +343,40 @@ fn a_sink_routed_cursor_probe_comes_back_as_the_sink_command() {
     assert_eq!(argv[..3], SINK_COMMAND);
     assert_eq!(argument_after(&argv, "--harness"), "cursor");
     assert_eq!(argument_after(&argv, "--workspace"), workspace);
+    discard(Path::new(argument_after(&argv, "--request-file")));
+
+    // A daemon that admits the runtime's own sink gets that sink instead.
+    let mut native = cursor_probe_envelope(workspace, true);
+    if let Some(sink) = native.containment_sink.as_mut() {
+        sink.native_sink = true;
+    }
+    let mut response = Some(json!({}));
+    let answer = cursor_probe(
+        &native,
+        "cursor",
+        "PreToolUse",
+        "sink",
+        &sandboxed_build(),
+        &mut response,
+    );
+    assert_eq!(answer, Some(ROUTED));
+    let response = response.expect("a response");
+    let command = response["hookSpecificOutput"]["updatedInput"]["command"]
+        .as_str()
+        .expect("command is text");
+    let argv = crate::mcp_proxy_shlex::split_with(command, "", "").expect("quoted");
+    if cfg!(any(target_os = "macos", target_os = "linux")) {
+        let runtime = std::env::current_exe().expect("runtime");
+        assert_eq!(
+            argv[..2],
+            [
+                runtime.to_str().expect("utf-8 runtime"),
+                "contained-workspace-sink"
+            ]
+        );
+    } else {
+        assert_eq!(argv[..3], SINK_COMMAND);
+    }
     discard(Path::new(argument_after(&argv, "--request-file")));
 }
 

@@ -138,6 +138,7 @@ fn cursor_probe(
         &reviewed,
         &envelope.source,
         &sink.sink_command,
+        sink.native_sink,
         envelope.recording_only,
     )?;
     let routed = response.get("reason_code").and_then(Value::as_str) == Some(ROUTED_REASON);
