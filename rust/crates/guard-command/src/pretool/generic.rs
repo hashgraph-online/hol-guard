@@ -351,19 +351,9 @@ pub fn evaluate_pre_tool_envelope_with_execution_context(
             .as_deref()
             .and_then(env_prefix_projection::code_loading_setting)
         {
-            result.reason = match command
-                .as_deref()
-                .and_then(env_prefix_projection::node_heap_only_setting)
-            {
-                // A memory size is the usual reason to set it; say how to
-                // raise the heap in a form the sandbox accepts.
-                Some(mib) => format!(
-                    "HOL Guard blocked this command because the {setting} setting can load code that the installed extension controls cannot check. To give Node more memory, pass the option to node itself and run the tool's script from node_modules, for example `node --max-old-space-size={mib} node_modules/typescript/bin/tsc --noEmit`. Guard runs that form in its read-only sandbox."
-                ),
-                None => format!(
-                    "HOL Guard blocked this command because the {setting} setting can load code that the installed extension controls cannot check. Run the command without it."
-                ),
-            };
+            result.reason = format!(
+                "HOL Guard blocked this command because the {setting} setting can load code that the installed extension controls cannot check. Run the command without it."
+            );
         } else if let Some(setting) = command
             .as_deref()
             .and_then(env_prefix_projection::substituted_setting)
