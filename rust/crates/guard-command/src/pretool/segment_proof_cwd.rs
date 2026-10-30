@@ -103,6 +103,109 @@ fn cwd_list_context(
     Some(cwd)
 }
 
+/// `cd <dir> && <reads> && cd <absolute> && <reads>`.
+///
+/// Each later `cd` is absolute, so it names the same directory whether or not
+/// an earlier group was a subshell. The reads are proved in the directory
+/// that `cd` names, and only `&&` joins the steps, so a `cd` that fails does
+/// not leave them in the directory they started in.
+pub(in crate::pretool) fn exact_safe_absolute_cd_chain(
+    model: &CanonicalCommandV1,
+    allow_git_helper_context: bool,
+    context: PathContext<'_>,
+) -> bool {
+    eprintln!("chain-enter {}", model.normalized_text);
+    if model.segments.len() < 4 || model.confidence != "exact" {
+        eprintln!(
+            "chain-skip len={} confidence={}",
+            model.segments.len(),
+            model.confidence
+        );
+        return false;
+    }
+    let mut index = 0usize;
+    while index < model.segments.len() {
+        if index > 0 && separator_between(model, index).as_deref() != Some("&&") {
+            eprintln!(
+                "chain-sep-before-cd {index} {:?}",
+                separator_between(model, index)
+            );
+            return false;
+        }
+        let cd = &model.segments[index];
+        if cd.executable.as_deref() != Some("cd")
+            || !cd.environment_names.is_empty()
+            || cd.pipeline_index != 0
+            || !directory_targets::drive_targets_quoted(cd)
+            || !directory_targets::home_targets_unquoted(cd)
+        {
+            return false;
+        }
+        let [target] = cd.arguments.as_slice() else {
+            eprintln!("chain-cd-args {:?}", cd.arguments);
+            return false;
+        };
+        if index > 0 && !std::path::Path::new(target).is_absolute() {
+            eprintln!("chain-relative {target}");
+            return false;
+        }
+        let Some(cwd) = safe_reads::verified_cwd_target(target, context) else {
+            eprintln!("chain-unverified {target}");
+            return false;
+        };
+        index += 1;
+        let mut reads = 0usize;
+        while index < model.segments.len()
+            && model.segments[index].executable.as_deref() != Some("cd")
+        {
+            if separator_between(model, index).as_deref() != Some("&&") {
+                eprintln!(
+                    "chain-sep-read {index} {:?}",
+                    separator_between(model, index)
+                );
+                return false;
+            }
+            let segment = &model.segments[index];
+            if cwd_effectful_segment(segment) {
+                eprintln!("chain-effectful {:?}", segment.executable);
+                return false;
+            }
+            if !exact_safe_segment_with_context(
+                    model,
+                    segment,
+                    allow_git_helper_context,
+                    PathContext {
+                        cwd: Some(&cwd),
+                        ..context
+                    },
+                )
+            {
+                eprintln!("chain-unproved {:?}", segment.tokens);
+                return false;
+            }
+            reads += 1;
+            index += 1;
+        }
+        if reads == 0 {
+            return false;
+        }
+    }
+    true
+}
+
+fn separator_between(model: &CanonicalCommandV1, index: usize) -> Option<String> {
+    let previous = &model.segments[index - 1];
+    let next = &model.segments[index];
+    let length = next.span.start.checked_sub(previous.span.end)?;
+    let separator: String = model
+        .normalized_text
+        .chars()
+        .skip(previous.span.end)
+        .take(length)
+        .collect();
+    Some(separator.trim().to_owned())
+}
+
 pub(in crate::pretool) fn exact_safe_cwd_compound(
     model: &CanonicalCommandV1,
     allow_git_helper_context: bool,

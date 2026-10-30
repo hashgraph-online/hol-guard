@@ -11,8 +11,8 @@ mod cwd;
 #[path = "github_metadata_text.rs"]
 mod github_metadata_text;
 pub(super) use cwd::{
-    after_read_prefix, cwd_read_executable, exact_safe_cwd_compound, git_read_cwd_compound_context,
-    verified_cwd_compound_context, verified_cwd_list_context,
+    after_read_prefix, cwd_read_executable, exact_safe_absolute_cd_chain, exact_safe_cwd_compound,
+    git_read_cwd_compound_context, verified_cwd_compound_context, verified_cwd_list_context,
 };
 
 pub(crate) fn benign_command_segments(
