@@ -11,39 +11,23 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_approvals import (
-    approval_index_statements,
-    approval_schema_statement,
-    get_approval_request,
-    list_approval_requests,
-    resolve_request_with_queue_result,
-)
-from tests.approval_queue_identity_support import bind_connection_guard_home
+from codex_plugin_scanner.guard.store_approvals import approval_index_statements
 from tests.coverage_ci import under_coverage_scale
 from tests.native_approval_writes import (
     _store_for,
     add_approval_request,
-    bulk_resolve_approval_requests,
+    get_approval_request,
+    list_approval_requests,
     native_approval_connection,
     native_store,
     page_cursor,
+    resolve_request_with_queue_result,
     seed_pending_approval_rows,
 )
 
 
 def _make_conn() -> sqlite3.Connection:
     return native_approval_connection()
-
-
-def _make_memory_conn() -> sqlite3.Connection:
-    # Pure-SQL scale fixtures seed rows directly and never call the native writer.
-    conn = sqlite3.connect(":memory:")
-    conn.row_factory = sqlite3.Row
-    bind_connection_guard_home(conn, Path(tempfile.mkdtemp(prefix="hol-guard-approval-home-")))
-    conn.execute(approval_schema_statement())
-    for stmt in approval_index_statements():
-        conn.execute(stmt)
-    return conn
 
 
 def _make_request(
@@ -159,7 +143,7 @@ class TestQueueScaleTargets:
         assert elapsed < 0.1
 
     def test_resolving_one_request_with_100k_rows_stays_under_100ms(self) -> None:
-        conn = _make_memory_conn()
+        conn = _make_conn()
         seed_pending_approval_rows(conn, 100_000)
         # Starts the resident for this connection's guard home outside the timed
         # resolve, as the listing target above does: a resolution projects its

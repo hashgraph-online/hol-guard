@@ -50,6 +50,43 @@ def native_store(conn: sqlite3.Connection) -> GuardStore:
     return _store_for(conn)
 
 
+def get_approval_request(
+    conn: sqlite3.Connection, request_id: str, *, derive_scope: bool = True
+) -> dict[str, object] | None:
+    """Commit ``conn`` and read ``request_id`` through the native resident."""
+    return native_store(conn).get_approval_request(request_id, derive_scope=derive_scope)
+
+
+def list_approval_requests(
+    conn: sqlite3.Connection,
+    *,
+    status: str | None = "pending",
+    harness: str | None = None,
+    limit: int | None = 50,
+) -> list[dict[str, object]]:
+    """Commit ``conn`` and read one queue page through the native resident."""
+    return native_store(conn).list_approval_requests(status=status, harness=harness, limit=limit)
+
+
+def resolve_request_with_queue_result(
+    conn: sqlite3.Connection,
+    request_id: str,
+    *,
+    resolution_action: str,
+    resolution_scope: str,
+    reason: str | None,
+    resolved_at: str,
+) -> dict[str, object]:
+    """Commit ``conn`` and resolve ``request_id`` through the native resident."""
+    return native_store(conn).resolve_request_with_queue_result(
+        request_id,
+        resolution_action=resolution_action,
+        resolution_scope=resolution_scope,
+        reason=reason,
+        resolved_at=resolved_at,
+    )
+
+
 def page_cursor(item: dict[str, object]) -> str:
     """The approval queue page cursor that continues after ``item``."""
     marker = {"last_seen_at": item["last_seen_at"], "request_id": item["request_id"]}

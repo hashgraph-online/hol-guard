@@ -72,15 +72,6 @@ from .store_approvals import (
     approval_schema_statement,
     backfill_approval_queue_columns,
 )
-from .store_approvals import (
-    get_approval_request as load_approval_request,
-)
-from .store_approvals import (
-    list_approval_requests as load_approval_requests,
-)
-from .store_approvals import (
-    resolve_request_with_queue_result as persist_queue_resolution,
-)
 from .store_connect import (
     connect_request_schema_statement,
     connect_state_schema_statement,
