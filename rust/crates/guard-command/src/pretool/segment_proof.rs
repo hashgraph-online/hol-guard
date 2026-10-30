@@ -452,8 +452,11 @@ pub(super) fn exact_safe_segment_with_context(
         // desktop PATH shim, is deliberately absent: a batch target is run
         // through `cmd.exe /c`, which reads the arguments a second time, and
         // the text `command test` carries exists to hold the operators that
-        // reading would act on.
+        // reading would act on. The spelling is handed on, because on Windows
+        // the one without a suffix reaches that same shim through `PATHEXT`
+        // and the proof has to read its arguments as the shim would.
         "hol-guard" | "hol-guard.exe" => super::guard_diagnostics::safe_hol_guard_segment(
+            basename,
             &segment.arguments,
             context.cwd,
             segment.pipeline_index,

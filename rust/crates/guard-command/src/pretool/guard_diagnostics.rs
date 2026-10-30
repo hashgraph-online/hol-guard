@@ -73,11 +73,13 @@ const SHADOW_NAMES: &[&str] = &[
 ];
 
 pub(super) fn safe_hol_guard_segment(
+    basename: &str,
     arguments: &[String],
     cwd: Option<&str>,
     pipeline_index: usize,
 ) -> bool {
     cwd.is_some_and(|cwd| !cwd_shadows_launcher(Path::new(cwd)))
+        && arguments_reach_the_launcher(basename, arguments, cfg!(windows))
         && (safe_hol_guard_arguments(arguments)
             || (pipeline_index == 0
                 && super::pytest_contained::safe_pytest_contained_arguments(arguments, cwd)))
@@ -111,6 +113,38 @@ pub(super) fn names_launcher(text: &str) -> bool {
             .iter()
             .any(|shadow| name.eq_ignore_ascii_case(shadow))
     })
+}
+
+/// Characters `cmd.exe` acts on when it reads a batch target's arguments a
+/// second time. `&`, `|`, `(`, `)`, `<` and `>` begin a command of their own,
+/// `^` escapes the character after it, `"` ends the quoting the launcher was
+/// spawned with, and `%` and `!` put a variable's value into the line before
+/// any of that is read. A line ending closes the line outright.
+const REPARSED: &[char] = &['"', '&', '|', '<', '>', '^', '%', '!', '(', ')', '\n', '\r'];
+
+/// Whether the arguments reach the launcher as they were written, whatever
+/// program the spelling resolves to.
+///
+/// Windows resolves a word carrying no program suffix through `PATHEXT`, so a
+/// bare `hol-guard`, and an install spelled `~/.hol-guard/bin/hol-guard`, both
+/// reach `hol-guard.cmd` wherever that PATH shim is the launcher the lookup
+/// settles on -- and Guard writes that shim itself. A batch target is handed
+/// to `cmd.exe /c`, which reads the arguments again after the launcher was
+/// spawned with them, so a word holding one of the characters that reading
+/// acts on is not the word the shapes below were proved against. Taking the
+/// `.cmd` spelling out of the admission left that route open under every
+/// spelling the same lookup reaches.
+///
+/// The fixed shapes carry no text of the caller's, so they survive a second
+/// reading unchanged and stay silent on Windows as they are everywhere else.
+/// Only the readers that take free text -- `command test`, `explain`, and the
+/// ids beside them -- keep their review there, and only where the text holds
+/// one of those characters. The explicit `.exe` spelling names a real program,
+/// which is read once.
+fn arguments_reach_the_launcher(basename: &str, arguments: &[String], windows_host: bool) -> bool {
+    !windows_host
+        || basename.ends_with(".exe")
+        || arguments.iter().all(|word| !word.contains(REPARSED))
 }
 
 /// Whether the working directory could supply the program a bare `hol-guard`
@@ -221,11 +255,15 @@ const INSTALL_ROOTS: &[&str] = &[
     "~/appdata/local/pipx/",
     "~/appdata/local/programs/",
     "~/appdata/roaming/",
+    "~/appdata/roaming/python/",
+    "~/appdata/roaming/uv/",
     "~/library/application support/",
     "/applications/",
     "/etc/hol-guard/",
     "/library/",
+    "/library/application support/",
     "/opt/",
+    "/opt/homebrew/",
     "/program files (x86)/",
     "/program files/",
     "/programdata/",
@@ -315,10 +353,26 @@ fn names_its_own_directory(component: &str) -> bool {
 /// shared tree. Guard's own is named after it, so a sibling that is not is
 /// another program's install or a checkout written beside them, and the `bin`
 /// it carries proves nothing about who wrote the file inside.
+///
+/// A root is read as deeply as it is spelled, and a spelling is admitted by
+/// whichever entry reads it, so a narrower root answers for the layouts the
+/// wider one would refuse. `/Library/Application Support/` holds one directory
+/// per application as `/Library/` does, and is listed here as well, so Guard's
+/// own install below it is admitted while a sibling is not. A packager's tree
+/// there is a shared root instead and is listed above without a Guard-named
+/// directory: `/opt/homebrew/` carries one directory per formula below a
+/// `/opt/` an account cannot add to, and `%APPDATA%\Python` and `%APPDATA%\uv`
+/// carry one per interpreter version or tool below a `Roaming` a session
+/// writes freely.
 const APPLICATION_ROOTS: &[&str] = &[
     "~/applications/",
     "~/appdata/local/programs/",
+    "~/appdata/roaming/",
+    "~/library/application support/",
     "/applications/",
+    "/library/",
+    "/library/application support/",
+    "/opt/",
     "/program files (x86)/",
     "/program files/",
     "/programdata/",
