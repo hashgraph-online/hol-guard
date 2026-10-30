@@ -150,3 +150,39 @@ fn a_changed_since_selector_is_an_inert_value() {
         2
     );
 }
+
+/// A brace expansion stands for the words the shell joins from it, not for
+/// the alternatives read on their own: `{.,}./other` holds two pieces that
+/// climb nowhere and expands to `../other`.
+#[test]
+fn a_brace_expansion_building_a_step_back_is_not_an_inert_value() {
+    for arguments in [
+        vec!["--filter", "{.,}./other", "build"],
+        vec!["--filter={.,}./other", "build"],
+        vec!["--filter", "{.,x}./other", "build"],
+        vec!["--filter", "{web,.}./other", "build"],
+        vec!["--filter", "..{/web,}/other", "build"],
+    ] {
+        assert_eq!(skip_inert_options("pnpm", &arguments), 0, "{arguments:?}");
+    }
+}
+
+/// An expansion whose every word stays below the workspace is still inert,
+/// and a brace group holding no comma is the literal text pnpm's own
+/// directory selector is written in rather than an expansion.
+#[test]
+fn a_brace_expansion_that_stays_below_the_workspace_is_an_inert_value() {
+    for (arguments, skipped) in [
+        (vec!["--filter", "{web,api}", "build"], 2),
+        (vec!["--filter={web,api}", "build"], 1),
+        (vec!["--filter", "packages/{web,api}", "build"], 2),
+        (vec!["--filter", "{web,{api,docs}}", "build"], 2),
+        (vec!["--filter", "{web,api", "build"], 2),
+    ] {
+        assert_eq!(
+            skip_inert_options("pnpm", &arguments),
+            skipped,
+            "{arguments:?}"
+        );
+    }
+}

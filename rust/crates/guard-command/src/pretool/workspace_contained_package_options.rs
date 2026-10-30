@@ -67,11 +67,19 @@ pub(super) fn skip_inert_options(manager: &str, arguments: &[&str]) -> usize {
 /// out refuses the whole value. A comma separates pieces for the same reason,
 /// one step earlier: the shell expands `--filter={web,../sibling}` into two
 /// words before pnpm sees either, so the second selector never appears in the
-/// text this reads. Splitting on the comma reads it anyway. A value carrying
-/// `$` is refused outright, since what it names is not in the text. A scoped
-/// name such as `@acme/web` still passes, and so does a changed-since
-/// selector such as `[origin/main]`, which names a git ref rather than a
-/// place on disk.
+/// text this reads. Splitting on the comma reads it anyway.
+///
+/// Reading the alternatives one at a time is not enough on its own, because
+/// the shell joins each of them to the text around the group: `{.,}./other`
+/// holds the pieces `.` and `./other`, neither of which climbs, and stands
+/// for the words `../other` and `./other`. So the value is read both ways,
+/// as the pieces it is written from and as the words it stands for, and
+/// either reading reaching out refuses it.
+///
+/// A value carrying `$` is refused outright, since what it names is not in
+/// the text. A scoped name such as `@acme/web` still passes, and so does a
+/// changed-since selector such as `[origin/main]`, which names a git ref
+/// rather than a place on disk.
 pub(super) fn inert_value(value: &str) -> bool {
     !value.is_empty()
         && !value.starts_with('-')
@@ -81,6 +89,76 @@ pub(super) fn inert_value(value: &str) -> bool {
             .split(['{', '}', ','])
             .filter(|piece| !piece.is_empty())
             .all(stays_below_the_workspace)
+        && expanded_words(value)
+            .is_some_and(|words| words.iter().all(|word| stays_below_the_workspace(word)))
+}
+
+/// The most words a brace expansion may stand for before the value is read as
+/// one this route cannot settle.
+const BRACE_WORDS: usize = 64;
+
+/// The words the shell expands `value` into, or `None` when there are more of
+/// them than this reads.
+///
+/// Only a brace group holding a top-level comma expands; the shell leaves
+/// `{<dir>}` and an unbalanced brace as the literal text they are, which is
+/// the text pnpm's own directory selector is written in. Every alternative
+/// carries the text around its group, and each expansion drops a group, so
+/// the walk ends.
+fn expanded_words(value: &str) -> Option<Vec<String>> {
+    let mut words = Vec::new();
+    expand_into(value, &mut words).then_some(words)
+}
+
+fn expand_into(value: &str, words: &mut Vec<String>) -> bool {
+    if words.len() == BRACE_WORDS {
+        return false;
+    }
+    let Some((prefix, alternatives, suffix)) = alternative_group(value) else {
+        words.push(value.to_owned());
+        return true;
+    };
+    alternatives
+        .iter()
+        .all(|alternative| expand_into(&format!("{prefix}{alternative}{suffix}"), words))
+}
+
+/// The first balanced brace group holding a top-level comma, as the text
+/// before it, the alternatives inside it and the text after it.
+fn alternative_group(value: &str) -> Option<(&str, Vec<&str>, &str)> {
+    let open = value.find('{')?;
+    let mut depth = 0usize;
+    let mut alternatives = Vec::new();
+    let mut start = open + 1;
+    for (index, character) in value[open..]
+        .char_indices()
+        .map(|(offset, character)| (offset + open, character))
+    {
+        match character {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    if alternatives.is_empty() {
+                        // A group with no comma is literal text, so the next
+                        // group is the one to read.
+                        let (prefix, alternatives, suffix) =
+                            alternative_group(&value[index + 1..])?;
+                        let prefix = &value[..index + 1 + prefix.len()];
+                        return Some((prefix, alternatives, suffix));
+                    }
+                    alternatives.push(&value[start..index]);
+                    return Some((&value[..open], alternatives, &value[index + 1..]));
+                }
+            }
+            ',' if depth == 1 => {
+                alternatives.push(&value[start..index]);
+                start = index + 1;
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 /// Whether `piece` can only name a place below where the command runs.
