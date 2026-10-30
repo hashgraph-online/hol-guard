@@ -434,7 +434,11 @@ fn remove_redirect(
         "1" | "2" if !input => out.truncate(out.len() - 1),
         "0" if input => out.truncate(out.len() - 1),
         _ if descriptor.chars().all(|value| value.is_ascii_digit()) => return None,
-        // `&>` means background-then-redirect under POSIX `sh`.
+        // `&>` sends both streams to the file. POSIX `sh` reads it as the
+        // job separator followed by a redirect, which writes the same file
+        // after starting the same program, so both readings name the same
+        // write and the spelling decides with `> f 2>&1`.
+        "&" if !input => out.truncate(out.len() - 1),
         _ if descriptor.ends_with('&') => return None,
         _ => {}
     }
