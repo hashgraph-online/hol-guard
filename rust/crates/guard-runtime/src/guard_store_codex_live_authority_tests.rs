@@ -160,3 +160,24 @@ fn native_evidence_refuses_a_caller_key_or_lookup() {
         );
     }
 }
+
+#[test]
+fn the_op_reports_a_missing_binding_with_a_code_the_transport_passes_on() {
+    let connection = Connection::open_in_memory().unwrap();
+    let mut args = Map::new();
+    args.insert("request_id".into(), json!("req-1"));
+    args.insert("now".into(), json!(NOW));
+    args.insert("native_evidence".into(), json!(true));
+    assert!(matches!(
+        op(&connection, "/nonexistent-guard-home", &Args(&args), None),
+        Err(StoreError::Invalid(NATIVE_EVIDENCE_REQUIRED))
+    ));
+    // `native_guard_store.py` keeps a resident reason only in this shape.
+    let suffix = NATIVE_EVIDENCE_REQUIRED
+        .strip_prefix("native_guard_store_")
+        .unwrap();
+    assert!(suffix.len() <= 48);
+    assert!(suffix
+        .bytes()
+        .all(|byte| byte.is_ascii_lowercase() || byte == b'_'));
+}

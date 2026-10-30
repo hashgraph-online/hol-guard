@@ -183,7 +183,7 @@ def _unavailable(reason: str) -> NativeGuardStoreUnavailable:
     return error
 
 
-_NO_PUBLISHED_EVIDENCE = _unavailable("codex_live_evidence_required")
+_NO_PUBLISHED_EVIDENCE = _unavailable("native_guard_store_codex_live_evidence_required")
 
 
 class _OneCallStore(StoreExactCloudLocalOnceMixin):
@@ -397,7 +397,7 @@ def test_live_completion_without_a_resident_reply_is_not_recorded() -> None:
 
 def test_live_authority_reads_the_published_evidence_first() -> None:
     allow = {"action": "allow", "source": "approval-gate-once", "request_id": "r1"}
-    store = _OneCallStore(native=allow)
+    store = _OneCallStore(native={"native_evidence": allow})
 
     assert _authority(store) == allow
     (step,) = store.steps
@@ -406,9 +406,27 @@ def test_live_authority_reads_the_published_evidence_first() -> None:
 
 
 def test_live_authority_with_published_evidence_and_no_allow_answers_none() -> None:
-    store = _OneCallStore(native=None)
+    store = _OneCallStore(native={"native_evidence": None})
 
     assert _authority(store) is None
+    assert len(store.steps) == 1
+
+
+def test_live_authority_gathers_the_evidence_for_a_resident_that_predates_it() -> None:
+    allow = {"action": "allow", "source": "approval-gate-once", "request_id": "r1"}
+    store = _OneCallStore(native=None, reply=allow)
+
+    assert _authority(store) == allow
+    calls = [step for step in store.steps if isinstance(step, tuple) and step[0] == "codex_live_allow_authority"]
+    assert len(calls) == 1
+    assert "lookup" in calls[0][1]
+
+
+def test_live_authority_takes_an_exact_allow_from_a_resident_that_predates_native_evidence() -> None:
+    allow = {"action": "allow", "source": "approval-gate-once", "request_id": "r1"}
+    store = _OneCallStore(native=allow)
+
+    assert _authority(store) == allow
     assert len(store.steps) == 1
 
 

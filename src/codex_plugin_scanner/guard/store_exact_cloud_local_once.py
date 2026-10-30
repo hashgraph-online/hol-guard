@@ -13,6 +13,7 @@ from .project_identity import _process_directory
 _LOOKUP_KEY_FIELDS = ("integrity_key_b64", "local_once_integrity_key_b64")
 # The resident has no published evidence to read; the caller must send it.
 _EVIDENCE_REQUIRED = "codex_live_evidence_required"
+_NATIVE_EVIDENCE_REQUIRED = "native_guard_store_codex_live_evidence_required"
 
 
 class _NativeStoreOwner(Protocol):
@@ -36,15 +37,21 @@ class StoreExactCloudLocalOnceMixin:
         # memory, in one call, on the evidence the daemon published. Only when
         # it cannot does this gather the evidence and the key and ask again.
         base = {"request_id": request["request_id"], "now": now, "cwd": _process_directory()}
-        evidence_error: Exception | None = None
         try:
-            decision = self._native_store_call("codex_live_allow_authority", {**base, "native_evidence": True})
+            reply = self._native_store_call("codex_live_allow_authority", {**base, "native_evidence": True})
         except NativeGuardStoreUnavailable as error:
-            if error.reason != _EVIDENCE_REQUIRED:
+            if error.reason != _NATIVE_EVIDENCE_REQUIRED:
                 raise
-            args, evidence_error = _live_authority_args(self, request, now=now)
-            # Never retried: the lookup records a refused row's integrity audit.
-            decision = self._native_store_call("codex_live_allow_authority", args)
+            reply = None
+        if isinstance(reply, Mapping) and "native_evidence" in reply:
+            decision = reply["native_evidence"]
+            return dict(decision) if isinstance(decision, Mapping) else None
+        if isinstance(reply, Mapping):
+            # A resident that predates native evidence answered from the exact allow.
+            return dict(reply)
+        args, evidence_error = _live_authority_args(self, request, now=now)
+        # Never retried: the lookup records a refused row's integrity audit.
+        decision = self._native_store_call("codex_live_allow_authority", args)
         if isinstance(decision, Mapping):
             return dict(decision)
         if evidence_error is not None:

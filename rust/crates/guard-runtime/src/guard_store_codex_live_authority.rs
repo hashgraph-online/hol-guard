@@ -19,14 +19,16 @@
 //! resident reads both from the integrity state and key the daemon published,
 //! as the MCP relay does. When it cannot (no current binding, a state that is
 //! not the protected one the store holds, or rows it cannot verify), it
-//! refuses with `codex_live_evidence_required` before reading anything, and
-//! the caller gathers the evidence and asks again.
+//! refuses with `native_guard_store_codex_live_evidence_required` before
+//! reading anything, and the caller gathers the evidence and asks again. Its
+//! answer comes as `{"native_evidence": decision}`, so the caller can tell
+//! it from a resident that predates the flag and answered without a lookup.
 
 use std::path::Path;
 
 use guard_contracts::PolicyDecisionLookupRequestV1;
 use rusqlite::Connection;
-use serde_json::Value;
+use serde_json::{json, Value};
 
 use crate::guard_store_args::Args;
 use crate::guard_store_db::{StoreError, StoreResult};
@@ -37,6 +39,28 @@ use crate::project_identity::{portable_workspace, resolve_relative, PortableIden
 
 /// The resident cannot read this call's evidence itself.
 pub(crate) const EVIDENCE_REQUIRED: &str = "codex_live_evidence_required";
+
+/// `EVIDENCE_REQUIRED` as the store transport reports it to the caller.
+pub(crate) const NATIVE_EVIDENCE_REQUIRED: &str = "native_guard_store_codex_live_evidence_required";
+
+/// `codex_live_allow_authority`.
+pub(crate) fn op(
+    connection: &Connection,
+    guard_home: &str,
+    args: &Args<'_>,
+    owner: Option<&PolicySnapshotStore>,
+) -> StoreResult<Value> {
+    if !args.flag("native_evidence")? {
+        return resolve(connection, guard_home, args, owner);
+    }
+    match resolve_native(connection, guard_home, args, owner) {
+        Ok(decision) => Ok(json!({ "native_evidence": decision })),
+        Err(StoreError::Invalid(reason)) if reason == EVIDENCE_REQUIRED => {
+            Err(StoreError::Invalid(NATIVE_EVIDENCE_REQUIRED))
+        }
+        Err(error) => Err(error),
+    }
+}
 
 pub(crate) fn resolve(
     connection: &Connection,
@@ -141,14 +165,14 @@ fn resolve_native(
         Native::Lookup(lookup) => lookup,
         Native::NoLookup => return Ok(Value::Null),
     };
-    evaluate(lookup, request_id, args.opt_str("cwd")?)
+    evaluate(*lookup, request_id, args.opt_str("cwd")?)
 }
 
 enum Native {
     /// The exact Cloud allow issued for the request.
     Answered(Value),
     /// The lookup the saved rows need.
-    Lookup(PolicyDecisionLookupRequestV1),
+    Lookup(Box<PolicyDecisionLookupRequestV1>),
     /// No saved row can answer.
     NoLookup,
 }
@@ -196,14 +220,14 @@ fn native_read(
         return Ok(Native::NoLookup);
     };
     saved.now = now.to_owned();
-    Ok(Native::Lookup(saved.lookup_request(&Probe {
+    Ok(Native::Lookup(Box::new(saved.lookup_request(&Probe {
         harness,
         artifact_id,
         artifact_hash: text("artifact_hash"),
         workspace: text("workspace"),
         publisher: text("publisher"),
         exact_match_context: None,
-    })))
+    }))))
 }
 
 /// `_portable_project_workspace(workspace)`, with a relative workspace read

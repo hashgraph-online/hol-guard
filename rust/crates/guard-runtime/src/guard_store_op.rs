@@ -781,7 +781,7 @@ fn dispatch(
             crate::guard_store_claimed_native_allow::settle(connection, guard_home, args)
         }
         "codex_live_allow_authority" => {
-            crate::guard_store_codex_live_authority::resolve(connection, guard_home, args, owner)
+            crate::guard_store_codex_live_authority::op(connection, guard_home, args, owner)
         }
         "complete_codex_live_decision" => {
             crate::guard_store_codex_live_completion::complete(connection, guard_home, args, owner)
