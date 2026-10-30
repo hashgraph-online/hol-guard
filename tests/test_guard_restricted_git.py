@@ -23,6 +23,10 @@ from codex_plugin_scanner.guard.runtime.restricted_pytest_model import Restricte
         ["git", "submodule", "status"],
         ["git", "notes", "add", "-m", "x"],
         ["git", "blame", "--textconv", "example.txt"],
+        ["git", "grep", "-nO", "needle"],
+        ["git", "grep", "--open", "needle"],
+        ["git", "cat-file", "--filters", "HEAD:example.txt"],
+        ["git", "-c", "core.pager=sh", "log"],
     ],
 )
 def test_mutation_helpers_and_shell_effects_rejected(command, tmp_path):
@@ -62,16 +66,19 @@ def test_linux_git_uses_the_filtered_readonly_profile(monkeypatch, tmp_path):
 
 @pytest.mark.usefixtures("native_context_digest")
 @pytest.mark.parametrize(
-    ("command", "screens"),
+    ("command", "arguments"),
     [
-        (["git", "blame", "example.txt"], ("--no-textconv",)),
-        (["git", "grep", "needle"], ("--no-textconv",)),
-        (["git", "stash", "show", "-p"], ()),
+        (["git", "blame", "example.txt"], ("--no-textconv", "example.txt")),
+        (["git", "grep", "needle"], ("--no-textconv", "needle")),
+        # `git grep -o` prints only the matching text; nothing is opened by it.
+        (["git", "grep", "-o", "needle"], ("--no-textconv", "-o", "needle")),
+        # `stash show` prints a diff, and its screens follow its own word.
+        (["git", "stash", "show", "-p"], ("show", "--no-ext-diff", "--no-textconv", "-p")),
         (["git", "reflog"], ()),
-        (["git", "rev-list", "--count", "HEAD"], ()),
+        (["git", "rev-list", "--count", "HEAD"], ("--count", "HEAD")),
     ],
 )
-def test_the_everyday_reads_authority_contains_are_planned_here_too(monkeypatch, tmp_path, command, screens):
+def test_the_everyday_reads_authority_contains_are_planned_here_too(monkeypatch, tmp_path, command, arguments):
     """A read Guard sends to containment is a read this sink can plan.
 
     The sink used to carry `diff`, `log` and `show` alone, so a `git blame`
@@ -88,9 +95,41 @@ def test_the_everyday_reads_authority_contains_are_planned_here_too(monkeypatch,
     monkeypatch.setattr(git, "git_binary_path_is_trusted", lambda *args, **kwargs: True)
     plan = git.prepare_restricted_git(command, workspace=tmp_path)
     assert plan.command[:5] == (str(executable), "--no-pager", "-c", "core.fsmonitor=false", command[1])
-    assert plan.command[5 : 5 + len(screens)] == screens
-    assert plan.command[5 + len(screens) :] == tuple(command[2:])
+    assert plan.command[5:] == arguments
     assert "--ext-diff" not in plan.command and "--textconv" not in plan.command
+
+
+@pytest.mark.usefixtures("native_context_digest")
+def test_a_routed_read_runs_in_the_directory_it_named(monkeypatch, tmp_path):
+    """`git -C subdir` is a read authority contains, so the sink plans it.
+
+    Git's own `-C` would move the run out from under the metadata roots this
+    plan grants, so the directory is resolved inside the approved workspace
+    here and the option never reaches the vector Git executes.
+    """
+
+    (tmp_path / ".git").mkdir()
+    (tmp_path / "subdir").mkdir()
+    executable = tmp_path / "git"
+    executable.write_text("synthetic image")
+    monkeypatch.setattr(git, "_select_backend", lambda **kwargs: ("linux-bubblewrap", tmp_path / "bwrap"))
+    monkeypatch.setattr(git, "_resolve_executable", lambda *args, **kwargs: executable)
+    monkeypatch.setattr(git, "git_binary_path_is_trusted", lambda *args, **kwargs: True)
+    plan = git.prepare_restricted_git(["git", "-C", "subdir", "grep", "needle"], workspace=tmp_path)
+    assert plan.cwd == (tmp_path / "subdir").resolve()
+    assert plan.command[4:] == ("grep", "--no-textconv", "needle")
+    assert "-C" not in plan.command and "subdir" not in plan.command
+
+
+@pytest.mark.usefixtures("native_context_digest")
+def test_a_routed_read_cannot_step_outside_the_approved_workspace(monkeypatch, tmp_path):
+    workspace = tmp_path / "project"
+    workspace.mkdir()
+    (workspace / ".git").mkdir()
+    monkeypatch.setattr(git, "_select_backend", lambda **kwargs: ("linux-bubblewrap", tmp_path / "bwrap"))
+    monkeypatch.setattr(git, "git_binary_path_is_trusted", lambda *args, **kwargs: True)
+    with pytest.raises(RestrictedPytestError):
+        git.prepare_restricted_git(["git", "-C", "..", "grep", "needle"], workspace=workspace)
 
 
 @pytest.mark.usefixtures("native_context_digest")

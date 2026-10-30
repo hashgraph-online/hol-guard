@@ -662,10 +662,11 @@ pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
             }))
         }
         "git_read_only_argv" => crate::contained_git::read_only_invocation(&command)
-            .map(|(operation, arguments)| {
+            .map(|reading| {
                 json!({
-                    "operation": operation,
-                    "arguments": arguments,
+                    "operation": reading.operation,
+                    "arguments": reading.arguments,
+                    "directories": reading.directories,
                 })
             })
             .ok_or_else(|| {

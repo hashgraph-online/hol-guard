@@ -78,11 +78,27 @@ def prepare_restricted_git(
     # The same grammar authority reads the command against names the operation
     # here, so a read it contains is a read this sink can plan.
     reading = restricted_native("git_read_only_argv", {"command": list(argv)}, dict)
-    operation, arguments = reading.get("operation"), reading.get("arguments")
-    if type(operation) is not str or type(arguments) is not list or not all(type(word) is str for word in arguments):
+    operation, arguments, directories = (
+        reading.get("operation"),
+        reading.get("arguments"),
+        reading.get("directories"),
+    )
+    if (
+        type(operation) is not str
+        or type(arguments) is not list
+        or type(directories) is not list
+        or not all(type(word) is str for word in (*arguments, *directories))
+    ):
         raise RestrictedPytestError("git_restricted_invalid_command", "Protected Git requires direct read-only argv.")
     root = _resolve_workspace(workspace, home_dir=home_dir)
     directory = _resolve_cwd(cwd or root, workspace=root)
+    # Git's own -C would move the run out from under the roots this plan
+    # grants, so the sink walks the same path and starts the run there. Each
+    # one is resolved against the last, as Git resolves them, and each has to
+    # land inside the approved workspace on its own.
+    for named in directories:
+        step = Path(named)
+        directory = _resolve_cwd(step if step.is_absolute() else directory / step, workspace=root)
     backend, backend_path = _select_backend(platform=sys.platform, backend_executable=None)
     if backend not in {"macos-seatbelt", "linux-bubblewrap"}:
         raise RestrictedPytestError("git_restricted_sandbox_unavailable", "Protected Git filtering is unavailable.")

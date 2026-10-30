@@ -5,7 +5,12 @@ fn vector(words: &[&str]) -> Vec<String> {
 }
 
 fn read(words: &[&str]) -> Option<(String, Vec<String>)> {
+    read_only_invocation(&vector(words)).map(|reading| (reading.operation, reading.arguments))
+}
+
+fn routed(words: &[&str]) -> Option<(String, Vec<String>, Vec<String>)> {
     read_only_invocation(&vector(words))
+        .map(|reading| (reading.operation, reading.arguments, reading.directories))
 }
 
 #[test]
@@ -38,6 +43,21 @@ fn a_verb_that_reads_its_own_blobs_screens_only_the_filter_it_knows() {
 }
 
 #[test]
+fn a_subcommand_that_prints_a_diff_is_screened_after_its_own_word() {
+    assert_eq!(
+        read(&["git", "stash", "show", "-p"]),
+        Some((
+            "stash".to_owned(),
+            vector(&["show", "--no-ext-diff", "--no-textconv", "-p"])
+        ))
+    );
+    assert_eq!(
+        read(&["git", "stash", "list"]),
+        Some(("stash".to_owned(), vector(&["list"])))
+    );
+}
+
+#[test]
 fn a_verb_that_names_no_helper_option_is_passed_through() {
     assert_eq!(
         read(&["git", "rev-list", "--count", "HEAD"]),
@@ -65,8 +85,6 @@ fn an_everyday_read_authority_contains_is_planned_here_too() {
 
 #[test]
 fn a_mixed_verb_is_read_only_in_the_forms_that_are_named() {
-    assert!(read(&["git", "stash", "list"]).is_some());
-    assert!(read(&["git", "stash", "show", "-p"]).is_some());
     assert!(read(&["git", "stash", "push"]).is_none());
     assert!(read(&["git", "stash"]).is_none());
     assert!(read(&["git", "bisect", "log"]).is_some());
@@ -99,10 +117,99 @@ fn an_option_that_selects_a_helper_or_moves_the_output_is_refused() {
         "-o",
         "--exec-path=/tmp/evil",
         "-Oorderfile",
-        "--open-files-in-pager=sh",
     ] {
         assert!(read(&["git", "log", option]).is_none(), "{option}");
     }
+    assert!(read(&["git", "grep", "--open-files-in-pager=sh"]).is_none());
+}
+
+#[test]
+fn a_refused_option_is_refused_in_every_spelling_git_resolves() {
+    // Git accepts any unambiguous prefix of a long option its verb defines.
+    for option in ["--open", "--open-files", "--textc", "--tex"] {
+        assert!(
+            read(&["git", "grep", option, "needle"]).is_none(),
+            "{option}"
+        );
+    }
+    for option in ["--ext", "--ext-di", "--outp"] {
+        assert!(read(&["git", "diff", option]).is_none(), "{option}");
+    }
+    // A cluster carries its letters one by one, whatever their order.
+    for cluster in ["-nO", "-iOsh", "-O"] {
+        assert!(
+            read(&["git", "grep", cluster, "needle"]).is_none(),
+            "{cluster}"
+        );
+    }
+    // `cat-file` runs the repository's smudge filter for `--filters`, and
+    // spells neither `--filter` nor `--text`, so both abbreviate a refusal.
+    for option in ["--filters", "--filter", "--text"] {
+        assert!(
+            read(&["git", "cat-file", option, "HEAD:x"]).is_none(),
+            "{option}"
+        );
+    }
+}
+
+#[test]
+fn an_option_a_verb_spells_in_full_keeps_its_own_meaning() {
+    // `--text` is the diff family's own "treat the file as text", and the
+    // letters after a short option that takes a value are that value.
+    assert!(read(&["git", "diff", "--text"]).is_some());
+    assert!(read(&["git", "grep", "--text", "needle"]).is_some());
+    assert!(read(&["git", "grep", "-eFOO"]).is_some());
+    assert!(read(&["git", "log", "-SFOO"]).is_some());
+    assert!(read(&["git", "log", "--oneline", "--format=%H"]).is_some());
+    // `git grep -o` prints only the matching text; nothing is opened by it.
+    assert_eq!(
+        read(&["git", "grep", "-o", "needle"]),
+        Some((
+            "grep".to_owned(),
+            vector(&["--no-textconv", "-o", "needle"])
+        ))
+    );
+}
+
+#[test]
+fn a_leading_directory_is_reported_rather_than_executed() {
+    assert_eq!(
+        routed(&["git", "-C", "subdir", "grep", "needle"]),
+        Some((
+            "grep".to_owned(),
+            vector(&["--no-textconv", "needle"]),
+            vector(&["subdir"])
+        ))
+    );
+    assert_eq!(
+        routed(&["git", "-Csubdir", "-C", "nested", "log", "-1"]),
+        Some((
+            "log".to_owned(),
+            vector(&["--no-ext-diff", "--no-textconv", "-1"]),
+            vector(&["subdir", "nested"])
+        ))
+    );
+    assert_eq!(
+        routed(&["git", "--no-pager", "diff"]),
+        Some((
+            "diff".to_owned(),
+            vector(&["--no-ext-diff", "--no-textconv"]),
+            Vec::new()
+        ))
+    );
+}
+
+#[test]
+fn a_global_option_that_configures_git_is_not_a_read() {
+    // `-c` names a setting such as the pager, and `--git-dir` moves the
+    // repository out from under the roots the plan grants.
+    assert!(read(&["git", "-c", "core.pager=sh", "log"]).is_none());
+    assert!(read(&["git", "--git-dir=/tmp/evil", "log"]).is_none());
+    assert!(read(&["git", "--exec-path=/tmp/evil", "log"]).is_none());
+    assert!(read(&["git", "-C"]).is_none());
+    assert!(read(&["git", "-C", "-x", "log"]).is_none());
+    assert!(read(&["git", "-C", ";", "log"]).is_none());
+    assert!(read(&["git", "-C", "subdir"]).is_none());
 }
 
 #[test]
