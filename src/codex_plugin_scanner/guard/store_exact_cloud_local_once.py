@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import Callable, Mapping
 from typing import Any, Protocol
 
 from .native_store_policy import encode_key
 from .project_identity import _process_directory
+
+_LOOKUP_KEY_FIELDS = ("integrity_key_b64", "local_once_integrity_key_b64")
 
 
 class _NativeStoreOwner(Protocol):
@@ -31,26 +34,45 @@ class StoreExactCloudLocalOnceMixin:
         # stay here.
         request_id = request["request_id"]
         args: dict[str, object] = {"request_id": request_id, "now": now, "cwd": _process_directory()}
+        # The lookup is only the fallback: evidence that cannot be gathered
+        # must not hide the exact Cloud allow the resident reads first.
+        evidence_error: Exception | None = None
+        lookup: dict[str, object] | None = None
+        try:
+            evidence = self.policy_lookup_evidence(now=now)
+        except (OSError, RuntimeError, ValueError, sqlite3.Error) as error:
+            evidence_error = error
+        else:
+            if evidence.degraded_trust_status is None:
+                lookup = self.policy_decision_lookup_request(
+                    evidence,
+                    harness=str(request["harness"]),
+                    artifact_id=_text(request.get("artifact_id")),
+                    artifact_hash=_text(request.get("artifact_hash")),
+                    workspace=_text(request.get("workspace")),
+                    publisher=_text(request.get("publisher")),
+                    runtime_exact_match_context=None,
+                    consume_one_shot=False,
+                )
+        # Read after the evidence, which may mint the key the lookup names.
         key, key_id = self._policy_integrity_secret_material(create=False)
         if key is not None and key_id is not None:
             self._provision_resident_verifier(key)
             args["integrity_key_b64"] = encode_key(key)
             args["integrity_key_id"] = key_id
-        evidence = self.policy_lookup_evidence(now=now)
-        if evidence.degraded_trust_status is None:
-            args["lookup"] = self.policy_decision_lookup_request(
-                evidence,
-                harness=str(request["harness"]),
-                artifact_id=_text(request.get("artifact_id")),
-                artifact_hash=_text(request.get("artifact_hash")),
-                workspace=_text(request.get("workspace")),
-                publisher=_text(request.get("publisher")),
-                runtime_exact_match_context=None,
-                consume_one_shot=False,
-            )
+        if lookup is not None:
+            # Key bytes travel only at the top level, which the request digest
+            # never covers; the resident restores them into the lookup.
+            for field in _LOOKUP_KEY_FIELDS:
+                lookup.pop(field, None)
+            args["lookup"] = lookup
         # Never retried: the lookup records a refused row's integrity audit.
         decision = self._native_store_call("codex_live_allow_authority", args)
-        return dict(decision) if isinstance(decision, Mapping) else None
+        if isinstance(decision, Mapping):
+            return dict(decision)
+        if evidence_error is not None:
+            raise evidence_error
+        return None
 
     def settle_claimed_native_allow(
         self: _NativeStoreOwner,

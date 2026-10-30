@@ -244,9 +244,18 @@ class _Evidence:
 
 
 class _OneCallStore(StoreExactCloudLocalOnceMixin):
-    def __init__(self, *, key: bool = True, degraded: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        key: bool = True,
+        degraded: bool = False,
+        evidence_error: Exception | None = None,
+        reply: object = None,
+    ) -> None:
         self.key = key
         self.degraded = degraded
+        self.evidence_error = evidence_error
+        self.reply = reply
         self.steps: list[object] = []
 
     def _policy_integrity_secret_material(self, *, create: bool) -> tuple[bytes | None, str | None]:
@@ -258,6 +267,8 @@ class _OneCallStore(StoreExactCloudLocalOnceMixin):
 
     def policy_lookup_evidence(self, *, now: str | None = None) -> _Evidence:
         self.steps.append(("evidence", now))
+        if self.evidence_error is not None:
+            raise self.evidence_error
         return _Evidence(self.degraded)
 
     def policy_decision_lookup_request(
@@ -273,11 +284,19 @@ class _OneCallStore(StoreExactCloudLocalOnceMixin):
         consume_one_shot: bool,
     ) -> dict[str, object]:
         self.steps.append(("lookup", {"workspace": workspace, "consume_one_shot": consume_one_shot}))
-        return {"schema": "guard-policy-decision-lookup-request.v1"}
+        return {
+            "schema": "guard-policy-decision-lookup-request.v1",
+            "integrity_key_b64": "a2V5",
+            "integrity_key_id": "key-1",
+            "local_once_integrity_key_b64": "a2V5",
+            "local_once_integrity_key_id": "key-1",
+        }
 
     def _native_store_call(self, method: str, args: Mapping[str, object]) -> object:
         self.steps.append((method, dict(args)))
-        raise NativeGuardStoreUnavailable("dropped")
+        if self.reply is None:
+            raise NativeGuardStoreUnavailable("dropped")
+        return self.reply
 
 
 def _authority(store: _OneCallStore) -> dict[str, object] | None:
@@ -296,10 +315,10 @@ def test_live_authority_asks_the_resident_once_with_a_non_consuming_lookup() -> 
     with pytest.raises(NativeGuardStoreUnavailable):
         _authority(store)
 
-    assert store.steps[0] == ("provision", b"k" * 32)
-    assert store.steps[1] == ("evidence", "2026-10-30T00:00:00+00:00")
-    lookup = store.steps[2]
+    assert store.steps[0] == ("evidence", "2026-10-30T00:00:00+00:00")
+    lookup = store.steps[1]
     assert isinstance(lookup, tuple) and lookup[0] == "lookup"
+    assert store.steps[2] == ("provision", b"k" * 32)
     assert lookup[1]["consume_one_shot"] is False
     assert lookup[1]["workspace"] == "/work/a"
     calls = [step for step in store.steps if isinstance(step, tuple) and step[0] == "codex_live_allow_authority"]
@@ -307,7 +326,12 @@ def test_live_authority_asks_the_resident_once_with_a_non_consuming_lookup() -> 
     args = calls[0][1]
     assert args["request_id"] == "r1"
     assert args["integrity_key_id"] == "key-1"
-    assert args["lookup"] == {"schema": "guard-policy-decision-lookup-request.v1"}
+    # Key bytes stay out of the digested lookup; only their ids remain.
+    assert args["lookup"] == {
+        "schema": "guard-policy-decision-lookup-request.v1",
+        "integrity_key_id": "key-1",
+        "local_once_integrity_key_id": "key-1",
+    }
 
 
 def test_live_authority_without_trusted_evidence_reads_only_the_exact_cloud_allow() -> None:
@@ -319,3 +343,20 @@ def test_live_authority_without_trusted_evidence_reads_only_the_exact_cloud_allo
     assert "lookup" not in call[1]
     assert "integrity_key_b64" not in call[1]
     assert not any(isinstance(step, tuple) and step[0] in {"provision", "lookup"} for step in store.steps)
+
+
+def test_live_authority_reads_the_exact_cloud_allow_when_evidence_fails() -> None:
+    allow = {"action": "allow", "source": "approval-gate-once", "request_id": "r1"}
+    store = _OneCallStore(evidence_error=OSError("policy store unreadable"), reply=allow)
+
+    assert _authority(store) == allow
+    (call,) = [step for step in store.steps if isinstance(step, tuple) and step[0] == "codex_live_allow_authority"]
+    assert "lookup" not in call[1]
+
+
+def test_live_authority_without_an_exact_allow_reports_the_evidence_failure() -> None:
+    store = _OneCallStore(evidence_error=OSError("policy store unreadable"), reply=[])
+
+    with pytest.raises(OSError, match="policy store unreadable"):
+        _authority(store)
+    assert sum(1 for step in store.steps if isinstance(step, tuple) and step[0] == "codex_live_allow_authority") == 1

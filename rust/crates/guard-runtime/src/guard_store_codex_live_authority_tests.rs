@@ -79,6 +79,8 @@ fn a_lookup_that_could_spend_or_bypass_authority_is_refused() {
         ("local_once_only", json!(true)),
         ("portable_workspace", json!("git-project:v1:caller-chosen")),
         ("unknown_field", json!(1)),
+        ("integrity_key_b64", json!("a2V5")),
+        ("local_once_integrity_key_b64", json!("a2V5")),
     ] {
         assert!(
             matches!(
@@ -89,6 +91,18 @@ fn a_lookup_that_could_spend_or_bypass_authority_is_refused() {
             change.0
         );
     }
+}
+
+#[test]
+fn the_lookup_gets_the_call_key_only_when_it_names_that_key() {
+    assert_eq!(
+        carried(Some("a2V5"), Some("key-1"), Some("key-1")),
+        Some("a2V5".to_owned())
+    );
+    assert_eq!(carried(Some("a2V5"), Some("key-1"), Some("key-2")), None);
+    assert_eq!(carried(Some("a2V5"), Some("key-1"), None), None);
+    assert_eq!(carried(Some("a2V5"), None, None), None);
+    assert_eq!(carried(None, Some("key-1"), Some("key-1")), None);
 }
 
 #[test]

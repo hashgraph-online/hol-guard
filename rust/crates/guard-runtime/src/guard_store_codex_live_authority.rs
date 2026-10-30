@@ -51,9 +51,19 @@ pub(crate) fn resolve(
         || request.probe_groups.is_some()
         || request.portable_workspace.is_some()
         || request.evidence_binding.is_some()
+        || request.integrity_key_b64.is_some()
+        || request.local_once_integrity_key_b64.is_some()
     {
         return Err(StoreError::Invalid("codex_live_authority_lookup_invalid"));
     }
+    // The key bytes travel only at the top level, which the request digest
+    // never covers. A key the lookup names but the call does not carry stays
+    // unset, so its rows verify as an unknown key.
+    let key = args.opt_str("integrity_key_b64")?;
+    let key_id = args.opt_str("integrity_key_id")?;
+    request.integrity_key_b64 = carried(key, key_id, request.integrity_key_id.as_deref());
+    request.local_once_integrity_key_b64 =
+        carried(key, key_id, request.local_once_integrity_key_id.as_deref());
     // The lookup reads the store this call was opened on, never one it names.
     request.store_path = Path::new(guard_home)
         .join(STORE_FILE_NAME)
@@ -87,6 +97,12 @@ fn identity(workspace: Option<&str>, cwd: Option<&str>) -> PortableIdentity {
         Some(cwd) => resolve_relative(workspace, cwd),
         None => portable_workspace(workspace),
     }
+}
+
+/// The call's key, for a lookup that names that same key.
+fn carried(key: Option<&str>, key_id: Option<&str>, named: Option<&str>) -> Option<String> {
+    key.filter(|_| named.is_some() && named == key_id)
+        .map(str::to_owned)
 }
 
 /// The valid `approval-gate-once` allow issued for `request_id`.
