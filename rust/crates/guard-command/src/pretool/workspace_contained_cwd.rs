@@ -197,6 +197,7 @@ pub(super) fn depths(model: &CanonicalCommandV1, workspace: &Path) -> Vec<usize>
     let Some(locations) = locations(model, workspace) else {
         return zeros;
     };
+    let canonical_workspace = workspace.canonicalize().ok();
     locations
         .iter()
         .map(|roots| {
@@ -205,9 +206,30 @@ pub(super) fn depths(model: &CanonicalCommandV1, workspace: &Path) -> Vec<usize>
             // both can spend stay inside.
             roots
                 .iter()
-                .map(|root| {
-                    root.strip_prefix(workspace)
-                        .map_or(0, |rest| rest.components().count())
+                .map(|cwd| {
+                    // The walk carries the spelling the shell prints, since a
+                    // later `cd ..` is spent on that. A `..` in an ordinary
+                    // operand is resolved by the kernel instead, which spends
+                    // it on whatever the spelling points to: with a link to
+                    // its own directory in the way, `cd l/l` leaves the shell
+                    // two names deep while the process stands at the root, and
+                    // `cat ../../secret` then reads above the workspace. Only
+                    // the steps both readings grant may be spent.
+                    let printed = cwd
+                        .strip_prefix(workspace)
+                        .map_or(0, |rest| rest.components().count());
+                    let resolved = cwd
+                        .canonicalize()
+                        .ok()
+                        .zip(canonical_workspace.as_deref())
+                        .and_then(|(moved, root)| {
+                            moved
+                                .strip_prefix(root)
+                                .ok()
+                                .map(|rest| rest.components().count())
+                        })
+                        .unwrap_or(0);
+                    printed.min(resolved)
                 })
                 .min()
                 .unwrap_or(0)
