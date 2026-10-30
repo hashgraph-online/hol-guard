@@ -984,13 +984,15 @@ def _retire_guard_daemons_for_home(
     retired: list[int] = []
     handled_pids: set[int] = set()
     pending_launch = load_authenticated_guard_daemon_pending_launch(guard_home)
-    if _guard_daemon_pending_launch_is_generation_bound(
-        pending_launch
-    ) and not _guard_daemon_pending_launch_state_is_resolved(guard_home):
+    if (
+        _guard_daemon_pending_launch_is_generation_bound(pending_launch)
+        and not _guard_daemon_pending_launch_state_is_resolved(guard_home)
+        and not _guard_daemon_pending_launch_is_abandoned(pending_launch)
+    ):
         # A launch-specific receipt is deliberately unresolved until its
-        # owner publishes the matching handoff or its signed escaped-child
-        # generation is proven dead. Inventory cannot prove that a same-home
-        # process is one of this launch's descendants.
+        # owner publishes the matching handoff or its root is gone. Inventory
+        # cannot prove that a same-home process is one of a live launch's
+        # descendants.
         return retired
     if isinstance(pending_launch, dict):
         pending_pid = pending_launch.get("pid")
@@ -1107,6 +1109,7 @@ def _retire_guard_daemons_for_home(
             empty_inventory_confirmed = _guard_daemon_process_inventory_for_guard_home(guard_home) == []
         if empty_inventory_confirmed and keep_port is None:
             _reconcile_invalid_daemon_lifecycle_artifacts(guard_home)
+            _resolve_abandoned_guard_daemon_pending_launch(guard_home, pending_launch)
     reap_orphaned_daemon_workers(deadline=deadline)
     return retired
 
@@ -1178,7 +1181,11 @@ def guard_daemon_retirement_is_complete(guard_home: Path) -> bool:
     elif _state_path(guard_home).is_file():
         if not _daemon_lifecycle_artifact_is_exact_tombstone(_state_path(guard_home)):
             return False
-    if not _guard_daemon_pending_launch_state_is_resolved(guard_home):
+    if not _guard_daemon_pending_launch_state_is_resolved(
+        guard_home
+    ) and not _resolve_abandoned_guard_daemon_pending_launch(
+        guard_home, load_authenticated_guard_daemon_pending_launch(guard_home)
+    ):
         return False
     inventory = _guard_daemon_process_inventory_for_guard_home(guard_home)
     return inventory == []
@@ -2421,30 +2428,34 @@ def _resolve_abandoned_guard_daemon_pending_launch(guard_home: Path, pending: di
     the same launch.
     """
 
-    if pending is None or not _guard_daemon_pending_launch_is_generation_bound(pending):
-        return False
-    pid = pending.get("pid")
-    marker = pending.get("process_start_marker")
-    launch_nonce = pending.get("launch_nonce")
-    creation_time = pending.get("process_creation_time")
-    if (
-        type(pid) is not int
-        or pid <= 0
-        or not isinstance(marker, str)
-        or not marker
-        or not isinstance(launch_nonce, str)
-    ):
-        return False
-    if not _guard_daemon_pending_launch_root_is_gone(pid, marker=marker, creation_time=creation_time):
+    if pending is None or not _guard_daemon_pending_launch_is_abandoned(pending):
         return False
     if _guard_daemon_process_inventory_for_guard_home(guard_home) != []:
         return False
+    pid = pending["pid"]
+    creation_time = pending.get("process_creation_time")
+    assert type(pid) is int
     return _clear_guard_daemon_pending_launch_if_current(
         guard_home,
         pid=pid,
         creation_time=creation_time if type(creation_time) is int else None,
-        launch_nonce=launch_nonce,
-        process_start_marker=marker,
+        launch_nonce=str(pending["launch_nonce"]),
+        process_start_marker=str(pending["process_start_marker"]),
+    )
+
+
+def _guard_daemon_pending_launch_is_abandoned(pending: dict[str, object] | None) -> bool:
+    """Whether a generation-bound launch's root process is gone."""
+
+    if not _guard_daemon_pending_launch_is_generation_bound(pending):
+        return False
+    assert pending is not None
+    pid = pending.get("pid")
+    marker = pending.get("process_start_marker")
+    if type(pid) is not int or pid <= 0 or not isinstance(marker, str) or not marker:
+        return False
+    return _guard_daemon_pending_launch_root_is_gone(
+        pid, marker=marker, creation_time=pending.get("process_creation_time")
     )
 
 

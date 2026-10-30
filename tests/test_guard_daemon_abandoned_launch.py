@@ -146,3 +146,57 @@ def test_replaced_receipt_is_not_cleared_for_an_older_launch(tmp_path, monkeypat
     )
     assert not daemon_manager_module._guard_daemon_pending_launch_state_is_resolved(guard_home)
     assert os.path.getsize(daemon_manager_module._pending_launch_path(guard_home)) > 2
+
+
+def _retirement_doubles(monkeypatch, inventories: list[list[tuple[int, int]]]) -> list[int]:
+    signalled: list[int] = []
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_guard_daemon_process_inventory_for_guard_home",
+        lambda *_args, **_kwargs: inventories.pop(0) if len(inventories) > 1 else inventories[0],
+    )
+    monkeypatch.setattr(daemon_manager_module, "load_authenticated_daemon_state", lambda _home: None)
+    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_identity_for_retirement", lambda _pid: ("m", "o"))
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_retire_guard_daemon_pid",
+        lambda pid, **_kwargs: signalled.append(pid) or True,
+    )
+    monkeypatch.setattr(daemon_manager_module, "_reconcile_invalid_daemon_lifecycle_artifacts", lambda _home: None)
+    monkeypatch.setattr(daemon_manager_module, "reap_orphaned_daemon_workers", lambda **_kwargs: None)
+    return signalled
+
+
+def test_stopping_a_home_with_a_dead_launch_retires_its_daemon_and_the_receipt(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    _write_abandoned_launch(guard_home)
+    _launch_root(monkeypatch, dead=True)
+    signalled = _retirement_doubles(monkeypatch, [[(77_669, 5410)], []])
+
+    assert daemon_manager_module.retire_all_guard_daemons_for_home(guard_home) == [77_669]
+    assert signalled == [77_669]
+    assert daemon_manager_module._guard_daemon_pending_launch_state_is_resolved(guard_home)
+    assert daemon_manager_module.guard_daemon_retirement_is_complete(guard_home)
+
+
+def test_stopping_a_home_keeps_a_live_launch_and_its_daemon(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    _write_abandoned_launch(guard_home)
+    _launch_root(monkeypatch, dead=False, marker=_PENDING_MARKER, creation_time=_PENDING_CREATION_TIME)
+    signalled = _retirement_doubles(monkeypatch, [[(77_669, 5410)], []])
+
+    assert daemon_manager_module.retire_all_guard_daemons_for_home(guard_home) == []
+    assert signalled == []
+    assert not daemon_manager_module._guard_daemon_pending_launch_state_is_resolved(guard_home)
+    assert not daemon_manager_module.guard_daemon_retirement_is_complete(guard_home)
+
+
+def test_retirement_check_resolves_a_dead_launch_once_the_home_is_empty(tmp_path, monkeypatch):
+    guard_home = tmp_path / "guard-home"
+    _write_abandoned_launch(guard_home)
+    _launch_root(monkeypatch, dead=True)
+    _home_inventory(monkeypatch, [])
+    monkeypatch.setattr(daemon_manager_module, "load_authenticated_daemon_state", lambda _home: None)
+
+    assert daemon_manager_module.guard_daemon_retirement_is_complete(guard_home)
+    assert daemon_manager_module._guard_daemon_pending_launch_state_is_resolved(guard_home)
