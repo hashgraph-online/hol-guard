@@ -157,12 +157,36 @@ fn an_untrusted_git_is_refused_before_any_metadata_is_read() {
     let workspace = fixture.0.join("project");
     directory(&workspace);
     // A pointer that would fail on its own: trust has to answer first.
+    // `plan` would rebuild this as a directory, so the case calls the
+    // planner directly and the file has to still be the pointer afterwards.
     fs::write(workspace.join(".git"), "not a git pointer\n").unwrap();
-    let reply = plan(&fixture, &["diff", "--stat"], untrusted);
+    let git = fixture.0.join("tools/git");
+    directory(git.parent().unwrap());
+    fs::write(&git, "synthetic image").unwrap();
+    fs::set_permissions(&git, fs::Permissions::from_mode(0o755)).unwrap();
+    directory(&fixture.0.join("home"));
+    let reply = prepare_git(
+        &json!({
+            "command": [git, "diff", "--stat"],
+            "workspace": workspace,
+            "cwd": workspace,
+            "home": fixture.0.join("home"),
+            "platform": "darwin",
+            "backend_executable": "/usr/bin/true",
+            "search_path": "",
+            "account_home": fixture.0.join("home"),
+            "groups": [],
+        }),
+        untrusted,
+    );
     assert_eq!(
         reply,
         json!({"reason_code": "git_restricted_invalid_command",
             "message": "Git does not resolve to a trusted executable."})
+    );
+    assert_eq!(
+        fs::read_to_string(workspace.join(".git")).unwrap(),
+        "not a git pointer\n"
     );
 }
 
