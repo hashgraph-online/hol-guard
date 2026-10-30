@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import re
 from collections.abc import Iterable, Mapping, Sequence
+from pathlib import Path
 
 from ..native_context import _resolve_digest_home, native_context_digest
 from ..native_local_cli_identity import record_local_cli_identity_failure
@@ -41,7 +42,7 @@ def merge_profile_commands(tool_name: str, discovered: Sequence[LocalCliCommand]
     return merge_discovered_commands(tool_name, (*discovered, *profile.local_cli_commands()))
 
 
-def profiled_cli_package_launch(tokens: Sequence[str]) -> bool:
+def profiled_cli_package_launch(tokens: Sequence[str], *, guard_home: Path | None = None) -> bool:
     """Return True when a package runner directly launches a profiled CLI.
 
     ``npx wrangler`` is a CLI call, not an MCP server; probing it over stdio
@@ -50,11 +51,14 @@ def profiled_cli_package_launch(tokens: Sequence[str]) -> bool:
     (``@other/wrangler``) are not the profiled CLI, so they keep MCP discovery.
     The native runtime reads which bin the runner launches; when it cannot
     answer, the paste is treated as a profiled launch so nothing is spawned.
+
+    ``guard_home`` is the home whose resident answers, which for a served
+    request is the store's own home rather than the operator's.
     """
 
     if not tokens:
         return False
-    target = _native_runner_target(tokens)
+    target = _native_runner_target(tokens, guard_home=guard_home)
     if target is _UNREADABLE:
         return True
     if not isinstance(target, str):
@@ -69,13 +73,13 @@ def profiled_cli_package_launch(tokens: Sequence[str]) -> bool:
 _UNREADABLE = object()
 
 
-def _native_runner_target(tokens: Sequence[str]) -> object:
+def _native_runner_target(tokens: Sequence[str], *, guard_home: Path | None = None) -> object:
     """Return the launched bin's name, ``None``, or ``_UNREADABLE``."""
 
     result = native_context_digest(
         "package_runner_target",
         {"tokens": [str(token) for token in tokens]},
-        guard_home=_resolve_digest_home(None),
+        guard_home=_resolve_digest_home(guard_home),
     )
     if not isinstance(result, dict) or result.get("status") != "ok":
         record_local_cli_identity_failure("native_package_runner_target_unavailable")

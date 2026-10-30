@@ -765,7 +765,11 @@ class LocalCliApiService:
             server_identity_hash=stored_server_hash if isinstance(stored_server_hash, str) else None,
             source_label=stored_source_label if isinstance(stored_source_label, str) else None,
         )
-        if selected_server is None and stored_observation is None and profiled_cli_package_launch(tokens):
+        if (
+            selected_server is None
+            and stored_observation is None
+            and profiled_cli_package_launch(tokens, guard_home=self._store.guard_home)
+        ):
             return None
         # A known connection remains MCP even when its script no longer exists.
         if selected_server is None and not looks_like_mcp_launch(

@@ -1,13 +1,15 @@
 """Record local CLI command-id resolution from the Python owner before it retires.
 
-Run with the source tree whose ``command_tokens_for_invocation``
-(``runtime/local_cli_commands.py``) still splits the parsed argv in Python.
 Each vector starts after the shell parse: the first segment's arguments, the
 identity's runner, kind and name, and the CLI's catalog ids. The token step
-below is that function's post-parse branch transcribed verbatim; the runner
-split, name pattern, depth cap and ``match_command_id`` are the real owner
-objects, loaded from the owner source without importing its package (which
-needs the generated command catalog). No resident runs.
+below is ``command_tokens_for_invocation``'s post-parse branch transcribed
+verbatim. The name pattern and depth cap come from
+``runtime/local_cli_commands.py``, and the runner split and
+``match_command_id`` from ``tests/local_cli_command_id_client.py``, which keeps
+the composed Python answer that recorded these vectors. Both are read from
+source without importing their package, which needs the generated command
+catalog. The resident owns that grammar now, so this recorder reads no module
+the native runtime replaced. No resident runs.
 """
 
 from __future__ import annotations
@@ -21,41 +23,51 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from codex_plugin_scanner.guard.runtime import local_cli_runner
-from codex_plugin_scanner.guard.runtime.local_cli_runner import _split_runner_arguments
+_REPOSITORY = Path(__file__).resolve().parents[5]
+_CONSTANT_NAMES = frozenset({"ROOT_COMMAND_ID", "OTHER_COMMAND_ID", "_COMMAND_NAME", "_MAX_DEPTH"})
+_CLIENT_NAMES = frozenset(
+    {
+        "match_command_id",
+        "_runner_inner_arguments",
+        "_PRETARGET_OPTIONS",
+        "_EXEC_SUBCOMMANDS",
+        "_EXEC_SUBCOMMAND_RUNNERS",
+    }
+)
 
-_OWNER_NAMES = frozenset({"ROOT_COMMAND_ID", "OTHER_COMMAND_ID", "_COMMAND_NAME", "_MAX_DEPTH", "match_command_id"})
 
+def _load_source(namespace: dict[str, Any], path: Path, names: frozenset[str]) -> dict[str, Any]:
+    """Execute just ``names``'s definitions from ``path``, importing nothing."""
 
-def _owner_objects() -> dict[str, Any]:
-    """Execute the owner's constants and ``match_command_id`` from source."""
-
-    path = Path(local_cli_runner.__file__).with_name("local_cli_commands.py")
     tree = ast.parse(path.read_text(encoding="utf-8"))
     body = [
         node
         for node in tree.body
-        if (isinstance(node, ast.FunctionDef) and node.name in _OWNER_NAMES)
+        if (isinstance(node, ast.FunctionDef) and node.name in names)
         or (
             isinstance(node, ast.Assign)
-            and all(isinstance(target, ast.Name) and target.id in _OWNER_NAMES for target in node.targets)
+            and all(isinstance(target, ast.Name) and target.id in names for target in node.targets)
         )
     ]
-    namespace: dict[str, Any] = {"re": re, "Sequence": Sequence, "LocalCliCommand": object}
     exec(compile(ast.Module(body=body, type_ignores=[]), str(path), "exec"), namespace)
-    assert set(namespace) >= _OWNER_NAMES
+    assert names <= set(namespace), sorted(names - set(namespace))
     return namespace
 
 
-_OWNER = _owner_objects()
+_OWNER: dict[str, Any] = {"re": re, "Sequence": Sequence, "LocalCliCommand": object}
+_load_source(
+    _OWNER,
+    _REPOSITORY / "src" / "codex_plugin_scanner" / "guard" / "runtime" / "local_cli_commands.py",
+    _CONSTANT_NAMES,
+)
+_load_source(_OWNER, _REPOSITORY / "tests" / "local_cli_command_id_client.py", _CLIENT_NAMES)
 _COMMAND_NAME = _OWNER["_COMMAND_NAME"]
 _MAX_DEPTH = _OWNER["_MAX_DEPTH"]
 match_command_id = _OWNER["match_command_id"]
 
 
 def runner_inner_arguments(runner: str, arguments: list[str]) -> list[str] | None:
-    split = _split_runner_arguments(runner, arguments)
-    return split[1] if split is not None else None
+    return _OWNER["_runner_inner_arguments"](runner, arguments)
 
 
 def _tokens(arguments: list[str], *, runner: str | None, kind: str, name: str) -> list[str]:

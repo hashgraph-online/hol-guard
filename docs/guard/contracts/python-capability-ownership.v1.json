@@ -1876,6 +1876,19 @@
     "rust/crates/guard-command/src/command_action_risk_classes.rs",
     "rust/crates/guard-runtime/src/hook_artifact_facts_op.rs"
    ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/local_cli_runner.py",
+   "module": "codex_plugin_scanner.guard.runtime.local_cli_runner",
+   "source_sha256": "13340152570b07e144ad87c60afa7831b1e2d160667bc24ccefaacaba87f59ed",
+   "forbidden_symbols": [
+    "runner_name",
+    "runner_target",
+    "_split_runner_arguments"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/native_exact_action_op/runner_bin.rs"
+   ]
   }
  ],
  "retired_test_paths": [
