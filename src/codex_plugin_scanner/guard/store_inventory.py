@@ -270,13 +270,13 @@ class StoreInventoryMixin:
 
     def set_device_label(self, label: str, now: str) -> dict[str, str]:
         normalized_label = label.strip() or "Local machine"
-        metadata = self._native_store_call(
+        self._native_store_call(
             "set_device_label", {**self._device_row_args(), "label": normalized_label, "now": now}
         )
         # A chosen label is kept even when it reads like a default ("Local machine");
         # clearing the label hands the name back to the host name.
         self.set_sync_payload(DEVICE_LABEL_CHOICE_KEY, {"label": normalized_label if label.strip() else None}, now)
-        return metadata
+        return self.get_device_metadata()
 
     def device_display_name(self, label: str) -> str:
         """``effective_device_label`` for the stored label, honouring an explicit choice.
