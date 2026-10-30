@@ -21,7 +21,12 @@ from .extension_adapters import extension_adapter
 from .interruptions import case_interruptions, describe
 from .mixed_reads import assess_mixed_reads
 from .native_routes import native_route_proof_error
-from .native_tools import BACKGROUND_READ_CASE, JOB_OUTPUT_PATH, native_tools_scope_error
+from .native_tools import (
+    BACKGROUND_READ_CASE,
+    JOB_OUTPUT_PATH,
+    misspelled_fixture_read_error,
+    native_tools_scope_error,
+)
 from .proofs import (
     block_reasons,
     command_outputs_match,
@@ -271,6 +276,8 @@ def _assess_observed(
     if approval_retry_enabled(scenario):
         return assess_approval_retry(scenario, case, calls, bound)
     if scenario.oracle == "native-tools":
+        if misspelled := misspelled_fixture_read_error(scenario, calls, by_id):
+            return "not-exercised", misspelled
         # A Guard denial or review can stop the remaining steps; judge it as a false positive below.
         guard_stopped = case["approval_delta"] != 0 or (
             any(call["is_error"] is True for call in calls) and any(g.get("decision") == "deny" for g in guards)
