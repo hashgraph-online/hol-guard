@@ -75,9 +75,13 @@ pub(crate) enum Kick {
     DaemonUnreachable,
     /// The daemon answered that it will not prepare the workspace.
     Refused,
-    /// The daemon was not asked: the kick interval has not passed, or no
-    /// time was left before the deadline.
+    /// The daemon was not asked: the kick interval has not passed since it
+    /// refused or could not be reached, or no time was left before the
+    /// deadline.
     Skipped,
+    /// The daemon was not asked because it took a readiness request within
+    /// the kick interval; it may still be preparing the lane.
+    Pending,
 }
 
 /// Asks the daemon to bind the lane for the session's workspace.
@@ -151,7 +155,7 @@ pub(crate) fn startup(
     let kicked = match kick.kick(kick_deadline) {
         Kick::Requested => true,
         // A daemon that was not asked may still bind the lane by itself.
-        Kick::Skipped => false,
+        Kick::Skipped | Kick::Pending => false,
         Kick::DaemonUnreachable => return Gate::NotReady(DAEMON_UNREACHABLE.to_owned()),
         Kick::Refused => return Gate::NotReady(DAEMON_REFUSED.to_owned()),
     };
@@ -259,7 +263,8 @@ pub(crate) struct DaemonKick {
     readiness_path: String,
     /// `<python> ... guard daemon ensure ...`, when the argv names the proxy.
     ensure: Option<Vec<String>>,
-    last: Option<Instant>,
+    /// When the daemon was last asked, and what it answered.
+    last: Option<(Instant, Kick)>,
 }
 
 impl DaemonKick {
@@ -392,27 +397,31 @@ impl DaemonKick {
 impl LaneKick for DaemonKick {
     fn kick(&mut self, deadline: Instant) -> Kick {
         let now = Instant::now();
-        if self
-            .last
-            .is_some_and(|last| now.duration_since(last) < KICK_INTERVAL)
-        {
-            return Kick::Skipped;
+        if let Some((last, answer)) = self.last {
+            if now.duration_since(last) < KICK_INTERVAL {
+                return if answer == Kick::Requested {
+                    Kick::Pending
+                } else {
+                    Kick::Skipped
+                };
+            }
         }
         if remaining(deadline).is_zero() {
             return Kick::Skipped;
         }
-        self.last = Some(now);
         let answered = self
             .daemon()
             .and_then(|daemon| self.request(&daemon, deadline));
-        match answered {
+        let answer = match answered {
             Some(true) => Kick::Requested,
             Some(false) => Kick::Refused,
             None => {
                 self.spawn_ensure();
                 Kick::DaemonUnreachable
             }
-        }
+        };
+        self.last = Some((now, answer));
+        answer
     }
 }
 

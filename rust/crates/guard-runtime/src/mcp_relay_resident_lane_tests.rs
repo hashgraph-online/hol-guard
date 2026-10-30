@@ -74,7 +74,9 @@ fn other_answers_are_refused_without_a_retry() {
     ));
     assert!(!authority.rekick(Some(&b"not json"[..]), budget()));
     assert_eq!(kicks.get(), 0);
-    for answer in [Kick::Refused, Kick::DaemonUnreachable] {
+    // A daemon that refused or was unreachable within the kick interval is
+    // not waited on.
+    for answer in [Kick::Refused, Kick::DaemonUnreachable, Kick::Skipped] {
         let (mut authority, kicks) = kicked(answer);
         assert!(!authority.rekick(Some(deferred("direct_lane_unbound").as_slice()), budget()));
         assert_eq!(kicks.get(), 1);
@@ -82,12 +84,12 @@ fn other_answers_are_refused_without_a_retry() {
 }
 
 /// The lane closes while the daemon republishes its snapshot: the ACK is
-/// withdrawn before the next one is written. A daemon asked within the kick
-/// interval is not asked again, and the call is decided again after a pause
-/// until the retry budget is spent, rather than refused at once.
+/// withdrawn before the next one is written. A daemon that took a request
+/// within the kick interval is not asked again, and the call is decided again
+/// after a pause until the retry budget is spent, rather than refused at once.
 #[test]
 fn a_lane_closed_for_a_republish_is_retried_within_the_budget() {
-    let (mut authority, kicks) = kicked(Kick::Skipped);
+    let (mut authority, kicks) = kicked(Kick::Pending);
     let missing = deferred("direct_lane_ack_missing");
     let deadline = Instant::now() + Duration::from_millis(120);
     let started = Instant::now();
@@ -130,14 +132,14 @@ fn only_the_first_call_of_a_warming_session_waits_for_the_lane() {
 }
 
 #[test]
-fn a_refusing_daemon_ends_the_warm_up_but_a_skipped_kick_does_not() {
+fn a_refusing_daemon_ends_the_warm_up_but_a_pending_kick_does_not() {
     let (authority, kicks) = kicked(Kick::Refused);
     let mut authority = authority.warming(true);
     let started = Instant::now();
     authority.warm_up_within(Duration::from_secs(5));
     assert!(started.elapsed() < Duration::from_secs(1));
     assert_eq!(kicks.get(), 1);
-    let (authority, kicks) = kicked(Kick::Skipped);
+    let (authority, kicks) = kicked(Kick::Pending);
     let mut authority = authority.warming(true);
     let started = Instant::now();
     authority.warm_up_within(Duration::from_millis(150));

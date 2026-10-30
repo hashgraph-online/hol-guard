@@ -74,7 +74,7 @@ impl ResidentRelayAuthority {
                 Err(_) => {}
             }
             if let Some(kick) = self.kick.as_mut() {
-                // The kick rate-limits itself (`Kick::Skipped`), so this asks
+                // The kick rate-limits itself (`Kick::Pending`), so this asks
                 // the daemon at most once per kick interval.
                 let deadline = (Instant::now() + RETRY_BUDGET).min(deadline);
                 if kick.kick(deadline) == Kick::Refused {
@@ -158,8 +158,9 @@ impl ResidentRelayAuthority {
 
     /// Whether a call deferred with `output` is decided again: the lane
     /// deferred it for a reason the daemon can clear, and either the daemon
-    /// took the request to prepare the workspace, or it was asked within the
-    /// kick interval and `deadline` leaves room for a pause. The lane also
+    /// took the request to prepare the workspace, or it took one within the
+    /// kick interval and `deadline` leaves room for a pause. A daemon that
+    /// refused or could not be reached is not waited on. The lane also
     /// closes for the tens of milliseconds the daemon takes to republish its
     /// policy snapshot and reopens without being asked; a hook defers to the
     /// daemon over that window, while the relay has nobody to defer to.
@@ -175,7 +176,7 @@ impl ResidentRelayAuthority {
         }
         match kick.kick(deadline) {
             Kick::Requested => true,
-            Kick::Skipped if remaining(deadline) >= RETRY_POLL => {
+            Kick::Pending if remaining(deadline) >= RETRY_POLL => {
                 std::thread::sleep(RETRY_POLL);
                 true
             }
