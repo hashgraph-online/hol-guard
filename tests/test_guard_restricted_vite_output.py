@@ -231,8 +231,8 @@ def test_the_recheck_reads_the_config_the_command_names(tmp_path):
     """The sandbox recheck is handed the build's own words, not just its cwd."""
 
     app = _dashboard(tmp_path, _config("process.env.OUT_DIR"))
-    (app / "vite.alt.ts").write_text(_config('"release"'))
-    release = app / "release"
+    (app / "vite.alt.ts").write_text(_config('"../release"'))
+    release = tmp_path / "release"
     release.mkdir()
     (release / "index.html").write_text("<html></html>")
     arguments = ["build", "--config", "vite.alt.ts"]
