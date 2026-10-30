@@ -6,9 +6,11 @@ import copy
 import json
 from pathlib import Path
 
+from ci.gauntlet.case_retry import retryable
 from ci.gauntlet.catalog import load_catalog
 from ci.gauntlet.evidence import assess_case
 from ci.gauntlet.input_evidence import input_digest
+from ci.gauntlet.native_tools import misspelled_fixture_reads
 
 # A recorded native read case: the model listed the folder, sent both file reads to a path that
 # dropped part of the fixture root, got Guard's missing-path deny, and then read both files under
@@ -40,6 +42,14 @@ def test_a_corrected_misspelled_read_is_retried_not_a_false_positive() -> None:
     assessment = assess_case(SCENARIO, copy.deepcopy(CASE))
     assert assessment["outcome"] == "not-exercised"
     assert "misspelled a fixture path" in assessment["reason"]
+    # The excused deny must not count as an interruption, or qualification would refuse the retry.
+    assert retryable(assessment)
+
+
+def test_a_corrected_misspelled_read_that_also_raised_an_approval_is_a_false_positive() -> None:
+    case = copy.deepcopy(CASE)
+    case["approval_delta"] = 1
+    assert assess_case(SCENARIO, case)["outcome"] == "false-positive"
 
 
 def test_a_corrected_misspelled_read_on_a_windows_drive_is_retried() -> None:
@@ -61,3 +71,41 @@ def test_a_missing_path_deny_on_the_fixture_spelling_is_still_a_false_positive()
     # Guard calling a real fixture file missing is the product fault this judge exists to catch.
     case = _respell(copy.deepcopy(CASE), STRAY, "{{workspace}}/")
     assert assess_case(SCENARIO, case)["outcome"] == "false-positive"
+
+
+STRAY_README = "/tmp/agent-scratch/project-feature/console/src/lib/auth/README.md"
+FIXTURE_README = "{{workspace}}/console/src/lib/auth/README.md"
+
+
+def _read(call_id: str, path: str, *, failed: bool) -> dict:
+    return {"id": call_id, "name": "read", "args": {"path": path}, "is_error": failed}
+
+
+def _deny(call_id: str, reason_code: str = "native_missing_path") -> dict:
+    return {"tool_call_id": call_id, "event": "PreToolUse", "decision": "deny", "reason_code": reason_code}
+
+
+def test_only_a_later_read_corrects_a_missing_path_deny() -> None:
+    later = [_read("stray", STRAY_README, failed=True), _read("fixed", FIXTURE_README, failed=False)]
+    earlier = list(reversed(later))
+    assert misspelled_fixture_reads(SCENARIO, later, [_deny("stray")]) == {"stray"}
+    assert misspelled_fixture_reads(SCENARIO, earlier, [_deny("stray")]) == frozenset()
+
+
+def test_a_correction_must_be_the_file_the_prompt_names_under_its_own_root() -> None:
+    # {{home}} holds a file at the same relative path, but the prompt asked for the workspace copy.
+    calls = [
+        _read("stray", STRAY_README, failed=True),
+        _read("other", "{{home}}/console/src/lib/auth/README.md", failed=False),
+    ]
+    assert misspelled_fixture_reads(SCENARIO, calls, [_deny("stray")]) == frozenset()
+
+
+def test_any_other_deny_in_the_run_keeps_the_whole_run_a_false_positive() -> None:
+    calls = [
+        _read("stray", STRAY_README, failed=True),
+        _read("fixed", FIXTURE_README, failed=False),
+        _read("session", "{{workspace}}/console/src/lib/auth/session.ts", failed=True),
+    ]
+    observations = [_deny("stray"), _deny("session", "native_read_review")]
+    assert misspelled_fixture_reads(SCENARIO, calls, observations) == frozenset()
