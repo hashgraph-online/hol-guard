@@ -2226,8 +2226,8 @@ def test_production_driver_restores_bindings_when_candidate_start_fails(transiti
 
     The launch exits before its process identity can be recorded, so no signed
     launch receipt exists and the retirement proof stays exact. A launch whose
-    identity was recorded keeps its receipt until containment is proven, which
-    is covered by the daemon manager launch-containment tests.
+    identity was recorded keeps its receipt until its own handoff clears it,
+    which is covered by the daemon manager pending-launch tests.
     """
     from codex_plugin_scanner.guard.daemon import manager as daemon_manager
     from codex_plugin_scanner.guard.runtime_transition_coordinator import RuntimeTransitionCoordinator
