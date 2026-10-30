@@ -97,6 +97,10 @@ def test_a_workspace_receipt_runs_what_the_read_only_parsers_reject(
             return None
         if operation == "command_words":
             return str(fields["command_text"]).split()
+        if operation == "command_prefix_split":
+            # The command carries no prefix, so its own program stands first
+            # and nothing is peeled off it.
+            return {"core_index": 0, "assignments": [], "dropped_data": False}
         assert operation == "contained_kind", operation
         return kinds
 
