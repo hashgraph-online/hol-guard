@@ -32285,8 +32285,8 @@
       "expect": "not_allow"
     },
     {
-      "id": "neg-group-subshell-leading-conditional",
-      "fix_area": "negative",
+      "id": "group-subshell-leading-conditional-ls",
+      "fix_area": "shell",
       "harnesses": [
         "codex",
         "zcode",
@@ -32299,6 +32299,40 @@
         "command": "(cd src) && ls"
       },
       "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-group-subshell-cd-into-workspace-write",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "(cd ${WORKTREE}) && touch note.txt"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-group-subshell-cd-into-workspace-list",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "(cd ${WORKTREE}) && ls"
+      },
+      "cwd": "parent",
       "expect": "not_allow"
     },
     {
