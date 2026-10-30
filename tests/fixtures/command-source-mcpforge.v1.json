@@ -120,7 +120,11 @@
                         "npx.exe"
                       ],
                       "interspersed_flags": [
+                        "--no",
                         "--no-install",
+                        "--offline",
+                        "--prefer-offline",
+                        "--prefer-online",
                         "--quiet",
                         "--silent",
                         "--yes",
@@ -496,6 +500,58 @@
     {
       "id": "npx-silent-short-publish",
       "command": "npx -s mcpforge publish --slug sample-api",
+      "enabled_extensions": [
+        "command.mcpforge"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "rule_id": "command.mcpforge.publish"
+    },
+    {
+      "id": "npx-no-publish",
+      "command": "npx --no mcpforge publish --slug example-api",
+      "enabled_extensions": [
+        "command.mcpforge"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "rule_id": "command.mcpforge.publish"
+    },
+    {
+      "id": "npx-offline-publish",
+      "command": "npx --offline mcpforge publish --slug example-api",
+      "enabled_extensions": [
+        "command.mcpforge"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "rule_id": "command.mcpforge.publish"
+    },
+    {
+      "id": "npx-prefer-offline-publish",
+      "command": "npx --prefer-offline mcpforge publish --slug example-api",
+      "enabled_extensions": [
+        "command.mcpforge"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "rule_id": "command.mcpforge.publish"
+    },
+    {
+      "id": "npx-prefer-online-publish",
+      "command": "npx --prefer-online mcpforge publish --slug example-api",
       "enabled_extensions": [
         "command.mcpforge"
       ],
