@@ -83,7 +83,7 @@ fn local_once_approval_integrity(row: &Value) -> Value {
 }
 
 /// `_verify_local_once_approval` (:411-424).
-fn verify_local_once_approval<'a>(
+pub(crate) fn verify_local_once_approval<'a>(
     row: &Value,
     key: Option<&'a [u8]>,
     key_id: Option<&'a str>,
@@ -124,7 +124,7 @@ fn local_once_approval_integrity_failure(
 
 /// `_local_once_approval_payload` (:443-467) — the decision dict surfaced to
 /// callers.
-fn local_once_approval_payload(row: &Value) -> Value {
+pub(crate) fn local_once_approval_payload(row: &Value) -> Value {
     serde_json::json!({
         "action": row_value(row, "action"),
         "approval_id": row_value(row, "approval_id"),

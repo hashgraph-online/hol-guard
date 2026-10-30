@@ -440,7 +440,8 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "get_next_pending_request"
         | "get_approval_extension_allow_hint"
         | "approval_desktop_notified_at"
-        | "oldest_approval_request_created_at" => Kind::Snapshot,
+        | "oldest_approval_request_created_at"
+        | "peek_exact_cloud_local_once_approval" => Kind::Snapshot,
         "workflow_capability_commit" => Kind::Write,
         "consume_native_review_approval"
         | "settle_native_review_reuse"
@@ -761,6 +762,9 @@ fn dispatch(
         }
         "apply_temporary_mcp_grant_resolution" => {
             apply_temporary_mcp_grant(connection, guard_home, args, owner)
+        }
+        "peek_exact_cloud_local_once_approval" => {
+            crate::guard_store_exact_cloud_peek::peek(connection, args)
         }
         "apply_signed_remote_exact_result" => {
             crate::guard_store_exact_cloud_apply::apply_signed_remote_exact_result(
