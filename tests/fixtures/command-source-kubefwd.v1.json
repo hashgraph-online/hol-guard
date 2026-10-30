@@ -85,30 +85,85 @@
               ],
               "default_mode": "review",
               "matcher": {
-                "op": "leading-subcommand.v1",
-                "config": {
-                  "executables": [
-                    "kubefwd"
-                  ],
-                  "subcommands": [
-                    "svc",
-                    "services"
-                  ],
-                  "forbidden_flags_before_delimiter": [
-                    "--help",
-                    "-h",
-                    "--version"
-                  ],
-                  "options_with_values": [
-                    "-n",
-                    "--namespace",
-                    "-l",
-                    "--selector",
-                    "--context",
-                    "--kubeconfig"
-                  ],
-                  "required_flags_anywhere": []
-                }
+                "op": "any.v1",
+                "config": {},
+                "matchers": [
+                  {
+                    "op": "leading-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "kubefwd"
+                      ],
+                      "subcommands": [
+                        "svc"
+                      ],
+                      "forbidden_flags_before_delimiter": [
+                        "--help",
+                        "-h",
+                        "--version"
+                      ],
+                      "options_with_values": [
+                        "-n",
+                        "--namespace",
+                        "-l",
+                        "--selector",
+                        "--context",
+                        "--kubeconfig"
+                      ],
+                      "required_flags_anywhere": []
+                    }
+                  },
+                  {
+                    "op": "leading-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "kubefwd"
+                      ],
+                      "subcommands": [
+                        "services"
+                      ],
+                      "forbidden_flags_before_delimiter": [
+                        "--help",
+                        "-h",
+                        "--version"
+                      ],
+                      "options_with_values": [
+                        "-n",
+                        "--namespace",
+                        "-l",
+                        "--selector",
+                        "--context",
+                        "--kubeconfig"
+                      ],
+                      "required_flags_anywhere": []
+                    }
+                  },
+                  {
+                    "op": "leading-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "kubefwd"
+                      ],
+                      "subcommands": [
+                        "svcs"
+                      ],
+                      "forbidden_flags_before_delimiter": [
+                        "--help",
+                        "-h",
+                        "--version"
+                      ],
+                      "options_with_values": [
+                        "-n",
+                        "--namespace",
+                        "-l",
+                        "--selector",
+                        "--context",
+                        "--kubeconfig"
+                      ],
+                      "required_flags_anywhere": []
+                    }
+                  }
+                ]
               },
               "safe_variants": [],
               "family": null,
@@ -301,6 +356,19 @@
     {
       "id": "services-alias",
       "command": "kubefwd services -n staging",
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "rule_id": "command.kubefwd.service-forward",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.kubefwd"
+      ]
+    },
+    {
+      "id": "svcs-alias",
+      "command": "kubefwd svcs -n staging",
       "expected_action": "review",
       "expected_effective_segments": [
         0
