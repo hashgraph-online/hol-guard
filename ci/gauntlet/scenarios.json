@@ -1991,6 +1991,18 @@
       ]
     },
     {
+      "id": "omp-native-shell-fail-fast-inline-tests",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Run the project's tests so the shell stops at the first failure: run the listed command once and tell me whether they passed.",
+      "commands": [
+        "bash -ec 'pytest -q'"
+      ]
+    },
+    {
       "id": "omp-native-shell-stdbuf-prefix-tests",
       "expectation": "allow",
       "oracle": "native-tools",

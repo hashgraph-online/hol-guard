@@ -10652,6 +10652,70 @@
       "expect": "allow"
     },
     {
+      "id": "shell-inline-fail-fast-bundle-pytest",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bash -ec 'pytest -q'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-inline-fail-fast-separate-npm",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bash -e -c 'npm run build'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-inline-fail-fast-three-letters",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bash -euxc 'pytest -q'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "shell-inline-trace-sh-vitest",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sh -x -c 'npx vitest run tests/sample.test.ts'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "session-port-prefix-vitest",
       "fix_area": "shell",
       "harnesses": [

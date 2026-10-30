@@ -340,14 +340,53 @@ pub(super) fn inline_shell_script(raw: &str) -> Option<String> {
         return None;
     }
     let tokens = crate::shell_tokens(raw, false).ok()?;
-    let [shell, option, script] = tokens.as_slice() else {
+    let (shell, rest) = tokens.split_first()?;
+    if !INLINE_SHELLS.contains(&shell.as_str()) {
+        return None;
+    }
+    let [script] = carries_script(rest)? else {
         return None;
     };
-    if !INLINE_SHELLS.contains(&shell.as_str()) || option != "-c" || script.trim().is_empty() {
+    if script.trim().is_empty() {
         return None;
     }
     Some(script.clone())
 }
+
+/// The words after the one carrying `-c`, when every other option letter in
+/// front of the script is one of [`INERT_SHELL_FLAGS`].
+///
+/// `bash -ec 'npm test'`, `bash -ce 'npm test'` and `bash -e -c 'npm test'`
+/// all run the script `bash -c 'npm test'` runs: a bundled word sets each of
+/// its letters, and `-c` takes the script as the next word wherever in the
+/// bundle it sits. `-e` stops the script at its first failure and changes
+/// nothing about which programs the words name. The walk refuses any other
+/// letter, so `-l`, `-i`, `-s` and `-o` keep the paths they have.
+fn carries_script(words: &[String]) -> Option<&[String]> {
+    let mut index = 0;
+    loop {
+        let word = words.get(index)?.strip_prefix('-')?;
+        index += 1;
+        if word.is_empty() {
+            return None;
+        }
+        let (flags, closes) = match word.find('c') {
+            Some(position) => (format!("{}{}", &word[..position], &word[position + 1..]), true),
+            None => (word.to_string(), false),
+        };
+        if !flags.chars().all(|flag| INERT_SHELL_FLAGS.contains(flag)) {
+            return None;
+        }
+        if closes {
+            return Some(&words[index..]);
+        }
+    }
+}
+
+/// The option letters a shell reads without changing which words the script
+/// is or what the shell reads before running it: stop at the first failure,
+/// refuse an unset parameter, and trace what runs.
+const INERT_SHELL_FLAGS: &str = "eux";
 
 /// Whether an operator stands outside the quoting, where the shell reads it as
 /// its own word.
@@ -472,6 +511,49 @@ mod tests {
             super::inline_shell_script("sh -c 'gh pr view 12 > /tmp/out'"),
             Some("gh pr view 12 > /tmp/out".to_owned()),
         );
+    }
+
+    #[test]
+    fn inert_option_letters_keep_the_script_the_whole_command() {
+        for command in [
+            "bash -ec 'npm test'",
+            "bash -e -c 'npm test'",
+            "bash -eu -c 'npm test'",
+            "bash -euxc 'npm test'",
+            // `-c` takes the next word wherever it sits in the bundle.
+            "bash -ce 'npm test'",
+            "sh -x -c 'npm test'",
+        ] {
+            assert_eq!(
+                super::inline_shell_script(command).as_deref(),
+                Some("npm test"),
+                "{command}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_option_the_shell_reads_differently_keeps_the_wrapper_path() {
+        for command in [
+            // A login or interactive shell reads startup files first, so the
+            // script is not the whole command.
+            "bash -lc 'npm test'",
+            "bash -l -c 'npm test'",
+            "bash -ic 'npm test'",
+            // zsh reads `~/.zshenv` whatever option it is given.
+            "zsh -c 'npm test'",
+            "zsh -ec 'npm test'",
+            // The script arrives on stdin, or an option takes a value this
+            // walk does not read.
+            "bash -s -c 'npm test'",
+            "bash -o pipefail -c 'npm test'",
+            // No `-c` at all, and no script to model.
+            "bash -e 'npm test'",
+            "bash -ec",
+            "bash -ec ''",
+        ] {
+            assert!(super::inline_shell_script(command).is_none(), "{command}");
+        }
     }
 
     #[test]
