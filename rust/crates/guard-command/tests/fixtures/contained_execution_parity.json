@@ -55,7 +55,8 @@
           "node_test": false,
           "vitest": false,
           "git": false,
-          "node_tool": false
+          "node_tool": false,
+          "package_test": false
         }
       }
     },
@@ -100,7 +101,8 @@
           "node_test": false,
           "vitest": false,
           "git": false,
-          "node_tool": false
+          "node_tool": false,
+          "package_test": false
         }
       }
     },
@@ -151,7 +153,8 @@
           "node_test": true,
           "vitest": false,
           "git": false,
-          "node_tool": false
+          "node_tool": false,
+          "package_test": false
         }
       }
     },
@@ -206,7 +209,8 @@
           "node_test": false,
           "vitest": false,
           "git": false,
-          "node_tool": false
+          "node_tool": false,
+          "package_test": false
         }
       }
     },
@@ -266,7 +270,8 @@
           "node_test": false,
           "vitest": false,
           "git": false,
-          "node_tool": false
+          "node_tool": false,
+          "package_test": false
         }
       }
     },
@@ -334,7 +339,8 @@
           "node_test": false,
           "vitest": false,
           "git": false,
-          "node_tool": false
+          "node_tool": false,
+          "package_test": false
         }
       }
     },
@@ -397,7 +403,8 @@
           "node_test": false,
           "vitest": false,
           "git": false,
-          "node_tool": false
+          "node_tool": false,
+          "package_test": false
         }
       }
     },
@@ -460,7 +467,8 @@
           "node_test": false,
           "vitest": false,
           "git": false,
-          "node_tool": false
+          "node_tool": false,
+          "package_test": false
         }
       }
     },
@@ -514,7 +522,8 @@
           "node_test": false,
           "vitest": false,
           "git": false,
-          "node_tool": false
+          "node_tool": false,
+          "package_test": false
         }
       }
     },
@@ -568,7 +577,8 @@
           "node_test": false,
           "vitest": false,
           "git": false,
-          "node_tool": false
+          "node_tool": false,
+          "package_test": false
         }
       }
     },
@@ -624,7 +634,8 @@
           "node_test": false,
           "vitest": false,
           "git": false,
-          "node_tool": false
+          "node_tool": false,
+          "package_test": false
         }
       }
     },
@@ -687,7 +698,8 @@
           "node_test": false,
           "vitest": false,
           "git": false,
-          "node_tool": false
+          "node_tool": false,
+          "package_test": false
         }
       }
     },
@@ -910,7 +922,8 @@
           "node_test": true,
           "vitest": false,
           "git": false,
-          "node_tool": false
+          "node_tool": false,
+          "package_test": false
         }
       }
     },
@@ -1802,7 +1815,8 @@
           "node_test": false,
           "vitest": true,
           "git": false,
-          "node_tool": false
+          "node_tool": false,
+          "package_test": false
         }
       }
     },
@@ -1821,7 +1835,8 @@
           "node_test": false,
           "vitest": true,
           "git": false,
-          "node_tool": false
+          "node_tool": false,
+          "package_test": false
         }
       }
     },
