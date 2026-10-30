@@ -1,6 +1,6 @@
 # HOL Guard native runtime hardening PRD
 
-Status: accepted follow-up, tracked on `main`. Reconciled 2026-10-29 against `main` at `6a319266c3`, with 3.58.0 shipped and 3.59.0 open in its release PR. The program was planned on a `release/3.0` branch and did not land that way: the work merged to `main` through ordinary PRs, and `release/3.0` is now historical.
+Status: accepted follow-up, tracked on `main`. Reconciled 2026-10-30 against `main` at `755022afa0`, with 3.58.0 shipped and 3.59.0 open in its release PR. The program was planned on a `release/3.0` branch and did not land that way: the work merged to `main` through ordinary PRs, and `release/3.0` is now historical.
 
 ## Objective
 
