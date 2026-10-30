@@ -134,7 +134,6 @@ def _native_runtime_decision(
         memory_command=memory_command,
         memory_artifact_type=memory_artifact_type,
         memory_artifact_name=memory_artifact_name,
-        consume_one_shot=False,
     )
     saved_decision = lookup["decision"]
     ignored_integrity = lookup["ignored_local_integrity"] is not None

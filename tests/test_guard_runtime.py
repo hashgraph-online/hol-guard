@@ -19250,7 +19250,6 @@ def test_policy_bundle_decision_resolves_before_receipt_persistence(tmp_path, mo
     original_add_receipt = store.add_receipt
 
     def tracked_resolve_policy(*args, **kwargs):
-        assert kwargs.get("consume_one_shot") is False
         order.append("resolve_policy_non_consuming")
         return original_resolve_policy(*args, **kwargs)
 

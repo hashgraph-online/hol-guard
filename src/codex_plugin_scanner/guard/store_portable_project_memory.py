@@ -69,8 +69,8 @@ class StorePortableProjectMemoryMixin:
     def resolve_policy_decision_lookup_with_memory_pattern(
         self,
         harness: str,
-        artifact_id: str | None,
-        artifact_hash: str | None = None,
+        artifact_id: str,
+        artifact_hash: str,
         workspace: str | None = None,
         publisher: str | None = None,
         now: str | None = None,
@@ -79,27 +79,13 @@ class StorePortableProjectMemoryMixin:
         memory_command: str | None = None,
         memory_artifact_type: str | None = None,
         memory_artifact_name: str | None = None,
-        consume_one_shot: bool = True,
     ) -> PolicyDecisionLookupResult:
         """Peek the direct, exact-command and memory candidates in one resident call.
 
-        The resident composes them most restrictive with the portable Git
-        workspace, as the consuming path below does one probe at a time.
+        The resident expands the candidates and composes them most restrictive
+        with the portable Git workspace. The lookup never consumes a one-shot
+        approval.
         """
-        if consume_one_shot or not artifact_id or not artifact_hash:
-            return super().resolve_policy_decision_lookup_with_memory_pattern(
-                harness,
-                artifact_id,
-                artifact_hash=artifact_hash,
-                workspace=workspace,
-                publisher=publisher,
-                now=now,
-                runtime_exact_match_context=runtime_exact_match_context,
-                memory_command=memory_command,
-                memory_artifact_type=memory_artifact_type,
-                memory_artifact_name=memory_artifact_name,
-                consume_one_shot=consume_one_shot,
-            )
         evidence = self.policy_lookup_evidence(now=now)
         if evidence.degraded_trust_status is not None:
             return {
