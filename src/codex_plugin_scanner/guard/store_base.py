@@ -100,19 +100,7 @@ from .store_resume import (
     delete_request_resumes as purge_request_resumes,
 )
 from .store_resume import (
-    get_latest_request_resume as load_latest_request_resume,
-)
-from .store_resume import (
-    get_request_resume as load_request_resume,
-)
-from .store_resume import (
     resume_schema_statement,
-)
-from .store_resume import (
-    seed_request_resume as persist_request_resume_seed,
-)
-from .store_resume import (
-    update_request_resume as persist_request_resume_update,
 )
 from .store_supply_chain import (
     get_supply_chain_bundle as load_supply_chain_bundle,

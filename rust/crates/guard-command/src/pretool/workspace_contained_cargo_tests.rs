@@ -158,3 +158,59 @@ fn a_manifest_path_inside_the_workspace_compiles_that_package() {
         }
     }
 }
+
+/// Cargo's own options stand in front of the verb, and the ones that only
+/// say how it reports, or how strictly it treats the lockfile and the
+/// network, leave the verb the verb it was.
+#[test]
+fn an_option_in_front_of_the_verb_leaves_the_work_it_names() {
+    let ws = package("cargo-global-options");
+    for command in [
+        "cargo --offline test",
+        "cargo -q test",
+        "cargo --quiet test",
+        "cargo -v build",
+        "cargo -vv build",
+        "cargo --verbose check",
+        "cargo --locked --offline test",
+        "cargo --frozen build",
+        "cargo --color always test",
+        "cargo --color=never test",
+        "cargo +nightly --offline test",
+    ] {
+        for harness in ["codex", "claude-code", "omp"] {
+            let (reason, minimum) = outcome(harness, command, &ws);
+            assert_eq!(reason == CONTAINED, host(), "{reason} {harness}: {command}");
+            if !host() {
+                assert_eq!(minimum, "review", "{reason}: {command}");
+            }
+        }
+    }
+}
+
+/// An option that chooses a config key, an unstable flag or another
+/// directory decides what the run resolves and where, which is what the
+/// admission rests on; and reading past an inert one never turns a registry
+/// verb into local work.
+#[test]
+fn an_option_that_decides_what_the_run_reads_keeps_its_review() {
+    let ws = package("cargo-global-options-refused");
+    for command in [
+        "cargo --config build.rustc-wrapper=\"sccache\" test",
+        "cargo --config=net.offline=false test",
+        "cargo -Z unstable-options test",
+        "cargo -Zscript test",
+        "cargo -C crates/engine test",
+        "cargo --color test",
+        "cargo --offline install cargo-nextest",
+        "cargo -q add serde",
+        "cargo --locked update",
+        "cargo --offline publish --dry-run",
+    ] {
+        for harness in ["codex", "claude-code", "omp"] {
+            let (reason, minimum) = outcome(harness, command, &ws);
+            assert_ne!(reason, CONTAINED, "{harness}: {command}");
+            assert_eq!(minimum, "review", "{harness}: {command} ({reason})");
+        }
+    }
+}

@@ -395,6 +395,8 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "list_guard_operations"
         | "get_guard_operation_for_approval_request"
         | "count_guard_events_v1"
+        | "get_request_resume"
+        | "get_latest_request_resume"
         | "list_guard_operation_items"
         | "get_guard_client_attachment"
         | "list_guard_client_attachments"
@@ -429,6 +431,11 @@ fn method_kind(method: &str) -> Option<Kind> {
         // Its exact Cloud read takes its own snapshot and its lookup opens its
         // own connection, so no transaction is held around them.
         "codex_live_allow_authority" => Kind::Read,
+        // Its authority lookup opens its own connection, so it takes the
+        // write lock itself only to record the continuation. That commit is
+        // its own, so the call reports no committed write: no caller retries
+        // it, and the outbox generation still follows its changes.
+        "complete_codex_live_decision" | "record_codex_live_completion" => Kind::Read,
         "list_command_activity_page"
         | "command_activity_analytics"
         | "list_command_activity_invalidations"
@@ -697,6 +704,8 @@ fn dispatch(
         "get_guard_operation_for_approval_request" => {
             sessions::operation_for_approval_request(connection, args)
         }
+        "get_request_resume" => crate::codex_request_resume_store::get(connection, args),
+        "get_latest_request_resume" => crate::codex_request_resume_store::latest(connection, args),
         "add_guard_operation_item" => sessions::add_operation_item(connection, args),
         "list_guard_operation_items" => sessions::list_operation_items(connection, args),
         "attach_guard_client" => clients::attach_client(connection, args),
@@ -779,6 +788,12 @@ fn dispatch(
         }
         "codex_live_allow_authority" => {
             crate::guard_store_codex_live_authority::resolve(connection, guard_home, args)
+        }
+        "complete_codex_live_decision" => {
+            crate::guard_store_codex_live_completion::complete(connection, guard_home, args, owner)
+        }
+        "record_codex_live_completion" => {
+            crate::guard_store_codex_live_completion::record(connection, guard_home, args, owner)
         }
         "apply_signed_remote_exact_result" => {
             crate::guard_store_exact_cloud_apply::apply_signed_remote_exact_result(
