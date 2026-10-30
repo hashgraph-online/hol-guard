@@ -23,6 +23,9 @@ nix.workspace = true
 
 [dev-dependencies]
 base64ct.workspace = true
+# Reading the source of a copy is not proof of how many buffers it touched, so
+# the scrubbing tests install the counting allocator and measure.
+guard-alloc-probe = { path = "../guard-alloc-probe" }
 
 [lints]
 workspace = true

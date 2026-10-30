@@ -967,6 +967,7 @@ name = "guard-scanner"
 version = "0.1.0"
 dependencies = [
  "base64ct",
+ "guard-alloc-probe",
  "guard-rules",
  "hex",
  "hmac",

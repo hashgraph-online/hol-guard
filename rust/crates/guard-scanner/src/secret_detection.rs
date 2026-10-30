@@ -1385,7 +1385,17 @@ fn line_text(text: &str, match_start: usize) -> Zeroizing<String> {
     let end = text[match_start..]
         .find('\n')
         .map_or(text.len(), |index| match_start + index);
-    Zeroizing::new(text[start..end].chars().take(1024).collect::<String>())
+    // Collecting the characters would grow the string from a quarter-length
+    // guess, and every grow frees a buffer still holding the head of the line,
+    // which is where a secret usually sits. Finding the cut first and copying
+    // the slice once allocates exactly what the line needs, so the only buffer
+    // that ever held the text is the one `Zeroizing` wipes.
+    let line = &text[start..end];
+    let cut = line
+        .char_indices()
+        .nth(1024)
+        .map_or(line.len(), |(index, _)| index);
+    Zeroizing::new(line[..cut].to_string())
 }
 
 #[allow(clippy::too_many_arguments)] // Mirrors the Python keyword arguments verbatim.
@@ -1569,6 +1579,14 @@ pub fn scan_secret_text(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use guard_alloc_probe::CountingAllocator;
+
+    // Installed for this crate's unit tests so a copy that silently grows is
+    // visible as an extra allocation call rather than something a reader has
+    // to take on trust.
+    #[global_allocator]
+    static COUNTING_ALLOCATOR: CountingAllocator = CountingAllocator;
 
     // Built in parts so a literal JWT never appears in source.
     fn jwt_fixture() -> String {
@@ -1993,6 +2011,40 @@ mod tests {
             finding.fingerprint(key).expect("the key is not empty"),
             hex::encode(joined.finalize().into_bytes())
         );
+    }
+
+    #[test]
+    fn a_matched_line_reaches_the_zeroizing_buffer_in_one_copy() {
+        // Collecting characters starts from a guess of about a quarter of the
+        // line's bytes and grows from there, and every grow frees a buffer that
+        // still holds the head of the line, which is where the secret sits. The
+        // allocator is the only honest witness to that, so measure it: one call
+        // is the copy, and anything more is a freed buffer nobody wiped.
+        let line = format!("API_KEY=sk_live_{}", "e\u{301}".repeat(400));
+        let text = format!("harmless line\n{line}\ntrailing line");
+        let match_start = text.find("sk_live_").expect("the fixture carries the line");
+
+        let (copied, measured) = guard_alloc_probe::measure(|| line_text(&text, match_start));
+
+        assert_eq!(copied.as_str(), line);
+        assert_eq!(
+            measured.alloc_calls, 1,
+            "the line was copied through more than one buffer"
+        );
+    }
+
+    #[test]
+    fn a_long_line_is_cut_on_a_character_boundary() {
+        let line = format!("API_KEY=sk_live_{}", "e\u{301}".repeat(2000));
+        let text = format!("harmless line\n{line}\n");
+        let match_start = text.find("sk_live_").expect("the fixture carries the line");
+
+        let copied = line_text(&text, match_start);
+
+        // The cut counts characters, so a multi-byte character is never halved
+        // and the kept text is still a prefix of the line it came from.
+        assert_eq!(copied.chars().count(), 1024);
+        assert!(line.starts_with(copied.as_str()));
     }
 
     #[test]
