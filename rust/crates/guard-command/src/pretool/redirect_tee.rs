@@ -151,7 +151,12 @@ fn read_tee_stage(chars: &[char], start: usize) -> Option<TeeStage> {
         if is_boundary(chars[index]) {
             // A redirection on the stage itself moves where `tee` writes,
             // so the targets read here would no longer name the writes.
-            if matches!(chars[index], '<' | '>') {
+            //
+            // A brace beside an operand is a brace expansion: `tee a{b,c}`
+            // writes `ab` and `ac`, while `> a{b,c}` hands the shell two
+            // words and is an ambiguous redirect. The operand read here
+            // would name neither file.
+            if matches!(chars[index], '<' | '>' | '{' | '}') {
                 return None;
             }
             break;
@@ -256,6 +261,21 @@ mod tests {
         assert_eq!(as_redirects("ls | tee"), None);
         assert_eq!(as_redirects("ls | sudo tee out.log"), None);
         assert_eq!(as_redirects("ls | tee out.log > copy.log"), None);
+    }
+
+    #[test]
+    fn refuses_an_operand_a_brace_expands() {
+        // `tee a{b,c}` writes `ab` and `ac`; the redirect spelling names
+        // neither, so the operand read off the stage is not the write.
+        assert_eq!(as_redirects("ls | tee a{b,c}"), None);
+        assert_eq!(as_redirects("ls | tee out{,.bak}"), None);
+        assert_eq!(as_redirects("ls | tee {a,b}.log"), None);
+        // A brace that opens its own group still ends the stage at the `;`
+        // before it, so the ordinary rewrite is untouched.
+        assert_eq!(
+            as_redirects("{ ls | tee out.log; }").as_deref(),
+            Some("{ ls > out.log; }")
+        );
     }
 
     #[test]

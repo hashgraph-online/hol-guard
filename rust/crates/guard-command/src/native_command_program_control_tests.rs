@@ -175,3 +175,18 @@ fn native_mcp_defaults_are_opt_in_tightening_only_and_redacted() {
         }));
     }
 }
+
+#[test]
+fn a_watched_executable_names_the_program_a_projection_must_not_rewrite_away() {
+    let controls = authored_controls(&binding(&[], false)).unwrap();
+    let program = crate::native_command_program::authored_test_support::full_program();
+    assert!(program
+        .extensions
+        .iter()
+        .flat_map(|extension| &extension.executables)
+        .any(|name| controls.watches_executable(name)));
+    assert!(!controls.watches_executable("guard-no-such-program"));
+    // No authored extension watches `tee`, so the pipeline rewrite that
+    // reads a `| tee PATH` stage as the redirect it performs stays on.
+    assert!(!controls.watches_executable("tee"));
+}

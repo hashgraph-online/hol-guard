@@ -292,6 +292,21 @@ fn only_the_one_ampersand_that_ends_the_command_is_read_off() {
     );
     // Nothing was projected away, so there is no projection to read.
     assert_eq!(project("npm run build &"), None);
+    // A word after the target makes the two readings of `&>` name different
+    // work: `bash` passes it to the same program, POSIX `sh` backgrounds the
+    // first command and runs the word as a second one. The sandbox runs the
+    // raw bytes, so the projection refuses rather than model one of them.
+    assert_eq!(project("printf ok &> .tool-versions rm -rf src"), None);
+    assert_eq!(project("npm run build &> build.log tail -5"), None);
+    // A separator after the target leaves both readings naming the same
+    // write, so the ordinary spelling still projects.
+    for raw in [
+        "npm run build &> build.log; echo done",
+        "npm run build &> build.log | tail -5",
+        "npm run build &> build.log & echo started",
+    ] {
+        assert!(project(raw).is_some(), "{raw}");
+    }
 }
 
 #[test]

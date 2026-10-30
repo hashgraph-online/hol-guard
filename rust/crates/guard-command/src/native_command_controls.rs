@@ -514,6 +514,21 @@ impl CompiledNativeCommandControls {
                 environment,
             )
     }
+
+    /// Whether an enabled extension names `executable` among the programs it
+    /// watches. A projection that rewrites one spelling of a command into
+    /// another drops the program it rewrote away, and with it the extension
+    /// evidence that program carried, so a watched program keeps its own
+    /// evaluation instead.
+    pub(crate) fn watches_executable(&self, executable: &str) -> bool {
+        self.program.extensions.iter().any(|extension| {
+            self.active_extensions.contains(&extension.extension_id)
+                && extension
+                    .executables
+                    .iter()
+                    .any(|candidate| candidate == executable)
+        })
+    }
 }
 
 #[path = "native_command_delegated.rs"]

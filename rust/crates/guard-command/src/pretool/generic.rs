@@ -734,10 +734,15 @@ fn evaluate_envelope(
     // write and falls through to review, while the redirect spelling of the
     // same work is modelled and bounded. Evaluating that spelling puts both
     // forms on the same target checks.
+    // An extension that watches `tee` evaluates the stage itself, and the
+    // rewrite deletes the program it would match on. Leaving such a command
+    // on the existing path keeps that evaluation.
+    let tee_is_watched = controls.is_some_and(|controls| controls.watches_executable("tee"));
     if let Some(rewritten) = signals
         .command
         .as_deref()
         .filter(|_| project_redirects && !search_scope_proven && !apply_patch_proven)
+        .filter(|_| !tee_is_watched)
         .and_then(redirect_tee::as_redirects)
     {
         let rewritten_payload = payload_with_command(
