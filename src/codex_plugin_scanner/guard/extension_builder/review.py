@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import cast
 
-from ..runtime.command_reviewed_literal_matcher import validate_reviewed_literal_argv
 from .errors import BuilderError
 from .io import object_value
 from .models import Discovery, Operation
@@ -59,26 +58,6 @@ def default_review(discovery: Discovery) -> Review:
     return Review(discovery.binding, tuple(sorted((row.operation_id, Decision(state)) for row in discovery.operations)))
 
 
-def _safe_invocations(discovery: Discovery, operation: Operation, decision: Decision) -> None:
-    for argv in decision.safe_argv:
-        try:
-            validate_reviewed_literal_argv(discovery.metadata.executable, argv)
-        except ValueError as exc:
-            raise BuilderError("unsafe_variant", "Safe variants require a bounded exact literal invocation.") from exc
-        if argv[: len(operation.path)] != operation.path:
-            raise BuilderError("safe_variant_scope", "Safe arguments must begin with their reviewed operation path.")
-        candidates = [row.path for row in discovery.operations if row.path and argv[: len(row.path)] == row.path]
-        longest = max(candidates, key=len) if candidates else ()
-        if longest != operation.path:
-            raise BuilderError(
-                "safe_variant_scope", "Review a safe invocation under its most specific known operation."
-            )
-        if not operation.path and any(not argument.startswith("-") for argument in argv):
-            raise BuilderError(
-                "safe_variant_scope", "Root safe variants may contain literal flags only, not unknown operations."
-            )
-
-
 def _decision(discovery: Discovery, operation: Operation, value: object) -> Decision:
     row = object_value(value)
     decision = Decision(
@@ -108,12 +87,10 @@ def _decision(discovery: Discovery, operation: Operation, value: object) -> Deci
             "root_block_scope",
             "Root inventory rows cannot block every invocation; use a scoped native detector for root-only blocking.",
         )
-    if decision.safe_argv:
-        if discovery.metadata.kind != "cli" or decision.state != "review" or not decision.reviewed:
-            raise BuilderError(
-                "safe_variant_state", "Only explicitly reviewed, nonblocked CLI operations can have safe variants."
-            )
-        _safe_invocations(discovery, operation, decision)
+    if decision.safe_argv and (discovery.metadata.kind != "cli" or decision.state != "review" or not decision.reviewed):
+        raise BuilderError(
+            "safe_variant_state", "Only explicitly reviewed, nonblocked CLI operations can have safe variants."
+        )
     return decision
 
 
@@ -137,5 +114,11 @@ def load_review(value: object, discovery: Discovery) -> Review:
             for argv in decisions[operation.operation_id].safe_argv
         )
         blocked_ids = frozenset(key for key, decision in decisions.items() if decision.state == "block")
+        # The matchers a compiled extension carries are the only reading of a
+        # reviewed vector: whether it is spelled as a literal invocation at all,
+        # whether its options were discovered, and which operation the grammar
+        # places it under. Python comparing discovery paths beside that answer
+        # was a second grammar that could call a vector well placed after the
+        # matchers had already refused it.
         validate_native_bindings(discovery, safe_rows, blocked_ids)
     return Review(discovery.binding, tuple(sorted(decisions.items())))

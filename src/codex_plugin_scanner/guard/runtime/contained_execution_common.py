@@ -6,7 +6,6 @@ import os
 from pathlib import Path
 
 _ALLOWED_ENVIRONMENT_KEYS = ("LANG", "LC_ALL", "LC_CTYPE", "NO_COLOR", "TERM")
-_MAX_EXECUTABLE_BYTES = 256 * 1024 * 1024
 
 
 def canonical_existing_directory(path: Path) -> Path:

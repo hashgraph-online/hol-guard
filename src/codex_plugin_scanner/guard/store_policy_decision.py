@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from .policy_integrity import is_remote_policy_source
 
 
@@ -63,3 +65,20 @@ def policy_decision_hash_exists(store, *, harness: str, artifact_id: str, artifa
     """
     with store._connect() as connection:
         return connection.execute(query, (harness, artifact_id, artifact_hash)).fetchone() is not None
+
+
+def policy_decision_block_exists(store, *, harness: str, artifact_ids: Sequence[str]) -> bool:
+    """Cheaply report whether an artifact-scoped block names one of these ids.
+
+    Like ``policy_decision_hash_exists``, this lets the hook path skip the full
+    lookup when no saved block could match.
+    """
+
+    placeholders = ", ".join("?" for _ in artifact_ids)
+    query = f"""
+        select 1 from policy_decisions
+        where harness in (?, '*') and scope = 'artifact' and action = 'block' and artifact_id in ({placeholders})
+        limit 1
+    """
+    with store._connect() as connection:
+        return connection.execute(query, (harness, *artifact_ids)).fetchone() is not None

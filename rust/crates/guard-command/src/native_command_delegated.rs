@@ -8,8 +8,29 @@ fn basename(value: &str) -> &str {
     value.rsplit(['/', '\\']).next().unwrap_or(value)
 }
 
-fn inspection_only(arguments: &[String]) -> bool {
-    matches!(arguments, [only] if matches!(only.as_str(), "--version" | "--help" | "-h"))
+/// The managers that read a lone `-V` as something other than "print the
+/// version and exit". Gradle and Maven both spell `--show-version` that way,
+/// which prints the version and then runs the build: the default tasks or the
+/// pom's own default goal execute, and resolving them reaches a registry.
+/// Bundler reads it as `--verbose`, and a bare `bundle` installs, so
+/// `bundle -V` fetches gems. Each of those is work the firewall is here to
+/// observe, so for them the flag is not an inspection.
+const VERBOSE_SHORT_V: &[&str] = &["mvn", "mvnw", "gradle", "gradlew", "bundle", "bundler"];
+
+/// A lone inspection flag is the whole argument list, so it names no package
+/// and no subcommand: the manager prints its version or its usage and exits.
+/// `-v` is the short spelling of that everywhere here, and the one agents
+/// reach for first. `-V` is the same probe for most of them, and for the
+/// managers in [`VERBOSE_SHORT_V`] it is not a probe at all.
+fn inspection_only(executable: &str, arguments: &[String]) -> bool {
+    let [only] = arguments else { return false };
+    match only.as_str() {
+        "--version" | "--help" | "-h" | "-v" => true,
+        "-V" => !VERBOSE_SHORT_V
+            .iter()
+            .any(|name| name.eq_ignore_ascii_case(executable)),
+        _ => false,
+    }
 }
 
 pub(crate) fn normalized_tool(value: &str) -> String {
@@ -46,7 +67,7 @@ impl CompiledNativeCommandControls {
                             .executables
                             .iter()
                             .any(|value| value.eq_ignore_ascii_case(executable))
-                            || inspection_only(&segment.arguments)
+                            || inspection_only(executable, &segment.arguments)
                         {
                             return None;
                         }
