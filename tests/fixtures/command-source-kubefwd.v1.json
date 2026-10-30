@@ -747,7 +747,7 @@
     {
       "id": "idle-only-tui",
       "command": "kubefwd --tui",
-      "expected_action": "allow",
+      "expected_action": "review",
       "expected_effective_segments": [],
       "rule_id": "command.kubefwd.service-forward",
       "disabled_permissions": [],
@@ -758,7 +758,7 @@
     {
       "id": "idle-only-label-selector",
       "command": "kubefwd -l app=api",
-      "expected_action": "allow",
+      "expected_action": "review",
       "expected_effective_segments": [],
       "rule_id": "command.kubefwd.service-forward",
       "disabled_permissions": [],
@@ -769,7 +769,7 @@
     {
       "id": "idle-only-long-label-selector",
       "command": "kubefwd --selector app=api",
-      "expected_action": "allow",
+      "expected_action": "review",
       "expected_effective_segments": [],
       "rule_id": "command.kubefwd.service-forward",
       "disabled_permissions": [],
@@ -780,7 +780,7 @@
     {
       "id": "idle-only-context",
       "command": "kubefwd --context dev",
-      "expected_action": "allow",
+      "expected_action": "review",
       "expected_effective_segments": [],
       "rule_id": "command.kubefwd.service-forward",
       "disabled_permissions": [],
@@ -791,7 +791,7 @@
     {
       "id": "idle-only-short-context",
       "command": "kubefwd -x dev",
-      "expected_action": "allow",
+      "expected_action": "review",
       "expected_effective_segments": [],
       "rule_id": "command.kubefwd.service-forward",
       "disabled_permissions": [],
@@ -802,7 +802,7 @@
     {
       "id": "idle-only-kubeconfig",
       "command": "kubefwd --kubeconfig ~/.kube/config",
-      "expected_action": "allow",
+      "expected_action": "review",
       "expected_effective_segments": [],
       "rule_id": "command.kubefwd.service-forward",
       "disabled_permissions": [],
@@ -813,7 +813,7 @@
     {
       "id": "idle-only-short-kubeconfig",
       "command": "kubefwd -c ~/.kube/config",
-      "expected_action": "allow",
+      "expected_action": "review",
       "expected_effective_segments": [],
       "rule_id": "command.kubefwd.service-forward",
       "disabled_permissions": [],
@@ -824,7 +824,7 @@
     {
       "id": "idle-only-no-namespace",
       "command": "kubefwd --theme dark",
-      "expected_action": "allow",
+      "expected_action": "review",
       "expected_effective_segments": [],
       "rule_id": "command.kubefwd.service-forward",
       "disabled_permissions": [],
