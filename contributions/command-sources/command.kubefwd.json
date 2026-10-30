@@ -156,6 +156,139 @@
                 ],
                 "required_flags_anywhere": []
               }
+            },
+            {
+              "op": "zero-operand-flags.v1",
+              "config": {
+                "executables": [
+                  "kubefwd"
+                ],
+                "required_flags": [
+                  "-n"
+                ],
+                "options_with_values": [
+                  "-n",
+                  "--namespace",
+                  "-l",
+                  "--selector",
+                  "--context",
+                  "--kubeconfig"
+                ]
+              }
+            },
+            {
+              "op": "zero-operand-flags.v1",
+              "config": {
+                "executables": [
+                  "kubefwd"
+                ],
+                "required_flags": [
+                  "--namespace"
+                ],
+                "options_with_values": [
+                  "-n",
+                  "--namespace",
+                  "-l",
+                  "--selector",
+                  "--context",
+                  "--kubeconfig"
+                ]
+              }
+            },
+            {
+              "op": "zero-operand-flags.v1",
+              "config": {
+                "executables": [
+                  "kubefwd"
+                ],
+                "required_flags": [
+                  "-l"
+                ],
+                "options_with_values": [
+                  "-n",
+                  "--namespace",
+                  "-l",
+                  "--selector",
+                  "--context",
+                  "--kubeconfig"
+                ]
+              }
+            },
+            {
+              "op": "zero-operand-flags.v1",
+              "config": {
+                "executables": [
+                  "kubefwd"
+                ],
+                "required_flags": [
+                  "--selector"
+                ],
+                "options_with_values": [
+                  "-n",
+                  "--namespace",
+                  "-l",
+                  "--selector",
+                  "--context",
+                  "--kubeconfig"
+                ]
+              }
+            },
+            {
+              "op": "zero-operand-flags.v1",
+              "config": {
+                "executables": [
+                  "kubefwd"
+                ],
+                "required_flags": [
+                  "--context"
+                ],
+                "options_with_values": [
+                  "-n",
+                  "--namespace",
+                  "-l",
+                  "--selector",
+                  "--context",
+                  "--kubeconfig"
+                ]
+              }
+            },
+            {
+              "op": "zero-operand-flags.v1",
+              "config": {
+                "executables": [
+                  "kubefwd"
+                ],
+                "required_flags": [
+                  "--kubeconfig"
+                ],
+                "options_with_values": [
+                  "-n",
+                  "--namespace",
+                  "-l",
+                  "--selector",
+                  "--context",
+                  "--kubeconfig"
+                ]
+              }
+            },
+            {
+              "op": "zero-operand-flags.v1",
+              "config": {
+                "executables": [
+                  "kubefwd"
+                ],
+                "required_flags": [
+                  "--tui"
+                ],
+                "options_with_values": [
+                  "-n",
+                  "--namespace",
+                  "-l",
+                  "--selector",
+                  "--context",
+                  "--kubeconfig"
+                ]
+              }
             }
           ]
         },
