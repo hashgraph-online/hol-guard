@@ -102,10 +102,16 @@ fn conventional_output(path: &Path, workspace: &Path) -> bool {
 
 /// Accept a conventional build directory, the config loader's own bundle
 /// directory, or the literal output the Vite config in `cwd` names.
+///
+/// `config` is the file the command's `--config` names. The check reads the
+/// config the build will actually load: reading the default `vite.config.*`
+/// instead refuses the directory a named config declares, and lets a default
+/// config nothing can verify refuse a build that never loads it.
 pub fn output_root_admissible(
     path: &Path,
     workspace: &Path,
     cwd: Option<&Path>,
+    config: Option<&Path>,
 ) -> Result<(), Refusal> {
     let linked = is_symlink(path);
     let bundle = !linked
@@ -119,7 +125,7 @@ pub fn output_root_admissible(
     // A config that names a non-literal outDir refuses. Read the bundle
     // directory first so that recheck does not refuse a command-line --outDir.
     let declared = match cwd {
-        Some(cwd) if !bundle && !conventional => match declared_output(cwd, workspace, None) {
+        Some(cwd) if !bundle && !conventional => match declared_output(cwd, workspace, config) {
             Declared::Unverified => return Err(Refusal(UNVERIFIED)),
             Declared::Output(output) => output == path,
             Declared::Default => false,
@@ -241,16 +247,15 @@ pub fn output_root(arguments: &[String], workspace: &Path, cwd: &Path) -> Result
             );
         }
     }
+    let config = explicit_config(arguments, cwd)?;
     // An empty `--outDir=` names nothing, so the config is still read.
     let declared = match named.filter(|value| !value.is_empty()) {
         Some(_) => None,
-        None => {
-            match declared_output(cwd, workspace, explicit_config(arguments, cwd)?.as_deref()) {
-                Declared::Unverified => return Err(Refusal(UNVERIFIED)),
-                Declared::Output(output) => Some(output),
-                Declared::Default => None,
-            }
-        }
+        None => match declared_output(cwd, workspace, config.as_deref()) {
+            Declared::Unverified => return Err(Refusal(UNVERIFIED)),
+            Declared::Output(output) => Some(output),
+            Declared::Default => None,
+        },
     };
     let output = match &declared {
         Some(output) => output.clone(),
@@ -260,6 +265,7 @@ pub fn output_root(arguments: &[String], workspace: &Path, cwd: &Path) -> Result
         &output,
         workspace,
         if declared.is_some() { Some(cwd) } else { None },
+        config.as_deref(),
     )?;
     Ok(output)
 }
@@ -304,8 +310,23 @@ pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
             return Some(unreadable.reply());
         };
         let cwd = requested_path(input, "cwd");
+        // The recheck is handed the command's own words so it reads the config
+        // the build names, as the first reading did. Words it cannot read name
+        // no config rather than standing in for the default one.
+        let config = match (input.get("arguments"), cwd.as_deref()) {
+            (Some(_), Some(cwd)) => {
+                let Some(arguments) = requested_arguments(input) else {
+                    return Some(unreadable.reply());
+                };
+                match explicit_config(&arguments, cwd) {
+                    Ok(config) => config,
+                    Err(refusal) => return Some(refusal.reply()),
+                }
+            }
+            _ => None,
+        };
         return Some(
-            match output_root_admissible(&path, &workspace, cwd.as_deref()) {
+            match output_root_admissible(&path, &workspace, cwd.as_deref(), config.as_deref()) {
                 Ok(()) => json!({"value": true}),
                 Err(refusal) => refusal.reply(),
             },

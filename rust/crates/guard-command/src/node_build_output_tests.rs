@@ -138,6 +138,101 @@ fn a_named_config_is_read_instead_of_the_default_one() {
 }
 
 #[test]
+fn a_named_config_declares_an_output_the_check_admits() {
+    // The admissibility check reads the config the build loads. Reading the
+    // default one beside it refused the directory `vite.alt.ts` declares.
+    let workspace = project("named-config-output");
+    std::fs::write(
+        workspace.join("vite.config.ts"),
+        "export default { build: { outDir: 'dist' } }",
+    )
+    .expect("default config");
+    std::fs::write(
+        workspace.join("vite.alt.ts"),
+        "export default { build: { outDir: 'release' } }",
+    )
+    .expect("named config");
+    let arguments = ["build", "--config", "vite.alt.ts"];
+    let reply = root_request(&workspace, &workspace, &arguments);
+    assert_eq!(
+        reply["value"].as_str().map(PathBuf::from),
+        Some(workspace.join("release"))
+    );
+    let reply = evaluate(
+        "node_build_output_admissible",
+        &json!({
+            "workspace": workspace.to_string_lossy(),
+            "cwd": workspace.to_string_lossy(),
+            "path": workspace.join("release").to_string_lossy(),
+            "arguments": arguments,
+        }),
+    )
+    .expect("answered");
+    assert_eq!(reply["value"], json!(true), "{reply}");
+}
+
+#[test]
+fn an_unverifiable_default_config_does_not_refuse_a_named_one() {
+    // The build never loads the default config, so what it declares is not
+    // the reading that decides this build's output.
+    let workspace = project("named-over-unverified");
+    std::fs::write(
+        workspace.join("vite.config.ts"),
+        "export default { build: { outDir: process.env.OUT } }",
+    )
+    .expect("default config");
+    std::fs::write(
+        workspace.join("vite.alt.ts"),
+        "export default { build: { outDir: 'release' } }",
+    )
+    .expect("named config");
+    let reply = root_request(
+        &workspace,
+        &workspace,
+        &["build", "--config", "vite.alt.ts"],
+    );
+    assert_eq!(
+        reply["value"].as_str().map(PathBuf::from),
+        Some(workspace.join("release"))
+    );
+}
+
+#[test]
+fn a_recheck_whose_words_name_no_config_file_refuses() {
+    let workspace = project("recheck-missing-config");
+    let reply = evaluate(
+        "node_build_output_admissible",
+        &json!({
+            "workspace": workspace.to_string_lossy(),
+            "cwd": workspace.to_string_lossy(),
+            "path": workspace.join("dist").to_string_lossy(),
+            "arguments": ["build", "--config"],
+        }),
+    )
+    .expect("answered");
+    assert_eq!(refusal(&reply), "Missing Vite config.");
+}
+
+#[test]
+fn a_recheck_whose_words_are_not_the_commands_own_refuses() {
+    let workspace = project("recheck-bad-words");
+    let reply = evaluate(
+        "node_build_output_admissible",
+        &json!({
+            "workspace": workspace.to_string_lossy(),
+            "cwd": workspace.to_string_lossy(),
+            "path": workspace.join("dist").to_string_lossy(),
+            "arguments": ["build", 4],
+        }),
+    )
+    .expect("answered");
+    assert_eq!(
+        refusal(&reply),
+        "HOL Guard could not read the project this build writes into."
+    );
+}
+
+#[test]
 fn the_default_config_declares_the_output_when_the_command_names_none() {
     let workspace = project("default-config");
     std::fs::write(

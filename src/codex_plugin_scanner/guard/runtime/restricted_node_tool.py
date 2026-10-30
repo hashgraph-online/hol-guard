@@ -111,19 +111,32 @@ def _create_vite_temp_directory(root: Path, workspace: Path) -> None:
         )
 
 
-def validate_build_output_root(path: Path, *, workspace: Path, cwd: Path | None = None) -> None:
+def validate_build_output_root(
+    path: Path,
+    *,
+    workspace: Path,
+    cwd: Path | None = None,
+    arguments: Sequence[str] | None = None,
+) -> None:
     """Ask native authority whether a build may write this directory.
 
     The reading is a verdict — a conventional `dist` beside a package
     manifest, the config loader's own bundle directory, or the literal
-    directory the Vite config in `cwd` names, and nothing already there that
-    emptying the directory would destroy or write through. The sandbox asks
-    again just before it launches, so a plan cannot be granted one directory
-    and started against another, and both askings read the same native answer.
+    directory the Vite config the command loads names, and nothing already
+    there that emptying the directory would destroy or write through. The
+    sandbox asks again just before it launches, so a plan cannot be granted
+    one directory and started against another, and both askings read the same
+    native answer.
+
+    `arguments` are the command's own words. They travel with the question so
+    native authority reads the config the build names rather than the default
+    one beside it, which would refuse the directory the named config declares.
     """
     fields: dict[str, object] = {"path": path, "workspace": workspace}
     if cwd is not None:
         fields["cwd"] = cwd
+    if arguments is not None:
+        fields["arguments"] = list(arguments)
     restricted_native("node_build_output_admissible", fields, (bool,))
 
 

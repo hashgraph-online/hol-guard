@@ -102,7 +102,7 @@ def _backend_argv(plan: RestrictedPytestPlan, *, private_root: Path, user_site_r
         from .restricted_node_tool import validate_build_output_root
 
         for path in plan.output_roots:
-            validate_build_output_root(path, workspace=plan.workspace, cwd=plan.cwd)
+            validate_build_output_root(path, workspace=plan.workspace, cwd=plan.cwd, arguments=plan.command)
     if plan.read_only_roots and plan.profile_version != "git-readonly-v1":
         raise RestrictedPytestError(PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE, "Unexpected extra read grants.")
     if plan.backend == "macos-seatbelt":

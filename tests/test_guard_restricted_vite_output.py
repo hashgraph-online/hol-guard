@@ -225,3 +225,18 @@ def test_a_linked_ancestor_of_node_modules_is_not_a_bundle_grant(tmp_path):
     modules = linked / "node_modules"
     modules.mkdir()
     assert tool.config_bundle_directory(linked, workspace, modules) is None
+
+
+def test_the_recheck_reads_the_config_the_command_names(tmp_path):
+    """The sandbox recheck is handed the build's own words, not just its cwd."""
+
+    app = _dashboard(tmp_path, _config("process.env.OUT_DIR"))
+    (app / "vite.alt.ts").write_text(_config('"release"'))
+    release = app / "release"
+    release.mkdir()
+    (release / "index.html").write_text("<html></html>")
+    arguments = ["build", "--config", "vite.alt.ts"]
+    tool.validate_build_output_root(release, workspace=tmp_path, cwd=app, arguments=arguments)
+    # Without the words, the default config decides and cannot be verified.
+    with pytest.raises(RestrictedPytestError):
+        tool.validate_build_output_root(release, workspace=tmp_path, cwd=app)
