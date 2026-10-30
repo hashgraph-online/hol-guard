@@ -23,6 +23,11 @@ pub(crate) fn evaluate(
         budget.check()?;
         return Ok(result);
     }
+    // The grant reading lives with the workspace sink, which is contained on
+    // Unix only. Where there is no sink the operation falls through to the
+    // platform's own answer below, which reports no enforceable backend
+    // rather than a grant nothing can hold.
+    #[cfg(unix)]
     if operation == "workspace_grant_script_roots" {
         let result = crate::contained_workspace_grant_plan::evaluate(input);
         budget.check()?;
