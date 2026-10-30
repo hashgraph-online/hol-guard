@@ -114,22 +114,12 @@ pub(in crate::pretool) fn exact_safe_absolute_cd_chain(
     allow_git_helper_context: bool,
     context: PathContext<'_>,
 ) -> bool {
-    eprintln!("chain-enter {}", model.normalized_text);
     if model.segments.len() < 4 || model.confidence != "exact" {
-        eprintln!(
-            "chain-skip len={} confidence={}",
-            model.segments.len(),
-            model.confidence
-        );
         return false;
     }
     let mut index = 0usize;
     while index < model.segments.len() {
-        if index > 0 && separator_between(model, index).as_deref() != Some("&&") {
-            eprintln!(
-                "chain-sep-before-cd {index} {:?}",
-                separator_between(model, index)
-            );
+        if index > 0 && !separator_is_and(model, index) {
             return false;
         }
         let cd = &model.segments[index];
@@ -142,15 +132,12 @@ pub(in crate::pretool) fn exact_safe_absolute_cd_chain(
             return false;
         }
         let [target] = cd.arguments.as_slice() else {
-            eprintln!("chain-cd-args {:?}", cd.arguments);
             return false;
         };
         if index > 0 && !std::path::Path::new(target).is_absolute() {
-            eprintln!("chain-relative {target}");
             return false;
         }
         let Some(cwd) = safe_reads::verified_cwd_target(target, context) else {
-            eprintln!("chain-unverified {target}");
             return false;
         };
         index += 1;
@@ -158,19 +145,12 @@ pub(in crate::pretool) fn exact_safe_absolute_cd_chain(
         while index < model.segments.len()
             && model.segments[index].executable.as_deref() != Some("cd")
         {
-            if separator_between(model, index).as_deref() != Some("&&") {
-                eprintln!(
-                    "chain-sep-read {index} {:?}",
-                    separator_between(model, index)
-                );
+            if !separator_is_and(model, index) {
                 return false;
             }
             let segment = &model.segments[index];
-            if cwd_effectful_segment(segment) {
-                eprintln!("chain-effectful {:?}", segment.executable);
-                return false;
-            }
-            if !exact_safe_segment_with_context(
+            if cwd_effectful_segment(segment)
+                || !exact_safe_segment_with_context(
                     model,
                     segment,
                     allow_git_helper_context,
@@ -180,7 +160,6 @@ pub(in crate::pretool) fn exact_safe_absolute_cd_chain(
                     },
                 )
             {
-                eprintln!("chain-unproved {:?}", segment.tokens);
                 return false;
             }
             reads += 1;
@@ -193,17 +172,23 @@ pub(in crate::pretool) fn exact_safe_absolute_cd_chain(
     true
 }
 
-fn separator_between(model: &CanonicalCommandV1, index: usize) -> Option<String> {
+fn separator_is_and(model: &CanonicalCommandV1, index: usize) -> bool {
     let previous = &model.segments[index - 1];
     let next = &model.segments[index];
-    let length = next.span.start.checked_sub(previous.span.end)?;
+    let Some(length) = next.span.start.checked_sub(previous.span.end) else {
+        return false;
+    };
     let separator: String = model
         .normalized_text
         .chars()
         .skip(previous.span.end)
         .take(length)
         .collect();
-    Some(separator.trim().to_owned())
+    // The gap keeps the group brackets, as in `) && (`.
+    separator
+        .chars()
+        .filter(|character| !character.is_whitespace() && *character != '(' && *character != ')')
+        .eq(['&', '&'])
 }
 
 pub(in crate::pretool) fn exact_safe_cwd_compound(
