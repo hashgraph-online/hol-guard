@@ -229,21 +229,24 @@ def _row(evidence_id: str) -> dict[str, object]:
 
 
 class TestNativeReadPages:
-    def test_a_read_that_fills_its_budget_continues_from_the_next_offset(self) -> None:
+    def test_a_read_that_fills_its_budget_continues_after_its_last_row(self) -> None:
         store = _PagedStore(
             [
-                {"rows": [_row("e1"), _row("e2")], "more": True},
-                {"rows": [_row("e3")], "more": False},
+                {"rows": [_row("e1"), _row("e2")], "more": True, "after": ["2024-01-01T00:00:00Z", 7]},
+                {"rows": [_row("e3")], "more": False, "after": ["2024-01-01T00:00:00Z", 8]},
             ]
         )
         records = list_evidence(store, harness="codex", limit=10)
         assert [record.evidence_id for record in records] == ["e1", "e2", "e3"]
-        assert [(call["offset"], call["limit"]) for call in store.calls] == [(0, 10), (2, 8)]
+        assert [(call.get("after"), call["limit"]) for call in store.calls] == [
+            (None, 10),
+            (["2024-01-01T00:00:00Z", 7], 8),
+        ]
         assert all(call["harness"] == "codex" for call in store.calls)
         assert list(records[0].details) == ["z", "a"]
 
     def test_a_read_stops_once_it_has_the_limit(self) -> None:
-        store = _PagedStore([{"rows": [_row("e1"), _row("e2")], "more": True}])
+        store = _PagedStore([{"rows": [_row("e1"), _row("e2")], "more": True, "after": ["t", 2]}])
         records = list_evidence(store, limit=2)
         assert len(records) == 2
         assert len(store.calls) == 1
@@ -386,33 +389,40 @@ class TestLargeScalePagination:
         cases = [
             (
                 "harness",
-                query_prefix + "where harness = ? order by created_at desc limit ? offset ?",
-                ("codex", 100, 0),
+                query_prefix + "where harness = ? order by created_at desc, rowid asc limit ?",
+                ("codex", 100),
                 "idx_evidence_harness_created",
             ),
             (
                 "category/severity",
-                query_prefix + "where category = ? and severity = ? order by created_at desc limit ? offset ?",
-                ("secret", "high", 100, 0),
+                query_prefix + "where category = ? and severity = ? order by created_at desc, rowid asc limit ?",
+                ("secret", "high", 100),
                 "idx_evidence_category_severity_created",
             ),
             (
                 "harness/category/severity",
                 query_prefix
-                + "where harness = ? and category = ? and severity = ? order by created_at desc limit ? offset ?",
-                ("codex", "secret", "high", 100, 0),
+                + "where harness = ? and category = ? and severity = ? order by created_at desc, rowid asc limit ?",
+                ("codex", "secret", "high", 100),
                 "idx_evidence_harness_category_severity_created",
             ),
             (
                 "request",
-                query_prefix + "where request_id = ? order by created_at desc limit ? offset ?",
-                ("req-1", 100, 0),
+                query_prefix + "where request_id = ? order by created_at desc, rowid asc limit ?",
+                ("req-1", 100),
                 "idx_evidence_request_created",
             ),
             (
+                "harness after a cursor",
+                query_prefix + "where harness = ? and created_at <= ? and (created_at < ? or rowid > ?) "
+                "order by created_at desc, rowid asc limit ?",
+                ("codex", "2024-01-02", "2024-01-02", 7, 100),
+                "idx_evidence_harness_created",
+            ),
+            (
                 "identity",
-                query_prefix + "where action_identity = ? order by created_at desc limit ? offset ?",
-                ("codex:tool:bash", 100, 0),
+                query_prefix + "where action_identity = ? order by created_at desc, rowid asc limit ?",
+                ("codex:tool:bash", 100),
                 "idx_evidence_identity_created",
             ),
         ]

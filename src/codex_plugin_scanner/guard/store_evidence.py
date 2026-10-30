@@ -232,12 +232,11 @@ def list_evidence(
     }
     records: list[EvidenceRecord] = []
     while len(records) < limit:
-        page = store._native_store_call(
-            "list_evidence", {**args, "limit": limit - len(records), "offset": len(records)}
-        )
+        page = store._native_store_call("list_evidence", {**args, "limit": limit - len(records)})
         records.extend(_row_to_record(row, include_details=include_details) for row in page["rows"])
         if not page["more"] or not page["rows"]:
             break
+        args["after"] = page["after"]
     return records
 
 
