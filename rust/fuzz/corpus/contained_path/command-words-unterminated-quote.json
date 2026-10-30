@@ -1,1 +1,1 @@
-{"command_text":"pytest -q \"tests/a b.py"}
+{"command_text":"pytest -q \"tests/a b.py"}
