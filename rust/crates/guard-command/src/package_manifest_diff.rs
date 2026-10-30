@@ -412,11 +412,24 @@ pub fn parse_manifest_dependencies_ordered(
     byte_limit: usize,
     deadline_ms: u64,
 ) -> DepMap {
+    try_parse_manifest_dependencies_ordered(path, text, byte_limit, deadline_ms).unwrap_or_default()
+}
+
+/// `parse_manifest_dependencies_ordered` for callers that must tell a file
+/// Guard could not parse from one that lists no dependencies. `None` when the
+/// file is too large, malformed, too slow to parse, or in a format Guard has no
+/// parser for; otherwise its dependencies, which may be none.
+pub fn try_parse_manifest_dependencies_ordered(
+    path: &str,
+    text: &str,
+    byte_limit: usize,
+    deadline_ms: u64,
+) -> Option<DepMap> {
     if text.len() > byte_limit {
-        return DepMap::new();
+        return None;
     }
     let deadline = Deadline::from_ms(deadline_ms);
-    dependency_map_for_path(path, text, &deadline).unwrap_or_default()
+    dependency_map_for_supported_path(path, text, &deadline)?.ok()
 }
 
 /// Result-returning variant of `parse_manifest_dependencies` for callers that
@@ -470,10 +483,19 @@ pub fn installs_every_version(path: &str) -> bool {
 // ---------------------------------------------------------------------------
 
 fn dependency_map_for_path(path: &str, text: &str, deadline: &Deadline) -> ParseResult<DepMap> {
+    dependency_map_for_supported_path(path, text, deadline).unwrap_or_else(|| Ok(DepMap::new()))
+}
+
+/// `None` when Guard has no parser for the file's format.
+fn dependency_map_for_supported_path(
+    path: &str,
+    text: &str,
+    deadline: &Deadline,
+) -> Option<ParseResult<DepMap>> {
     let lower_path = path.to_lowercase();
     let lower_name = last_path_segment(&lower_path);
     if lower_path.ends_with("package.json") {
-        return json_dependency_map(
+        return Some(json_dependency_map(
             text,
             &[
                 "dependencies",
@@ -482,72 +504,80 @@ fn dependency_map_for_path(path: &str, text: &str, deadline: &Deadline) -> Parse
                 "peerDependencies",
             ],
             deadline,
-        );
+        ));
     }
     if lower_path.ends_with("package-lock.json") {
-        return package_lock_dependency_map(text, deadline);
+        return Some(package_lock_dependency_map(text, deadline));
     }
     if lower_path.ends_with("pnpm-lock.yaml") {
-        return pnpm_lock_dependency_map(text, deadline);
+        return Some(pnpm_lock_dependency_map(text, deadline));
     }
     if lower_path.ends_with("yarn.lock") {
-        return yarn_lock_dependency_map(text, deadline);
+        return Some(yarn_lock_dependency_map(text, deadline));
     }
     if lower_path.ends_with("bun.lock") {
-        return bun_lock_dependency_map(text, deadline);
+        return Some(bun_lock_dependency_map(text, deadline));
     }
     if lower_path.ends_with("composer.json") {
-        return json_dependency_map(text, &["require", "require-dev"], deadline);
+        return Some(json_dependency_map(
+            text,
+            &["require", "require-dev"],
+            deadline,
+        ));
     }
     if lower_path.ends_with("requirements.txt")
         || lower_path.ends_with("constraints.txt")
         || lower_name.ends_with(".requirements.txt")
     {
-        return requirements_dependency_map(text, deadline);
+        return Some(requirements_dependency_map(text, deadline));
     }
     if lower_path.ends_with("pyproject.toml") {
-        return pyproject_dependency_map(text, deadline);
+        return Some(pyproject_dependency_map(text, deadline));
     }
     if lower_path.ends_with("poetry.lock") {
-        return toml_lock_dependency_map(text, deadline);
+        return Some(toml_lock_dependency_map(text, deadline));
     }
     if lower_path.ends_with("uv.lock") {
-        return toml_lock_dependency_map(text, deadline);
+        return Some(toml_lock_dependency_map(text, deadline));
     }
     if lower_path.ends_with("pipfile") {
-        return toml_table_dependency_map(text, &["packages", "dev-packages"], deadline);
+        return Some(toml_table_dependency_map(
+            text,
+            &["packages", "dev-packages"],
+            deadline,
+        ));
     }
     if lower_path.ends_with("pipfile.lock") {
-        return pipfile_lock_dependency_map(text, deadline);
+        return Some(pipfile_lock_dependency_map(text, deadline));
     }
     if lower_path.ends_with("cargo.toml") {
-        return cargo_toml_dependency_map(text, deadline);
+        return Some(cargo_toml_dependency_map(text, deadline));
     }
     if lower_path.ends_with("cargo.lock") {
-        return toml_lock_dependency_map(text, deadline);
+        return Some(toml_lock_dependency_map(text, deadline));
     }
     if lower_path.ends_with("go.mod") {
-        return go_mod_dependency_map(text, deadline);
+        return Some(go_mod_dependency_map(text, deadline));
     }
     if lower_path.ends_with("pom.xml") {
-        return pom_dependency_map(text, deadline);
+        return Some(pom_dependency_map(text, deadline));
     }
     if lower_path.ends_with("build.gradle") || lower_path.ends_with("build.gradle.kts") {
-        return gradle_dependency_map(text, deadline);
+        return Some(gradle_dependency_map(text, deadline));
     }
     if lower_path.ends_with("gradle.lockfile") {
-        return gradle_lockfile_dependency_map(text, deadline);
+        return Some(gradle_lockfile_dependency_map(text, deadline));
     }
     if lower_path.ends_with("composer.lock") {
-        return composer_lock_dependency_map(text, deadline);
+        return Some(composer_lock_dependency_map(text, deadline));
     }
     if lower_path.ends_with("gemfile") {
-        return gemfile_dependency_map(text, deadline);
+        return Some(gemfile_dependency_map(text, deadline));
     }
     if lower_path.ends_with("gemfile.lock") {
-        return gemfile_lock_dependency_map(text, deadline);
+        return Some(gemfile_lock_dependency_map(text, deadline));
     }
-    Ok(DepMap::new())
+    None
 }
 
 // ---------------------------------------------------------------------------
@@ -1428,6 +1458,21 @@ mod tests {
     use super::*;
 
     const GENEROUS: u64 = 60_000;
+
+    #[test]
+    fn try_parse_tells_an_empty_lockfile_from_one_guard_cannot_parse() {
+        let root_only = r#"{"lockfileVersion": 3, "packages": {"": {"name": "demo"}}}"#;
+        let parse = |path: &str, text: &str, limit: usize| {
+            try_parse_manifest_dependencies_ordered(path, text, limit, GENEROUS)
+        };
+        assert!(parse("package-lock.json", root_only, 1024).is_some_and(|map| map.is_empty()));
+        assert!(parse("Cargo.lock", "version = 4\n", 1024).is_some_and(|map| map.is_empty()));
+        assert!(parse("package-lock.json", r#"{"lockfileVersion": 3,"#, 1024).is_none());
+        assert!(parse("package-lock.json", root_only, 8).is_none());
+        let go_sum = "github.com/pkg/errors v0.9.1 h1:abc=\n";
+        assert!(parse("go.sum", go_sum, 1024).is_none());
+        assert!(parse_manifest_dependencies_ordered("go.sum", go_sum, 1024, GENEROUS).is_empty());
+    }
 
     /// Oracle:
     /// `_dependency_map_for_path("package.json", TEXT, deadline=inf)`
