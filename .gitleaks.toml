@@ -347,6 +347,16 @@ regexes = [
   '''^[\t\r\n ]*"(?:replayKey|replay_key)": "[0-9a-f]{64}",?[\t\r\n ]*$''',
 ]
 
+[[rules.allowlists]]
+description = "Synthetic provider-shaped samples the new secret rules are tested against, each held in two pieces so no whole token appears in source"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)rust/crates/guard\-scanner/src/secret_detection\.rs$''']
+regexes = [
+  '''^[\t\r\n ]*\("vault\-token", "hvs\.CAESIJq2VL8nP4wR7t", "Y1uI6oP3aS5dFgHj"\),[\t\r\n ]*$''',
+  '''^[\t\r\n ]*\("square\-access\-token", "sq0atp\-Qq2VL8nP4w", "R7tY1uI6oP3a"\),[\t\r\n ]*$''',
+]
+
 [[rules]]
 id = "github-pat"
 
