@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from codex_plugin_scanner.guard import native_restricted_pytest as transport
 from codex_plugin_scanner.guard.runtime import contained_test_hook as sink
 from codex_plugin_scanner.guard.runtime import restricted_node_tool as tool
 from codex_plugin_scanner.guard.runtime.restricted_pytest_model import RestrictedPytestError
@@ -287,3 +288,13 @@ def test_existing_output_links_and_protected_files_are_rejected(tmp_path, kind):
     with pytest.raises(RestrictedPytestError):
         tool.validate_build_output_root(output, workspace=tmp_path)
     assert source.read_text() == "source"
+
+
+def test_a_missing_local_tool_keeps_its_own_refusal(monkeypatch):
+    message = "The local lint/typecheck tool is unavailable; no replacement was downloaded."
+    reply = {"reason_code": "node_tool_dependency_unavailable", "message": message}
+    monkeypatch.setattr(transport, "_call", lambda *args, **kwargs: reply)
+    with pytest.raises(RestrictedPytestError) as refused:
+        transport._request("prepare_node_tool", {}, dict)
+    assert refused.value.reason_code == "node_tool_dependency_unavailable"
+    assert str(refused.value) == message

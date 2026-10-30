@@ -28,6 +28,7 @@ _REASONS = {
     "vitest_restricted_dependency_unavailable",
     "inline_eval_invalid_command",
     "node_tool_invalid_command",
+    "node_tool_dependency_unavailable",
     "node_build_invalid_output",
     "package_test_invalid_command",
     "git_restricted_invalid_command",
