@@ -23,7 +23,7 @@ def command_words(command: str) -> list[str]:
     from .restricted_pytest import RestrictedPytestError
 
     words = restricted_native("command_words", {"command_text": command}, list)
-    if not all(type(word) is str for word in words):
+    if type(words) is not list or not all(type(word) is str for word in words):
         raise RestrictedPytestError("pytest_restricted_invalid_command", "Invalid restricted execution request.")
     return list(words)
 

@@ -156,18 +156,24 @@ def test_authorized_original_input_runs_only_with_readonly_profile(
     from codex_plugin_scanner.guard import native_restricted_pytest
 
     calls = []
-    monkeypatch.setattr(
-        native_restricted_pytest,
-        "restricted_native",
-        lambda *args, **kwargs: {
+
+    def native(operation: str, fields: dict[str, object], _expected: object) -> object:
+        # The sink reads every contained command's words through native
+        # authority. A kind mapping returned in its place is a mapping whose
+        # keys are strings, which a reader looking for words takes for the
+        # command itself, so this stand-in answers the operation.
+        if operation == "command_words":
+            return str(fields["command_text"]).split()
+        return {
             "inline_eval": False,
             "node_test": False,
             "vitest": False,
             "git": False,
             "node_tool": False,
             "package_test": False,
-        },
-    )
+        }
+
+    monkeypatch.setattr(native_restricted_pytest, "restricted_native", native)
     monkeypatch.setattr(
         sink, "prepare_restricted_pytest", lambda *args, **kwargs: calls.append(("prepare", args, kwargs))
     )
