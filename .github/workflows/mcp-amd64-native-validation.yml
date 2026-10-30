@@ -1,7 +1,7 @@
 name: MCP amd64 native managed-resident validation
 
 # Validates the published linux/amd64 managed-resident publish + recovery path
-# on REAL x86_64 hardware (ubuntu-latest), removing the Docker-Desktop Rosetta
+# on REAL x86_64 hardware (ubuntu-24.04), removing the Docker-Desktop Rosetta
 # variable. The amd64 wheel is a public release asset; the runner drives the
 # wheel's own CLI in a python:3.12-slim container, native arch, no emulation.
 
@@ -22,7 +22,7 @@ env:
 
 jobs:
   amd64-native-resident:
-    runs-on: ubuntu-latest        # real x86_64 — no Rosetta, no qemu-user
+    runs-on: ubuntu-24.04        # real x86_64 — no Rosetta, no qemu-user
     timeout-minutes: 20
     steps:
       - name: Check out validation runner

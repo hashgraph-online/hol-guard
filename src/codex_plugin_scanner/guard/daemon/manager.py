@@ -98,7 +98,6 @@ _GUARD_DAEMON_PRIVATE_FILE_MODE = 0o600
 _GUARD_DAEMON_PRIVATE_DIR_MODE = 0o700
 _APPROVAL_CENTER_LOCATOR_FILE = "approval-center-locator.json"
 _GUARD_DAEMON_PENDING_LAUNCH_FILE = "daemon-launch-pending.json"
-_GUARD_DAEMON_LAUNCH_CONTAINMENT_FILE = "daemon-launch-containment.json"
 _GUARD_DAEMON_LAUNCH_NONCE_ENV = "HOL_GUARD_DAEMON_LAUNCH_NONCE"
 _GUARD_DAEMON_LAUNCH_NONCE_HEX_LENGTH = 64
 _GUARD_DAEMON_START_PROGRESS_FILE = "daemon-start-progress.json"
@@ -108,9 +107,6 @@ _GUARD_DAEMON_OWNER_LOCK_FILE = "daemon-owner.lock"
 _GUARD_DAEMON_RECOVERY_LOCK_FILE = "daemon-recovery.lock"
 _GUARD_DAEMON_STATE_MAX_BYTES = 64 * 1024
 _GUARD_DAEMON_PENDING_LAUNCH_MAX_BYTES = 4096
-_GUARD_DAEMON_LAUNCH_CONTAINMENT_MAX_BYTES = 8192
-_GUARD_DAEMON_LAUNCH_CONTAINMENT_RECORD_ATTEMPTS = 20
-_GUARD_DAEMON_LAUNCH_CONTAINMENT_RECORD_SLEEP_SECONDS = 0.02
 _GUARD_DAEMON_START_PROGRESS_MAX_BYTES = 4096
 _GUARD_DAEMON_RESERVATION_MAX_BYTES = 4096
 _GUARD_DAEMON_RECOVERY_WORKER_TIMEOUT_SECONDS = 30.0
@@ -2207,351 +2203,6 @@ def load_authenticated_guard_daemon_pending_launch(guard_home: Path) -> dict[str
     return payload
 
 
-def _load_authenticated_guard_daemon_containment_receipt(guard_home: Path) -> dict[str, object] | None:
-    """Load the launch owner's exact receipt for a child outside its session."""
-
-    raw_payload = read_private_regular_text(
-        guard_home / _GUARD_DAEMON_LAUNCH_CONTAINMENT_FILE,
-        max_bytes=_GUARD_DAEMON_LAUNCH_CONTAINMENT_MAX_BYTES,
-        require_private_parent=True,
-    )
-    if raw_payload is None:
-        return None
-    try:
-        payload = json.loads(raw_payload)
-    except json.JSONDecodeError:
-        return None
-    discovery_key = load_daemon_discovery_key(guard_home)
-    if (
-        discovery_key is None
-        or not isinstance(payload, dict)
-        or not verify_daemon_state(payload, discovery_key=discovery_key)
-        or payload.get("state_kind") != "daemon_launch_containment"
-    ):
-        return None
-    payload_guard_home = payload.get("guard_home")
-    if not isinstance(payload_guard_home, str):
-        return None
-    try:
-        if Path(payload_guard_home).resolve() != guard_home.resolve():
-            return None
-    except (OSError, RuntimeError):
-        return None
-    return payload
-
-
-def _guard_daemon_containment_receipt_matches_launch(
-    pending: dict[str, object],
-    receipt: dict[str, object],
-) -> bool:
-    """Require nonce, root generation, and child identity before reconciling."""
-
-    launch_nonce = pending.get("launch_nonce")
-    pending_pid = pending.get("pid")
-    pending_marker = pending.get("process_start_marker")
-    pending_owner = pending.get("owner", pending.get("user"))
-    receipt_launch_pid = receipt.get("launch_pid")
-    receipt_launch_marker = receipt.get("launch_process_start_marker")
-    receipt_launch_owner = receipt.get("launch_owner")
-    if (
-        not _launch_nonce_is_valid(launch_nonce)
-        or receipt.get("launch_nonce") != launch_nonce
-        or receipt.get("launch_generation") != launch_nonce
-        or receipt.get("generation") != launch_nonce
-        or type(pending_pid) is not int
-        or pending_pid <= 0
-        or not isinstance(pending_marker, str)
-        or not pending_marker
-        or not isinstance(pending_owner, str)
-        or not pending_owner
-    ):
-        return False
-    direct_launch_match = (
-        receipt_launch_pid == pending_pid
-        and receipt_launch_marker == pending_marker
-        and receipt_launch_owner == pending_owner
-    )
-    child_launch_match = (
-        type(receipt_launch_pid) is int
-        and receipt_launch_pid > 0
-        and receipt_launch_pid != pending_pid
-        and isinstance(receipt_launch_marker, str)
-        and bool(receipt_launch_marker)
-        and isinstance(receipt_launch_owner, str)
-        and receipt_launch_owner == pending_owner
-        and receipt.get("launch_parent_pid") == pending_pid
-        and receipt.get("launch_parent_process_start_marker") == pending_marker
-        and receipt.get("launch_parent_owner") == pending_owner
-    )
-    if not (direct_launch_match or child_launch_match):
-        return False
-    return (
-        _guard_daemon_containment_receipt_child_generations(
-            pending,
-            receipt,
-        )
-        is not None
-    )
-
-
-def _guard_daemon_containment_receipt_child_generations(
-    pending: dict[str, object],
-    receipt: dict[str, object],
-) -> list[tuple[int, str, str]] | None:
-    """Normalize one signed receipt's child identities without trusting PID alone."""
-
-    pending_pid = pending.get("pid")
-    pending_owner = pending.get("owner", pending.get("user"))
-    if type(pending_pid) is not int or pending_pid <= 0 or not isinstance(pending_owner, str) or not pending_owner:
-        return None
-    raw_children = receipt.get("children")
-    if raw_children is None:
-        raw_children = [
-            {
-                "pid": receipt.get("pid"),
-                "process_start_marker": receipt.get("process_start_marker"),
-                "owner": receipt.get("owner", receipt.get("user")),
-            }
-        ]
-    if not isinstance(raw_children, list) or not raw_children:
-        return None
-    children: list[tuple[int, str, str]] = []
-    for raw_child in raw_children:
-        if not isinstance(raw_child, dict):
-            return None
-        child_pid = raw_child.get("pid")
-        child_marker = raw_child.get("process_start_marker")
-        child_owner = raw_child.get("owner", raw_child.get("user"))
-        if (
-            type(child_pid) is not int
-            or child_pid <= 0
-            or child_pid == pending_pid
-            or not isinstance(child_marker, str)
-            or not child_marker
-            or not isinstance(child_owner, str)
-            or child_owner != pending_owner
-        ):
-            return None
-        child_identity = (child_pid, child_marker, child_owner)
-        if child_identity not in children:
-            children.append(child_identity)
-    return children
-
-
-def _guard_daemon_launch_process_identity(pid: int) -> tuple[str, str] | None:
-    marker = process_start_token(pid)
-    owner = process_owner_marker(pid) if isinstance(marker, str) and marker else None
-    if not isinstance(marker, str) or not marker or not isinstance(owner, str) or not owner:
-        return None
-    return marker, owner
-
-
-def record_guard_daemon_launch_containment_child(guard_home: Path | None, *, pid: int) -> bool:
-    """Record one exact worker generation while a nonce-bound daemon launch is pending.
-
-    The worker spawn path calls this after ``Process.start()``.  Failure to
-    observe the pending record or either process identity leaves the launch
-    unresolved; this helper never signals a process and never infers ownership
-    from a PID scan or an unverified descendant relationship.
-    """
-
-    if guard_home is None or type(pid) is not int or pid <= 0:
-        return False
-    launch_nonce = os.environ.get(_GUARD_DAEMON_LAUNCH_NONCE_ENV)
-    if not _launch_nonce_is_valid(launch_nonce):
-        return False
-    resolved_guard_home = guard_home.resolve(strict=False)
-    launch_pid = os.getpid()
-    launch_identity: tuple[str, str] | None = None
-    parent_pid: int | None = None
-    parent_identity: tuple[str, str] | None = None
-    pending: dict[str, object] | None = None
-    child_identity: tuple[str, str] | None = None
-    for attempt in range(_GUARD_DAEMON_LAUNCH_CONTAINMENT_RECORD_ATTEMPTS):
-        pending = load_authenticated_guard_daemon_pending_launch(resolved_guard_home)
-        if isinstance(pending, dict) and pending.get("launch_nonce") == launch_nonce:
-            launch_identity = _guard_daemon_launch_process_identity(launch_pid)
-            child_identity = _guard_daemon_launch_process_identity(pid)
-            if launch_identity is not None and child_identity is not None:
-                pending_pid = pending.get("pid")
-                if pending_pid == launch_pid:
-                    break
-                parent_pid = os.getppid()
-                if parent_pid == pending_pid:
-                    parent_identity = _guard_daemon_launch_process_identity(parent_pid)
-                    if parent_identity is not None:
-                        break
-        if attempt + 1 < _GUARD_DAEMON_LAUNCH_CONTAINMENT_RECORD_ATTEMPTS:
-            time.sleep(_GUARD_DAEMON_LAUNCH_CONTAINMENT_RECORD_SLEEP_SECONDS)
-    if (
-        pending is None
-        or pending.get("launch_nonce") != launch_nonce
-        or launch_identity is None
-        or child_identity is None
-        or (pending.get("pid") != launch_pid and (parent_pid != pending.get("pid") or parent_identity is None))
-    ):
-        return False
-    launch_marker, launch_owner = launch_identity
-    child_marker, child_owner = child_identity
-    pending_owner = pending.get("owner", pending.get("user"))
-    if (
-        not isinstance(pending_owner, str)
-        or pending_owner != launch_owner
-        or pending_owner != child_owner
-        or (parent_identity is not None and parent_identity[1] != pending_owner)
-    ):
-        return False
-    _ensure_private_directory(resolved_guard_home)
-    with _guard_daemon_state_write_lock(resolved_guard_home):
-        current_pending = load_authenticated_guard_daemon_pending_launch(resolved_guard_home)
-        if (
-            current_pending is None
-            or current_pending.get("launch_nonce") != launch_nonce
-            or not _guard_daemon_pending_launch_is_generation_bound(current_pending)
-        ):
-            return False
-        pending = current_pending
-        receipt = _load_authenticated_guard_daemon_containment_receipt(resolved_guard_home)
-        if receipt is not None:
-            if not _guard_daemon_containment_receipt_matches_launch(pending, receipt):
-                return False
-            existing_children = _guard_daemon_containment_receipt_child_generations(pending, receipt)
-            if existing_children is None:
-                return False
-        else:
-            existing_children = []
-        child_record = {
-            "pid": pid,
-            "process_start_marker": child_marker,
-            "owner": child_owner,
-        }
-        children = [
-            {
-                "pid": existing_pid,
-                "process_start_marker": existing_marker,
-                "owner": existing_owner,
-            }
-            for existing_pid, existing_marker, existing_owner in existing_children
-        ]
-        if (pid, child_marker, child_owner) not in existing_children:
-            children.append(child_record)
-        containment_payload: dict[str, object] = {
-            "state_kind": "daemon_launch_containment",
-            "guard_home": str(resolved_guard_home),
-            "launch_nonce": launch_nonce,
-            "launch_generation": launch_nonce,
-            "generation": launch_nonce,
-            "launch_pid": launch_pid,
-            "launch_process_start_marker": launch_marker,
-            "launch_owner": launch_owner,
-            "children": children,
-        }
-        if launch_pid != pending.get("pid"):
-            assert parent_pid is not None and parent_identity is not None
-            containment_payload.update(
-                {
-                    "launch_parent_pid": parent_pid,
-                    "launch_parent_process_start_marker": parent_identity[0],
-                    "launch_parent_owner": parent_identity[1],
-                }
-            )
-        discovery_key = ensure_daemon_discovery_key(resolved_guard_home)
-        signed_containment = authenticate_daemon_state(containment_payload, discovery_key=discovery_key)
-        encoded = json.dumps(signed_containment, sort_keys=True)
-        if len(encoded.encode("utf-8")) > _GUARD_DAEMON_LAUNCH_CONTAINMENT_MAX_BYTES:
-            return False
-        _write_private_atomic_text(
-            resolved_guard_home / _GUARD_DAEMON_LAUNCH_CONTAINMENT_FILE,
-            encoded,
-        )
-    return True
-
-
-def _guard_daemon_exact_generation_is_dead(
-    pid: int,
-    *,
-    process_start_marker: str,
-    process_owner: str,
-) -> bool:
-    """Prove the recorded process generation is gone without signaling a PID."""
-
-    actual_start_marker = process_start_token(pid)
-    if actual_start_marker is None:
-        return not _guard_daemon_pid_is_running(pid)
-    if not secrets.compare_digest(actual_start_marker, process_start_marker):
-        # The recorded generation is gone; a reused PID is not ours.
-        return True
-    actual_owner = process_owner_marker(pid)
-    if not isinstance(actual_owner, str) or not secrets.compare_digest(actual_owner, process_owner):
-        return False
-    return _guard_daemon_pid_is_proven_dead(pid)
-
-
-def _reconcile_guard_daemon_pending_launch(guard_home: Path) -> bool:
-    """Clear a pending launch only after its signed escaped-child generation is gone."""
-
-    path = _pending_launch_path(guard_home)
-    if not path.is_file() or _daemon_lifecycle_artifact_is_exact_tombstone(path):
-        return True
-    pending = load_authenticated_guard_daemon_pending_launch(guard_home)
-    if not _guard_daemon_pending_launch_is_generation_bound(pending):
-        return False
-    assert pending is not None
-    pending_pid = pending.get("pid")
-    pending_marker = pending.get("process_start_marker")
-    pending_owner = pending.get("owner", pending.get("user"))
-    if (
-        type(pending_pid) is not int
-        or not isinstance(pending_marker, str)
-        or not pending_marker
-        or not isinstance(pending_owner, str)
-        or not pending_owner
-        or not _guard_daemon_exact_generation_is_dead(
-            pending_pid,
-            process_start_marker=pending_marker,
-            process_owner=pending_owner,
-        )
-    ):
-        return False
-    receipt = _load_authenticated_guard_daemon_containment_receipt(guard_home)
-    if receipt is None or not _guard_daemon_containment_receipt_matches_launch(pending, receipt):
-        return False
-    receipt_launch_pid = receipt.get("launch_pid")
-    receipt_launch_marker = receipt.get("launch_process_start_marker")
-    receipt_launch_owner = receipt.get("launch_owner")
-    if (
-        type(receipt_launch_pid) is not int
-        or not isinstance(receipt_launch_marker, str)
-        or not receipt_launch_marker
-        or not isinstance(receipt_launch_owner, str)
-        or not receipt_launch_owner
-        or not _guard_daemon_exact_generation_is_dead(
-            receipt_launch_pid,
-            process_start_marker=receipt_launch_marker,
-            process_owner=receipt_launch_owner,
-        )
-    ):
-        return False
-    child_generations = _guard_daemon_containment_receipt_child_generations(pending, receipt)
-    if child_generations is None or any(
-        not _guard_daemon_exact_generation_is_dead(
-            child_pid,
-            process_start_marker=child_marker,
-            process_owner=child_owner,
-        )
-        for child_pid, child_marker, child_owner in child_generations
-    ):
-        return False
-    pending_creation_time = pending.get("process_creation_time")
-    return _clear_guard_daemon_pending_launch_if_current(
-        guard_home,
-        pid=pending_pid,
-        creation_time=pending_creation_time if type(pending_creation_time) is int else None,
-        launch_nonce=str(pending["launch_nonce"]),
-        process_start_marker=pending_marker,
-    )
-
-
 def _clear_guard_daemon_pending_launch_if_current(
     guard_home: Path,
     *,
@@ -2574,12 +2225,6 @@ def _clear_guard_daemon_pending_launch_if_current(
             str(pending.get("process_start_marker", "")), process_start_marker
         ):
             return False
-        containment = _load_authenticated_guard_daemon_containment_receipt(guard_home)
-        if containment is not None and _guard_daemon_containment_receipt_matches_launch(pending, containment):
-            _write_private_atomic_text(
-                guard_home / _GUARD_DAEMON_LAUNCH_CONTAINMENT_FILE,
-                "{}",
-            )
         _write_private_atomic_text(_pending_launch_path(guard_home), "{}")
         return True
 
@@ -2747,41 +2392,17 @@ def _windows_pending_launch_needs_retirement(guard_home: Path, *, progress_is_li
     )
 
 
-def _guard_daemon_pending_launch_is_active(guard_home: Path) -> bool:
-    pending = load_authenticated_guard_daemon_pending_launch(guard_home)
-    if pending is None:
-        return False
-    pid = pending.get("pid")
-    creation_time = pending.get("process_creation_time")
-    process_marker = pending.get("process_start_marker")
-    if type(pid) is not int or (os.name == "nt" and type(creation_time) is not int):
-        return False
-    if os.name == "nt":
-        actual_creation_time = windows_process_creation_time(pid)
-        if actual_creation_time != creation_time:
-            return False
-    elif not isinstance(process_marker, str) or process_start_token(pid) != process_marker:
-        return False
-    return _guard_daemon_pid_is_running(pid)
-
-
 def _guard_daemon_pending_launch_state_is_resolved(guard_home: Path) -> bool:
+    """Only the launch's own handoff, which leaves a tombstone, resolves it.
+
+    A dead root handle does not prove that a descendant did not escape its
+    process group/session, and no launch records which children it started.
+    Keep the signed receipt until a matching handoff clears it; callers must
+    fail closed while it remains unresolved.
+    """
+
     path = _pending_launch_path(guard_home)
-    if not path.is_file():
-        return True
-    if _daemon_lifecycle_artifact_is_exact_tombstone(path):
-        return True
-    pending = load_authenticated_guard_daemon_pending_launch(guard_home)
-    if pending is None:
-        return False
-    if _guard_daemon_pending_launch_is_active(guard_home):
-        return False
-    if _guard_daemon_pending_launch_is_generation_bound(pending):
-        return _reconcile_guard_daemon_pending_launch(guard_home)
-    # A dead root handle does not prove that a descendant did not escape its
-    # process group/session. Keep the signed receipt until a matching handoff
-    # clears it; callers must fail closed while it remains unresolved.
-    return False
+    return not path.is_file() or _daemon_lifecycle_artifact_is_exact_tombstone(path)
 
 
 def _remove_invalid_daemon_discovery_key(guard_home: Path) -> bool:
