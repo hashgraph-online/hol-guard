@@ -11,7 +11,7 @@ pub(crate) use tokens::{shell_tokens, shell_tokens_preserving_redirects};
 #[path = "parser_segment_shapes.rs"]
 mod shapes;
 
-use shapes::sole_command_group;
+use shapes::{blank_top_level_groups, sole_command_group};
 pub(super) use shapes::{is_stderr_to_null_redirect, is_stderr_to_stdout_redirect};
 // Only the redirect tests in `command_compatibility` read the sink directly.
 #[cfg(test)]
@@ -54,6 +54,18 @@ fn split_execution_segments_inner(
             segment.end += inside.start;
         }
         return Ok(segments);
+    }
+    // A list whose elements are subshell groups: `(cd api && npm test) &&
+    // (cd web && npm test)`. Each group runs its list in a child shell, so
+    // the list is what the group can run, and blanking the brackets leaves
+    // every segment pointing at the text it came from.
+    if let Some(blanked) = blank_top_level_groups(&chars) {
+        let flat: String = blanked.into_iter().collect();
+        return split_execution_segments_inner(
+            &flat,
+            preserve_unquoted_backslash,
+            allow_background,
+        );
     }
     let mut quote = Quote::None;
     let mut escaped = false;
