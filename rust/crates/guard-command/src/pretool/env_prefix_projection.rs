@@ -441,6 +441,14 @@ fn inert_assignment(name: &str, value: &str) -> bool {
     {
         return true;
     }
+    // A build or test setting whose name says "options" or "flags" while the
+    // value in front of the command only chooses how the run reports or how
+    // often it repeats. The name alone cannot tell `GOFLAGS=-count=1` from
+    // `GOFLAGS=-toolexec=./x`, so that module reads the value against a
+    // closed list and everything else still fails closed below.
+    if super::inert_tool_settings::inert_tool_setting(name, value) {
+        return true;
+    }
     // Any program may read any other name, so other settings are reviewed
     // through the projection instead of passing as inert.
     false
