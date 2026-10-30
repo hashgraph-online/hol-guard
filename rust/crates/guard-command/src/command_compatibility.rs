@@ -231,7 +231,11 @@ fn screened_build_setting(segment: &CommandSegmentV1, name: &str) -> bool {
     let prefix = crate::command_tokens::leading_environment(&segment.tokens).1;
     let mut values = segment.tokens[..prefix.min(segment.tokens.len())]
         .iter()
-        .filter_map(|token| token.strip_prefix(name).and_then(|rest| rest.strip_prefix('=')))
+        .filter_map(|token| {
+            token
+                .strip_prefix(name)
+                .and_then(|rest| rest.strip_prefix('='))
+        })
         .peekable();
     values.peek().is_some()
         && values.all(|value| {
