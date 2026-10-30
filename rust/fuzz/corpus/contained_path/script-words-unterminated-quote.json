@@ -1,0 +1,1 @@
+{"script":"node --test \"tests/a b.mjs"}

@@ -124,6 +124,39 @@ fn every_contained_path_operation_is_one_the_screen_answers() {
 }
 
 #[test]
+fn the_corpus_carries_a_seed_each_screen_reads_as_its_own_request() {
+    let corpus = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fuzz/corpus/contained_path")
+        .canonicalize()
+        .expect("the contained_path corpus is checked in beside the fuzz targets");
+    let mut answered: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
+    for entry in std::fs::read_dir(&corpus).expect("the corpus directory reads") {
+        let seed =
+            std::fs::read(entry.expect("a corpus entry reads").path()).expect("a seed reads");
+        let Some((selector, rest)) = seed.split_first() else {
+            continue;
+        };
+        let Ok(request) = serde_json::from_slice::<serde_json::Value>(rest) else {
+            continue;
+        };
+        let operation = super::CONTAINED_ARGV_OPERATIONS
+            [usize::from(*selector) % super::CONTAINED_ARGV_OPERATIONS.len()];
+        if guard_command::contained_argv::evaluate(operation, &request)
+            .is_some_and(|reply| reply.get("value").is_some())
+        {
+            let _ = answered.insert(operation);
+        }
+    }
+    // `script_words` reads a `script` string rather than the `command` array
+    // every other screen reads, so a corpus of command requests would replay
+    // its seeds into an early error and never reach the lexer behind it.
+    assert!(
+        answered.contains("script_words"),
+        "no seed reaches the script_words screen as a request it answers: {answered:?}"
+    );
+}
+
+#[test]
 fn a_contained_path_seed_reaches_every_screen_in_turn() {
     let request = br#"{"command":["npx","jest","-ic../outside/jest.config.js"]}"#;
     for selector in 0..=u8::try_from(super::CONTAINED_ARGV_OPERATIONS.len()).unwrap() {

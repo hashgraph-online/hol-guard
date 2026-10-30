@@ -105,8 +105,10 @@ pub fn prompt_text(data: &[u8]) {
     let _ = guard_command::prompt_analysis::extract_prompt_requests(text);
 }
 
-/// The containment screens a contained run is admitted by, every one of which
-/// reads a `command` array out of the request it is given.
+/// The containment screens a contained run is admitted by. Each reads a
+/// `command` array out of the request it is given, except `script_words`,
+/// which reads a manifest `script` string; the corpus carries seeds of both
+/// shapes, so a campaign reaches the lexer behind that one too.
 ///
 /// `contained_target` is deliberately absent. It resolves a virtual-environment
 /// activation against the filesystem, so a campaign would be probing the
