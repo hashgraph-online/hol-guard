@@ -87,7 +87,7 @@ fn anything_but_the_plain_shape_stays_with_guards_own_sink() {
         "CI=1 python3 -c 0",
         "cd x && python3 -c 0",
         "python3 -c 'unterminated",
-        "npx eslint .",
+        "CI=1 npx eslint .",
         "CI=1 vitest run",
     ] {
         assert_eq!(plain_program(command), None, "{command}");
@@ -170,6 +170,25 @@ fn any_other_plain_program_is_planned_as_pytest() {
     assert!(plain_call(&pytest, &call("pytest -q")));
     assert!(!plain_call(&pytest, &call("python3 -c 0")));
     assert!(!plain_call(&pytest, &call("PYTEST_ADDOPTS=-x pytest")));
+}
+
+#[test]
+fn a_plain_lint_or_typecheck_run_is_a_node_tool() {
+    assert_eq!(
+        plain_program("npx eslint ."),
+        Some((words(&["npx", "eslint", "."]), None, Kind::NodeTool))
+    );
+    assert_eq!(Kind::of(ROUTES[7]), Kind::NodeTool);
+    let tool = Value::Object(response(ROUTES[7].0, ROUTES[7].1));
+    assert!(plain_call(&tool, &call("npx eslint .")));
+    assert!(!plain_call(&tool, &call("vitest run")));
+    // A build is granted its output directory, which this sink never
+    // writes: its route is not one of these.
+    let build = Value::Object(response(
+        "native_node_build_output_containment_required",
+        "node-build-output-v1",
+    ));
+    assert!(!plain_call(&build, &call("npx vite build")));
 }
 
 #[test]

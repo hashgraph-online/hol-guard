@@ -1,6 +1,7 @@
 //! The native sink for a read-only run: an evaluation (`python -c`, `node
-//! -e`, `bun -e`), a Vitest run, a `node --test` run, a Git inspection or a
-//! pytest run the resident sent to its own profile.
+//! -e`, `bun -e`), a Vitest run, a `node --test` run, a local lint or
+//! typecheck tool, a Git inspection or a pytest run the resident sent to its
+//! own profile.
 //!
 //! Guard's own sink runs such a call in three steps: it reads the program
 //! the command stands behind, plans the run, and asks the live resident
@@ -21,7 +22,7 @@ use super::*;
 /// requires.
 pub(super) type Route = (&'static str, &'static str);
 
-const ROUTES: [Route; 7] = [
+const ROUTES: [Route; 8] = [
     (
         "native_python_eval_readonly_containment_required",
         PYTHON_EVAL_PROFILE,
@@ -44,6 +45,10 @@ const ROUTES: [Route; 7] = [
         "native_pytest_readonly_containment_required",
         PYTEST_PROFILE,
     ),
+    (
+        "native_node_tool_readonly_containment_required",
+        NODE_TOOL_PROFILE,
+    ),
 ];
 pub(super) const VITEST_ROUTE: Route = (
     "native_vitest_readonly_containment_required",
@@ -55,6 +60,7 @@ pub(super) const VITEST_PROFILE: &str = "vitest-readonly-v1";
 const NODE_TEST_PROFILE: &str = "node-test-readonly-v1";
 const GIT_PROFILE: &str = "git-readonly-v1";
 const PYTEST_PROFILE: &str = "pytest-readonly-v2";
+const NODE_TOOL_PROFILE: &str = "node-tool-readonly-v1";
 const SEATBELT: &str = "macos-seatbelt";
 const INVALID_PLAN: &str = "Invalid native restricted launch plan.";
 
@@ -66,6 +72,7 @@ pub(crate) enum Kind {
     NodeTest,
     Git,
     Pytest,
+    NodeTool,
 }
 
 impl Kind {
@@ -75,6 +82,7 @@ impl Kind {
             NODE_TEST_PROFILE => Self::NodeTest,
             GIT_PROFILE => Self::Git,
             PYTEST_PROFILE => Self::Pytest,
+            NODE_TOOL_PROFILE => Self::NodeTool,
             _ => Self::Eval,
         }
     }
@@ -159,7 +167,7 @@ pub(crate) fn plain_program(command: &str) -> Option<(Vec<String>, Option<u64>, 
         kind("node_test")?,
     ) {
         (true, ..) => Kind::Eval,
-        (false, true, ..) => return None,
+        (false, true, ..) => Kind::NodeTool,
         (false, false, true, ..) => Kind::Git,
         (false, false, false, true, _) => Kind::Vitest,
         (false, false, false, false, true) => Kind::NodeTest,
@@ -224,6 +232,7 @@ pub(super) fn run(
         Kind::NodeTest => ("prepare_node", Some(NODE_TEST_PROFILE)),
         Kind::Git => ("prepare_git", Some(GIT_PROFILE)),
         Kind::Pytest => ("prepare", Some(PYTEST_PROFILE)),
+        Kind::NodeTool => ("prepare_node_tool", Some(NODE_TOOL_PROFILE)),
     };
     let mut plan = prepare(operation, &argv, workspace, home)?;
     if profile.is_some_and(|profile| plan.profile_version != profile) {
@@ -260,7 +269,7 @@ pub(super) fn run(
         Kind::Eval => {
             environment.insert("PYTHONDONTWRITEBYTECODE".into(), "1".into());
         }
-        Kind::NodeTest => {
+        Kind::NodeTest | Kind::NodeTool => {
             // Node preloads and search paths from the host are not
             // repository test input.
             environment.remove("NODE_OPTIONS");
