@@ -4,7 +4,8 @@ Artifact snapshots, diffs, inventory, capabilities, provenance cache and the
 attestation sequence run in the native resident (``guard_store`` op), which owns
 the SQL and the decision-contract canonicalization. Python serializes the
 inputs and shapes the decoded rows; it never recomputes what the resident
-persists. Local device metadata stays here.
+persists. The local device row and the connected workspace id are read and
+written there too.
 """
 
 # pyright: reportAttributeAccessIssue=false, reportUndefinedVariable=false
@@ -250,33 +251,23 @@ class StoreInventoryMixin:
             {"artifact_hash": artifact_hash, "payload_json": json.dumps(payload), "now": now},
         )
 
+    def _device_row_args(self) -> dict[str, object]:
+        """What the resident needs to recreate a missing device row."""
+
+        return {"new_device_id": uuid4().hex, "created_at": _now()}
+
     def get_or_create_installation_id(self) -> str:
-        with self._connect() as connection:
-            self._ensure_local_device(connection)
-            row = connection.execute(
-                "select installation_id from guard_devices where device_key = ?",
-                (_DEVICE_ROW_KEY,),
-            ).fetchone()
-        if row is None:
-            raise RuntimeError("Guard local device row was not initialized.")
-        return str(row["installation_id"])
+        return self.get_device_metadata()["installation_id"]
 
     def set_device_label(self, label: str, now: str) -> dict[str, str]:
         normalized_label = label.strip() or "Local machine"
-        with self._connect() as connection:
-            self._ensure_local_device(connection)
-            connection.execute(
-                """
-                update guard_devices
-                set device_label = ?, updated_at = ?
-                where device_key = ?
-                """,
-                (normalized_label, now, _DEVICE_ROW_KEY),
-            )
+        metadata = self._native_store_call(
+            "set_device_label", {**self._device_row_args(), "label": normalized_label, "now": now}
+        )
         # A chosen label is kept even when it reads like a default ("Local machine");
         # clearing the label hands the name back to the host name.
         self.set_sync_payload(DEVICE_LABEL_CHOICE_KEY, {"label": normalized_label if label.strip() else None}, now)
-        return self.get_device_metadata()
+        return _device_metadata(metadata)
 
     def device_display_name(self, label: str) -> str:
         """``effective_device_label`` for the stored label, honouring an explicit choice.
@@ -293,36 +284,28 @@ class StoreInventoryMixin:
         return effective_device_label(label, chosen=chosen)
 
     def rotate_installation_id(self, now: str) -> dict[str, str]:
-        new_installation_id = uuid4().hex
-        with self._connect() as connection:
-            self._ensure_local_device(connection)
-            connection.execute(
-                """
-                update guard_devices
-                set installation_id = ?, updated_at = ?
-                where device_key = ?
-                """,
-                (new_installation_id, now, _DEVICE_ROW_KEY),
-            )
-        return self.get_device_metadata()
+        metadata = self._native_store_call(
+            "rotate_installation_id", {**self._device_row_args(), "installation_id": uuid4().hex, "now": now}
+        )
+        return _device_metadata(metadata)
 
     def get_device_metadata(self) -> dict[str, str]:
-        with self._connect() as connection:
-            self._ensure_local_device(connection)
-            row = connection.execute(
-                "select installation_id, device_label from guard_devices where device_key = ?",
-                (_DEVICE_ROW_KEY,),
-            ).fetchone()
-        if row is None:
-            raise RuntimeError("Guard local device metadata is unavailable.")
-        return {
-            "installation_id": str(row["installation_id"]),
-            "device_label": str(row["device_label"]),
-        }
+        metadata = self._native_store_call("get_device_metadata", {})
+        if metadata is None:
+            metadata = self._native_store_call("ensure_device_metadata", self._device_row_args())
+        return _device_metadata(metadata)
 
     def get_cloud_workspace_id(self) -> str | None:
-        with self._connect() as connection:
-            return self._cloud_workspace_id_from_connection(connection)
+        return self._native_store_call("get_cloud_workspace_id", {})
 
     def next_aibom_trust_attestation_sequence(self, now: str) -> int:
         return int(self._native_store_call("next_aibom_trust_attestation_sequence", {"now": now}))
+
+
+def _device_metadata(metadata: object) -> dict[str, str]:
+    if not isinstance(metadata, dict):
+        raise RuntimeError("Guard local device metadata is unavailable.")
+    return {
+        "installation_id": str(metadata["installation_id"]),
+        "device_label": str(metadata["device_label"]),
+    }

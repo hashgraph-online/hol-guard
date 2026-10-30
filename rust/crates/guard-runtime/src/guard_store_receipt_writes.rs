@@ -20,7 +20,7 @@ use crate::guard_store_receipt_rollups::{
     action_query, rebuild_if_pending, record_decision_change, record_insert,
 };
 
-const DEVICE_KEY: &str = "local-device";
+pub(crate) const DEVICE_KEY: &str = "local-device";
 const APPROVAL_SQL: &str = "select request_id as linked_approval_request_id, \
      status as approval_status, resolution_action as approval_resolution_action, \
      resolved_at as approval_resolved_at, policy_action as approval_policy_action, \
@@ -49,7 +49,7 @@ fn cell(map: &Map<String, Value>, key: &str) -> Value {
     map.get(key).cloned().unwrap_or(Value::Null)
 }
 
-fn local_workspace_id(connection: &Connection) -> StoreResult<Option<String>> {
+pub(crate) fn local_workspace_id(connection: &Connection) -> StoreResult<Option<String>> {
     let row = query_one(
         connection,
         "select payload_json from sync_state where state_key = 'oauth_local_credentials'",
@@ -68,7 +68,11 @@ fn local_workspace_id(connection: &Connection) -> StoreResult<Option<String>> {
         .map(str::to_owned))
 }
 
-fn ensure_local_device(connection: &Connection, device_id: &str, now: &str) -> StoreResult<()> {
+pub(crate) fn ensure_local_device(
+    connection: &Connection,
+    device_id: &str,
+    now: &str,
+) -> StoreResult<()> {
     let present = query_one(
         connection,
         "select device_key from guard_devices where device_key = ?",
