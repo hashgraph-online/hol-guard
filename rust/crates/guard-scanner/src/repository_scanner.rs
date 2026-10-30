@@ -580,7 +580,12 @@ pub fn scan_repository_secrets(
             &normalized,
             "working_tree",
             None,
-            max_findings - findings.len(),
+            // One past what the caller allowed. The loop only notices a full
+            // budget when it starts another file, so a blob that fills it on
+            // the way through the last one would otherwise drop the rest of
+            // its findings and still report complete coverage. The extra
+            // finding is dropped by the cap below, which reports the cut.
+            max_findings - findings.len() + 1,
         );
         files_scanned += 1;
         bytes_scanned += scanned_bytes;
@@ -664,7 +669,10 @@ pub fn scan_repository_secrets(
                         &normalized,
                         "git_history",
                         Some(&commit),
-                        max_findings - findings.len(),
+                        // One past the cap, so a blob that fills the budget is
+                        // visible to the cap below instead of ending the scan
+                        // quietly. See the working-tree call above.
+                        max_findings - findings.len() + 1,
                     );
                     files_scanned += 1;
                     bytes_scanned += scanned_bytes;
@@ -943,6 +951,45 @@ mod tests {
         assert!(result.truncated);
         assert_eq!(result.files_scanned, 1);
         assert_eq!(result.truncation_reasons, ["max_files"]);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn max_findings_cap_inside_one_file_truncates_with_ordered_reason() {
+        // The cap used to be handed to the blob as the whole remaining
+        // budget, and the loop only noticed a full budget when it opened the
+        // next file. One file holding more secrets than the caller allowed
+        // therefore dropped the rest of them and still called the scan
+        // complete, which reads as "nothing else is in there".
+        let dir = temp_root("findingcap");
+        let body = format!("{SECRET_LINE}\n{SECRET_LINE}\n{SECRET_LINE}\n{SECRET_LINE}\n");
+        fs::write(dir.join("only.env"), body).unwrap();
+        let options = RepositoryScanOptions {
+            max_findings: 2,
+            ..RepositoryScanOptions::default()
+        };
+        let result = scan_repository_secrets(&dir, &options).unwrap();
+        assert_eq!(result.findings.len(), 2);
+        assert!(result.truncated);
+        assert_eq!(result.truncation_reasons, ["max_findings"]);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_file_within_the_findings_cap_is_not_reported_as_truncated() {
+        // The extra finding the scan now asks for is how it tells a cut from
+        // a complete read; a file that fits must still report coverage.
+        let dir = temp_root("findingfit");
+        let body = format!("{SECRET_LINE}\n{SECRET_LINE}\n");
+        fs::write(dir.join("only.env"), body).unwrap();
+        let options = RepositoryScanOptions {
+            max_findings: 2,
+            ..RepositoryScanOptions::default()
+        };
+        let result = scan_repository_secrets(&dir, &options).unwrap();
+        assert_eq!(result.findings.len(), 2);
+        assert!(!result.truncated);
+        assert!(result.truncation_reasons.is_empty());
         let _ = fs::remove_dir_all(&dir);
     }
 
