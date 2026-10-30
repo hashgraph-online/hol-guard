@@ -543,9 +543,42 @@ fn script_words(input: &Value) -> Result<Vec<String>, RestrictedPytestError> {
     })
 }
 
+/// The words a contained command spells, read with the lexer that read it
+/// when the command was admitted.
+///
+/// `pretool` lexes the hook's command text with `PLAIN_LEXER` to decide the
+/// run is contained; the sink then read that same text a second time with
+/// Python's `shlex` to find the prefix it peels and the program it plans.
+/// Two readings of one command can part — this lexer leaves a backslash alone
+/// where the platform spells paths with it, `shlex` always escapes — so the
+/// receipt the sink draws has to be drawn over the words authority read.
+fn command_words(input: &Value) -> Result<Vec<String>, RestrictedPytestError> {
+    let text = input
+        .get("command_text")
+        .and_then(Value::as_str)
+        .ok_or_else(|| {
+            RestrictedPytestError::new(
+                "pytest_restricted_invalid_command",
+                "Invalid restricted execution request.",
+            )
+        })?;
+    split_with(PLAIN_LEXER, text).map_err(|_| {
+        RestrictedPytestError::new(
+            "pytest_restricted_invalid_command",
+            "Invalid restricted execution request.",
+        )
+    })
+}
+
 pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
     if operation == "contained_target" {
         return Some(json!({ "value": contained_target(input) }));
+    }
+    if operation == "command_words" {
+        return Some(match command_words(input) {
+            Ok(words) => json!({ "value": words }),
+            Err(error) => crate::restricted_command::error_reply(error),
+        });
     }
     if operation == "script_words" {
         return Some(match script_words(input) {

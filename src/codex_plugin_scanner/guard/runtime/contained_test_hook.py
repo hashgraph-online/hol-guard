@@ -20,6 +20,7 @@ from .contained_command_prefix import (
     _assignments_applied,
     _peel_for_receipt,
     _split_command_prefix,
+    command_words,
     peel_run_prefixes,
 )
 from .contained_run_directory import as_directory_change, as_run_root
@@ -384,12 +385,12 @@ def run_authorized_contained_test(
             merge_stderr=merge_stderr,
         )
     try:
-        core, assignments, dropped = _peel_for_receipt(shlex.split(tool_input["command"], posix=True))
-    # The peel asks native authority for the prefixes it reads, so a transport
-    # failure or a resident too old to know the operation raises here, before
-    # any receipt is drawn. Nothing is peeled then, and the command goes on to
-    # the guarded planner block, which already answers a native failure the
-    # same way it does for `run_prefix_peel`.
+        core, assignments, dropped = _peel_for_receipt(command_words(tool_input["command"]))
+    # Both the words and the peel come from native authority, so a transport
+    # failure or a resident too old to know either operation raises here,
+    # before any receipt is drawn. Nothing is peeled then, and the command goes
+    # on to the guarded planner block, which already answers a native failure
+    # the same way it does for `run_prefix_peel`.
     except (ValueError, RestrictedPytestError):
         core, assignments, dropped = [], {}, False
     if assignments or dropped:
@@ -415,10 +416,11 @@ def run_authorized_contained_test(
 
     planned_command: list[str] | None = None
     try:
-        try:
-            command, _ = _split_command_prefix(shlex.split(tool_input["command"], posix=True))
-        except ValueError as error:
-            raise _reject() from error
+        # Both the words and the split are native authority's reading. A
+        # command it cannot read raises `RestrictedPytestError` here, which
+        # the handler below answers the way it answers an unreadable split:
+        # only a live workspace receipt still runs the command.
+        command, _ = _split_command_prefix(command_words(tool_input["command"]))
         # Native authority reads a system `timeout` and each launcher it
         # knows through to the program they run, so the planners below are
         # handed that program. A clock still bounds this run: it only ever

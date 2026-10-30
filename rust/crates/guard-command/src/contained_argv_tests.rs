@@ -379,3 +379,46 @@ fn a_manifest_script_reads_the_way_the_route_that_admits_it_reads_it() {
         json!("node_tool_invalid_command")
     );
 }
+
+#[test]
+fn a_hook_command_reads_the_way_the_screen_that_admitted_it_read_it() {
+    // `pretool` lexes the hook's command text with this lexer when it decides
+    // the run is contained, so the sink asks for that same reading rather than
+    // splitting the text again on its way to a receipt.
+    assert_eq!(
+        evaluate(
+            "command_words",
+            &json!({ "command_text": "CI=1 pytest -q tests/test_a.py" })
+        )
+        .unwrap()["value"],
+        json!(["CI=1", "pytest", "-q", "tests/test_a.py"])
+    );
+    // The two readings part on a backslash: this lexer leaves it alone where
+    // the platform spells paths with it, and Python's `shlex`, which the sink
+    // used, escapes on every platform. A receipt drawn over the escaped words
+    // would not name the run that executes.
+    assert_eq!(
+        evaluate(
+            "command_words",
+            &json!({ "command_text": "pytest tests\\a.py" })
+        )
+        .unwrap()["value"],
+        if cfg!(windows) {
+            json!(["pytest", "tests\\a.py"])
+        } else {
+            json!(["pytest", "testsa.py"])
+        }
+    );
+    // An unterminated quote is not a reading of the command, so no receipt is
+    // drawn over a partial parse.
+    assert_eq!(
+        evaluate("command_words", &json!({ "command_text": "pytest 'tests" })).unwrap()
+            ["reason_code"],
+        json!("pytest_restricted_invalid_command")
+    );
+    // A request without the text names nothing to run.
+    assert_eq!(
+        evaluate("command_words", &json!({ "command": ["pytest"] })).unwrap()["reason_code"],
+        json!("pytest_restricted_invalid_command")
+    );
+}

@@ -60,6 +60,14 @@ def _native(operation: str, fields: dict[str, object], expected: object) -> obje
     if operation == "run_prefix_peel":
         command: list[str] = fields["command"]  # type: ignore[assignment]
         return {"core": command, "seconds": None} | _PEEL.get(tuple(command), {})
+    if operation == "command_words":
+        # Standing in for the native lexer, whose grammar is tested in
+        # `guard-command` (`contained_argv_tests.rs`). This reading keeps a
+        # backslash the way the native lexer keeps it where the platform
+        # spells paths with it, and Python's `shlex` eats it, so a test can
+        # tell which of the two readings the sink used.
+        text: str = fields["command_text"]  # type: ignore[assignment]
+        return shlex.split(text.replace("\\", "\\\\"), posix=True)
     if operation == "command_prefix_split":
         key = (tuple(fields["command"]), bool(fields["drop_data"]))  # type: ignore[arg-type]
         return _WHOLE | _SPLIT.get(key, {})
@@ -252,3 +260,35 @@ def test_a_native_failure_with_no_workspace_receipt_refuses(monkeypatch: pytest.
             payload, workspace=tmp_path, timeout_seconds=20, authorize=lambda _: _required()
         )
     assert refused.value.reason_code == "native_contained_argv_unavailable"
+
+
+def test_the_sink_reads_the_command_the_way_native_authority_read_it(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """One command, one reading.
+
+    `pretool` lexed this text when it decided the run is contained. Splitting
+    it a second time here is a second grammar: this process escapes a
+    backslash, the native lexer leaves it alone where the platform spells
+    paths with it, so the two part on `tests\\a.py` and a receipt drawn over
+    the escaped words would not name the run that executes.
+    """
+    executed: list[list[str]] = []
+    monkeypatch.setattr(sink, "prepare_restricted_pytest", _plan_only_pytest)
+    monkeypatch.setattr(sink, "run_restricted_pytest", lambda command, **_: executed.append(command) or 0)
+    # The wrapper peel and the sibling-root anchor are earlier screens with
+    # their own tests and their own resident calls; this one is about the
+    # reading the receipt and the planner share.
+    monkeypatch.setattr(sink, "peel_contained_wrapper", lambda *_, **__: None)
+    monkeypatch.setattr(sink, "anchored_sibling_root", lambda *_, **__: None)
+    text = "pytest tests\\a.py"
+    payload = {"hook_event_name": "PreToolUse", "tool_name": "bash", "tool_input": {"command": text}}
+    assert (
+        sink.run_authorized_contained_test(
+            payload, workspace=tmp_path, timeout_seconds=20, authorize=lambda _: _required()
+        )
+        == 0
+    )
+    assert executed == [["pytest", "tests\\a.py"]]
+    # And the sink keeps no reading of its own to fall back on.
+    assert shlex.split(text, posix=True) == ["pytest", "testsa.py"]

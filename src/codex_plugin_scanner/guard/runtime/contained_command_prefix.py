@@ -7,6 +7,27 @@ from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 
 
+def command_words(command: str) -> list[str]:
+    """Ask native authority for the words a contained command spells.
+
+    `pretool` lexed this same text when it decided the run is contained. A
+    second reading here is a second grammar: this one escapes a backslash on
+    every platform, the native lexer leaves it alone where the platform spells
+    paths with it, so `pytest tests\\a.py` parts into different words and the
+    receipt drawn over them would not name the run that executes.
+
+    An answer that is not a list of words is no reading at all, so it raises
+    rather than letting a partial parse reach a planner.
+    """
+    from ..native_restricted_pytest import restricted_native
+    from .restricted_pytest import RestrictedPytestError
+
+    words = restricted_native("command_words", {"command_text": command}, list)
+    if not all(type(word) is str for word in words):
+        raise RestrictedPytestError("pytest_restricted_invalid_command", "Invalid restricted execution request.")
+    return list(words)
+
+
 def _read_command_prefix(command: list[str], *, drop_data: bool = False) -> tuple[list[str], dict[str, str], bool]:
     """Ask native authority where the command's own program stands.
 
