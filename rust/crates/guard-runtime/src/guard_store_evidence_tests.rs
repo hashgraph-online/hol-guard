@@ -228,6 +228,28 @@ fn clearing_reports_how_many_records_it_removed() {
 }
 
 #[test]
+fn a_write_to_a_store_without_the_evidence_table_recreates_it() {
+    let connection = Connection::open_in_memory().unwrap();
+    call(
+        &connection,
+        add,
+        record("ev-1", "2024-01-01T00:00:00Z", "codex", "{}"),
+    )
+    .unwrap();
+    let page = call(&connection, list, json!({"limit": 10})).unwrap();
+    assert_eq!(ids(&page), ["ev-1"]);
+    let indexes: i64 = connection
+        .query_row(
+            "select count(*) from sqlite_master where type = 'index' and tbl_name = 'guard_evidence' \
+             and name like 'idx_evidence_%'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(indexes, 11);
+}
+
+#[test]
 fn a_record_without_a_numeric_confidence_is_refused() {
     let connection = store();
     let mut bad = record("ev-1", "t1", "codex", "{}");

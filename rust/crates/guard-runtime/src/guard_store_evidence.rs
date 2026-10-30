@@ -57,15 +57,54 @@ pub(crate) fn add(connection: &rusqlite::Connection, args: &Args<'_>) -> StoreRe
             .map_or(Value::Null, Value::from),
     );
     params.push(Value::from(args.str("created_at")?));
-    exec(
-        connection,
-        "insert or replace into guard_evidence \
-           (evidence_id, action_id, request_id, harness, workspace, signal_id, \
-            category, severity, confidence, summary, details_json, action_identity, created_at) \
-         values (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        &params,
-    )?;
+    match exec(connection, INSERT, &params) {
+        Err(StoreError::Sqlite(error)) if missing_table(&error) => {
+            connection.execute_batch(SCHEMA)?;
+            exec(connection, INSERT, &params)?;
+        }
+        result => {
+            result?;
+        }
+    }
     Ok(Value::Null)
+}
+
+const INSERT: &str = "insert or replace into guard_evidence \
+       (evidence_id, action_id, request_id, harness, workspace, signal_id, \
+        category, severity, confidence, summary, details_json, action_identity, created_at) \
+     values (?,?,?,?,?,?,?,?,?,?,?,?,?)";
+
+/// The table and indexes `ensure_evidence_schema` creates, so a write to a
+/// store whose evidence table was dropped repairs it as the Python write did.
+const SCHEMA: &str = "create table if not exists guard_evidence (
+       evidence_id text not null primary key,
+       action_id text not null default '', request_id text not null default '',
+       harness text not null default '', workspace text not null default '',
+       signal_id text not null default '', category text not null default '',
+       severity text not null default '', confidence real not null default 0.0,
+       summary text not null default '', details_json text not null default '{}',
+       action_identity text, created_at text not null);
+     create index if not exists idx_evidence_created on guard_evidence(created_at desc);
+     create index if not exists idx_evidence_request on guard_evidence(request_id);
+     create index if not exists idx_evidence_action on guard_evidence(action_id);
+     create index if not exists idx_evidence_category_severity on guard_evidence(category, severity);
+     create index if not exists idx_evidence_harness_workspace on guard_evidence(harness, workspace);
+     create index if not exists idx_evidence_identity on guard_evidence(action_identity);
+     create index if not exists idx_evidence_request_created
+       on guard_evidence(request_id, created_at desc);
+     create index if not exists idx_evidence_identity_created
+       on guard_evidence(action_identity, created_at desc);
+     create index if not exists idx_evidence_harness_created
+       on guard_evidence(harness, created_at desc);
+     create index if not exists idx_evidence_category_severity_created
+       on guard_evidence(category, severity, created_at desc);
+     create index if not exists idx_evidence_harness_category_severity_created
+       on guard_evidence(harness, category, severity, created_at desc);";
+
+fn missing_table(error: &rusqlite::Error) -> bool {
+    error
+        .to_string()
+        .starts_with("no such table: guard_evidence")
 }
 
 const COUNT_FILTERS: [(&str, &str); 3] = [
