@@ -353,7 +353,7 @@ fn rg_arguments_pass(
                 && !tree::rg_root_inside_cwd(argument, context)
                 && !sibling::rg_sibling_repository_root(argument, context)
                 && !sibling::named_path(argument, context, allow_absent)
-                && !(allow_absent && super::grep::absent_target(argument, context))
+                && !proven_absent_root(argument, context, allow_absent)
                 && !tree::safe_recursive_search_target(argument, context)
                 && !tree::safe_literal_bracket_search_target(argument, context)
                 && (!argument.contains(['*', '?', '['])
@@ -447,6 +447,13 @@ fn names_only_globs_proven(arguments: &[String], roots: &[&str], context: ReadCo
         context.home_dir,
         context.cwd,
     )
+}
+
+/// A root that is not there, where no other step of the command could put
+/// one there first. The filesystem screen runs only when `allow_absent`
+/// holds, so a command that creates the root pays nothing for the check.
+fn proven_absent_root(value: &str, context: ReadContext<'_>, allow_absent: bool) -> bool {
+    allow_absent && super::grep::absent_target(value, context)
 }
 
 /// Every `-g`, `--glob` or `--iglob` value that selects rather than excludes.

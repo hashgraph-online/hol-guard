@@ -42,6 +42,12 @@ fn naming_a_missing_file_in_a_sibling_repository_is_allowed() {
         "rg -n fixture ~/Code/org/service-api/src/lib.rs",
         "rg -n fixture ~/Code/org/service-api/src/journey/runner.ts | head -6",
         "rg -n fixture ~/Code/org/service-api/src/main.rs ~/Code/org/service-api/src/lib.rs",
+        // No repository below home holds this one, so the sibling route
+        // declines it. A path with nothing at it opens no file and walks no
+        // directory, and the missing names clear the hidden and credential
+        // screens, which is the answer `ls`, `cat` and `grep -r` already
+        // give for the same spelling.
+        "rg -n fixture ~/Code/org/notes/todo.md",
     ] {
         assert_decision(&cwd, &layout.home, command, true);
     }
@@ -91,8 +97,6 @@ fn a_named_path_that_could_reach_a_secret_is_reviewed() {
         // name is not a credential's, as it does inside the project.
         "rg -n fixture ~/Code/org/service-api/src/.env.local",
         "rg -n fixture ~/Code/org/service-api/src/secrets/prod.pem",
-        // Nothing below home that is not a repository gets this route.
-        "rg -n fixture ~/Code/org/notes/todo.md",
     ] {
         assert_decision(&cwd, &layout.home, command, false);
     }

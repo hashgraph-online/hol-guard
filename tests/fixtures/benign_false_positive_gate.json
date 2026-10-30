@@ -9082,7 +9082,7 @@
       "expect": "not_allow"
     },
     {
-      "id": "neg-mkdir-then-rg-absent-root",
+      "id": "neg-touch-then-rg-absent-root",
       "fix_area": "negative",
       "harnesses": [
         "codex",
@@ -9093,7 +9093,24 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "mkdir -p ${HOME}/acme-plain/absent-logs && rg -ln retry ${HOME}/acme-plain/absent-logs"
+        "command": "touch ${HOME}/acme-plain/absent-logs && rg -ln retry ${HOME}/acme-plain/absent-logs"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-mkdir-then-rg-unrelated-absent-root",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "mkdir -p ${HOME}/acme-plain/absent-logs && rg -ln retry ${HOME}/acme-plain/other-absent"
       },
       "cwd": "worktree",
       "expect": "not_allow"
