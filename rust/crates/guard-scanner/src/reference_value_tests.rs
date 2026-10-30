@@ -251,6 +251,7 @@ fn actions_workflow_expressions_are_not_credentials() {
         NODE_AUTH_TOKEN: ${{secrets.NODE_AUTH_TOKEN}}\n          \
         API_KEY: \"${{ secrets.API_KEY }}\"\n          \
         DEPLOY_PASSWORD: '${{ secrets.DEPLOY_PASSWORD }}'  # rotated monthly\n          \
+        BOT_TOKEN: ${{ github.token }} # use the 'bot' identity\n          \
         SIGNING_SECRET: ${{ steps.mint.outputs.secret }}\n          \
         ACCESS_KEY: ${{ needs.build.outputs.keys[0] }}\n";
     assert!(!credential_assignment(workflow));
@@ -265,6 +266,9 @@ fn actions_expressions_do_not_hide_literals() {
         format!("TOKEN: ${{{{ format('{{0}}', '{secret}') }}}}"),
         format!("TOKEN: ${{{{ secrets.TOKEN }}}}{secret}"),
         format!("TOKEN: ${{{{ secrets.TOKEN }}}} '{secret}'"),
+        format!("TOKEN: ${{{{ secrets.TOKEN }}}} {secret}"),
+        format!("TOKEN: \"${{{{ secrets.TOKEN }}}}\" {secret}"),
+        format!("TOKEN: ${{{{ secrets.TOKEN }}}}#{secret}"),
         format!("TOKEN: \"${{{{ secrets.TOKEN }}}}{secret}\""),
         format!("TOKEN: ${{{{ {secret} }}}}"),
         format!("TOKEN: ${{{{ secrets.TOKEN {secret}"),

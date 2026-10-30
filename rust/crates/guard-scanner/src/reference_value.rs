@@ -106,7 +106,7 @@ pub(crate) fn is_reference(matched: &str, rest_of_line: &str) -> bool {
             || !hides_literal(if placeholder { "" } else { value }, rest_of_line))
 }
 
-/// Whether `value` is one whole Actions context read with no literal after it.
+/// Whether `value` is one whole Actions context read and nothing else.
 /// The rule captures a quoted value whole, but stops an unquoted one at the
 /// first space or `}`, so there the expression runs on into `rest_of_line`.
 fn is_actions_expression(value: &str, rest_of_line: &str) -> bool {
@@ -117,8 +117,7 @@ fn is_actions_expression(value: &str, rest_of_line: &str) -> bool {
         return ACTIONS_EXPRESSION
             .find(literal)
             .is_some_and(|found| found.end() == literal.len())
-            && !has_attached_literal(rest_of_line)
-            && !hides_literal("", rest_of_line);
+            && ends_yaml_value(rest_of_line);
     }
     if !value.starts_with("${{") {
         return false;
@@ -128,14 +127,20 @@ fn is_actions_expression(value: &str, rest_of_line: &str) -> bool {
     let Some(found) = ACTIONS_EXPRESSION.find(&joined) else {
         return false;
     };
-    let Some(tail) = found
+    found
         .end()
         .checked_sub(value.len())
         .and_then(|offset| rest_of_line.get(offset..))
-    else {
-        return false;
-    };
-    !has_attached_literal(tail) && !hides_literal("", tail)
+        .is_some_and(ends_yaml_value)
+}
+
+/// Whether only blanks or a comment follow a value. Unlike a shell word, a
+/// plain YAML scalar runs on past a space, so any other text there, such as
+/// `${{ secrets.TOKEN }} more`, is part of the value. A comment needs a blank
+/// before its `#`, and its quotes are prose, not part of the value.
+fn ends_yaml_value(tail: &str) -> bool {
+    let rest = tail.trim_start_matches([' ', '\t']);
+    rest.is_empty() || (rest.len() < tail.len() && rest.starts_with('#'))
 }
 
 /// A shell word can concatenate empty quotes, placeholders and bare text.
