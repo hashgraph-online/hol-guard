@@ -8,10 +8,13 @@ use std::path::{Path, PathBuf};
 /// A private home holding the session's repository, a sibling one with a
 /// script, and a plain directory with one. `/tmp`, not `$TMPDIR`: macOS puts
 /// the latter below `/private/var`, which the path proofs judge as its own
-/// location rather than a home.
-fn fixture() -> PathBuf {
-    let root = PathBuf::from(format!("/tmp/guard-sink-sibling-{}", std::process::id()));
-    let _ = fs::remove_dir_all(&root);
+/// location rather than a home. The returned handle removes the fixture.
+fn fixture() -> (tempfile::TempDir, PathBuf) {
+    let directory = tempfile::Builder::new()
+        .prefix("guard-sink-sibling-")
+        .tempdir_in("/tmp")
+        .unwrap();
+    let root = directory.path().to_path_buf();
     let projects = root.join("home/projects");
     for directory in ["app/.git", "report/.git", "report/scripts", "plain"] {
         fs::create_dir_all(projects.join(directory)).unwrap();
@@ -25,7 +28,8 @@ fn fixture() -> PathBuf {
     }
     fs::write(projects.join("report/scripts/report.py"), "").unwrap();
     fs::write(projects.join("plain/probe.py"), "").unwrap();
-    root.canonicalize().unwrap()
+    let root = root.canonicalize().unwrap();
+    (directory, root)
 }
 
 fn sibling_root(command: &str, workspace: &str, home: &Path) -> Option<PathBuf> {
@@ -36,7 +40,7 @@ fn sibling_root(command: &str, workspace: &str, home: &Path) -> Option<PathBuf> 
 
 #[test]
 fn a_script_in_a_sibling_repository_runs_from_its_root() {
-    let root = fixture();
+    let (_fixture, root) = fixture();
     let (home, projects) = (root.join("home"), root.join("home/projects"));
     let workspace = projects.join("app");
     let workspace = workspace.to_str().unwrap();
@@ -56,5 +60,4 @@ fn a_script_in_a_sibling_repository_runs_from_its_root() {
     ] {
         assert_eq!(sibling_root(&command, workspace, &home), None, "{command}");
     }
-    fs::remove_dir_all(root).unwrap();
 }
