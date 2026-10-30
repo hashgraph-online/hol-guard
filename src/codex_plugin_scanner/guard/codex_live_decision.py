@@ -74,38 +74,7 @@ def resolve_codex_live_allow_authority(
 
     if _optional_text(request.get("request_id")) != request_id:
         return None
-    exact_cloud_decision = store.peek_exact_cloud_local_once_approval(request_id=request_id, now=now)
-    if isinstance(exact_cloud_decision, Mapping) and _exact_request_authority(
-        exact_cloud_decision,
-        request_id=request_id,
-    ):
-        return {str(key): value for key, value in exact_cloud_decision.items()}
-    lookup = store.resolve_policy_decision_lookup(
-        str(request["harness"]),
-        _optional_text(request.get("artifact_id")),
-        artifact_hash=_optional_text(request.get("artifact_hash")),
-        workspace=_optional_text(request.get("workspace")),
-        publisher=_optional_text(request.get("publisher")),
-        now=now,
-        consume_one_shot=False,
-    )
-    decision = lookup.get("decision")
-    if not isinstance(decision, Mapping) or not _exact_request_authority(decision, request_id=request_id):
-        return None
-    return {str(key): value for key, value in decision.items()}
-
-
-def _exact_request_authority(value: object, *, request_id: str) -> bool:
-    if not isinstance(value, Mapping):
-        return False
-    authority = cast(Mapping[str, object], value)
-    return (
-        authority.get("action") == "allow"
-        and authority.get("source") == "approval-gate-once"
-        and authority.get("request_id") == request_id
-        and authority.get("integrity_status") == "valid"
-        and isinstance(authority.get("approval_id"), str)
-    )
+    return store.codex_live_allow_authority(request, now=now)
 
 
 def _terminal_resume_matches(value: object, *, action: object) -> bool:

@@ -8,7 +8,10 @@ from pathlib import Path
 import pytest
 
 import codex_plugin_scanner.guard.codex_live_decision as live_decision_module
-from codex_plugin_scanner.guard.codex_live_decision import complete_codex_live_decision
+from codex_plugin_scanner.guard.codex_live_decision import (
+    complete_codex_live_decision,
+    resolve_codex_live_allow_authority,
+)
 from codex_plugin_scanner.guard.local_authority_integrity import sign_local_authority_payload
 from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.native_guard_store import NativeGuardStoreUnavailable
@@ -151,7 +154,7 @@ def test_live_completion_consumes_only_original_exact_cloud_request(tmp_path: Pa
         fresh_allow_authorized=True,
     )
     assert sibling_result == {"completed": False, "error": "exact_approval_authority_missing"}
-    assert store.peek_exact_cloud_local_once_approval(request_id="exact-live-original", now=resolved_at) is not None
+    assert _live_authority(store, "exact-live-original", resolved_at) is not None
 
     original_result = complete_codex_live_decision(
         store,
@@ -161,7 +164,7 @@ def test_live_completion_consumes_only_original_exact_cloud_request(tmp_path: Pa
     )
     assert original_result["completed"] is True
     assert original_result["action"] == "allow"
-    assert store.peek_exact_cloud_local_once_approval(request_id="exact-live-original", now=resolved_at) is None
+    assert _live_authority(store, "exact-live-original", resolved_at) is None
     resume = store.get_request_resume("exact-live-original")
     assert resume is not None and resume["status"] == "sent"
 
@@ -224,54 +227,95 @@ def test_live_completion_fails_closed_when_authority_revision_changes_before_cla
     )
 
     assert result == {"completed": False, "error": "continuation_not_recorded"}
-    assert (
-        store.peek_exact_cloud_local_once_approval(request_id="exact-live-revision-race", now=resolved_at) is not None
-    )
+    assert _live_authority(store, "exact-live-revision-race", resolved_at) is not None
     resume = store.get_request_resume("exact-live-revision-race")
     assert resume is not None and resume["status"] == "pending"
 
 
-class _DroppingPeekStore(StoreExactCloudLocalOnceMixin):
-    def __init__(self, failures: list[NativeGuardStoreUnavailable]) -> None:
-        self.failures = failures
-        self.calls = 0
+def _live_authority(store: GuardStore, request_id: str, now: str) -> dict[str, object] | None:
+    request = store.get_approval_request(request_id)
+    assert request is not None
+    return resolve_codex_live_allow_authority(store, request=request, request_id=request_id, now=now)
+
+
+class _Evidence:
+    def __init__(self, degraded: bool) -> None:
+        self.degraded_trust_status = {"status": "degraded"} if degraded else None
+
+
+class _OneCallStore(StoreExactCloudLocalOnceMixin):
+    def __init__(self, *, key: bool = True, degraded: bool = False) -> None:
+        self.key = key
+        self.degraded = degraded
+        self.steps: list[object] = []
 
     def _policy_integrity_secret_material(self, *, create: bool) -> tuple[bytes | None, str | None]:
-        return b"k" * 32, "key-1"
+        assert create is False
+        return (b"k" * 32, "key-1") if self.key else (None, None)
 
     def _provision_resident_verifier(self, key: bytes | None = None) -> None:
-        assert key == b"k" * 32
+        self.steps.append(("provision", key))
+
+    def policy_lookup_evidence(self, *, now: str | None = None) -> _Evidence:
+        self.steps.append(("evidence", now))
+        return _Evidence(self.degraded)
+
+    def policy_decision_lookup_request(
+        self,
+        evidence: object,
+        *,
+        harness: str,
+        artifact_id: str | None,
+        artifact_hash: str | None,
+        workspace: str | None,
+        publisher: str | None,
+        runtime_exact_match_context: str | None,
+        consume_one_shot: bool,
+    ) -> dict[str, object]:
+        self.steps.append(("lookup", {"workspace": workspace, "consume_one_shot": consume_one_shot}))
+        return {"schema": "guard-policy-decision-lookup-request.v1"}
 
     def _native_store_call(self, method: str, args: Mapping[str, object]) -> object:
-        assert method == "peek_exact_cloud_local_once_approval"
-        self.calls += 1
-        if self.failures:
-            raise self.failures.pop(0)
-        return {"request_id": args["request_id"], "action": "allow"}
+        self.steps.append((method, dict(args)))
+        raise NativeGuardStoreUnavailable("dropped")
 
 
-def _no_answer(reason: str = "native_guard_store_unavailable") -> NativeGuardStoreUnavailable:
-    error = NativeGuardStoreUnavailable("dropped")
-    error.reason = reason
-    return error
+def _authority(store: _OneCallStore) -> dict[str, object] | None:
+    request = {
+        "request_id": "r1",
+        "harness": "codex",
+        "artifact_id": "codex:bash",
+        "artifact_hash": "sha256:abc",
+        "workspace": "/work/a",
+    }
+    return store.codex_live_allow_authority(request, now="2026-10-30T00:00:00+00:00")
 
 
-def test_exact_cloud_peek_retries_one_dropped_round_trip() -> None:
-    store = _DroppingPeekStore([_no_answer()])
-
-    decision = store.peek_exact_cloud_local_once_approval(request_id="r1", now="2026-10-30T00:00:00+00:00")
-
-    assert decision == {"request_id": "r1", "action": "allow"}
-    assert store.calls == 2
-
-
-def test_exact_cloud_peek_gives_up_after_the_second_drop_or_another_failure() -> None:
-    twice = _DroppingPeekStore([_no_answer(), _no_answer()])
+def test_live_authority_asks_the_resident_once_with_a_non_consuming_lookup() -> None:
+    store = _OneCallStore()
     with pytest.raises(NativeGuardStoreUnavailable):
-        twice.peek_exact_cloud_local_once_approval(request_id="r1", now="2026-10-30T00:00:00+00:00")
-    assert twice.calls == 2
+        _authority(store)
 
-    refused = _DroppingPeekStore([_no_answer("native_guard_store_refused")])
+    assert store.steps[0] == ("provision", b"k" * 32)
+    assert store.steps[1] == ("evidence", "2026-10-30T00:00:00+00:00")
+    lookup = store.steps[2]
+    assert isinstance(lookup, tuple) and lookup[0] == "lookup"
+    assert lookup[1]["consume_one_shot"] is False
+    assert lookup[1]["workspace"] == "/work/a"
+    calls = [step for step in store.steps if isinstance(step, tuple) and step[0] == "codex_live_allow_authority"]
+    assert len(calls) == 1
+    args = calls[0][1]
+    assert args["request_id"] == "r1"
+    assert args["integrity_key_id"] == "key-1"
+    assert args["lookup"] == {"schema": "guard-policy-decision-lookup-request.v1"}
+
+
+def test_live_authority_without_trusted_evidence_reads_only_the_exact_cloud_allow() -> None:
+    store = _OneCallStore(key=False, degraded=True)
     with pytest.raises(NativeGuardStoreUnavailable):
-        refused.peek_exact_cloud_local_once_approval(request_id="r1", now="2026-10-30T00:00:00+00:00")
-    assert refused.calls == 1
+        _authority(store)
+
+    (call,) = [step for step in store.steps if isinstance(step, tuple) and step[0] == "codex_live_allow_authority"]
+    assert "lookup" not in call[1]
+    assert "integrity_key_b64" not in call[1]
+    assert not any(isinstance(step, tuple) and step[0] in {"provision", "lookup"} for step in store.steps)

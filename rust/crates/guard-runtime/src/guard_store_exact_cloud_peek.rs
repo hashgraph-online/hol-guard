@@ -1,5 +1,5 @@
-//! `peek_exact_cloud_local_once_approval`: the unconsumed exact Cloud Review
-//! allow issued for one resolved request, read without claiming it.
+//! The unconsumed exact Cloud Review allow issued for one resolved request,
+//! read without claiming it.
 //!
 //! The row is found through the request it answers - its harness, artifact,
 //! hash, workspace scope and publisher - so an allow cannot be read back for
