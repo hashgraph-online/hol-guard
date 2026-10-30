@@ -598,11 +598,11 @@ pub static SECRET_RULES: LazyLock<Vec<SecretRule>> = LazyLock::new(|| {
             "doppler-token",
             "Doppler token",
             "critical",
-            r"\b(?P<secret>dp\.(?:ct|pt|sa|scim|audit)\.[A-Za-z0-9]{40,44}|dp\.st\.(?:[a-z0-9_-]{2,35}\.)?[A-Za-z0-9]{40,44})\b",
+            r"\b(?P<secret>dp\.(?:ct|pt|said|sa|scim|audit)\.[A-Za-z0-9]{40,44}|dp\.st\.(?:[a-z0-9_-]{2,35}\.)?[A-Za-z0-9]{40,44})\b",
             FLAG_UNICODE,
             "doppler",
             true,
-            "Doppler personal, service, service-account, SCIM, or audit token.",
+            "Doppler personal, service, service-account, service-account identity, SCIM, or audit token.",
             None,
         ),
         secret_rule(
@@ -2517,12 +2517,14 @@ mod tests {
 
     #[test]
     fn the_doppler_rule_reads_cli_and_config_scoped_tokens() {
-        // A Doppler service token carries the config it was cut for, and a CLI
-        // token uses its own `ct` kind. Both were missed while only the kinds
-        // without a middle segment were listed.
+        // A Doppler service token carries the config it was cut for, a CLI
+        // token uses its own `ct` kind, and a service account identity token
+        // uses `said`, which the `sa` kind does not cover. All three were
+        // missed while only the shorter kinds were listed.
         for (head, tail) in [
             ("dp.ct.a7Kq2VL8nP4wR7tY1uI6oP3", "aS5dFgHjK9mQ2vL8nP4w"),
             ("dp.st.dev.a7Kq2VL8nP4wR7tY1uI6oP3", "aS5dFgHjK9mQ2vL8nP4w"),
+            ("dp.said.a7Kq2VL8nP4wR7tY1uI6oP3", "aS5dFgHjK9mQ2vL8nP4w"),
         ] {
             let text = format!("SERVICE_CREDENTIAL = \"{head}{tail}\"");
             let summary = scan_secret_text(&text, "config/prod.env", "working_tree", None, 200);
@@ -2533,6 +2535,24 @@ mod tests {
                 .collect();
             assert!(claimed.contains(&"doppler-token"), "{head}: {claimed:?}");
         }
+    }
+
+    #[test]
+    fn a_doppler_identity_token_is_read_without_a_credential_name_beside_it() {
+        // A token pasted on its own, with no assignment to name it, is the
+        // shape a leaked credential most often takes. The rule's format is
+        // specific enough to stand alone, so the finding must not depend on
+        // surrounding text.
+        let head = "dp.said.a7Kq2VL8nP4wR7tY1uI6oP3";
+        let tail = "aS5dFgHjK9mQ2vL8nP4w";
+        let text = format!("{head}{tail}\n");
+        let summary = scan_secret_text(&text, "notes/scratch.txt", "working_tree", None, 200);
+        let claimed: Vec<&str> = summary
+            .findings
+            .iter()
+            .map(|finding| finding.rule_id)
+            .collect();
+        assert!(claimed.contains(&"doppler-token"), "{claimed:?}");
     }
 
     #[test]
