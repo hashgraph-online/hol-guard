@@ -1,12 +1,12 @@
 //! The native sink for a read-only run: an evaluation (`python -c`, `node
-//! -e`, `bun -e`), a Vitest run, a `node --test` run or a Git inspection the
-//! resident sent to its own profile.
+//! -e`, `bun -e`), a Vitest run, a `node --test` run, a Git inspection or a
+//! pytest run the resident sent to its own profile.
 //!
 //! Guard's own sink runs such a call in three steps: it reads the program
 //! the command stands behind, plans the run, and asks the live resident
-//! again — for the call as issued and, except for Git, for the planned
-//! argv — before it starts the planned argv under a read-only Seatbelt profile with a private
-//! home and temporary directory. This replays those steps for the plain
+//! again — for the call as issued and, except for Git and pytest, for the
+//! planned argv — before it starts the planned argv under a read-only
+//! Seatbelt profile with a private home and temporary directory. This replays those steps for the plain
 //! shape, a call with no settings, wrapper or directory change in front of
 //! the program: the edge routes nothing else here. Linux keeps Guard's own
 //! sink, whose read-only namespace this does not build.
@@ -21,7 +21,7 @@ use super::*;
 /// requires.
 pub(super) type Route = (&'static str, &'static str);
 
-const ROUTES: [Route; 6] = [
+const ROUTES: [Route; 7] = [
     (
         "native_python_eval_readonly_containment_required",
         PYTHON_EVAL_PROFILE,
@@ -40,6 +40,10 @@ const ROUTES: [Route; 6] = [
         NODE_TEST_PROFILE,
     ),
     ("native_git_readonly_containment_required", GIT_PROFILE),
+    (
+        "native_pytest_readonly_containment_required",
+        PYTEST_PROFILE,
+    ),
 ];
 pub(super) const VITEST_ROUTE: Route = (
     "native_vitest_readonly_containment_required",
@@ -50,6 +54,7 @@ const NODE_EVAL_PROFILE: &str = "node-eval-readonly-v1";
 pub(super) const VITEST_PROFILE: &str = "vitest-readonly-v1";
 const NODE_TEST_PROFILE: &str = "node-test-readonly-v1";
 const GIT_PROFILE: &str = "git-readonly-v1";
+const PYTEST_PROFILE: &str = "pytest-readonly-v2";
 const SEATBELT: &str = "macos-seatbelt";
 const INVALID_PLAN: &str = "Invalid native restricted launch plan.";
 
@@ -60,6 +65,7 @@ pub(crate) enum Kind {
     Vitest,
     NodeTest,
     Git,
+    Pytest,
 }
 
 impl Kind {
@@ -68,6 +74,7 @@ impl Kind {
             VITEST_PROFILE => Self::Vitest,
             NODE_TEST_PROFILE => Self::NodeTest,
             GIT_PROFILE => Self::Git,
+            PYTEST_PROFILE => Self::Pytest,
             _ => Self::Eval,
         }
     }
@@ -142,7 +149,8 @@ pub(crate) fn plain_program(command: &str) -> Option<(Vec<String>, Option<u64>, 
     if kind("package_test") != Some(false) {
         return None;
     }
-    // Guard's own sink takes the first kind in this order.
+    // Guard's own sink takes the first kind in this order, and plans any
+    // other program as pytest.
     let kind = match (
         kind("inline_eval")?,
         kind("node_tool")?,
@@ -155,7 +163,7 @@ pub(crate) fn plain_program(command: &str) -> Option<(Vec<String>, Option<u64>, 
         (false, false, true, ..) => Kind::Git,
         (false, false, false, true, _) => Kind::Vitest,
         (false, false, false, false, true) => Kind::NodeTest,
-        _ => return None,
+        (false, false, false, false, false) => Kind::Pytest,
     };
     Some((core, seconds, kind))
 }
@@ -180,6 +188,10 @@ pub(super) struct ReadonlyPlan {
     read_only_roots: Vec<String>,
     #[allow(dead_code)]
     denied_capabilities: Vec<String>,
+    /// The account's own Python packages, linked into a pytest run's
+    /// private home for reading.
+    #[serde(skip)]
+    user_site_root: Option<String>,
 }
 
 /// Run the read-only call `route` names for `payload` in `workspace`.
@@ -211,8 +223,9 @@ pub(super) fn run(
         Kind::Vitest => ("prepare_vitest", Some(VITEST_PROFILE)),
         Kind::NodeTest => ("prepare_node", Some(NODE_TEST_PROFILE)),
         Kind::Git => ("prepare_git", Some(GIT_PROFILE)),
+        Kind::Pytest => ("prepare", Some(PYTEST_PROFILE)),
     };
-    let plan = prepare(operation, &argv, workspace, home)?;
+    let mut plan = prepare(operation, &argv, workspace, home)?;
     if profile.is_some_and(|profile| plan.profile_version != profile) {
         return Err(Failure::new(SANDBOX_UNAVAILABLE, INVALID_PLAN));
     }
@@ -227,9 +240,10 @@ pub(super) fn run(
     }
     // Asked again after planning, so the decision follows every file the
     // planner read; then for the argv the plan runs. Guard's own sink asks
-    // nothing more for a Git inspection, whose plan proves its executable.
+    // nothing more for a Git inspection, whose plan proves its executable,
+    // or for pytest, whose planner admits only a pytest executable.
     authorize_route(authority, payload, route)?;
-    if kind != Kind::Git {
+    if !matches!(kind, Kind::Git | Kind::Pytest) {
         authorize_route(
             authority,
             &with_command(payload, &plan.command, None),
@@ -238,6 +252,9 @@ pub(super) fn run(
     }
     let private = private_root()?;
     signals.clean_up(private.path.clone());
+    if kind == Kind::Pytest {
+        plan.user_site_root = super::pytest::link_user_site(&private.path)?;
+    }
     let mut environment = environment(&plan, &private)?;
     match kind {
         Kind::Eval => {
@@ -256,6 +273,7 @@ pub(super) fn run(
             environment = serde_json::from_value(native("git_environment", source)?)
                 .map_err(|_| unavailable("invalid_reply"))?;
         }
+        Kind::Pytest => super::pytest::settle(&mut environment, &private.path)?,
         Kind::Vitest => {}
     }
     launch(
@@ -335,6 +353,9 @@ fn prepare(
         input["account_home"] = json!(wire_path(&account));
         input["groups"] = json!(groups);
     }
+    if operation == "prepare" {
+        input["read_only_workspace"] = Value::Bool(true);
+    }
     let plan = native(operation, input)?;
     let plan: ReadonlyPlan = serde_json::from_value(plan)
         .map_err(|_| Failure::new(SANDBOX_UNAVAILABLE, INVALID_PLAN))?;
@@ -384,6 +405,7 @@ pub(super) fn environment(
         &plan.cwd,
         &path_text(&private.path)?,
         &plan.allowed_executables,
+        plan.user_site_root.as_deref(),
     )
 }
 
@@ -408,6 +430,7 @@ pub(super) fn launch(
             "command": plan.command,
             "backend_executable": plan.backend_executable,
             "private_root": path_text(&private.path)?,
+            "user_site_root": plan.user_site_root,
         }),
     )?;
     let Value::String(profile) = profile else {

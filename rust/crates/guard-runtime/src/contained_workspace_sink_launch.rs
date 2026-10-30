@@ -29,8 +29,13 @@ pub(super) struct Launch<'a> {
 impl Launch<'_> {
     pub(super) fn contained(&self, argv: &[String]) -> Outcome<i32> {
         let private_root = path_text(&self.private.path)?;
-        let mut environment =
-            restricted_environment(self.workspace_text, self.workspace_text, &private_root, &[])?;
+        let mut environment = restricted_environment(
+            self.workspace_text,
+            self.workspace_text,
+            &private_root,
+            &[],
+            None,
+        )?;
         let empty_config = self.private.path.join("gitconfig");
         std::fs::write(&empty_config, b"").map_err(|_| {
             Failure::new(
@@ -176,13 +181,15 @@ impl Launch<'_> {
 
 /// The environment the native filter leaves a contained run started from
 /// `cwd` in `workspace`, with its private home and temporary directory under
-/// `private_root`. `PYTHONPATH` and `VIRTUAL_ENV` are read as the host spells
-/// them, with `~` expanded, as Guard's own sink hands them over.
+/// `private_root` and any linked `user_site_root`. `PYTHONPATH` and
+/// `VIRTUAL_ENV` keep the host's spelling, `~` expanded, as Guard's own sink
+/// hands them over.
 pub(super) fn restricted_environment(
     workspace: &str,
     cwd: &str,
     private_root: &str,
     allowed_executables: &[String],
+    user_site_root: Option<&str>,
 ) -> Outcome<BTreeMap<String, String>> {
     let mut source: Map<String, Value> = Map::new();
     for (name, value) in environment() {
@@ -212,6 +219,7 @@ pub(super) fn restricted_environment(
             "private_home": format!("{private_root}/home"),
             "private_tmp": format!("{private_root}/tmp"),
             "allowed_executables": allowed_executables,
+            "user_site_root": user_site_root,
         }),
     )?;
     match launch_environment {

@@ -35,6 +35,7 @@ fn plan(profile: &str) -> ReadonlyPlan {
         allowed_executables: words(&["/usr/bin/node"]),
         read_only_roots: Vec::new(),
         denied_capabilities: Vec::new(),
+        user_site_root: None,
     }
 }
 
@@ -85,8 +86,6 @@ fn anything_but_the_plain_shape_stays_with_guards_own_sink() {
     for command in [
         "CI=1 python3 -c 0",
         "cd x && python3 -c 0",
-        "pytest -q",
-        "python ../test_sample.py",
         "python3 -c 'unterminated",
         "npx eslint .",
         "CI=1 vitest run",
@@ -154,6 +153,23 @@ fn a_plain_node_test_run_or_git_inspection_is_its_own_kind() {
     let git = Value::Object(response(ROUTES[5].0, ROUTES[5].1));
     assert!(plain_call(&git, &call("git log -1")));
     assert!(!plain_call(&git, &call("node --test")));
+}
+
+#[test]
+fn any_other_plain_program_is_planned_as_pytest() {
+    assert_eq!(
+        plain_program("pytest -q"),
+        Some((words(&["pytest", "-q"]), None, Kind::Pytest))
+    );
+    assert_eq!(
+        plain_program("timeout 30 pytest tests"),
+        Some((words(&["pytest", "tests"]), Some(30), Kind::Pytest))
+    );
+    assert_eq!(Kind::of(ROUTES[6]), Kind::Pytest);
+    let pytest = Value::Object(response(ROUTES[6].0, ROUTES[6].1));
+    assert!(plain_call(&pytest, &call("pytest -q")));
+    assert!(!plain_call(&pytest, &call("python3 -c 0")));
+    assert!(!plain_call(&pytest, &call("PYTEST_ADDOPTS=-x pytest")));
 }
 
 #[test]

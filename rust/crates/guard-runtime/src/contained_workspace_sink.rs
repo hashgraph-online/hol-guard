@@ -35,6 +35,8 @@ mod paths;
 mod plan_check;
 #[path = "contained_workspace_sink_process.rs"]
 mod process;
+#[path = "contained_pytest_readonly_sink.rs"]
+mod pytest;
 #[path = "contained_readonly_sink.rs"]
 mod readonly;
 #[path = "contained_workspace_sink_launch.rs"]
