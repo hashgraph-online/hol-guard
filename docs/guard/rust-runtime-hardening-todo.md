@@ -105,6 +105,11 @@ these items ask for.
 - [ ] NRH-T084 use more restrictive effect/action on mismatch;
 - [ ] NRH-T085 expand secret/exfiltration corpus across credentials, shells, encodings, archives, cloud/GitHub/webhook/database/language clients;
 - [ ] NRH-T086 prove no secret sample reaches responses/logs/diagnostics/metrics/artifacts/crashes;
+  the detector's own copies are narrowed: `SecretFinding` scrubs its candidate on drop, the
+  fingerprint hashes the field in place instead of joining it into a temporary, and the scan keys
+  deduplication on a digest, so a run no longer leaves four plaintext copies of every detected
+  secret in freed allocations until the process exits. The scanned text buffer itself is still
+  unscrubbed, and a crash dump taken mid-scan would still carry it;
 - [ ] NRH-T087 add bounded native prompt-injection DTO/rules with documentation/fixture/quotation context parity;
 - [ ] NRH-T088 scan untrusted repository/web/issue/PR/log/MCP/file output and expose tightening-only signals until parity;
 - [ ] NRH-T089 add POSIX/PowerShell/CMD/language/Git/package/cloud mass-deletion effects and bounded scope estimation;

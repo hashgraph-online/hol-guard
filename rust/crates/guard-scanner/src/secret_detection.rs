@@ -22,8 +22,22 @@ use std::collections::{BTreeMap, HashSet};
 use std::error::Error;
 use std::fmt;
 use std::sync::LazyLock;
+use zeroize::Zeroize;
 
 type HmacSha256 = Hmac<Sha256>;
+
+/// How the scan tells two candidates apart without keeping either one.
+///
+/// Deduplication only ever asks whether it has seen these exact bytes before,
+/// and a digest answers that. Keying on the candidate itself would put a second
+/// copy of every secret in a set that lives as long as the scan does.
+pub(crate) type CandidateDigest = [u8; 32];
+
+pub(crate) fn candidate_digest(candidate: &str) -> CandidateDigest {
+    let mut digest = [0u8; 32];
+    digest.copy_from_slice(&Sha256::digest(candidate.as_bytes()));
+    digest
+}
 
 const DETECTOR_VERSION: &str = "guard-secrets-v1";
 const GENERIC_CANDIDATE_POLICY_VERSION: &str = "credential-expression-filter-v2";
@@ -562,7 +576,11 @@ const GENERIC_RULE_META: RuleMeta = RuleMeta {
 
 /// One detected secret. `candidate` is excluded from `Debug` and `PartialEq`,
 /// mirroring `field(repr=False, compare=False)` on the Python dataclass so the
-/// raw secret can never leak through formatting or equality.
+/// raw secret can never leak through formatting or equality, and it is
+/// overwritten when the finding is dropped so it does not sit in a freed
+/// allocation for the rest of the process. Nothing else in this module keeps a
+/// second copy of those bytes: the scan keys its deduplication on a digest, and
+/// the fingerprint hashes the field in place.
 #[derive(Clone)]
 pub struct SecretFinding {
     pub rule_id: &'static str,
@@ -630,16 +648,36 @@ impl fmt::Display for EmptyFingerprintKeyError {
 
 impl Error for EmptyFingerprintKeyError {}
 
+impl Drop for SecretFinding {
+    fn drop(&mut self) {
+        self.scrub_candidate();
+    }
+}
+
 impl SecretFinding {
     /// Tenant/caller-scoped HMAC of the finding, never exposing candidate bytes.
     pub fn fingerprint(&self, key: &[u8]) -> Result<String, EmptyFingerprintKeyError> {
         if key.is_empty() {
             return Err(EmptyFingerprintKeyError);
         }
-        let material = format!("{}\u{0}{}", self.rule_id, self.candidate);
+        // Fed in three pieces rather than joined into one string: the bytes
+        // the HMAC sees are the same, and the candidate is never copied into a
+        // temporary that outlives this call unscrubbed.
         let mut mac = HmacSha256::new_from_slice(key).expect("HMAC accepts keys of any length");
-        mac.update(material.as_bytes());
+        mac.update(self.rule_id.as_bytes());
+        mac.update(&[0]);
+        mac.update(self.candidate.as_bytes());
         Ok(hex::encode(mac.finalize().into_bytes()))
+    }
+
+    /// Overwrite the raw secret in place.
+    ///
+    /// `Drop` runs this, so a finding that goes out of scope leaves nothing
+    /// behind in the allocation it frees. A caller that holds a finding past
+    /// the point where it still needs the raw bytes — to report the family and
+    /// the line, say — can run it early and keep the rest of the finding.
+    pub fn scrub_candidate(&mut self) {
+        self.candidate.zeroize();
     }
 
     /// Public, non-sensitive payload. Field order matches the Python dict
@@ -1403,7 +1441,7 @@ pub fn scan_secret_text(
     }
     let bounded_max = max_findings.clamp(1, 10_000);
     let mut findings: Vec<SecretFinding> = Vec::new();
-    let mut seen: HashSet<(&'static str, usize, String)> = HashSet::new();
+    let mut seen: HashSet<(&'static str, usize, CandidateDigest)> = HashSet::new();
 
     for rule in SECRET_RULES.iter() {
         for captures in rule.pattern.captures_iter(text) {
@@ -1428,7 +1466,11 @@ pub fn scan_secret_text(
                 Some(rule),
             );
             let Some(finding) = finding else { continue };
-            if !seen.insert((finding.rule_id, finding.line, finding.candidate.clone())) {
+            if !seen.insert((
+                finding.rule_id,
+                finding.line,
+                candidate_digest(&finding.candidate),
+            )) {
                 continue;
             }
             findings.push(finding);
@@ -1444,9 +1486,9 @@ pub fn scan_secret_text(
 
     // Generic assignments are intentionally evaluated after provider formats so
     // the structured detector wins when both identify the same token.
-    let provider_candidates: HashSet<String> = findings
+    let provider_candidates: HashSet<CandidateDigest> = findings
         .iter()
-        .map(|finding| finding.candidate.clone())
+        .map(|finding| candidate_digest(&finding.candidate))
         .collect();
     for captures in ASSIGNMENT.captures_iter(text) {
         let candidate = captures
@@ -1455,7 +1497,7 @@ pub fn scan_secret_text(
             .or_else(|| captures.name("secret_uq"))
             .map(|m| m.as_str());
         let Some(candidate) = candidate else { continue };
-        if provider_candidates.contains(candidate) {
+        if provider_candidates.contains(&candidate_digest(candidate)) {
             continue;
         }
         let name = captures.name("name").map(|m| m.as_str()).unwrap_or("");
@@ -1485,7 +1527,11 @@ pub fn scan_secret_text(
             None,
         );
         let Some(finding) = finding else { continue };
-        if !seen.insert((finding.rule_id, finding.line, finding.candidate.clone())) {
+        if !seen.insert((
+            finding.rule_id,
+            finding.line,
+            candidate_digest(&finding.candidate),
+        )) {
             continue;
         }
         findings.push(finding);
@@ -1871,5 +1917,63 @@ mod tests {
         assert_eq!(summary.findings.len(), 2);
         assert_eq!(summary.findings[0].line, 1);
         assert_eq!(summary.findings[1].line, 2);
+    }
+
+    #[test]
+    fn scrubbing_a_finding_keeps_everything_but_the_secret() {
+        let summary = scan_secret_text(
+            &fixture_text(),
+            "config/prod.env",
+            "working_tree",
+            None,
+            200,
+        );
+        let mut finding = summary.findings.into_iter().next().expect("a finding");
+        let rule_id = finding.rule_id;
+        let line = finding.line;
+        assert!(!finding.candidate.is_empty());
+
+        finding.scrub_candidate();
+
+        assert!(finding.candidate.is_empty());
+        assert_eq!(finding.rule_id, rule_id);
+        assert_eq!(finding.line, line);
+        assert_eq!(finding.path, "config/prod.env");
+    }
+
+    #[test]
+    fn feeding_the_fingerprint_in_pieces_matches_the_joined_form() {
+        use hmac::Mac;
+
+        let summary = scan_secret_text(
+            &fixture_text(),
+            "config/prod.env",
+            "working_tree",
+            None,
+            200,
+        );
+        let finding = summary.findings.first().expect("a finding");
+        let key = b"fingerprint-key";
+
+        // What the finding used to build and hash in one allocation.
+        let mut joined = HmacSha256::new_from_slice(key).expect("HMAC accepts this key");
+        joined.update(format!("{}\u{0}{}", finding.rule_id, finding.candidate).as_bytes());
+
+        assert_eq!(
+            finding.fingerprint(key).expect("the key is not empty"),
+            hex::encode(joined.finalize().into_bytes())
+        );
+    }
+
+    #[test]
+    fn the_dedup_digest_tells_candidates_apart() {
+        assert_eq!(
+            candidate_digest("ghp_AbCdEfGhIjKlMnOpQrStUvWxYz012345"),
+            candidate_digest("ghp_AbCdEfGhIjKlMnOpQrStUvWxYz012345")
+        );
+        assert_ne!(
+            candidate_digest("ghp_AbCdEfGhIjKlMnOpQrStUvWxYz012345"),
+            candidate_digest("ghp_AbCdEfGhIjKlMnOpQrStUvWxYz012346")
+        );
     }
 }

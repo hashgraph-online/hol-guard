@@ -681,13 +681,13 @@ pub fn scan_repository_secrets(
     // A provider rule can also be recognized by the contextual assignment
     // rule. Keep occurrences stable while preferring the stronger provider
     // format (higher confidence_score wins the dedup key).
-    let mut deduped: HashMap<(String, usize, String, Option<String>), SecretFinding> =
+    let mut deduped: HashMap<(String, usize, CandidateDigest, Option<String>), SecretFinding> =
         HashMap::new();
     for finding in findings {
         let key = (
             finding.path.clone(),
             finding.line,
-            finding.candidate.clone(),
+            candidate_digest(&finding.candidate),
             finding.commit.clone(),
         );
         match deduped.entry(key) {
