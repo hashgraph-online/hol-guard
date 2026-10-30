@@ -1,6 +1,6 @@
 use super::*;
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn denial(route: Route) -> Value {
     json!({
         "decision": "deny",
@@ -10,7 +10,7 @@ fn denial(route: Route) -> Value {
     })
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn call(command: &str) -> Map<String, Value> {
     let Value::Object(call) = json!({ "command": command }) else {
         unreachable!()
@@ -18,42 +18,14 @@ fn call(command: &str) -> Map<String, Value> {
     call
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
-fn seatbelt_runs_every_read_only_route() {
-    assert!(ROUTES.into_iter().all(host_runs));
-}
-
-#[cfg(target_os = "linux")]
-#[test]
-fn bubblewrap_runs_the_python_and_plain_node_routes() {
-    let runs: Vec<&str> = ROUTES
-        .into_iter()
-        .filter(|route| host_runs(*route))
-        .map(|(_, profile)| profile)
-        .collect();
-    assert_eq!(
-        runs,
-        [
-            PYTHON_EVAL_PROFILE,
-            NODE_EVAL_PROFILE,
-            NODE_EVAL_PROFILE,
-            NODE_TEST_PROFILE,
-            GIT_PROFILE,
-            PYTEST_PROFILE,
-            NODE_TOOL_PROFILE,
-        ]
-    );
-}
-
-#[cfg(target_os = "linux")]
-#[test]
-fn a_vitest_run_keeps_guards_own_sink_on_linux() {
+fn every_read_only_route_takes_the_native_sink_on_a_sandboxed_host() {
     assert!(readonly_shape(&denial(ROUTES[0]), &call("python3 -c 0")));
     assert!(readonly_shape(&denial(ROUTES[5]), &call("git log -1")));
     assert!(readonly_shape(&denial(ROUTES[1]), &call("node -e 0")));
     assert!(readonly_shape(&denial(ROUTES[4]), &call("node --test")));
-    assert!(!readonly_shape(&denial(VITEST_ROUTE), &call("vitest run")));
+    assert!(readonly_shape(&denial(VITEST_ROUTE), &call("vitest run")));
 }
 
 fn plan(backend: &str, profile: &str) -> ReadonlyPlan {

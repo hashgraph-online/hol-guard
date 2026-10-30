@@ -12,9 +12,8 @@
 //! steps for the plain shape, a call with no wrapper or directory change in
 //! front of the program, and for one with settings in front: the call as
 //! issued draws the receipt and the plain run behind the settings runs with
-//! the inert ones carried. The edge routes nothing else here. On Linux it
-//! runs the Python runs and the Node evaluations, tests and tools
-//! (`backend`).
+//! the inert ones carried. The edge routes nothing else here. macOS and
+//! Linux each start the plan under their own sandbox (`backend`).
 //!
 //! Rust owns every verdict: the resident's receipts, the operations' plan.
 
@@ -26,7 +25,7 @@ use super::*;
 #[path = "contained_readonly_backend.rs"]
 mod backend;
 #[path = "contained_readonly_node.rs"]
-mod node_runtime;
+pub(super) mod node_runtime;
 
 /// The read-only routes: the reason the resident gives and the profile it
 /// requires.
@@ -81,6 +80,7 @@ const PYTEST_PROFILE: &str = "pytest-readonly-v2";
 const NODE_TOOL_PROFILE: &str = "node-tool-readonly-v1";
 const NODE_BUILD_PROFILE: &str = "node-build-output-v1";
 const PACKAGE_PROFILE: &str = "package-test-readonly-v1";
+#[cfg(test)]
 const SEATBELT: &str = "macos-seatbelt";
 const INVALID_PLAN: &str = "Invalid native restricted launch plan.";
 
@@ -118,11 +118,7 @@ pub(crate) fn readonly_route(response: &Map<String, Value>) -> Option<Route> {
 /// builds, with no `cwd` argument for Guard's own sink to turn into a
 /// directory change.
 pub(crate) fn readonly_shape(response: &Value, original: &Map<String, Value>) -> bool {
-    response
-        .as_object()
-        .and_then(readonly_route)
-        .is_some_and(backend::host_runs)
-        && plain_call(response, original)
+    HOST_BACKEND.is_some() && plain_call(response, original)
 }
 
 fn plain_call(response: &Value, original: &Map<String, Value>) -> bool {
@@ -182,7 +178,7 @@ pub(super) fn run(
     route: Route,
     signals: &process::Signals,
 ) -> Outcome<i32> {
-    if !backend::host_runs(route) {
+    if HOST_BACKEND.is_none() {
         return Err(Failure::unauthorized());
     }
     let command = payload

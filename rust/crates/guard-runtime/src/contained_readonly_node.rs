@@ -8,7 +8,8 @@
 //! memory limits allow. The runtime's help is read only once the resident
 //! allows it from every directory the run touches, and nothing in the
 //! repository or the caller's `NODE_OPTIONS` is read as a capability.
-//! This replays that step.
+//! A Vitest run or a build starts a transform image under Vitest's route,
+//! so that route admits the help too. This replays that step.
 
 use super::*;
 
@@ -17,7 +18,7 @@ const PROBE_SECONDS: u64 = 10;
 
 /// Settle `environment` for `plan`'s Node run, which `payload` asked for.
 /// The help probe's private directory goes when the probe ends.
-pub(super) fn settle(
+pub(in super::super) fn settle(
     payload: &Map<String, Value>,
     workspace: &Path,
     authority: &Authority<'_>,
@@ -41,7 +42,7 @@ pub(super) fn settle(
         let response = authority
             .authorize(&asked)
             .ok_or_else(Failure::unauthorized)?;
-        if !allowed(&response) {
+        if !allowed(&response, transform(plan)) {
             return Err(Failure::unauthorized());
         }
     }
@@ -89,12 +90,21 @@ pub(super) fn settle(
     Ok(())
 }
 
-/// Whether the resident allows the help outright.
-fn allowed(response: &Map<String, Value>) -> bool {
+/// Whether `plan` starts a transform image, as a Vitest run and a build do.
+fn transform(plan: &ReadonlyPlan) -> bool {
+    matches!(
+        plan.profile_version.as_str(),
+        VITEST_PROFILE | NODE_BUILD_PROFILE
+    )
+}
+
+/// Whether the resident allows the help outright or, for a run that starts
+/// a transform image, reads it as a capability of a read-only Vitest run.
+fn allowed(response: &Map<String, Value>, transform: bool) -> bool {
     let text = |name: &str| response.get(name).and_then(Value::as_str);
     response.get("observe_mode") != Some(&Value::Bool(true))
-        && text("decision") == Some("allow")
-        && text("policy_action") == Some("allow")
+        && ((text("decision") == Some("allow") && text("policy_action") == Some("allow"))
+            || (transform && readonly_route(response) == Some(VITEST_ROUTE)))
 }
 
 /// Whether Node's help lists the option on a line of its own options: an
