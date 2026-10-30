@@ -49,6 +49,12 @@ fn a_value_that_can_name_code_a_file_or_a_search_path_is_not_inert() {
         ("PYTEST_ADDOPTS", "-q tests/test_one.py"),
         ("PYTEST_ADDOPTS", "--tb"),
         ("PYTEST_ADDOPTS", "-k not slow"),
+        // An option that takes a value is inert only when it is given one,
+        // so the walk never steps over a word it has not read.
+        ("PYTEST_ADDOPTS", "--maxfail --"),
+        ("PYTEST_ADDOPTS", "--maxfail -pevil"),
+        ("PYTEST_ADDOPTS", "--maxfail="),
+        ("PYTEST_ADDOPTS", "--tb= -q"),
         ("PYTEST_ADDOPTS", ""),
         ("RUSTFLAGS", "-Clinker=./ld"),
         ("RUSTFLAGS", "-C linker=./ld"),

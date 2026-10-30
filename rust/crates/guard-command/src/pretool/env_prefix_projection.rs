@@ -441,14 +441,6 @@ fn inert_assignment(name: &str, value: &str) -> bool {
     {
         return true;
     }
-    // A build or test setting whose name says "options" or "flags" while the
-    // value in front of the command only chooses how the run reports or how
-    // often it repeats. The name alone cannot tell `GOFLAGS=-count=1` from
-    // `GOFLAGS=-toolexec=./x`, so that module reads the value against a
-    // closed list and everything else still fails closed below.
-    if super::inert_tool_settings::inert_tool_setting(name, value) {
-        return true;
-    }
     // Any program may read any other name, so other settings are reviewed
     // through the projection instead of passing as inert.
     false
@@ -460,8 +452,19 @@ fn inert_assignment(name: &str, value: &str) -> bool {
 /// endpoint — out of this branch, and a plain scalar cannot spell a path or
 /// an option for the program to act on. A reviewed projection still names
 /// such a setting, so this widening belongs to the proof side alone.
+///
+/// A build or test setting whose name says "options" or "flags" while the
+/// value only chooses how the run reports or how often it repeats belongs
+/// here rather than with the inert settings. The name alone cannot tell
+/// `GOFLAGS=-count=1` from `GOFLAGS=-toolexec=./x`, so that module reads the
+/// value against a closed list; but `-count=1` is still a value `go` reads,
+/// and a contained run of the projected command would repeat a cached test
+/// the caller asked to rerun. Keeping it on the proof side leaves the
+/// value screen in `env_prefix_values` free to say so.
 fn ordinary_project_setting(name: &str, value: &str) -> bool {
-    plain_scalar(value) && crate::command_compatibility::environment::ordinary_setting_name(name)
+    super::inert_tool_settings::inert_tool_setting(name, value)
+        || plain_scalar(value)
+            && crate::command_compatibility::environment::ordinary_setting_name(name)
 }
 
 fn plain_scalar(value: &str) -> bool {

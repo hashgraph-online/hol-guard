@@ -108,7 +108,8 @@ fn lint_name(lint: &str) -> bool {
 /// The options `pytest` itself is already trusted with on a command line,
 /// read the same way here. A value this walk does not reach the end of —
 /// a plugin (`-p`), a configuration file (`-c`), a bare test path, or the
-/// `--` that ends option parsing — is not inert.
+/// `--` that ends option parsing — is not inert, and an option that takes a
+/// value is inert only when it is given one.
 fn pytest_addopts_inert(value: &str) -> bool {
     let words: Vec<&str> = words(value).collect();
     let mut index = 0;
@@ -119,21 +120,28 @@ fn pytest_addopts_inert(value: &str) -> bool {
             continue;
         }
         if PYTEST_SAFE_FLAGS_WITH_VALUES.contains(&word) {
-            // The option's own value follows as the next word, and a value
-            // that is missing leaves the walk short of the end.
-            index += 2;
+            // The option's own value follows as the next word. A missing one
+            // leaves the walk short of the end, and a word spelled as an
+            // option or as the `--` that ends option parsing is not a value
+            // this walk may step over unread.
+            match words.get(index + 1) {
+                Some(following) if !following.starts_with('-') => index += 2,
+                _ => return false,
+            }
             continue;
         }
         if PYTEST_SAFE_FLAGS_WITH_VALUES.iter().any(|flag| {
             word.strip_prefix(flag)
-                .is_some_and(|rest| rest.starts_with('='))
+                .and_then(|rest| rest.strip_prefix('='))
+                .is_some_and(|chosen| !chosen.is_empty())
         }) {
             index += 1;
             continue;
         }
         return false;
     }
-    index == words.len() && !words.is_empty()
+    // Every word was read; the walk only steps over a value it has seen.
+    !words.is_empty()
 }
 
 #[cfg(test)]
