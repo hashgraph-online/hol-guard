@@ -554,3 +554,33 @@ fn external_publisher_display_name_changes_trust_digest() {
     source["extension"]["publisher"]["id"] = serde_json::json!("hol");
     assert!(compile_addition(&[&serde_json::to_vec(&source).unwrap()], TRUST).is_err());
 }
+
+#[test]
+fn a_tee_stage_keeps_its_pipeline_evidence_when_the_rewrite_does_not_settle() {
+    // `cmd | tee PATH` is evaluated as `cmd > PATH`, but a target the
+    // redirect projection cannot bound leaves the redirect in the text, and
+    // the shell parser models no segments for it. The pipeline's own
+    // segments carry the extension evidence, so the unsettled rewrite must
+    // not replace them.
+    let output = compiled();
+    let result = crate::pretool::evaluate_pre_tool_envelope_with_extensions(
+        "claude-code",
+        "PreToolUse",
+        &serde_json::json!({
+            "tool_name": "Bash",
+            "tool_input": {"command": "example-cli destroy | tee destroy.log"},
+        }),
+        Some(&controls(&output, true, false)),
+        None,
+    );
+    assert_eq!(result.minimum_action, "review");
+    let segments: Vec<_> = result
+        .command_extensions
+        .as_ref()
+        .into_iter()
+        .flat_map(|batch| &batch.observations)
+        .filter(|observation| observation.rule_id == "command.example-cli.destroy")
+        .flat_map(|observation| observation.effective_segment_indexes.iter().copied())
+        .collect();
+    assert_eq!(segments, vec![0]);
+}

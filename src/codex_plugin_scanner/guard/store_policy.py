@@ -1585,15 +1585,17 @@ class StorePolicyMixin:
             )
             return APPROVAL_REUSE_DIAGNOSTIC_UNAVAILABLE_REASON, None, None
 
-    def _provision_resident_verifier(self) -> None:
+    def _provision_resident_verifier(self, key: bytes | None = None) -> None:
         """Establish the verifier key the resident requires before it serves.
 
         Provisioning is O_EXCL and never replaces, so it is idempotent. A
         verifier that is malformed, foreign-owned, or mismatched is tampering
-        evidence and is never silently degraded past.
+        evidence and is never silently degraded past. A caller that already
+        read the keyring passes its key instead of reading it again.
         """
 
-        key, _key_id = self._policy_integrity_secret_material(create=False)
+        if key is None:
+            key, _key_id = self._policy_integrity_secret_material(create=False)
         if key is None:
             return
         try:

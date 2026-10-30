@@ -172,6 +172,13 @@ fn split_execution_segments_inner(
                     index += 1;
                     continue;
                 }
+                // `&>` is one token: the redirect that sends both streams to
+                // a file. Reading its `&` as a job separator left the same
+                // work spelled `A &> f`, `A > f 2>&1` and `A & > f` deciding
+                // three different ways.
+                if chars.get(index + 1) == Some(&'>') {
+                    return Err("command_redirect_not_yet_supported");
+                }
                 if chars.get(index + 1) != Some(&'&') {
                     if !allow_background {
                         return Err("background_job_not_yet_supported");
