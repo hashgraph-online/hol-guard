@@ -413,11 +413,27 @@ pub(crate) fn manager_local_bin_arguments<'a>(
     manager: &str,
     arguments: &'a [String],
 ) -> Option<&'a [String]> {
-    let rest = match (manager, arguments) {
+    let mut rest = match (manager, arguments) {
         ("npm", [subcommand, rest @ ..]) if subcommand == "exec" || subcommand == "x" => rest,
         ("pnpm" | "yarn", [subcommand, rest @ ..]) if subcommand == "exec" => rest,
         _ => return None,
     };
+    // `npx` is npm's own name for `npm exec`, and the two take the same
+    // options before the tool: they answer the install prompt, choose between
+    // the cache and the registry, or set how much the runner prints. None of
+    // them names a package, so the tool behind them is still the workspace's
+    // own one and the run is the same local-bin run either spelling makes.
+    // `pnpm exec` and `yarn exec` keep reading only the separator, because
+    // their own options (`--recursive`, `--filter`, `--parallel`) choose
+    // which packages the run reaches.
+    if manager == "npm" {
+        while let [option, tail @ ..] = rest {
+            if !npm_exec_inert_option(option) {
+                break;
+            }
+            rest = tail;
+        }
+    }
     let rest = match rest {
         [separator, rest @ ..] if separator == "--" => rest,
         rest => rest,
@@ -426,6 +442,16 @@ pub(crate) fn manager_local_bin_arguments<'a>(
     // is not a local-bin run.
     rest.first().filter(|tool| !tool.starts_with('-'))?;
     Some(rest)
+}
+
+/// Whether an `npm exec` option names no package. The answer is read from the
+/// table `npx` itself is parsed with, so the two spellings of one run cannot
+/// drift apart. The separator is left out of the answer: it ends the options
+/// rather than being one, and the peel above reads it on its own.
+fn npm_exec_inert_option(option: &str) -> bool {
+    crate::package_intent_parser::runner_options::local_execution_flags("npx")
+        .iter()
+        .any(|flag| *flag != "--" && *flag == option)
 }
 
 pub(crate) fn manager_script_task<'a>(manager: &str, arguments: &'a [String]) -> Option<&'a str> {
