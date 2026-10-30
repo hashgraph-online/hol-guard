@@ -75,7 +75,10 @@ fn an_installations_own_launcher_entry_is_proven() {
     let root = root("sdk");
     installed(&root, "sdk/bin", "kubectl", "sdk/platform/kubectl");
     assert!(proven(&root, "~/sdk/bin/kubectl"));
-    assert!(proven(&root, root.join("sdk/bin/kubectl").to_str().unwrap()));
+    assert!(proven(
+        &root,
+        root.join("sdk/bin/kubectl").to_str().unwrap()
+    ));
 }
 
 /// The agent writes the checkout it is working in, so a `bin` there is a
@@ -84,7 +87,12 @@ fn an_installations_own_launcher_entry_is_proven() {
 #[test]
 fn a_launcher_directory_inside_the_checkout_is_not_an_installation() {
     let root = root("worktree");
-    installed(&root, "project/vendor/bin", "kubectl", "project/vendor/kubectl");
+    installed(
+        &root,
+        "project/vendor/bin",
+        "kubectl",
+        "project/vendor/kubectl",
+    );
     assert!(!proven(&root, "vendor/bin/kubectl"));
 }
 

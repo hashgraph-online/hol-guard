@@ -75,8 +75,12 @@ pub(super) fn installed_program(executable: &str, context: super::PathContext<'_
     if !executable_file(&resolved) || resolved.file_name() != Some(program) {
         return false;
     }
-    if !super::read_paths::resolved_location_allowed(&resolved, context.home_dir, context.cwd, false)
-    {
+    if !super::read_paths::resolved_location_allowed(
+        &resolved,
+        context.home_dir,
+        context.cwd,
+        false,
+    ) {
         return false;
     }
     let Ok(cwd) = std::fs::canonicalize(cwd) else {
