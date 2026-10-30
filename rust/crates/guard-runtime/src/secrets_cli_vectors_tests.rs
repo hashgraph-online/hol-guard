@@ -40,31 +40,29 @@ fn decode(data: &Value) -> Vec<u8> {
 }
 
 #[test]
-fn detector_version_and_rule_catalog_match_python() {
+fn the_rules_command_publishes_the_catalog_python_published() {
     let vectors = vectors();
+    let response = respond(&SecretsRequest::Rules(RulesRequest {}));
+    assert_eq!(response["ok"], Value::Bool(true));
+    // The Python CLI printed a hand-maintained literal. The same bytes now
+    // come from the rule table the scan path uses, so what a user reads is
+    // what runs: a rule that is renamed, dropped or added shows up here.
+    assert_eq!(response["result"], vectors["rules"]);
     assert_eq!(vectors["detector_version"], detector_version());
-    assert_eq!(vectors["rules"]["detector_version"], detector_version());
-    let recorded = vectors["rules"]["rules"].as_array().unwrap();
+    let listed = response["result"]["rules"].as_array().unwrap();
     let catalog = secret_rule_catalog();
-    assert_eq!(recorded.len(), catalog.len());
-    for (expected, rule) in recorded.iter().zip(catalog) {
-        assert_eq!(expected["rule_id"], rule.rule_id);
-        assert_eq!(expected["family"], rule.family, "{}", rule.rule_id);
-        assert_eq!(expected["severity"], rule.severity, "{}", rule.rule_id);
-        assert_eq!(expected["validation"], rule.validation, "{}", rule.rule_id);
+    assert_eq!(listed.len(), catalog.len());
+    for (listed, rule) in listed.iter().zip(catalog) {
+        assert_eq!(listed["rule_id"], rule.rule_id, "{}", rule.rule_id);
+        assert_eq!(listed["family"], rule.family, "{}", rule.rule_id);
+        assert_eq!(listed["severity"], rule.severity, "{}", rule.rule_id);
+        assert_eq!(listed["validation"], rule.validation, "{}", rule.rule_id);
         assert_eq!(
-            expected["description"], rule.description,
+            listed["strong_format"], rule.strong_format,
             "{}",
             rule.rule_id
         );
-        // The public catalog omits `strong_format` when it is false.
-        let strong = expected.get("strong_format").and_then(Value::as_bool);
-        assert_eq!(
-            strong.unwrap_or(false),
-            rule.strong_format,
-            "{}",
-            rule.rule_id
-        );
+        assert_eq!(listed["description"], rule.description, "{}", rule.rule_id);
     }
 }
 
@@ -267,7 +265,7 @@ mod cli {
             &b"{}"[..],
             br#"{"command":"scan","target":".","scope":"everything"}"#,
             br#"{"command":"scan","target":".","scope":"working","extra":1}"#,
-            br#"{"command":"rules"}"#,
+            br#"{"command":"rules","target":"."}"#,
             b"not json",
         ] {
             assert_eq!(

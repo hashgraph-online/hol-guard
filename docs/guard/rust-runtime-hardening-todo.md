@@ -103,7 +103,7 @@ these items ask for.
 - [ ] NRH-T082 bind effects to request/parser/rule/policy identities;
 - [ ] NRH-T083 keep durable correlation in Python and add read-then-exfil plus Guard-disable-then-retry sequences;
 - [ ] NRH-T084 use more restrictive effect/action on mismatch;
-- [ ] NRH-T085 expand secret/exfiltration corpus across credentials, shells, encodings, archives, cloud/GitHub/webhook/database/language clients;
+- [ ] NRH-T085 expand secret/exfiltration corpus across credentials, shells, encodings, archives, cloud/GitHub/webhook/database/language clients; the published catalog no longer stands in the way of that: `hol-guard secrets rules` printed a hand-maintained literal checked into `guard/secrets/public_rule_catalog.py`, so a rule added, renamed or dropped in the detector left the list a user reads describing a detector that does not exist, and every addition had to be transcribed into a second place. The `rules` command is native now and answers from `secret_rule_catalog()` itself, the Python module is gone from `src/`, and the shim renders the one reply it receives. The corpus itself is still the Python-era seventeen rules plus the contextual assignment;
 - [ ] NRH-T086 prove no secret sample reaches responses/logs/diagnostics/metrics/artifacts/crashes;
 - [ ] NRH-T087 add bounded native prompt-injection DTO/rules with documentation/fixture/quotation context parity;
 - [ ] NRH-T088 scan untrusted repository/web/issue/PR/log/MCP/file output and expose tightening-only signals until parity;
