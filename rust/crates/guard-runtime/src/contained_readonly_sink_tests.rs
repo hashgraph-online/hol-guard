@@ -34,6 +34,7 @@ fn plan(profile: &str) -> ReadonlyPlan {
         command: words(&["node", "-e", "0"]),
         allowed_executables: words(&["/usr/bin/node"]),
         read_only_roots: Vec::new(),
+        output_roots: Vec::new(),
         denied_capabilities: Vec::new(),
         user_site_root: None,
     }
@@ -173,7 +174,7 @@ fn any_other_plain_program_is_planned_as_pytest() {
 }
 
 #[test]
-fn a_plain_lint_or_typecheck_run_is_a_node_tool() {
+fn a_plain_lint_typecheck_or_build_run_is_a_node_tool() {
     assert_eq!(
         plain_program("npx eslint ."),
         Some((words(&["npx", "eslint", "."]), None, Kind::NodeTool))
@@ -182,13 +183,18 @@ fn a_plain_lint_or_typecheck_run_is_a_node_tool() {
     let tool = Value::Object(response(ROUTES[7].0, ROUTES[7].1));
     assert!(plain_call(&tool, &call("npx eslint .")));
     assert!(!plain_call(&tool, &call("vitest run")));
-    // A build is granted its output directory, which this sink never
-    // writes: its route is not one of these.
-    let build = Value::Object(response(
-        "native_node_build_output_containment_required",
-        "node-build-output-v1",
-    ));
-    assert!(!plain_call(&build, &call("npx vite build")));
+    // A build is the same tool, planned with the one directory it writes.
+    assert_eq!(
+        ROUTES[8],
+        (
+            "native_node_build_output_containment_required",
+            NODE_BUILD_PROFILE
+        )
+    );
+    assert_eq!(Kind::of(ROUTES[8]), Kind::NodeTool);
+    let build = Value::Object(response(ROUTES[8].0, ROUTES[8].1));
+    assert!(plain_call(&build, &call("npx vite build")));
+    assert!(!plain_call(&build, &call("CI=1 npx vite build")));
 }
 
 #[test]

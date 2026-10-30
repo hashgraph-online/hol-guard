@@ -1,7 +1,7 @@
 //! The native sink for a read-only run: an evaluation (`python -c`, `node
-//! -e`, `bun -e`), a Vitest run, a `node --test` run, a local lint or
-//! typecheck tool, a Git inspection or a pytest run the resident sent to its
-//! own profile.
+//! -e`, `bun -e`), a Vitest run, a `node --test` run, a local lint,
+//! typecheck or build tool, a Git inspection or a pytest run the resident
+//! sent to its own profile. A build writes only the directory its plan names.
 //!
 //! Guard's own sink runs such a call in three steps: it reads the program
 //! the command stands behind, plans the run, and asks the live resident
@@ -22,7 +22,7 @@ use super::*;
 /// requires.
 pub(super) type Route = (&'static str, &'static str);
 
-const ROUTES: [Route; 8] = [
+const ROUTES: [Route; 9] = [
     (
         "native_python_eval_readonly_containment_required",
         PYTHON_EVAL_PROFILE,
@@ -49,6 +49,10 @@ const ROUTES: [Route; 8] = [
         "native_node_tool_readonly_containment_required",
         NODE_TOOL_PROFILE,
     ),
+    (
+        "native_node_build_output_containment_required",
+        NODE_BUILD_PROFILE,
+    ),
 ];
 pub(super) const VITEST_ROUTE: Route = (
     "native_vitest_readonly_containment_required",
@@ -61,6 +65,7 @@ const NODE_TEST_PROFILE: &str = "node-test-readonly-v1";
 const GIT_PROFILE: &str = "git-readonly-v1";
 const PYTEST_PROFILE: &str = "pytest-readonly-v2";
 const NODE_TOOL_PROFILE: &str = "node-tool-readonly-v1";
+const NODE_BUILD_PROFILE: &str = "node-build-output-v1";
 const SEATBELT: &str = "macos-seatbelt";
 const INVALID_PLAN: &str = "Invalid native restricted launch plan.";
 
@@ -82,7 +87,7 @@ impl Kind {
             NODE_TEST_PROFILE => Self::NodeTest,
             GIT_PROFILE => Self::Git,
             PYTEST_PROFILE => Self::Pytest,
-            NODE_TOOL_PROFILE => Self::NodeTool,
+            NODE_TOOL_PROFILE | NODE_BUILD_PROFILE => Self::NodeTool,
             _ => Self::Eval,
         }
     }
@@ -194,6 +199,8 @@ pub(super) struct ReadonlyPlan {
     pub(super) allowed_executables: Vec<String>,
     #[serde(default)]
     read_only_roots: Vec<String>,
+    #[serde(default)]
+    pub(super) output_roots: Vec<String>,
     #[allow(dead_code)]
     denied_capabilities: Vec<String>,
     /// The account's own Python packages, linked into a pytest run's
@@ -232,7 +239,7 @@ pub(super) fn run(
         Kind::NodeTest => ("prepare_node", Some(NODE_TEST_PROFILE)),
         Kind::Git => ("prepare_git", Some(GIT_PROFILE)),
         Kind::Pytest => ("prepare", Some(PYTEST_PROFILE)),
-        Kind::NodeTool => ("prepare_node_tool", Some(NODE_TOOL_PROFILE)),
+        Kind::NodeTool => ("prepare_node_tool", Some(route.1)),
     };
     let mut plan = prepare(operation, &argv, workspace, home)?;
     if profile.is_some_and(|profile| plan.profile_version != profile) {
@@ -258,6 +265,9 @@ pub(super) fn run(
             &with_command(payload, &plan.command, None),
             route,
         )?;
+    }
+    if plan.profile_version == NODE_BUILD_PROFILE {
+        return super::node_build::run(payload, workspace, authority, plan, timeout, signals);
     }
     let private = private_root()?;
     signals.clean_up(private.path.clone());
@@ -374,6 +384,7 @@ fn prepare(
         || plan.backend != SEATBELT
         || plan.command.is_empty()
         || !plan.allowed_executables.contains(&plan.executable)
+        || plan.output_roots.is_empty() == (plan.profile_version == NODE_BUILD_PROFILE)
     {
         return Err(Failure::new(SANDBOX_UNAVAILABLE, INVALID_PLAN));
     }
@@ -435,7 +446,7 @@ pub(super) fn launch(
             "cwd": plan.cwd,
             "allowed_executables": plan.allowed_executables,
             "read_only_roots": plan.read_only_roots,
-            "output_roots": [],
+            "output_roots": plan.output_roots,
             "command": plan.command,
             "backend_executable": plan.backend_executable,
             "private_root": path_text(&private.path)?,

@@ -78,36 +78,7 @@ pub(super) fn run(
     signals.clean_up(private.path.clone());
     let images = Images::create()?;
     signals.clean_up(images.path.clone());
-    let anchor = tsx_package_dir(&plan.command).unwrap_or_else(|| PathBuf::from(&plan.cwd));
-    let project = native(
-        "nearest_project_root",
-        json!({
-            "cwd": wire_path(&anchor),
-            "workspace": plan.workspace,
-            "value": "node_modules/esbuild/package.json",
-        }),
-    )?;
-    let Value::String(project) = project else {
-        return Err(unavailable("invalid_reply"));
-    };
-    let image = esbuild_image::snapshot(Path::new(&project), &images.path)?;
-    if let Some(image) = &image {
-        let ping = [
-            path_text(&image.source)?,
-            format!("--service={}", image.version),
-            "--ping".to_owned(),
-        ];
-        for directory in &contexts {
-            let asked = readonly::with_command(payload, &ping, Some(directory));
-            let response = authority
-                .authorize(&asked)
-                .ok_or_else(Failure::unauthorized)?;
-            if !capability_allowed(&response, route) {
-                return Err(Failure::unauthorized());
-            }
-        }
-        plan.allowed_executables.push(path_text(&image.image)?);
-    }
+    let image = transform_image(payload, authority, &mut plan, &contexts, &images, true)?;
     let mut environment = readonly::environment(&plan, &private)?;
     if let Some(image) = &image {
         environment.insert("ESBUILD_BINARY_PATH".into(), path_text(&image.image)?);
@@ -128,6 +99,58 @@ pub(super) fn run(
         timeout,
         process::Notes::ReadOnly(READ_ONLY_WRITE_NOTE),
     )
+}
+
+/// The private copy of the project's esbuild `plan` may start, once the
+/// resident allows its service ping from every directory in `contexts`.
+///
+/// A Vitest run always needs it. A build that never loads esbuild (tsc, a
+/// plain JavaScript config) runs without one when it cannot be prepared.
+pub(super) fn transform_image(
+    payload: &Map<String, Value>,
+    authority: &Authority<'_>,
+    plan: &mut ReadonlyPlan,
+    contexts: &[String],
+    images: &Images,
+    required: bool,
+) -> Outcome<Option<esbuild_image::Image>> {
+    let anchor = tsx_package_dir(&plan.command).unwrap_or_else(|| PathBuf::from(&plan.cwd));
+    let snapshot = || {
+        let project = native(
+            "nearest_project_root",
+            json!({
+                "cwd": wire_path(&anchor),
+                "workspace": plan.workspace,
+                "value": "node_modules/esbuild/package.json",
+            }),
+        )?;
+        let Value::String(project) = project else {
+            return Err(unavailable("invalid_reply"));
+        };
+        esbuild_image::snapshot(Path::new(&project), &images.path)
+    };
+    let image = match snapshot() {
+        Err(_) if !required => None,
+        image => image?,
+    };
+    if let Some(image) = &image {
+        let ping = [
+            path_text(&image.source)?,
+            format!("--service={}", image.version),
+            "--ping".to_owned(),
+        ];
+        for directory in contexts {
+            let asked = readonly::with_command(payload, &ping, Some(directory));
+            let response = authority
+                .authorize(&asked)
+                .ok_or_else(Failure::unauthorized)?;
+            if !capability_allowed(&response, readonly::VITEST_ROUTE) {
+                return Err(Failure::unauthorized());
+            }
+        }
+        plan.allowed_executables.push(path_text(&image.image)?);
+    }
+    Ok(image)
 }
 
 /// Whether the resident lets the run start the transform image: allowed
@@ -181,12 +204,12 @@ fn write_preload(private: &Path) -> Outcome<PathBuf> {
 
 /// The directory that holds the run's transform image, apart from its
 /// writable scratch, removed when dropped.
-struct Images {
-    path: PathBuf,
+pub(super) struct Images {
+    pub(super) path: PathBuf,
 }
 
 impl Images {
-    fn create() -> Outcome<Self> {
+    pub(super) fn create() -> Outcome<Self> {
         let unavailable = || {
             Failure::new(
                 SANDBOX_UNAVAILABLE,

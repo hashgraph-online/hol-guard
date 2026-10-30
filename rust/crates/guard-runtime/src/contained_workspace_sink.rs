@@ -26,6 +26,8 @@ mod denial;
 mod esbuild_image;
 #[path = "contained_workspace_sink_grant.rs"]
 mod grant;
+#[path = "contained_node_build_sink.rs"]
+mod node_build;
 #[cfg(any(target_os = "linux", all(unix, test)))]
 #[path = "contained_workspace_sink_overlay.rs"]
 mod overlay;
