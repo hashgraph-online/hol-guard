@@ -180,11 +180,14 @@ def test_only_a_command_that_never_named_pytest_loses_the_planner_error(
     """The pytest planner is the last shape tried, and it uses one reason code.
 
     A script that never named pytest must not be told to fix a pytest
-    invocation. A real pytest command keeps the planner's own refusal, and
-    which commands those are is the native argv reader's answer: `python3 -Im
-    pytest -q` is one, though the Python copy this replaced read the `-Im`
-    cluster as something other than a module option and reported the
-    authorization failure in its place.
+    invocation. Which commands name pytest is the native argv reader's answer
+    and never this sink's, so the stand-in below answers from a fixed table
+    rather than reading the grammar a second time. That grammar is pinned in
+    `pytest_argv_tests.rs`, the `-Im` cluster included, which the Python copy
+    this replaced read as something other than a module option. What turns on
+    the answer here is the routing alone: a command native authority reads as
+    pytest keeps the planner's own refusal, and every other one reports the
+    authorization that failed.
     """
     scripts = tmp_path / "scripts"
     scripts.mkdir()
@@ -197,19 +200,15 @@ def test_only_a_command_that_never_named_pytest_loses_the_planner_error(
     from codex_plugin_scanner.guard import native_restricted_pytest
     from codex_plugin_scanner.guard.runtime import contained_authority
 
+    # The commands under test that native authority reads as pytest. A table,
+    # not a grammar: a fake that re-read the argv would answer for itself and
+    # leave the reader it stands in for untested.
+    names_pytest = (("pytest",), ("python3", "-m", "pytest"), ("python3", "-Im", "pytest"))
+
     def native(operation: str, fields: dict[str, object], _expected: object) -> object:
-        # Which commands name pytest is the native argv reader's answer, and the
-        # wording of this refusal is the only thing that turns on it. The whole
-        # grammar lives in `pytest_argv.rs`; the commands named here are a bare
-        # `pytest` or an interpreter whose module option carries `pytest`,
-        # whether that option stands alone or inside a cluster.
         if operation == "pytest_command":
             words: list[str] = fields["command"]  # type: ignore[assignment]
-            if words[:1] == ["pytest"]:
-                return True
-            return words[:1] in (["python"], ["python3"]) and any(
-                word.startswith("-") and word.endswith("m") for word in words[1:2]
-            )
+            return any(tuple(words[: len(named)]) == named for named in names_pytest)
         return {
             "inline_eval": False,
             "node_test": False,
