@@ -310,7 +310,12 @@ fn routed(response: &PyVal, payload: &PyVal, mapped: bool, target: &Target<'_>) 
     ]);
     let mut serialized = String::new();
     dumps(&snapshot, true, mapped, &mut serialized);
-    if serialized.len() > MAX_REQUEST_BYTES {
+    // The sink reads the snapshot as strict JSON: a lone surrogate or a
+    // non-finite number would be refused there, so such a call keeps its
+    // denial instead of being handed to a sink that cannot run it.
+    if serialized.len() > MAX_REQUEST_BYTES
+        || serde_json::from_str::<serde_json::Value>(&serialized).is_err()
+    {
         return None;
     }
     let request = write_snapshot(serialized.as_bytes())?;

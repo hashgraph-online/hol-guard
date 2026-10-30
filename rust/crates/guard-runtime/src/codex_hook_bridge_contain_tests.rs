@@ -289,6 +289,24 @@ fn calls_the_sink_cannot_run_keep_the_denial() {
             "{response}"
         );
     }
+    // The sink reads strict JSON, so a lone surrogate or a non-finite
+    // number in the call keeps the denial.
+    for payload in [
+        format!(
+            r#"{{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{{"command":"x\udc80"}},"cwd":"{cwd}"}}"#
+        ),
+        format!(
+            r#"{{"hook_event_name":"PreToolUse","tool_name":"Bash","tool_input":{{"command":"x","timeout":NaN}},"cwd":"{cwd}"}}"#
+        ),
+    ] {
+        let read = parse_mapping_lone_surrogates(&payload).unwrap();
+        assert!(read.mapped || !payload.contains("udc80"), "{payload}");
+        assert_eq!(
+            routed(&deny, &read.value, read.mapped, &target),
+            None,
+            "{payload}"
+        );
+    }
     let bare = Target {
         prefix: &installed[..4],
         guard_home: "/g",
