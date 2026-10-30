@@ -407,3 +407,11 @@ fn the_daemon_path_runs_the_runtime_sink_only_when_the_daemon_admits_it() {
     params.insert("native_sink".to_owned(), json!(true));
     assert_eq!(head(&params), "contained-workspace-sink");
 }
+
+#[test]
+fn the_native_sink_verb_is_the_runtime_sink_command() {
+    assert_eq!(
+        super::NATIVE_SINK_VERB,
+        crate::contained_workspace_sink::SINK_COMMAND
+    );
+}

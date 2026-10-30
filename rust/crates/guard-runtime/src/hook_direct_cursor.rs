@@ -25,7 +25,6 @@
 //! the call as usual.
 
 use super::{reviewed_edge, HookDirectDefer, CURSOR, PRE_TOOL_USE};
-use crate::contained_workspace_sink::SINK_COMMAND as NATIVE_SINK_VERB;
 use crate::hook_decision_containment_rewrite::{containment_rewrite_with, Native};
 use crate::hook_decision_containment_route::{edge_route, host_platform};
 use admission::admitted;
@@ -33,6 +32,10 @@ use guard_command::hook_responses::pre_tool;
 use guard_contracts::{ContainmentRewriteInputsV1, GuardHookSourceMetadataV2};
 use serde_json::{json, Map, Value};
 use std::path::Path;
+
+/// The runtime's own sink verb (`contained_workspace_sink::SINK_COMMAND`),
+/// spelled here because that module is built only on Unix.
+const NATIVE_SINK_VERB: &str = "contained-workspace-sink";
 
 const SHELL_TOOL: &str = "Shell";
 const SOURCE_HOOK_FIELD: &str = "cursor_source_hook_event";
