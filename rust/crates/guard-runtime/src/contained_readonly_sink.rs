@@ -113,15 +113,26 @@ pub(crate) fn readonly_route(response: &Map<String, Value>) -> Option<Route> {
     })
 }
 
-/// Whether the native sink runs this call: a read-only run of the plain
-/// shape and of the kind its route names, on the host whose sandbox it
-/// builds, with no `cwd` argument for Guard's own sink to turn into a
-/// directory change.
-pub(crate) fn readonly_shape(response: &Value, original: &Map<String, Value>) -> bool {
-    HOST_BACKEND.is_some() && plain_call(response, original)
+/// Whether the native sink runs this call, issued from `workspace`: a
+/// read-only run of the plain shape and of the kind its route names, bare
+/// or behind a wrapper the sink peels (`wrapper::native_core`), on the host
+/// whose sandbox it builds, with no `cwd` argument for Guard's own sink to
+/// turn into a directory change.
+pub(crate) fn readonly_shape(
+    response: &Value,
+    original: &Map<String, Value>,
+    workspace: &str,
+    home: &str,
+) -> bool {
+    HOST_BACKEND.is_some() && plain_call(response, original, workspace, home)
 }
 
-fn plain_call(response: &Value, original: &Map<String, Value>) -> bool {
+fn plain_call(
+    response: &Value,
+    original: &Map<String, Value>,
+    workspace: &str,
+    home: &str,
+) -> bool {
     let Some(route) = response.as_object().and_then(readonly_route) else {
         return false;
     };
@@ -129,7 +140,8 @@ fn plain_call(response: &Value, original: &Map<String, Value>) -> bool {
         && original
             .get("command")
             .and_then(Value::as_str)
-            .and_then(program)
+            .and_then(|command| super::wrapper::native_core(command, workspace, home))
+            .and_then(|core| program(&core))
             .is_some_and(|(_, (_, _, kind))| kind == Kind::of(route))
 }
 

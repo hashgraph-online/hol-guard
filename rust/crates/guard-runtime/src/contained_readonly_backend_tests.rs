@@ -21,11 +21,36 @@ fn call(command: &str) -> Map<String, Value> {
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 #[test]
 fn every_read_only_route_takes_the_native_sink_on_a_sandboxed_host() {
-    assert!(readonly_shape(&denial(ROUTES[0]), &call("python3 -c 0")));
-    assert!(readonly_shape(&denial(ROUTES[5]), &call("git log -1")));
-    assert!(readonly_shape(&denial(ROUTES[1]), &call("node -e 0")));
-    assert!(readonly_shape(&denial(ROUTES[4]), &call("node --test")));
-    assert!(readonly_shape(&denial(VITEST_ROUTE), &call("vitest run")));
+    assert!(readonly_shape(
+        &denial(ROUTES[0]),
+        &call("python3 -c 0"),
+        "/w",
+        "/h"
+    ));
+    assert!(readonly_shape(
+        &denial(ROUTES[5]),
+        &call("git log -1"),
+        "/w",
+        "/h"
+    ));
+    assert!(readonly_shape(
+        &denial(ROUTES[1]),
+        &call("node -e 0"),
+        "/w",
+        "/h"
+    ));
+    assert!(readonly_shape(
+        &denial(ROUTES[4]),
+        &call("node --test"),
+        "/w",
+        "/h"
+    ));
+    assert!(readonly_shape(
+        &denial(VITEST_ROUTE),
+        &call("vitest run"),
+        "/w",
+        "/h"
+    ));
 }
 
 fn plan(backend: &str, profile: &str) -> ReadonlyPlan {

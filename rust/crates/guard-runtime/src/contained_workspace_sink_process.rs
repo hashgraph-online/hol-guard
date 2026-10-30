@@ -23,6 +23,7 @@ use nix::sys::signal::{kill, killpg, SigSet, Signal};
 use nix::unistd::Pid;
 
 use super::denial::{denial_note, loopback_denied};
+use super::output::Shaping;
 use super::{envelope, Failure, Outcome, LAUNCH_COMMAND, SANDBOX_UNAVAILABLE};
 
 const OUTPUT_LIMIT: usize = 1024 * 1024;
@@ -54,6 +55,8 @@ struct Running {
 /// running command.
 pub(super) struct Signals {
     running: Arc<Mutex<Running>>,
+    /// The redirections of the wrapper being run.
+    pub(super) output: Shaping,
 }
 
 impl Signals {
@@ -75,7 +78,10 @@ impl Signals {
                     forward(&shared, signal);
                 });
         }
-        Self { running }
+        Self {
+            running,
+            output: Shaping::default(),
+        }
     }
 
     /// Remove `scratch` should a signal end the sink between commands.
@@ -102,6 +108,7 @@ impl Signals {
     pub(super) fn idle() -> Self {
         Self {
             running: Arc::new(Mutex::new(Running::default())),
+            output: Shaping::default(),
         }
     }
 
@@ -160,6 +167,8 @@ pub(super) fn run_backend(
     let launcher = std::env::current_exe().map_err(|error| not_started(&error))?;
     let stdout = capture_file(scratch, "stdout")?;
     let stderr = capture_file(scratch, "stderr")?;
+    // A merged run writes both streams to one file, in the order written.
+    let merge = signals.output.merges();
     let mut command = Command::new(launcher);
     command
         .arg(LAUNCH_COMMAND)
@@ -170,11 +179,15 @@ pub(super) fn run_backend(
         .current_dir(workspace)
         .stdin(Stdio::null())
         .stdout(clone(&stdout)?)
-        .stderr(clone(&stderr)?);
+        .stderr(clone(if merge { &stdout } else { &stderr })?);
     let (status, timed_out) = run_tracked(&mut command, signals, timeout_seconds, true)
         .map_err(|error| not_started(&error))?;
-    let stdout_text = replay(stdout, &mut std::io::stdout());
-    let stderr_text = replay(stderr, &mut std::io::stderr());
+    let mut shown = Vec::new();
+    let stdout_text = replay(stdout, &mut shown);
+    signals.output.out(&shown);
+    shown.clear();
+    let stderr_text = replay(stderr, &mut shown);
+    signals.output.err(&shown);
     if timed_out {
         return Err(Failure::with_exit(
             "pytest_restricted_timeout",
@@ -197,9 +210,9 @@ pub(super) fn run_backend(
         Notes::Silent => None,
     };
     if let Some(note) = note {
-        let mut stderr = std::io::stderr().lock();
-        let _ = writeln!(stderr, "\n[HOL Guard] {note}");
-        let _ = stderr.flush();
+        signals
+            .output
+            .err(format!("\n[HOL Guard] {note}\n").as_bytes());
     }
     Ok(code)
 }
