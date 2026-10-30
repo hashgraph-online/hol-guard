@@ -1041,11 +1041,22 @@ pub fn last_flow_operator(controls: &[String]) -> Option<&String> {
         .find(|c| flow_operators().contains(&c.as_str()))
 }
 
+/// The first operator that joins commands in a run of controls.
+pub fn first_flow_operator(controls: &[String]) -> Option<&String> {
+    controls
+        .iter()
+        .find(|c| flow_operators().contains(&c.as_str()))
+}
+
 /// The controls that join commands in the shell this segment runs in.
 ///
 /// A `(` or `{` before the segment starts that shell, and a `)` or `}` after
 /// it leaves the shell. `&&` and `||` outside those brackets decide whether
 /// the group runs, not which directory a `cd` inside it reaches when it does.
+/// They still decide what the directory is once the group ends, which is the
+/// bracket's own work: a brace group runs its list in this shell, so leaving
+/// one the shell only reached conditionally gives up the directory rather
+/// than carrying it to the commands after it.
 pub fn same_shell_controls(controls: &[String], before_segment: bool) -> &[String] {
     if before_segment {
         let start = controls

@@ -32481,6 +32481,40 @@
       "expect": "not_allow"
     },
     {
+      "id": "neg-brace-group-conditional-cd-into-workspace-write",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "false && { cd ${WORKTREE}; }; touch note.txt"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-brace-group-piped-cd-into-workspace-write",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "{ cd ${WORKTREE}; } | cat && touch note.txt"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
       "id": "docker-volume-ls",
       "fix_area": "shell",
       "harnesses": [

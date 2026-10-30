@@ -213,7 +213,7 @@ pub fn model_shell_execution_context_bounded(
         stack: Vec::new(),
         reason_code: reason_code.clone(),
     };
-    let mut group_states: Vec<(String, Option<ShellState>)> = Vec::new();
+    let mut group_states: Vec<GroupFrame> = Vec::new();
     let mut segments: Vec<ShellExecutionSegment> = Vec::new();
     let mut first_reason = reason_code.clone();
     let mut proof_total = 0usize;
@@ -448,35 +448,81 @@ pub fn shell_execution_context_metadata(context: &ShellExecutionContext) -> Valu
     })
 }
 
+/// A command group the walk is inside.
+struct GroupFrame {
+    /// The bracket that opened the group.
+    kind: String,
+    /// The directory state the group opened in.
+    entry: ShellState,
+    /// The group's list runs in a shell of its own, so what it does to the
+    /// directory never reaches the commands after it.
+    own_shell: bool,
+    /// An operator before the group decides whether its list runs at all, so
+    /// a directory the list reaches is not one the commands after it inherit.
+    conditional: bool,
+}
+
 /// `_apply_group_boundaries_before_segment` (:320-345).
 fn apply_group_boundaries_before_segment(
     mut state: ShellState,
     controls: &[String],
-    group_states: &mut Vec<(String, Option<ShellState>)>,
+    group_states: &mut Vec<GroupFrame>,
 ) -> (ShellState, Option<&'static str>) {
     let mut reason: Option<&'static str> = None;
-    for control in controls {
+    for (index, control) in controls.iter().enumerate() {
         match control.as_str() {
-            "(" => group_states.push(("(".to_owned(), Some(state.clone()))),
-            "{" => group_states.push(("{".to_owned(), None)),
-            ")" => {
-                if group_states.last().map(|(g, _)| g.as_str()) != Some("(") {
-                    reason = Some(SHELL_CWD_UNRESOLVED_SYNTAX);
-                } else if let Some((_g, Some(saved))) = group_states.pop() {
-                    state = saved;
-                }
+            "(" => group_states.push(GroupFrame {
+                kind: "(".to_owned(),
+                entry: state.clone(),
+                own_shell: true,
+                conditional: false,
+            }),
+            "{" => {
+                // A brace group runs its list in the current shell, so a `cd`
+                // inside it outlives the group. What the shell does with the
+                // group as a whole decides whether it may: a pipeline or a
+                // background job runs the list in a child, and `&&` or `||`
+                // decide whether the list runs at all.
+                let opened_by = last_flow_operator(&controls[..index]).map(String::as_str);
+                group_states.push(GroupFrame {
+                    kind: "{".to_owned(),
+                    entry: state.clone(),
+                    own_shell: matches!(opened_by, Some("|") | Some("|&") | Some("&")),
+                    conditional: matches!(opened_by, Some("&&") | Some("||")),
+                });
             }
-            "}" => {
-                if group_states.last().map(|(g, _)| g.as_str()) != Some("{") {
+            ")" | "}" => {
+                let opener = if control == ")" { "(" } else { "{" };
+                if group_states.last().map(|frame| frame.kind.as_str()) != Some(opener) {
                     reason = Some(SHELL_CWD_UNRESOLVED_SYNTAX);
                 } else {
-                    group_states.pop();
+                    let frame = group_states.pop().expect("the bracket matched a frame");
+                    let child_shell = frame.own_shell
+                        || matches!(
+                            first_flow_operator(&controls[index + 1..]).map(String::as_str),
+                            Some("|") | Some("|&") | Some("&")
+                        );
+                    if child_shell {
+                        state = frame.entry;
+                    } else if frame.conditional
+                        && leaves_a_different_directory(&state, &frame.entry)
+                    {
+                        state.cwd = None;
+                        state.cwd_identity = None;
+                        state.reason_code = Some(SHELL_CWD_UNRESOLVED_CONTROL_FLOW.to_owned());
+                        reason = Some(SHELL_CWD_UNRESOLVED_CONTROL_FLOW);
+                    }
                 }
             }
             _ => {}
         }
     }
     (state, reason)
+}
+
+/// Whether the group's list moved the shell it ran in.
+fn leaves_a_different_directory(state: &ShellState, entry: &ShellState) -> bool {
+    state.cwd != entry.cwd || state.stack.len() != entry.stack.len()
 }
 
 /// `_apply_directory_operation` (:348-420).

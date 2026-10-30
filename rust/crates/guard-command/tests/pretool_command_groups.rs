@@ -288,3 +288,51 @@ fn a_list_of_brace_groups_is_read_as_the_lists_inside_them() {
     }
     std::fs::remove_dir_all(root).unwrap();
 }
+
+/// A brace group runs its list in the shell that reached it, so a `cd` inside
+/// one outlives the group — but only when the shell actually ran the list.
+/// Reading the operators of the group's own shell must not hide the operator
+/// that decides whether the group runs at all: `false && { cd elsewhere; }`
+/// leaves the shell where it was, and a pipeline or a background job runs the
+/// list in a child whose directory never comes back. A command after such a
+/// group has no proven directory, so it is not read as though it had one.
+#[test]
+fn a_brace_group_the_shell_may_not_have_run_carries_no_directory_out_of_it() {
+    let nonce = crate::unique_nanos::unique_nanos();
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/command-group-fixtures")
+        .join(format!("conditional-{}-{nonce}", std::process::id()));
+    std::fs::create_dir_all(root.join("project")).unwrap();
+    let root = std::fs::canonicalize(root).unwrap();
+    let project = root.join("project");
+    std::fs::write(project.join("one.txt"), "ordinary fixture\n").unwrap();
+    let inside = project.display().to_string();
+
+    for harness in ["omp", "zcode", "claude-code", "codex", "cursor"] {
+        for (command, allowed) in [
+            // The shell reaches the group whatever the list returns, so the
+            // directory it leaves behind is the one the next command runs in.
+            (format!("{{ cd {inside}; }} && cat one.txt"), true),
+            (format!("{{ cd {inside}; }}; cat one.txt"), true),
+            // An operator before the group decides whether the list runs, so
+            // the directory after it is not one Guard can read.
+            (format!("false && {{ cd {inside}; }} && cat one.txt"), false),
+            (format!("false && {{ cd {inside}; }}; cat one.txt"), false),
+            (format!("false || {{ cd {inside}; }}; cat one.txt"), false),
+            // A pipeline or a background job runs the list in a child shell,
+            // which leaves the directory exactly as `(` does.
+            (format!("{{ cd {inside}; }} | cat; cat one.txt"), false),
+            (
+                format!("cat one.txt | {{ cd {inside}; }}; cat one.txt"),
+                false,
+            ),
+        ] {
+            assert_eq!(
+                evaluate(harness, &command, &root) == "allow",
+                allowed,
+                "{harness}: {command}"
+            );
+        }
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}
