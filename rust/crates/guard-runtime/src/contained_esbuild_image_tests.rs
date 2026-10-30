@@ -50,9 +50,11 @@ fn the_image_is_a_private_copy_of_the_projects_binary() {
 
 #[test]
 fn a_shared_write_bit_under_a_private_directory_grants_nothing() {
-    // The temporary project directory is 0700, so no other account can
-    // reach the 0777 image Bun-style unpacking leaves behind.
+    // A 0700 project directory keeps every other account from reaching the
+    // 0777 image Bun-style unpacking leaves behind. The mode is set here:
+    // a temporary directory under Linux's shared `/tmp` is created 0755.
     let project = project("0.25.10", MACH_O, 0o777);
+    fs::set_permissions(project.path(), fs::Permissions::from_mode(0o700)).expect("private");
     let images = tempfile::tempdir().expect("images");
     assert!(snapshot(project.path(), images.path())
         .expect("snapshot")
