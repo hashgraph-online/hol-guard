@@ -180,6 +180,8 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # plugin only the sandbox's reach, and no network for the module fetch
         # `-mod=mod` would start.
         "neg-goflags-toolexec-prefix-go-test",
+        "neg-goflags-screened-then-toolexec-prefix-go-test",
+        "neg-goflags-toolexec-prefix-then-screened-argument-go-test",
         "neg-goflags-mod-mod-prefix-go-test",
         "neg-rustflags-linker-prefix-cargo-test",
         "neg-pytest-addopts-plugin-prefix-venv-pytest",
