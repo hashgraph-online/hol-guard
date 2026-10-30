@@ -31,11 +31,27 @@ pub(super) fn severity_rank_map() -> &'static HashMap<&'static str, u8> {
     &MAP
 }
 
-#[allow(dead_code)]
+/// Seconds Guard Cloud gets for each chunk of packages in one evaluate
+/// request, on the first try and again on the retry.
 pub(super) const TIMEOUT_SECONDS: u64 = 1;
 
-#[allow(dead_code)]
 pub(super) const RETRY_TIMEOUT_SECONDS: u64 = 1;
+
+/// Guard Cloud checks an evaluate request in chunks of this many packages.
+pub(super) const CLOUD_EVALUATE_CHUNK_PACKAGES: usize = 100;
+
+/// Longest wait for one evaluate attempt, however many packages it carries.
+pub(super) const CLOUD_EVALUATE_MAX_TIMEOUT_SECONDS: u64 = 5;
+
+/// Timeout for one evaluate attempt carrying `package_count` packages. A
+/// request of up to one chunk keeps `base_seconds`; each further chunk adds
+/// `base_seconds`, up to [`CLOUD_EVALUATE_MAX_TIMEOUT_SECONDS`].
+pub(super) fn cloud_evaluate_timeout_seconds(base_seconds: u64, package_count: usize) -> u64 {
+    let chunks = package_count.div_ceil(CLOUD_EVALUATE_CHUNK_PACKAGES).max(1) as u64;
+    base_seconds
+        .saturating_mul(chunks)
+        .min(CLOUD_EVALUATE_MAX_TIMEOUT_SECONDS.max(base_seconds))
+}
 
 pub(super) static CLOUD_INBOX_URL_RE: LazyLock<Regex> = LazyLock::new(|| {
     RegexBuilder::new(r"https?://[^\s]+/guard/inbox/?")
@@ -266,4 +282,35 @@ pub(super) fn user_copy_to_dict(copy: &Map<String, Value>) -> Value {
             copy.get("harness_message").cloned().unwrap_or(Value::Null),
         ),
     ])
+}
+
+#[cfg(test)]
+mod cloud_evaluate_timeout_tests {
+    use super::*;
+
+    #[test]
+    fn one_chunk_keeps_the_base_timeout() {
+        assert_eq!(cloud_evaluate_timeout_seconds(TIMEOUT_SECONDS, 0), 1);
+        assert_eq!(cloud_evaluate_timeout_seconds(TIMEOUT_SECONDS, 1), 1);
+        assert_eq!(cloud_evaluate_timeout_seconds(TIMEOUT_SECONDS, 100), 1);
+    }
+
+    #[test]
+    fn a_lockfile_of_several_chunks_gets_a_second_per_chunk() {
+        assert_eq!(cloud_evaluate_timeout_seconds(TIMEOUT_SECONDS, 101), 2);
+        assert_eq!(cloud_evaluate_timeout_seconds(TIMEOUT_SECONDS, 267), 3);
+        assert_eq!(
+            cloud_evaluate_timeout_seconds(RETRY_TIMEOUT_SECONDS, 267),
+            3
+        );
+    }
+
+    #[test]
+    fn the_wait_stops_growing_at_the_cap() {
+        assert_eq!(cloud_evaluate_timeout_seconds(TIMEOUT_SECONDS, 1_000), 5);
+        assert_eq!(
+            cloud_evaluate_timeout_seconds(TIMEOUT_SECONDS, usize::MAX),
+            5
+        );
+    }
 }

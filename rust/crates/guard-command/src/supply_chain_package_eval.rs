@@ -79,9 +79,9 @@ use crate::package_intent_common::{
 #[path = "supply_chain_package_eval/contracts.rs"]
 mod contracts;
 use contracts::{
-    decision_rank_map, decision_to_guard_action, dict_items, dist_tag_range_ecosystems,
-    ensure_terminal_punctuation, json_obj, optional_string, registry_default_ranges,
-    severity_rank_map, string_tuple, value_str, CLOUD_INBOX_URL_RE,
+    cloud_evaluate_timeout_seconds, decision_rank_map, decision_to_guard_action, dict_items,
+    dist_tag_range_ecosystems, ensure_terminal_punctuation, json_obj, optional_string,
+    registry_default_ranges, severity_rank_map, string_tuple, value_str, CLOUD_INBOX_URL_RE,
     EXTERNAL_ARCHIVE_MAX_AGGREGATE_BYTES, EXTERNAL_ARCHIVE_MAX_TARGETS,
     LEGACY_LOCAL_APPROVAL_INSTRUCTION_RE, LOCAL_APPROVAL_INSTRUCTION_RE,
     LOCAL_APPROVAL_REQUEST_URL_RE, LOCAL_REVIEW_INSTRUCTION_RE, LOCKFILE_PARSE_BUDGET_SECONDS,

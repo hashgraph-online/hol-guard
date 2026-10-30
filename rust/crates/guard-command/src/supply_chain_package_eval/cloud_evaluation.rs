@@ -243,7 +243,13 @@ impl CloudContext<'_> {
         }
     }
 
-    fn post(&self, auth_context: &Value, url: &str, data: &[u8]) -> EvalResult<Map<String, Value>> {
+    fn post(
+        &self,
+        auth_context: &Value,
+        url: &str,
+        data: &[u8],
+        package_count: usize,
+    ) -> EvalResult<Map<String, Value>> {
         let request = self.deps.guard_sync.guard_sync_request(
             auth_context,
             url,
@@ -252,16 +258,18 @@ impl CloudContext<'_> {
             None,
             None,
         )?;
+        // Cloud checks a large request chunk by chunk, so it gets longer to
+        // answer before the install is paused as unreachable.
         self.deps.guard_sync.urlopen_json_with_timeout_retry(
             &request,
-            TIMEOUT_SECONDS,
-            RETRY_TIMEOUT_SECONDS,
+            cloud_evaluate_timeout_seconds(TIMEOUT_SECONDS, package_count),
+            cloud_evaluate_timeout_seconds(RETRY_TIMEOUT_SECONDS, package_count),
         )
     }
 
     /// POST with the single forced-refresh retry on HTTP 401.
-    fn fetch(&self, auth_context: &Value, url: &str, data: &[u8]) -> Fetched {
-        let error = match self.post(auth_context, url, data) {
+    fn fetch(&self, auth_context: &Value, url: &str, data: &[u8], package_count: usize) -> Fetched {
+        let error = match self.post(auth_context, url, data, package_count) {
             Ok(payload) => return Fetched::Payload(payload),
             Err(error) => error,
         };
@@ -280,7 +288,7 @@ impl CloudContext<'_> {
         else {
             return Fetched::Status(status, edge_block);
         };
-        match self.post(&Value::Object(fresh), url, data) {
+        match self.post(&Value::Object(fresh), url, data, package_count) {
             Ok(payload) => Fetched::Payload(payload),
             Err(error) => match classify_post_failure(error) {
                 PostFailure::Http(retry_status, edge_block) => {
@@ -486,8 +494,17 @@ pub(super) fn evaluate_with_cloud(
         workspace_fingerprint,
         &policy_version,
     );
+    let package_count = request_payload
+        .get("packages")
+        .and_then(Value::as_array)
+        .map_or(0, Vec::len);
     let request_data = serde_json::to_vec(&request_payload).unwrap_or_default();
-    match context.fetch(&Value::Object(auth_context), &evaluate_url, &request_data) {
+    match context.fetch(
+        &Value::Object(auth_context),
+        &evaluate_url,
+        &request_data,
+        package_count,
+    ) {
         Fetched::Payload(payload) => context.merge_response(&payload),
         Fetched::Status(status, edge_block) => {
             context.http_status_outcome(status, edge_block.as_deref())
