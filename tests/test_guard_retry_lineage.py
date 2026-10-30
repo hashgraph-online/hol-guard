@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import sqlite3
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -118,15 +119,13 @@ def test_continuation_store_update_cannot_replace_first_retry_lineage(tmp_path: 
         metadata={"retry_lineage": initial},
         now=_NOW,
     )
-    _ = store.seed_request_resume(
-        request_id="request-continuation",
-        operation_id="continuation-operation",
-        harness="pi",
-        strategy="manual-only",
-        supported=False,
-        thread_id=None,
-        now=_NOW,
-    )
+    with sqlite3.connect(store.path) as connection:
+        _ = connection.execute(
+            "insert into guard_request_resumes "
+            "(request_id, operation_id, harness, strategy, supported, status, created_at, updated_at) "
+            "values (?, ?, 'pi', 'manual-only', 0, 'pending', ?, ?)",
+            ("request-continuation", "continuation-operation", _NOW, _NOW),
+        )
     claim = store.claim_continuation_attempt(
         request_id="request-continuation",
         offer_hash="continuation-offer",

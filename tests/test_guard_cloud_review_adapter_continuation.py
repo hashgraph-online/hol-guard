@@ -9,7 +9,6 @@ from codex_plugin_scanner.guard.adapters.contracts import HARNESS_CONTRACTS
 from codex_plugin_scanner.guard.continuation_runtime import (
     continuation_offer_payload,
     continue_request_after_application,
-    record_live_hook_completion,
 )
 from codex_plugin_scanner.guard.live_process_identity import current_process_identity
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
@@ -90,11 +89,9 @@ def test_every_adapter_proves_or_refuses_automatic_continuation(tmp_path: Path, 
     assert harness == "codex"
     waiting = continue_request_after_application(store, request_row=request, action="allow_once", now=_NOW)
     assert waiting["continuationStatus"] == "waiting"
-    completed = record_live_hook_completion(
-        store,
-        request_id=str(request["request_id"]),
-        action="allow",
-        now="2026-08-24T12:00:01+00:00",
+    completed = store._native_store_call(
+        "record_codex_live_completion",
+        {"request_id": str(request["request_id"]), "action": "allow", "now": "2026-08-24T12:00:01+00:00"},
     )
     assert isinstance(completed, Mapping)
     assert completed["continuationStatus"] == "resumed"

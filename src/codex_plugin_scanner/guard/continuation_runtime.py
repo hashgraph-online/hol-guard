@@ -261,51 +261,6 @@ def continuation_offer_payload(
     }
 
 
-def record_live_hook_completion(
-    store: GuardStore,
-    *,
-    request_id: str,
-    action: str,
-    now: str,
-    approval_decision: Mapping[str, object] | None = None,
-) -> dict[str, object] | None:
-    """Record proof that the original browser-waiting Codex hook consumed a decision."""
-
-    request = store.get_approval_request(request_id)
-    if not isinstance(request, Mapping):
-        return None
-    normalized_action = _continuation_action(action)
-    offer = _offer_from_request(
-        store,
-        request_row=request,
-        request_id=request_id,
-        observed_at=_parse_aware_timestamp(now),
-        headless=False,
-    )
-    if offer.capability != "suspended-response":
-        return None
-    previous = _previous_result(store.get_request_resume(request_id), offer=offer, action=normalized_action)
-    if previous is not None and previous.status != "waiting":
-        return _payload(offer, previous, replayed=True)
-    if normalized_action == "allow_once":
-        result = _result(offer, "resumed", "live_hook_completed", now)
-    else:
-        result = _result(offer, "blocked_not_resumed", "blocked_not_resumed", now)
-    persisted = _finalize_persist_attempt(
-        store,
-        request_id=request_id,
-        action=normalized_action,
-        offer=offer,
-        result=result,
-        now=now,
-        approval_decision=approval_decision,
-    )
-    if not persisted:
-        return None
-    authoritative = _previous_result(store.get_request_resume(request_id), offer=offer, action=normalized_action)
-    return _payload(offer, authoritative or result, replayed=authoritative is not None)
-
-
 def _finalize_persist_attempt(
     store: GuardStore,
     *,
