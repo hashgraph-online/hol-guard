@@ -37630,7 +37630,7 @@
       "expect": "not_allow"
     },
     {
-      "id": "neg-nodeopts-heap-then-node-path-prefix-npm-test",
+      "id": "neg-nodeopts-heap-then-preload-prefix-npm-test",
       "fix_area": "negative",
       "harnesses": [
         "codex",
@@ -37640,7 +37640,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "NODE_OPTIONS=--max-old-space-size=4096 NODE_PATH=/ws npm test"
+        "command": "NODE_OPTIONS=--max-old-space-size=4096 LD_PRELOAD=/tmp/x.so npm test"
       },
       "cwd": "worktree",
       "expect": "not_allow"
