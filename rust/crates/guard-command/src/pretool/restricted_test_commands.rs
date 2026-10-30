@@ -8,7 +8,7 @@
 #[path = "restricted_test_commands_tests.rs"]
 mod tests;
 
-use crate::contained_argv::{contained_runner_call, jest_contained_call};
+use crate::contained_argv::{contained_runner_call, jest_contained_call, npm_exec_inert_option};
 use crate::contained_node_tool::{
     entry_tool, local_package_entry, supported_tool, writes_or_chains, ToolMode,
 };
@@ -442,16 +442,6 @@ pub(crate) fn manager_local_bin_arguments<'a>(
     // is not a local-bin run.
     rest.first().filter(|tool| !tool.starts_with('-'))?;
     Some(rest)
-}
-
-/// Whether an `npm exec` option names no package. The answer is read from the
-/// table `npx` itself is parsed with, so the two spellings of one run cannot
-/// drift apart. The separator is left out of the answer: it ends the options
-/// rather than being one, and the peel above reads it on its own.
-fn npm_exec_inert_option(option: &str) -> bool {
-    crate::package_intent_parser::runner_options::local_execution_flags("npx")
-        .iter()
-        .any(|flag| *flag != "--" && *flag == option)
 }
 
 pub(crate) fn manager_script_task<'a>(manager: &str, arguments: &'a [String]) -> Option<&'a str> {
