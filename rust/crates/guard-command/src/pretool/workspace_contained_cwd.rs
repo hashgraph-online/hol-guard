@@ -1,7 +1,7 @@
 //! Possible shell working directories for literal command segments.
 
 use crate::CanonicalCommandV1;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 const MAX_STATES: usize = 64;
 
@@ -17,7 +17,32 @@ fn moves_the_shell(executable: Option<&str>) -> bool {
     matches!(executable, Some("cd") | Some("pushd"))
 }
 
+/// The directory a shell says it is in after `cd target`, which is the one it
+/// resolves the next `..` against. A shell without `cd -P` spends a parent
+/// step on the name it last printed rather than on what that name points to,
+/// so `cd deep` into a link to `a/b` leaves the shell in `deep`, and the
+/// `../..` after it climbs out of the workspace while resolving the link
+/// first would land back inside it. `None` where the steps climb past the
+/// root, which no directory answers to.
+fn logical_join(cwd: &Path, target: &str) -> Option<PathBuf> {
+    let mut walked = PathBuf::new();
+    for component in cwd.join(target).components() {
+        match component {
+            Component::Prefix(_) | Component::RootDir => walked.push(component.as_os_str()),
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if !walked.pop() {
+                    return None;
+                }
+            }
+            Component::Normal(part) => walked.push(part),
+        }
+    }
+    Some(walked)
+}
+
 pub(super) fn locations(model: &CanonicalCommandV1, workspace: &Path) -> Option<Vec<Vec<PathBuf>>> {
+    let root = workspace.canonicalize().ok()?;
     let mut states = vec![(workspace.to_path_buf(), true)];
     let mut result = Vec::new();
     // The operator that decided whether the pipeline now being read runs at
@@ -68,34 +93,41 @@ pub(super) fn locations(model: &CanonicalCommandV1, workspace: &Path) -> Option<
                 if target.starts_with(['-', '~', '+']) {
                     return None;
                 }
-                // A pipeline's cd runs in a child shell and never moves its parent.
-                let in_pipeline = model
+                // bash's `lastpipe` and zsh's default both run the last
+                // element of a pipeline in the shell that read it, so a `cd`
+                // inside one may move the shell the rest of the command runs
+                // in. The walk cannot tell which shell read this text, and
+                // taking the reading where nothing moved would credit a later
+                // climb to a descent that did happen.
+                if model
                     .segments
                     .iter()
                     .filter(|other| other.execution_context == segment.execution_context)
                     .count()
-                    > 1;
-                if in_pipeline {
-                    next.extend([(cwd.clone(), true), (cwd, false)]);
-                } else {
-                    let supplied = cwd.join(target);
-                    // The sandbox hands the run no CDPATH to search, and
-                    // `cd::sets_search_path` refuses the shape of a run that
-                    // sets one itself, so a name that exists here is where the
-                    // run lands. A name that does not exist has nowhere to
-                    // land at all, so don't invent a cwd the real shell never
-                    // reaches.
-                    if !supplied.is_dir() {
-                        return None;
-                    }
-                    let moved = supplied.canonicalize().ok()?;
-                    if !moved.starts_with(workspace) {
-                        return None;
-                    }
-                    // A failed cd leaves the old cwd. &&/|| choose the corresponding
-                    // state; a later semicolon resumes both, rather than guessing.
-                    next.extend([(moved, true), (cwd, false)]);
+                    > 1
+                {
+                    return None;
                 }
+                // The sandbox hands the run no CDPATH to search, and
+                // `cd::sets_search_path` refuses the shape of a run that sets
+                // one itself, so a name that exists here is where the run
+                // lands. A name that does not exist has nowhere to land at
+                // all, so don't invent a cwd the real shell never reaches.
+                //
+                // The shell is tracked by the spelling it carries, since that
+                // is what its next `..` is spent on; where that spelling
+                // points has to stay inside the workspace too, so a link out
+                // of it is still refused.
+                let moved = logical_join(&cwd, target)?;
+                if !moved.is_dir() {
+                    return None;
+                }
+                if !moved.starts_with(workspace) || !moved.canonicalize().ok()?.starts_with(&root) {
+                    return None;
+                }
+                // A failed cd leaves the old cwd. &&/|| choose the corresponding
+                // state; a later semicolon resumes both, rather than guessing.
+                next.extend([(moved, true), (cwd, false)]);
             } else if name == "popd" {
                 return None;
             } else {

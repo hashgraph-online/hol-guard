@@ -26,6 +26,7 @@ pub(super) fn below(target: &str, workspace: &Path) -> bool {
     !target.is_empty()
         && !target.starts_with(['~', '-'])
         && !target.contains('$')
+        && !expands_by_glob(target)
         && path
             .components()
             .all(|component| !matches!(component, std::path::Component::ParentDir))
@@ -183,7 +184,20 @@ pub(super) fn bounded(target: &str, workspace: &Path, temp_fixed: bool) -> bool 
 /// inside the workspace, so what this reading adds over [`below`] is the
 /// parent step that proof already covers.
 pub(super) fn walked(target: &str) -> bool {
-    !target.is_empty() && !target.contains('$') && !target.starts_with(['~', '-', '+'])
+    !target.is_empty()
+        && !target.contains('$')
+        && !target.starts_with(['~', '-', '+'])
+        && !expands_by_glob(target)
+}
+
+/// Whether the shell expands `target` against the file system before `cd`
+/// ever sees it. Both readings above take the operand for the name of the
+/// directory entered, which a pattern is not: `cd ../x*` is the directory
+/// `x*` here and whatever the pattern matched there, and a `GLOBIGNORE` or a
+/// second entry decides which name that is. A pattern matching more than one
+/// name gives `cd` two operands and fails, so nothing ordinary is lost.
+fn expands_by_glob(target: &str) -> bool {
+    target.contains(['*', '?', '['])
 }
 
 /// Whether every temporary stand-in in the command is the only operand of a

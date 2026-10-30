@@ -191,3 +191,37 @@ fn a_chain_that_climbs_back_into_the_workspace_is_still_bounded() {
         assert!(!shaped(&command, &ws), "{command}");
     }
 }
+
+/// A shell spends a parent step on the name it last printed rather than on
+/// what that name points to, so a chain that enters a link and climbs twice
+/// leaves the workspace while resolving the link first lands back inside it.
+/// A pattern is not the name of the directory entered either, and the last
+/// element of a pipeline may be read by the shell itself, so neither shape
+/// carries the walk.
+#[test]
+fn a_move_the_walk_cannot_read_as_the_shell_does_is_refused() {
+    let ws = workspace("cd-walk-divergence", true);
+    std::fs::create_dir_all(ws.join("a/b")).unwrap();
+    std::fs::create_dir_all(ws.join("app")).unwrap();
+    std::fs::create_dir_all(ws.join("x*")).unwrap();
+    std::os::unix::fs::symlink(ws.join("a/b"), ws.join("deep")).unwrap();
+    for command in [
+        // `deep` names a link to `a/b`, so the shell stands two steps from
+        // the workspace root by its own reckoning and one by the resolved
+        // one; the climb out has to be read the shell's way.
+        "cd deep && ls && cd ../..",
+        // The shell hands `cd` whatever the pattern matched, which the walk
+        // cannot take for the literal directory of that name.
+        "cd x* && ls",
+        "cd app && ls && cd ../x*",
+        // bash's `lastpipe` and zsh's default both run the last element of a
+        // pipeline in the shell that read it, so this `cd ..` may be the
+        // shell's own move and the climb after it a second one.
+        "cd app && ls | cd .. && cd ..",
+    ] {
+        assert!(!shaped(command, &ws), "{command}");
+    }
+    // One step in and one step back through the same link is still the
+    // directory the sandbox bounds.
+    assert!(shaped("cd deep && ls && cd ..", &ws));
+}
