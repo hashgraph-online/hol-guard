@@ -352,6 +352,13 @@ fn secret_rule(
 
 /// Provider-format rules in Python tuple order; iteration order drives finding
 /// emit order and dedup identity.
+/// How many provider rules the retired Python detector published.
+///
+/// Rules added since then append after these, so the leading slice stays the
+/// set Python hashed into `guard-secrets-v1:1d8dc93ef4fc2a04` and the recorded
+/// parity vectors stay checkable against it.
+pub const PYTHON_ERA_PROVIDER_RULES: usize = 17;
+
 pub static SECRET_RULES: LazyLock<Vec<SecretRule>> = LazyLock::new(|| {
     vec![
         secret_rule(
@@ -540,6 +547,186 @@ pub static SECRET_RULES: LazyLock<Vec<SecretRule>> = LazyLock::new(|| {
             false,
             "JWT-like bearer token in credential context.",
             Some(&JWT),
+        ),
+        // Rules added after the Python detector was retired. They append
+        // after the set Python published so `detector_version` keeps a
+        // checkable prefix, and the synthetic `credential-assignment` entry
+        // stays last in both the catalog and the digest material.
+        secret_rule(
+            "atlassian-api-token",
+            "Atlassian API token",
+            "critical",
+            r"\b(?P<secret>ATATT[A-Za-z0-9_\-=]{20,255})",
+            FLAG_UNICODE,
+            "atlassian",
+            true,
+            "Atlassian API token for Jira, Confluence, or Bitbucket Cloud.",
+            None,
+        ),
+        secret_rule(
+            "telegram-bot-token",
+            "Telegram bot token",
+            "high",
+            r"\b(?P<secret>[0-9]{8,10}:AA[A-Za-z0-9_-]{30,40})",
+            FLAG_UNICODE,
+            "telegram",
+            true,
+            "Telegram bot token granting full control of the bot.",
+            None,
+        ),
+        secret_rule(
+            "discord-webhook",
+            "Discord incoming webhook",
+            "critical",
+            r"(?P<secret>https://(?:ptb\.|canary\.)?discord(?:app)?\.com/api/webhooks/[0-9]{17,20}/[A-Za-z0-9_-]{60,80})",
+            FLAG_UNICODE,
+            "discord",
+            true,
+            "Discord incoming webhook that posts to a channel without further authentication.",
+            None,
+        ),
+        secret_rule(
+            "doppler-token",
+            "Doppler token",
+            "critical",
+            r"\b(?P<secret>dp\.(?:pt|st|sa|scim|audit)\.[A-Za-z0-9]{40,44})\b",
+            FLAG_UNICODE,
+            "doppler",
+            true,
+            "Doppler personal, service, service-account, SCIM, or audit token.",
+            None,
+        ),
+        secret_rule(
+            "vault-token",
+            "HashiCorp Vault token",
+            "critical",
+            r"\b(?P<secret>hv[sbr]\.[A-Za-z0-9_-]{20,100})",
+            FLAG_UNICODE,
+            "vault",
+            true,
+            "HashiCorp Vault service, batch, or recovery token.",
+            None,
+        ),
+        secret_rule(
+            "shopify-access-token",
+            "Shopify access token",
+            "critical",
+            r"\b(?P<secret>shp(?:at|ca|pa|ss)_[0-9a-fA-F]{32})\b",
+            FLAG_UNICODE,
+            "shopify",
+            true,
+            "Shopify access, custom-app, private-app, or shared-secret token.",
+            None,
+        ),
+        secret_rule(
+            "grafana-service-account-token",
+            "Grafana service account token",
+            "high",
+            r"\b(?P<secret>glsa_[A-Za-z0-9]{32}_[0-9a-fA-F]{8})\b",
+            FLAG_UNICODE,
+            "grafana",
+            true,
+            "Grafana service account token.",
+            None,
+        ),
+        secret_rule(
+            "linear-api-key",
+            "Linear API key",
+            "high",
+            r"\b(?P<secret>lin_api_[A-Za-z0-9]{40,50})\b",
+            FLAG_UNICODE,
+            "linear",
+            true,
+            "Linear personal API key.",
+            None,
+        ),
+        secret_rule(
+            "dockerhub-pat",
+            "Docker Hub access token",
+            "critical",
+            r"\b(?P<secret>dckr_pat_[A-Za-z0-9_-]{20,64})",
+            FLAG_UNICODE,
+            "dockerhub",
+            true,
+            "Docker Hub personal access token able to push images.",
+            None,
+        ),
+        secret_rule(
+            "postman-api-key",
+            "Postman API key",
+            "high",
+            r"\b(?P<secret>PMAK-[0-9a-fA-F]{24}-[0-9a-fA-F]{34})\b",
+            FLAG_UNICODE,
+            "postman",
+            true,
+            "Postman API key.",
+            None,
+        ),
+        secret_rule(
+            "databricks-token",
+            "Databricks access token",
+            "critical",
+            r"\b(?P<secret>dapi[0-9a-fA-F]{32}(?:-[0-9]+)?)\b",
+            FLAG_UNICODE,
+            "databricks",
+            true,
+            "Databricks personal access token.",
+            None,
+        ),
+        secret_rule(
+            "planetscale-token",
+            "PlanetScale token",
+            "critical",
+            r"\b(?P<secret>pscale_(?:tkn|pw)_[A-Za-z0-9_\-]{32,64})",
+            FLAG_UNICODE,
+            "planetscale",
+            true,
+            "PlanetScale service token or database password.",
+            None,
+        ),
+        secret_rule(
+            "figma-token",
+            "Figma access token",
+            "high",
+            r"\b(?P<secret>figd_[A-Za-z0-9_-]{40,64})",
+            FLAG_UNICODE,
+            "figma",
+            true,
+            "Figma personal access token.",
+            None,
+        ),
+        secret_rule(
+            "square-access-token",
+            "Square access token",
+            "critical",
+            r"\b(?P<secret>(?:sq0atp-[A-Za-z0-9_-]{22}|EAAA[A-Za-z0-9_-]{60}))",
+            FLAG_UNICODE,
+            "square",
+            true,
+            "Square production access token.",
+            None,
+        ),
+        secret_rule(
+            "mailgun-api-key",
+            "Mailgun API key",
+            "critical",
+            r"\b(?P<secret>key-[0-9a-f]{32})\b",
+            FLAG_UNICODE,
+            "mailgun",
+            true,
+            "Mailgun private API key able to send mail for the domain.",
+            None,
+        ),
+        secret_rule(
+            "flyio-token",
+            "Fly.io API token",
+            "critical",
+            r"\b(?P<secret>(?:fm1a|fm1r|fm2)_[A-Za-z0-9+/=]{40,200})",
+            FLAG_UNICODE,
+            "flyio",
+            true,
+            "Fly.io deploy or personal access token.",
+            None,
         ),
     ]
 });
@@ -805,22 +992,30 @@ fn round4(value: f64) -> f64 {
 /// Detector version digest, byte-identical to the Python implementation: the
 /// SHA-256 hex digest of the rule material truncated to 16 hex characters.
 pub fn detector_version() -> String {
-    let mut material_parts: Vec<String> = SECRET_RULES
-        .iter()
-        .map(|rule| {
-            format!(
-                "{}|{}|{}|{}|{}",
-                rule.rule_id,
-                rule.severity,
-                rule.validation,
-                rule.pattern_source,
-                rule.pattern_flags
-            )
-        })
-        .collect();
-    material_parts.push(format!(
+    let mut material_parts: Vec<String> = SECRET_RULES.iter().map(rule_material_line).collect();
+    material_parts.push(assignment_material_line());
+    detector_version_over(&material_parts)
+}
+
+/// One rule's contribution to the detector digest.
+fn rule_material_line(rule: &SecretRule) -> String {
+    format!(
+        "{}|{}|{}|{}|{}",
+        rule.rule_id, rule.severity, rule.validation, rule.pattern_source, rule.pattern_flags
+    )
+}
+
+/// The synthetic `credential-assignment` contribution, always last.
+fn assignment_material_line() -> String {
+    format!(
         "credential-assignment|{ASSIGNMENT_PATTERN_SOURCE}|{FLAG_IGNORECASE_MULTILINE_UNICODE}|{GENERIC_CANDIDATE_POLICY_VERSION}"
-    ));
+    )
+}
+
+/// Digest over an explicit material list. Hashing a subset is how the rules
+/// Python published stay checkable against the version Python published once
+/// later rules have been appended.
+fn detector_version_over(material_parts: &[String]) -> String {
     let digest = hex::encode(Sha256::digest(material_parts.join("\n").as_bytes()));
     format!("{DETECTOR_VERSION}:{digest:.16}")
 }
@@ -1610,10 +1805,52 @@ mod tests {
         .join("\n")
     }
 
+    /// The provider rules Python published, in the order it published them.
+    const PYTHON_ERA_RULE_IDS: [&str; PYTHON_ERA_PROVIDER_RULES] = [
+        "github-token",
+        "gitlab-token",
+        "aws-access-key",
+        "slack-token",
+        "slack-webhook",
+        "stripe-secret-key",
+        "openai-api-key",
+        "anthropic-api-key",
+        "huggingface-token",
+        "npm-token",
+        "pypi-token",
+        "google-api-key",
+        "sendgrid-api-key",
+        "pem-private-key",
+        "database-url-password",
+        "basic-auth-url-password",
+        "jwt-token",
+    ];
+
+    /// The version string the Python detector published for its own rule set.
+    const PYTHON_DETECTOR_VERSION: &str = "guard-secrets-v1:1d8dc93ef4fc2a04";
+
     #[test]
-    fn detector_version_matches_python() {
+    fn the_rules_python_published_still_hash_to_the_version_python_published() {
         // Oracle: python3 detector_version() -> guard-secrets-v1:1d8dc93ef4fc2a04
-        assert_eq!(detector_version(), "guard-secrets-v1:1d8dc93ef4fc2a04");
+        //
+        // Later rules append after the set Python shipped, so the live digest
+        // moves with them. Hashing exactly the material Python hashed keeps
+        // that oracle checkable: a rule Python published that is renamed,
+        // reseverityed or has its pattern edited still breaks this.
+        let mut material: Vec<String> = SECRET_RULES
+            .iter()
+            .take(PYTHON_ERA_PROVIDER_RULES)
+            .map(rule_material_line)
+            .collect();
+        material.push(assignment_material_line());
+        assert_eq!(detector_version_over(&material), PYTHON_DETECTOR_VERSION);
+    }
+
+    #[test]
+    fn a_rule_added_after_python_moves_the_detector_version() {
+        // The digest is what a consumer compares to decide whether a cached
+        // scan is still current, so appending rules has to change it.
+        assert_ne!(detector_version(), PYTHON_DETECTOR_VERSION);
     }
 
     #[test]
@@ -1654,9 +1891,19 @@ mod tests {
     }
 
     #[test]
-    fn catalog_has_18_entries_with_python_order() {
+    fn catalog_keeps_the_python_entries_in_python_order() {
         let catalog = secret_rule_catalog();
-        assert_eq!(catalog.len(), 18);
+        // The provider rules Python published lead, later ones follow, and the
+        // synthetic contextual entry stays last however many are appended.
+        assert!(catalog.len() > PYTHON_ERA_PROVIDER_RULES);
+        assert_eq!(
+            catalog
+                .iter()
+                .take(PYTHON_ERA_PROVIDER_RULES)
+                .map(|rule| rule.rule_id)
+                .collect::<Vec<_>>(),
+            PYTHON_ERA_RULE_IDS,
+        );
         assert_eq!(
             serde_json::to_value(&catalog[0]).unwrap(),
             serde_json::json!({
@@ -1680,7 +1927,7 @@ mod tests {
             })
         );
         assert_eq!(
-            serde_json::to_value(&catalog[17]).unwrap(),
+            serde_json::to_value(catalog.last().unwrap()).unwrap(),
             serde_json::json!({
                 "rule_id": "credential-assignment",
                 "family": "Contextual credential assignment",
@@ -1702,10 +1949,7 @@ mod tests {
             200,
         );
         assert_eq!(summary.findings.len(), 4);
-        assert_eq!(
-            summary.detector_version,
-            "guard-secrets-v1:1d8dc93ef4fc2a04"
-        );
+        assert_eq!(summary.detector_version, detector_version());
 
         let github = &summary.findings[0];
         assert_eq!(github.rule_id, "github-token");
@@ -1769,15 +2013,17 @@ mod tests {
         );
         let public = summary.to_public_dict(Some(b"oracle-key")).unwrap();
         let json = serde_json::to_string(&public).unwrap();
-        let expected = concat!(
-            r#"{"schema":"guard-secret-scan.v1","detector_version":"guard-secrets-v1:1d8dc93ef4fc2a04","#,
+        let expected = format!(
+            r#"{{"schema":"guard-secret-scan.v1","detector_version":"{}","#,
+            detector_version()
+        ) + concat!(
             r#""finding_count":4,"findings":[{"rule_id":"github-token","family":"GitHub token","#,
             r#""severity":"critical","confidence":"high","confidence_score":1.0,"line":2,"#,
             r#""path":"config/prod.env","source":"working_tree","commit":null,"validation":"github","#,
             r#""entropy":5.0588,"context_reasons":["provider-format","high-token-rarity","#,
             r#""credential-name-context"],"fingerprint":"b018734dfa08a0099c84c484d37b473f5a14095e14a647584993f1b2c6d9a100"},"#,
         );
-        assert!(json.starts_with(expected), "mismatch: {json}");
+        assert!(json.starts_with(&expected), "mismatch: {json}");
         // Without a key, `fingerprint` is absent (not null).
         let no_key = serde_json::to_string(&summary.to_public_dict(None).unwrap()).unwrap();
         assert!(!no_key.contains("fingerprint"));
@@ -2057,5 +2303,136 @@ mod tests {
             candidate_digest("ghp_AbCdEfGhIjKlMnOpQrStUvWxYz012345"),
             candidate_digest("ghp_AbCdEfGhIjKlMnOpQrStUvWxYz012346")
         );
+    }
+
+    /// One synthetic credential per rule added after the Python detector was
+    /// retired, in the order the rules appear. None of these is a live secret:
+    /// each is assembled to satisfy its own pattern and nothing else. Each is
+    /// held in two pieces, as `jwt_fixture` is, so no complete provider-shaped
+    /// token ever appears as a literal in this file.
+    const RULES_ADDED_AFTER_PYTHON: [(&str, &str, &str); 16] = [
+        (
+            "atlassian-api-token",
+            "ATATT3xFfGF0A1b2C3d4E5",
+            "f6G7h8I9j0K1l2M",
+        ),
+        (
+            "telegram-bot-token",
+            "7645120398:AAH9kQ2vL8nP4wR",
+            "7tY1uI6oP3aS5dFgHj",
+        ),
+        (
+            "discord-webhook",
+            "https://discord.com/api/webhooks/1298374650192837465/qZ2vL8nP4wR7tY1uI6o",
+            "P3aS5dFgHjK9mQ2vL8nP4wR7tY1uI6oP3aS5dFgHjK9mQ2vL8",
+        ),
+        (
+            "doppler-token",
+            "dp.pt.a7Kq2VL8nP4wR7tY1uI6oP3",
+            "aS5dFgHjK9mQ2vL8nP4w",
+        ),
+        ("vault-token", "hvs.CAESIJq2VL8nP4wR7t", "Y1uI6oP3aS5dFgHj"),
+        (
+            "shopify-access-token",
+            "shpat_9f3b7c2a1d4e8f60",
+            "b5a9c7d3e1f2a4b6",
+        ),
+        (
+            "grafana-service-account-token",
+            "glsa_Qq2VL8nP4wR7tY1uI6oP3a",
+            "S5dFgHjK9m_3f7b1c9d",
+        ),
+        (
+            "linear-api-key",
+            "lin_api_Qq2VL8nP4wR7tY1uI6oP3a",
+            "S5dFgHjK9mQ2vL8nP4wR",
+        ),
+        (
+            "dockerhub-pat",
+            "dckr_pat_Qq2VL8nP4wR7tY1uI6",
+            "oP3aS5dFgHjK9mQ2vL",
+        ),
+        (
+            "postman-api-key",
+            "PMAK-6f3b7c2a1d4e8f60b5a9c7d3-e1f2a4b6",
+            "9c8d7e5f3a1b2c4d6e8f0a2b4c",
+        ),
+        (
+            "databricks-token",
+            "dapi9f3b7c2a1d4e8f60b",
+            "5a9c7d3e1f2a4b6",
+        ),
+        (
+            "planetscale-token",
+            "pscale_tkn_Qq2VL8nP4wR7tY1uI6o",
+            "P3aS5dFgHjK9mQ2vL8nP4",
+        ),
+        (
+            "figma-token",
+            "figd_Qq2VL8nP4wR7tY1uI6oP3aS5",
+            "dFgHjK9mQ2vL8nP4wR7t",
+        ),
+        ("square-access-token", "sq0atp-Qq2VL8nP4w", "R7tY1uI6oP3a"),
+        (
+            "mailgun-api-key",
+            "key-9f3b7c2a1d4e8f60b",
+            "5a9c7d3e1f2a4b6",
+        ),
+        (
+            "flyio-token",
+            "fm2_Qq2VL8nP4wR7tY1uI6oP3aS5dFgHjK9mQ",
+            "2vL8nP4wR7tY1uI6oP3aS5dFgH",
+        ),
+    ];
+
+    #[test]
+    fn the_sample_set_covers_every_rule_added_after_python() {
+        // A rule appended without a sample would be a pattern nothing ever
+        // runs, so the list above has to track the table.
+        assert_eq!(
+            SECRET_RULES
+                .iter()
+                .skip(PYTHON_ERA_PROVIDER_RULES)
+                .map(|rule| rule.rule_id)
+                .collect::<Vec<_>>(),
+            RULES_ADDED_AFTER_PYTHON
+                .iter()
+                .map(|(rule_id, _, _)| *rule_id)
+                .collect::<Vec<_>>(),
+        );
+    }
+
+    #[test]
+    fn every_rule_added_after_python_finds_its_own_credential() {
+        for (rule_id, head, tail) in RULES_ADDED_AFTER_PYTHON {
+            let text = format!("SERVICE_CREDENTIAL = \"{head}{tail}\"");
+            let summary = scan_secret_text(&text, "config/prod.env", "working_tree", None, 200);
+            let found: Vec<&str> = summary
+                .findings
+                .iter()
+                .map(|finding| finding.rule_id)
+                .collect();
+            assert!(found.contains(&rule_id), "{rule_id}: {found:?}");
+        }
+    }
+
+    #[test]
+    fn a_rule_added_after_python_does_not_claim_another_rules_credential() {
+        // Each sample belongs to exactly one provider. A pattern loose enough
+        // to swallow a neighbour's token would mislabel a real finding.
+        for (rule_id, head, tail) in RULES_ADDED_AFTER_PYTHON {
+            let text = format!("SERVICE_CREDENTIAL = \"{head}{tail}\"");
+            let summary = scan_secret_text(&text, "config/prod.env", "working_tree", None, 200);
+            for finding in &summary.findings {
+                let claimed = finding.rule_id;
+                let is_own = claimed == rule_id;
+                let is_python_era = PYTHON_ERA_RULE_IDS.contains(&claimed);
+                let is_contextual = claimed == "credential-assignment";
+                assert!(
+                    is_own || is_python_era || is_contextual,
+                    "{rule_id} also matched {claimed}"
+                );
+            }
+        }
     }
 }
