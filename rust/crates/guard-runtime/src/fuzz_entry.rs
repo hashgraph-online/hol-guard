@@ -128,6 +128,7 @@ pub const CONTAINED_ARGV_OPERATIONS: &[&str] = &[
     "node_tool_route",
     "pytest_command",
     "package_test_resolve",
+    "script_words",
 ];
 
 /// The containment argument screens, which decide whether a contained run's

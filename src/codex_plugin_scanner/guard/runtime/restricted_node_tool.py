@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import shlex
 import stat
 import sys
 from collections.abc import Callable, Sequence
@@ -261,10 +260,10 @@ def _script_body(task: str, *, workspace: Path, cwd: Path | None) -> tuple[str, 
     script = scripts.get(task) if isinstance(scripts, dict) else None
     if not isinstance(script, str):
         raise RestrictedPytestError("node_tool_invalid_command", "The requested local script is unavailable.")
-    try:
-        return tuple(shlex.split(script))
-    except ValueError as error:
-        raise RestrictedPytestError("node_tool_invalid_command", "The local script could not be parsed.") from error
+    # Reading a script into the words a run will execute is a reading of a
+    # command, so the sink asks native authority for it rather than splitting
+    # the text a second way.
+    return tuple(restricted_native("script_words", {"script": script}, list))
 
 
 def prepare_restricted_node_tool(

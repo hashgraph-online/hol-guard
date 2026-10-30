@@ -4,6 +4,7 @@
 mod tests;
 use crate::contained_node_tool::local_package_entry;
 use crate::restricted_command::{normalized_command, RestrictedPytestError};
+use crate::sfrs_shlex::{split_with, PLAIN_LEXER};
 use regex::Regex;
 use serde_json::{json, Value};
 use std::path::Path;
@@ -517,9 +518,40 @@ fn contained_target(input: &Value) -> Value {
     crate::pretool::generic::contained_target(text, context).map_or(Value::Null, Value::String)
 }
 
+/// The words a manifest script spells, read with the lexer that reads it in
+/// `package_script_route`.
+///
+/// Splitting a script into the words a run will execute is a reading of a
+/// command, so it belongs here rather than in the sink. The route already
+/// reads the manifest's `lint` script with `PLAIN_LEXER` to admit `npm run
+/// lint`; the sink read the same text a second time with Python's `shlex`.
+/// Two readings of one script can part — this lexer leaves a backslash alone
+/// where the platform spells paths with it, `shlex` always escapes — and the
+/// words a run executes have to be the words that were read.
+fn script_words(input: &Value) -> Result<Vec<String>, RestrictedPytestError> {
+    let script = input.get("script").and_then(Value::as_str).ok_or_else(|| {
+        RestrictedPytestError::new(
+            "node_tool_invalid_command",
+            "The requested local script is unavailable.",
+        )
+    })?;
+    split_with(PLAIN_LEXER, script).map_err(|_| {
+        RestrictedPytestError::new(
+            "node_tool_invalid_command",
+            "The local script could not be parsed.",
+        )
+    })
+}
+
 pub fn evaluate(operation: &str, input: &Value) -> Option<Value> {
     if operation == "contained_target" {
         return Some(json!({ "value": contained_target(input) }));
+    }
+    if operation == "script_words" {
+        return Some(match script_words(input) {
+            Ok(words) => json!({ "value": words }),
+            Err(error) => crate::restricted_command::error_reply(error),
+        });
     }
     if !matches!(
         operation,

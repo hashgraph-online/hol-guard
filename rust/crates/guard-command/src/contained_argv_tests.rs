@@ -342,3 +342,40 @@ fn a_lookalike_entry_still_names_no_runner() {
         assert_eq!(kind["value"]["vitest"], false, "{argument} {kind}");
     }
 }
+
+#[test]
+fn a_manifest_script_reads_the_way_the_route_that_admits_it_reads_it() {
+    // `package_script_route` reads a named script's words with this lexer, so
+    // the sink that runs the script asks for that reading rather than making
+    // its own.
+    assert_eq!(
+        evaluate(
+            "script_words",
+            &json!({ "script": "eslint src --max-warnings 0" })
+        )
+        .unwrap()["value"],
+        json!(["eslint", "src", "--max-warnings", "0"])
+    );
+    // This lexer leaves a backslash alone where the platform spells paths with
+    // it; Python's `shlex`, which the sink used to split the script with,
+    // escapes on every platform.
+    assert_eq!(
+        evaluate("script_words", &json!({ "script": "eslint .\\src" })).unwrap()["value"],
+        if cfg!(windows) {
+            json!(["eslint", ".\\src"])
+        } else {
+            json!(["eslint", ".src"])
+        }
+    );
+    // An unterminated quote is not a reading of the script, so the run is
+    // refused rather than started on whatever a partial parse leaves.
+    assert_eq!(
+        evaluate("script_words", &json!({ "script": "eslint 'src" })).unwrap()["reason_code"],
+        json!("node_tool_invalid_command")
+    );
+    // A manifest entry that is not text names nothing to run.
+    assert_eq!(
+        evaluate("script_words", &json!({ "script": 7 })).unwrap()["reason_code"],
+        json!("node_tool_invalid_command")
+    );
+}
