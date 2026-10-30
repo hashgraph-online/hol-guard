@@ -1040,3 +1040,25 @@ pub fn last_flow_operator(controls: &[String]) -> Option<&String> {
         .rev()
         .find(|c| flow_operators().contains(&c.as_str()))
 }
+
+/// The controls that join commands in the shell this segment runs in.
+///
+/// A `(` or `{` before the segment starts that shell, and a `)` or `}` after
+/// it leaves the shell. `&&` and `||` outside those brackets decide whether
+/// the group runs, not which directory a `cd` inside it reaches when it does.
+pub fn same_shell_controls(controls: &[String], before_segment: bool) -> &[String] {
+    if before_segment {
+        let start = controls
+            .iter()
+            .rposition(|control| control == "(" || control == "{")
+            .map(|index| index + 1)
+            .unwrap_or(0);
+        &controls[start..]
+    } else {
+        let end = controls
+            .iter()
+            .position(|control| control == ")" || control == "}")
+            .unwrap_or(controls.len());
+        &controls[..end]
+    }
+}

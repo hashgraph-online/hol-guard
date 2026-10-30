@@ -244,7 +244,8 @@ pub fn model_shell_execution_context_bounded(
         let mut operation = directory_operation(segment_tokens);
         if let Some(op) = operation.as_mut() {
             directory_change_present = true;
-            let flow_before = last_flow_operator(controls_before).cloned();
+            let flow_before =
+                last_flow_operator(same_shell_controls(controls_before, true)).cloned();
             let previous_segment = segments.last();
             if matches!(flow_before.as_deref(), Some("&&") | Some("||"))
                 && (previous_segment.is_none()
@@ -568,8 +569,8 @@ fn apply_directory_operation(
             reason_code: state.reason_code.clone(),
         };
     }
-    let flow_before = last_flow_operator(controls_before).cloned();
-    let flow = last_flow_operator(controls_after).cloned();
+    let flow_before = last_flow_operator(same_shell_controls(controls_before, true)).cloned();
+    let flow = last_flow_operator(same_shell_controls(controls_after, false)).cloned();
     if matches!(flow_before.as_deref(), Some("|") | Some("|&")) {
         return (state, None);
     }
