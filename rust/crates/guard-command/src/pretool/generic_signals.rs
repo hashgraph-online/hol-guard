@@ -136,6 +136,19 @@ fn bounded_identifier(value: &Value) -> bool {
     }
 }
 
+/// Whether the text is a JSON-encoded empty list. Only an empty one qualifies:
+/// a list that names targets keeps every value it carries.
+fn encodes_an_empty_list(value: &str) -> bool {
+    let trimmed = value.trim();
+    if !trimmed.starts_with('[') || trimmed.len() > MAX_COMMAND_BYTES {
+        return false;
+    }
+    matches!(
+        parse_strict_nested_json(trimmed.as_bytes()),
+        Ok(Value::Array(items)) if items.is_empty()
+    )
+}
+
 pub(crate) fn extract_generic_signals(
     payload: &Value,
 ) -> Result<GenericSignals, GenericExtractionError> {
@@ -174,6 +187,11 @@ pub(crate) fn extract_generic_signals(
     let command = collect_commands(&maps)?;
     let tool_name = collect_tool_names(payload)?;
     let mut path_values = collect_key_strings(&maps, &PATH_KEYS)?;
+    // Cline's compatibility copy encodes each parameter as a JSON string, so a
+    // call that names no file to read arrives as the text `[]`. That text is
+    // the empty list it encodes, not a file called `[]`, and reading it as a
+    // target hides the read-nothing proof behind a review.
+    path_values.retain(|value| !encodes_an_empty_list(value));
     // Adapter aliases can repeat one target; distinct targets must still
     // prevent the single-file benign proof.
     path_values.sort();

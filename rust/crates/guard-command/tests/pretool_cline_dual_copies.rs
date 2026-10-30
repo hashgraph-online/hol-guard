@@ -203,3 +203,49 @@ fn prompt_event_label_reads_as_one_event() {
     let (_, reason_code) = verdict_for("UserPromptSubmit", &prepared);
     assert_ne!(reason_code, json!("native_pre_tool_ambiguous_payload"));
 }
+
+/// The install canary encodes its empty target list as the text `[]`, the
+/// same way Cline encodes every compatibility parameter. Reading that text as
+/// a file called `[]` turns a call that opens nothing into a review, and the
+/// canary runs before any workspace is bound, so no workspace proof rescues
+/// it. The read-nothing proof must carry the decision.
+#[test]
+fn the_canarys_encoded_empty_target_list_names_no_file() {
+    let payload = json!({
+        "hookName": "PreToolUse",
+        "taskId": "hol-guard-cline-canary",
+        "workspaceRoots": [CWD],
+        "preToolUse": {"toolName": "read_files", "parameters": {"paths": "[]"}},
+    });
+    let prepared = prepared(&payload).expect("the lone copy prepares");
+    let result = evaluate_pre_tool_envelope_with_context(
+        "cline",
+        "PreToolUse",
+        &prepared,
+        None,
+        None,
+        None,
+        None,
+    );
+    let value = serde_json::to_value(&result).expect("result serializes");
+    assert_eq!(value["decision"], json!("allow"));
+    assert_eq!(value["reason_code"], json!("native_empty_file_read_request"));
+}
+
+/// A target list that names a file keeps it. Only the empty encoding is read
+/// as naming nothing.
+#[test]
+fn an_encoded_target_list_that_names_a_file_is_not_empty() {
+    let payload = json!({
+        "hookName": "PreToolUse",
+        "taskId": "t1",
+        "workspaceRoots": [CWD],
+        "preToolUse": {
+            "toolName": "read_files",
+            "parameters": {"paths": "[\"/etc/shadow\"]"},
+        },
+    });
+    let prepared = prepared(&payload).expect("the lone copy prepares");
+    let (_, reason_code) = verdict(&prepared);
+    assert_ne!(reason_code, json!("native_empty_file_read_request"));
+}
