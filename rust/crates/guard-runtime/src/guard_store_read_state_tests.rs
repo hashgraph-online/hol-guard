@@ -27,17 +27,21 @@ fn call(
     op(connection, &Args(&args))
 }
 
+/// Every page, ordered as `get_read_state` orders them: newest `read_at`
+/// first, rowid order within one time.
 fn read_ids(connection: &Connection) -> Value {
-    let mut all = Vec::new();
+    let mut marks = Vec::new();
     let mut after = Value::Null;
     loop {
         let page = call(connection, ids, json!({"after": after})).unwrap();
-        all.extend(page["ids"].as_array().unwrap().iter().cloned());
+        marks.extend(page["marks"].as_array().unwrap().iter().cloned());
         after = page["after"].clone();
         if after.is_null() {
-            return Value::Array(all);
+            break;
         }
     }
+    marks.sort_by(|left, right| right[1].as_str().cmp(&left[1].as_str()));
+    Value::Array(marks.into_iter().map(|mark| mark[0].clone()).collect())
 }
 
 #[test]
@@ -122,7 +126,7 @@ fn unread_and_clear_remove_marks() {
 }
 
 #[test]
-fn a_read_pages_by_cursor_and_a_mark_between_pages_shifts_nothing() {
+fn a_read_pages_by_rowid_and_a_mark_between_pages_loses_nothing() {
     let connection = store();
     for index in 0..PAGE_ROWS + 2 {
         connection
@@ -133,19 +137,24 @@ fn a_read_pages_by_cursor_and_a_mark_between_pages_shifts_nothing() {
             .unwrap();
     }
     let first = call(&connection, ids, json!({})).unwrap();
-    assert_eq!(first["ids"].as_array().unwrap().len() as i64, PAGE_ROWS);
-    assert_eq!(first["ids"][0], json!("id-0"));
+    assert_eq!(first["marks"].as_array().unwrap().len() as i64, PAGE_ROWS);
+    assert_eq!(first["marks"][0], json!(["id-0", "t1"]));
+    let unpaged = format!("id-{PAGE_ROWS}");
     call(
         &connection,
         mark_read,
-        json!({"request_ids": ["newest"], "now": "t2"}),
+        json!({"request_ids": ["newest", unpaged], "now": "t2"}),
     )
     .unwrap();
     let rest = call(&connection, ids, json!({"after": first["after"]})).unwrap();
     let last = PAGE_ROWS + 1;
     assert_eq!(
-        rest["ids"],
-        json!([format!("id-{PAGE_ROWS}"), format!("id-{last}")])
+        rest["marks"],
+        json!([
+            [unpaged, "t2"],
+            [format!("id-{last}"), "t1"],
+            ["newest", "t2"]
+        ])
     );
     assert_eq!(rest["after"], Value::Null);
 }
@@ -163,15 +172,15 @@ fn a_read_stops_at_its_byte_budget() {
             .unwrap();
     }
     let first = call(&connection, ids, json!({})).unwrap();
-    assert_eq!(first["ids"].as_array().unwrap().len(), 1);
+    assert_eq!(first["marks"].as_array().unwrap().len(), 1);
     assert!(!first["after"].is_null());
     assert_eq!(read_ids(&connection).as_array().unwrap().len(), 3);
 }
 
 #[test]
-fn a_cursor_that_is_not_a_read_at_and_rowid_pair_is_refused() {
+fn a_cursor_that_is_not_a_rowid_is_refused() {
     let connection = store();
-    for after in [json!("t1"), json!(["t1"]), json!([1, "t1"])] {
+    for after in [json!("t1"), json!(["t1", 1]), json!(1.5)] {
         assert!(matches!(
             call(&connection, ids, json!({"after": after})),
             Err(StoreError::Invalid("native_guard_store_args_invalid"))

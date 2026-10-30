@@ -47,13 +47,20 @@ class StoreReadStateMixin:
         self._native_store_call("mark_request_unread", {"request_id": request_id})
 
     def get_read_state(self) -> list[str]:
-        request_ids: list[str] = []
+        """Read request ids, most recently read first.
+
+        Pages come in rowid order, which a repeat mark never changes, so no
+        mark is skipped when one changes between pages.
+        """
+        marks: list[tuple[str, str]] = []
         page: Mapping[str, Any] = {"after": None}
         while True:
             page = self._native_store_call("get_read_state", {"after": page["after"]})
-            request_ids.extend(str(request_id) for request_id in page["ids"])
+            marks.extend((str(request_id), str(read_at)) for request_id, read_at in page["marks"])
             if page["after"] is None:
-                return request_ids
+                break
+        marks.sort(key=lambda mark: mark[1], reverse=True)
+        return [request_id for request_id, _ in marks]
 
     def clear_read_state(self) -> None:
         self._native_store_call("clear_read_state", {})

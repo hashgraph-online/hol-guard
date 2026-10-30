@@ -2,7 +2,7 @@
 //!
 //! The dashboard marks requests read and unread; only the newest
 //! `READ_STATE_LIMIT` marks are kept. A read of the marks fits in one native
-//! store response: it returns a page and a cursor after its last mark, and
+//! store response: it returns a page and the rowid after its last mark, and
 //! the caller reads on from there until no cursor comes back.
 
 use serde_json::{json, Value};
@@ -58,55 +58,38 @@ pub(crate) fn mark_unread(
     Ok(Value::Null)
 }
 
-/// `get_read_state`: one page of the read request ids, most recently read
-/// first, and the `[read_at, rowid]` to read on from, or null on the last
-/// page. Marks read at the same time come in rowid order, which the
-/// `read_at` index already carries.
+/// `get_read_state`: one page of the read marks as `[request_id, read_at]`
+/// pairs in rowid order, and the rowid to read on from, or null on the last
+/// page. A repeat mark keeps its rowid, so every mark that lasts the whole
+/// read comes back exactly once; the caller orders them by `read_at`.
 pub(crate) fn ids(connection: &rusqlite::Connection, args: &Args<'_>) -> StoreResult<Value> {
-    let (clause, mut params) = match args.raw("after") {
-        None | Some(Value::Null) => ("", Vec::new()),
-        Some(Value::Array(pair)) => match pair.as_slice() {
-            [Value::String(read_at), Value::Number(rowid)] => (
-                "where read_at <= ? and (read_at < ? or rowid > ?)",
-                vec![
-                    Value::from(read_at.as_str()),
-                    Value::from(read_at.as_str()),
-                    Value::from(rowid.as_i64().ok_or(ARGS_INVALID)?),
-                ],
-            ),
-            _ => return Err(ARGS_INVALID),
-        },
-        Some(_) => return Err(ARGS_INVALID),
+    let after = match args.raw("after") {
+        None | Some(Value::Null) => 0,
+        Some(value) => value.as_i64().ok_or(ARGS_INVALID)?,
     };
-    params.push(Value::from(PAGE_ROWS));
     let rows = query_all(
         connection,
-        &format!(
-            "select request_id, read_at, rowid as row_order from guard_request_read_state \
-             {clause} order by read_at desc, rowid asc limit ?"
-        ),
-        &params,
+        "select request_id, read_at, rowid as row_order from guard_request_read_state \
+         where rowid > ? order by rowid asc limit ?",
+        &[Value::from(after), Value::from(PAGE_ROWS)],
     )?;
     let full = rows.len() as i64 == PAGE_ROWS;
     let mut page = Vec::new();
     let mut size = 0;
-    let mut after = Value::Null;
+    let mut cursor = Value::Null;
     for row in &rows {
-        let id = text(row, "request_id");
-        if !page.is_empty() && size + id.len() > READ_BYTES_BUDGET {
+        let (id, read_at) = (text(row, "request_id"), text(row, "read_at"));
+        if !page.is_empty() && size + id.len() + read_at.len() > READ_BYTES_BUDGET {
             break;
         }
-        size += id.len();
-        page.push(Value::from(id));
-        after = json!([
-            text(row, "read_at"),
-            row.get("row_order").cloned().unwrap_or(Value::Null)
-        ]);
+        size += id.len() + read_at.len();
+        page.push(json!([id, read_at]));
+        cursor = row.get("row_order").cloned().unwrap_or(Value::Null);
     }
     if page.len() == rows.len() && !full {
-        after = Value::Null;
+        cursor = Value::Null;
     }
-    Ok(json!({"ids": page, "after": after}))
+    Ok(json!({"marks": page, "after": cursor}))
 }
 
 /// `clear_read_state`.

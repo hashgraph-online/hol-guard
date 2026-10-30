@@ -33,12 +33,12 @@ def test_no_marks_sends_nothing() -> None:
     assert store.calls == []
 
 
-def test_a_read_follows_the_cursor_until_the_last_page() -> None:
+def test_a_read_follows_the_cursor_and_orders_marks_newest_first() -> None:
     store = _FakeStore(
         [
-            {"ids": ["a", "b"], "after": ["t1", 2]},
-            {"ids": ["c"], "after": None},
+            {"marks": [["a", "t1"], ["b", "t3"]], "after": 2},
+            {"marks": [["c", "t2"], ["d", "t1"]], "after": None},
         ]
     )
-    assert store.get_read_state() == ["a", "b", "c"]
-    assert [args["after"] for _method, args in store.calls] == [None, ["t1", 2]]
+    assert store.get_read_state() == ["b", "c", "a", "d"]
+    assert [args["after"] for _method, args in store.calls] == [None, 2]
