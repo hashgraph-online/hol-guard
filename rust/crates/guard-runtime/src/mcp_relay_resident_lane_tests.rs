@@ -48,34 +48,69 @@ fn deferred(reason: &str) -> Vec<u8> {
     bytes(json!({"schema": RESULT_SCHEMA, "outcome": "defer", "reason": reason}))
 }
 
+fn budget() -> Instant {
+    Instant::now() + Duration::from_millis(250)
+}
+
 #[test]
-fn a_lane_defer_the_daemon_took_gets_one_retry() {
+fn a_lane_defer_the_daemon_took_is_retried() {
     let (mut authority, kicks) = kicked(Kick::Requested);
-    assert!(authority.rekick(Some(deferred("direct_lane_unbound").as_slice())));
-    assert!(authority.rekick(Some(deferred("mcp_relay_harness_unbound").as_slice())));
+    assert!(authority.rekick(Some(deferred("direct_lane_unbound").as_slice()), budget()));
+    assert!(authority.rekick(
+        Some(deferred("mcp_relay_harness_unbound").as_slice()),
+        budget()
+    ));
     assert_eq!(kicks.get(), 2);
 }
 
 #[test]
 fn other_answers_are_refused_without_a_retry() {
     let (mut authority, kicks) = kicked(Kick::Requested);
-    assert!(!authority.rekick(None));
-    assert!(!authority.rekick(Some(deferred("mcp_relay_policy_need").as_slice())));
-    assert!(!authority.rekick(Some(deferred("direct_lane_unsupported").as_slice())));
-    assert!(!authority.rekick(Some(&b"not json"[..])));
+    assert!(!authority.rekick(None, budget()));
+    assert!(!authority.rekick(Some(deferred("mcp_relay_policy_need").as_slice()), budget()));
+    assert!(!authority.rekick(
+        Some(deferred("direct_lane_unsupported").as_slice()),
+        budget()
+    ));
+    assert!(!authority.rekick(Some(&b"not json"[..]), budget()));
     assert_eq!(kicks.get(), 0);
-    for answer in [Kick::Refused, Kick::DaemonUnreachable, Kick::Skipped] {
+    for answer in [Kick::Refused, Kick::DaemonUnreachable] {
         let (mut authority, kicks) = kicked(answer);
-        assert!(!authority.rekick(Some(deferred("direct_lane_unbound").as_slice())));
+        assert!(!authority.rekick(Some(deferred("direct_lane_unbound").as_slice()), budget()));
         assert_eq!(kicks.get(), 1);
     }
+}
+
+/// The lane closes while the daemon republishes its snapshot: the ACK is
+/// withdrawn before the next one is written. A daemon asked within the kick
+/// interval is not asked again, and the call is decided again after a pause
+/// until the retry budget is spent, rather than refused at once.
+#[test]
+fn a_lane_closed_for_a_republish_is_retried_within_the_budget() {
+    let (mut authority, kicks) = kicked(Kick::Skipped);
+    let missing = deferred("direct_lane_ack_missing");
+    let deadline = Instant::now() + Duration::from_millis(120);
+    let started = Instant::now();
+    let mut retries = 0;
+    while authority.rekick(Some(missing.as_slice()), deadline) {
+        retries += 1;
+        assert!(retries < 100, "the budget bounds the retries");
+    }
+    assert!(retries >= 2, "the call waits for the lane to reopen");
+    assert!(started.elapsed() >= Duration::from_millis(50));
+    assert!(started.elapsed() < Duration::from_millis(500));
+    assert_eq!(kicks.get(), retries + 1);
+    // A spent budget refuses at once.
+    let started = Instant::now();
+    assert!(!authority.rekick(Some(missing.as_slice()), Instant::now()));
+    assert!(started.elapsed() < Duration::from_millis(25));
 }
 
 #[test]
 fn without_a_kick_a_deferral_is_never_retried() {
     let (mut authority, _) = kicked(Kick::Requested);
     authority.kick = None;
-    assert!(!authority.rekick(Some(deferred("direct_lane_unbound").as_slice())));
+    assert!(!authority.rekick(Some(deferred("direct_lane_unbound").as_slice()), budget()));
 }
 
 #[test]
