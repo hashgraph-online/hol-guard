@@ -61,7 +61,6 @@ from ..runtime.local_cli_identity import (
 )
 from ..runtime.local_mcp_probe import (
     McpProbeError,
-    is_package_mcp_launcher,
     is_strict_package_mcp_launcher,
     looks_like_mcp_launch,
     mcp_launch_tokens,
@@ -769,9 +768,6 @@ class LocalCliApiService:
         if (
             selected_server is None
             and stored_observation is None
-            # Only a package-runner paste can launch a profiled CLI, so a direct
-            # launch keeps MCP discovery even when the runner answer is missing.
-            and is_package_mcp_launcher(tokens)
             and profiled_cli_package_launch(tokens, guard_home=self._store.guard_home)
         ):
             return None

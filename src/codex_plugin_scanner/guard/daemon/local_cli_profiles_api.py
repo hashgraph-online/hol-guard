@@ -60,7 +60,10 @@ def profiled_cli_package_launch(tokens: Sequence[str], *, guard_home: Path | Non
         return False
     target = _native_runner_target(tokens, guard_home=guard_home)
     if target is _UNREADABLE:
-        return True
+        # Only a runner paste can launch a profiled CLI, so a direct launch of a
+        # server keeps MCP discovery when the runner answer is missing, while a
+        # runner paste still spawns nothing.
+        return _names_package_runner(tokens[0])
     if not isinstance(target, str):
         return False
     package_name, _, version_spec = target.rpartition("@") if target.rfind("@") > 0 else (target, "", "")
@@ -71,6 +74,17 @@ def profiled_cli_package_launch(tokens: Sequence[str], *, guard_home: Path | Non
 
 
 _UNREADABLE = object()
+
+# The runner names the native grammar reads a launched bin through, so a paste
+# this list does not name has no runner target for the native answer to miss.
+_PACKAGE_RUNNERS = frozenset({"npx", "bunx", "pnpm", "pnpx", "yarn", "npm"})
+
+
+def _names_package_runner(executable: str) -> bool:
+    name = Path(executable.replace("\\", "/")).name.lower()
+    if name.endswith(".cmd") or name.endswith(".exe"):
+        name = name[:-4]
+    return name in _PACKAGE_RUNNERS
 
 
 def _native_runner_target(tokens: Sequence[str], *, guard_home: Path | None = None) -> object:
