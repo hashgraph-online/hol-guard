@@ -103,6 +103,182 @@ fn cwd_list_context(
     Some(cwd)
 }
 
+/// `cd <dir> && <reads>`, then more of the same, with a read outside a group
+/// proved in the directory that group leaves behind.
+///
+/// A later `cd` is absolute, so it names the same directory whether or not an
+/// earlier group was a subshell. `||` does not start that `cd`: it skips the
+/// `cd` when the step before it succeeds, and a later `&&` read would then
+/// run in a directory this proof did not verify. A read after a `)` is
+/// outside the subshell, so it is proved in the directory the command started
+/// in. A read after a brace group stays with the `cd`, because `{ ...; }`
+/// does not restore the directory and the `;` before `}` is not the join.
+pub(in crate::pretool) fn exact_safe_absolute_cd_chain(
+    model: &CanonicalCommandV1,
+    allow_git_helper_context: bool,
+    context: PathContext<'_>,
+) -> bool {
+    if model.segments.len() < 2 || model.confidence != "exact" {
+        return false;
+    }
+    let mut saw_directory = false;
+    let mut index = 0usize;
+    while index < model.segments.len() {
+        if index > 0 && !reaches_segment(model, index) {
+            return false;
+        }
+        if model.segments[index].executable.as_deref() == Some("cd") {
+            if !take_cd_chunk(model, allow_git_helper_context, context, &mut index) {
+                return false;
+            }
+            saw_directory = true;
+            continue;
+        }
+        if !read_in_context(model, index, allow_git_helper_context, context) {
+            return false;
+        }
+        index += 1;
+    }
+    saw_directory
+}
+
+/// `&&` or `;` may start an absolute `cd`. A read that is not a `cd` may also
+/// follow `||`: that operator only chooses whether the read runs.
+fn reaches_segment(model: &CanonicalCommandV1, index: usize) -> bool {
+    let Some(operator) = separator_operator(model, index) else {
+        return false;
+    };
+    if model.segments[index].executable.as_deref() == Some("cd") {
+        matches!(operator.as_str(), "&&" | ";")
+    } else {
+        matches!(operator.as_str(), "&&" | "||" | ";")
+    }
+}
+
+fn take_cd_chunk(
+    model: &CanonicalCommandV1,
+    allow_git_helper_context: bool,
+    context: PathContext<'_>,
+    index: &mut usize,
+) -> bool {
+    let cd = &model.segments[*index];
+    if !cd.environment_names.is_empty()
+        || cd.pipeline_index != 0
+        || !directory_targets::drive_targets_quoted(cd)
+        || !directory_targets::home_targets_unquoted(cd)
+    {
+        return false;
+    }
+    let [target] = cd.arguments.as_slice() else {
+        return false;
+    };
+    if *index > 0 && !std::path::Path::new(target).is_absolute() {
+        return false;
+    }
+    let Some(cwd) = safe_reads::verified_cwd_target(target, context) else {
+        return false;
+    };
+    let proved = PathContext {
+        cwd: Some(&cwd),
+        ..context
+    };
+    *index += 1;
+    let mut reads = 0usize;
+    while *index < model.segments.len()
+        && model.segments[*index].executable.as_deref() != Some("cd")
+    {
+        // A `)` closes the subshell the `cd` ran in. The next command is back
+        // in the directory the command started in, so it is not a read there.
+        if separator_operator(model, *index).as_deref() != Some("&&")
+            || gap_closes_subshell(model, *index)
+        {
+            break;
+        }
+        if !read_in_context(model, *index, allow_git_helper_context, proved) {
+            return false;
+        }
+        reads += 1;
+        *index += 1;
+    }
+    reads > 0
+}
+
+fn read_in_context(
+    model: &CanonicalCommandV1,
+    index: usize,
+    allow_git_helper_context: bool,
+    context: PathContext<'_>,
+) -> bool {
+    let segment = &model.segments[index];
+    !cwd_effectful_segment(segment)
+        && exact_safe_segment_with_context(model, segment, allow_git_helper_context, context)
+        && segment.arguments.iter().all(|argument| {
+            // An absent name inside a repository is still a safe read on its
+            // own. Here the directory was chosen by `cd`, so the operand has
+            // to be the file in that directory: `cat one.txt` after
+            // `cd web` is not the `one.txt` that sits beside `web`.
+            if argument.starts_with('-') {
+                return true;
+            }
+            let path = std::path::Path::new(argument);
+            let resolved = if path.is_absolute() {
+                path.to_path_buf()
+            } else {
+                let Some(cwd) = context.cwd else {
+                    return false;
+                };
+                std::path::Path::new(cwd).join(path)
+            };
+            resolved.is_file()
+        })
+}
+
+fn gap_closes_subshell(model: &CanonicalCommandV1, index: usize) -> bool {
+    let previous = &model.segments[index - 1];
+    let next = &model.segments[index];
+    let Some(length) = next.span.start.checked_sub(previous.span.end) else {
+        return false;
+    };
+    model
+        .normalized_text
+        .chars()
+        .skip(previous.span.end)
+        .take(length)
+        .any(|character| character == ')')
+}
+
+/// The control operator joining the segment at `index` to the one before it.
+///
+/// The gap between two segments keeps whatever brackets the text had, as in
+/// `) && (` or `; } && {`. Brackets are not operators: the shape proof reads
+/// each group's own list, and the directory model decides what a bracket does
+/// to the directory. The `;` that ends a brace group's list goes with them,
+/// because it terminates that list rather than joining the two groups.
+fn separator_operator(model: &CanonicalCommandV1, index: usize) -> Option<String> {
+    let previous = &model.segments[index - 1];
+    let next = &model.segments[index];
+    let length = next.span.start.checked_sub(previous.span.end)?;
+    let gap: Vec<char> = model
+        .normalized_text
+        .chars()
+        .skip(previous.span.end)
+        .take(length)
+        .collect();
+    let mut operator = String::new();
+    for (position, character) in gap.iter().enumerate() {
+        match character {
+            value if value.is_whitespace() => {}
+            '(' | ')' | '{' | '}' => {}
+            ';' if gap[position + 1..]
+                .iter()
+                .find(|value| !value.is_whitespace())
+                == Some(&'}') => {}
+            value => operator.push(*value),
+        }
+    }
+    Some(operator)
+}
+
 pub(in crate::pretool) fn exact_safe_cwd_compound(
     model: &CanonicalCommandV1,
     allow_git_helper_context: bool,

@@ -9869,7 +9869,7 @@ _PACKAGE_THEN_SHELL_RISK_COMMANDS = (
     ("npm install lodash\nrm -f important.txt", "native_package_review"),
     ("npm install lodash | sh -c 'rm -f important.txt'", "native_command_extension_evaluation_failed"),
     ("sh -c 'npm install lodash && rm -f important.txt'", "native_package_review"),
-    ("(npm install lodash) && (rm -f important.txt)", "native_command_review_required"),
+    ("(npm install lodash) && (rm -f important.txt)", "native_package_review"),
     ("npm install lodash > install.log", "native_package_review"),
     ("npm install lodash > install.log && rm -f important.txt", "native_command_review_required"),
     ("npm install lodash && bash <<'EOF'\nrm -f important.txt\nEOF", "native_command_extension_evaluation_failed"),

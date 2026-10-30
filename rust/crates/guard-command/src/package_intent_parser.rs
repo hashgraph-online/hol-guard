@@ -81,6 +81,10 @@ mod tests;
 mod uvx_value_options_tests;
 
 #[cfg(test)]
+#[path = "package_intent_parser/install_help_tests.rs"]
+mod install_help_tests;
+
+#[cfg(test)]
 #[path = "package_intent_parser/routine_local_runner_tests.rs"]
 mod routine_local_runner_tests;
 
@@ -242,6 +246,30 @@ struct CommandSegment {
 // Public entry points  (package_intent_parser.py :147-…)
 // ---------------------------------------------------------------------------
 
+/// `<manager> <install verb...> -h|--help`: the manager prints usage and
+/// exits. Only the install verbs themselves may come before the flag, so a
+/// runner such as `npx some-pkg --help`, which passes the flag to the package
+/// it runs, is still an install.
+fn is_install_help(name: &str, tokens: &[String]) -> bool {
+    let Some((last, rest)) = tokens.split_last() else {
+        return false;
+    };
+    if !matches!(last.as_str(), "-h" | "--help") {
+        return false;
+    }
+    let verbs: Vec<&str> = rest.iter().skip(1).map(String::as_str).collect();
+    matches!(
+        (name, verbs.as_slice()),
+        ("uv", ["pip", "install"] | ["add"])
+            | ("pip" | "pip3", ["install"])
+            | ("npm", ["install" | "i" | "add"])
+            | ("pnpm", ["add" | "install" | "i"])
+            | ("yarn", ["add" | "install"])
+            | ("bun", ["add" | "install" | "i"])
+            | ("go", ["get" | "install"])
+    )
+}
+
 /// `parse_package_intent`  (package_intent_parser.py :147-…).
 pub fn parse_package_intent(
     command_text: &str,
@@ -257,6 +285,10 @@ pub fn parse_package_intent(
             continue;
         }
         let name = command_name(&segment.tokens[0]);
+        if is_install_help(&name, &segment.tokens) {
+            // `uv pip install --help` prints usage and installs nothing.
+            continue;
+        }
         let segment_workspace = if segment.context_complete {
             segment.effective_cwd.clone()
         } else {
