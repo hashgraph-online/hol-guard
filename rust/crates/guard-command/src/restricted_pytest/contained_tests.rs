@@ -127,7 +127,9 @@ fn recorded_original_contained_execution_outcomes() {
     ))
     .unwrap();
     for case in vectors["cases"].as_array().unwrap() {
-        if case["operation"] == "process_ceiling_snapshot" {
+        // `contained_argv_tests` reads the test-script vectors through the
+        // screen itself, which no operation names any more.
+        if case["operation"] == "process_ceiling_snapshot" || case["operation"] == "test_script" {
             continue;
         }
         fs::set_permissions(&node, fs::Permissions::from_mode(0o755)).unwrap();
