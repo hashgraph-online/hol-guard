@@ -1987,7 +1987,8 @@ def test_matching_saved_allow_is_composed_non_consumingly_before_any_claim(
     store = GuardStore(tmp_path / "guard-home")
 
     def exact_saved_allow(*_args: object, **kwargs: object) -> dict[str, object]:
-        assert kwargs["consume_one_shot"] is False
+        # The memory-pattern lookup only peeks: it has no consuming mode.
+        assert "consume_one_shot" not in kwargs
         return {
             "decision": {
                 "action": "allow",
