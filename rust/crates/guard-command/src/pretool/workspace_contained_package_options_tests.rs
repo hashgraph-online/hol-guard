@@ -58,6 +58,19 @@ fn a_path_selector_leaving_the_workspace_is_not_an_inert_value() {
         vec!["--filter", "..\\other", "build"],
         vec!["--filter", "web\\..\\..\\other", "build"],
         vec!["--filter=../sibling", "build"],
+        // pnpm removes the `...` that adds dependents before it decides
+        // whether what is left names a place, so these resolve to
+        // `../other` against the directory the command ran in.
+        vec!["--filter", "...../other", "build"],
+        vec!["--filter", "...^../other", "build"],
+        vec!["--filter", "!...../other", "build"],
+        vec!["--filter=...../other", "build"],
+        vec!["--filter", "...^..\\other", "build"],
+        // The shell expands a brace alternative into one word per
+        // alternative, so pnpm is handed `--filter=../sibling` of its own.
+        vec!["--filter={web,../sibling}", "build"],
+        vec!["--filter", "{web,../sibling}", "build"],
+        vec!["--filter", "web,/opt/other", "build"],
         vec!["-F", "/opt/other", "build"],
         // A missing value leaves the option itself in front of the verb.
         vec!["--filter"],
@@ -84,6 +97,11 @@ fn a_selector_that_stays_in_the_workspace_is_an_inert_value() {
         // The `{<dir>}` selector holds a directory, and this one is inside.
         (vec!["--filter", "{packages/web}", "build"], 2),
         (vec!["--filter", "@scope/*{components/**}", "build"], 2),
+        // The same `...` prefix in front of a name is a name, not a place.
+        (vec!["--filter", "...web", "build"], 2),
+        (vec!["--filter", "...^web", "build"], 2),
+        (vec!["--filter", "...packages/web", "build"], 2),
+        (vec!["--filter", "!...web", "build"], 2),
     ] {
         assert_eq!(
             skip_inert_options("pnpm", &arguments),

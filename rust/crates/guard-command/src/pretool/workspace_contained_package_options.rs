@@ -64,17 +64,21 @@ pub(super) fn skip_inert_options(manager: &str, arguments: &[&str]) -> usize {
 /// selector after a name pattern, a changed-since ref or an exclusion, as in
 /// `web{/opt/other}`, `[origin/main]{/opt/other}` and `!{/opt/other}`. So
 /// each piece a brace separates is read on its own, and one of them reaching
-/// out refuses the whole value. A value carrying `$` is refused outright,
-/// since what it names is not in the text. A scoped name such as `@acme/web`
-/// still passes, and so does a changed-since selector such as
-/// `[origin/main]`, which names a git ref rather than a place on disk.
+/// out refuses the whole value. A comma separates pieces for the same reason,
+/// one step earlier: the shell expands `--filter={web,../sibling}` into two
+/// words before pnpm sees either, so the second selector never appears in the
+/// text this reads. Splitting on the comma reads it anyway. A value carrying
+/// `$` is refused outright, since what it names is not in the text. A scoped
+/// name such as `@acme/web` still passes, and so does a changed-since
+/// selector such as `[origin/main]`, which names a git ref rather than a
+/// place on disk.
 pub(super) fn inert_value(value: &str) -> bool {
     !value.is_empty()
         && !value.starts_with('-')
         && !value.contains('$')
         && !value.chars().any(char::is_whitespace)
         && value
-            .split(['{', '}'])
+            .split(['{', '}', ','])
             .filter(|piece| !piece.is_empty())
             .all(stays_below_the_workspace)
 }
@@ -86,7 +90,34 @@ pub(super) fn inert_value(value: &str) -> bool {
 /// relative path is what makes one test enough — a name never climbs
 /// anywhere, so the only pieces this can refuse are the directory spellings
 /// it is here to bound.
+///
+/// pnpm removes its own decorations before it decides whether what is left
+/// names a place, so this removes them first too. `...../other` is the `...`
+/// that adds a project's dependents in front of `../other`, and pnpm resolves
+/// that against the directory the command ran in. Read whole, its components
+/// are `.....` and `other` and neither is a step back, so the value has to be
+/// read the way pnpm reads it as well as the way it is written.
 fn stays_below_the_workspace(piece: &str) -> bool {
+    climbs_nowhere(piece) && climbs_nowhere(undecorated(piece))
+}
+
+/// `piece` with pnpm's selector decorations removed: a leading exclusion, the
+/// `...` or `...^` that adds dependents, and the trailing `...` or `^...`
+/// that adds dependencies.
+fn undecorated(piece: &str) -> &str {
+    let piece = piece.strip_prefix('!').unwrap_or(piece);
+    let piece = match piece.strip_prefix("...") {
+        Some(rest) => rest.strip_prefix('^').unwrap_or(rest),
+        None => piece,
+    };
+    match piece.strip_suffix("...") {
+        Some(rest) => rest.strip_suffix('^').unwrap_or(rest),
+        None => piece,
+    }
+}
+
+/// Whether `piece` names no place above where the command runs.
+fn climbs_nowhere(piece: &str) -> bool {
     !piece.starts_with(['/', '\\', '~'])
         && !is_drive_prefixed(piece)
         && !piece.split(['/', '\\']).any(|component| component == "..")
