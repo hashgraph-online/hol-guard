@@ -89,7 +89,10 @@ fn inert_options(manager: &str) -> (&'static [&'static str], &'static [&'static 
 
 // npm's own output and workspace options. `--no-audit` and `--no-fund` only
 // drop reporting an install would have printed, and an install is refused by
-// the registry verbs regardless.
+// the registry verbs regardless. `--verbose` is npm's spelling of a log
+// level, and `--timing` and `--no-timing` only say whether npm records how
+// long its own run took. `--no-workspaces` holds a run to the root package
+// rather than widening it across the workspace's projects.
 //
 // The cache and lifecycle options below each ask npm to do less than it would
 // by default: `--prefer-offline` and `--offline` move work from the registry
@@ -106,12 +109,16 @@ const NPM_FLAGS: &[&str] = &[
     "--quiet",
     "--color",
     "--no-color",
+    "--verbose",
     "--no-audit",
     "--no-fund",
     "--no-progress",
     "--no-update-notifier",
+    "--timing",
+    "--no-timing",
     "--workspaces",
     "--ws",
+    "--no-workspaces",
     "--include-workspace-root",
     "--prefer-offline",
     "--offline",
@@ -171,10 +178,13 @@ const YARN_FLAGS: &[&str] = &[
 
 // bun's output options, `--bun` for a script the project pins to node, and
 // the two options that keep a run on what is already installed.
+// `--config` is absent with the other options that point a manager at a
+// file: what it names is read as configuration, which is not inert.
 const BUN_FLAGS: &[&str] = &[
     "--silent",
     "--bun",
     "--no-progress",
+    "--no-summary",
     "--prefer-offline",
     "--no-install",
 ];

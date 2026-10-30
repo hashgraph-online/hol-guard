@@ -112,6 +112,11 @@ fn a_changed_since_selector_is_an_inert_value() {
 fn an_option_that_narrows_the_run_does_not_hide_the_verb() {
     for (manager, arguments, verb) in [
         ("npm", vec!["--prefer-offline", "run", "test"], "run"),
+        ("npm", vec!["--verbose", "run", "test"], "run"),
+        ("npm", vec!["--timing", "run", "test"], "run"),
+        ("npm", vec!["--no-timing", "test"], "test"),
+        ("npm", vec!["--no-workspaces", "run", "test"], "run"),
+        ("bun", vec!["--no-summary", "run", "test"], "run"),
         ("npm", vec!["--offline", "test"], "test"),
         ("npm", vec!["--ignore-scripts", "run", "test"], "run"),
         ("npm", vec!["--foreground-scripts", "run", "build"], "run"),
@@ -146,6 +151,11 @@ fn an_option_that_widens_the_run_still_hides_the_verb() {
         ("yarn", vec!["--offline"]),
         ("bun", vec!["--ignore-scripts", "run", "test"]),
         ("yarn", vec!["--use-stderr", "test"]),
+        // Options that name a file the manager reads its configuration
+        // through, or that change which configuration files it reads at all,
+        // are not output options and stay out with the directory options.
+        ("bun", vec!["--config=bunfig.toml", "run", "test"]),
+        ("yarn", vec!["--no-default-rc", "test"]),
     ] {
         let skipped = skip_inert_options(manager, &arguments);
         assert!(
