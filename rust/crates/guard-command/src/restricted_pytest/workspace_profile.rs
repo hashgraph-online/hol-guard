@@ -396,11 +396,14 @@ pub(super) fn compose_with(
     // privilege names above stay denied by literal path across all four
     // directories, as they already were.
     executable.extend(existing(super::launch_roots::MAC_PROGRAM_ROOTS));
-    // The same sealed framework interpreters the reachability check reaches,
-    // so a `rake` or `tclsh` script judged containable can start the program
-    // its shebang names. Reads of that tree are already granted with the rest
-    // of `/System`.
-    executable.extend(existing(&[super::launch_roots::MAC_FRAMEWORK_PROGRAM_ROOT]));
+    // The same sealed framework interpreter directories the reachability
+    // check reaches, so a `rake` or `tclsh` script judged containable can
+    // start the program its shebang names. They are named one by one rather
+    // than as a subpath of the frameworks directory, which would also reach
+    // the privileged helpers in the `Support`, `Helpers`, `XPCServices` and
+    // `MachServices` trees beside them. Reads of that tree are already
+    // granted with the rest of `/System`.
+    executable.extend(super::launch_roots::mac_framework_program_directories());
     executable.extend(input.exec_roots.iter().cloned());
     let privileged = privileged_executables();
     let mut lines = vec![

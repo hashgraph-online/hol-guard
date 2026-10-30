@@ -451,60 +451,7 @@ fn a_project_package_shim_directory_stays_reachable() {
     let _ = fs::remove_dir_all(&root);
 }
 
-/// An executable macOS ships inside one of its own frameworks, found the way
-/// a shebang names one. `/System/Library/Frameworks/Ruby.framework/Versions/
-/// 2.6/usr/bin/ruby` is the one `/usr/bin/rake` runs on.
+/// The macOS framework interpreter roots, in a file of their own.
 #[cfg(target_os = "macos")]
-fn framework_program() -> Option<PathBuf> {
-    let versions = fs::read_dir(MAC_FRAMEWORK_PROGRAM_ROOT)
-        .ok()?
-        .filter_map(Result::ok)
-        .flat_map(|framework| fs::read_dir(framework.path().join("Versions")));
-    for version in versions {
-        for entry in version.filter_map(Result::ok) {
-            let programs = match fs::read_dir(entry.path().join("usr/bin")) {
-                Ok(programs) => programs,
-                Err(_) => continue,
-            };
-            for program in programs.filter_map(Result::ok) {
-                let path = program.path();
-                if path.is_file()
-                    && fs::metadata(&path).is_ok_and(|meta| meta.permissions().mode() & 0o111 != 0)
-                {
-                    return Some(path);
-                }
-            }
-        }
-    }
-    None
-}
-
-/// `/usr/bin/rake` is a short script whose shebang names the Ruby macOS ships
-/// inside a framework. That interpreter sits on the signed system volume, so
-/// the sandbox can run it, but it is not under any of the four `bin`
-/// directories the roots used to name and the run was reviewed instead of
-/// contained. The frameworks directory joins them.
-#[test]
-#[cfg(target_os = "macos")]
-fn a_script_run_by_a_framework_interpreter_stays_reachable() {
-    let root = scratch();
-    let workspace = root.join("workspace");
-    assert!(
-        executable_roots(&workspace, Vec::new())
-            .iter()
-            .any(|entry| entry == Path::new(MAC_FRAMEWORK_PROGRAM_ROOT)),
-        "the sealed framework programs are not executable roots"
-    );
-    if let Some(interpreter) = framework_program() {
-        tool(
-            &workspace.join("build.rb"),
-            &format!("#!{}\n", interpreter.display()),
-        );
-        assert!(
-            !outside(&root, "./build.rb", "/usr/bin:/bin"),
-            "{} is unreachable",
-            interpreter.display()
-        );
-    }
-    let _ = fs::remove_dir_all(root);
-}
+#[path = "launch_roots_framework_tests.rs"]
+mod framework;
