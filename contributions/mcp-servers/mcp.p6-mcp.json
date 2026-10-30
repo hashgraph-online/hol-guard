@@ -1,9 +1,9 @@
 {
   "schemaVersion": "guard.mcp-server-contribution.v1",
   "id": "mcp.p6-mcp",
-  "version": "1.1.0",
-  "name": "P6 MCP for Primavera P6",
-  "description": "Reads and, when the user allows it, edits Primavera P6 Professional schedules in a local P6 standalone (SQLite) database or in XER files. 32 read tools return schedule analysis; p6_export_xer and p6_export_dashboard write a caller-named .xer or .xlsx file; 18 write tools change the database, are off by default and apply only after a dry run and a single-use confirmation token. Independent project, not affiliated with Oracle. Off until enabled locally.",
+  "version": "1.2.0",
+  "name": "MCP for Primavera P6",
+  "description": "Reads and, when the user allows it, edits Primavera P6 Professional schedules in a local P6 standalone (SQLite) database or in XER files. 37 read tools return schedule analysis (2 read a public skill catalog); 2 export tools write a caller-named .xer or .xlsx file; 18 write tools change the database, are off by default and apply only after a dry run and a single-use confirmation token; p6_shop_install adds a skill the same way. Independent project, not affiliated with Oracle. Off until enabled locally.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
@@ -22,7 +22,8 @@
     "local-data-access",
     "local-sqlite-write",
     "local-file-write",
-    "local-data-deletion"
+    "local-data-deletion",
+    "external-network-read"
   ],
   "tools": [
     { "name": "p6_list_projects", "state": "inherit" },
@@ -39,6 +40,9 @@
     { "name": "p6_float_paths", "state": "inherit" },
     { "name": "p6_float_origin", "state": "inherit" },
     { "name": "p6_lookahead", "state": "inherit" },
+    { "name": "p6_milestones", "state": "inherit" },
+    { "name": "p6_schedule_risk", "state": "inherit" },
+    { "name": "p6_update_integrity", "state": "inherit" },
     { "name": "p6_progress_check", "state": "inherit" },
     { "name": "p6_progress_curve", "state": "inherit" },
     { "name": "p6_resource_summary", "state": "inherit" },
@@ -57,6 +61,8 @@
     { "name": "p6_diagnose", "state": "inherit" },
     { "name": "p6_sql_select", "state": "inherit" },
     { "name": "p6_list_udfs", "state": "inherit" },
+    { "name": "p6_shop_search", "state": "inherit" },
+    { "name": "p6_shop_get", "state": "inherit" },
     { "name": "p6_export_xer", "state": "review" },
     { "name": "p6_export_dashboard", "state": "review" },
     { "name": "p6_update_activity", "state": "review" },
@@ -77,18 +83,20 @@
     { "name": "p6_delete_activity", "state": "review" },
     { "name": "p6_delete_project", "state": "review" },
     { "name": "p6_restore_backup", "state": "review" },
+    { "name": "p6_shop_install", "state": "review" },
     { "name": "other", "state": "review" }
   ],
   "referenceUrls": [
-    "https://github.com/nizarhamza/p6-mcp/releases/tag/v1.6.0",
-    "https://github.com/nizarhamza/p6-mcp/blob/v1.6.0/README.md",
-    "https://github.com/nizarhamza/p6-mcp/blob/v1.6.0/SECURITY.md",
-    "https://github.com/nizarhamza/p6-mcp/blob/v1.6.0/p6mcp/policy.py"
+    "https://github.com/nizarhamza/p6-mcp/releases/tag/v2.0.0",
+    "https://github.com/nizarhamza/p6-mcp/blob/v2.0.0/README.md",
+    "https://github.com/nizarhamza/p6-mcp/blob/v2.0.0/SECURITY.md",
+    "https://github.com/nizarhamza/p6-mcp/blob/v2.0.0/p6mcp/policy.py"
   ],
   "saferAlternatives": [
-    "Keep 'Allow write operations' off in P6 MCP Settings (the default): the server then lists no write tool and refuses every write call itself, whatever the client decides.",
+    "Keep 'Allow write operations' off in MCP for Primavera P6 Settings (the default): the server then lists no write tool and refuses every write call itself, whatever the client decides.",
     "Every write is a dry run first and applies only with the single-use confirmation token it returns; deleting a project or an activity and restoring a backup also need a confirmation text.",
     "A backup is taken before every write, each write goes to the edit log, and writes are refused while P6 (PM.exe) is running. Open P6 and press F9 after a write.",
-    "Use the Basic tool profile (11 read-only tools) or XER-only mode, which loads XER files into a private read-only copy without touching a P6 database."
+    "Use the Basic tool profile (11 read-only tools) or XER-only mode, which loads XER files into a private read-only copy without touching a P6 database.",
+    "Turn off 'Allow the skill shop' in Settings: the server then lists no p6_shop_* tool and reads no catalog; p6_shop_install shows the whole skill and needs the confirmation token."
   ]
 }
