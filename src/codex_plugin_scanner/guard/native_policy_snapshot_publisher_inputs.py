@@ -21,6 +21,10 @@ from .native_policy_snapshot_constants import (
 )
 from .native_policy_snapshot_direct_lane import NativePolicySnapshotDirectLaneAck
 
+RESIDENT_SCOPE_PREFIX = "resident-v3-"
+# Stands in for the mtime and size of a scope that belongs to another runtime.
+FOREIGN_SCOPE_METADATA = -1
+
 if TYPE_CHECKING:
     from .runtime.extension_control_runtime import ExtensionControlRuntime
     from .store import GuardStore
@@ -104,19 +108,44 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
     ) -> tuple[tuple[tuple[str, tuple[int, int, int, int] | None], ...], tuple[tuple[str, int, int], ...]]:
         return self._current_policy_input_stats(), self._current_resident_fingerprint()
 
-    def _current_resident_fingerprint(self) -> tuple[tuple[str, int, int], ...]:
-        """Observe resident generation metadata without policy/config reads."""
+    def _live_resident_scope(self) -> str | None:
+        """The resident scope of the runtime this publisher pushes to.
 
+        The resident names its state directory after the first 16 hex digits
+        of its executable digest, and every snapshot is bound to that digest.
+        ``None`` until a runtime status has been observed.
+        """
+
+        identity = getattr(getattr(self, "_last_runtime_status", None), "identity", None)
+        digest = getattr(identity, "sha256", None)
+        if not isinstance(digest, str) or len(digest) != 64:
+            return None
+        return f"{RESIDENT_SCOPE_PREFIX}{digest[:16]}"
+
+    def _current_resident_fingerprint(self) -> tuple[tuple[str, int, int], ...]:
+        """Observe resident generation metadata without policy/config reads.
+
+        Another runtime's scope (a Desktop bundle beside the PyPI wheel, or a
+        runtime left behind by an upgrade) is recorded by name only. Its
+        residents cannot answer for a snapshot bound to this runtime, so their
+        restarts and hook traffic must not withdraw this ACK, and their
+        generation numbers must not outrank the resident that acknowledged.
+        """
+
+        live_scope = self._live_resident_scope()
         resident_values: list[tuple[str, int, int]] = []
         state_dir = self.guard_home / NATIVE_RUNTIME_STATE_DIRECTORY
         try:
             resident_directories = sorted(
-                (entry for entry in state_dir.iterdir() if entry.name.startswith("resident-v3-")),
+                (entry for entry in state_dir.iterdir() if entry.name.startswith(RESIDENT_SCOPE_PREFIX)),
                 key=lambda entry: entry.name,
             )
         except OSError:
             resident_directories = []
         for directory in resident_directories:
+            if live_scope is not None and directory.name != live_scope:
+                resident_values.append((directory.name, FOREIGN_SCOPE_METADATA, FOREIGN_SCOPE_METADATA))
+                continue
             try:
                 metadata = directory.stat()
             except OSError:
@@ -157,6 +186,10 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
                 metadata = (state_dir / path_key).lstat()
             except OSError:
                 return False
+            if mtime_ns == FOREIGN_SCOPE_METADATA and size == FOREIGN_SCOPE_METADATA:
+                if not stat.S_ISDIR(metadata.st_mode):
+                    return False
+                continue
             if not stat.S_ISREG(metadata.st_mode) and not stat.S_ISDIR(metadata.st_mode):
                 return False
             if metadata.st_mtime_ns != mtime_ns or metadata.st_size != size:
@@ -181,7 +214,7 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
             before_roots = {path for path, _mtime, _size in before}
             observed_roots = {path for path, _mtime, _size in observed if "/" not in path}
             started_in_empty_roots = (
-                all(path.startswith("resident-v3-") and "/" not in path for path in before_roots)
+                all(path.startswith(RESIDENT_SCOPE_PREFIX) and "/" not in path for path in before_roots)
                 and before_roots == observed_roots
                 and any("/generation-" in path and path.endswith(".json") for path, _mtime, _size in observed)
             )
