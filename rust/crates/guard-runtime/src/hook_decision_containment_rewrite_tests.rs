@@ -205,7 +205,7 @@ fn cursor_runs_the_runtime_sink_its_shell_check_admits() {
     let inputs: guard_contracts::ContainmentRewriteInputsV1 =
         serde_json::from_value(inputs).expect("rewrite inputs");
     let reason = json!("protected");
-    let runtime = |_: &Value, _: &serde_json::Map<String, Value>, _: &str| {
+    let runtime = |_: &Value, _: &serde_json::Map<String, Value>, _: &str, _: &str| {
         Some("/opt/hol guard/runtime".to_owned())
     };
 
