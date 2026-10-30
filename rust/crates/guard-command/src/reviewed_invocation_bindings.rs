@@ -95,7 +95,25 @@ pub fn validate_reviewed_invocations(
                 code: UNSAFE_VARIANT,
             }));
         }
-        if let Some(code) = unknown_options(&vocabularies[owner_index], &row.argv) {
+        // The owner's own path stands first in the vector. Everything after
+        // it is read by position, so an option written ahead of the path would
+        // be counted as part of the path and never screened, while the matcher
+        // steps over an unknown leading option and places the vector under the
+        // operation anyway.
+        let vocabulary = &vocabularies[owner_index];
+        let opens_with_its_path = row.argv.len() >= vocabulary.path.len()
+            && row
+                .argv
+                .iter()
+                .zip(&vocabulary.path)
+                .all(|(argument, token)| &normalized(argument) == token);
+        if !opens_with_its_path {
+            return Ok(Some(ReviewedBindingRefusal {
+                index,
+                code: SAFE_VARIANT_SCOPE,
+            }));
+        }
+        if let Some(code) = unknown_options(vocabulary, &row.argv) {
             return Ok(Some(ReviewedBindingRefusal { index, code }));
         }
         let command = parse_command(&CommandModelRequestV1 {

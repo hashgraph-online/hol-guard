@@ -79,6 +79,32 @@ fn a_value_taking_option_carrying_its_value_is_accepted() {
 }
 
 #[test]
+fn an_option_written_ahead_of_the_operation_path_is_refused() {
+    let operations = [operation("items-list", &["items", "list"], &[], &[])];
+    let rows = [row("items-list", &["--evil=/x", "items", "list"])];
+    assert_eq!(
+        validate(&operations, &rows, &[]),
+        Ok(Some(ReviewedBindingRefusal {
+            index: 0,
+            code: SAFE_VARIANT_SCOPE
+        }))
+    );
+}
+
+#[test]
+fn a_vector_shorter_than_its_operation_path_is_refused() {
+    let operations = [operation("items-list", &["items", "list"], &[], &[])];
+    let rows = [row("items-list", &["items"])];
+    assert_eq!(
+        validate(&operations, &rows, &[]),
+        Ok(Some(ReviewedBindingRefusal {
+            index: 0,
+            code: SAFE_VARIANT_SCOPE
+        }))
+    );
+}
+
+#[test]
 fn a_root_operation_owns_no_operands() {
     let operations = [operation("git", &[], &["--version"], &[])];
     let rows = [row("git", &["status"])];
