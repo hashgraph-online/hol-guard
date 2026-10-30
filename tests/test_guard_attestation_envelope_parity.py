@@ -22,6 +22,8 @@ import pytest
 from codex_plugin_scanner.guard.runtime.trust_attestation import (
     _normalize_pem,
     _public_key_fingerprint,
+)
+from tests.trust_attestation_verify_support import (
     verify_trust_attestation,
 )
 
