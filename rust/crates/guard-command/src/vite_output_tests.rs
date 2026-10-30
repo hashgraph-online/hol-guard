@@ -328,3 +328,15 @@ fn a_config_past_the_read_limit_is_unverifiable() {
         Declared::Unverified
     );
 }
+
+#[test]
+fn modules_a_parent_component_reaches_outside_the_workspace_is_not_granted() {
+    let project = Project::new("bundle-climb");
+    let workspace = project.workspace().join("ws");
+    fs::create_dir_all(workspace.join("app")).expect("app");
+    let outside = project.workspace().join("elsewhere");
+    fs::create_dir_all(outside.join("node_modules")).expect("modules");
+    let cwd = workspace.join("app/../../elsewhere");
+    let modules = cwd.join("node_modules");
+    assert_eq!(bundle_directory(&cwd, &workspace, &modules), None);
+}

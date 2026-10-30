@@ -324,7 +324,20 @@ pub fn bundle_directory(cwd: &Path, workspace: &Path, modules: &Path) -> Option<
         .ancestors()
         .map(|directory| directory.join("node_modules"))
         .find(|candidate| candidate.exists())?;
-    if nearest != modules || !nearest.starts_with(workspace) {
+    // The nearest `node_modules` and the one the caller asks to grant are the
+    // same directory when they resolve to one place, and the workspace holds
+    // it when the resolved directory sits below the resolved workspace. The
+    // replaced reader compared resolved paths too, and on Windows that
+    // comparison ignored case, so a directory spelled with different
+    // capitalization than the workspace still named the project's own.
+    let (Ok(reached), Ok(asked), Ok(root)) = (
+        nearest.canonicalize(),
+        modules.canonicalize(),
+        workspace.canonicalize(),
+    ) else {
+        return None;
+    };
+    if reached != asked || !reached.starts_with(&root) {
         return None;
     }
     let mut current = nearest.as_path();
