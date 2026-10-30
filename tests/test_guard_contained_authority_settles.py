@@ -210,6 +210,13 @@ def test_only_a_command_that_never_named_pytest_loses_the_planner_error(
         if operation == "pytest_command":
             words: list[str] = fields["command"]  # type: ignore[assignment]
             return any(tuple(words[: len(named)]) == named for named in names_pytest)
+        if operation == "command_words":
+            # The commands above are plain words, so the stand-in hands them
+            # back split on spaces. It must answer this operation at all: the
+            # sink reads every contained command through it, and the kind
+            # answer below is a mapping whose keys are strings, which a reader
+            # looking for words would take for the command itself.
+            return str(fields["command_text"]).split()
         return {
             "inline_eval": False,
             "node_test": False,
@@ -247,18 +254,22 @@ def test_a_later_contained_receipt_waits_for_the_resident(tmp_path: Path, monkey
     from codex_plugin_scanner.guard.runtime import restricted_node_test as node
 
     monkeypatch.setattr(contained_authority.time, "sleep", lambda _seconds: None)
-    monkeypatch.setattr(
-        native_restricted_pytest,
-        "restricted_native",
-        lambda *_args, **_kwargs: {
+
+    def native(operation: str, fields: dict[str, object], _expected: object) -> object:
+        # `command_words` is the sink's reading of every contained command, and
+        # a kind mapping returned in its place reads as the command's words.
+        if operation == "command_words":
+            return str(fields["command_text"]).split()
+        return {
             "inline_eval": False,
             "node_test": True,
             "vitest": False,
             "git": False,
             "node_tool": False,
             "package_test": False,
-        },
-    )
+        }
+
+    monkeypatch.setattr(native_restricted_pytest, "restricted_native", native)
     monkeypatch.setattr(
         node,
         "prepare_restricted_node_test",

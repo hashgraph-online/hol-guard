@@ -27,8 +27,10 @@ import tempfile
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 
+# `auto` selects the runtime bundled beside the imported package and nothing
+# else, so a `HOL_GUARD_NATIVE_BINARY` left in the environment is read by
+# nothing here and needs no clearing.
 os.environ["HOL_GUARD_NATIVE"] = "auto"
-os.environ.pop("HOL_GUARD_NATIVE_BINARY", None)
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 try:
