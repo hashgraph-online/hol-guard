@@ -15,7 +15,6 @@ import pytest
 from codex_plugin_scanner.guard.continuation_contract import ContinuationOffer, ContinuationResult
 from codex_plugin_scanner.guard.continuation_runtime import (
     continue_request_after_application,
-    record_live_hook_completion,
 )
 from codex_plugin_scanner.guard.continuation_worker import StoreContinuationPlan
 from codex_plugin_scanner.guard.live_process_identity import current_process_identity
@@ -180,11 +179,9 @@ def test_live_codex_hook_reports_waiting_without_starting_a_second_resume(tmp_pa
     assert replay["continuationEvidenceId"] == payload["continuationEvidenceId"]
     assert len(store.list_events(event_name="review.continuation.attempt")) == 1
 
-    completed = record_live_hook_completion(
-        store,
-        request_id="request-codex-live",
-        action="allow",
-        now="2026-08-24T12:00:01+00:00",
+    completed = store._native_store_call(
+        "record_codex_live_completion",
+        {"request_id": "request-codex-live", "action": "allow", "now": "2026-08-24T12:00:01+00:00"},
     )
     assert completed is not None
     assert completed["continuationStatus"] == "resumed"
@@ -273,11 +270,9 @@ def test_live_hook_completion_wins_over_inflight_waiting_owner(tmp_path: Path, m
         while not started.exists() and time.monotonic() < deadline:
             time.sleep(0.01)
         assert started.exists(), "spawned continuation did not reach the deterministic interleaving"
-        completed = record_live_hook_completion(
-            store,
-            request_id="request-live-completion-race",
-            action="allow",
-            now="2026-08-24T12:00:01+00:00",
+        completed = store._native_store_call(
+            "record_codex_live_completion",
+            {"request_id": "request-live-completion-race", "action": "allow", "now": "2026-08-24T12:00:01+00:00"},
         )
         (guard_home / "continuation-child-release").write_text("release", encoding="utf-8")
         returned = future.result(timeout=5.0)

@@ -29,9 +29,10 @@ from .hook_native_review_binding import (
     native_review_policy_binding,
     native_review_settle,
 )
-from .hook_native_saved_approval import native_saved_decision_response
+from .hook_native_saved_approval import native_exact_command_block_response, native_saved_decision_response
 from .hook_request_parsing import native_review_launch_target as _native_review_launch_target
 from .hook_request_parsing import native_review_tool_name as _native_review_tool_name
+from .hook_request_parsing import pre_tool_command
 from .native_review_allow_hint import native_review_hint_ask
 from .native_review_connector import native_review_connector_lookup, raise_connector_setup_notice
 from .native_review_records import native_review_approval_center_url
@@ -95,6 +96,17 @@ def pause_native_pre_tool_for_approval(
     valid, identity, exact_token, once_only_reason = evidence
     if not valid:
         return _policy_binding_failed(harness, native_result, guard_home)
+    # A saved block on the exact command, such as a Guard Cloud policy rule,
+    # wins over an exact-action allow or a pending once approval.
+    command_block = native_exact_command_block_response(
+        store,
+        harness=harness,
+        command=pre_tool_command(payload),
+        native_result=native_result,
+        workspace=workspace,
+    )
+    if command_block is not None:
+        return command_block
     saved = native_saved_decision_response(
         store,
         harness=harness,

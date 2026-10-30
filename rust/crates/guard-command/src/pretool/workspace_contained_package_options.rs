@@ -220,20 +220,44 @@ fn inert_options(manager: &str) -> (&'static [&'static str], &'static [&'static 
 
 // npm's own output and workspace options. `--no-audit` and `--no-fund` only
 // drop reporting an install would have printed, and an install is refused by
-// the registry verbs regardless.
+// the registry verbs regardless. `--verbose` is npm's spelling of a log
+// level, and `--timing` and `--no-timing` only say whether npm records how
+// long its own run took. `--no-workspaces` holds a run to the root package
+// rather than widening it across the workspace's projects.
+//
+// The cache and lifecycle options below each ask npm to do less than it would
+// by default: `--prefer-offline` and `--offline` move work from the registry
+// to the cache already on disk, `--ignore-scripts` drops the lifecycle
+// scripts a verb would otherwise run around the one it was asked for, and
+// `--foreground-scripts` only changes where their output goes. None of them
+// chooses different work, so the verb behind them runs what the verb alone
+// runs. Their opposites are absent on purpose: `--prefer-online` sends a run
+// back to the registry, and `--no-package-lock` lets a resolution drift from
+// the tree the lockfile pins.
 const NPM_FLAGS: &[&str] = &[
     "--silent",
     "-s",
     "--quiet",
     "--color",
     "--no-color",
+    "--verbose",
     "--no-audit",
     "--no-fund",
     "--no-progress",
     "--no-update-notifier",
+    "--timing",
+    "--no-timing",
     "--workspaces",
     "--ws",
+    "--no-workspaces",
     "--include-workspace-root",
+    "--prefer-offline",
+    "--offline",
+    "--ignore-scripts",
+    "--foreground-scripts",
+    "-d",
+    "-dd",
+    "-ddd",
 ];
 const NPM_VALUE_OPTIONS: &[&str] = &["--loglevel", "--workspace", "-w"];
 
@@ -252,6 +276,10 @@ const PNPM_FLAGS: &[&str] = &[
     "--stream",
     "--aggregate-output",
     "--no-bail",
+    "--use-stderr",
+    "--prefer-offline",
+    "--offline",
+    "--ignore-scripts",
 ];
 const PNPM_VALUE_OPTIONS: &[&str] = &[
     "--loglevel",
@@ -262,9 +290,12 @@ const PNPM_VALUE_OPTIONS: &[&str] = &[
     "--workspace-concurrency",
 ];
 
-// yarn's output options. `--frozen-lockfile` and the rest of the install
-// options are absent on purpose: a bare `yarn` installs, so a run carrying
-// only options still has no verb and stays out.
+// yarn's output options, and the two cache options that only move work off
+// the registry. `--frozen-lockfile` and the rest of the install options are
+// absent on purpose: a bare `yarn` installs, so a run carrying only options
+// still has no verb and stays out, and the verb check behind these options is
+// what keeps it that way. `--ignore-engines` is absent for the opposite
+// reason: it lets a run proceed where yarn would have stopped it.
 const YARN_FLAGS: &[&str] = &[
     "--silent",
     "-s",
@@ -272,10 +303,22 @@ const YARN_FLAGS: &[&str] = &[
     "--non-interactive",
     "--no-color",
     "--verbose",
+    "--prefer-offline",
+    "--offline",
 ];
 
-// bun's output options, and `--bun` for a script the project pins to node.
-const BUN_FLAGS: &[&str] = &["--silent", "--bun", "--no-progress"];
+// bun's output options, `--bun` for a script the project pins to node, and
+// the two options that keep a run on what is already installed.
+// `--config` is absent with the other options that point a manager at a
+// file: what it names is read as configuration, which is not inert.
+const BUN_FLAGS: &[&str] = &[
+    "--silent",
+    "--bun",
+    "--no-progress",
+    "--no-summary",
+    "--prefer-offline",
+    "--no-install",
+];
 
 #[cfg(test)]
 #[path = "workspace_contained_package_options_tests.rs"]

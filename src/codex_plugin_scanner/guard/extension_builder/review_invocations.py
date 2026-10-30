@@ -12,6 +12,7 @@ from .errors import BuilderError
 from .models import Discovery, Operation
 
 _MESSAGES = {
+    "unsafe_variant": "Safe variants require a bounded exact literal invocation.",
     "safe_variant_conflict": "A safe invocation overlaps a native explicitly blocked operation.",
     "safe_variant_option": "Safe invocations must use explicitly discovered option names and arity.",
     "safe_variant_scope": "Native parsing assigns this safe invocation to another or ambiguous operation.",

@@ -75,6 +75,7 @@ def _pause(
     for name, value in {
         "review_evidence_parts": lambda _evidence: (True, binding, token, None),
         "native_saved_decision_response": lambda *_a, **_k: None,
+        "native_exact_command_block_response": lambda *_a, **_k: None,
         "native_review_settle": lambda *_a, **_k: None,
         "native_package_review_response": lambda *_a, **_k: None,
         "native_review_approval_center_url": lambda _store: "http://127.0.0.1:4781",

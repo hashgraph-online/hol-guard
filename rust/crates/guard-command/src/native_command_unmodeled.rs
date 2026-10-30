@@ -82,6 +82,15 @@ const COMPATIBILITY_EXECUTABLES: &[(&str, &[&str])] = &[
     ("command.kubernetes-secrets", &["kubectl", "oc"]),
 ];
 
+/// The programs a compatibility-only rule of `extension_id` stands for, when
+/// the catalog names them outside the program itself.
+pub(super) fn compatibility_executables(extension_id: &str) -> Option<&'static [&'static str]> {
+    COMPATIBILITY_EXECUTABLES
+        .iter()
+        .find(|(id, _)| *id == extension_id)
+        .map(|(_, executables)| *executables)
+}
+
 const UNMODELED_ERRORS: [&str; 2] = [
     "native_command_compatibility_model_unsupported",
     "native_command_compatibility_context_unsupported",
@@ -372,10 +381,7 @@ impl CompiledNativeCommandControls {
         let mut floor = "review";
         for &index in self.candidate_index.extension_indices() {
             let extension = &self.program.extensions[index];
-            let compatibility = COMPATIBILITY_EXECUTABLES
-                .iter()
-                .find(|(id, _)| *id == extension.extension_id)
-                .map(|(_, executables)| *executables);
+            let compatibility = compatibility_executables(&extension.extension_id);
             let extension_names = self.program.extension_names(index, compatibility);
             let owns = extension_names
                 .as_ref()
@@ -418,10 +424,7 @@ impl CompiledNativeCommandControls {
                 if extension.required || !self.active_extensions.contains(&extension.extension_id) {
                     return false;
                 }
-                let compatibility = COMPATIBILITY_EXECUTABLES
-                    .iter()
-                    .find(|(id, _)| *id == extension.extension_id)
-                    .map(|(_, executables)| *executables);
+                let compatibility = compatibility_executables(&extension.extension_id);
                 !self
                     .program
                     .extension_known_names(index, compatibility)
@@ -443,10 +446,7 @@ impl CompiledNativeCommandControls {
                 {
                     return false;
                 }
-                let compatibility = COMPATIBILITY_EXECUTABLES
-                    .iter()
-                    .find(|(id, _)| *id == extension.extension_id)
-                    .map(|(_, executables)| *executables);
+                let compatibility = compatibility_executables(&extension.extension_id);
                 let extension_names = self.program.extension_names(index, compatibility);
                 extension_names
                     .as_ref()

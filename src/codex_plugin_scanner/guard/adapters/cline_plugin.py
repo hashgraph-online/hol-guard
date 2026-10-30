@@ -17,7 +17,6 @@ from .guard_cli_attestation import GuardCliAttestation, guard_hook_command, reso
 
 _MANAGED_MARKER = "HOL_GUARD_MANAGED_CLINE_PLUGIN_V1"
 _SCHEMA_VERSION = 1
-_PLUGIN_NAME = "hol-guard"
 _PLUGIN_TIMEOUT_MS = 9_000
 _BRIDGE_TIMEOUT_SECONDS = 8
 _MAX_PAYLOAD_BYTES = 256 * 1024

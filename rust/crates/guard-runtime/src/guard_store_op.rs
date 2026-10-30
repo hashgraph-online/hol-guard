@@ -40,6 +40,7 @@ use crate::guard_store_claude_review::{
     add_claude_approval_request, add_claude_native_review_approval_request,
 };
 use crate::guard_store_clients as clients;
+use crate::guard_store_cloud_events as cloud_events;
 use crate::guard_store_cmd_activity as activity;
 use crate::guard_store_cmd_api as api;
 use crate::guard_store_cmd_feedback as feedback;
@@ -50,6 +51,7 @@ use crate::guard_store_composio_catalog as composio_catalog;
 use crate::guard_store_connect as connect;
 use crate::guard_store_connector_context as connector_context;
 use crate::guard_store_db::{exec, query_all, query_one, text, StoreError, StoreResult};
+use crate::guard_store_evidence as evidence;
 use crate::guard_store_inventory as inventory;
 use crate::guard_store_local_cli as local_cli;
 use crate::guard_store_local_cli_catalog as local_cli_catalog;
@@ -393,6 +395,9 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "get_guard_operation"
         | "list_guard_operations"
         | "get_guard_operation_for_approval_request"
+        | "count_guard_events_v1"
+        | "get_request_resume"
+        | "get_latest_request_resume"
         | "list_guard_operation_items"
         | "get_guard_client_attachment"
         | "list_guard_client_attachments"
@@ -424,10 +429,20 @@ fn method_kind(method: &str) -> Option<Kind> {
         // Its lookup runs on the shared connection and its claim takes the
         // write lock itself, so no transaction is held around them.
         "settle_claimed_native_allow" => Kind::Read,
+        // Its exact Cloud read takes its own snapshot and its lookup opens its
+        // own connection, so no transaction is held around them.
+        "codex_live_allow_authority" => Kind::Read,
+        // Its authority lookup opens its own connection, so it takes the
+        // write lock itself only to record the continuation. That commit is
+        // its own, so the call reports no committed write: no caller retries
+        // it, and the outbox generation still follows its changes.
+        "complete_codex_live_decision" | "record_codex_live_completion" => Kind::Read,
         "list_command_activity_page"
         | "command_activity_analytics"
         | "list_command_activity_invalidations"
         | "command_activity_diagnostics"
+        | "list_evidence"
+        | "count_evidence"
         | "list_command_shadow_observations"
         | "observed_mcp_tool_actions"
         | "read_mcp_provider_choices"
@@ -443,8 +458,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "get_next_pending_request"
         | "get_approval_extension_allow_hint"
         | "approval_desktop_notified_at"
-        | "oldest_approval_request_created_at"
-        | "peek_exact_cloud_local_once_approval" => Kind::Snapshot,
+        | "oldest_approval_request_created_at" => Kind::Snapshot,
         "workflow_capability_commit" => Kind::Write,
         "consume_native_review_approval"
         | "settle_native_review_reuse"
@@ -483,6 +497,8 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "rebuild_command_activity_rollups"
         | "record_command_activity_feedback"
         | "clear_command_activity_evidence"
+        | "add_evidence"
+        | "clear_evidence"
         | "upsert_guard_session"
         | "upsert_guard_operation"
         | "link_codex_live_wait"
@@ -508,6 +524,10 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "receipt_summary_between"
         | "receipt_analytics"
         | "reconcile_receipt_events"
+        | "add_event"
+        | "add_guard_event_v1"
+        | "list_guard_events_v1"
+        | "mark_guard_events_v1_uploaded"
         | "maintain_storage"
         | "managed_keyring_reconcile"
         | "record_local_cli_observation"
@@ -618,6 +638,10 @@ fn dispatch(
         "record_command_activity_feedback" => feedback::record_feedback(connection, args),
         "list_command_activity_invalidations" => feedback::list_invalidations(connection, args),
         "clear_command_activity_evidence" => privacy::clear_evidence(connection),
+        "add_evidence" => evidence::add(connection, args),
+        "list_evidence" => evidence::list(connection, args),
+        "count_evidence" => evidence::count(connection, args),
+        "clear_evidence" => evidence::clear(connection, args),
         "command_activity_diagnostics" => privacy::diagnostics(connection, args),
         "count_command_shadow_observations" => privacy::count_shadow(connection),
         "list_command_shadow_observations" => privacy::list_shadow(connection, args),
@@ -689,6 +713,8 @@ fn dispatch(
         "get_guard_operation_for_approval_request" => {
             sessions::operation_for_approval_request(connection, args)
         }
+        "get_request_resume" => crate::codex_request_resume_store::get(connection, args),
+        "get_latest_request_resume" => crate::codex_request_resume_store::latest(connection, args),
         "add_guard_operation_item" => sessions::add_operation_item(connection, args),
         "list_guard_operation_items" => sessions::list_operation_items(connection, args),
         "attach_guard_client" => clients::attach_client(connection, args),
@@ -769,8 +795,14 @@ fn dispatch(
         "settle_claimed_native_allow" => {
             crate::guard_store_claimed_native_allow::settle(connection, guard_home, args)
         }
-        "peek_exact_cloud_local_once_approval" => {
-            crate::guard_store_exact_cloud_peek::peek(connection, args)
+        "codex_live_allow_authority" => {
+            crate::guard_store_codex_live_authority::resolve(connection, guard_home, args)
+        }
+        "complete_codex_live_decision" => {
+            crate::guard_store_codex_live_completion::complete(connection, guard_home, args, owner)
+        }
+        "record_codex_live_completion" => {
+            crate::guard_store_codex_live_completion::record(connection, guard_home, args, owner)
         }
         "apply_signed_remote_exact_result" => {
             crate::guard_store_exact_cloud_apply::apply_signed_remote_exact_result(
@@ -801,6 +833,11 @@ fn dispatch(
         "receipt_analytics" => receipt_reads::analytics(connection, args),
         "receipt_decision_counts" => receipt_reads::decision_counts(connection, args),
         "reconcile_receipt_events" => receipt_reads::reconcile_events(connection, args),
+        "add_event" => cloud_events::add_event(connection, args),
+        "add_guard_event_v1" => cloud_events::add(connection, args),
+        "list_guard_events_v1" => cloud_events::list(connection, args),
+        "count_guard_events_v1" => cloud_events::count(connection, args),
+        "mark_guard_events_v1_uploaded" => cloud_events::mark_uploaded(connection, args),
         "maintain_storage" => storage_maintenance::maintain(connection, args),
         "run_storage_housekeeping" => storage_maintenance::housekeeping(connection),
         _ if connect::handles(method) => connect::dispatch(connection, method, args),

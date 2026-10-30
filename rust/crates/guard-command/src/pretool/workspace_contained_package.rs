@@ -273,9 +273,12 @@ pub(super) fn local_package_work(
         // each of them. The verb names neither effect, so the subcommand after
         // it decides, and neither effect is the local script work this admits.
         let workspace_fanout = name == "yarn" && behind.first() == Some(&"workspaces");
+        // `-V` is the other short spelling of the same probe. A manager
+        // that reads it as "verbose" still has no verb to run, so either
+        // reading prints a version or a usage line and exits.
         let version_probe = behind
             .iter()
-            .all(|argument| matches!(*argument, "-v" | "--version" | "-h" | "--help"));
+            .all(|argument| matches!(*argument, "-v" | "-V" | "--version" | "-h" | "--help"));
         let leading_verb = behind
             .first()
             .is_some_and(|argument| !argument.starts_with('-'));
