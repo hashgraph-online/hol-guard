@@ -818,11 +818,16 @@ def _install_managed_core(staged: Path, manifest: _ParsedCoreManifest, target: s
     # Stage beside the target and rename over it. Copying onto an existing
     # executable rewrites the same inode, and macOS keeps the code signature it
     # cached for that inode, so a reinstall of the same version is killed on
-    # its next launch even though the file on disk verifies.
-    candidate = version_dir / f".{_executable_name()}.{os.getpid()}.tmp"
-    _reject_symlink(candidate)
+    # its next launch even though the file on disk verifies. The candidate is
+    # a new file under a name no other install uses: a predictable name could
+    # already be a hard link to the installed binary, or another update's
+    # candidate.
+    descriptor, candidate_name = tempfile.mkstemp(prefix=f".{_executable_name()}.", suffix=".tmp", dir=version_dir)
+    candidate = Path(candidate_name)
     try:
-        _ = shutil.copy2(staged, candidate)
+        with os.fdopen(descriptor, "wb") as destination, staged.open("rb") as source:
+            shutil.copyfileobj(source, destination)
+        shutil.copystat(staged, candidate)
         _reject_symlink(candidate)
         _make_executable(candidate)
         _verify_candidate(
