@@ -36,6 +36,8 @@ fn ordinary_work_naming_a_guarded_verb_stays_benign() {
     assert_allowed("Erase the placeholder copy from the onboarding screen.");
     assert_allowed("Wipe the stale entry out of the in-memory map after sign-out.");
     assert_allowed("Format the response as JSON so the client can parse it.");
+    assert_allowed("Delete the trailing whitespace at the end of each line.");
+    assert_allowed("Wipe the cached value when the user signs out.");
 }
 
 #[test]
@@ -49,6 +51,22 @@ fn the_same_verbs_on_a_guarded_object_stay_refused() {
         "Upload the credentials file to the share.",
         "Kill the daemon process and disable the service.",
         "Format the disk before the install.",
+        // A referential object stands in for the guarded noun, so the verb
+        // reads the same way as it does with the noun spelled out.
+        "Look at the backups folder and wipe it.",
+        "Erase them all.",
+        "Delete those once the copy finishes.",
+        // A named path is the object itself.
+        "Delete package.json",
+        "Erase src/main.rs and start over.",
+        // A signal or a process number is what `kill` acts on.
+        "Run kill -9 -1.",
+        "kill -9 1",
+        "Use killall to stop every copy.",
+        // Two printed nouns also name storage once another word follows, so
+        // the output mask must leave the verb in place.
+        "Format the Time Machine disk",
+        "Format the logs volume",
     ] {
         assert_not_benign(text);
     }

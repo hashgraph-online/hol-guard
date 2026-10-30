@@ -1,5 +1,5 @@
 use super::sensitive_command;
-use regex::Regex;
+use regex::{Captures, Regex};
 use std::sync::OnceLock;
 
 const BYPASS_PATTERNS: [&str; 10] = [
@@ -420,7 +420,7 @@ pub(super) fn benign_prompt_text(text: &str) -> bool {
         .get_or_init(|| Regex::new(r"(?i)\.env\.example\b").expect("bounded template reference"));
     remainder = env_template.replace_all(&remainder, " ").into_owned();
     let risky_action = RISK_ACTION.get_or_init(|| {
-        Regex::new(r"(?i)\b(?:rm\s+-[a-z]*[rf]\b|(?:delete|erase|wipe|upload)\b[^.!?;\n]{0,60}\b(?:files?|director(?:y|ies)|folders?|repos?|repositor(?:y|ies)|workspace|contents?|disks?|drives?|volumes?|partitions?|databases?|tables?|backups?|dumps?|data|payload|secrets?|tokens?|credentials?|keys?|config|logs?|history|branch|everything)\b|kill\b[^.!?;\n]{0,60}\b(?:process(?:es)?|pids?|daemons?|containers?|sessions?)\b|format\b|exfiltrat[a-z]*\b|transfer\b|curl\b|wget\b|sudo\b|bash\s+-c\b|sh\s+-c\b|powershell\b|cmd\s+/c\b|subprocess\b|spawn\s*\(|exec\s*\(|send\s+(?:data|payload|file|secret|token|credential)\b|post\s+(?:payload|data|file|secret)\b|sync\s+(?:output|data)\b|(?:send|post|sync|transfer)\s+(?:to|over|via|at)\s+(?:webhook|server|slack|discord|https?://)\b|then\s+(?:read|open|print|summari[sz]e|show|dump|include|use|grab|upload|send)\s+(?:it|them|those|files|secrets)\b)")
+        Regex::new(r"(?i)\b(?:rm\s+-[a-z]*[rf]\b|(?:delete|erase|wipe|upload)\b[^.!?;\n]{0,60}(?:\b(?:files?|director(?:y|ies)|folders?|repos?|repositor(?:y|ies)|workspace|contents?|disks?|drives?|volumes?|partitions?|databases?|tables?|backups?|dumps?|data|payload|secrets?|tokens?|credentials?|keys?|config|logs?|history|branch|everything|it|them|those|these)\b|\b[a-z0-9_-]+\.[a-z0-9]{1,8}\b|/[a-z0-9_./-]+)|kill\b(?:[^.!?;\n]{0,60}\b(?:process(?:es)?|pids?|daemons?|containers?|sessions?)\b|\s+-[0-9a-z]+|\s+[0-9]+)|pkill\b|killall\b|format\b|exfiltrat[a-z]*\b|transfer\b|curl\b|wget\b|sudo\b|bash\s+-c\b|sh\s+-c\b|powershell\b|cmd\s+/c\b|subprocess\b|spawn\s*\(|exec\s*\(|send\s+(?:data|payload|file|secret|token|credential)\b|post\s+(?:payload|data|file|secret)\b|sync\s+(?:output|data)\b|(?:send|post|sync|transfer)\s+(?:to|over|via|at)\s+(?:webhook|server|slack|discord|https?://)\b|then\s+(?:read|open|print|summari[sz]e|show|dump|include|use|grab|upload|send)\s+(?:it|them|those|files|secrets)\b)")
             .expect("bounded risky prompt action")
     });
     let referential = REFERENTIAL_INSTRUCTION.get_or_init(|| {
@@ -472,13 +472,34 @@ fn mask_transfer_encoding(value: &str) -> String {
 /// `format` applied to what a program prints all choose how output is shaped;
 /// the bare word, or an assignment such as `operation=format`, still asks to
 /// format a disk.
+///
+/// Two of the printed nouns also name storage once another word follows them:
+/// `format the time machine disk`, `format the logs volume`. The mask reads
+/// what comes after its own match and leaves such a phrase alone, so the verb
+/// stays in the text for the guarded reading below.
 fn mask_format_options(value: &str) -> String {
     static OPTION: OnceLock<Regex> = OnceLock::new();
+    static STORAGE: OnceLock<Regex> = OnceLock::new();
+    let storage = STORAGE.get_or_init(|| {
+        Regex::new(
+            r"(?i)^\s*(?:machine\s+)?(?:disks?|drives?|volumes?|partitions?|usb|ssd|hdd|sd\s*cards?|media)\b",
+        )
+        .expect("bounded storage noun")
+    });
     OPTION
         .get_or_init(|| {
             Regex::new(r"(?i)(^|[^a-z0-9-])--?format\b|=format:|\bformat(?:s|ted|ting)?\s+(?:the\s+|this\s+|that\s+|its\s+|your\s+)?(?:output|response|reply|message|json|yaml|xml|html|markdown|code|text|table|date|time|number|string|currency|logs?|diff|results?|summary|report)\b")
                 .expect("bounded format option")
         })
-        .replace_all(value, "${1}output-layout")
+        .replace_all(value, |captures: &Captures| {
+            let whole = captures.get(0).expect("whole match present");
+            if storage.is_match(&value[whole.end()..]) {
+                return whole.as_str().to_owned();
+            }
+            format!(
+                "{}output-layout",
+                captures.get(1).map_or("", |prefix| prefix.as_str())
+            )
+        })
         .into_owned()
 }
