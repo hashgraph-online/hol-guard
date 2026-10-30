@@ -476,7 +476,8 @@ fn every_resolved_version_in_the_workspace_is_listed() {
 fn a_lockfile_that_lists_no_packages_is_not_a_parse_warning() {
     // A project with no dependencies still has a valid lockfile. Only a
     // lockfile Guard cannot parse, or one in a format it has no parser for,
-    // leaves the audit incomplete.
+    // leaves the audit incomplete. A line-scanned lockfile with no packages
+    // counts only when it carries its package manager's header.
     let scratch = Scratch::new("empty-lockfiles");
     let workspace = scratch.0.join("ws");
     write_files(
@@ -486,6 +487,8 @@ fn a_lockfile_that_lists_no_packages_is_not_a_parse_warning() {
             "package-lock.json": r#"{"name": "demo", "lockfileVersion": 3, "requires": true,
                 "packages": {"": {"name": "demo"}}}"#,
             "Cargo.lock": "version = 4\n",
+            "yarn.lock": "# yarn lockfile v1\n\n\n",
+            "Gemfile.lock": "not a lockfile\n",
             "uv.lock": "not toml [",
             "go.sum": "github.com/pkg/errors v0.9.1 h1:abc=\n",
         }),
@@ -506,6 +509,10 @@ fn a_lockfile_that_lists_no_packages_is_not_a_parse_warning() {
     assert_eq!(
         warnings,
         [
+            (
+                "Gemfile.lock".to_owned(),
+                "lockfile_parse_warning".to_owned()
+            ),
             ("go.sum".to_owned(), "lockfile_parse_warning".to_owned()),
             ("uv.lock".to_owned(), "lockfile_parse_warning".to_owned()),
         ]

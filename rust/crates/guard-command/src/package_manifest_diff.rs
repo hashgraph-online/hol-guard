@@ -429,7 +429,33 @@ pub fn try_parse_manifest_dependencies_ordered(
         return None;
     }
     let deadline = Deadline::from_ms(deadline_ms);
-    dependency_map_for_supported_path(path, text, &deadline)?.ok()
+    let dependencies = dependency_map_for_supported_path(path, text, &deadline)?.ok()?;
+    if dependencies.is_empty() && !has_lockfile_header(path, text) {
+        return None;
+    }
+    Some(dependencies)
+}
+
+/// The yarn, pnpm, Bundler and Gradle lockfile parsers skip lines they don't
+/// recognise and never fail, so finding no packages there proves nothing about
+/// the file. Such a lockfile counts as empty only when it carries the line its
+/// package manager always writes. Every other format fails on bad input.
+fn has_lockfile_header(path: &str, text: &str) -> bool {
+    let lower_path = path.to_lowercase();
+    let mut lines = text.lines().map(str::trim);
+    if lower_path.ends_with("yarn.lock") {
+        return lines.any(|line| line == "# yarn lockfile v1" || line == "__metadata:");
+    }
+    if lower_path.ends_with("pnpm-lock.yaml") {
+        return lines.any(|line| line.starts_with("lockfileVersion:"));
+    }
+    if lower_path.ends_with("gemfile.lock") {
+        return lines.any(|line| line == "BUNDLED WITH" || line == "DEPENDENCIES");
+    }
+    if lower_path.ends_with("gradle.lockfile") {
+        return lines.any(|line| line.starts_with("empty="));
+    }
+    true
 }
 
 /// Result-returning variant of `parse_manifest_dependencies` for callers that
@@ -1469,6 +1495,22 @@ mod tests {
         assert!(parse("Cargo.lock", "version = 4\n", 1024).is_some_and(|map| map.is_empty()));
         assert!(parse("package-lock.json", r#"{"lockfileVersion": 3,"#, 1024).is_none());
         assert!(parse("package-lock.json", root_only, 8).is_none());
+        for (path, empty) in [
+            ("yarn.lock", "# yarn lockfile v1\n\n\n"),
+            ("yarn.lock", "__metadata:\n  version: 8\n"),
+            ("pnpm-lock.yaml", "lockfileVersion: '9.0'\n"),
+            (
+                "Gemfile.lock",
+                "GEM\n  specs:\n\nDEPENDENCIES\n\nBUNDLED WITH\n   2.5.0\n",
+            ),
+            ("gradle.lockfile", "# Gradle generated file\nempty=\n"),
+        ] {
+            assert!(
+                parse(path, empty, 1024).is_some_and(|map| map.is_empty()),
+                "{path}"
+            );
+            assert!(parse(path, "not a lockfile\n", 1024).is_none(), "{path}");
+        }
         let go_sum = "github.com/pkg/errors v0.9.1 h1:abc=\n";
         assert!(parse("go.sum", go_sum, 1024).is_none());
         assert!(parse_manifest_dependencies_ordered("go.sum", go_sum, 1024, GENEROUS).is_empty());
