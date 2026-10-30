@@ -134,3 +134,39 @@ fn a_step_the_kernel_will_not_grant_is_not_spent() {
     // The step the link does grant is still spent.
     assert!(shaped("cd here/app && ls ..", &ws));
 }
+
+/// `cd app && npm test; cd ..` is the same visit spelled so the climb back
+/// runs whatever the work did. The only branch where that climb leaves the
+/// workspace is the one where the first `cd` failed, and on that branch the
+/// shell never descended and nothing runs after the climb, so the chain is
+/// bounded exactly as the `&&` spelling is.
+#[test]
+fn a_climb_that_only_leaves_where_the_descent_failed_stays_contained() {
+    let ws = workspace("cwd-failed-branch", true);
+    std::fs::create_dir_all(ws.join("app/sub")).unwrap();
+    for command in [
+        "cd app && ls; cd ..",
+        "cd app && cat package.json; cd ..",
+        "cd app; ls; cd ..",
+        "cd app || ls; cd ..",
+        "cd app && ls || cd ..",
+        "cd app/sub && ls; cd ../..",
+        "cd app; cd ..",
+    ] {
+        assert!(shaped(command, &ws), "{command}");
+    }
+    for command in [
+        // The climb leaves on the branch the command really takes.
+        "cd app && ls && cd ../..",
+        "cd app && cd ../..",
+        // Something runs after the shell that climbed out, and the walk
+        // never bounded the directory it would read.
+        "cd app && ls; cd ..; ls",
+        "cd app && ls; cd ..; cat package.json",
+        // No descent at all, so the climb is the step out.
+        "cd ..",
+        "ls; cd ..",
+    ] {
+        assert!(!shaped(command, &ws), "{command}");
+    }
+}

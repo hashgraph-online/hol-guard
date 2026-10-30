@@ -5,6 +5,23 @@ use std::path::{Component, Path, PathBuf};
 
 const MAX_STATES: usize = 64;
 
+/// One shell the command could be running in by the time a segment is read.
+///
+/// `succeeded` is how the segment before it ended, which is what `&&` and
+/// `||` select on. `descent_failed` records that this directory is the one a
+/// `cd` left behind when the walk modelled it as failing, and `left` that a
+/// later climb from such a branch stepped above the workspace. A branch that
+/// only exists because a descent failed may spend its climb outside, since
+/// nothing the command actually runs is read from there; the walk gives up as
+/// soon as such a shell would execute a segment.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct Shell {
+    cwd: PathBuf,
+    succeeded: bool,
+    descent_failed: bool,
+    left: bool,
+}
+
 /// Whether this segment is the shell builtin that moves the shell itself.
 ///
 /// Only the bare spelling counts. `cd` and `pushd` change the directory of the
@@ -43,7 +60,12 @@ fn logical_join(cwd: &Path, target: &str) -> Option<PathBuf> {
 
 pub(super) fn locations(model: &CanonicalCommandV1, workspace: &Path) -> Option<Vec<Vec<PathBuf>>> {
     let root = workspace.canonicalize().ok()?;
-    let mut states = vec![(workspace.to_path_buf(), true)];
+    let mut states = vec![Shell {
+        cwd: workspace.to_path_buf(),
+        succeeded: true,
+        descent_failed: false,
+        left: false,
+    }];
     let mut result = Vec::new();
     // The operator that decided whether the pipeline now being read runs at
     // all. A `|` joins a segment to the one before it rather than to the list,
@@ -80,11 +102,22 @@ pub(super) fn locations(model: &CanonicalCommandV1, workspace: &Path) -> Option<
         let name = segment.executable.as_deref()?;
         let mut executing = Vec::new();
         let mut next = Vec::new();
-        for (cwd, succeeded) in states {
-            if (connector == "&&" && !succeeded) || (connector == "||" && succeeded) {
-                next.push((cwd, succeeded));
+        for shell in states {
+            if (connector == "&&" && !shell.succeeded) || (connector == "||" && shell.succeeded) {
+                next.push(shell);
                 continue;
             }
+            // A shell that climbed out on a failed-descent branch reads this
+            // segment from a directory the walk never bounded, so the reading
+            // that let the climb pass no longer holds.
+            if shell.left {
+                return None;
+            }
+            let Shell {
+                cwd,
+                descent_failed,
+                ..
+            } = shell;
             executing.push(cwd.clone());
             if moves_the_shell(Some(name)) {
                 let [target] = segment.arguments.as_slice() else {
@@ -122,16 +155,54 @@ pub(super) fn locations(model: &CanonicalCommandV1, workspace: &Path) -> Option<
                 if !moved.is_dir() {
                     return None;
                 }
-                if !moved.starts_with(workspace) || !moved.canonicalize().ok()?.starts_with(&root) {
+                let inside = moved.starts_with(workspace)
+                    && moved
+                        .canonicalize()
+                        .ok()
+                        .is_some_and(|real| real.starts_with(&root));
+                // `cd app && work; cd ..` climbs back to the workspace root on
+                // every branch the command really takes. The one branch that
+                // would land above it is the one where the first `cd` failed,
+                // which is also a branch where the shell never descended — so
+                // the climb is the step out, not the work. Carry it rather
+                // than giving up on the whole walk; the check above stops it
+                // as soon as anything would run from there.
+                if !inside && !descent_failed {
                     return None;
                 }
                 // A failed cd leaves the old cwd. &&/|| choose the corresponding
                 // state; a later semicolon resumes both, rather than guessing.
-                next.extend([(moved, true), (cwd, false)]);
+                next.extend([
+                    Shell {
+                        cwd: moved,
+                        succeeded: true,
+                        descent_failed,
+                        left: !inside,
+                    },
+                    Shell {
+                        cwd,
+                        succeeded: false,
+                        descent_failed: true,
+                        left: false,
+                    },
+                ]);
             } else if name == "popd" {
                 return None;
             } else {
-                next.extend([(cwd.clone(), true), (cwd, false)]);
+                next.extend([
+                    Shell {
+                        cwd: cwd.clone(),
+                        succeeded: true,
+                        descent_failed,
+                        left: false,
+                    },
+                    Shell {
+                        cwd,
+                        succeeded: false,
+                        descent_failed,
+                        left: false,
+                    },
+                ]);
             }
         }
         next.sort();
