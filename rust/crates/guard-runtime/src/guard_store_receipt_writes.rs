@@ -49,7 +49,7 @@ fn cell(map: &Map<String, Value>, key: &str) -> Value {
     map.get(key).cloned().unwrap_or(Value::Null)
 }
 
-pub(crate) fn local_workspace_id(connection: &Connection) -> StoreResult<Option<String>> {
+fn local_workspace_id(connection: &Connection) -> StoreResult<Option<String>> {
     let row = query_one(
         connection,
         "select payload_json from sync_state where state_key = 'oauth_local_credentials'",

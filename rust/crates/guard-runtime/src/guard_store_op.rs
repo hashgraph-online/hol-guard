@@ -394,8 +394,6 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "get_guard_operation"
         | "list_guard_operations"
         | "get_guard_operation_for_approval_request"
-        | "get_device_metadata"
-        | "get_cloud_workspace_id"
         | "list_guard_operation_items"
         | "get_guard_client_attachment"
         | "list_guard_client_attachments"
@@ -513,7 +511,6 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "receipt_summary_between"
         | "receipt_analytics"
         | "reconcile_receipt_events"
-        | "ensure_device_metadata"
         | "set_device_label"
         | "rotate_installation_id"
         | "maintain_storage"
@@ -809,11 +806,8 @@ fn dispatch(
         "receipt_analytics" => receipt_reads::analytics(connection, args),
         "receipt_decision_counts" => receipt_reads::decision_counts(connection, args),
         "reconcile_receipt_events" => receipt_reads::reconcile_events(connection, args),
-        "get_device_metadata" => devices::get(connection, args),
-        "ensure_device_metadata" => devices::ensure(connection, args),
         "set_device_label" => devices::set_label(connection, args),
         "rotate_installation_id" => devices::rotate(connection, args),
-        "get_cloud_workspace_id" => devices::cloud_workspace_id(connection, args),
         "maintain_storage" => storage_maintenance::maintain(connection, args),
         "run_storage_housekeeping" => storage_maintenance::housekeeping(connection),
         _ if connect::handles(method) => connect::dispatch(connection, method, args),

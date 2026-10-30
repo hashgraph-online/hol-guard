@@ -1,15 +1,16 @@
-//! The local device row: the installation id and label that name this machine
-//! to Guard Cloud, and the connected workspace.
+//! Writes to the local device row: the installation id and label that name
+//! this machine to Guard Cloud.
 //!
-//! The schema creates the row, so reads stay lock-free; the writes recreate it
-//! first when it is missing, as `_ensure_local_device` did.
+//! Each write recreates a missing row first, as `_ensure_local_device` did.
+//! Reads of the row stay in Python: the cloud capability and enrollment checks
+//! read it before the native store is provisioned.
 
 use rusqlite::Connection;
 use serde_json::{json, Value};
 
 use crate::guard_store_args::Args;
 use crate::guard_store_db::{exec, query_one, text, StoreResult};
-use crate::guard_store_receipt_writes::{ensure_local_device, local_workspace_id, DEVICE_KEY};
+use crate::guard_store_receipt_writes::{ensure_local_device, DEVICE_KEY};
 
 fn metadata(connection: &Connection) -> StoreResult<Value> {
     let row = query_one(
@@ -25,23 +26,12 @@ fn metadata(connection: &Connection) -> StoreResult<Value> {
     }))
 }
 
-/// `get_device_metadata`, or null when the row is missing.
-pub(crate) fn get(connection: &Connection, _args: &Args<'_>) -> StoreResult<Value> {
-    metadata(connection)
-}
-
 fn ensured(connection: &Connection, args: &Args<'_>) -> StoreResult<()> {
     ensure_local_device(
         connection,
         args.str("new_device_id")?,
         args.str("created_at")?,
     )
-}
-
-/// Recreate a missing device row and read it.
-pub(crate) fn ensure(connection: &Connection, args: &Args<'_>) -> StoreResult<Value> {
-    ensured(connection, args)?;
-    metadata(connection)
 }
 
 /// `set_device_label`: the caller sends the label already normalized.
@@ -72,11 +62,6 @@ pub(crate) fn rotate(connection: &Connection, args: &Args<'_>) -> StoreResult<Va
         ],
     )?;
     metadata(connection)
-}
-
-/// `get_cloud_workspace_id`: the workspace the stored OAuth pairing names.
-pub(crate) fn cloud_workspace_id(connection: &Connection, _args: &Args<'_>) -> StoreResult<Value> {
-    Ok(local_workspace_id(connection)?.map_or(Value::Null, Value::from))
 }
 
 #[cfg(test)]
