@@ -223,8 +223,6 @@ class GuardBrowserOpener(Protocol):
 _GUARD_CLIENT_VERSION = "2.0.0"
 _SERVICE_RUNTIME_PROFILE_STATE_KEY = "service_runtime_profile"
 _NAMED_SECURITY_LEVELS = {"relaxed", "balanced", "strict", "gentle", "paranoid"}
-_HOOK_DAEMON_UNREACHABLE_REASON_MARKER = "daemon was unreachable"
-_CODEX_BROWSER_APPROVAL_WAIT_MAX_SECONDS = 8
 
 
 _SETTINGS_POLICY_RISK_ACTIONS: dict[str, dict[str, dict[str, str]]] = {

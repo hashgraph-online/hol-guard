@@ -195,11 +195,6 @@ def native_evaluation_has_terminal_policy_action(
 
 
 # The payload fields the observer-event rule reads to name an attested event.
-_OBSERVER_EVENT_PAYLOAD_FIELDS = (
-    "hook_event_name",
-    "hookEventName",
-    "cursor_source_hook_event",
-)
 
 
 def native_render_pre_tool(

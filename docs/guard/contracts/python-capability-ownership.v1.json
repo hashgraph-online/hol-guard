@@ -2487,6 +2487,33 @@
     "rust/crates/guard-command/src/inventory_item_metadata.rs",
     "rust/crates/guard-runtime/src/inventory_item_classification_op.rs"
    ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/native_policy_snapshot_constants.py",
+   "source_sha256": "69f505d30daa7f9d0d5f68177b7a1de3233a4cee7a2556f249bf9c563daa30ef",
+   "forbidden_symbols": [
+    "_ACTION_SEVERITY",
+    "_VALID_ACTIONS"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-contracts/src/decision_lattice.rs",
+    "rust/crates/guard-policy-snapshot/src/lib.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/command_activity_lifecycle.py",
+   "source_sha256": "aa240d99aee2f85396db7a7176be2671c72aa984e34872bd3818e40d431c955b",
+   "forbidden_symbols": [
+    "_RULE_MODE_FLOOR",
+    "_SEVERITY",
+    "_UNCERTAINTY_REASON",
+    "_UNMAPPED_RISK_CLASS_EFFECTS"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/command_decision_adapter.rs",
+    "rust/crates/guard-command/src/command_model.rs",
+    "rust/crates/guard-command/src/native_command_controls_floor.rs"
+   ]
   }
  ]
 }
