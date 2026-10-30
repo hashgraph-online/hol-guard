@@ -88,11 +88,23 @@ pub(crate) fn peek(connection: &Connection, args: &Args<'_>) -> StoreResult<Valu
     let Some((key, key_id)) = integrity_material(args)? else {
         return Ok(Value::Null);
     };
-    let Some(row) = exact_cloud_row(connection, request_id, &now)? else {
+    verified_decision(connection, request_id, &now, &key, key_id)
+}
+
+/// The verified exact Cloud decision for `request_id`, or `Null`. `now` must
+/// already be canonical.
+pub(crate) fn verified_decision(
+    connection: &Connection,
+    request_id: &str,
+    now: &str,
+    key: &[u8],
+    key_id: &str,
+) -> StoreResult<Value> {
+    let Some(row) = exact_cloud_row(connection, request_id, now)? else {
         return Ok(Value::Null);
     };
     let row = Value::Object(row);
-    if verify_local_once_approval(&row, Some(key.as_slice()), Some(key_id)).status != "valid" {
+    if verify_local_once_approval(&row, Some(key), Some(key_id)).status != "valid" {
         return Ok(Value::Null);
     }
     let revision = crate::claim_reuse::approval_authority_revision(connection)?;
