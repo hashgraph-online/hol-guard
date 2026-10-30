@@ -1,4 +1,4 @@
-use std::cell::OnceCell;
+use std::{cell::OnceCell, time::Instant};
 
 use super::*;
 
@@ -80,6 +80,7 @@ struct CloudContext<'a> {
     bundle_decision: Option<&'a str>,
     fail_closed: OnceCell<String>,
     entitlement: OnceCell<Map<String, Value>>,
+    started: Instant,
 }
 
 impl CloudContext<'_> {
@@ -244,6 +245,7 @@ impl CloudContext<'_> {
     }
 
     fn post(&self, auth_context: &Value, url: &str, data: &[u8]) -> EvalResult<Map<String, Value>> {
+        let (timeout, retry_timeout) = cloud_evaluate_timeouts(self.targets.len(), self.started)?;
         let request = self.deps.guard_sync.guard_sync_request(
             auth_context,
             url,
@@ -252,13 +254,9 @@ impl CloudContext<'_> {
             None,
             None,
         )?;
-        // Cloud checks a large request chunk by chunk, so it gets longer to
-        // answer before the install is paused as unreachable.
-        self.deps.guard_sync.urlopen_json_with_timeout_retry(
-            &request,
-            cloud_evaluate_timeout_seconds(TIMEOUT_SECONDS, self.targets.len()),
-            cloud_evaluate_timeout_seconds(RETRY_TIMEOUT_SECONDS, self.targets.len()),
-        )
+        self.deps
+            .guard_sync
+            .urlopen_json_with_timeout_retry(&request, timeout, retry_timeout)
     }
 
     /// POST with the single forced-refresh retry on HTTP 401.
@@ -451,6 +449,7 @@ pub(super) fn evaluate_with_cloud(
         bundle_decision,
         fail_closed: OnceCell::new(),
         entitlement: OnceCell::new(),
+        started: Instant::now(),
     };
     let auth_context = match deps
         .guard_sync

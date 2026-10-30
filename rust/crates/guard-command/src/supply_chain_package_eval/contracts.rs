@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use super::*;
 
 // ---------------------------------------------------------------------------
@@ -43,6 +45,15 @@ pub(super) const CLOUD_EVALUATE_CHUNK_PACKAGES: usize = 100;
 /// Longest wait for one evaluate attempt, however many packages it carries.
 pub(super) const CLOUD_EVALUATE_MAX_TIMEOUT_SECONDS: u64 = 5;
 
+/// Longest one Cloud evaluation may run, the sign-in refresh retry included.
+/// It leaves room inside the native request's 25-second deadline.
+pub(super) const CLOUD_EVALUATE_DEADLINE_SECONDS: u64 = 20;
+const _: () = assert!(CLOUD_EVALUATE_DEADLINE_SECONDS + 1 < 25);
+
+/// Attempts one evaluate POST can make: the first try, its timeout retry and
+/// two retries after a gateway error.
+const CLOUD_EVALUATE_ATTEMPTS_PER_POST: u64 = 4;
+
 /// Timeout for one evaluate attempt carrying `package_count` packages. A
 /// request of up to one chunk keeps `base_seconds`; each further chunk adds
 /// `base_seconds`, up to [`CLOUD_EVALUATE_MAX_TIMEOUT_SECONDS`].
@@ -51,6 +62,30 @@ pub(super) fn cloud_evaluate_timeout_seconds(base_seconds: u64, package_count: u
     base_seconds
         .saturating_mul(chunks)
         .min(CLOUD_EVALUATE_MAX_TIMEOUT_SECONDS.max(base_seconds))
+}
+
+/// First-try and retry timeouts for an evaluate POST sent now, in an
+/// evaluation that began at `started`. Each attempt gets its chunk-scaled
+/// wait, cut so every attempt the POST can make ends before the deadline.
+/// Once less than a second per attempt is left, the POST is not sent and the
+/// evaluation ends with the same timeout a slow answer would give.
+pub(super) fn cloud_evaluate_timeouts(
+    package_count: usize,
+    started: Instant,
+) -> EvalResult<(u64, u64)> {
+    // Whole seconds only, so attempts can end up to a second past the
+    // deadline; that stays inside the native request's.
+    let share = CLOUD_EVALUATE_DEADLINE_SECONDS.saturating_sub(started.elapsed().as_secs())
+        / CLOUD_EVALUATE_ATTEMPTS_PER_POST;
+    if share == 0 {
+        return Err(EvalError::Internal(
+            "timeout: Guard Cloud evaluation ran out of time.".to_owned(),
+        ));
+    }
+    Ok((
+        cloud_evaluate_timeout_seconds(TIMEOUT_SECONDS, package_count).min(share),
+        cloud_evaluate_timeout_seconds(RETRY_TIMEOUT_SECONDS, package_count).min(share),
+    ))
 }
 
 pub(super) static CLOUD_INBOX_URL_RE: LazyLock<Regex> = LazyLock::new(|| {
@@ -286,6 +321,8 @@ pub(super) fn user_copy_to_dict(copy: &Map<String, Value>) -> Value {
 
 #[cfg(test)]
 mod cloud_evaluate_timeout_tests {
+    use std::time::Duration;
+
     use super::*;
 
     #[test]
@@ -302,6 +339,47 @@ mod cloud_evaluate_timeout_tests {
         assert_eq!(
             cloud_evaluate_timeout_seconds(RETRY_TIMEOUT_SECONDS, 267),
             3
+        );
+    }
+
+    fn started_seconds_ago(seconds: u64) -> Instant {
+        Instant::now()
+            .checked_sub(Duration::from_secs(seconds))
+            .expect("monotonic clock covers the test offset")
+    }
+
+    #[test]
+    fn a_fresh_evaluation_gets_the_chunk_scaled_wait() {
+        assert_eq!(
+            cloud_evaluate_timeouts(267, Instant::now()).unwrap(),
+            (3, 3)
+        );
+        assert_eq!(
+            cloud_evaluate_timeouts(1_000, Instant::now()).unwrap(),
+            (5, 5)
+        );
+    }
+
+    #[test]
+    fn a_retry_late_in_the_evaluation_only_gets_what_is_left() {
+        // 10 seconds in, 10 remain across four possible attempts.
+        assert_eq!(
+            cloud_evaluate_timeouts(1_000, started_seconds_ago(10)).unwrap(),
+            (2, 2)
+        );
+    }
+
+    #[test]
+    fn no_post_is_sent_once_the_deadline_is_too_close() {
+        let error = cloud_evaluate_timeouts(1, started_seconds_ago(17)).unwrap_err();
+        assert!(matches!(error, EvalError::Internal(message) if message.starts_with("timeout:")));
+    }
+
+    #[test]
+    fn every_attempt_of_a_post_ends_inside_the_deadline() {
+        let (first, retry) = cloud_evaluate_timeouts(usize::MAX, Instant::now()).unwrap();
+        assert!(
+            first.max(retry) * CLOUD_EVALUATE_ATTEMPTS_PER_POST <= CLOUD_EVALUATE_DEADLINE_SECONDS
         );
     }
 
