@@ -108,13 +108,27 @@ def _linux_proc_process_entries(proc_root: Path = Path("/proc")) -> list[tuple[i
     return entries
 
 
-def _linux_proc_environment_contains(entry: bytes, proc_root: Path = Path("/proc")) -> bool | None:
-    """Search this user's readable procfs environments for one exact ``NAME=value`` entry."""
+def _linux_proc_environment_contains(
+    entry: bytes,
+    *,
+    launched_at_tick: int,
+    deadline: float,
+    proc_root: Path = Path("/proc"),
+) -> bool | None:
+    """Search this user's procfs environments for one exact ``NAME=value`` entry.
+
+    Returns ``None`` when the answer is unknown: the deadline passed, the inventory
+    overflowed, or a process that started at or after ``launched_at_tick`` (so could
+    descend from the launch) hides its environment. A process that started earlier
+    cannot carry the entry, so its unreadable environment is skipped.
+    """
 
     remaining_bytes = m._GUARD_DAEMON_LAUNCH_ENVIRONMENT_QUERY_LIMIT_BYTES
     user_id = m.os.getuid()
     try:
         for process_dir in proc_root.iterdir():
+            if m.time.monotonic() >= deadline:
+                return None
             if not process_dir.name.isdigit():
                 continue
             try:
@@ -122,7 +136,16 @@ def _linux_proc_environment_contains(entry: bytes, proc_root: Path = Path("/proc
                     continue
                 with (process_dir / "environ").open("rb") as stream:
                     raw_environment = stream.read(remaining_bytes + 1)
-            except (FileNotFoundError, ProcessLookupError, PermissionError):
+            except (FileNotFoundError, ProcessLookupError):
+                continue
+            except PermissionError:
+                started_at_tick = _linux_proc_start_tick(process_dir)
+                if started_at_tick is None:
+                    if (process_dir / "stat").exists():
+                        return None
+                    continue
+                if started_at_tick >= launched_at_tick:
+                    return None
                 continue
             except OSError:
                 return None
@@ -134,6 +157,19 @@ def _linux_proc_environment_contains(entry: bytes, proc_root: Path = Path("/proc
     except OSError:
         return None
     return False
+
+
+def _linux_proc_start_tick(process_dir: Path) -> int | None:
+    try:
+        value = (process_dir / "stat").read_text(encoding="ascii")[:4096]
+    except (OSError, UnicodeError):
+        return None
+    _, separator, suffix = value.rpartition(")")
+    fields = suffix.split()
+    # The suffix starts at proc field 3; field 22 is the process start tick.
+    if not separator or len(fields) <= 19 or not fields[19].isdigit():
+        return None
+    return int(fields[19])
 
 
 def _terminate_bounded_process_query(process: subprocess.Popen[bytes]) -> None:

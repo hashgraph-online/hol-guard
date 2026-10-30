@@ -13,6 +13,7 @@ import threading
 import time
 from contextlib import nullcontext, suppress
 from datetime import datetime, timezone
+from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -1942,14 +1943,16 @@ def test_exited_launch_receipt_stays_while_a_nonce_holder_may_run(tmp_path, monk
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pending_launch_state_is_resolved", lambda _home: False)
     monkeypatch.setattr(daemon_manager_module, "load_authenticated_guard_daemon_pending_launch", lambda _home: pending)
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_proven_dead", lambda _pid: True)
-    monkeypatch.setattr(daemon_manager_module, "_launch_nonce_holder_is_running", lambda _nonce: holder_running)
+    monkeypatch.setattr(
+        daemon_manager_module, "_launch_nonce_holder_is_running", lambda _nonce, **_kwargs: holder_running
+    )
     monkeypatch.setattr(
         daemon_manager_module,
         "_clear_guard_daemon_pending_launch_if_current",
         lambda _home, **kwargs: cleared.append(kwargs["pid"]) or True,
     )
 
-    assert daemon_manager_module._retire_exited_posix_pending_launch(guard_home) is False
+    assert daemon_manager_module._retire_exited_posix_pending_launch(guard_home, deadline=time.monotonic() + 5) is False
     assert cleared == []
 
 
@@ -1972,21 +1975,89 @@ def test_launch_receipt_stays_while_its_root_runs(tmp_path, monkeypatch):
     monkeypatch.setattr(
         daemon_manager_module,
         "_launch_nonce_holder_is_running",
-        lambda _nonce: (_ for _ in ()).throw(AssertionError("a live root needs no inventory")),
+        lambda _nonce, **_kwargs: (_ for _ in ()).throw(AssertionError("a live root needs no inventory")),
     )
 
-    assert daemon_manager_module._retire_exited_posix_pending_launch(guard_home) is False
+    assert daemon_manager_module._retire_exited_posix_pending_launch(guard_home, deadline=time.monotonic() + 5) is False
 
 
-@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="reads Linux procfs")
+def _fake_linux_process(proc_root, pid, *, environment, start_tick, readable=True):
+    process_dir = proc_root / str(pid)
+    process_dir.mkdir(parents=True)
+    (process_dir / "environ").write_bytes(environment)
+    fields = " ".join(["S"] + ["0"] * 18 + [str(start_tick)])
+    (process_dir / "stat").write_text(f"{pid} (python) {fields}\n", encoding="ascii")
+    if not readable:
+        (process_dir / "environ").chmod(0)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX procfs layout")
 def test_linux_environment_search_finds_only_the_exact_entry(tmp_path):
     proc_root = tmp_path / "proc"
-    for pid, environment in ((101, b"A=1\0LAUNCH=abc\0"), (102, b"LAUNCH=abcd\0")):
-        (proc_root / str(pid)).mkdir(parents=True)
-        (proc_root / str(pid) / "environ").write_bytes(environment)
+    _fake_linux_process(proc_root, 101, environment=b"A=1\0LAUNCH=abc\0", start_tick=500)
+    _fake_linux_process(proc_root, 102, environment=b"LAUNCH=abcd\0", start_tick=500)
+    search = partial(
+        daemon_manager_module._linux_proc_environment_contains,
+        launched_at_tick=400,
+        deadline=time.monotonic() + 5,
+        proc_root=proc_root,
+    )
 
-    assert daemon_manager_module._linux_proc_environment_contains(b"LAUNCH=abc", proc_root) is True
-    assert daemon_manager_module._linux_proc_environment_contains(b"LAUNCH=ab", proc_root) is False
+    assert search(b"LAUNCH=abc") is True
+    assert search(b"LAUNCH=ab") is False
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX procfs layout")
+@pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0, reason="root reads any environment")
+@pytest.mark.parametrize(("hidden_start_tick", "expected"), [(399, False), (400, None), (900, None)])
+def test_linux_environment_search_only_skips_a_hidden_process_older_than_the_launch(
+    tmp_path, hidden_start_tick, expected
+):
+    proc_root = tmp_path / "proc"
+    _fake_linux_process(proc_root, 101, environment=b"A=1\0", start_tick=500)
+    _fake_linux_process(proc_root, 102, environment=b"LAUNCH=abc\0", start_tick=hidden_start_tick, readable=False)
+
+    assert (
+        daemon_manager_module._linux_proc_environment_contains(
+            b"LAUNCH=abc", launched_at_tick=400, deadline=time.monotonic() + 5, proc_root=proc_root
+        )
+        is expected
+    )
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX procfs layout")
+def test_linux_environment_search_is_unknown_past_its_deadline(tmp_path):
+    proc_root = tmp_path / "proc"
+    _fake_linux_process(proc_root, 101, environment=b"A=1\0", start_tick=500)
+
+    assert (
+        daemon_manager_module._linux_proc_environment_contains(
+            b"LAUNCH=abc", launched_at_tick=400, deadline=time.monotonic() - 1, proc_root=proc_root
+        )
+        is None
+    )
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX launch receipts only")
+@pytest.mark.parametrize(
+    ("ps_line", "expected"),
+    [
+        ("hol-guard daemon HOME=/h HOL_GUARD_DAEMON_LAUNCH_NONCE=abc", True),
+        ("hol-guard daemon NOTE=xHOL_GUARD_DAEMON_LAUNCH_NONCE=abc", False),
+        ("hol-guard daemon HOL_GUARD_DAEMON_LAUNCH_NONCE=abcd", False),
+    ],
+)
+def test_ps_environment_search_needs_the_whole_entry(monkeypatch, ps_line, expected):
+    monkeypatch.setattr(daemon_manager_module.sys, "platform", "darwin")
+    monkeypatch.setattr(daemon_manager_module, "_trusted_posix_ps_path", lambda: "/bin/ps")
+    monkeypatch.setattr(daemon_manager_module, "_bounded_process_query_stdout", lambda *_a, **_k: f"login\n{ps_line}\n")
+
+    assert (
+        daemon_manager_module._launch_nonce_holder_is_running(
+            "abc", root_start_marker="darwin:launch", deadline=time.monotonic() + 5
+        )
+        is expected
+    )
 
 
 @pytest.mark.skipif(os.name == "nt", reason="requires POSIX subprocess identity markers")
@@ -3809,7 +3880,7 @@ def test_late_generation_bound_pending_launch_blocks_replacement_inside_start_lo
         return None if len(pending_reads) == 1 else pending
 
     monkeypatch.setattr(daemon_manager_module, "_schedule_stale_ephemeral_guard_daemon_reap", lambda **_kwargs: None)
-    monkeypatch.setattr(daemon_manager_module, "_retire_exited_posix_pending_launch", lambda _home: False)
+    monkeypatch.setattr(daemon_manager_module, "_retire_exited_posix_pending_launch", lambda _home, **_kwargs: False)
     monkeypatch.setattr(daemon_manager_module, "_live_or_newer_daemon_url", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(daemon_manager_module, "_adopt_existing_guard_daemon", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_start_in_progress", lambda _home: False)
