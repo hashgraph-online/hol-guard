@@ -31,6 +31,8 @@ _REASONS = {
     "node_build_invalid_output",
     "package_test_invalid_command",
     "git_restricted_invalid_command",
+    "git_restricted_invalid_metadata",
+    "git_restricted_sandbox_unavailable",
     "linux_mapping_unavailable",
     PYTEST_EXTERNAL_PYTHONPATH_REASON_CODE,
     PYTEST_INVALID_COMMAND_REASON_CODE,
