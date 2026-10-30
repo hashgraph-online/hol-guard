@@ -222,3 +222,18 @@ fn a_negation_a_successor_reads_stays_written() {
         assert_eq!(flatten(command).as_deref(), Some(expected), "{command}");
     }
 }
+
+/// `then` runs when a negated `cd` fails, so the branch is still outside
+/// `src`. Dropping the `!` would check `touch ../escape.txt` as if `cd` had
+/// succeeded.
+#[test]
+fn a_negated_directory_change_keeps_the_negation_its_branch_reads() {
+    assert_eq!(
+        flatten("if ! cd src; then touch ../escape.txt; fi").as_deref(),
+        Some("! cd src; touch ../escape.txt")
+    );
+    assert_eq!(
+        flatten("if ! cd src; then echo in; else echo out; fi").as_deref(),
+        Some("! cd src; echo in; echo out")
+    );
+}

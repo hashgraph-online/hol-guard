@@ -16,58 +16,9 @@
 //! fully understand returns `None` and keeps the existing review.
 
 use super::control_flow_flatten::{
-    conditional_parts, keyword, unnegated_part, MAX_FLATTENED_BYTES,
+    command_head, conditional_parts, keyword, rendered_separator, unnegated_part,
+    MAX_FLATTENED_BYTES, STATE_CHANGING,
 };
-
-/// Commands that change the state later commands in the same shell run with.
-const STATE_CHANGING: &[&str] = &[
-    "cd",
-    "pushd",
-    "popd",
-    "export",
-    "unset",
-    "set",
-    "shopt",
-    "setopt",
-    "unsetopt",
-    "source",
-    ".",
-    "alias",
-    "unalias",
-    "umask",
-    "eval",
-    "exec",
-    "read",
-    "mapfile",
-    "readarray",
-    "declare",
-    "typeset",
-    "local",
-    "readonly",
-    "trap",
-    "hash",
-    "builtin",
-    "command",
-    "enable",
-    "ulimit",
-    "getopts",
-    "let",
-    "shift",
-    "chdir",
-    "integer",
-    "float",
-    "private",
-    "autoload",
-    "unfunction",
-    "unhash",
-    "emulate",
-    "zmodload",
-    "vared",
-    "disable",
-    "noglob",
-    "nocorrect",
-    "-",
-];
 
 /// Keywords that open or continue a construct this splice does not read.
 const OTHER_CONSTRUCTS: &[&str] = &[
@@ -110,7 +61,7 @@ pub(super) fn spliced(command: &str) -> Option<String> {
             // outcome in its place.
             if index < last {
                 out.push_str(&unnegated_part(item, separator));
-                out.push_str(separator);
+                out.push_str(rendered_separator(separator));
             } else {
                 out.push_str(item);
             }
@@ -244,7 +195,7 @@ fn starts_with_word(text: &str, word: &str) -> bool {
 /// its real name is unknown here.
 fn changes_shell_state(item: &str) -> bool {
     item.split('|').any(|stage| {
-        let first = stage.split_whitespace().next().unwrap_or_default();
+        let first = command_head(stage);
         STATE_CHANGING.contains(&first)
             || first == "if"
             || OTHER_CONSTRUCTS.contains(&first)

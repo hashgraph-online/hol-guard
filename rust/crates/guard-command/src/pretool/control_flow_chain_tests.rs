@@ -90,3 +90,14 @@ fn a_negated_item_keeps_the_negation_the_surrounding_list_reads() {
         assert_eq!(spliced(command).as_deref(), Some(expected), "{command}");
     }
 }
+
+/// A negated `cd` still changes the directory when it succeeds, and `then`
+/// runs when it does not. Splicing that into the surrounding list would check
+/// the later command in the wrong directory.
+#[test]
+fn a_negated_directory_change_is_not_spliced() {
+    assert_eq!(
+        spliced("git status --short && if ! cd src; then touch ../escape.txt; fi"),
+        None
+    );
+}
