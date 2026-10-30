@@ -12,6 +12,9 @@ from codex_plugin_scanner.github_reporting import GitHubPrCommentResult, build_v
 from codex_plugin_scanner.models import ScanResult, build_severity_counts
 
 CONNECT_LINK = "https://hol.org/plugins/connect?repo=acme%2Ftool&utm_source=hol-scanner-action&utm_medium=job-summary"
+PREFLIGHT_LINK = (
+    "https://hol.org/plugins/preflight?repo=acme%2Ftool&utm_source=hol-scanner-action&utm_medium=job-summary"
+)
 
 
 def _run_scan(monkeypatch, tmp_path, *, event: object, publish_hint: str | None = None, **env: str) -> str:
@@ -68,7 +71,44 @@ def test_public_repository_summary_links_to_hol_plugins(monkeypatch, tmp_path) -
 
     assert "### Publish on HOL Plugins" in summary
     assert f"({CONNECT_LINK})" in summary
+    assert f"({PREFLIGHT_LINK})" in summary
     assert "Set `publish_hint: false` to hide it." in summary
+
+
+@pytest.mark.parametrize(
+    ("plugin_dir", "expected_path"),
+    [
+        pytest.param("plugins/acme-tool", "&path=plugins%2Facme-tool", id="subfolder"),
+        pytest.param("./plugins/acme-tool/", "&path=plugins%2Facme-tool", id="dot-prefixed"),
+        pytest.param(".", "", id="root"),
+        pytest.param("plugins/../secret", "", id="traversal"),
+        pytest.param("/home/runner/work/tool", "", id="absolute"),
+        pytest.param("plugins/$(id)", "", id="shell-characters"),
+    ],
+)
+def test_preflight_link_carries_only_a_plain_relative_folder(plugin_dir, expected_path) -> None:
+    lines = action_runner._build_publish_hint_lines("acme/tool", plugin_dir)
+    expected = f"https://hol.org/plugins/preflight?repo=acme%2Ftool{expected_path}&utm_source=hol-scanner-action"
+    assert any(f"({expected}&utm_medium=job-summary)" in line for line in lines)
+
+
+def test_marketplace_scope_preflight_link_omits_the_folder() -> None:
+    lines = action_runner._build_step_summary_lines(
+        mode="scan",
+        score="90",
+        grade="A",
+        grade_label="Excellent",
+        max_severity="none",
+        findings_total="0",
+        report_path="",
+        registry_payload_path="",
+        submission_issues=[],
+        submission_eligible=False,
+        scope="marketplace",
+        publish_hint_repository="acme/tool",
+        publish_hint_plugin_dir="plugins/acme-tool",
+    )
+    assert any(f"({PREFLIGHT_LINK})" in line for line in lines)
 
 
 @pytest.mark.parametrize(
@@ -88,6 +128,7 @@ def test_summary_omits_publish_hint(monkeypatch, tmp_path, event, publish_hint, 
     assert "## HOL AI Plugin Scanner" in summary
     assert "Publish on HOL Plugins" not in summary
     assert "hol.org/plugins/connect" not in summary
+    assert "hol.org/plugins/preflight" not in summary
 
 
 def test_submit_mode_summary_omits_publish_hint() -> None:

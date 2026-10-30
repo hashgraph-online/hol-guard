@@ -253,6 +253,8 @@ def _build_findings_summary_lines(findings: tuple[Finding, ...]) -> tuple[str, .
 
 
 HOL_PLUGINS_CONNECT_URL = "https://hol.org/plugins/connect"
+HOL_PLUGINS_PREFLIGHT_URL = "https://hol.org/plugins/preflight"
+_PREFLIGHT_FOLDER_PATTERN = re.compile(r"^[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$")
 
 
 def _public_repository_for_publish_hint(*, repository: str, server_url: str, event_path: str) -> str:
@@ -275,14 +277,35 @@ def _public_repository_for_publish_hint(*, repository: str, server_url: str, eve
     return repository
 
 
-def _build_publish_hint_lines(repository: str) -> list[str]:
+def _preflight_folder(plugin_dir: str) -> str:
+    """Return the scanned folder relative to the repository root, or "" for the root or anything unusual."""
+    candidate = plugin_dir.strip().replace("\\", "/").strip("/")
+    while candidate.startswith("./"):
+        candidate = candidate[2:]
+    if candidate in {"", "."} or plugin_dir.strip().startswith("/") or len(candidate) > 200:
+        return ""
+    if not _PREFLIGHT_FOLDER_PATTERN.match(candidate) or any(part in {".", ".."} for part in candidate.split("/")):
+        return ""
+    return candidate
+
+
+def _build_publish_hint_lines(repository: str, plugin_dir: str = "") -> list[str]:
     query = urlencode({"repo": repository, "utm_source": "hol-scanner-action", "utm_medium": "job-summary"})
+    preflight_params = {"repo": repository}
+    folder = _preflight_folder(plugin_dir)
+    if folder:
+        preflight_params["path"] = folder
+    preflight_params.update({"utm_source": "hol-scanner-action", "utm_medium": "job-summary"})
+    preflight_query = urlencode(preflight_params)
     return [
         "",
         "### Publish on HOL Plugins",
         "",
         f"Find this repository's HOL Plugins listing, claim it free and add a live trust badge: "
         f"[{HOL_PLUGINS_CONNECT_URL}]({HOL_PLUGINS_CONNECT_URL}?{query})",
+        "",
+        f"Check it against the Claude, Codex and Cursor plugin directory submission rules before you submit: "
+        f"[{HOL_PLUGINS_PREFLIGHT_URL}]({HOL_PLUGINS_PREFLIGHT_URL}?{preflight_query})",
         "",
         "Shown for public repositories only. Set `publish_hint: false` to hide it.",
     ]
@@ -306,6 +329,7 @@ def _build_step_summary_lines(
     skipped_target_count: int | None = None,
     findings: tuple[Finding, ...] = (),
     publish_hint_repository: str = "",
+    publish_hint_plugin_dir: str = "",
 ) -> tuple[str, ...]:
     lines = ["## HOL AI Plugin Scanner", "", f"- Mode: {mode}"]
     lines.append(f"- Scope: {scope}")
@@ -334,7 +358,12 @@ def _build_step_summary_lines(
         lines.extend(_build_findings_summary_lines(findings))
         lines.extend(contributor_review_lines(findings))
     if publish_hint_repository and mode != "submit":
-        lines.extend(_build_publish_hint_lines(publish_hint_repository))
+        lines.extend(
+            _build_publish_hint_lines(
+                publish_hint_repository,
+                publish_hint_plugin_dir if scope == "plugin" else "",
+            )
+        )
     return tuple(lines)
 
 
@@ -489,6 +518,7 @@ def main() -> int:
                     skipped_target_count=skipped_target_count,
                     findings=summary_findings,
                     publish_hint_repository=pr_comment_listing_repository,
+                    publish_hint_plugin_dir=plugin_dir,
                 ),
             )
         output_values["action_exit_code"] = str(return_code)
