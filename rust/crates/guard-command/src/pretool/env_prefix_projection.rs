@@ -428,6 +428,15 @@ fn inert_assignment(name: &str, value: &str) -> bool {
     {
         return true;
     }
+    // The same `NODE_OPTIONS` the runtime already treats as inert when a
+    // developer's shell exports it: only flags that size the engine or change
+    // what it prints. Written in front of the command it is the same setting,
+    // so reading it differently would block `NODE_OPTIONS=--max-old-space-size=4096 npm test`
+    // while the identical inherited value passes. A preload, a loader or an
+    // inspector is not inert, and those keep failing closed below.
+    if upper == "NODE_OPTIONS" && guard_contracts::node_options_inert(value) {
+        return true;
+    }
     // Clearing a credential only removes authority from the command.
     if value.is_empty()
         && CREDENTIAL_MARKERS
