@@ -103,3 +103,56 @@ fn a_changed_since_selector_is_an_inert_value() {
         2
     );
 }
+
+/// An option that only asks the manager to do less — stay on the cache it
+/// already has, skip the lifecycle scripts around the verb, or move where the
+/// output goes — does not change which work the verb runs, so it must not
+/// hide the verb either.
+#[test]
+fn an_option_that_narrows_the_run_does_not_hide_the_verb() {
+    for (manager, arguments, verb) in [
+        ("npm", vec!["--prefer-offline", "run", "test"], "run"),
+        ("npm", vec!["--offline", "test"], "test"),
+        ("npm", vec!["--ignore-scripts", "run", "test"], "run"),
+        ("npm", vec!["--foreground-scripts", "run", "build"], "run"),
+        ("npm", vec!["-d", "run", "test"], "run"),
+        ("npm", vec!["-ddd", "test"], "test"),
+        ("pnpm", vec!["--prefer-offline", "test"], "test"),
+        ("pnpm", vec!["--offline", "run", "build"], "run"),
+        ("pnpm", vec!["--use-stderr", "test"], "test"),
+        ("pnpm", vec!["--ignore-scripts", "run", "test"], "run"),
+        ("yarn", vec!["--prefer-offline", "test"], "test"),
+        ("yarn", vec!["--offline", "test"], "test"),
+        ("bun", vec!["--prefer-offline", "run", "test"], "run"),
+        ("bun", vec!["--no-install", "run", "test"], "run"),
+    ] {
+        let skipped = skip_inert_options(manager, &arguments);
+        assert_eq!(arguments.get(skipped).copied(), Some(verb), "{arguments:?}");
+    }
+}
+
+/// The opposite of a narrowing option is not one of them: sending a run back
+/// to the registry, letting a resolution drift from the lockfile, or letting
+/// a run past a check yarn would have stopped it on each change what the run
+/// does. And an option on one manager's list is not on another's.
+#[test]
+fn an_option_that_widens_the_run_still_hides_the_verb() {
+    for (manager, arguments) in [
+        ("npm", vec!["--prefer-online", "run", "test"]),
+        ("npm", vec!["--no-package-lock", "run", "test"]),
+        ("yarn", vec!["--ignore-engines", "test"]),
+        // A bare manager carrying only these options still has no verb, so
+        // the install a bare `yarn` performs stays out.
+        ("yarn", vec!["--offline"]),
+        ("bun", vec!["--ignore-scripts", "run", "test"]),
+        ("yarn", vec!["--use-stderr", "test"]),
+    ] {
+        let skipped = skip_inert_options(manager, &arguments);
+        assert!(
+            arguments
+                .get(skipped)
+                .is_none_or(|argument| argument.starts_with('-')),
+            "{arguments:?} reached a verb at {skipped}"
+        );
+    }
+}
