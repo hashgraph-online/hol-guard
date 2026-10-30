@@ -80,6 +80,22 @@ hol-guard plugin uninstall acme/toolgate --apply
 
 Guard removes the plugin with each runtime's own command. It also removes a marketplace that Guard added for this plugin, unless another plugin still uses it. A marketplace you added yourself stays.
 
+## Check an installed plugin
+
+```bash
+hol-guard plugin verify acme/toolgate
+```
+
+HOL records, for every listing version, the commit each channel served: its own catalog, Claude Code's official marketplace, Open VSX and the others it watches. `verify` reads the version and commit Claude Code recorded for your user-scope install of the listing and compares them with that record.
+
+- **Matches**: the commit Claude Code installed is one HOL recorded for that version.
+- **Warning**: HOL recorded a different commit for that version. Guard prints the commits it recorded, any notes such as a re-tagged or withdrawn version, and the listing's releases page. It changes nothing: the plugin stays installed and enabled, and the command exits 0.
+- **Nothing to compare**: HOL has no commit for that version yet, or Claude Code kept no commit, as for a plugin installed by running a declared command.
+
+Exit codes: 0 when the check ran, whatever it found; 2 for a usage error or an answer HOL should not have sent; 3 when Claude Code has no install of the listing for your user or HOL has no integrity record for it; 6 when HOL is unreachable. `--json` prints one `hol-guard.plugin-verify/1` document with `status` set to `matches`, `differs`, `not_recorded` or `no_commit`.
+
+`verify` sends two HTTPS `GET`s: the listing's install spec, then its public integrity record from the same origin. Only the listing name is sent; your installed version and commit stay on your machine. `HOL_GUARD_PLUGIN_SPEC_URL` moves both requests to your own portal.
+
 ## Exit codes
 
 | Code | Meaning |
