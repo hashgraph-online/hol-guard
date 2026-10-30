@@ -32,6 +32,7 @@ _REASONS = {
     "package_test_invalid_command",
     "git_restricted_invalid_command",
     "linux_mapping_unavailable",
+    "contained_run_authorization_failed",
     PYTEST_EXTERNAL_PYTHONPATH_REASON_CODE,
     PYTEST_INVALID_COMMAND_REASON_CODE,
     PYTEST_INVALID_WORKSPACE_REASON_CODE,

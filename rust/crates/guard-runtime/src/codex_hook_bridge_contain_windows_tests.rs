@@ -332,3 +332,61 @@ fn only_day_old_plain_snapshots_are_reclaimed() {
     assert!(fresh.join(REQUEST_FILE_NAME).exists());
     assert!(other.join(REQUEST_FILE_NAME).exists());
 }
+
+/// Removes a snapshot directory the test wrote under the real temporary
+/// directory, whatever the test left in it.
+struct Written(std::path::PathBuf);
+
+impl Drop for Written {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+fn snapshot() -> (std::path::PathBuf, Written) {
+    let request = write_snapshot(br#"{"schema":"x"}"#).unwrap();
+    let directory = Written(request.parent().unwrap().to_path_buf());
+    (request, directory)
+}
+
+#[test]
+fn a_snapshot_reads_back_only_from_directly_inside_the_temporary_directory() {
+    let (request, directory) = snapshot();
+    assert_eq!(
+        read_snapshot(&request).as_deref(),
+        Some(&br#"{"schema":"x"}"#[..])
+    );
+    let nested = directory
+        .0
+        .join(format!("{REQUEST_DIRECTORY_PREFIX}nested"));
+    std::fs::create_dir(&nested).unwrap();
+    std::fs::write(nested.join(REQUEST_FILE_NAME), b"{}").unwrap();
+    assert_eq!(read_snapshot(&nested.join(REQUEST_FILE_NAME)), None);
+    let elsewhere = tempfile::tempdir().unwrap();
+    let outside = elsewhere
+        .path()
+        .join(format!("{REQUEST_DIRECTORY_PREFIX}outside"));
+    std::fs::create_dir(&outside).unwrap();
+    std::fs::write(outside.join(REQUEST_FILE_NAME), b"{}").unwrap();
+    assert_eq!(read_snapshot(&outside.join(REQUEST_FILE_NAME)), None);
+}
+
+#[test]
+fn a_linked_snapshot_is_refused() {
+    let (request, directory) = snapshot();
+    let elsewhere = tempfile::tempdir().unwrap();
+    let second = elsewhere.path().join("second-name");
+    std::fs::hard_link(&request, &second).unwrap();
+    assert_eq!(read_snapshot(&request), None);
+    std::fs::remove_file(&second).unwrap();
+    assert!(read_snapshot(&request).is_some());
+    let linked = directory.0.with_file_name(format!(
+        "{REQUEST_DIRECTORY_PREFIX}linked-{}",
+        std::process::id()
+    ));
+    let _linked = Written(linked.clone());
+    if std::os::windows::fs::symlink_dir(&directory.0, &linked).is_ok() {
+        assert_eq!(read_snapshot(&linked.join(REQUEST_FILE_NAME)), None);
+        let _ = std::fs::remove_dir(&linked);
+    }
+}

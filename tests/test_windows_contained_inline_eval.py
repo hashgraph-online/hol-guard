@@ -1,8 +1,5 @@
 """Windows contains installed Python and Node scripts, and only for harnesses with a sink."""
 
-import hashlib
-import json
-import os
 import shlex
 import sys
 from pathlib import Path
@@ -12,7 +9,7 @@ import pytest
 from codex_plugin_scanner.guard import native_restricted_pytest as transport
 from codex_plugin_scanner.guard.adapters.zcode_contained_tests import contained_sink_command_prefix
 from codex_plugin_scanner.guard.native_hook_containment_route import native_containment_rewrite
-from codex_plugin_scanner.guard.runtime import contained_test_hook, restricted_inline_eval
+from codex_plugin_scanner.guard.runtime import restricted_inline_eval
 from codex_plugin_scanner.guard.runtime.restricted_pytest_model import RestrictedPytestError
 from tests.containment_resident import native_containment_sink
 
@@ -163,57 +160,3 @@ def test_windows_routes_only_harnesses_with_a_sink_command(
         request = Path(argv[argv.index("--request-file") + 1])
         request.unlink()
         request.parent.rmdir()
-
-
-def _write_request(directory: Path, workspace: Path) -> tuple[Path, str]:
-    directory.mkdir()
-    raw = json.dumps(
-        {
-            "schema": "guard-contained-test-request.v1",
-            "workspace": str(workspace),
-            "payload": {
-                "hook_event_name": "PreToolUse",
-                "tool_name": "bash",
-                "tool_input": {"command": "python3 test_calc.py"},
-                "cwd": str(workspace),
-            },
-        }
-    ).encode()
-    request = directory / "request.json"
-    request.write_bytes(raw)
-    return request, hashlib.sha256(raw).hexdigest()
-
-
-def test_windows_request_must_sit_directly_in_the_temporary_directory(monkeypatch, tmp_path):
-    temporary = (tmp_path / "temp").resolve()
-    temporary.mkdir()
-    workspace = (tmp_path / "workspace").resolve()
-    workspace.mkdir()
-    monkeypatch.setattr(contained_test_hook, "trusted_windows_local_temp", lambda: temporary)
-    request, digest = _write_request(temporary / "hol-guard-contained-test-a", workspace)
-    payload = contained_test_hook._read_windows_request(request, digest, workspace=workspace)
-    assert payload["tool_input"] == {"command": "python3 test_calc.py"}
-    with pytest.raises(RestrictedPytestError):
-        contained_test_hook._read_windows_request(request, "0" * 64, workspace=workspace)
-    nested, nested_digest = _write_request(
-        temporary / "hol-guard-contained-test-a" / "hol-guard-contained-test-b", workspace
-    )
-    with pytest.raises(RestrictedPytestError):
-        contained_test_hook._read_windows_request(nested, nested_digest, workspace=workspace)
-
-
-def test_windows_request_rejects_linked_files(monkeypatch, tmp_path):
-    temporary = (tmp_path / "temp").resolve()
-    temporary.mkdir()
-    workspace = (tmp_path / "workspace").resolve()
-    workspace.mkdir()
-    monkeypatch.setattr(contained_test_hook, "trusted_windows_local_temp", lambda: temporary)
-    request, digest = _write_request(temporary / "hol-guard-contained-test-a", workspace)
-    os.link(request, tmp_path / "second-name")
-    with pytest.raises(RestrictedPytestError):
-        contained_test_hook._read_windows_request(request, digest, workspace=workspace)
-    linked = temporary / "hol-guard-contained-test-b"
-    linked.symlink_to(request.parent, target_is_directory=True)
-    (tmp_path / "second-name").unlink()
-    with pytest.raises(RestrictedPytestError):
-        contained_test_hook._read_windows_request(linked / "request.json", digest, workspace=workspace)

@@ -483,4 +483,4 @@ mod codex;
 mod tests;
 #[cfg(windows)]
 #[path = "codex_hook_bridge_contain_windows.rs"]
-mod windows;
+pub(crate) mod windows;

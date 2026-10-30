@@ -23,6 +23,11 @@ pub(crate) fn evaluate(
         budget.check()?;
         return Ok(result);
     }
+    if operation == "contained_test_request" {
+        let result = crate::contained_test_request::evaluate(input);
+        budget.check()?;
+        return Ok(result);
+    }
     // The grant reading lives with the workspace sink, which is contained on
     // Unix only. Where there is no sink the operation falls through to the
     // platform's own answer below, which reports no enforceable backend

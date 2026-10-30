@@ -199,6 +199,7 @@ mod consumer_result;
 mod consumer_url;
 #[cfg(unix)]
 mod contained_op;
+mod contained_test_request;
 #[cfg(unix)]
 mod contained_workspace_grant_plan;
 #[cfg(unix)]
