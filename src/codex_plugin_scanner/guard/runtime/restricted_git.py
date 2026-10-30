@@ -3,130 +3,36 @@
 from __future__ import annotations
 
 import os
-import stat
 import sys
 import tempfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from ..native_restricted_pytest import restricted_native
-from .git_execution_safety import git_binary_path_is_trusted
+from ..native_restricted_pytest import decode_native_plan, restricted_native
 from .restricted_pytest_model import GIT_READ_ONLY_PROFILE_VERSION, RestrictedPytestError, RestrictedPytestPlan
 from .restricted_pytest_sandbox import _backend_argv, _restricted_environment, _run_backend_process
-from .restricted_pytest_validation import (
-    _normalized_command,
-    _resolve_cwd,
-    _resolve_executable,
-    _resolve_workspace,
-    _select_backend,
-)
-
-
-def _metadata_pointer(path: Path) -> str:
-    if path.is_symlink():
-        raise ValueError("symlinked Git metadata pointer")
-    with path.open("rb") as stream:
-        data = stream.read(4097)
-    if len(data) > 4096 or b"\x00" in data:
-        raise ValueError("invalid Git metadata pointer")
-    return data.decode("utf-8").strip()
-
-
-def _repository_read_roots(workspace: Path, cwd: Path) -> tuple[Path, ...]:
-    """Resolve only Git's linked metadata, never grant its parent checkout."""
-    try:
-        directory = cwd
-        while not (directory / ".git").exists():
-            if directory == workspace:
-                return ()
-            directory = directory.parent
-        pointer = directory / ".git"
-        if pointer.is_dir() and not pointer.is_symlink():
-            return ()
-        text = _metadata_pointer(pointer)
-        if not text.startswith("gitdir: ") or "\n" in text:
-            raise ValueError("invalid Git directory pointer")
-        target = Path(text.removeprefix("gitdir: "))
-        gitdir = (target if target.is_absolute() else directory / target).resolve(strict=True)
-        if not gitdir.is_dir():
-            raise ValueError("missing Git metadata")
-        common_pointer = gitdir / "commondir"
-        if common_pointer.exists():
-            common = (gitdir / _metadata_pointer(common_pointer)).resolve(strict=True)
-            relative = gitdir.relative_to(common)
-            if len(relative.parts) != 2 or relative.parts[0] != "worktrees":
-                raise ValueError("invalid linked worktree metadata")
-        else:
-            common = gitdir
-        if not common.name.endswith(".git") or not (common / "objects").is_dir() or not (common / "refs").is_dir():
-            raise ValueError("invalid common repository metadata")
-        for root in (gitdir, common):
-            metadata = root.stat()
-            if metadata.st_uid not in {0, os.getuid()} or metadata.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
-                raise ValueError("untrusted repository metadata")
-        return tuple(dict.fromkeys((gitdir, common)))
-    except (OSError, ValueError, RuntimeError) as error:
-        raise RestrictedPytestError(
-            "git_restricted_invalid_metadata", "Git metadata could not be safely resolved."
-        ) from error
 
 
 def prepare_restricted_git(
     command: Sequence[str], *, workspace: Path, cwd: Path | None = None, home_dir: Path | None = None
 ) -> RestrictedPytestPlan:
-    argv = _normalized_command(command)
-    # The same grammar authority reads the command against names the operation
-    # here, so a read it contains is a read this sink can plan.
-    reading = restricted_native("git_read_only_argv", {"command": list(argv)}, dict)
-    operation, arguments, directories = (
-        reading.get("operation"),
-        reading.get("arguments"),
-        reading.get("directories"),
+    # The resident reads the argv, walks Git's -C path inside the workspace,
+    # proves the Git executable and resolves linked worktree metadata.
+    result = restricted_native(
+        "prepare_git",
+        {
+            "command": list(command),
+            "workspace": workspace,
+            "cwd": cwd or workspace,
+            "home": home_dir,
+            "platform": sys.platform,
+            "backend_executable": None,
+            "account_home": Path.home(),
+            "groups": sorted(os.getgroups()),
+        },
+        dict,
     )
-    if (
-        type(operation) is not str
-        or type(arguments) is not list
-        or type(directories) is not list
-        or not all(type(word) is str for word in (*arguments, *directories))
-    ):
-        raise RestrictedPytestError("git_restricted_invalid_command", "Protected Git requires direct read-only argv.")
-    root = _resolve_workspace(workspace, home_dir=home_dir)
-    directory = _resolve_cwd(cwd or root, workspace=root)
-    # Git's own -C would move the run out from under the roots this plan
-    # grants, so the sink walks the same path and starts the run there. Each
-    # one is resolved against the last, as Git resolves them, and each has to
-    # land inside the approved workspace on its own.
-    for named in directories:
-        step = Path(named)
-        directory = _resolve_cwd(step if step.is_absolute() else directory / step, workspace=root)
-    backend, backend_path = _select_backend(platform=sys.platform, backend_executable=None)
-    if backend not in {"macos-seatbelt", "linux-bubblewrap"}:
-        raise RestrictedPytestError("git_restricted_sandbox_unavailable", "Protected Git filtering is unavailable.")
-    executable = _resolve_executable(argv[0], cwd=directory)
-    if not git_binary_path_is_trusted(executable, cwd=directory):
-        raise RestrictedPytestError("git_restricted_invalid_command", "Git does not resolve to a trusted executable.")
-    # The reading writes each helper screen ahead of the caller's own words, so
-    # an option-shaped pathname cannot push one past '--'.
-    transformed = (str(executable), "--no-pager", "-c", "core.fsmonitor=false", operation, *arguments)
-    return RestrictedPytestPlan(
-        profile_version=GIT_READ_ONLY_PROFILE_VERSION,
-        backend=backend,
-        backend_executable=backend_path,
-        workspace=root,
-        cwd=directory,
-        command=transformed,
-        executable=executable,
-        allowed_executables=(executable,),
-        read_only_roots=_repository_read_roots(root, directory),
-        denied_capabilities=(
-            "workspace-write",
-            "workspace-credential-read",
-            "network",
-            "unapproved-process-exec",
-            "host-secret-environment",
-            "host-home-read",
-        ),
-    )
+    return decode_native_plan(result, (GIT_READ_ONLY_PROFILE_VERSION,))
 
 
 def run_restricted_git(
@@ -160,20 +66,9 @@ def run_restricted_git(
             private_tmp=tmp,
             allowed_executables=plan.allowed_executables,
         )
-        for key in tuple(launch_env):
-            if key.startswith("GIT_") or key in {"PAGER", "XDG_CONFIG_HOME"}:
-                del launch_env[key]
-        launch_env.update(
-            {
-                "GIT_CONFIG_NOSYSTEM": "1",
-                "GIT_OPTIONAL_LOCKS": "0",
-                "GIT_TERMINAL_PROMPT": "0",
-                "GIT_NO_LAZY_FETCH": "1",
-            }
-        )
         return _run_backend_process(
             _backend_argv(plan, private_root=root),
-            env=launch_env,
+            env=restricted_native("git_environment", {"source": launch_env}, dict),
             timeout_seconds=timeout_seconds,
             cwd=plan.cwd,
             merge_stderr=merge_stderr,

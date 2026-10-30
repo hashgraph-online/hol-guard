@@ -209,6 +209,9 @@ def decode_native_plan(result: dict[str, Any], profiles: tuple[str, ...]):
 
     scalars = {"profile_version", "backend", "backend_executable", "workspace", "cwd", "executable"}
     arrays = {"command", "allowed_executables", "denied_capabilities"}
+    # Only a Git plan grants read-only roots: its linked worktree metadata.
+    if result.get("profile_version") == "git-readonly-v1":
+        arrays.add("read_only_roots")
     if (
         set(result) != scalars | arrays
         or any(not isinstance(result[key], str) for key in scalars)
@@ -247,4 +250,5 @@ def decode_native_plan(result: dict[str, Any], profiles: tuple[str, ...]):
         command=tuple(result["command"]),
         allowed_executables=tuple(Path(v) for v in result["allowed_executables"]),
         denied_capabilities=tuple(result["denied_capabilities"]),
+        read_only_roots=tuple(Path(v) for v in result.get("read_only_roots", ())),
     )

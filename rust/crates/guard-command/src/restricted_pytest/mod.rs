@@ -209,6 +209,7 @@ mod developer_shim;
 mod environment;
 mod executables;
 mod framework_grants;
+mod git_plan;
 mod launch_roots;
 mod launch_shebang;
 mod mapping;
@@ -236,6 +237,8 @@ pub fn evaluate_with_deadline(
     mapping::evaluate(operation, input, deadline).unwrap_or_else(|| evaluate(operation, input))
 }
 pub use authority::evaluate;
+/// The runtime proves the Git executable, so it hands its own trust check in.
+pub use git_plan::{prepare_git, GitBinaryTrust};
 pub(crate) use launch_roots::launches_outside_exec_roots;
 pub use mapping::evidence as mapping_evidence;
 /// The Windows planner in `guard-runtime` decides the same question about the
