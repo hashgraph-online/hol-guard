@@ -27,7 +27,7 @@ use crate::codex_hook_bridge_direct_resident::send_to_live_resident;
 use crate::codex_hook_bridge_direct_resident::{send_to_live_resident_reporting, DirectMiss};
 use crate::codex_hook_response::{POST_TOOL_USE, PRE_TOOL_USE};
 
-const STATE_DIRECTORY: &str = "native-runtime";
+pub(crate) const STATE_DIRECTORY: &str = "native-runtime";
 const DIRECT_RESULT_SCHEMA: &str = "guard-hook-direct-result.v1";
 const USER_PROMPT_SUBMIT: &str = "UserPromptSubmit";
 /// Claude Code's permission dialog, which the resident answers from the

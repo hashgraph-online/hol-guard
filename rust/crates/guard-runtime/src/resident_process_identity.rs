@@ -193,7 +193,7 @@ pub(crate) fn durable_runtime_digest(state_base: &Path) -> Option<String> {
     durable_digest_for(&executable, state_base)
 }
 
-fn durable_digest_for(executable: &Path, state_base: &Path) -> Option<String> {
+pub(crate) fn durable_digest_for(executable: &Path, state_base: &Path) -> Option<String> {
     let directory = executable.parent()?;
     let digest = directory.file_name()?.to_str()?;
     if digest.len() != 64 || !digest.bytes().all(|byte| byte.is_ascii_hexdigit()) {

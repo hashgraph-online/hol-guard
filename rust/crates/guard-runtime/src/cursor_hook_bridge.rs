@@ -52,13 +52,18 @@ use guard_command::hook_adapter_value::{OMap, OValue, PyJsonError};
 
 use crate::bounded_hook_bridge::{read_hook_input, write_stdout, Input, MAX_HOOK_INPUT_BYTES};
 use crate::claude_hook_bridge_render::py_strip;
+#[cfg(unix)]
+use crate::codex_hook_bridge_direct::STATE_DIRECTORY;
 use crate::codex_hook_bridge_direct::{direct_answer_reporting, CURSOR};
+use crate::codex_hook_bridge_direct_resident::DirectMiss;
 use crate::codex_hook_response::{POST_TOOL_USE, PRE_TOOL_USE};
 use crate::cursor_hook_bridge_response::{
     python_document, read_python_document, rendered, unavailable_output, unmapped_json,
     unparseable_output, AFTER_EVENTS, AFTER_STDOUT,
 };
 use crate::cursor_hook_bridge_script::read_client_constants;
+#[cfg(unix)]
+use crate::hook_bridge_successor::{self, HandOff};
 use crate::hook_env_stamp::{current_environment, stamp_hook_input_text, Stamp};
 use crate::pyjson::in_surrogate_plane;
 
@@ -364,12 +369,20 @@ fn closed_event(client: &Client, payload_event: Option<String>) -> String {
     }
 }
 
+/// [`reply_to`] for a bridge that never hands its hook on.
+#[cfg(all(test, unix))]
+fn reply(client: &Client, raw: &[u8]) -> Reply {
+    reply_to(client, raw, None)
+}
+
 /// The bridge's reply to the hook: the client's own answer to input it
-/// cannot parse, else a live resident's answer, else the daemon's, as
+/// cannot parse, else a live resident's answer, else the answer of the
+/// newer bridge the resident runs, else the daemon's, as
 /// `daemon::daemon_reply` settles them. A hook the bridge cannot read
 /// exactly, or cannot send as the client would, fails closed: the daemon
-/// is never asked without the exact request.
-fn reply(client: &Client, raw: &[u8]) -> Reply {
+/// is never asked without the exact request. `python_argv` is the client's
+/// command, which a newer bridge is run with.
+fn reply_to(client: &Client, raw: &[u8], python_argv: Option<&[String]>) -> Reply {
     let (payload, mapped) = match hook_object(raw) {
         Ok(read) => read,
         Err(Unread::Unparseable) => {
@@ -394,11 +407,41 @@ fn reply(client: &Client, raw: &[u8]) -> Reply {
         &request.data,
         client.deadline,
     );
+    if let (Err(DirectMiss::NoResident), Some(python_argv)) = (&resident, python_argv) {
+        if let Some(reply) = successor_reply(client, python_argv, raw) {
+            return reply;
+        }
+    }
     if request.probe {
         let (stdout, code) = probe::reply(client, &request, resident);
         return Reply::Answered(stdout, code);
     }
     daemon::daemon_reply(client, &request, resident)
+}
+
+/// The reply of the newer bridge the home's resident runs, when this bridge
+/// is an older durable copy a long-lived session still launches. `None`
+/// keeps the hook here; a newer bridge that ran but gave no answer in time
+/// fails closed, as this bridge would past its deadline.
+#[cfg(unix)]
+fn successor_reply(client: &Client, python_argv: &[String], raw: &[u8]) -> Option<Reply> {
+    let state_base = Path::new(&client.guard_home).join(STATE_DIRECTORY);
+    let successor = hook_bridge_successor::successor(&state_base)?;
+    let arguments: Vec<String> = std::iter::once(BRIDGE_COMMAND.to_owned())
+        .chain(python_argv.iter().cloned())
+        .collect();
+    match hook_bridge_successor::hand_off(&successor, &arguments, raw, client.deadline)? {
+        HandOff::Answered(stdout, code) => Some(match String::from_utf8(stdout) {
+            Ok(stdout) => Reply::Answered(stdout, code),
+            Err(_) => fail_closed(&client.event),
+        }),
+        HandOff::Failed => Some(fail_closed(&client.event)),
+    }
+}
+
+#[cfg(not(unix))]
+fn successor_reply(_client: &Client, _python_argv: &[String], _raw: &[u8]) -> Option<Reply> {
+    None
 }
 
 /// The client the installer's argv runs, or `None` for any other argv or
@@ -442,7 +485,7 @@ pub(crate) fn run(python_argv: &[String]) -> i32 {
         // The client reads an empty hook and answers its unparseable input.
         Input::Failed => Vec::new(),
     };
-    let Reply::Answered(stdout, code) = reply(&client, &raw);
+    let Reply::Answered(stdout, code) = reply_to(&client, &raw, Some(python_argv));
     write_stdout(&stdout);
     code
 }

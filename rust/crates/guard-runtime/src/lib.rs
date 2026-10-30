@@ -490,6 +490,8 @@ mod hook_artifact_facts_op;
 mod hook_authority_state_op;
 mod hook_bridge_daemon_start;
 mod hook_bridge_fallback;
+#[cfg(unix)]
+mod hook_bridge_successor;
 mod hook_cli_claude_text;
 mod hook_cli_emit;
 mod hook_cli_emit_redaction;
