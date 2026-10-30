@@ -1,7 +1,8 @@
 //! The native sink for a read-only run: an evaluation (`python -c`, `node
-//! -e`, `bun -e`), a Vitest run, a `node --test` run, a local lint,
-//! typecheck or build tool, a Git inspection or a pytest run the resident
-//! sent to its own profile. A build writes only the directory its plan names.
+//! -e`, `bun -e`), a Vitest run, a `node --test` run, a package manager's own
+//! test script, a local lint, typecheck or build tool, a Git inspection or a
+//! pytest run the resident sent to its own profile. A build writes only the
+//! directory its plan names; a package test runs as the runner it spells.
 //!
 //! Guard's own sink runs such a call in three steps: it reads the program
 //! the command stands behind, plans the run, and asks the live resident
@@ -16,13 +17,14 @@
 
 use serde::Deserialize;
 
+use super::program::{plain_program, Kind};
 use super::*;
 
 /// The read-only routes: the reason the resident gives and the profile it
 /// requires.
 pub(super) type Route = (&'static str, &'static str);
 
-const ROUTES: [Route; 9] = [
+const ROUTES: [Route; 10] = [
     (
         "native_python_eval_readonly_containment_required",
         PYTHON_EVAL_PROFILE,
@@ -53,6 +55,10 @@ const ROUTES: [Route; 9] = [
         "native_node_build_output_containment_required",
         NODE_BUILD_PROFILE,
     ),
+    (
+        "native_package_test_readonly_containment_required",
+        PACKAGE_PROFILE,
+    ),
 ];
 pub(super) const VITEST_ROUTE: Route = (
     "native_vitest_readonly_containment_required",
@@ -66,19 +72,9 @@ const GIT_PROFILE: &str = "git-readonly-v1";
 const PYTEST_PROFILE: &str = "pytest-readonly-v2";
 const NODE_TOOL_PROFILE: &str = "node-tool-readonly-v1";
 const NODE_BUILD_PROFILE: &str = "node-build-output-v1";
+const PACKAGE_PROFILE: &str = "package-test-readonly-v1";
 const SEATBELT: &str = "macos-seatbelt";
 const INVALID_PLAN: &str = "Invalid native restricted launch plan.";
-
-/// The kind of read-only run.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Kind {
-    Eval,
-    Vitest,
-    NodeTest,
-    Git,
-    Pytest,
-    NodeTool,
-}
 
 impl Kind {
     fn of(route: Route) -> Self {
@@ -88,6 +84,7 @@ impl Kind {
             GIT_PROFILE => Self::Git,
             PYTEST_PROFILE => Self::Pytest,
             NODE_TOOL_PROFILE | NODE_BUILD_PROFILE => Self::NodeTool,
+            PACKAGE_PROFILE => Self::Package,
             _ => Self::Eval,
         }
     }
@@ -126,63 +123,6 @@ fn plain_call(response: &Value, original: &Map<String, Value>) -> bool {
             .and_then(Value::as_str)
             .and_then(plain_program)
             .is_some_and(|(_, _, kind)| kind == Kind::of(route))
-}
-
-/// The program a plain read-only run starts, the seconds a system `timeout`
-/// in front of it allows, and its kind, read with the operations Guard's
-/// own sink reads it with. `None` for anything else: a setting, carried or
-/// dropped, a package-test alias, or a program of another kind.
-pub(crate) fn plain_program(command: &str) -> Option<(Vec<String>, Option<u64>, Kind)> {
-    let words = strings(native("command_words", json!({ "command_text": command })).ok()?)?;
-    let peeled = native(
-        "command_prefix_split",
-        json!({ "command": words, "drop_data": true }),
-    )
-    .ok()?;
-    if peeled.get("assignments") != Some(&json!([]))
-        || peeled.get("dropped_data") != Some(&Value::Bool(false))
-    {
-        return None;
-    }
-    let split = native(
-        "command_prefix_split",
-        json!({ "command": words, "drop_data": false }),
-    )
-    .ok()?;
-    let index = usize::try_from(split.get("core_index")?.as_u64()?).ok()?;
-    let core = words.get(index..)?.to_vec();
-    let peeled = native("run_prefix_peel", json!({ "command": core })).ok()?;
-    let core = strings(peeled.get("core")?.clone())?;
-    let seconds = match peeled.get("seconds")? {
-        Value::Null => None,
-        seconds => Some(seconds.as_u64()?),
-    };
-    let kinds = native("contained_kind", json!({ "command": core })).ok()?;
-    let kind = |name: &str| kinds.get(name).and_then(Value::as_bool);
-    if kind("package_test") != Some(false) {
-        return None;
-    }
-    // Guard's own sink takes the first kind in this order, and plans any
-    // other program as pytest.
-    let kind = match (
-        kind("inline_eval")?,
-        kind("node_tool")?,
-        kind("git")?,
-        kind("vitest")?,
-        kind("node_test")?,
-    ) {
-        (true, ..) => Kind::Eval,
-        (false, true, ..) => Kind::NodeTool,
-        (false, false, true, ..) => Kind::Git,
-        (false, false, false, true, _) => Kind::Vitest,
-        (false, false, false, false, true) => Kind::NodeTest,
-        (false, false, false, false, false) => Kind::Pytest,
-    };
-    Some((core, seconds, kind))
-}
-
-fn strings(value: Value) -> Option<Vec<String>> {
-    serde_json::from_value(value).ok()
 }
 
 /// A profile-bound plan, field for field what the planner answers.
@@ -225,9 +165,15 @@ pub(super) fn run(
         .and_then(|input| input.get("command"))
         .and_then(Value::as_str)
         .ok_or_else(|| Failure::invalid("Invalid restricted execution request."))?;
-    let (argv, seconds, kind) = plain_program(command).ok_or_else(Failure::unauthorized)?;
+    let (mut argv, seconds, mut kind) = plain_program(command).ok_or_else(Failure::unauthorized)?;
     if kind != Kind::of(route) {
         return Err(Failure::unauthorized());
+    }
+    // A package test runs as the runner its script spells, under that
+    // runner's route once the call as issued names the package route again.
+    let package = kind == Kind::Package;
+    if package {
+        (argv, kind) = super::program::package_test(&argv, workspace)?;
     }
     let timeout = seconds.map_or(RUN_TIMEOUT_SECONDS, |seconds| {
         seconds.min(RUN_TIMEOUT_SECONDS)
@@ -240,11 +186,25 @@ pub(super) fn run(
         Kind::Git => ("prepare_git", Some(GIT_PROFILE)),
         Kind::Pytest => ("prepare", Some(PYTEST_PROFILE)),
         Kind::NodeTool => ("prepare_node_tool", Some(route.1)),
+        Kind::Package => return Err(Failure::unauthorized()),
     };
     let mut plan = prepare(operation, &argv, workspace, home)?;
     if profile.is_some_and(|profile| plan.profile_version != profile) {
         return Err(Failure::new(SANDBOX_UNAVAILABLE, INVALID_PLAN));
     }
+    let underlying;
+    let (payload, route) = if package {
+        authorize_route(authority, payload, route)?;
+        underlying = with_command(payload, &argv, None);
+        let route = if kind == Kind::Vitest {
+            VITEST_ROUTE
+        } else {
+            ROUTES[4]
+        };
+        (&underlying, route)
+    } else {
+        (payload, route)
+    };
     match kind {
         Kind::Vitest => {
             return super::vitest::run(payload, workspace, authority, plan, timeout, signals)
@@ -293,7 +253,7 @@ pub(super) fn run(
                 .map_err(|_| unavailable("invalid_reply"))?;
         }
         Kind::Pytest => super::pytest::settle(&mut environment, &private.path)?,
-        Kind::Vitest => {}
+        Kind::Vitest | Kind::Package => {}
     }
     launch(
         &plan,

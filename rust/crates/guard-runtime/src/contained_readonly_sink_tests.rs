@@ -198,6 +198,22 @@ fn a_plain_lint_typecheck_or_build_run_is_a_node_tool() {
 }
 
 #[test]
+fn a_package_test_is_routed_by_the_package_route() {
+    assert_eq!(
+        ROUTES[9],
+        (
+            "native_package_test_readonly_containment_required",
+            PACKAGE_PROFILE
+        )
+    );
+    assert_eq!(Kind::of(ROUTES[9]), Kind::Package);
+    let package = Value::Object(response(ROUTES[9].0, ROUTES[9].1));
+    assert!(plain_call(&package, &call("npm test")));
+    assert!(!plain_call(&package, &call("CI=1 npm test")));
+    assert!(!plain_call(&package, &call("node --test")));
+}
+
+#[test]
 fn the_edge_routes_a_call_only_to_the_sink_of_its_own_kind() {
     let vitest = Value::Object(response(VITEST_ROUTE.0, VITEST_ROUTE.1));
     assert!(plain_call(&vitest, &call("vitest run")));

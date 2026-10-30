@@ -24,13 +24,54 @@ struct Tool {
 }
 
 pub(super) fn evaluate(operation: &str, input: &Value) -> Option<Value> {
-    if operation != "prepare_node_tool" {
-        return None;
-    }
-    Some(match prepare(input) {
-        Ok(plan) => json!({ "value": plan }),
+    let result = match operation {
+        "prepare_node_tool" => prepare(input),
+        "package_test_command" => package_test_command(input),
+        _ => return None,
+    };
+    Some(match result {
+        Ok(value) => json!({ "value": value }),
         Err(error) => crate::restricted_command::error_reply(error),
     })
+}
+
+/// The words a package manager's own test script runs, read from the
+/// nearest project's manifest: the same reading the run's tool route takes.
+fn package_test_command(input: &Value) -> Result<Value, RestrictedPytestError> {
+    let request = input.as_object().ok_or_else(invalid_request)?;
+    let command = request.get("command").cloned().unwrap_or(Value::Null);
+    let command = serde_json::from_value::<Vec<String>>(command).map_err(|_| invalid_request())?;
+    let place = |field: &str| {
+        request
+            .get(field)
+            .and_then(Value::as_str)
+            .map(PathBuf::from)
+    };
+    let workspace = place("workspace").ok_or_else(invalid_request)?;
+    let cwd = place("cwd").unwrap_or_else(|| workspace.clone());
+    let manifest = manifest(&workspace, &cwd)?;
+    let scripts = manifest
+        .as_ref()
+        .and_then(|manifest| manifest.get("scripts"))
+        .and_then(Value::as_object);
+    crate::contained_package_test::resolve(&command, scripts).map(|words| json!(words))
+}
+
+/// The nearest project's manifest, read through a verified descriptor.
+fn manifest(
+    workspace: &Path,
+    cwd: &Path,
+) -> Result<Option<Map<String, Value>>, RestrictedPytestError> {
+    let package = ask(
+        "nearest_project_root",
+        json!({ "cwd": cwd, "workspace": workspace, "value": "package.json" }),
+    )?;
+    let package = PathBuf::from(package.as_str().ok_or_else(invalid_request)?);
+    Ok(crate::contained_runner::pkg_json::read_json_with_integrity(
+        &package.join("package.json"),
+        false,
+    )
+    .0)
 }
 
 fn invalid_request() -> RestrictedPytestError {
@@ -230,15 +271,7 @@ fn script_body(
     workspace: &Path,
     cwd: &Path,
 ) -> Result<Vec<String>, RestrictedPytestError> {
-    let package = ask(
-        "nearest_project_root",
-        json!({ "cwd": cwd, "workspace": workspace, "value": "package.json" }),
-    )?;
-    let package = PathBuf::from(package.as_str().ok_or_else(invalid_request)?);
-    let (manifest, _) = crate::contained_runner::pkg_json::read_json_with_integrity(
-        &package.join("package.json"),
-        false,
-    );
+    let manifest = manifest(workspace, cwd)?;
     let scripts = manifest
         .as_ref()
         .and_then(|manifest| manifest.get("scripts"))
