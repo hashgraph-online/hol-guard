@@ -790,8 +790,7 @@
       "src/target_identities.rs",
       "src/typescript_launch_evidence.rs",
       "src/vite_output.rs",
-      "src/vite_output_tests.rs",
-      "src/workspace_inventory.rs",
+        "src/workspace_inventory.rs",
       "src/workspace_roots.rs"
     ]
   }
