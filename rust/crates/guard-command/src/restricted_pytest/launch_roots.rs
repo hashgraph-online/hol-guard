@@ -171,6 +171,20 @@ fn unreachable_from(
 /// as they already are in `/usr/bin`.
 pub(super) const MAC_PROGRAM_ROOTS: &[&str] = &["/bin", "/usr/bin", "/usr/sbin", "/sbin"];
 
+/// The sealed directory holding the interpreters macOS ships inside its own
+/// frameworks. `/usr/bin/rake`, `/usr/bin/irb` and `/usr/bin/tclsh` are short
+/// scripts whose shebang names a program under here, so the interpreter a
+/// command as ordinary as `rake spec` runs on resolved outside every root the
+/// containment check knows and the run was reviewed instead of contained.
+/// The tree sits on the signed system volume: it is read-only even for root,
+/// the profile already reads all of `/System`, and the capabilities this
+/// sandbox withholds - no writable path outside the workspace, no mach
+/// service but the user-database lookup, no root - stop a machine change
+/// wherever the program it runs happens to sit. `/System/Library` is not
+/// taken whole, because the support directories beside the frameworks carry
+/// privileged helpers the `bin` directories do not.
+pub(super) const MAC_FRAMEWORK_PROGRAM_ROOT: &str = "/System/Library/Frameworks";
+
 /// The canonical form of a session `PATH` entry that is one of the system
 /// program directories above, which the sandbox executes from on every
 /// platform. The toolchain roots the sandbox PATH otherwise accepts leave out
@@ -202,6 +216,12 @@ pub(super) fn executable_roots(workspace: &Path, exec_roots: Vec<PathBuf>) -> Ve
             .map(PathBuf::from)
             .filter(|root| root.exists()),
     );
+    if cfg!(target_os = "macos") {
+        let frameworks = PathBuf::from(MAC_FRAMEWORK_PROGRAM_ROOT);
+        if frameworks.is_dir() {
+            roots.push(frameworks);
+        }
+    }
     roots.extend(exec_roots);
     roots
 }
