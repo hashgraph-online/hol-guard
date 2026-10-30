@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.metadata
 import json
+import os
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -224,6 +225,90 @@ def test_install_rejects_symlink_version_dir(
             fetch_bytes=fetch_bytes,
         )
     assert error.value.reason_code == "desktop_core_path_untrusted"
+
+
+def _parsed_core_manifest(binary: bytes) -> update_desktop_core._ParsedCoreManifest:
+    return {
+        "version": "3.0.0a200",
+        "source_commit": "a" * 40,
+        "target": "aarch64-apple-darwin",
+        "sha256": update_desktop_core._sha256_hex(binary),
+        "size": len(binary),
+        "minimum_desktop_version": "0.1.0",
+    }
+
+
+def test_reinstalling_the_same_core_version_replaces_the_executable_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # macOS caches a binary's code signature per inode. Rewriting an executed
+    # Core in place gets it killed on the next launch, so a reinstall must
+    # land on a new file rather than overwrite the old one.
+    monkeypatch.setattr(update_desktop_core, "desktop_core_root", lambda: tmp_path / "core")
+    monkeypatch.setattr(update_desktop_core, "_macos_codesign_ok", lambda _path: True)
+    monkeypatch.setattr(update_desktop_core, "_macos_signing_team", lambda _path: "TEAMID")
+    binary = b"signed-core-bytes"
+    staged = tmp_path / "staged"
+    staged.write_bytes(binary)
+    manifest = _parsed_core_manifest(binary)
+
+    first = update_desktop_core._install_managed_core(staged, manifest, "aarch64-apple-darwin")
+    first_inode = first.stat().st_ino
+    second = update_desktop_core._install_managed_core(staged, manifest, "aarch64-apple-darwin")
+
+    assert second == first
+    assert second.read_bytes() == binary
+    assert second.stat().st_ino != first_inode
+    assert sorted(path.name for path in second.parent.iterdir()) == [second.name]
+
+
+def test_a_rejected_core_reinstall_leaves_the_installed_executable_untouched(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(update_desktop_core, "desktop_core_root", lambda: tmp_path / "core")
+    monkeypatch.setattr(update_desktop_core, "_macos_codesign_ok", lambda _path: True)
+    monkeypatch.setattr(update_desktop_core, "_macos_signing_team", lambda _path: "TEAMID")
+    binary = b"signed-core-bytes"
+    staged = tmp_path / "staged"
+    staged.write_bytes(binary)
+    manifest = _parsed_core_manifest(binary)
+    installed = update_desktop_core._install_managed_core(staged, manifest, "aarch64-apple-darwin")
+    installed_inode = installed.stat().st_ino
+    staged.write_bytes(b"tampered-core-bytes")
+
+    with pytest.raises(update_desktop_core.DesktopCoreUpdateError) as error:
+        update_desktop_core._install_managed_core(staged, manifest, "aarch64-apple-darwin")
+
+    assert error.value.reason_code == "desktop_core_integrity_mismatch"
+    assert installed.read_bytes() == binary
+    assert installed.stat().st_ino == installed_inode
+    assert sorted(path.name for path in installed.parent.iterdir()) == [installed.name]
+
+
+def test_a_hard_link_at_a_predictable_candidate_name_cannot_rewrite_the_installed_core(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(update_desktop_core, "desktop_core_root", lambda: tmp_path / "core")
+    monkeypatch.setattr(update_desktop_core, "_macos_codesign_ok", lambda _path: True)
+    monkeypatch.setattr(update_desktop_core, "_macos_signing_team", lambda _path: "TEAMID")
+    binary = b"signed-core-bytes"
+    staged = tmp_path / "staged"
+    staged.write_bytes(binary)
+    manifest = _parsed_core_manifest(binary)
+    installed = update_desktop_core._install_managed_core(staged, manifest, "aarch64-apple-darwin")
+    planted = installed.with_name(f".{installed.name}.{os.getpid()}.tmp")
+    os.link(installed, planted)
+    staged.write_bytes(b"tampered-core-bytes")
+
+    with pytest.raises(update_desktop_core.DesktopCoreUpdateError) as error:
+        update_desktop_core._install_managed_core(staged, manifest, "aarch64-apple-darwin")
+
+    assert error.value.reason_code == "desktop_core_integrity_mismatch"
+    assert installed.read_bytes() == binary
+    assert sorted(path.name for path in installed.parent.iterdir()) == sorted([installed.name, planted.name])
 
 
 def test_download_bytes_rejects_untrusted_source() -> None:

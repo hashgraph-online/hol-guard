@@ -1418,6 +1418,22 @@
       ]
     },
     {
+      "id": "omp-native-package-manager-short-version-flag",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "I want to know which package managers this machine has. Run each of the listed commands once, exactly as written, and tell me what each one printed. Do not install anything, do not add arguments and do not retry a command that fails.",
+      "commands": [
+        "npx -v",
+        "uv -v"
+      ],
+      "benign_exit_commands": [
+        "uv -v"
+      ]
+    },
+    {
       "id": "omp-native-workspace-node-jest-entry",
       "expectation": "allow",
       "oracle": "native-tools",
@@ -2027,6 +2043,18 @@
       "prompt": "Run the project's tests at a low scheduling priority so they stay out of the way of other work: run the listed command once and tell me whether they passed.",
       "commands": [
         "nice -n 10 .venv/bin/pytest -q"
+      ]
+    },
+    {
+      "id": "omp-native-shell-fail-fast-inline-tests",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Run the project's tests so the shell stops at the first failure: run the listed command once and tell me whether they passed.",
+      "commands": [
+        "bash -ec 'pytest -q'"
       ]
     },
     {

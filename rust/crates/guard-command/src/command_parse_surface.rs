@@ -144,11 +144,12 @@ pub(crate) fn parse_command_unbound(
 /// `bash -c`, `dash -c` and `ash -c`. A login shell (`-lc`) sources the profile
 /// files first and `zsh` reads `~/.zshenv` whatever option it is given, so
 /// those run code this text does not hold and keep the wrapper's own
-/// uncertainty. The bounded shape is what keeps the rest true: three words, a
-/// known shell, the `-c` option, and no expansion the parser would have to
-/// guess at. Anything else — an extra operand, `-s`, a prefix, a shell this
-/// text only names — keeps that uncertainty too, as does a script this parser
-/// cannot model exactly.
+/// uncertainty. The bounded shape is what keeps the rest true: a known shell,
+/// options that end in `-c` and say only how the script reacts to a failure,
+/// one script word, and no expansion the parser would have to guess at.
+/// Anything else — an extra operand, `-s`, `-o pipefail`, a prefix, a shell
+/// this text only names — keeps that uncertainty too, as does a script this
+/// parser cannot model exactly.
 ///
 /// A Windows agent runs PowerShell, which reads quotes differently from the
 /// shell this text names: `''` closes and reopens a POSIX single-quoted word

@@ -11,7 +11,6 @@ import pytest
 
 from codex_plugin_scanner.guard.continuation_runtime import (
     continue_request_after_application,
-    record_live_hook_completion,
 )
 from codex_plugin_scanner.guard.live_process_identity import current_process_identity
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
@@ -254,7 +253,10 @@ def test_terminal_continuation_projects_as_a_distinct_authenticated_event(
         timeout_seconds=30.0,
     )
     assert waiting["continuationStatus"] == "waiting", waiting
-    completed = record_live_hook_completion(store, request_id=request.request_id, action="allow", now=_LATER)
+    completed = store._native_store_call(
+        "record_codex_live_completion",
+        {"request_id": request.request_id, "action": "allow", "now": _LATER},
+    )
     assert completed is not None and completed["continuationStatus"] == "resumed"
     captured: list[dict[str, object]] = []
     monkeypatch.setattr(cloud_review_sync, "post_review_events", _accepting_transport(captured))

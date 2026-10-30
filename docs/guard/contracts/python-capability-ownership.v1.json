@@ -1889,6 +1889,17 @@
    "native_replacements": [
     "rust/crates/guard-runtime/src/native_exact_action_op/runner_bin.rs"
    ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/command_reviewed_literal_matcher.py",
+   "module": "codex_plugin_scanner.guard.runtime.command_reviewed_literal_matcher",
+   "source_sha256": "60cd955b234541b6cb5f835c2a8e29190cbaab418bec2d309de9f8e64676212b",
+   "forbidden_symbols": [
+    "validate_reviewed_literal_argv"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/command_reviewed_literal.rs"
+   ]
   }
  ],
  "retired_test_paths": [

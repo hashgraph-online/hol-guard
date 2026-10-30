@@ -15,29 +15,10 @@ pub(crate) struct ReviewedLiteralConfig {
 
 impl ReviewedLiteralConfig {
     pub(crate) fn validate(mut self) -> Result<Self, &'static str> {
-        if self.executable.is_empty()
-            || self.executable.len() > 64
-            || !self.executable.is_ascii()
-            || !self.executable.as_bytes()[0].is_ascii_alphanumeric()
-            || !self
-                .executable
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || b"_.+-".contains(&byte))
-            || !(1..=16).contains(&self.arguments.len())
-            || self
-                .arguments
-                .iter()
-                .any(|argument| argument.len() > 64 || !literal_argument(argument))
-        {
+        let Some(expected) = reviewed_literal_spelling(&self.executable, &self.arguments) else {
             return Err("invalid_reviewed_literal_config");
-        }
-        self.expected = std::iter::once(self.executable.as_str())
-            .chain(self.arguments.iter().map(String::as_str))
-            .collect::<Vec<_>>()
-            .join(" ");
-        if self.expected.len() > 120 {
-            return Err("invalid_reviewed_literal_config");
-        }
+        };
+        self.expected = expected;
         Ok(self)
     }
 
@@ -68,6 +49,37 @@ impl ReviewedLiteralConfig {
             && !segment.path_overridden
             && segment.pipeline_index == 0
     }
+}
+
+/// The one spelling a reviewed literal invocation is allowed to have, or
+/// nothing when it is not written in the grammar at all.
+///
+/// A configured matcher and an extension under review ask the same question of
+/// the same argument vector: a bounded basename, one to sixteen literal tokens,
+/// no shell syntax, expansion, wrapper or environment override, and a joined
+/// invocation short enough to print as a command example. Review used to ask it
+/// of a regular expression in Python, so an author could be told a vector was
+/// well written and then watch the compiler refuse the matcher built from it.
+pub(crate) fn reviewed_literal_spelling(executable: &str, arguments: &[String]) -> Option<String> {
+    if executable.is_empty()
+        || executable.len() > 64
+        || !executable.is_ascii()
+        || !executable.as_bytes()[0].is_ascii_alphanumeric()
+        || !executable
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"_.+-".contains(&byte))
+        || !(1..=16).contains(&arguments.len())
+        || arguments
+            .iter()
+            .any(|argument| argument.len() > 64 || !literal_argument(argument))
+    {
+        return None;
+    }
+    let expected = std::iter::once(executable)
+        .chain(arguments.iter().map(String::as_str))
+        .collect::<Vec<_>>()
+        .join(" ");
+    (expected.len() <= 120).then_some(expected)
 }
 
 fn literal_argument(argument: &str) -> bool {

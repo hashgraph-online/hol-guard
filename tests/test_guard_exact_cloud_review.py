@@ -15,6 +15,7 @@ import pytest
 from codex_plugin_scanner.cli import _build_parser, _resolve_legacy_args, main
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_dispatch_cloud_review as cloud_review_dispatch
+from codex_plugin_scanner.guard.codex_live_decision import resolve_codex_live_allow_authority
 from codex_plugin_scanner.guard.daemon import command_queue_worker as queue_worker_module
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
@@ -163,7 +164,9 @@ def test_exact_cloud_review_resolves_one_request_without_policy_or_memory(tmp_pa
     resolved_at = resolution.resolved_request["resolved_at"]
     assert isinstance(resolved_at, str)
     assert target_row is not None
-    authority = store.peek_exact_cloud_local_once_approval(request_id=target.request_id, now=resolved_at)
+    authority = resolve_codex_live_allow_authority(
+        store, request=target_row, request_id=target.request_id, now=resolved_at
+    )
     assert authority is not None
     assert authority["request_id"] == target.request_id
     assert authority["source"] == "approval-gate-once"

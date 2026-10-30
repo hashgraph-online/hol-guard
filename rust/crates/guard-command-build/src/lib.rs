@@ -63,6 +63,8 @@ pub mod command_model;
 mod command_operand_matchers;
 #[path = "../../guard-command/src/command_option_parsing.rs"]
 pub mod command_option_parsing;
+#[path = "../../guard-command/src/command_reviewed_literal.rs"]
+mod command_reviewed_literal;
 #[path = "../../guard-command/src/command_segment_parsing.rs"]
 mod command_segment_parsing;
 #[path = "../../guard-command/src/command_specialized_matchers.rs"]

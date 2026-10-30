@@ -4,31 +4,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
-from functools import wraps
-from inspect import signature
-from typing import Any, Concatenate, ParamSpec
+from collections.abc import Mapping
+from typing import Any
 
 # ruff: noqa: F403,F405
 from .store_base import *
-from .store_resume import update_request_resume as _update_request_resume
-
-_P = ParamSpec("_P")
-
-
-def _with_resume_connection(
-    update: Callable[Concatenate[sqlite3.Connection, _P], None],
-) -> Callable[Concatenate[StoreSessionsMixin, _P], None]:
-    """Open the Guard store connection around a request-resume update."""
-
-    @wraps(update)
-    def _method(self: StoreSessionsMixin, /, *args: _P.args, **kwargs: _P.kwargs) -> None:
-        with self._connect() as connection:
-            update(connection, *args, **kwargs)
-
-    wrapped_signature = signature(update)
-    _method.__signature__ = wrapped_signature.replace(parameters=list(wrapped_signature.parameters.values())[1:])
-    return _method
 
 
 def _utc_now_iso() -> str:
@@ -185,38 +165,11 @@ class StoreSessionsMixin:
         row = self._native_store_call("get_guard_operation_for_approval_request", {"request_id": request_id})
         return None if row is None else _guard_operation_row(row)
 
-    def seed_request_resume(
-        self,
-        *,
-        request_id: str,
-        operation_id: str | None,
-        harness: str,
-        strategy: str,
-        supported: bool,
-        thread_id: str | None,
-        now: str,
-    ) -> None:
-        with self._connect() as connection:
-            persist_request_resume_seed(
-                connection,
-                request_id=request_id,
-                operation_id=operation_id,
-                harness=harness,
-                strategy=strategy,
-                supported=supported,
-                thread_id=thread_id,
-                now=now,
-            )
-
     def get_request_resume(self, request_id: str) -> dict[str, object] | None:
-        with self._connect() as connection:
-            return load_request_resume(connection, request_id)
+        return self._native_store_call("get_request_resume", {"request_id": request_id})
 
     def get_latest_request_resume(self, *, harness: str | None = None) -> dict[str, object] | None:
-        with self._connect() as connection:
-            return load_latest_request_resume(connection, harness=harness)
-
-    update_request_resume = _with_resume_connection(_update_request_resume)
+        return self._native_store_call("get_latest_request_resume", {"harness": harness})
 
     def add_guard_operation_item(
         self,
