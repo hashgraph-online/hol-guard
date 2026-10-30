@@ -243,3 +243,88 @@ fn the_operation_reports_the_refusal_the_build_shows() {
 fn an_unknown_operation_is_left_to_the_other_readers() {
     assert!(super::vite_output::evaluate("normalized_command", &json!({})).is_none());
 }
+
+#[test]
+fn a_named_config_that_climbs_out_of_the_workspace_is_unverifiable() {
+    let project = Project::new("named-climb");
+    let workspace = project.workspace().join("ws");
+    let app = workspace.join("app");
+    fs::create_dir_all(&app).expect("app");
+    let outside = project.workspace().join("elsewhere");
+    fs::create_dir_all(&outside).expect("elsewhere");
+    fs::write(
+        outside.join("vite.config.ts"),
+        "export default { build: { outDir: 'dist' } }\n",
+    )
+    .expect("config");
+    assert_eq!(
+        declared_output(
+            &app,
+            &workspace,
+            Some(&app.join("../../elsewhere/vite.config.ts"))
+        ),
+        Declared::Unverified
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_named_config_behind_a_linked_directory_is_unverifiable() {
+    let project = Project::new("named-link");
+    let workspace = project.workspace().join("ws");
+    let app = workspace.join("app");
+    fs::create_dir_all(&app).expect("app");
+    let outside = project.workspace().join("elsewhere");
+    fs::create_dir_all(&outside).expect("elsewhere");
+    fs::write(
+        outside.join("vite.config.ts"),
+        "export default { build: { outDir: 'dist' } }\n",
+    )
+    .expect("config");
+    std::os::unix::fs::symlink(&outside, workspace.join("link")).expect("link");
+    assert_eq!(
+        declared_output(
+            &app,
+            &workspace,
+            Some(&workspace.join("link/vite.config.ts"))
+        ),
+        Declared::Unverified
+    );
+}
+
+#[test]
+fn a_named_config_reached_through_a_parent_keeps_its_output() {
+    let project = Project::new("named-parent");
+    let workspace = project.workspace().join("ws");
+    let app = workspace.join("app");
+    let configs = workspace.join("config");
+    fs::create_dir_all(&app).expect("app");
+    fs::create_dir_all(&configs).expect("configs");
+    fs::write(
+        configs.join("vite.ts"),
+        "export default { build: { outDir: '../static' } }\n",
+    )
+    .expect("config");
+    assert_eq!(
+        declared_output(&app, &workspace, Some(&app.join("../config/vite.ts"))),
+        Declared::Output(workspace.join("static"))
+    );
+}
+
+#[test]
+fn a_config_past_the_read_limit_is_unverifiable() {
+    let project = Project::new("oversize");
+    let app = project.app();
+    // Every spelling past the limit would be another capture to collect, so a
+    // reader that scanned the whole file would answer from the last one. The
+    // limit is the same 256 KiB the reader stops at.
+    let mut body = String::from("export default { build: { outDir: '../static' } }\n");
+    while body.len() <= 256 * 1024 {
+        body.push_str("// outDir: '../other'\n");
+    }
+    fs::write(app.join("vite.config.ts"), &body).expect("config");
+    assert_eq!(
+        declared_output(&app, project.workspace(), None),
+        Declared::Unverified
+    );
+}

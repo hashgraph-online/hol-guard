@@ -12,6 +12,7 @@
 //! read the same answer, so neither can drift from the other.
 
 use serde_json::{json, Value};
+use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 use std::sync::LazyLock;
 
@@ -115,13 +116,33 @@ fn chosen_config(cwd: &Path, workspace: &Path, config: Option<&Path>) -> Result<
         }
         return Ok(path);
     };
-    if !named.starts_with(workspace) {
+    // The named config is judged by where it resolves, not by how it is
+    // spelled. A `..` component, or a parent reached through a link, lands
+    // outside the workspace while the spelling still opens with it, and this
+    // file is read here before the build runs. Resolving the directory also
+    // settles the config's own spelling, so an `outDir` read relative to it
+    // cannot carry a parent component into the admissibility walk.
+    let (Some(parent), Some(name)) = (named.parent(), named.file_name()) else {
         return Err(Declared::Unverified);
-    }
-    if !named.is_file() || is_symlink(named) {
+    };
+    let (Ok(parent), Ok(root)) = (parent.canonicalize(), workspace.canonicalize()) else {
+        // A directory that does not resolve names no config in the workspace,
+        // so nothing here can say the build's output is the default one.
+        return Err(Declared::Unverified);
+    };
+    let Ok(inside) = parent.strip_prefix(&root) else {
+        return Err(Declared::Unverified);
+    };
+    // The resolved directory is spelled back under the workspace the caller
+    // holds, so the admissibility walk below reads the prefix it was handed
+    // rather than a second spelling of the same directory: resolving a path
+    // under the system temporary directory answers `/private/var/...` where
+    // the caller holds `/var/...`, and both name one place.
+    let resolved = workspace.join(inside).join(name);
+    if !resolved.is_file() || is_symlink(&resolved) {
         return Err(Declared::Default);
     }
-    Ok(named.to_path_buf())
+    Ok(resolved)
 }
 
 /// The config's literal output directory, read once for every caller.
@@ -130,9 +151,24 @@ pub fn declared_output(cwd: &Path, workspace: &Path, config: Option<&Path>) -> D
         Ok(path) => path,
         Err(answer) => return answer,
     };
-    let Ok(raw) = std::fs::read(&path) else {
+    // One byte past the limit is enough to know the config is over it, so an
+    // oversized file is never decoded, scanned or captured from: the work the
+    // resident does on the hook path is bounded by the limit rather than by
+    // the size of a file the workspace supplies.
+    let Ok(file) = std::fs::File::open(&path) else {
         return Declared::Default;
     };
+    let mut raw = Vec::new();
+    if file
+        .take(MAX_CONFIG_BYTES as u64 + 1)
+        .read_to_end(&mut raw)
+        .is_err()
+    {
+        return Declared::Default;
+    }
+    if raw.len() > MAX_CONFIG_BYTES {
+        return Declared::Unverified;
+    }
     let text = String::from_utf8_lossy(&raw);
     let (mentions, literal) = out_dir_patterns();
     let mention_count = mentions.find_iter(&text).count();
@@ -140,7 +176,7 @@ pub fn declared_output(cwd: &Path, workspace: &Path, config: Option<&Path>) -> D
         return Declared::Default;
     }
     let captures: Vec<_> = literal.captures_iter(&text).collect();
-    if raw.len() > MAX_CONFIG_BYTES || mention_count != 1 || captures.len() != 1 {
+    if mention_count != 1 || captures.len() != 1 {
         return Declared::Unverified;
     }
     let Some(spelled) = captures[0]
