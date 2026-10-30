@@ -552,11 +552,20 @@ pub static SECRET_RULES: LazyLock<Vec<SecretRule>> = LazyLock::new(|| {
         // after the set Python published so `detector_version` keeps a
         // checkable prefix, and the synthetic `credential-assignment` entry
         // stays last in both the catalog and the digest material.
+        //
+        // A rule whose token has no fixed length is written open-ended rather
+        // than capped. A cap with nothing to close the match against stops
+        // part-way through a longer value, and the part it captured is not the
+        // value the generic assignment rule sees, so the same credential is
+        // reported twice and the provider finding fingerprints a fragment of
+        // it. Where the token's length is fixed the cap stays, because the
+        // trailing `\b` then refuses the longer value outright instead of
+        // cutting it.
         secret_rule(
             "atlassian-api-token",
             "Atlassian API token",
             "critical",
-            r"\b(?P<secret>ATATT[A-Za-z0-9_\-=]{20,255})",
+            r"\b(?P<secret>ATATT[A-Za-z0-9_\-=]{20,})",
             FLAG_UNICODE,
             "atlassian",
             true,
@@ -567,7 +576,7 @@ pub static SECRET_RULES: LazyLock<Vec<SecretRule>> = LazyLock::new(|| {
             "telegram-bot-token",
             "Telegram bot token",
             "high",
-            r"\b(?P<secret>[0-9]{8,10}:AA[A-Za-z0-9_-]{30,40})",
+            r"\b(?P<secret>[0-9]{8,10}:AA[A-Za-z0-9_-]{30,})",
             FLAG_UNICODE,
             "telegram",
             true,
@@ -578,7 +587,7 @@ pub static SECRET_RULES: LazyLock<Vec<SecretRule>> = LazyLock::new(|| {
             "discord-webhook",
             "Discord incoming webhook",
             "critical",
-            r"(?P<secret>https://(?:ptb\.|canary\.)?discord(?:app)?\.com/api/webhooks/[0-9]{17,20}/[A-Za-z0-9_-]{60,80})",
+            r"(?P<secret>https://(?:ptb\.|canary\.)?discord(?:app)?\.com/api/webhooks/[0-9]{17,20}/[A-Za-z0-9_-]{60,})",
             FLAG_UNICODE,
             "discord",
             true,
@@ -589,7 +598,7 @@ pub static SECRET_RULES: LazyLock<Vec<SecretRule>> = LazyLock::new(|| {
             "doppler-token",
             "Doppler token",
             "critical",
-            r"\b(?P<secret>dp\.(?:pt|st|sa|scim|audit)\.[A-Za-z0-9]{40,44})\b",
+            r"\b(?P<secret>dp\.(?:ct|pt|sa|scim|audit)\.[A-Za-z0-9]{40,44}|dp\.st\.(?:[a-z0-9_-]{2,35}\.)?[A-Za-z0-9]{40,44})\b",
             FLAG_UNICODE,
             "doppler",
             true,
@@ -600,7 +609,7 @@ pub static SECRET_RULES: LazyLock<Vec<SecretRule>> = LazyLock::new(|| {
             "vault-token",
             "HashiCorp Vault token",
             "critical",
-            r"\b(?P<secret>hv[sbr]\.[A-Za-z0-9_-]{20,100})",
+            r"\b(?P<secret>hv[sbr]\.[A-Za-z0-9_-]{20,})",
             FLAG_UNICODE,
             "vault",
             true,
@@ -644,7 +653,7 @@ pub static SECRET_RULES: LazyLock<Vec<SecretRule>> = LazyLock::new(|| {
             "dockerhub-pat",
             "Docker Hub access token",
             "critical",
-            r"\b(?P<secret>dckr_pat_[A-Za-z0-9_-]{20,64})",
+            r"\b(?P<secret>dckr_pat_[A-Za-z0-9_-]{20,})",
             FLAG_UNICODE,
             "dockerhub",
             true,
@@ -677,7 +686,7 @@ pub static SECRET_RULES: LazyLock<Vec<SecretRule>> = LazyLock::new(|| {
             "planetscale-token",
             "PlanetScale token",
             "critical",
-            r"\b(?P<secret>pscale_(?:tkn|pw)_[A-Za-z0-9_\-]{32,64})",
+            r"\b(?P<secret>pscale_(?:tkn|pw)_[A-Za-z0-9_\-]{32,})",
             FLAG_UNICODE,
             "planetscale",
             true,
@@ -688,7 +697,7 @@ pub static SECRET_RULES: LazyLock<Vec<SecretRule>> = LazyLock::new(|| {
             "figma-token",
             "Figma access token",
             "high",
-            r"\b(?P<secret>figd_[A-Za-z0-9_-]{40,64})",
+            r"\b(?P<secret>figd_[A-Za-z0-9_-]{40,})",
             FLAG_UNICODE,
             "figma",
             true,
@@ -699,7 +708,7 @@ pub static SECRET_RULES: LazyLock<Vec<SecretRule>> = LazyLock::new(|| {
             "square-access-token",
             "Square access token",
             "critical",
-            r"\b(?P<secret>(?:sq0atp-[A-Za-z0-9_-]{22}|EAAA[A-Za-z0-9_-]{60}))",
+            r"\b(?P<secret>(?:sq0atp-[A-Za-z0-9_-]{22,}|EAAA[A-Za-z0-9_-]{60,}))",
             FLAG_UNICODE,
             "square",
             true,
@@ -710,10 +719,14 @@ pub static SECRET_RULES: LazyLock<Vec<SecretRule>> = LazyLock::new(|| {
             "mailgun-api-key",
             "Mailgun API key",
             "critical",
-            r"\b(?P<secret>key-[0-9a-f]{32})\b",
+            r"(?:^|[^A-Za-z0-9_-])(?P<secret>key-[0-9a-f]{32})\b",
             FLAG_UNICODE,
             "mailgun",
             true,
+            // `key-` before a hex digest also spells a cache key, an
+            // idempotency key and half the object keys in a storage bucket, so
+            // the match has to start where a word does. Anything carrying its
+            // own prefix is somebody else's key, not Mailgun's.
             "Mailgun private API key able to send mail for the domain.",
             None,
         ),
@@ -721,7 +734,7 @@ pub static SECRET_RULES: LazyLock<Vec<SecretRule>> = LazyLock::new(|| {
             "flyio-token",
             "Fly.io API token",
             "critical",
-            r"\b(?P<secret>(?:fm1a|fm1r|fm2)_[A-Za-z0-9+/=]{40,200})",
+            r"\b(?P<secret>(?:fm1a|fm1r|fm2)_[A-Za-z0-9+/]{40,}={0,3})",
             FLAG_UNICODE,
             "flyio",
             true,
@@ -2413,6 +2426,81 @@ mod tests {
                 .map(|finding| finding.rule_id)
                 .collect();
             assert!(found.contains(&rule_id), "{rule_id}: {found:?}");
+        }
+    }
+
+    #[test]
+    fn an_overlong_value_is_never_reported_as_a_fragment_of_itself() {
+        // A value longer than the provider's own token must not come back as
+        // the provider's token with its tail cut off: the fragment carries a
+        // fingerprint of something that was never a credential, and the
+        // generic rule reports the whole value alongside it as a second
+        // finding for the same secret. Either the provider claims the whole
+        // value or it claims nothing and the generic rule speaks for it, so
+        // one line holds one finding.
+        for (rule_id, head, tail) in RULES_ADDED_AFTER_PYTHON {
+            let value = format!("{head}{tail}Zz9Qq2Vv");
+            let text = format!("SERVICE_CREDENTIAL = \"{value}\"");
+            let summary = scan_secret_text(&text, "config/prod.env", "working_tree", None, 200);
+            for finding in &summary.findings {
+                if finding.rule_id != rule_id {
+                    continue;
+                }
+                assert_eq!(
+                    finding.candidate, value,
+                    "{rule_id} reported a fragment of the value"
+                );
+            }
+            // The fragment is what splits one credential into two findings:
+            // the provider rule fingerprints the part it took and the generic
+            // rule reports the whole value it did not recognise.
+            let claimed: Vec<&str> = summary
+                .findings
+                .iter()
+                .map(|finding| finding.rule_id)
+                .collect();
+            assert!(
+                !(claimed.contains(&rule_id) && claimed.contains(&"credential-assignment")),
+                "{rule_id}: {claimed:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_mailgun_rule_leaves_an_ordinary_cache_key_alone() {
+        // `key-` with a hex digest after it is a common shape for keys that
+        // open nothing.
+        // Held in two pieces, as every other sample in this file is.
+        let digest = format!("{}{}", "9f3b7c2a1d4e8f60b", "5a9c7d3e1f2a4b6");
+        for name in ["cache-key-", "idempotency-key-", "object_key-"] {
+            let text = format!("entry = \"{name}{digest}\"");
+            let summary = scan_secret_text(&text, "src/cache.rs", "working_tree", None, 200);
+            let claimed: Vec<&str> = summary
+                .findings
+                .iter()
+                .map(|finding| finding.rule_id)
+                .collect();
+            assert!(!claimed.contains(&"mailgun-api-key"), "{name}: {claimed:?}");
+        }
+    }
+
+    #[test]
+    fn the_doppler_rule_reads_cli_and_config_scoped_tokens() {
+        // A Doppler service token carries the config it was cut for, and a CLI
+        // token uses its own `ct` kind. Both were missed while only the kinds
+        // without a middle segment were listed.
+        for (head, tail) in [
+            ("dp.ct.a7Kq2VL8nP4wR7tY1uI6oP3", "aS5dFgHjK9mQ2vL8nP4w"),
+            ("dp.st.dev.a7Kq2VL8nP4wR7tY1uI6oP3", "aS5dFgHjK9mQ2vL8nP4w"),
+        ] {
+            let text = format!("SERVICE_CREDENTIAL = \"{head}{tail}\"");
+            let summary = scan_secret_text(&text, "config/prod.env", "working_tree", None, 200);
+            let claimed: Vec<&str> = summary
+                .findings
+                .iter()
+                .map(|finding| finding.rule_id)
+                .collect();
+            assert!(claimed.contains(&"doppler-token"), "{head}: {claimed:?}");
         }
     }
 
