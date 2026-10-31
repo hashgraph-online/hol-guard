@@ -1,4 +1,11 @@
-"""Fail-honest ownership and ACL verification for machine protection surfaces."""
+"""Fail-honest ownership and ACL verification for machine protection surfaces.
+
+This module does the platform I/O: the macOS path-chain walk with ``lstat`` and
+``ls -lde``, and the pinned PowerShell probe on Windows. The native runtime
+lists the Windows surfaces to probe, classifies the probe's rows and folds the
+per-surface results into one verdict. Without the runtime no surface reports
+health.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +16,7 @@ import os
 import platform
 import stat
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, cast
@@ -31,24 +39,12 @@ _MUTATING_POSIX_ACL_RIGHTS = {
     "writeextattr",
     "writesecurity",
 }
-_WINDOWS_PRIVILEGED_OWNER_SIDS = {
-    "S-1-5-18",  # LocalSystem
-    "S-1-5-32-544",  # Builtin Administrators
-    "S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464",  # TrustedInstaller
-}
-_WINDOWS_PRIVILEGED_ACE_SIDS = _WINDOWS_PRIVILEGED_OWNER_SIDS | {
-    "S-1-3-0",  # Creator Owner resolves to the separately verified privileged owner
-    "S-1-3-4",  # Owner Rights resolves to the separately verified privileged owner
-}
-_WINDOWS_FILE_MUTATION_MASK = 852_310
-_WINDOWS_REGISTRY_MUTATION_MASK = 851_974
-_WINDOWS_FILE_ANCESTOR_MUTATION_MASK = 852_032
-_WINDOWS_REGISTRY_ANCESTOR_MUTATION_MASK = 851_968
-_WINDOWS_GENERIC_MUTATION_MASK = 0x50000000
-_WINDOWS_ACTIVE_SETUP = (
-    r"HKLM:\Software\Microsoft\Active Setup\Installed Components\{AFA2F379-D7A2-4210-91E3-E71E43F1D994}"
-)
-_WINDOWS_POLICY = r"HKLM:\Software\Policies\HOL\Guard"
+OWNERSHIP_ACL_FEATURE = "native-ownership-acl-v1"
+OWNERSHIP_ACL_COMMAND = "ownership-acl"
+OWNERSHIP_ACL_SCHEMA = "ownership-acl.v1"
+_STATUS_TIMEOUT_SECONDS = 10.0
+_COMMAND_TIMEOUT_SECONDS = 30.0
+_ACL_STATES: frozenset[str] = frozenset({"healthy", "absent", "tampered", "unsupported", "unknown"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,24 +83,79 @@ class _MacosAclCacheEntry:
     fingerprint: tuple[int, ...] | None
 
 
-def _aggregate(surfaces: list[AclSurfaceResult]) -> OwnershipAclVerification:
-    priority = (
-        "ownership_acl_path_escape",
-        "ownership_acl_standard_user_writable",
-        "ownership_acl_wrong_owner",
+def _probe_failed(surfaces: tuple[AclSurfaceResult, ...] | None = None) -> OwnershipAclVerification:
+    return OwnershipAclVerification(
+        "unknown",
+        "ownership_acl_probe_failed",
+        surfaces or (AclSurfaceResult("platform", "unknown", "ownership_acl_probe_failed"),),
     )
-    for reason in priority:
-        if any(surface.reason_code == reason for surface in surfaces):
-            return OwnershipAclVerification("tampered", reason, tuple(surfaces))
-    if any(surface.state == "tampered" for surface in surfaces):
-        return OwnershipAclVerification("tampered", "ownership_acl_probe_failed", tuple(surfaces))
-    if any(surface.state == "absent" for surface in surfaces):
-        return OwnershipAclVerification("absent", "ownership_acl_surface_absent", tuple(surfaces))
-    if any(surface.state == "unknown" for surface in surfaces):
-        return OwnershipAclVerification("unknown", "ownership_acl_probe_failed", tuple(surfaces))
-    if any(surface.state == "unsupported" for surface in surfaces):
-        return OwnershipAclVerification("unsupported", "ownership_acl_platform_unsupported", tuple(surfaces))
-    return OwnershipAclVerification("healthy", "ownership_acl_valid", tuple(surfaces))
+
+
+def _native_answer(request: dict[str, object]) -> dict[str, object] | None:
+    """The runtime's answer to one ownership-acl request, or ``None`` when it cannot answer."""
+
+    from ..native_runtime import _run_native_process, native_runtime_status
+
+    status = native_runtime_status(deadline_monotonic=time.monotonic() + _STATUS_TIMEOUT_SECONDS)
+    if (
+        not status.available
+        or not status.compatible
+        or status.identity is None
+        or status.capabilities is None
+        or OWNERSHIP_ACL_FEATURE not in status.capabilities.features
+    ):
+        return None
+    output = _run_native_process(
+        status.identity.path,
+        (OWNERSHIP_ACL_COMMAND, "--stdin"),
+        input_text=json.dumps({"schema": OWNERSHIP_ACL_SCHEMA, **request}, sort_keys=True),
+        timeout_seconds=_COMMAND_TIMEOUT_SECONDS,
+        output_limit=_MAX_ACL_OUTPUT_BYTES,
+    )
+    if output is None:
+        return None
+    try:
+        answer = cast(object, json.loads(output))
+    except ValueError:
+        return None
+    if not isinstance(answer, dict) or answer.get("ok") is not True:
+        return None
+    return cast(dict[str, object], answer)
+
+
+def _native_verdict(request: dict[str, object]) -> OwnershipAclVerification | None:
+    answer = _native_answer(request)
+    if answer is None:
+        return None
+    status = answer.get("status")
+    reason_code = answer.get("reason_code")
+    rows = answer.get("surfaces")
+    if status not in _ACL_STATES or not isinstance(reason_code, str) or not isinstance(rows, list):
+        return None
+    surfaces: list[AclSurfaceResult] = []
+    for row in cast(list[object], rows):
+        if not isinstance(row, dict):
+            return None
+        fields = cast(dict[str, object], row)
+        name, state, reason = fields.get("name"), fields.get("state"), fields.get("reason_code")
+        if not isinstance(name, str) or state not in _ACL_STATES or not isinstance(reason, str):
+            return None
+        surfaces.append(AclSurfaceResult(name, cast(AclState, state), reason))
+    return OwnershipAclVerification(cast(AclState, status), reason_code, tuple(surfaces))
+
+
+def _aggregate(surfaces: list[AclSurfaceResult]) -> OwnershipAclVerification:
+    verdict = _native_verdict(
+        {
+            "op": "aggregate",
+            "surfaces": [
+                {"name": surface.name, "state": surface.state, "reason_code": surface.reason_code}
+                for surface in surfaces
+            ],
+        }
+    )
+    # Results nothing could fold never report health.
+    return verdict or _probe_failed(tuple(surfaces))
 
 
 def _macos_surfaces(paths: MachinePaths) -> tuple[_PathSurface, ...]:
@@ -244,68 +295,21 @@ def _verify_macos_surface(
 _windows_directory = windows_directory
 
 
-def _windows_filesystem_chain(path: str) -> tuple[str, ...]:
-    current = ntpath.normpath(path)
-    drive, tail = ntpath.splitdrive(current)
-    if not drive or not tail.startswith("\\"):
-        raise ValueError("Windows surface is not drive-absolute")
-    root = f"{drive}\\"
-    chain = [current]
-    while current.casefold() != root.casefold():
-        parent = ntpath.dirname(current)
-        if parent == current or not parent:
-            raise ValueError("Windows surface escapes drive root")
-        current = parent
-        chain.append(current)
-    return tuple(reversed(chain))
-
-
-def _windows_registry_chain(path: str) -> tuple[str, ...]:
-    prefix = "HKLM:\\"
-    if not path.casefold().startswith(prefix.casefold()):
-        raise ValueError("Windows registry surface escapes HKLM")
-    segments = [segment for segment in path[len(prefix) :].split("\\") if segment]
-    return tuple([prefix, *(prefix + "\\".join(segments[:index]) for index in range(1, len(segments) + 1))])
+def _windows_paths(paths: MachinePaths) -> dict[str, str]:
+    return {
+        "runtime_root": str(paths.runtime_root),
+        "manifest_path": str(paths.manifest_path),
+        "state_root": str(paths.state_root),
+        "log_root": str(paths.log_root),
+    }
 
 
 def _windows_surface_payload(paths: MachinePaths) -> list[dict[str, str | bool]]:
-    requested: tuple[tuple[str, str, bool], ...] = (
-        ("filesystem", str(paths.runtime_root), True),
-        ("filesystem", str(paths.manifest_path), False),
-        ("filesystem", str(paths.state_root), True),
-        ("filesystem", str(paths.state_root / "device-key.json"), False),
-        ("filesystem", str(paths.state_root / "installation-continuity.json"), False),
-        ("filesystem", str(paths.state_root / ".installation-continuity.lock"), False),
-        ("filesystem", str(paths.log_root), True),
-        ("registry", _WINDOWS_POLICY, True),
-        ("registry", _WINDOWS_ACTIVE_SETUP, True),
-    )
-    payload: list[dict[str, str | bool]] = []
-    seen: set[tuple[str, str]] = set()
-    for kind, leaf, leaf_container in requested:
-        chain = _windows_filesystem_chain(leaf) if kind == "filesystem" else _windows_registry_chain(leaf)
-        for index, path in enumerate(chain):
-            key = (kind, path.casefold())
-            if key in seen:
-                if index == len(chain) - 1:
-                    existing = next(
-                        item
-                        for item in payload
-                        if item["kind"] == kind and str(item["path"]).casefold() == path.casefold()
-                    )
-                    existing["leaf"] = True
-                continue
-            seen.add(key)
-            payload.append(
-                {
-                    "name": f"{kind}-{len(payload):03d}",
-                    "path": path,
-                    "kind": kind,
-                    "expectedContainer": True if index < len(chain) - 1 else leaf_container,
-                    "leaf": index == len(chain) - 1,
-                }
-            )
-    return payload
+    answer = _native_answer({"op": "windows-payload", "windows_paths": _windows_paths(paths)})
+    payload = None if answer is None else answer.get("payload")
+    if not isinstance(payload, list):
+        raise OSError("ownership_acl_native_unavailable")
+    return cast(list[dict[str, str | bool]], payload)
 
 
 def _windows_acl_script(encoded_items: str) -> str:
@@ -362,64 +366,6 @@ def _run_windows_acl_probe(paths: MachinePaths) -> object:
     return _run_windows_acl_payload(_windows_surface_payload(paths))
 
 
-def _windows_result(row: object) -> AclSurfaceResult:
-    if not isinstance(row, dict) or not isinstance(row.get("Name"), str):
-        raise ValueError("invalid Windows ACL row")
-    name = cast(str, row["Name"])
-    if row.get("Exists") is not True:
-        return AclSurfaceResult(name, "absent", "ownership_acl_surface_absent")
-    if row.get("Truncated") is True:
-        return AclSurfaceResult(name, "unknown", "ownership_acl_probe_failed")
-    if row.get("NullDacl") is True:
-        return AclSurfaceResult(name, "tampered", "ownership_acl_standard_user_writable")
-    attributes = row.get("Attributes")
-    if not isinstance(attributes, int) or attributes & 0x400:
-        return AclSurfaceResult(name, "tampered", "ownership_acl_path_escape")
-    kind = row.get("Kind")
-    expected_container = row.get("ExpectedContainer")
-    leaf = row.get("Leaf")
-    if kind not in {"filesystem", "registry"} or not isinstance(expected_container, bool) or not isinstance(leaf, bool):
-        raise ValueError("invalid Windows ACL row kind")
-    if row.get("Container") is not expected_container:
-        return AclSurfaceResult(name, "tampered", "ownership_acl_path_escape")
-    owner = row.get("Owner")
-    if not isinstance(owner, str) or owner not in _WINDOWS_PRIVILEGED_OWNER_SIDS:
-        return AclSurfaceResult(name, "tampered", "ownership_acl_wrong_owner")
-    rules = row.get("Rules")
-    if not isinstance(rules, list):
-        raise ValueError("invalid Windows ACL rules")
-    if kind == "registry":
-        mutation_mask = _WINDOWS_REGISTRY_MUTATION_MASK if leaf else _WINDOWS_REGISTRY_ANCESTOR_MUTATION_MASK
-    else:
-        mutation_mask = _WINDOWS_FILE_MUTATION_MASK if leaf else _WINDOWS_FILE_ANCESTOR_MUTATION_MASK
-    mutation_mask |= _WINDOWS_GENERIC_MUTATION_MASK
-    for rule in rules:
-        if not isinstance(rule, dict):
-            raise ValueError("invalid Windows ACL rule")
-        sid = rule.get("Sid")
-        rights = rule.get("Rights")
-        access_type = rule.get("Type")
-        propagation = rule.get("Propagation")
-        propagation_flags = {flag.strip() for flag in propagation.split(",")} if isinstance(propagation, str) else set()
-        if (
-            not isinstance(sid, str)
-            or not isinstance(rights, int)
-            or access_type not in {"Allow", "Deny"}
-            or not isinstance(propagation, str)
-            or not propagation_flags
-            or not propagation_flags <= {"None", "InheritOnly", "NoPropagateInherit"}
-        ):
-            raise ValueError("invalid Windows ACL rule fields")
-        if (
-            access_type == "Allow"
-            and "InheritOnly" not in propagation_flags
-            and sid not in _WINDOWS_PRIVILEGED_ACE_SIDS
-            and rights & mutation_mask
-        ):
-            return AclSurfaceResult(name, "tampered", "ownership_acl_standard_user_writable")
-    return AclSurfaceResult(name, "healthy", "ownership_acl_valid")
-
-
 def verify_protected_ownership_and_acl(
     paths: MachinePaths,
     *,
@@ -438,19 +384,11 @@ def verify_protected_ownership_and_acl(
         )
     if resolved_system == "Windows":
         try:
-            raw = _run_windows_acl_probe(paths)
-            rows = raw if isinstance(raw, list) else [raw]
-            expected_names = {item["name"] for item in _windows_surface_payload(paths)}
-            results = [_windows_result(row) for row in rows]
-            if len(results) != len(expected_names) or {result.name for result in results} != expected_names:
-                raise ValueError("Windows ACL output is incomplete")
-            return _aggregate(results)
-        except (OSError, subprocess.SubprocessError, ValueError, json.JSONDecodeError):
-            return OwnershipAclVerification(
-                "unknown",
-                "ownership_acl_probe_failed",
-                (AclSurfaceResult("platform", "unknown", "ownership_acl_probe_failed"),),
-            )
+            rows = _run_windows_acl_probe(paths)
+        except (OSError, subprocess.SubprocessError, ValueError):
+            return _probe_failed()
+        verdict = _native_verdict({"op": "windows-verify", "windows_paths": _windows_paths(paths), "rows": rows})
+        return verdict or _probe_failed()
     return OwnershipAclVerification(
         "unsupported",
         "ownership_acl_platform_unsupported",
