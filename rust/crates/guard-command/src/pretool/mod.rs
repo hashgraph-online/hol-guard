@@ -209,6 +209,7 @@ mod workspace_contained_tests;
 mod worktree_add;
 mod worktree_maintenance;
 mod worktree_writes;
+pub(crate) mod wget_reads;
 mod wrangler_reads;
 
 pub mod generic;

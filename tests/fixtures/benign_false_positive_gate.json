@@ -7648,6 +7648,118 @@
       "expect": "allow"
     },
     {
+      "id": "wget-loopback-health-read-to-stdout",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "wget -qO- http://127.0.0.1:8080/health"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "wget-loopback-header-only-probe",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "wget -q --spider http://127.0.0.1:8080/health"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "wget-loopback-read-discarded",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "wget -nv -O /dev/null http://127.0.0.1:8080/"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "wget-loopback-bounded-retry-read",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "wget --timeout=2 --tries=1 -qO- http://localhost:3000/api/health"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-wget-writes-a-file-it-never-named",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "wget http://127.0.0.1:8080/health"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-wget-public-read-follows-redirects",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "wget -qO- https://example.com/release.json"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-wget-recursive-site-download",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "wget -r -O- http://127.0.0.1:8080/"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "queue-curl-loopback-redirect-query-url",
       "fix_area": "queue",
       "harnesses": [
