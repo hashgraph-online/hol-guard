@@ -50,6 +50,7 @@ from ..native_prompt import request_from_dict as _prompt_request_from_dict  # no
 from ..native_runner_authority import NativeRunnerAuthorityError
 from ..native_supply_chain_bundle import (
     MAX_SUPPLY_CHAIN_BUNDLE_RESPONSE_BYTES,
+    VerifiedSupplyChainBundle,
     native_verify_supply_chain_bundle_response,
 )
 from ..oauth_token_claims import decode_oauth_access_token_claims as _decode_oauth_access_token_claims
@@ -140,10 +141,9 @@ from .managed_controls_sync import (
 )
 from .supply_chain_bundle import (
     SupplyChainBundleError,
-    load_supply_chain_bundle_response,
+    SupplyChainVerificationKey,
     load_supply_chain_verification_keys,
 )
-from .supply_chain_bundle_models import SupplyChainBundleResponse, SupplyChainVerificationKey
 from .supply_chain_support import ecosystem_support_matrix
 from .workspace_assessment_sync import (
     MAX_REQUEST_BYTES as _WORKSPACE_ASSESSMENT_REQUEST_BYTES,
@@ -1276,25 +1276,23 @@ def _verified_supply_chain_bundle_response(
     trusted_keys: tuple[SupplyChainVerificationKey, ...],
     cached_bundle_version: str | None,
     store: GuardStore,
-) -> SupplyChainBundleResponse:
-    """Read one bundle response and have the resident verify it.
+) -> VerifiedSupplyChainBundle:
+    """Have the resident verify one bundle response.
 
-    Reading is transport. The resident recomputes the canonical payload over
+    The resident reads the response and recomputes the canonical payload over
     ``payload`` itself and owns every verdict about it: the payload hash, the
     keyring the signing key anchors to, that key's rotation state, freshness,
     rollback and the signature. A resident that cannot answer raises, so an
     unverified bundle is never treated as verified.
     """
 
-    response = load_supply_chain_bundle_response(payload)
-    native_verify_supply_chain_bundle_response(
+    return native_verify_supply_chain_bundle_response(
         payload,
         trusted_keys=[key.to_dict() for key in trusted_keys] or None,
         cached_bundle_version=cached_bundle_version,
         guard_home=store.guard_home,
         store=store,
     )
-    return response
 
 
 def _sync_supply_chain_bundle_incremental(
@@ -1376,7 +1374,7 @@ def _sync_supply_chain_bundle_incremental(
             refreshed_partitions += 1
         next_partition_cache[cache_key] = {
             "payload_hash": payload_hash,
-            "response": response.to_dict(),
+            "response": response.response,
         }
     if not next_partition_cache:
         return None
@@ -1478,7 +1476,8 @@ def sync_supply_chain_bundle(
         except SupplyChainBundleError as error:
             raise RuntimeError(f"Guard supply-chain bundle sync failed: {error}") from error
     synced_at = _now()
-    store.cache_supply_chain_bundle(workspace_id, response.to_dict(), synced_at)
+    store.cache_supply_chain_bundle(workspace_id, response.response, synced_at)
+    verified = response.summary
     store.set_sync_payload(
         "supply_chain_bundle_keyring",
         {
@@ -1490,10 +1489,10 @@ def sync_supply_chain_bundle(
     store.set_sync_payload(
         "supply_chain_bundle_entitlement",
         {
-            "bundle_version": response.bundle.bundle_version,
-            "key_id": response.bundle.key_id,
-            "policy_hash": response.bundle.policy_hash,
-            "tier": response.bundle.tier,
+            "bundle_version": verified.get("bundle_version"),
+            "key_id": verified.get("key_id"),
+            "policy_hash": verified.get("policy_hash"),
+            "tier": verified.get("tier"),
             "workspace_id": workspace_id,
         },
         synced_at,
@@ -1507,15 +1506,15 @@ def sync_supply_chain_bundle(
                 synced_at,
             )
     summary: dict[str, object] = {
-        "advisory_count": len(response.bundle.advisories),
-        "bundle_version": response.bundle.bundle_version,
+        "advisory_count": verified.get("advisory_count"),
+        "bundle_version": verified.get("bundle_version"),
         "ecosystem_support": list(ecosystem_support_matrix()),
-        "feed_snapshot_hash": response.bundle.feed_snapshot_hash,
-        "package_count": len(response.bundle.packages),
-        "policy_hash": response.bundle.policy_hash,
+        "feed_snapshot_hash": verified.get("feed_snapshot_hash"),
+        "package_count": verified.get("package_count"),
+        "policy_hash": verified.get("policy_hash"),
         "status": "synced",
         "synced_at": synced_at,
-        "tier": response.bundle.tier,
+        "tier": verified.get("tier"),
         "workspace_id": workspace_id,
     }
     if partition_sync is not None:

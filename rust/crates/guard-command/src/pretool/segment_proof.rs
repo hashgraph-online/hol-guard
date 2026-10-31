@@ -429,6 +429,7 @@ pub(super) fn exact_safe_segment_with_context(
         }
         "gh" => safe_gh_arguments(&segment.arguments, &segment.text),
         "curl" => super::curl_reads::safe_curl_segment(model, segment, context),
+        "wget" => super::wget_reads::safe_wget_segment(model, segment, context),
         "kubectl" => super::kubectl_reads::safe_kubectl_segment(model, segment, context),
         "export" => {
             (super::kubectl_reads::safe_export_segment(model, segment, context)
