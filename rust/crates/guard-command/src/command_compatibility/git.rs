@@ -321,6 +321,20 @@ fn routed_with_route<'a>(
             index += 1;
             continue;
         }
+        // Neither of these chooses a program or moves the repository Git
+        // reads. `--no-replace-objects` turns off the replacement refs, so
+        // Git reports the objects it actually stores, and
+        // `--literal-pathspecs` turns off pathspec magic, so a pathspec
+        // reaches the one path it spells rather than the set a wildcard or a
+        // `:(exclude)` prefix would widen it to. A proof taken over the words
+        // after them reads the same operation either way.
+        if matches!(
+            argument.as_str(),
+            "--no-replace-objects" | "--literal-pathspecs"
+        ) {
+            index += 1;
+            continue;
+        }
         if argument == "-c" {
             let (key, value) = arguments.get(index + 1)?.split_once('=')?;
             let boolean = value.to_ascii_lowercase();

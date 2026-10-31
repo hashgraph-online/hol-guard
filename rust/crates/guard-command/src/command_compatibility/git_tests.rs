@@ -253,3 +253,45 @@ fn a_submodule_status_listing_invents_no_unrelated_git_owners() {
         );
     }
 }
+
+fn after_global_options(command: &str) -> Option<Vec<String>> {
+    let arguments: Vec<String> = command
+        .split_whitespace()
+        .skip(1)
+        .map(str::to_owned)
+        .collect();
+    routed_arguments(&arguments, crate::pretool::PathContext::default()).map(<[String]>::to_vec)
+}
+
+/// `--no-replace-objects` turns off the replacement refs and
+/// `--literal-pathspecs` turns off pathspec magic, so neither chooses a
+/// program or moves the repository Git reads: the words after them name the
+/// same operation the proof reads without them. An option that starts the
+/// pager or widens what a pathspec reaches is left where it stands, so the
+/// operation the proof looks for is not there.
+#[test]
+fn inert_global_options_leave_the_operation_the_proof_reads() {
+    for command in [
+        "git --no-replace-objects status",
+        "git --literal-pathspecs status",
+        "git --no-replace-objects --literal-pathspecs --no-pager status",
+    ] {
+        assert_eq!(
+            after_global_options(command).as_deref(),
+            Some(&["status".to_owned()][..]),
+            "{command}"
+        );
+    }
+    for command in [
+        "git --paginate status",
+        "git --bare status",
+        "git --glob-pathspecs status",
+        "git --icase-pathspecs status",
+    ] {
+        let rest = after_global_options(command).expect("the scanner stops at the option");
+        assert!(
+            rest.first().is_some_and(|word| word.starts_with('-')),
+            "{command}"
+        );
+    }
+}
