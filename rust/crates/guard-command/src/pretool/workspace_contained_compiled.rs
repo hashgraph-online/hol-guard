@@ -64,7 +64,9 @@ const GO_LOCAL_VERBS: &[&str] = &[
 // crate uses -- so the work reaches no further than `test` and `build`
 // already do. `mutants` edits the crate's own sources between those runs and
 // puts them back, which stays inside the directory the sandbox already lets a
-// build write. A name that is not on this list keeps its review, because
+// build write, as long as it is working on the crate the directory holds:
+// the options below move that choice, so each is read. A name that is not on
+// this list keeps its review, because
 // cargo would run whatever program carries it: `audit` and `deny` fetch an
 // advisory database, which is the registry reach the first group is held back
 // for.
@@ -112,6 +114,17 @@ const CARGO_INERT_OPTIONS: &[&str] = &[
 ];
 // The one inert option that takes its value as the next word.
 const CARGO_COLOR_OPTION: &str = "--color";
+// A subcommand cargo resolves to its own program reads its own options, and
+// two of them pick the crate it works on in place of the directory the run
+// starts in. `cargo-mutants` takes `-d`/`--dir` and `cargo-tarpaulin` takes
+// `-r`/`--root`; each then builds and runs that crate's tests, and mutants
+// writes its mutations into that crate's sources, which is the reach
+// `local_cargo_work` otherwise holds to the workspace. A line carrying one is
+// read against the workspace the way `--manifest-path` is.
+const CARGO_SUBCOMMAND_DIRECTORY_OPTIONS: &[(&str, &[&str])] = &[
+    ("mutants", &["-d", "--dir"]),
+    ("tarpaulin", &["-r", "--root"]),
+];
 
 /// Whether `go` runs a local verb inside a module that `directory` holds.
 /// A module the directory holds is the one go finds by ascending from it, as
@@ -228,10 +241,15 @@ fn cover_renders_a_profile(arguments: &[&str]) -> bool {
 ///
 /// `--manifest-path` replaces that search with the manifest it names, which
 /// must be a `Cargo.toml` inside the workspace, spelled without a parent step.
+/// A subcommand's own directory option moves the whole run the same way, and
+/// is read against the workspace the same way.
 pub(super) fn local_cargo_work(arguments: &[&str], directory: &Path, workspace: &Path) -> bool {
-    let local_verb = cargo_verb(arguments)
-        .is_some_and(|verb| CARGO_LOCAL_VERBS.contains(&verb.to_ascii_lowercase().as_str()));
-    local_verb
+    let Some(verb) = cargo_verb(arguments) else {
+        return false;
+    };
+    let verb = verb.to_ascii_lowercase();
+    CARGO_LOCAL_VERBS.contains(&verb.as_str())
+        && subcommand_directory_within(&verb, arguments, directory, workspace)
         && match manifest_path(arguments) {
             Some(Some(manifest)) => manifest_within(&directory.join(manifest), workspace),
             Some(None) => false,
@@ -240,6 +258,58 @@ pub(super) fn local_cargo_work(arguments: &[&str], directory: &Path, workspace: 
             })
             .is_some(),
         }
+}
+
+/// Whether the crate a subcommand's own directory option picks is one the
+/// workspace holds. A subcommand with no such option, and a line that does
+/// not carry it, are left to the manifest search above.
+fn subcommand_directory_within(
+    verb: &str,
+    arguments: &[&str],
+    directory: &Path,
+    workspace: &Path,
+) -> bool {
+    let Some((_, flags)) = CARGO_SUBCOMMAND_DIRECTORY_OPTIONS
+        .iter()
+        .find(|(subcommand, _)| *subcommand == verb)
+    else {
+        return true;
+    };
+    match directory_option(arguments, flags) {
+        None => true,
+        Some(Some(value)) => manifest_within(&directory.join(value).join("Cargo.toml"), workspace),
+        Some(None) => false,
+    }
+}
+
+/// The directory one of `flags` names, as the next argument, behind an `=`,
+/// or attached to a short flag the way clap reads one. `None` when the line
+/// carries no such flag; `Some(None)` when it has no value or more than one
+/// stands on the line, which leaves no one directory to judge.
+fn directory_option<'a>(arguments: &[&'a str], flags: &[&str]) -> Option<Option<&'a str>> {
+    let mut found: Option<Option<&'a str>> = None;
+    for (index, argument) in arguments.iter().enumerate() {
+        let Some(flag) = flags.iter().find(|flag| argument.starts_with(**flag)) else {
+            continue;
+        };
+        let rest = &argument[flag.len()..];
+        let value = if rest.is_empty() {
+            arguments.get(index + 1).copied()
+        } else if let Some(attached) = rest.strip_prefix('=') {
+            Some(attached).filter(|value| !value.is_empty())
+        } else if flag.starts_with("--") {
+            // A long option that merely shares this prefix is another option.
+            continue;
+        } else {
+            // A short flag carries its value attached.
+            Some(rest)
+        };
+        if found.is_some() {
+            return Some(None);
+        }
+        found = Some(value);
+    }
+    found
 }
 
 /// The verb cargo runs, read the way cargo reads it: past a `+toolchain`,
