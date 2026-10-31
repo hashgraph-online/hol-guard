@@ -239,11 +239,13 @@ class _ControlSyncRoutes:
             if candidate_rejection_reason is not None:
                 self._write_native_policy_bundle_rejection(candidate_rejection_reason)
                 return
+            stored_ack = store.get_sync_payload("policy_bundle_ack")
             policy_bundle_ack = policy_bundle_acknowledgement_payload(
                 device_id=device_id,
                 device_name=device_name,
                 policy_bundle=validated_policy_bundle,
                 synced_at=applied_at,
+                previous=stored_ack if isinstance(stored_ack, dict) else None,
                 delivery=validated_policy_bundle_delivery,
             )
             cloud_exception_items = _policy_bundle_cloud_exception_items(

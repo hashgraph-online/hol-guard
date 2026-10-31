@@ -1499,6 +1499,14 @@
    "body": "80fd5f269335"
   },
   {
+   "file": "rust/crates/guard-runtime/src/release_manifest_verify.rs",
+   "item": "fn owner_verdict(_metadata: &Metadata, _owner_uid: u32) -> Result<OwnerVerdict, Invalid>",
+   "verdict": "windows-unsupported",
+   "note": "Machine-runtime owner and mode bits are never proven off Unix, so a requested owner leaves the release manifest invalid; Windows callers pass no owner and rely on the signed per-file hashes.",
+   "cfg": "not(unix)",
+   "body": "66d059ccc9a3"
+  },
+  {
    "file": "rust/crates/guard-runtime/src/removal_evidence_files.rs",
    "item": "fn private_directory -- non-Unix block",
    "verdict": "windows-equivalent",

@@ -88,6 +88,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = removal_evidence::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if health_snapshot_binding::is_command(command) && flag == "--stdin" => {
+            let response = health_snapshot_binding::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if guard_config_load::is_command(command) && flag == "--stdin" => {
             let response = guard_config_load::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
@@ -100,8 +104,18 @@ pub(super) fn run() -> Result<(), String> {
             let response = guard_config_resolve::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if managed_policy_load_command::is_command(command) && flag == "--stdin" => {
+            let response = managed_policy_load_command::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if policy_effective::is_command(command) && flag == "--stdin" => {
             let response = policy_effective::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
+        [command, flag]
+            if release_manifest_verify_command::is_command(command) && flag == "--stdin" =>
+        {
+            let response = release_manifest_verify_command::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
         [command, flag] if business_source_codec::is_command(command) && flag == "--stdin" => {

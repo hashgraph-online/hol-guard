@@ -9,6 +9,7 @@ import pytest
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
+from codex_plugin_scanner.guard.mdm import health_snapshot_validation
 from codex_plugin_scanner.guard.mdm.contracts import IntegrityReasonCode
 from codex_plugin_scanner.guard.mdm.health_lease_contract import (
     HEALTH_LEASE_SCHEMA,
@@ -294,6 +295,26 @@ def test_outbox_rejects_malformed_snapshot_values(mutation: object) -> None:
 
     with pytest.raises(ValueError, match="health_lease_outbox_invalid"):
         _outbox(snapshot).canonical_bytes()
+
+
+def test_outbox_accepts_a_bound_snapshot() -> None:
+    snapshot = _snapshot()
+    snapshot["generatedAt"] = "2026-07-18T14:00:00.123456Z"
+    canonical = _outbox(snapshot).canonical_bytes()
+
+    # Signing may yield a high-S signature that the canonical form lowers, so
+    # compare the canonical bytes rather than the signed objects.
+    assert HealthLeaseOutbox.parse(canonical).canonical_bytes() == canonical
+
+
+def test_snapshot_binding_fails_closed_without_the_native_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+    snapshot = _snapshot()
+    snapshot["generatedAt"] = "2026-07-18T14:00:00Z"
+    outbox = _outbox(snapshot)
+    monkeypatch.setattr(health_snapshot_validation, "_native_answer", lambda *_: None)
+
+    with pytest.raises(ValueError, match="health_lease_snapshot_native_unavailable"):
+        outbox.canonical_bytes()
 
 
 def test_sequence_requires_complete_prior_lease_chain() -> None:

@@ -327,3 +327,18 @@ fn every_status_but_absent_and_active_fails_closed() {
     assert_eq!(ManagedPolicyStatus::Active.as_str(), "active");
     assert_eq!(ManagedPolicyStatus::Tampered.as_str(), "tampered");
 }
+
+#[test]
+fn a_cache_the_machine_does_not_own_is_never_current() {
+    let root = TempDir::new().expect("tempdir");
+    let path = root.path().join("managed-policy-cache.json");
+    write(&path, b"{}\n");
+    // Identical bytes do not spare a cache the machine does not control from
+    // being rewritten restricted.
+    assert!(!cache_is_current(&path, b"{}\n", CURRENT_SYSTEM));
+    assert!(!cache_is_current(
+        &root.path().join("absent.json"),
+        b"{}\n",
+        CURRENT_SYSTEM
+    ));
+}
