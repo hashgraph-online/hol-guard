@@ -1,4 +1,8 @@
-"""Native action projections for untyped persistence and API boundaries."""
+"""Test client for the resident's approval-surface projection.
+
+No runtime module projects approval surfaces through Python any more; the tests
+keep this batch framing to drive the resident directly.
+"""
 
 from __future__ import annotations
 
@@ -7,8 +11,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from .models import GuardAction
-from .native_signal_projection import NativeSignalProjectionError, signal_projection
+from codex_plugin_scanner.guard.models import GuardAction
+from codex_plugin_scanner.guard.native_signal_projection import NativeSignalProjectionError, signal_projection
 
 # Leave framing and home-path headroom below the resident's 4 MiB request cap.
 # ASCII encoding also bounds the canonical digest representation of Unicode.

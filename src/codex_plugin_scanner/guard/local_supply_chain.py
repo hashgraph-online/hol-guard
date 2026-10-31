@@ -902,33 +902,6 @@ def build_package_protect_payload(
     return (payload, int(execution.returncode))
 
 
-def apply_stored_package_policy_override(
-    evaluation: Any,
-    *,
-    store: Any,
-    artifact: GuardArtifact,
-    artifact_hash: str,
-    workspace_dir: Path,
-    now: str,
-    execution_context: PackageExecutionContext | None = None,
-    current_action: object | None = None,
-    claim_saved_approval: bool = True,
-) -> Any:
-    """Apply a saved package approval when the content hash still matches."""
-
-    return _resolve_stored_package_policy_override(
-        evaluation,
-        store=store,
-        artifact=artifact,
-        artifact_hash=artifact_hash,
-        workspace_dir=workspace_dir,
-        now=now,
-        execution_context=execution_context,
-        current_action=current_action,
-        claim_saved_approval=claim_saved_approval,
-    ).evaluation
-
-
 def _resolve_stored_package_policy_override(
     evaluation: Any,
     *,
