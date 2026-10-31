@@ -385,13 +385,19 @@ impl PulseTransport for FakePulse {
         if *self.offline.borrow() {
             return Err(PulseError::Unavailable);
         }
-        let jti = crate::jws::verify(artifact, &self.public_keys()?)?
-            .claims
+        let claims = crate::jws::verify(artifact, &self.public_keys()?)?.claims;
+        // Like the real service, an expired consent is never consumed.
+        let not_after = claims
+            .get("yanez_consent_not_after")
+            .and_then(Value::as_i64);
+        if not_after.is_none_or(|deadline| *self.now.borrow() > deadline) {
+            return Err(PulseError::ConsentExpired);
+        }
+        let jti = claims
             .get("jti")
             .and_then(Value::as_str)
-            .unwrap_or_default()
-            .to_owned();
-        if !self.consumed.borrow_mut().insert(jti) {
+            .unwrap_or_default();
+        if !self.consumed.borrow_mut().insert(jti.to_owned()) {
             return Err(PulseError::Replayed);
         }
         Ok(())
@@ -476,6 +482,13 @@ mod tests {
         let verify = |at| crate::receipt::verify_receipt(&artifact, &keys, &policy(at));
         verify(now + 60).expect("valid until the requested deadline");
         assert_eq!(verify(now + 61).unwrap_err(), PulseError::ConsentExpired);
+        // Nor can it be consumed after the deadline.
+        let consume_at = |at| {
+            *pulse.now.borrow_mut() = at;
+            pulse.consume(&artifact, "t")
+        };
+        assert_eq!(consume_at(now + 61), Err(PulseError::ConsentExpired));
+        assert_eq!(consume_at(now + 60), Ok(()));
         assert_eq!(
             pulse
                 .create_authorization(&terms, "not a time", "key-b")
