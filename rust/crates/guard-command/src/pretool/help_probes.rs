@@ -87,9 +87,7 @@ pub(super) fn safe_help_probe(basename: &str, arguments: &[String]) -> bool {
     let Some((flag, verbs)) = arguments.split_last() else {
         return false;
     };
-    help_flag(basename, flag)
-        && verbs.len() <= 2
-        && verbs.iter().all(|verb| usage_only_verb(verb))
+    help_flag(basename, flag) && verbs.len() <= 2 && verbs.iter().all(|verb| usage_only_verb(verb))
 }
 
 #[cfg(test)]
@@ -117,7 +115,10 @@ mod tests {
             ("docker", vec!["build", "--help"]),
             ("ruff", vec!["check", "--help"]),
         ] {
-            assert!(safe_help_probe(tool, &args(&arguments)), "{tool} {arguments:?}");
+            assert!(
+                safe_help_probe(tool, &args(&arguments)),
+                "{tool} {arguments:?}"
+            );
         }
     }
 
