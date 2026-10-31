@@ -29195,6 +29195,15 @@
       "expect": "not_allow"
     },
     {
+      "id": "neg-grep-exclude-before-include-reads-every-name",
+      "fix_area": "negative",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": { "command": "grep -rlZ --exclude='*.md' --include='*.rs' KEY src | xargs -0 cat" },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-rg-listing-xargs-removes-matches",
       "fix_area": "negative",
       "harnesses": [

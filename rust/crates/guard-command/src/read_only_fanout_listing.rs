@@ -173,6 +173,7 @@ pub(crate) fn shape<'a>(tool: &str, arguments: &'a [String]) -> Option<ListingSh
     let arguments = super::without_stderr_merge(arguments);
     let mut positionals: Vec<&str> = Vec::new();
     let mut patterns: Vec<&str> = Vec::new();
+    let mut unbounded_names = false;
     let mut lists_names = false;
     let mut null_separated = false;
     let mut index = 0;
@@ -212,6 +213,16 @@ pub(crate) fn shape<'a>(tool: &str, arguments: &'a [String]) -> Option<ListingSh
         };
         if matches!(name, "-g" | "--glob" | "--iglob" | "--include") {
             patterns.push(value);
+            continue;
+        }
+        // grep reads its name filters in the order they are written: the last
+        // one a name matches decides, and a name matching none of them is
+        // searched anyway unless the first filter was an `--include`. An
+        // `--exclude` written ahead of every include therefore admits each
+        // name neither of them mentions -- `--exclude='*.md' --include='*.rs'`
+        // prints `.env.local` -- so the includes beside it bound nothing.
+        if name == "--exclude" && patterns.is_empty() {
+            unbounded_names = true;
         }
     }
     let (_, roots) = positionals.split_first()?;
@@ -220,7 +231,11 @@ pub(crate) fn shape<'a>(tool: &str, arguments: &'a [String]) -> Option<ListingSh
     }
     Some(ListingShape {
         roots: roots.to_vec(),
-        patterns,
+        patterns: if unbounded_names {
+            Vec::new()
+        } else {
+            patterns
+        },
         null_separated,
     })
 }
@@ -305,6 +320,29 @@ mod tests {
         ] {
             assert!(shape("grep", &args(case)).is_none(), "{case:?}");
         }
+    }
+
+    #[test]
+    fn an_exclude_written_first_leaves_the_includes_bounding_nothing() {
+        // The last filter a name matches decides, and a name matching none is
+        // searched unless the first filter was an `--include`, so the globs
+        // here do not describe what the search prints.
+        let words = args(&["-rlZ", "--exclude=*.md", "--include=*.rs", "KEY", "src"]);
+        assert!(shape("grep", &words).unwrap().patterns.is_empty());
+        let words = args(&["-rlZ", "--exclude", "*.md", "--include", "*.rs", "KEY", "src"]);
+        assert!(shape("grep", &words).unwrap().patterns.is_empty());
+        // An exclude after the includes only narrows them further.
+        let words = args(&["-rlZ", "--include=*.rs", "--exclude=*.md", "KEY", "src"]);
+        assert_eq!(shape("grep", &words).unwrap().patterns, ["*.rs"]);
+        // A directory filter keeps its own list, which never re-admits a name.
+        let words = args(&["-rlZ", "--exclude-dir=target", "--include=*.rs", "KEY", "src"]);
+        assert_eq!(shape("grep", &words).unwrap().patterns, ["*.rs"]);
+        // The roots are still read, so a child that reads no contents is
+        // unaffected by the empty globs.
+        let words = args(&["-rlZ", "--exclude=*.md", "KEY", "src"]);
+        let parsed = shape("grep", &words).unwrap();
+        assert_eq!(parsed.roots, ["src"]);
+        assert!(parsed.patterns.is_empty());
     }
 
     #[test]
