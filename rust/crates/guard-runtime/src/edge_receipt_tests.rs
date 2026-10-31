@@ -65,8 +65,12 @@ fn receipts_accepted(home: &Path) -> Value {
     writer(home, json!({"action": "stats"}))["payload"]["receipt_accepted"].clone()
 }
 
+/// The writer counts a receipt in `accepted` as well, so the activities are
+/// what is left once its receipts are taken out.
 fn activities_accepted(home: &Path) -> Value {
-    writer(home, json!({"action": "stats"}))["payload"]["accepted"].clone()
+    let stats = writer(home, json!({"action": "stats"}));
+    let payload = &stats["payload"];
+    json!(payload["accepted"].as_u64().unwrap() - payload["receipt_accepted"].as_u64().unwrap())
 }
 
 /// An allowed `PreToolUse` answer and the envelope it answers, which now
