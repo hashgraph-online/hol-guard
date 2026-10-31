@@ -167,3 +167,63 @@ fn a_byte_bounded_head_is_peeled_as_a_filter_stage() {
         vec![vec!["head".to_owned(), "-c".to_owned(), "1500".to_owned()]]
     );
 }
+
+/// `pnpm -w` names the workspace root without spelling it, so the sink peels
+/// it into that root the way native authority projects it
+/// (`package_directory_flags.rs`). Were it left unpeeled, the sink would read
+/// the manifest nearest the working directory while pnpm runs the root
+/// package's script, and a subpackage's `build` would stand in for the root's.
+#[test]
+fn the_pnpm_workspace_root_flag_peels_into_the_root_it_names() {
+    let root = workspace("plan-pnpm-workspace-root", true);
+    std::fs::write(root.join("pnpm-workspace.yaml"), "packages:\n  - web\n").expect("workspace");
+    std::fs::create_dir_all(root.join("web")).expect("web");
+    let workspace_path = root.to_str().expect("workspace path");
+    let web = root.join("web");
+
+    for (command, core, cwd) in [
+        ("pnpm -w run build", "pnpm run build", root.clone()),
+        ("pnpm --workspace-root build", "pnpm build", root.clone()),
+        // Climbing out of the package it was typed in is how pnpm finds the
+        // root, and the root is still inside the workspace the sink runs in.
+        ("pnpm -w run build", "pnpm run build", web.clone()),
+    ] {
+        let peeled = wrapper_plan(command, workspace_path, cwd.to_str(), Some(HOME), false)
+            .plan
+            .unwrap_or_else(|| panic!("{command} from {}", cwd.display()));
+        assert_eq!(peeled.core, core, "{command}");
+        assert_eq!(
+            std::fs::canonicalize(&peeled.directory).expect("directory"),
+            root,
+            "{command}"
+        );
+    }
+}
+
+/// Without a workspace to name there is no root to peel into, and the flag is
+/// read in its two exact pnpm spellings only: npm's `-w` takes a workspace
+/// *name*, so reading it as this flag would drop a word the run depends on.
+#[test]
+fn other_workspace_root_spellings_are_left_whole_by_the_sink() {
+    let root = workspace("plan-pnpm-workspace-other", true);
+    let workspace_path = root.to_str().expect("workspace path");
+    for command in [
+        "pnpm -w run build",
+        "pnpm -wx run build",
+        "npm -w web run build",
+        "yarn -w run build",
+    ] {
+        assert!(
+            wrapper_plan(
+                command,
+                workspace_path,
+                Some(workspace_path),
+                Some(HOME),
+                false
+            )
+            .plan
+            .is_none(),
+            "{command}"
+        );
+    }
+}

@@ -175,3 +175,130 @@ fn advertises_the_operation_so_a_caller_can_tell_an_older_resident_apart() {
     assert!(crate::resident_op_features::RESIDENT_OP_FEATURES
         .contains(&guard_contracts::RESIDENT_HEALTH_FEATURE));
 }
+
+/// The only text a health reply is allowed to carry: the build it came from,
+/// the schema it answers in, its one status word, and the caller's own echoed
+/// identifier and digest. Every other value in the reply is a figure.
+const IDENTITY_FIELDS: [&str; 7] = [
+    "build_sha",
+    "request_id",
+    "request_sha256",
+    "runtime_version",
+    "schema",
+    "status",
+    "target",
+];
+
+/// The names a reply is allowed to spell at each of its objects.
+///
+/// The reply is a fixed struct, so its field names are known exactly and an
+/// unknown one can only have come from somewhere other than the struct. A
+/// counter keyed by the work served — a command, a path, a caller — reads back
+/// as an object whose keys are that work, and keys are text wherever they are
+/// put, so they are held to the same rule the values are.
+fn allowed_keys(path: &str) -> &'static [&'static str] {
+    match path {
+        "" => &[
+            "build_sha",
+            "control",
+            "counters",
+            "evaluation",
+            "overloaded_requests",
+            "protocol_version",
+            "request_id",
+            "request_sha256",
+            "runtime_version",
+            "schema",
+            "status",
+            "target",
+            "uptime_ms",
+        ],
+        "evaluation" | "control" => &["queue_capacity", "queued", "queued_max", "workers"],
+        "counters" => &[
+            "auth_failures",
+            "deadline_exceeded",
+            "digest_mismatches",
+            "frame_errors",
+            "panics",
+            "request_bytes_max",
+            "request_bytes_total",
+            "served_requests",
+            "service_micros_max",
+            "service_micros_total",
+        ],
+        _ => &[],
+    }
+}
+
+/// Read a reply the way a diagnostic would and say what in it carries text.
+///
+/// Returns the path of the first thing that does, so a fixture standing in for
+/// a reply the runtime does not produce can be checked without the assertion
+/// itself having to fail.
+fn figures_only(value: &Value, path: &str) -> Result<(), String> {
+    match value {
+        Value::Object(fields) => {
+            let allowed = allowed_keys(path);
+            for (key, field) in fields {
+                let child = if path.is_empty() {
+                    key.clone()
+                } else {
+                    format!("{path}.{key}")
+                };
+                if !allowed.contains(&key.as_str()) {
+                    return Err(format!("{child} (name)"));
+                }
+                figures_only(field, &child)?;
+            }
+            Ok(())
+        }
+        Value::Number(_) => Ok(()),
+        Value::String(_) => {
+            if !path.contains('.') && IDENTITY_FIELDS.contains(&path) {
+                Ok(())
+            } else {
+                Err(path.to_owned())
+            }
+        }
+        _ => Err(path.to_owned()),
+    }
+}
+
+#[test]
+fn every_value_outside_the_replys_own_identity_is_a_figure() {
+    // The counters carry no text from the work the resident did, by
+    // construction. This holds them to it: a counter added later that named
+    // the slowest operation, the path it read or the caller that sent it
+    // would be text, and text is only allowed where the reply says what it
+    // itself is. A nested field of an allowed name fails too, so a `status`
+    // string added inside the counters is caught as well.
+    let encoded = evaluate_resident_health(&request("req-figures")).unwrap();
+
+    let value: Value = serde_json::from_slice(&encoded).unwrap();
+    assert_eq!(figures_only(&value, ""), Ok(()));
+}
+
+#[test]
+fn a_counter_keyed_by_the_work_served_is_read_as_text_as_well() {
+    // A count is a figure wherever it is put, so a per-command or per-path
+    // table would pass a reading that only looked at values while spelling the
+    // work in its keys. These are the two shapes such a counter takes: a map
+    // under a known field, and a field of its own.
+    let mut keyed: Value =
+        serde_json::from_slice(&evaluate_resident_health(&request("req-keyed")).unwrap()).unwrap();
+    keyed["counters"]["served_requests"] = serde_json::json!({ "/private/etc/credentials": 1u64 });
+
+    assert_eq!(
+        figures_only(&keyed, ""),
+        Err("counters.served_requests./private/etc/credentials (name)".to_owned())
+    );
+
+    let mut added: Value =
+        serde_json::from_slice(&evaluate_resident_health(&request("req-added")).unwrap()).unwrap();
+    added["counters"]["slowest_command"] = serde_json::json!(12u64);
+
+    assert_eq!(
+        figures_only(&added, ""),
+        Err("counters.slowest_command (name)".to_owned())
+    );
+}

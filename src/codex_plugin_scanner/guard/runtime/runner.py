@@ -15,17 +15,11 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from base64 import urlsafe_b64encode
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
-from uuid import uuid4
-
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 
 from ...version import __version__
 from ..adapters.base import HarnessContext
@@ -41,6 +35,7 @@ from ..cloud_exceptions import (
     dedupe_cloud_exceptions,
 )
 from ..config import VALID_RECEIPT_REDACTION_LEVELS
+from ..dpop_key_binding import signed_dpop_proof
 from ..edge_events import build_runtime_session_event
 from ..managed_controls_policy_fields import ParsedManagedControlsPolicy
 from ..mdm.network import managed_urlopen
@@ -2095,22 +2090,6 @@ def _policy_bundle_cloud_exception_items(
     return serialized
 
 
-def _base64url_encode(data: bytes) -> str:
-    return urlsafe_b64encode(data).decode("ascii").rstrip("=")
-
-
-def _encode_jwt_segment(payload: Mapping[str, object]) -> str:
-    return _base64url_encode(json.dumps(dict(payload), separators=(",", ":"), sort_keys=True).encode("utf-8"))
-
-
-def _dpop_access_token_confirmation_claim(access_token: str) -> str:
-    # RFC 9449 requires the DPoP `ath` claim to be the SHA-256 hash of the access token.
-    # codeql[py/weak-sensitive-data-hashing]
-    digest = hashes.Hash(hashes.SHA256())
-    digest.update(access_token.encode("ascii"))
-    return _base64url_encode(digest.finalize())
-
-
 def _sign_guard_dpop_proof(
     *,
     request_url: str,
@@ -2120,40 +2099,26 @@ def _sign_guard_dpop_proof(
     nonce: str | None = None,
     now: datetime | None = None,
 ) -> str:
-    issued_at = int((now or datetime.now(timezone.utc)).timestamp())
-    header = {
-        "alg": dpop_key_material.algorithm,
-        "jwk": dpop_key_material.public_jwk,
-        "typ": "dpop+jwt",
-    }
-    claims: dict[str, object] = {
-        "htu": request_url,
-        "htm": method.upper(),
-        "iat": issued_at,
-        "jti": str(uuid4()),
-    }
-    if isinstance(access_token, str) and access_token:
-        claims["ath"] = _dpop_access_token_confirmation_claim(access_token)
-    if isinstance(nonce, str):
-        normalized_nonce = nonce.strip()
-        if normalized_nonce:
-            claims["nonce"] = normalized_nonce
-    signing_input = f"{_encode_jwt_segment(header)}.{_encode_jwt_segment(claims)}".encode("ascii")
     try:
-        private_key = serialization.load_pem_private_key(
-            dpop_key_material.private_key_pem.encode("ascii"),
-            password=None,
+        return signed_dpop_proof(
+            private_key_pem=dpop_key_material.private_key_pem,
+            algorithm=dpop_key_material.algorithm,
+            public_jwk=dpop_key_material.public_jwk,
+            request_url=request_url,
+            method=method,
+            issued_at=int((now or datetime.now(timezone.utc)).timestamp()),
+            access_token=access_token if isinstance(access_token, str) else None,
+            nonce=nonce if isinstance(nonce, str) else None,
         )
-    except (TypeError, ValueError) as exc:
+    except PolicyBundleNativeUnavailableError as exc:
+        raise GuardSyncNotAvailableError(
+            "Guard could not sign the Guard Cloud request. Try again shortly.",
+            retryable=True,
+        ) from exc
+    except PolicyBundleNativeError as exc:
         raise GuardSyncAuthorizationExpiredError(
             "Guard Cloud authorization key is invalid. Reconnect Guard Cloud."
         ) from exc
-    if not isinstance(private_key, ec.EllipticCurvePrivateKey) or not isinstance(private_key.curve, ec.SECP256R1):
-        raise RuntimeError("Guard DPoP key must be a P-256 (SECP256R1) EC private key.")
-    der_signature = private_key.sign(signing_input, ec.ECDSA(hashes.SHA256()))
-    r_value, s_value = decode_dss_signature(der_signature)
-    jose_signature = _base64url_encode(r_value.to_bytes(32, byteorder="big") + s_value.to_bytes(32, byteorder="big"))
-    return f"{signing_input.decode('ascii')}.{jose_signature}"
 
 
 def _guard_http_header_value(response: object, header_name: str) -> str | None:
@@ -2437,6 +2402,8 @@ def _refresh_guard_oauth_access_token_once(
                 dpop_key_material=dpop_key_material,
                 nonce=dpop_nonce,
             )
+        except GuardSyncNotAvailableError:
+            raise
         except (RuntimeError, TypeError, ValueError) as error:
             raise GuardSyncAuthorizationExpiredError(f"{_guard_oauth_reauthorization_message()} {error}") from error
         request = urllib.request.Request(

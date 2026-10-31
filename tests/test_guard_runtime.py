@@ -16,7 +16,7 @@ import sys
 import threading
 import urllib.error
 import urllib.request
-from base64 import urlsafe_b64decode
+from base64 import urlsafe_b64decode, urlsafe_b64encode
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -19751,7 +19751,7 @@ def test_sign_guard_dpop_proof_sets_access_token_hash_claim() -> None:
 
     claims = _decode_jwt_segment(proof.split(".")[1])
 
-    expected_ath = guard_runner_module._base64url_encode(hashlib.sha256(access_token.encode("ascii")).digest())
+    expected_ath = urlsafe_b64encode(hashlib.sha256(access_token.encode("ascii")).digest()).decode("ascii").rstrip("=")
 
     assert claims["ath"] == expected_ath
 
@@ -20330,6 +20330,37 @@ def test_sign_guard_dpop_proof_sets_nonce_claim() -> None:
     claims = _decode_jwt_segment(proof.split(".")[1])
 
     assert claims["nonce"] == "nonce-123"
+
+
+def test_sign_guard_dpop_proof_reports_a_resident_outage_as_retryable(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _outage(**_kwargs: object) -> str:
+        raise guard_runner_module.PolicyBundleNativeUnavailableError("native_unavailable")
+
+    monkeypatch.setattr(guard_runner_module, "signed_dpop_proof", _outage)
+
+    with pytest.raises(guard_runner_module.GuardSyncNotAvailableError) as error:
+        guard_runner_module._sign_guard_dpop_proof(
+            request_url="https://hol.org/api/guard/runtime/sessions/sync",
+            method="POST",
+            dpop_key_material=generate_dpop_key_pair(),
+        )
+
+    assert error.value.retryable is True
+    assert not isinstance(error.value, guard_runner_module.GuardSyncAuthorizationExpiredError)
+
+
+def test_sign_guard_dpop_proof_asks_to_reconnect_when_the_key_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _refused(**_kwargs: object) -> str:
+        raise guard_runner_module.PolicyBundleNativeError("invalid_dpop_private_key")
+
+    monkeypatch.setattr(guard_runner_module, "signed_dpop_proof", _refused)
+
+    with pytest.raises(guard_runner_module.GuardSyncAuthorizationExpiredError):
+        guard_runner_module._sign_guard_dpop_proof(
+            request_url="https://hol.org/api/guard/runtime/sessions/sync",
+            method="POST",
+            dpop_key_material=generate_dpop_key_pair(),
+        )
 
 
 def test_guard_http_header_value_matches_case_insensitive_mapping() -> None:

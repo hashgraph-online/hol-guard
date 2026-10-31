@@ -2569,3 +2569,33 @@ def test_revoke_guard_self_oauth_grant_binds_dpop_proof_to_access_token() -> Non
     expected_ath = base64.urlsafe_b64encode(access_token_digest).rstrip(b"=").decode("ascii")
     assert claims["ath"] == expected_ath
     assert claims["htu"] == "https://hol.org/api/guard/oauth/revoke/self"
+
+
+@pytest.mark.parametrize(
+    ("native_error", "message"),
+    [
+        ("PolicyBundleNativeUnavailableError", "Try again shortly"),
+        ("PolicyBundleNativeError", "Reconnect Guard Cloud"),
+    ],
+)
+def test_connect_dpop_signing_failure_is_operational_not_bad_input(
+    monkeypatch: pytest.MonkeyPatch,
+    native_error: str,
+    message: str,
+) -> None:
+    error_type = getattr(connect_flow, native_error)
+
+    def _fail(**_kwargs: object) -> str:
+        raise error_type("native_unavailable")
+
+    monkeypatch.setattr(connect_flow, "signed_dpop_proof", _fail)
+
+    with pytest.raises(RuntimeError, match=message) as error:
+        connect_flow._sign_dpop_proof(
+            token_endpoint="https://hol.org/api/guard/oauth/token",
+            dpop_key_material=generate_dpop_key_pair(),
+            now=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        )
+
+    assert not isinstance(error.value, ValueError)
+    assert isinstance(error.value.__cause__, error_type)

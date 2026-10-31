@@ -319,3 +319,57 @@ fn a_charge_the_channel_accepted_is_left_for_its_worker() {
     assert_eq!(queued, before + 1);
     assert_eq!(released, before);
 }
+
+#[test]
+fn a_served_request_that_carried_a_credential_leaves_none_of_it_in_a_health_reply() {
+    let _gauges = crate::resident_health_counters::GAUGE_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
+    // Assembled from pieces so no file in this repository holds a whole token
+    // of a shape a credential scanner recognises.
+    let secret = format!("{}{}{}", "AKIA", "QYLPT3K7", "R4FXM2WD");
+    let body = format!(
+        r#"{{"operation":"pre_tool_decide","command":"aws configure set aws_access_key_id {secret}"}}"#
+    );
+
+    // Serve that request the way the transport serves one: the credential is
+    // in the payload the pending request holds, and the reply is accounted for
+    // from it. What the resident keeps of a payload it read is a length and a
+    // duration, and a diagnostic reading the health reply afterwards must not
+    // be able to recover the bytes from either.
+    let before = health("req-before").1.counters.served_requests;
+    let mut pending = complete_request(Box::new(RecordingStream::default()), body.as_bytes());
+    finish_request(&mut pending, br#"{"decision":"allow"}"#, false);
+    let (reply, after) = health("req-credential");
+
+    assert!(
+        after.counters.served_requests > before,
+        "the request has to reach the accounting for this to say anything"
+    );
+    assert!(!reply.contains(&secret), "the reply repeats the credential");
+    assert!(
+        !reply.contains("aws_access_key_id"),
+        "the reply names the field the credential was read from"
+    );
+    assert!(
+        !reply.contains("pre_tool_decide"),
+        "the reply names the operation the credential was sent to"
+    );
+}
+
+/// Ask the resident how it is, the way a diagnostic on the control lane does.
+///
+/// Both the bytes the caller receives and what they parse to are returned: a
+/// reading of the parsed struct alone would say nothing about anything the
+/// reply carried outside its own fields.
+fn health(request_id: &str) -> (String, guard_contracts::ResidentHealthResultV1) {
+    let request = guard_contracts::ResidentHealthRequestV1 {
+        schema: guard_contracts::RESIDENT_HEALTH_REQUEST_SCHEMA.to_owned(),
+        request_id: request_id.to_owned(),
+    };
+    let encoded = crate::resident_health_op::evaluate_resident_health(&request)
+        .expect("a health request on the control lane is answered");
+    let reply = String::from_utf8(encoded).expect("the reply is JSON text");
+    let parsed = serde_json::from_str(&reply).expect("the reply is a health result");
+    (reply, parsed)
+}

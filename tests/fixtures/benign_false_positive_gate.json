@@ -1884,6 +1884,618 @@
       "expect": "not_allow"
     },
     {
+      "id": "curl-usage-text",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "curl --help"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "curl-usage-text-short",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "curl -h"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "wget-usage-text",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "wget --help"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "ssh-usage-text",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ssh --help"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "scp-usage-text",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "scp --help"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "sftp-usage-text",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "sftp --help"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "rsync-usage-text",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rsync --help"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "psql-usage-text",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "psql --help"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "redis-cli-usage-text",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "redis-cli --help"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "nc-usage-text",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "nc --help"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "cp-usage-text",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cp --help"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "chown-usage-text",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "chown --help"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "kill-usage-text",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "kill --help"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "curl-version-banner",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "curl --version"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "curl-version-banner-short",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "curl -V"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "wget-version-banner",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "wget --version"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "ssh-version-banner",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ssh -V"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "rsync-version-banner",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rsync --version"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "psql-version-banner",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "psql --version"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "cp-version-banner",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cp --version"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-psql-host-flag",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "psql -h"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-rsync-human-readable-flag",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rsync -h"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-nc-short-help",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "nc -h"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-mysql-usage-text",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "mysql --help"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-mysql-version-banner",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "mysql --version"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-curl-usage-text-with-url",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "curl --help https://example.test"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-cp-usage-text-with-operands",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cp --help src dst"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "curl-bundled-manual",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "curl --manual"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "queue-kubectl-get-usage-text",
+      "fix_area": "queue",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "kubectl get --help"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "queue-kubectl-get-resource-usage-text",
+      "fix_area": "queue",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "kubectl get pods -h"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "queue-kubectl-apply-usage-text",
+      "fix_area": "queue",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "kubectl apply --help"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "queue-kubectl-rollout-status-usage-text",
+      "fix_area": "queue",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "kubectl rollout status --help"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "queue-kubectl-global-options-list",
+      "fix_area": "queue",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "kubectl options"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-kubectl-plugin-usage-text",
+      "fix_area": "queue",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "kubectl krew --help"
+      },
+      "cwd": "org",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-kubectl-usage-text-with-operand",
+      "fix_area": "queue",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "kubectl get --help pods"
+      },
+      "cwd": "org",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-kubectl-usage-text-with-server",
+      "fix_area": "queue",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "kubectl get --server https://cluster.example.test --help"
+      },
+      "cwd": "org",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-uvx-help-text-verb",
       "fix_area": "shell",
       "harnesses": [
@@ -2272,6 +2884,81 @@
       "tool": "shell",
       "tool_input": {
         "command": "pnpm -C dashboard build 2>&1 | tail -20"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "pkgdir-pnpm-workspace-root-run-build",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm -w run build"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "pkgdir-pnpm-workspace-root-long-run-build",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm --workspace-root run build"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "pkgdir-pnpm-workspace-root-script-build",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm -w build"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "pkgdir-pnpm-workspace-root-script-test",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm -w test"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "pkgdir-pnpm-workspace-root-run-build-tail",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm -w run build 2>&1 | tail -20"
       },
       "cwd": "worktree",
       "expect": "allow"
@@ -34702,6 +35389,125 @@
       "expect": "allow"
     },
     {
+      "id": "helm-top-level-usage-text",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "helm --help"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "helm-command-usage-text",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "helm install --help"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "helm-upgrade-usage-text",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "helm upgrade --help"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "helm-nested-command-usage-text",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "helm repo add --help"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "helm-help-verb-usage-text",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "helm help install"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-helm-usage-text-after-kubeconfig",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "helm install --kubeconfig /tmp/agent.yaml --help"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-helm-install-without-the-flag",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "helm install mychart ./chart"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-docker-stats-streaming",
       "fix_area": "negative",
       "harnesses": [
@@ -38712,6 +39518,294 @@
       },
       "cwd": "worktree",
       "expect": "allow"
+    },
+    {
+      "id": "npm-install-usage-text",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm install --help"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-npm-help-verb-usage-text",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm help install"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-pnpm-add-usage-text",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm add --help"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "pip-install-usage-text",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pip install --help"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "pip3-install-usage-text",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pip3 install --help"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-cargo-add-usage-text",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cargo add --help"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "uv-sync-usage-text",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "uv sync --help"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "gem-install-usage-text",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gem install --help"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "brew-install-usage-text",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "brew install --help"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "apt-get-install-usage-text",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "apt-get install --help"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-go-help-verb-usage-text",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "go help build"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-brew-help-word-the-table-does-not-carry",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "brew help my-tap-command"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-yarn-usage-text",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "yarn add --help"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-poetry-usage-text",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "poetry add --help"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-composer-usage-text",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "composer require --help"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-bundle-usage-text",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "bundle install --help"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-npm-usage-text-with-operand",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm install express --help"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-npm-usage-text-without-the-flag",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "npm install"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
     },
     {
       "id": "npm-audit-fix-still-reviewed",

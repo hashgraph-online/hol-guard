@@ -9,10 +9,24 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 from codex_plugin_scanner.guard.models import GuardArtifact
-from codex_plugin_scanner.guard.native_context import context_browser_mcp
+from codex_plugin_scanner.guard.native_context import _resolve_digest_home, _unavailable, native_context_digest
+
+
+def context_browser_mcp(request: dict[str, Any]) -> dict[str, Any]:
+    """Project native browser semantics; native absence is not a negative match."""
+    result = native_context_digest(
+        "browser_mcp",
+        {"request": request},
+        guard_home=_resolve_digest_home(None),
+    )
+    browser = result.get("browser_mcp") if isinstance(result, dict) and result.get("status") == "ok" else None
+    if not isinstance(browser, dict) or browser.get("operation") != request.get("operation"):
+        raise _unavailable("native_browser_mcp_intent_unavailable")
+    return browser
+
 
 BrowserIntent = Literal[
     "browser.navigation",

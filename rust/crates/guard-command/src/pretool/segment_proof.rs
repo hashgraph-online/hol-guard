@@ -302,6 +302,7 @@ pub(super) fn exact_safe_segment_with_context(
     }
     if super::version_probes::safe_version_probe(basename, &segment.arguments)
         || super::help_probes::safe_help_probe(basename, &segment.arguments, context)
+        || super::manager_usage::safe_manager_segment(basename, model, segment, context)
     {
         return true;
     }
@@ -440,6 +441,7 @@ pub(super) fn exact_safe_segment_with_context(
         "wrangler" => super::wrangler_reads::safe_wrangler_arguments(&segment.arguments),
         "doctl" => super::doctl_reads::safe_doctl_arguments(&segment.arguments),
         "docker" => super::docker_reads::safe_docker_segment(model, segment),
+        "helm" => super::helm_usage::safe_helm_segment(model, segment),
         "nc" | "netcat" => super::port_probes::safe_nc_segment(model, segment),
         "brew" => super::brew_reads::safe_brew_segment(model, segment),
         "pg_ctl" => super::postgres_reads::safe_pg_ctl_arguments(&segment.arguments),

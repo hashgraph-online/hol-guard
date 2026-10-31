@@ -316,6 +316,10 @@ def build_fixture(root: Path) -> BenignFixture:
     # Worktree package borrowing the canonical checkout's installed node_modules through a symlink.
     _node_toolchain(parent / "dashboard")
     _write(worktree / "dashboard" / "package.json", (parent / "dashboard" / "package.json").read_text())
+    # pnpm's workspace root: `pnpm -w run build` runs the root package's script
+    # from anywhere in the checkout. Only `packages` is set, so the install
+    # checks still read the file as inert.
+    _write(worktree / "pnpm-workspace.yaml", "packages:\n  - dashboard\n")
     (worktree / "dashboard" / "node_modules").symlink_to(parent / "dashboard" / "node_modules")
     # The live Gauntlet's placeholder docs and field-copy source, read by its shell cases.
     _write(worktree / "docs" / "review-notes.md", REVIEW_NOTES)
