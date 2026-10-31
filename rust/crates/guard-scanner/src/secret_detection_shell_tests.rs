@@ -186,6 +186,26 @@ fn a_quoted_password_is_read_past_the_metacharacter_it_contains() {
 }
 
 #[test]
+fn the_same_characters_in_a_bare_word_are_read_as_the_shell_syntax_they_are() {
+    // The pair of this test and the one above it: what the quotes make part
+    // of a password is, without them, the command's own punctuation, and a
+    // bare word carrying it is a fragment of shell rather than a credential.
+    let value = format!("{}:{}", "hq8NdPvK2rTw", "Q5mZxL7Bc4Jy");
+    let script = format!("mysql --user ci --password {value} --host db.internal\n");
+    assert!(on_a_command_line(&scan(&script, "deploy/publish.sh")).is_empty());
+}
+
+#[test]
+fn a_single_quoted_password_is_held_whole_the_same_way() {
+    let value = format!("{};{}", "Rr4mWq9ZtB6kPx2L", "cJ8vNd3Ty");
+    let script = format!("psql --password '{value}' --host db.internal\n");
+    let findings = scan(&script, "deploy/publish.sh");
+    let read = on_a_command_line(&findings);
+    assert_eq!(read.len(), 1, "{findings:#?}");
+    assert_eq!(read[0].candidate, value);
+}
+
+#[test]
 fn a_value_whose_quote_never_closes_is_not_read_in_part() {
     // The quote says where the value ends. Without the one that closes it the
     // rule cannot tell, and reporting as far as the line happens to go would

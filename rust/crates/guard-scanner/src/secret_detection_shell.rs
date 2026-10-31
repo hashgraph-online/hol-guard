@@ -157,10 +157,11 @@ pub(super) fn shell_credential_findings(
             // A quoted value is held whole by the quote that closes it, so
             // the shell metacharacter a password may contain stays inside the
             // credential rather than cutting it short.
-            let matched = captures
+            let (matched, quoted) = captures
                 .name("secret")
-                .or_else(|| captures.name("double"))
-                .or_else(|| captures.name("single"))
+                .map(|secret| (secret, false))
+                .or_else(|| captures.name("double").map(|held| (held, true)))
+                .or_else(|| captures.name("single").map(|held| (held, true)))
                 .expect("one of the credential groups always matches");
             let candidate = matched.as_str();
             // A value spelled as a long option is the next flag on the line.
@@ -176,13 +177,16 @@ pub(super) fn shell_credential_findings(
             if !read.insert(digest) {
                 continue;
             }
-            // The value is an argument the shell handed over whole, so it is
-            // read as the written literal it is rather than as bare code.
-            if candidate_is_indirect_reference(candidate, false, path) {
+            // Quoting decides how the value reads. A bare word sits in the
+            // command's own syntax, so a bracket or a `;` in it is shell
+            // rather than credential; a quoted word was handed over whole by
+            // the quotes around it, and the same characters are then part of
+            // the password itself.
+            if candidate_is_indirect_reference(candidate, quoted, path) {
                 continue;
             }
             let whole_match = captures.get(0).expect("whole match always present");
-            if !generic_candidate_is_plausible(candidate, false, path, whole_match.as_str()) {
+            if !generic_candidate_is_plausible(candidate, quoted, path, whole_match.as_str()) {
                 continue;
             }
             // Anchored on the credential rather than on the whole match. The
