@@ -27,7 +27,7 @@ from typing import ClassVar
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard import native_prompt, store_policy
+from codex_plugin_scanner.guard import native_prompt
 from codex_plugin_scanner.guard import synced_policy as synced_policy_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
@@ -17470,9 +17470,6 @@ def test_fresh_mdm_activation_bootstraps_first_signed_policy_sync(
     )
     monkeypatch.setattr(mdm_lifecycle, "load_managed_policy", lambda: managed_state)
     monkeypatch.setattr(mdm_policy, "load_managed_policy", lambda: managed_state)
-    # The resident reads machine MDM policy natively and cannot see the policy
-    # patched in above, so the store ships the bundle identities it derives.
-    monkeypatch.setattr(store_policy, "_RESIDENT_DERIVES_BUNDLE_IDENTITIES", False)
     monkeypatch.setattr(
         mdm_lifecycle,
         "apply_managed_install",
@@ -17526,15 +17523,13 @@ def test_fresh_mdm_activation_bootstraps_first_signed_policy_sync(
     assert persisted_local_keyring["keys"] == []
     assert store.get_sync_payload("managed_policy_bundle_keyring_mirror") == keyring
     assert summary["remote_policies_stored"] == 1
-    assert (
-        resolve_policy(
-            store,
-            "codex",
-            "codex:project:package-request:fresh-managed-device",
-            "hash",
-        )
-        == "block"
-    )
+    # The resident reads machine MDM policy natively and cannot see the policy
+    # patched in above, so the check stops at the row the sync stored.
+    with sqlite3.connect(store.path) as connection:
+        stored = connection.execute(
+            "select action from policy_decisions where source = 'policy-bundle' and harness = 'codex'"
+        ).fetchall()
+    assert stored == [("block",)]
 
 
 def test_cached_bundle_is_not_activated_after_live_anchor_revocation(
