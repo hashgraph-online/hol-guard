@@ -112,6 +112,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         "native-policy-verifier-key-provision-v1".into(),
         "native-business-source-codec-v1".into(),
         "native-business-source-anchor-codec-v1".into(),
+        "native-integrity-snapshot-v1".into(),
         "native-business-source-current-fence-v2".into(),
         "hook-envelope-v2".into(),
         "hook-harness-response-v1".into(),
