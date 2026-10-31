@@ -92,3 +92,72 @@ fn a_manager_option_or_a_write_keeps_the_review() {
         );
     }
 }
+
+/// A pnpm or yarn option that only chooses how much the manager prints names
+/// no package, so the `exec` behind it is still the local-bin run and reaches
+/// the same sink the bare spelling does.
+#[test]
+fn a_reporting_option_before_exec_keeps_the_local_bin_run() {
+    for command in [
+        "pnpm --silent exec tsc --noEmit",
+        "pnpm -s exec tsc --noEmit",
+        "pnpm --no-color exec tsc --noEmit",
+        "pnpm --color exec eslint src",
+        "pnpm --reporter silent exec tsc --noEmit",
+        "pnpm --reporter=silent exec tsc --noEmit",
+        "pnpm --loglevel error exec tsc --noEmit",
+        "pnpm --loglevel=error exec tsc --noEmit",
+        "pnpm --use-stderr exec tsc --noEmit",
+        "pnpm --silent --no-color exec tsc --noEmit",
+        "pnpm --silent exec -- tsc --noEmit",
+        "yarn --silent exec eslint src",
+        "yarn -s exec eslint src",
+        "yarn --no-progress exec eslint src",
+        "yarn --non-interactive --no-color exec eslint src",
+    ] {
+        let result = classify("omp", command);
+        assert_eq!(result.decision, "deny", "{command}");
+        if cfg!(target_os = "macos") {
+            assert_eq!(
+                result.reason_code, "native_node_tool_readonly_containment_required",
+                "{command}"
+            );
+        }
+    }
+}
+
+/// What the peel does not reach: the pnpm options that choose which packages
+/// the run covers, the ones that move the directory or the registry, a value
+/// option whose value is missing so the peel eats the verb, and yarn's
+/// `--cwd`, which the reporting list leaves out.
+#[test]
+fn a_package_choosing_option_before_exec_keeps_the_review() {
+    for command in [
+        "pnpm -r exec tsc --noEmit",
+        "pnpm --recursive exec tsc --noEmit",
+        "pnpm --filter web exec tsc --noEmit",
+        "pnpm -F web exec tsc --noEmit",
+        "pnpm --filter-prod web exec tsc --noEmit",
+        "pnpm --parallel exec tsc --noEmit",
+        "pnpm --workspace-concurrency 2 exec tsc --noEmit",
+        "pnpm --silent -r exec tsc --noEmit",
+        "pnpm -r --silent exec tsc --noEmit",
+        "pnpm --dir /elsewhere exec tsc --noEmit",
+        "pnpm --registry https://registry.example exec tsc --noEmit",
+        "pnpm --ignore-scripts exec tsc --noEmit",
+        "pnpm --reporter exec tsc --noEmit",
+        "pnpm --loglevel exec tsc --noEmit",
+        "yarn --cwd /elsewhere exec eslint src",
+        "yarn --silent --cwd /elsewhere exec eslint src",
+    ] {
+        let result = classify("omp", command);
+        assert_ne!(
+            result.reason_code, "native_node_tool_readonly_containment_required",
+            "{command}"
+        );
+        assert_ne!(
+            result.reason_code, "native_vitest_readonly_containment_required",
+            "{command}"
+        );
+    }
+}
