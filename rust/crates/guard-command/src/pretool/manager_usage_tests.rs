@@ -71,3 +71,48 @@ fn a_manager_the_project_can_answer_for_is_absent() {
         assert!(manager_subcommands(manager).is_none(), "{manager}");
     }
 }
+
+/// A flag that only renders the page leaves the page where it was.
+#[test]
+fn a_flag_that_only_shapes_the_page_keeps_the_usage_reading() {
+    for (manager, line) in [
+        ("npm", "--help --json"),
+        ("npm", "--json --help"),
+        ("npm", "install --help --json"),
+        ("npm", "install --json --help"),
+        ("npm", "install --help --silent"),
+        ("pip", "install --help -q"),
+        ("pip", "install --help --disable-pip-version-check"),
+        ("pip3", "install -qq --help"),
+        ("uv", "add --help --no-cache"),
+        ("gem", "install --help --silent"),
+        ("brew", "install --help --quiet"),
+        ("apt", "list --help -q"),
+        ("apt-get", "install -qq --help"),
+        ("pip", "help install --no-color"),
+    ] {
+        assert!(admitted(manager, line), "{manager} {line}");
+    }
+}
+
+/// The flags above carry no value of their own, so a word that does keeps
+/// its value on the line and the reading still refuses it. A flag belonging
+/// to another manager is nobody's to drop.
+#[test]
+fn an_option_carrying_a_value_or_another_managers_flag_stays_reviewed() {
+    for (manager, line) in [
+        // `--loglevel` takes the word after it, which this reading refuses.
+        ("npm", "install --loglevel silly --help"),
+        ("pip", "install --log /tmp/pip.log --help"),
+        // Dropping a flag never drops an operand with it.
+        ("npm", "install --json express --help"),
+        ("brew", "install --quiet formula --help"),
+        // npm has no `--no-cache`, so the word is npm's to answer.
+        ("npm", "install --help --no-cache"),
+        // Nothing but a rendering flag names no page at all.
+        ("npm", "--json"),
+        ("pip", "-q"),
+    ] {
+        assert!(!admitted(manager, line), "{manager} {line}");
+    }
+}
