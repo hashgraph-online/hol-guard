@@ -230,6 +230,17 @@ fn commands_with_network_privilege_or_escape_stay_at_review() {
         "kill -00 4821",
         "kill -s SIGNULL 4821",
         "kill -0",
+        // Pid `0` asks about the caller's own process group, which is the
+        // same survey a negative operand asks for, and a leading zero writes
+        // both of those another way.
+        "kill -0 0",
+        "kill -0 00",
+        "kill -0 01",
+        "kill -s 0 0",
+        // Arithmetic stands for a number by the time the operands are read,
+        // so the words the caller wrote are what this form admits.
+        "kill -0 $((-1))",
+        "kill -0 $((4821))",
         "echo $(x)",
         "echo hi > ../out",
         "git reset --hard",

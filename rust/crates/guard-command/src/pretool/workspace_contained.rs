@@ -283,6 +283,13 @@ pub(crate) fn command_shape(
         if PRIVILEGE_DENY.contains(&name)
             && !(name == "chmod" && chmod::plain_mode(&segment.arguments))
             && !(name == "kill"
+                // An expansion stands for a number by the time the arguments
+                // are read, so `kill -0 $((-1))` would reach this form as the
+                // pid `1` while the shell signals every process the user can
+                // reach. The operands these two forms admit are read from the
+                // words the caller wrote, so a segment carrying an expansion
+                // is not one of them.
+                && !segment.text.contains('$')
                 && (kill::jobs_only(&segment.arguments) || kill::liveness_only(&segment.arguments)))
         {
             return None;

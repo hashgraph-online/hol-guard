@@ -87,6 +87,18 @@ def _tokens(command: str) -> tuple[str, ...]:
     return tuple(_relative(token) for token in tokens)
 
 
+def _call_command(call: dict[str, Any]) -> str:
+    """The shell command a normalized tool call ran, empty for any other call.
+
+    Every lane records a shell call's arguments under `command`: Claude Code and
+    Cursor from the tool arguments themselves, Codex from the command execution
+    item.
+    """
+    arguments = call.get("args")
+    command = arguments.get("command") if isinstance(arguments, dict) else None
+    return command if isinstance(command, str) else ""
+
+
 def _request(payload: dict[str, Any]) -> tuple[str | None, str | None]:
     """The shell command and file path a hook request names, in any harness's shape."""
     tool_input = payload.get("tool_input")
@@ -285,7 +297,14 @@ def _outcome(scenario: Scenario, case: dict[str, Any]) -> tuple[str, str]:
         unused = sorted(set(scenario.required_tools) - {call.get("tool") for call in calls})
         if unused:
             return "not-exercised", "the model did not use the " + ", ".join(unused) + " tool(s) the case requires"
-    failed = [c for c in calls if c.get("is_error")]
+    # A command the catalog declares as answering by failing keeps that answer
+    # here. `kill -0 <pid>` reports a process that is gone with a nonzero exit,
+    # so the harness marks the call an error while the work the case asked for
+    # is done. The omp lane already reads `benign_exit_commands` this way in
+    # `contained_core.contained_calls`; a lane running the harness's own shell
+    # sees the same exit and must not read it as an unfinished task.
+    declared_benign = {_tokens(command) for command in scenario.benign_exit_commands}
+    failed = [c for c in calls if c.get("is_error") and _tokens(_call_command(c)) not in declared_benign]
     if failed:
         return "task-incomplete", f"a {failed[0]['tool']} call failed after Guard allowed it"
     incomplete = [key for key, value in filesystem.items() if not key.startswith("protected:") and not value]

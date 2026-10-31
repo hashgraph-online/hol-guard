@@ -82,9 +82,14 @@ pub(super) fn liveness_only(arguments: &[String]) -> bool {
     operands > 0
 }
 
-/// A pid operand written as plain decimal digits.
+/// A pid operand written as plain decimal digits, naming one process. `0`
+/// asks about the caller's own process group and `-1` about every process the
+/// user can reach, so neither is the wait on a named process this form reads;
+/// a leading zero writes the same two as `00` and `-01`.
 fn pid(word: &str) -> bool {
-    !word.is_empty() && word.chars().all(|character| character.is_ascii_digit())
+    !word.is_empty()
+        && !word.starts_with('0')
+        && word.chars().all(|character| character.is_ascii_digit())
 }
 
 /// A signal written against the first word: `9`, `TERM` or `SIGTERM`. `-l`
