@@ -240,7 +240,10 @@ case "$1" in
       if [[ "$(basename "$asset")" == $pattern ]]; then cp "$asset" "$dir/"; fi
     done
     ;;
-  attestation) exit "${FAKE_ATTESTATION_STATUS:-0}" ;;
+  attestation)
+    if [[ -n "${FAKE_UNSIGNED_DIGEST:-}" && "$*" == *"--signer-digest $FAKE_UNSIGNED_DIGEST"* ]]; then exit 1; fi
+    exit "${FAKE_ATTESTATION_STATUS:-0}"
+    ;;
   api)
     case "$*" in
       *"/jobs?per_page=100"*) printf '%s\n' "$FAKE_AUTHORIZE_JOB" ;;
@@ -351,3 +354,14 @@ def test_pull_request_alpha_attested_by_a_commit_outside_main_is_rejected(
     assert result.returncode != 0
     assert "was not published by a main commit" in result.stderr
     assert not (runner / "out").exists()
+
+
+def test_pull_request_alpha_merged_into_main_after_publication_is_still_authorized(
+    tmp_path: Path, origin: dict[str, str]
+) -> None:
+    _git(Path(origin["repo"]), "merge", "-q", "--no-ff", "-m", "merge pull request", "pull")
+    result, log, runner = _authorize(tmp_path, origin, FAKE_UNSIGNED_DIGEST=origin["source"])
+    assert result.returncode == 0, result.stderr
+    assert (runner / "out").read_text(encoding="utf-8") == f"sha={origin['source']}\n"
+    assert f"--signer-digest {origin['commit']}" in log
+    assert f"repos/{REPOSITORY}/actions/runs/{RUN_ID}" in log

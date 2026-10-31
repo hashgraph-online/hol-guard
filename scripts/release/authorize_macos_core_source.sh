@@ -56,7 +56,6 @@ if ! git -C "$TRUST_REPO" merge-base --is-ancestor \
   "$SOURCE_SHA" "refs/remotes/origin/${RELEASE_BRANCH}"; then
   # A pull request alpha publishes an admin-authorized head that main never contains.
   [[ "$RELEASE_CHANNEL" == "alpha" ]] || { echo "Core source is not on the release branch" >&2; exit 1; }
-  [[ "${PUBLICATION_RUN_ID:-}" =~ ^[1-9][0-9]*$ ]] || { echo "Pull request alpha needs its publication run" >&2; exit 1; }
   PULL_REQUEST_ALPHA=true
 fi
 gh release download "$CORE_TAG" --repo "$GITHUB_REPOSITORY" \
@@ -86,11 +85,12 @@ verify_published_wheel() {
     --source-ref "$source_ref" \
     --deny-self-hosted-runners >/dev/null
 }
-# Release Please attests the tag. A manual stable dispatch attests main.
-# A repair dispatch attests the later main commit that checked out this tag.
 # A pull request alpha is attested by main's publish workflow at the commit that
 # dispatched it; the run and the wheel's sealed source manifest bind it to the tag.
-if [[ "$PULL_REQUEST_ALPHA" == "true" ]]; then
+verify_pull_request_alpha() {
+  [[ "$RELEASE_CHANNEL" == "alpha" ]] || { echo "Core source is not in the commit that published it" >&2; exit 1; }
+  [[ "${PUBLICATION_RUN_ID:-}" =~ ^[1-9][0-9]*$ ]] || { echo "Pull request alpha needs its publication run" >&2; exit 1; }
+  local attested_commit
   attested_commit=$(python3 -I scripts/release/read_publish_attestation_commit.py \
     "$BUNDLE" "refs/heads/${RELEASE_BRANCH}")
   [[ "$attested_commit" =~ ^[0-9a-f]{40}$ ]] || { echo "Pull request alpha provenance has no main commit" >&2; exit 1; }
@@ -111,6 +111,11 @@ if [[ "$PULL_REQUEST_ALPHA" == "true" ]]; then
     --wheel "$WHEEL" --bundle "$BUNDLE" --repo "$GITHUB_REPOSITORY" \
     --run-id "$PUBLICATION_RUN_ID" --source-sha "$SOURCE_SHA" \
     --version "$CORE_VERSION" --attested-commit "$attested_commit"
+}
+# Release Please attests the tag. A manual stable dispatch attests main.
+# A repair dispatch attests the later main commit that checked out this tag.
+if [[ "$PULL_REQUEST_ALPHA" == "true" ]]; then
+  verify_pull_request_alpha
 elif ! verify_published_wheel "refs/tags/${CORE_TAG}"; then
   if ! verify_published_wheel "refs/heads/${RELEASE_BRANCH}"; then
     attested_commit=$(python3 -I scripts/release/read_publish_attestation_commit.py \
@@ -118,15 +123,20 @@ elif ! verify_published_wheel "refs/tags/${CORE_TAG}"; then
     [[ "$attested_commit" =~ ^[0-9a-f]{40}$ ]]
     git -C "$TRUST_REPO" fetch --force --no-recurse-submodules origin \
       "+${attested_commit}:refs/repair-attested"
-    git -C "$TRUST_REPO" merge-base --is-ancestor "$SOURCE_SHA" "$attested_commit"
-    gh attestation verify "$WHEEL" \
-      --repo "$GITHUB_REPOSITORY" \
-      --bundle "$BUNDLE" \
-      --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/publish.yml" \
-      --signer-digest "$attested_commit" \
-      --source-digest "$attested_commit" \
-      --source-ref "refs/heads/${RELEASE_BRANCH}" \
-      --deny-self-hosted-runners >/dev/null
+    if git -C "$TRUST_REPO" merge-base --is-ancestor "$SOURCE_SHA" "$attested_commit"; then
+      gh attestation verify "$WHEEL" \
+        --repo "$GITHUB_REPOSITORY" \
+        --bundle "$BUNDLE" \
+        --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/publish.yml" \
+        --signer-digest "$attested_commit" \
+        --source-digest "$attested_commit" \
+        --source-ref "refs/heads/${RELEASE_BRANCH}" \
+        --deny-self-hosted-runners >/dev/null
+    else
+      # A pull request alpha whose head main later merged is now on the release
+      # branch, yet main's publish run still built it before that merge.
+      verify_pull_request_alpha
+    fi
   fi
 fi
 cp "$WHEEL" "$RUNNER_TEMP/$ATTESTED_NAME"

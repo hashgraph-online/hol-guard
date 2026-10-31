@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import base64
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -12,7 +13,6 @@ import subprocess
 import time
 import urllib.error
 import urllib.request
-import zipfile
 from pathlib import Path
 
 
@@ -87,7 +87,15 @@ _VERSION_PATTERNS = {
 }
 _PUBLICATION_JOBS = {"stable": "Publish main release to PyPI", "alpha": "Publish alpha to PyPI"}
 _PULL_REQUEST_ALPHA_JOB = "Authorize pull request alpha"
-_NATIVE_MANIFEST = "codex_plugin_scanner/_native/runtime-manifest.json"
+
+
+def _source_binding():
+    # Scripts run with `python3 -I`, which keeps this directory off sys.path.
+    path = Path(__file__).with_name("verify_pull_request_alpha_source.py")
+    spec = importlib.util.spec_from_file_location("verify_pull_request_alpha_source", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _alpha_source_is_in_run(repo: str, source_sha: str, head_sha: str) -> bool:
@@ -131,12 +139,8 @@ def _pull_request_alpha_built(repo: str, run_id: str, source_sha: str, wheel: Pa
     """
     if wheel is None or _attempt_conclusions(repo, run_id, _PULL_REQUEST_ALPHA_JOB) != ["success"]:
         return False
-    with zipfile.ZipFile(wheel) as archive:
-        info = archive.getinfo(_NATIVE_MANIFEST)
-        if info.file_size > 64 * 1024:
-            raise ValueError("native wheel manifest is too large")
-        manifest = json.loads(archive.read(info))
-    return isinstance(manifest, dict) and manifest.get("source_sha") == source_sha
+    manifest_sha, _ = _source_binding().manifest_source(wheel)
+    return manifest_sha == source_sha
 
 
 def publication_ready(
@@ -320,6 +324,7 @@ if __name__ == "__main__":
             os.environ["PUBLICATION_RUN_ID"],
             os.environ["PUBLICATION_SOURCE_SHA"],
             args.channel,
+            wheel=args.wheel,
         )
         ready = ready and _registry_ready(args.version, args.wheel, args.filename, args.channel)
         print("registry_ready=" + str(ready).lower())
