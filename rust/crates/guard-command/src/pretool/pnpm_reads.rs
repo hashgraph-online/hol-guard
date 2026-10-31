@@ -294,7 +294,11 @@ const UNSAFE_SETTINGS: [&str; 24] = [
 /// an `*a` standing for a `registry` anchored earlier all name `registry` to
 /// js-yaml while the comparison below would reduce them to something else. A
 /// double-quoted key carries escapes, so `"\u0072egistry"` names `registry`
-/// too. Each of those ends the reading as well.
+/// too. A flow sequence hides every one of them again: js-yaml turns the
+/// array a bracketed key holds into the string its elements spell, so
+/// `[!!str registry]`, `[*a]` and `["\u0072egistry"]` each name
+/// `registry` while putting a `[` where this screen reads for a tag. Each of
+/// those ends the reading as well.
 ///
 /// pnpm loads these files with js-yaml's default schema, which resolves all
 /// of them, so a settings file that spells one is no longer a file this check
@@ -308,7 +312,7 @@ fn inert_setting_line(line: &str) -> bool {
     if line.starts_with('?')
         || line.starts_with("<<")
         || line.contains('{')
-        || line.starts_with(['!', '&', '*'])
+        || line.starts_with(['!', '&', '*', '['])
     {
         return false;
     }

@@ -173,6 +173,9 @@ fn a_settings_line_that_moves_the_fetch_or_the_hook_module_is_not_inert() {
         "&anchored registry: https://registry.example.test",
         "*anchored : https://registry.example.test",
         "\"\\u0072egistry\": https://registry.example.test",
+        "[!!str registry]: https://registry.example.test",
+        "[*anchored]: https://registry.example.test",
+        "[\"\\u0072egistry\"]: https://registry.example.test",
     ] {
         assert!(!inert_setting_line(line), "{line}");
     }
