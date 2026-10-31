@@ -278,9 +278,9 @@ fn a_wildcard_include_is_proven_by_what_it_selects_below_the_root() {
         ("-rn x --include=*.md docs".to_owned(), true),
         ("-rn x --include *.md --include *.mdx docs".to_owned(), true),
         // BSD grep matches an include against the whole path as well as
-        // the name, so a wildcard that is not the first character can
-        // select a file below a directory the literal part matched.
-        ("-rn x --include README* docs".to_owned(), false),
+        // the name, but `README` is not how a path below `docs` begins, so
+        // only the name match is left and both greps answer alike.
+        ("-rn x --include README* docs".to_owned(), true),
         ("-rn x --include *.md docs src".to_owned(), true),
         // A literal name never reached this proof and still passes the
         // name screen on its own.
@@ -375,8 +375,15 @@ fn an_include_narrows_the_recursive_walk_below_the_root() {
         ),
         ("-rn KEY --include * docs".to_owned(), false),
         // macOS `grep` matches `deploy*` against `deploy/secrets/id_rsa`
-        // too, which the name this walk renders never matches.
+        // too, which the name this walk renders never matches. The glob is
+        // only free to cross the separator because the operand it runs over
+        // is spelled the way its literal head begins.
         ("-rn KEY --include deploy* deploy".to_owned(), false),
+        // The same glob over a root it cannot spell matches no path at all,
+        // so the name match is the whole of it and nothing below `docs` is
+        // selected.
+        ("-rn KEY --include deploy* docs".to_owned(), true),
+        ("-rn KEY --include README* .".to_owned(), true),
         // `[[:punct:]]` is one character class to `grep` and an ordinary
         // set of bytes to this matcher, so the search opens `docs/.env`
         // while the model reads the glob as a five-byte name nothing here

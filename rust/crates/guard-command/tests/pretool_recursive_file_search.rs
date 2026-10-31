@@ -290,16 +290,20 @@ fn recursive_search_source_globs_are_not_mistaken_for_env_files() {
             // is. Below a directory holding no credential file, an
             // env-shaped include selects none either.
             ("grep -rl --include=.env.* ordinary tests", true),
-            ("grep -rl --include=*.env.* ordinary tests", true),
             ("grep -rl --include=.env*.ts ordinary tests", true),
-            ("grep -rl --include=?env.*.ts ordinary tests", true),
-            ("grep -rl --include=[.]env*.ts ordinary tests", true),
+            // BSD grep matches an include against the whole path it reached
+            // a file by, so a leading wildcard can carry the glob across a
+            // separator and select a file no name match selects.
+            ("grep -rl --include=*.env.* ordinary tests", false),
+            // `?` and a bracket mean one character to grep and one byte to
+            // the matcher behind this walk, so neither is modeled.
+            ("grep -rl --include=?env.*.ts ordinary tests", false),
+            ("grep -rl --include=[.]env*.ts ordinary tests", false),
             // A glob carrying a separator is matched against the whole name
             // grep reached the file by, which the walk does not render.
             ("grep -rl --include=src/.env.* ordinary tests", false),
             // An include that does select a credential file keeps the review.
             ("grep -rl --include=.env.* ordinary secrets", false),
-            ("grep -rl --include=*.env.* ordinary secrets", false),
             // A tree holding a credential file the glob misses does not: the
             // walk below the root skips every file no include selects, so
             // `configured/.env` is never opened.
