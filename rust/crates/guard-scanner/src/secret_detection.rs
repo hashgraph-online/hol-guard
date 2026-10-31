@@ -756,10 +756,14 @@ pub static SECRET_RULES: LazyLock<Vec<SecretRule>> = LazyLock::new(|| {
             "slack-app-token",
             "Slack app-level token",
             "critical",
-            r"\b(?P<secret>xapp-[0-9]-[A-Za-z0-9-]{10,255})",
+            r"(?:^|[^A-Za-z0-9_-])(?P<secret>xapp-[0-9]-[A-Za-z0-9-]{10,})(?:$|[^A-Za-z0-9_-])",
             FLAG_UNICODE,
             "slack",
             true,
+            // `-` is a token character here, so a word boundary would end the
+            // match at one and report the head as the whole token. The match
+            // runs to the first character the alphabet does not hold, and the
+            // value is claimed entire or not at all.
             "Slack app-level token for socket-mode connections.",
             None,
         ),
@@ -767,10 +771,14 @@ pub static SECRET_RULES: LazyLock<Vec<SecretRule>> = LazyLock::new(|| {
             "discord-bot-token",
             "Discord bot token",
             "critical",
-            r"\b(?P<secret>[MNO][A-Za-z0-9_-]{23,25}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27,38})\b",
+            r"(?:^|[^A-Za-z0-9_.-])(?P<secret>[MNO][A-Za-z0-9_-]{23,25}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27,38})(?:$|[^A-Za-z0-9_.-])",
             FLAG_UNICODE,
             "discord",
             true,
+            // The segments hold `-` and `_`, and the token is exactly three of
+            // them, so the guards exclude `.` as well: a fourth segment or a
+            // longer third one is some other value, not a bot token with its
+            // tail cut off.
             "Discord bot token granting the application its gateway identity.",
             None,
         ),
@@ -800,10 +808,12 @@ pub static SECRET_RULES: LazyLock<Vec<SecretRule>> = LazyLock::new(|| {
             "sentry-auth-token",
             "Sentry auth token",
             "critical",
-            r"\b(?P<secret>sntry[su]_[A-Za-z0-9+/=_-]{50,255})",
+            r"(?:^|[^A-Za-z0-9+/=_-])(?P<secret>sntry[su]_[A-Za-z0-9+/=_-]{50,})(?:$|[^A-Za-z0-9+/=_-])",
             FLAG_UNICODE,
             "sentry",
             true,
+            // Unbounded above, because a ceiling on the quantifier reports the
+            // first N characters of anything longer.
             "Sentry organization or user auth token.",
             None,
         ),
@@ -811,10 +821,13 @@ pub static SECRET_RULES: LazyLock<Vec<SecretRule>> = LazyLock::new(|| {
             "google-oauth-client-secret",
             "Google OAuth client secret",
             "critical",
-            r"\b(?P<secret>GOCSPX-[A-Za-z0-9_-]{28})\b",
+            r"(?:^|[^A-Za-z0-9_-])(?P<secret>GOCSPX-[A-Za-z0-9_-]{28})(?:$|[^A-Za-z0-9_-])",
             FLAG_UNICODE,
             "google",
             true,
+            // Exactly 28 characters after the prefix, and `-` is one of them, so
+            // the character after the match has to come from outside the
+            // alphabet for the 28 to be the whole secret.
             "Google OAuth 2.0 client secret.",
             None,
         ),
@@ -2610,6 +2623,71 @@ mod tests {
             // The fragment is what splits one credential into two findings:
             // the provider rule fingerprints the part it took and the generic
             // rule reports the whole value it did not recognise.
+            let claimed: Vec<&str> = summary
+                .findings
+                .iter()
+                .map(|finding| finding.rule_id)
+                .collect();
+            assert!(
+                !(claimed.contains(&rule_id) && claimed.contains(&"credential-assignment")),
+                "{rule_id}: {claimed:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_value_that_runs_past_a_rule_in_its_own_alphabet_is_not_claimed() {
+        // The sibling test above appends letters and digits, which a word
+        // boundary already stops. These are the continuations it cannot see:
+        // `-` is not a word character, so `\b` is satisfied between a letter
+        // and a `-` and a rule whose alphabet holds `-` would report the head
+        // of the value as the whole token. A ceiling on the quantifier does
+        // the same to anything longer than the ceiling.
+        //
+        // Every sample is held in two pieces, as the rest of this file is.
+        let discord_segment = format!("{}{}", "N2k8vQ4rT7yU1iO3pA5sD", "9fG6hJ0kL2zX4cV8bN1m");
+        let google_tail = format!("{}{}", "Qq2VvL8nP4wR7tY1uI", "6oP3aS5dFg");
+        let slack_tail = format!("{}{}", "Zz9Qq2VvL8nP4wR7tY", "1uI6oP3aS5dFgHjK9m");
+        let sentry_tail = format!("{}{}", "Rr4TtY7uI1oP3aS5dF", "gH9jK2lZ6xC8vB4nM0");
+        for (rule_id, value) in [
+            // A third segment of 40 characters with a `-` at offset 30: a
+            // boundary stops the match at the `-` and reports the first 30.
+            (
+                "discord-bot-token",
+                format!(
+                    "{}.{}.{}-{}",
+                    &discord_segment[..24],
+                    "Qq2VvL",
+                    &discord_segment[..30],
+                    "9fG6hJ0kL"
+                ),
+            ),
+            // A 29th character that is a `-`, where the rule takes 28.
+            (
+                "google-oauth-client-secret",
+                format!("GOCSPX-{google_tail}-{}", "9fG6hJ0kL"),
+            ),
+            // Longer than the 255 characters the rule used to cap at.
+            (
+                "slack-app-token",
+                format!("xapp-1-{}", slack_tail.repeat(10)),
+            ),
+            (
+                "sentry-auth-token",
+                format!("sntrys_{}", sentry_tail.repeat(10)),
+            ),
+        ] {
+            let text = format!("SERVICE_CREDENTIAL = \"{value}\"");
+            let summary = scan_secret_text(&text, "config/prod.env", "working_tree", None, 200);
+            for finding in &summary.findings {
+                if finding.rule_id != rule_id {
+                    continue;
+                }
+                assert_eq!(
+                    finding.candidate, value,
+                    "{rule_id} reported a fragment of the value"
+                );
+            }
             let claimed: Vec<&str> = summary
                 .findings
                 .iter()
