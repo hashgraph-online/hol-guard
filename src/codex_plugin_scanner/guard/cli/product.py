@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
@@ -11,11 +10,8 @@ from ..adapters import get_adapter
 from ..adapters.base import HarnessContext, _artifact_uses_guard
 from ..config import GuardConfig
 from ..consumer import detect_all
-from ..consumer.service import diff_artifact
 from ..daemon.runtime_peer import load_guard_daemon_endpoint_url
-from ..models import GuardArtifact, HarnessDetection
-from ..native_artifact_content_hash import ArtifactContentHashUnavailableError, native_artifact_content_hashes
-from ..native_consumer_artifact_project import NativeConsumerProjectError
+from ..models import HarnessDetection
 from ..redaction import redact_local_path
 from ..runtime.connector_setup_items import connector_setup_status
 from ..store import GuardStore
@@ -33,6 +29,7 @@ from .connect_flow import (
     resolve_guard_cloud_repair_detail,
     resolve_guard_cloud_state,
 )
+from .status_review_count import count_review_artifacts
 
 HARNESS_PRIORITY = ("codex", "claude-code", "copilot", "hermes", "cursor", "antigravity", "gemini", "opencode")
 GUARD_COMMAND = "hol-guard"
@@ -127,7 +124,7 @@ def _summarize_harness(
 ) -> dict[str, object]:
     managed_install = store.get_managed_install(detection.harness)
     approval_flow = get_adapter(detection.harness).approval_flow(managed_install=managed_install)
-    review_count = _count_review_artifacts(store, detection.artifacts, detection.harness)
+    review_count = count_review_artifacts(store, detection.artifacts, detection.harness)
     managed = bool(managed_install and managed_install.get("active"))
     guard_registered = any(_artifact_uses_guard(artifact) for artifact in detection.artifacts)
     shim_path = None
@@ -222,44 +219,6 @@ def _managed_install_warning_count(*, managed: bool, manifest: dict[str, object]
         if not Path(candidate).expanduser().exists():
             missing += 1
     return missing
-
-
-def _count_review_artifacts(store: GuardStore, artifacts: tuple[GuardArtifact, ...], harness: str) -> int:
-    if not artifacts:
-        return 0
-    previous_snapshots = store.list_snapshots(harness)
-    guard_home = getattr(store, "guard_home", None)
-    try:
-        content_hashes = native_artifact_content_hashes(artifacts, guard_home=guard_home)
-    except ArtifactContentHashUnavailableError:
-        # Without hashes no diff is known, so every artifact needs review.
-        return len(artifacts)
-    return sum(
-        1
-        for artifact, content_hash in zip(artifacts, content_hashes, strict=True)
-        if _artifact_needs_review(previous_snapshots, artifact, content_hash, guard_home)
-    )
-
-
-def _artifact_needs_review(
-    previous_snapshots: Mapping[str, dict[str, object]],
-    artifact: GuardArtifact,
-    content_hash: str,
-    guard_home: Path | None,
-) -> bool:
-    try:
-        return bool(
-            diff_artifact(
-                previous_snapshots.get(artifact.artifact_id),
-                artifact,
-                guard_home=guard_home,
-                content_hash=content_hash,
-            )["changed"]
-        )
-    except NativeConsumerProjectError:
-        # Status stays readable when the resident cannot answer; an artifact
-        # whose diff is unknown is reported as needing review, never as clean.
-        return True
 
 
 def _redacted_path(path: str | Path | None, home_dir: Path) -> str | None:
