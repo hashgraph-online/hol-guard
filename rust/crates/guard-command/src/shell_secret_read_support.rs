@@ -160,7 +160,6 @@ fn sensitive_basename_labels() -> &'static BTreeMap<&'static str, &'static str> 
             (".htpasswd", "htpasswd credential file"),
             ("rclone.conf", "rclone remote credentials"),
             (".rclone.conf", "rclone remote credentials"),
-            ("kubeconfig", "Kubernetes config"),
             (
                 "application_default_credentials.json",
                 "Google Cloud credentials",
@@ -2250,6 +2249,37 @@ mod secret_corpus_tests {
                 "{path} gained a classification it should not have"
             );
         }
+    }
+
+    /// `kubeconfig` names a Kubernetes credential only where the `.kube`
+    /// directory holds it. A workspace file carrying that name — a template,
+    /// a fixture, a generated copy — is ordinary, and reading it as a secret
+    /// refuses writes the workspace is allowed to make.
+    #[test]
+    fn a_workspace_file_named_kubeconfig_stays_ordinary() {
+        assert!(classify_secret_path("/work/app/kubeconfig", None, None).is_none());
+        assert!(classify_secret_path("/work/app/deploy/kubeconfig", None, None).is_none());
+        assert_eq!(
+            classify_secret_path("/home/me/.kube/config", None, None)
+                .expect("the credential itself")
+                .family,
+            "Kubernetes config"
+        );
+    }
+
+    /// The `.ssh` directory reads as the material it holds, so a command that
+    /// walks it reaches keys without naming one. A directory whose name only
+    /// starts with the same letters is a different directory.
+    #[test]
+    fn the_ssh_directory_reads_as_key_material_but_a_lookalike_does_not() {
+        assert_eq!(
+            classify_secret_path("/home/me/.ssh", None, None)
+                .expect("the directory itself")
+                .family,
+            "SSH key material"
+        );
+        assert!(classify_secret_path("/home/me/.ssh-backup", None, None).is_none());
+        assert!(classify_secret_path("/home/me/.ssh-backup/notes.txt", None, None).is_none());
     }
 
     /// A bare key basename is a shell-read signal only. The file-request
