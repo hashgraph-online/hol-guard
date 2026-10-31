@@ -1083,6 +1083,38 @@
    "body": "05adc32b95e0"
   },
   {
+   "verdict": "windows-equivalent",
+   "note": "The Windows write still refuses a planted name with `create_new` and flushes the file with `sync_all` before it takes the state file's name; only the POSIX mode bits are left out, which the Python writer's `os.open(..., 0o600)` never set on Windows either. The round-trip tests in `health_lease_state_tests.rs` are not `cfg(unix)`-gated, so the Windows test job runs this arm.",
+   "file": "rust/crates/guard-runtime/src/health_lease_state.rs",
+   "item": "fn write_private_file(path: &Path, payload: &[u8]) -> io::Result<()>",
+   "cfg": "not(unix)",
+   "body": "0dc761715662"
+  },
+  {
+   "verdict": "posix-primitive",
+   "note": "`ELOOP` is how `O_NOFOLLOW` reports a link on Unix. Windows opens the link itself through `FILE_FLAG_OPEN_REPARSE_POINT` instead, and the opened handle then reads as no regular file and is refused by `is_private_regular_file`, so no error code needs classifying there.",
+   "file": "rust/crates/guard-runtime/src/health_lease_state.rs",
+   "item": "fn is_link_loop(_error: &io::Error) -> bool",
+   "cfg": "not(unix)",
+   "body": "2fd3a565b13a"
+  },
+  {
+   "verdict": "windows-permissive",
+   "note": "Python parity: `mdm/health_lease.py` accepted any regular file on Windows because `os.stat` reports no owner or mode bits there. The machine state root's own ACL is what keeps the files private on Windows; a DACL check was never ported. Covered by `a_regular_file_reads_back_without_owner_bits` in `health_lease_state_tests.rs`.",
+   "file": "rust/crates/guard-runtime/src/health_lease_state.rs",
+   "item": "fn is_private_regular_file(metadata: &Metadata, _owner_uid: u32) -> bool",
+   "cfg": "not(unix)",
+   "body": "4c7624b921d8"
+  },
+  {
+   "verdict": "posix-primitive",
+   "note": "Fsyncing a directory to make a new name durable is a POSIX primitive with no Windows counterpart, and `durable_io.fsync_directory` was a no-op on Windows too; each state file is still flushed with `sync_all` before it takes its name. The tests in `health_lease_state_tests.rs` that are not `cfg(unix)`-gated run this arm on Windows.",
+   "file": "rust/crates/guard-runtime/src/health_lease_state.rs",
+   "item": "fn sync_directory(_directory: &Path) -> io::Result<()>",
+   "cfg": "not(unix)",
+   "body": "e88822ef3716"
+  },
+  {
    "file": "rust/crates/guard-runtime/src/hook_approval_context/support.rs",
    "item": "pub(super) fn named_user_home(_text: &str) -> Option<String>",
    "verdict": "posix-primitive",
