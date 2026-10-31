@@ -4378,6 +4378,7 @@ clearer UX and an implementation plan with technical references.
                     "local-daemon",
                     "fleet-posture/v1",
                     "policy-bundle-v2-cloud-exceptions.v1",
+                    "policy-document-exact-commands.v1",
                 ],
                 "policy_bundle_versions": [
                     "guard-policy-bundle.v1",

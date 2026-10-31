@@ -40,9 +40,9 @@ from ..policy_bundle_trusted_keys import (
     validate_synced_policy_bundle,
 )
 from ..policy_bundle_v2 import POLICY_BUNDLE_V2_CONTRACT
+from ..runtime import runner_native_sync as _sync
 from ..runtime.extension_control_authority import ExtensionControlAuthorityError
 from ..runtime.runner import (
-    _build_policy_bundle_decisions,
     _daemon_version_supported,
     _guard_device_metadata,
     _persist_cloud_receipt_redaction_level,
@@ -52,6 +52,7 @@ from ..runtime.runner import (
     _policy_bundle_is_version_downgrade,
     _reset_cloud_receipt_redaction_authority,
     _validate_cached_policy_bundle,
+    policy_bundle_candidate_decisions,
 )
 from .managed_policy_delivery import daemon_managed_controls_candidate
 from .server_common import (
@@ -205,11 +206,30 @@ class _ControlSyncRoutes:
                     self._write_json({"error": managed_error}, status=400)
                     return
             applied_at = _now()
-            signed_remote_decisions = _build_policy_bundle_decisions(
+            store = self.server.store  # type: ignore[attr-defined]
+            (
+                signed_remote_decisions,
+                candidate_rejection_reason,
+                _candidate_rejection_rule_id,
+            ) = policy_bundle_candidate_decisions(
+                store,
                 validated_policy_bundle,
+                is_v2=validated_policy_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT,
                 device_id=device_id,
                 device_name=device_name,
+                canonical_enforcement=_sync.canonical_policy_enforcement_enabled(
+                    device_id=device_id,
+                    workspace_id=store.get_cloud_workspace_id(),
+                ),
+                existing_policy_bundle=existing_policy_bundle,
+                now=applied_at,
             )
+            if candidate_rejection_reason == NATIVE_UNAVAILABLE_REJECTION:
+                self._write_native_policy_bundle_unavailable()
+                return
+            if candidate_rejection_reason is not None:
+                self._write_native_policy_bundle_rejection(candidate_rejection_reason)
+                return
             policy_bundle_ack = policy_bundle_acknowledgement_payload(
                 device_id=device_id,
                 device_name=device_name,
