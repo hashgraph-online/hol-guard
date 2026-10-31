@@ -43384,6 +43384,34 @@
       "expect": "not_allow"
     },
     {
+      "id": "neg-http-moved-xdg-base",
+      "fix_area": "negative",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "http :3000/health"
+      },
+      "cwd": "org",
+      "environment": {
+        "XDG_CONFIG_HOME": "/tmp/hol-guard-gate-xdg"
+      },
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-xh-moved-xdg-base",
+      "fix_area": "negative",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "xh http://127.0.0.1:8080/health"
+      },
+      "cwd": "org",
+      "environment": {
+        "XDG_CONFIG_HOME": "/tmp/hol-guard-gate-xdg"
+      },
+      "expect": "not_allow"
+    },
+    {
       "id": "neg-xh-moved-configuration-directory",
       "fix_area": "negative",
       "harnesses": ["codex", "zcode", "claude-code", "omp"],
