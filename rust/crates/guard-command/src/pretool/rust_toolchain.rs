@@ -297,7 +297,7 @@ fn digits(value: &str, length: usize) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{inert_toolchain, rustup_settings_only_official};
+    use super::{inert_toolchain, registry_query, rustup_settings_only_official};
     use std::path::Path;
 
     fn words(command: &str) -> Vec<String> {
