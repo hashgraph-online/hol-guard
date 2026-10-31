@@ -159,7 +159,19 @@ fn an_evaluate_policy_reaches_the_device_without_changing_its_decisions() {
 
 #[test]
 fn an_evaluate_policy_is_still_checked_before_it_is_set_aside() {
-    let mut evaluating = request(json!([rule("unsupported", json!({"no-such-selector": []}))]));
+    let mut unsupported = rule("unsupported", json!({}));
+    unsupported["effect"] = json!("quarantine");
+    let mut evaluating = request(json!([unsupported]));
     evaluating["bundle"]["payload"]["spec"]["defaults"]["mode"] = json!("observe");
-    assert!(run(&evaluating)["error"].is_object(), "{}", run(&evaluating));
+    assert_eq!(refusal(&evaluating)["code"], "unsupported_policy_effect");
+}
+
+#[test]
+fn a_bundle_without_defaults_is_refused_rather_than_read_as_enforced() {
+    let mut input = request(json!([rule("every-device", json!({}))]));
+    input["bundle"]["payload"]["spec"]
+        .as_object_mut()
+        .unwrap()
+        .remove("defaults");
+    assert!(refusal(&input).is_object(), "{}", run(&input));
 }

@@ -78,7 +78,11 @@ pub(super) fn compile(input: &Value, deadline: Instant) -> Result<Value, Error> 
     };
     // An Evaluate policy rolls out its rules to watch them, not to enforce
     // them, so the device keeps its own decisions until the policy is enforced.
-    let evaluating = spec["defaults"]["mode"] == "observe";
+    let evaluating = spec
+        .get("defaults")
+        .and_then(|defaults| defaults.get("mode"))
+        .and_then(Value::as_str)
+        == Some("observe");
     let local: Vec<Value> = rules
         .iter()
         .filter_map(Value::as_object)
@@ -92,5 +96,9 @@ pub(super) fn compile(input: &Value, deadline: Instant) -> Result<Value, Error> 
         &mapping::parse("GuardPolicyDocument", &Value::Object(document))?.mapping,
         deadline,
     )?;
-    Ok(if evaluating { Value::Array(Vec::new()) } else { rows })
+    Ok(if evaluating {
+        Value::Array(Vec::new())
+    } else {
+        rows
+    })
 }
