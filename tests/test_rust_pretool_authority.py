@@ -286,18 +286,14 @@ def _sent_request(
     return sent
 
 
-_EVIDENCE_FEATURES = (
-    "pre-tool-command-authority-v1",
-    "resident-protocol-v2",
-    "pre-tool-extension-evidence-v1",
-)
+_FEATURES = ("pre-tool-command-authority-v1",)
 
 
 def test_a_caller_that_resolves_extensions_asks_for_their_evidence(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    sent = _sent_request(tmp_path, monkeypatch, _EVIDENCE_FEATURES, extension_evidence=True)
+    sent = _sent_request(tmp_path, monkeypatch, _FEATURES, extension_evidence=True)
     assert sent["request"]["extension_evidence"] is True
 
 
@@ -305,15 +301,7 @@ def test_the_enforcing_review_never_asks_for_extension_evidence(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    sent = _sent_request(tmp_path, monkeypatch, _EVIDENCE_FEATURES)
-    assert "extension_evidence" not in sent["request"]
-
-
-def test_an_older_runtime_is_never_sent_the_evidence_field(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    sent = _sent_request(tmp_path, monkeypatch, _EVIDENCE_FEATURES[:2], extension_evidence=True)
+    sent = _sent_request(tmp_path, monkeypatch, _FEATURES)
     assert "extension_evidence" not in sent["request"]
 
 
@@ -324,7 +312,7 @@ def test_pre_tool_request_carries_the_directories_the_command_runs_in(
     sent = _sent_request(
         tmp_path,
         monkeypatch,
-        ("pre-tool-command-authority-v1", "resident-protocol-v2", "pre-tool-path-context-v1"),
+        _FEATURES,
     )
     assert sent["request"]["cwd"] == str(tmp_path / "app-portal")
     assert sent["request"]["home_dir"] == str(tmp_path)
@@ -347,12 +335,7 @@ def test_the_request_carries_the_shell_the_command_will_run_in(
     sent = _sent_request(
         tmp_path,
         monkeypatch,
-        (
-            "pre-tool-command-authority-v1",
-            "resident-protocol-v2",
-            "pre-tool-path-context-v1",
-            "pre-tool-execution-environment-v1",
-        ),
+        _FEATURES,
         execution_environment=stamp,
     )
     assert sent["request"]["execution_environment"] == stamp
@@ -372,24 +355,6 @@ def test_a_caller_that_cannot_name_the_shell_sends_no_environment(
     sent = _sent_request(
         tmp_path,
         monkeypatch,
-        (
-            "pre-tool-command-authority-v1",
-            "resident-protocol-v2",
-            "pre-tool-path-context-v1",
-            "pre-tool-execution-environment-v1",
-        ),
+        _FEATURES,
     )
     assert "execution_environment" not in sent["request"]
-
-
-def test_a_runtime_without_the_feature_is_asked_the_question_it_understands(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    sent = _sent_request(
-        tmp_path,
-        monkeypatch,
-        ("pre-tool-command-authority-v1", "resident-protocol-v2"),
-    )
-    assert "cwd" not in sent["request"]
-    assert "home_dir" not in sent["request"]

@@ -299,7 +299,6 @@ def test_native_diagnostic_without_a_resident_raises_the_typed_value_error(
             publisher=None,
             now=_NOW,
             evidence_provider=lambda _policy, _local_once: {},
-            current_action=None,
         )
     assert isinstance(raised.value, native_store_policy.ApprovalReuseDiagnosticUnavailableError)
 

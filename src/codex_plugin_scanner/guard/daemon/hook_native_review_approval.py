@@ -37,11 +37,6 @@ if TYPE_CHECKING:
     from ..store import GuardStore
 
 _LOGGER = logging.getLogger(__name__)
-# An older resident renders the silent block only from facts the daemon names,
-# including the setup text it no longer looks up; a call without them is
-# refused there and the review never reaches the inbox. The current resident
-# renders from its own lookup and ignores these.
-_OLDER_RESIDENT_SETUP: dict[str, object] = {"setup_reason": None, "connector_is_local": False}
 
 
 def _policy_binding_failed(harness: str, native_result: Mapping[str, object], guard_home: Path) -> dict[str, object]:
@@ -182,7 +177,8 @@ def pause_native_pre_tool_for_approval(
         # The agent stays on the silent block. The inbox row is a separate record.
         facts = {"ask": ask, "home_dir": str(home_dir or Path.home())}
         # The queued row is stored with this same binding; without one a
-        # one-time approval cannot match the agent's retry.
+        # one-time approval cannot match the agent's retry. The resident
+        # derives it and the setup facts itself for the queued render.
         bound = {"retry_reuses_approval": identity is not None, "exact_action_allowable": exact_token is not None}
         queued = queue_native_pre_tool_review(
             store,
@@ -201,7 +197,7 @@ def pause_native_pre_tool_for_approval(
             connector_lookup=connector_lookup,
             policy_binding_verified=True,
             silent=True,
-            respond={"silent_review_block": {**facts, **bound, **_OLDER_RESIDENT_SETUP}},
+            respond={"silent_review_block": facts},
         )
         if queued is None:
             _LOGGER.warning("Silent review blocked without an inbox row for %s", harness)

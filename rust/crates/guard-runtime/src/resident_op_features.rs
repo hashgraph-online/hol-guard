@@ -21,6 +21,7 @@ pub(crate) const RESIDENT_OP_FEATURES: &[&str] = &[
     crate::local_cli_observer::EDGE_LOCAL_CLI_OBSERVATION_FEATURE,
     crate::edge_receipt::EDGE_RECEIPT_RECORD_FEATURE,
     crate::edge_receipt::EDGE_ACTIVITY_RECORD_FEATURE,
+    crate::edge_receipt::EDGE_PRE_TOOL_ACTIVITY_RECORD_FEATURE,
     guard_contracts::APPROVAL_EXTENSION_RECOMMENDATION_FEATURE,
     guard_contracts::GITHUB_CLI_CLASSIFY_FEATURE,
     guard_contracts::PROTECT_REQUEST_FEATURE,

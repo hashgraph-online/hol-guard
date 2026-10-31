@@ -15,8 +15,6 @@ _LOOKUP_KEY_FIELDS = ("integrity_key_b64", "local_once_integrity_key_b64")
 # The resident has no published evidence to read; the caller must send it.
 _EVIDENCE_REQUIRED = "codex_live_evidence_required"
 _NATIVE_EVIDENCE_REQUIRED = "native_guard_store_codex_live_evidence_required"
-# A resident older than the call answers that it has no such method.
-_METHOD_UNKNOWN = "native_guard_store_method_unknown"
 
 
 class _NativeStoreOwner(Protocol):
@@ -45,13 +43,10 @@ class StoreExactCloudLocalOnceMixin:
         except NativeGuardStoreUnavailable as error:
             if error.reason != _NATIVE_EVIDENCE_REQUIRED:
                 raise
-            reply = None
-        if isinstance(reply, Mapping) and "native_evidence" in reply:
-            decision = reply["native_evidence"]
+        else:
+            # Any other reply shape is no authority.
+            decision = reply.get("native_evidence") if isinstance(reply, Mapping) else None
             return dict(decision) if isinstance(decision, Mapping) else None
-        if isinstance(reply, Mapping):
-            # A resident that predates native evidence answered from the exact allow.
-            return dict(reply)
         args, evidence_error = _live_authority_args(self, request, now=now)
         # Never retried: the lookup records a refused row's integrity audit.
         decision = self._native_store_call("codex_live_allow_authority", args)
@@ -145,28 +140,7 @@ class StoreExactCloudLocalOnceMixin:
         # Never retried: a claim spends the approval, and even a live
         # completion's lookup records a refused row's integrity audit, so a
         # call whose reply was lost may already have landed.
-        try:
-            return self._native_store_call("settle_claimed_native_review", {**reuse, **claim})
-        except NativeGuardStoreUnavailable as error:
-            if error.reason != _METHOD_UNKNOWN:
-                raise
-        # A resident older than the combined call settles the same three steps
-        # one call each.
-        if self._native_store_call("settle_native_review_reuse", {**reuse, "spend": False}) == "blocked":
-            return "blocked"
-        if "integrity_key_b64" in claim:
-            try:
-                claimed = self._native_store_call(
-                    "settle_claimed_native_allow",
-                    {"harness": harness, "artifact_id": artifact_id, "workspace": workspace, "now": now, **claim},
-                )
-            except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error):
-                claimed = None
-            if claimed is True:
-                return "allowed"
-        if not claim_saved_approval:
-            return None
-        return self._native_store_call("settle_native_review_reuse", {**reuse, "spend": True})
+        return self._native_store_call("settle_claimed_native_review", {**reuse, **claim})
 
 
 def _live_authority_args(
