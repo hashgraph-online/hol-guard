@@ -28,7 +28,6 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Protocol, cast
 
-from ..native_policy_snapshot_direct_lane import DIRECT_HOOK_EVIDENCE_FEATURE
 from .hook_direct_counters import HookCounterLog
 from .hook_policy_fence_window import record_direct_fence_wait
 
@@ -330,7 +329,6 @@ class DirectHookEvidenceDrain:
 
 
 __all__ = [
-    "DIRECT_HOOK_EVIDENCE_FEATURE",
     "DirectHookEvidenceDrain",
     "record_direct_hook_evidence",
 ]
