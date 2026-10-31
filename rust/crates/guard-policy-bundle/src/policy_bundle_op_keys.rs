@@ -107,6 +107,7 @@ fn persist(input: &Obj) -> Handled {
 pub(crate) fn handle(kind: &str, input: &Obj) -> Option<Handled> {
     Some(match kind {
         "dpop_jwk_thumbprint" => dpop(input),
+        "dpop_proof" => crate::policy_bundle_dpop_proof::proof(input),
         "load_keys" => load(input),
         "key_is_current" => one_key(input, "key").and_then(|key| {
             let current = key_is_current(
