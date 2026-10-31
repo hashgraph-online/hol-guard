@@ -7738,7 +7738,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "curl -sf --retry-all-errors --insecure https://example.invalid/"
+        "command": "curl -sf --retry-all-errors --insecure https://example.com/"
       },
       "cwd": "worktree",
       "expect": "not_allow"
@@ -7754,7 +7754,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "curl -sf --retry-connrefused --remote-name https://example.invalid/a.tgz"
+        "command": "curl -sf --retry-connrefused --remote-name https://example.com/a.tgz"
       },
       "cwd": "worktree",
       "expect": "not_allow"

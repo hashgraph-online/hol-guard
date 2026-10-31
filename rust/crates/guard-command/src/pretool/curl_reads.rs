@@ -61,7 +61,7 @@ const LOCAL_ADMIN_PORTS: [u16; 23] = [
 /// None of them names a destination, carries a body or a credential, or
 /// writes a file, so each leaves the request this module already proved
 /// exactly where it was.
-const PLAIN_FLAGS: [&str; 30] = [
+const PLAIN_FLAGS: [&str; 29] = [
     "--compressed",
     "--fail",
     "--fail-with-body",
@@ -81,7 +81,6 @@ const PLAIN_FLAGS: [&str; 30] = [
     "--no-keepalive",
     "--no-progress-meter",
     "--no-styled-output",
-    "--path-as-is",
     "--progress-bar",
     "--raw",
     "--retry-all-errors",
