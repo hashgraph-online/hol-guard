@@ -903,7 +903,10 @@
         "gh alias list",
         "gh extension list",
         "gh config list",
-        "gh config get editor"
+        "gh config get editor",
+        "gh api 'search/issues?q=repo:owner/repo+created:>=2026-10-29'",
+        "gh api 'search/issues?q=repo:owner/repo+created:<2026-10-29'",
+        "gh api 'search/issues?q=repo:owner/repo+comments:>10'"
       ],
       "prompt": "List GitHub CLI metadata by running each command below in its own bash call, once and in order. Report each result and stop after the final command."
     },

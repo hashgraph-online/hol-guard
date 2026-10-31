@@ -3684,6 +3684,54 @@
       "expect": "allow"
     },
     {
+      "id": "gh-api-search-created-at-or-after",
+      "fix_area": "gh",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh api 'search/issues?q=repo:owner/repo+created:>=2026-10-29'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "gh-api-search-created-before",
+      "fix_area": "gh",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh api 'search/issues?q=repo:owner/repo+created:<2026-10-29'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "gh-api-search-comment-count-above",
+      "fix_area": "gh",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "gh api 'search/issues?q=repo:owner/repo+comments:>10'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "queue-gh-pr-comment-literal-body",
       "fix_area": "gh",
       "harnesses": [
