@@ -73,17 +73,22 @@ fn a_hook_module_above_the_working_directory_keeps_the_review() {
     let project = root.path().join("project");
     let nested = project.join("packages").join("api");
     std::fs::create_dir_all(&nested).expect("nested directories");
-    let context = |directory: &std::path::Path| super::super::PathContext {
-        home_dir: Some(root.path().to_str().expect("utf-8 root")),
-        cwd: Some(directory.to_str().expect("utf-8 cwd")),
-        ..Default::default()
-    };
+    fn context<'a>(home: &'a str, cwd: &'a str) -> super::super::PathContext<'a> {
+        super::super::PathContext {
+            home_dir: Some(home),
+            cwd: Some(cwd),
+            ..Default::default()
+        }
+    }
+    let home = root.path().to_str().expect("utf-8 root");
+    let nested = nested.to_str().expect("utf-8 nested");
+    let project_cwd = project.to_str().expect("utf-8 project");
 
-    assert!(hook_module_absent(context(&nested)));
+    assert!(hook_module_absent(context(home, nested)));
 
     std::fs::write(project.join(".pnpmfile.cjs"), "module.exports = {};\n").expect("hook module");
-    assert!(!hook_module_absent(context(&nested)));
-    assert!(!hook_module_absent(context(&project)));
+    assert!(!hook_module_absent(context(home, nested)));
+    assert!(!hook_module_absent(context(home, project_cwd)));
 }
 
 #[test]
