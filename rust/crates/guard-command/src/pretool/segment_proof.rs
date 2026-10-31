@@ -445,8 +445,12 @@ pub(super) fn exact_safe_segment_with_context(
         "pg_ctl" => super::postgres_reads::safe_pg_ctl_arguments(&segment.arguments),
         "psql" => super::postgres_reads::safe_psql_arguments(&segment.arguments, context),
         "npm" => {
-            super::npm_reads::read_only_neighbors(model)
+            super::npm_reads::read_only_neighbors(model, "npm")
                 && super::npm_reads::safe_npm_read(&segment.arguments, context)
+        }
+        "pnpm" => {
+            super::npm_reads::read_only_neighbors(model, "pnpm")
+                && super::pnpm_reads::safe_pnpm_read(&segment.arguments, context)
         }
         "pip" | "pip3" => super::pip_reads::safe_pip_segment(model, segment, context),
         "uv" => super::tool_inventory_reads::safe_uv_segment(model, segment),

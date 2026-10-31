@@ -1071,6 +1071,18 @@
       ]
     },
     {
+      "id": "omp-native-pnpm-registry-outdated-report",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "I want to know whether any dependency of this project has a newer published version. Run the listed command once, exactly as written, and tell me what it printed. A message that the package manager or the project is missing is a valid result: report it and stop. Do not substitute tools, change the command or cwd, add verification calls, request approval, or change policy.",
+      "commands": [
+        "pnpm outdated --json"
+      ]
+    },
+    {
       "id": "omp-native-git-read-directory-without-repository",
       "expectation": "allow",
       "oracle": "native-tools",

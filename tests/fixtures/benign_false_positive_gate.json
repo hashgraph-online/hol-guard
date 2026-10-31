@@ -38778,6 +38778,278 @@
       "expect": "not_allow"
     },
     {
+      "id": "pnpm-outdated",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm outdated"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "pnpm-outdated-json",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm outdated --json"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "pnpm-outdated-recursive",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm outdated --recursive"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "pnpm-outdated-package-name",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm outdated zod"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "pnpm-view-version",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm view react version"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "pnpm-info-dist-tag",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm info zod dist-tags.latest"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "pnpm-audit",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm audit"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "pnpm-audit-json",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm audit --json"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "pnpm-audit-level-attached",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm audit --audit-level=high"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "pnpm-audit-level-separate",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm audit --audit-level high"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "pnpm-update-still-reviewed",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm update"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "pnpm-audit-fix-still-reviewed",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm audit --fix"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "pnpm-audit-level-unknown-still-reviewed",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm audit --audit-level none"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "pnpm-outdated-dir-still-reviewed",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm outdated --dir packages/api"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "pnpm-outdated-filter-still-reviewed",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm outdated --filter ./packages/api"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "pnpm-view-registry-override-still-reviewed",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm view react --registry=https://registry.example.test"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "pnpm-view-local-path-still-reviewed",
+      "fix_area": "negative",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "pnpm view ./local"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "group-bun-pm-ls",
       "fix_area": "package",
       "harnesses": [

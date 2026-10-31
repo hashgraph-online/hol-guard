@@ -473,6 +473,7 @@
       "src/pretool/pipe_attacks.rs",
       "src/pretool/pipe_stdin_programs.rs",
       "src/pretool/plan_note_writes.rs",
+      "src/pretool/pnpm_reads.rs",
       "src/pretool/port_probes.rs",
       "src/pretool/postgres_reads.rs",
       "src/pretool/private_temporary_workspace.rs",
