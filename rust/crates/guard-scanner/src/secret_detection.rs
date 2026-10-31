@@ -27,6 +27,11 @@ use zeroize::{Zeroize, Zeroizing};
 
 type HmacSha256 = Hmac<Sha256>;
 
+#[path = "secret_detection_encoded.rs"]
+mod encoded;
+
+use encoded::{encoded_payload_findings, ENCODED_PAYLOAD_POLICY_VERSION};
+
 /// How the scan tells two candidates apart without keeping either one.
 ///
 /// Deduplication only ever asks whether it has seen these exact bytes before,
@@ -1288,6 +1293,7 @@ fn round4(value: f64) -> f64 {
 pub fn detector_version() -> String {
     let mut material_parts: Vec<String> = SECRET_RULES.iter().map(rule_material_line).collect();
     material_parts.push(assignment_material_line());
+    material_parts.push(encoded_payload_material_line());
     detector_version_over(&material_parts)
 }
 
@@ -1299,11 +1305,20 @@ fn rule_material_line(rule: &SecretRule) -> String {
     )
 }
 
-/// The synthetic `credential-assignment` contribution, always last.
+/// The synthetic `credential-assignment` contribution. It stays in the place
+/// Python gave it, directly after the rules, so the digest Python published is
+/// still reproducible from a prefix of this material.
 fn assignment_material_line() -> String {
     format!(
         "credential-assignment|{ASSIGNMENT_PATTERN_SOURCE}|{FLAG_IGNORECASE_MULTILINE_UNICODE}|{GENERIC_CANDIDATE_POLICY_VERSION}"
     )
+}
+
+/// Where a text is read, rather than which rules read it. A scan taken before
+/// the detector looked inside base64 payloads saw less of the same file, so it
+/// has to be recognisable as a different detector.
+fn encoded_payload_material_line() -> String {
+    format!("encoded-payload|{ENCODED_PAYLOAD_POLICY_VERSION}")
 }
 
 /// Digest over an explicit material list. Hashing a subset is how the rules
@@ -2124,6 +2139,22 @@ pub fn scan_secret_text(
         if findings.len() >= bounded_max {
             break;
         }
+    }
+
+    // Encoded payloads are read last. A credential that is also written out in
+    // the clear is already reported from the line it sits on, which is the
+    // place a reader can act on; the encoded pass only adds what no plain read
+    // of the file could have found.
+    let remaining = bounded_max.saturating_sub(findings.len());
+    for finding in encoded_payload_findings(text, path, source, commit, &lines, remaining) {
+        if !seen.insert((
+            finding.rule_id,
+            finding.line,
+            candidate_digest(&finding.candidate),
+        )) {
+            continue;
+        }
+        findings.push(finding);
     }
 
     findings.sort_by(|a, b| finding_sort_key(a).cmp(&finding_sort_key(b)));

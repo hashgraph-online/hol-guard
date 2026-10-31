@@ -7,6 +7,7 @@ rust-version.workspace = true
 publish = false
 
 [dependencies]
+base64ct.workspace = true
 guard-rules = { path = "../guard-rules" }
 hex.workspace = true
 hmac.workspace = true
@@ -22,7 +23,7 @@ zeroize = "1.9.0"
 nix.workspace = true
 
 [dev-dependencies]
-base64ct.workspace = true
+
 # Reading the source of a copy is not proof of how many buffers it touched, so
 # the scrubbing tests install the counting allocator and measure.
 guard-alloc-probe = { path = "../guard-alloc-probe" }
