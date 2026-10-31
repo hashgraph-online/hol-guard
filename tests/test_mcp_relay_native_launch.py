@@ -17,9 +17,7 @@ from codex_plugin_scanner.guard.adapters.cursor import CursorHarnessAdapter
 from codex_plugin_scanner.guard.adapters.harness_mcp_discovery import discover_harness_mcp_servers
 from codex_plugin_scanner.guard.adapters.managed_mcp_upstream import proxy_argument_tail
 from codex_plugin_scanner.guard.adapters.mcp_relay_native import (
-    MCP_RELAY_SELECTION_ENV,
     NATIVE_MCP_RELAY_COMMAND,
-    NATIVE_MCP_RELAY_DECIDE_FEATURE,
     NATIVE_MCP_RELAY_FEATURE,
     RELAY_PROXY_COMMANDS,
     mcp_proxy_command,
@@ -62,7 +60,6 @@ def _python_args(tmp_path: Path, proxy: str = "codex-mcp-proxy", harness: str = 
 @pytest.fixture
 def advertised(monkeypatch: pytest.MonkeyPatch) -> set[str]:
     features: set[str] = set()
-    monkeypatch.delenv(MCP_RELAY_SELECTION_ENV, raising=False)
     monkeypatch.setattr(
         native_hook_bridge,
         "native_hook_bridge_executable",
@@ -73,18 +70,16 @@ def advertised(monkeypatch: pytest.MonkeyPatch) -> set[str]:
 
 def test_feature_and_proxy_names_match_the_native_relay() -> None:
     relay = (_RUNTIME_SRC / "mcp_relay.rs").read_text(encoding="utf-8")
-    decide = (_RUNTIME_SRC / "mcp_relay_decide.rs").read_text(encoding="utf-8")
     args = (_RUNTIME_SRC / "mcp_relay_args.rs").read_text(encoding="utf-8")
     assert f'RELAY_COMMAND: &str = "{NATIVE_MCP_RELAY_COMMAND}"' in relay
     assert f'RELAY_FEATURE: &str = "{NATIVE_MCP_RELAY_FEATURE}"' in relay
-    assert f'MCP_RELAY_DECIDE_FEATURE: &str = "{NATIVE_MCP_RELAY_DECIDE_FEATURE}"' in decide
     assert set(re.findall(r'\("([a-z]+-mcp-proxy)", "[a-z]+", "[a-z]+", (?:true|false)\)', args)) == set(
         RELAY_PROXY_COMMANDS
     )
 
 
 def test_an_unadvertised_relay_keeps_the_python_proxy(tmp_path: Path, advertised: set[str]) -> None:
-    advertised.add(NATIVE_MCP_RELAY_DECIDE_FEATURE)
+    advertised.add("mcp-relay-decide-v2")
     args = _python_args(tmp_path)
     assert mcp_proxy_launch(sys.executable, args) == (sys.executable, args)
 
@@ -111,27 +106,7 @@ def test_other_guard_proxies_are_never_relayed(tmp_path: Path, advertised: set[s
     assert mcp_proxy_launch(sys.executable, ["-m", "other.module", "guard", "codex-mcp-proxy"])[0] == sys.executable
 
 
-def test_no_selection_keeps_the_python_proxy_from_an_advertised_relay(
-    tmp_path: Path, advertised: set[str], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    advertised.add(NATIVE_MCP_RELAY_FEATURE)
-    monkeypatch.setenv(MCP_RELAY_SELECTION_ENV, "python")
-    args = _python_args(tmp_path)
-    assert mcp_proxy_launch(sys.executable, args)[0] == str(_RUNTIME)
-
-
-def test_native_canary_needs_a_runtime_serving_relay_decisions(
-    tmp_path: Path, advertised: set[str], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv(MCP_RELAY_SELECTION_ENV, "native")
-    args = _python_args(tmp_path)
-    assert mcp_proxy_launch(sys.executable, args)[0] == sys.executable
-    advertised.add(NATIVE_MCP_RELAY_DECIDE_FEATURE)
-    assert mcp_proxy_launch(sys.executable, args)[0] == str(_RUNTIME)
-
-
 def test_the_relay_is_resolved_for_the_proxys_guard_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(MCP_RELAY_SELECTION_ENV, raising=False)
     homes: list[Path | None] = []
 
     def executable(feature: str, *, guard_home: Path | None = None) -> Path | None:
@@ -149,7 +124,6 @@ def test_the_relay_is_resolved_for_the_proxys_guard_home(tmp_path: Path, monkeyp
 def test_a_frozen_build_launches_the_durable_runtime_copy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from codex_plugin_scanner.guard import native_runtime, native_runtime_durable
 
-    monkeypatch.delenv(MCP_RELAY_SELECTION_ENV, raising=False)
     monkeypatch.setattr(native_hook_bridge.sys, "frozen", True, raising=False)
     identity = type("Identity", (), {"path": _RUNTIME})()
     capabilities = type("Capabilities", (), {"features": frozenset({NATIVE_MCP_RELAY_FEATURE})})()
