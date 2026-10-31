@@ -25,7 +25,8 @@ fn a_filter_chain_reads_the_whole_raw_stream() {
     let shaping = Shaping::default();
     assert!(shaping.enter(false, true));
     let checked = shaping.replay_out(stream(&written));
-    let captured = shaping.leave();
+    let (captured, cut) = shaping.leave();
+    assert!(!cut);
     // The denial check still reads the first `OUTPUT_LIMIT` bytes.
     assert_eq!(checked.len(), OUTPUT_LIMIT);
     assert_eq!(captured, written);
@@ -40,11 +41,27 @@ fn a_filter_chain_reads_the_whole_raw_stream() {
 fn a_chain_result_is_limited_and_made_display_text() {
     let shaping = Shaping::default();
     assert!(shaping.enter(false, true));
-    shaping.show(b"\x1b[0mend\r\n");
-    assert_eq!(shaping.leave(), "\u{fffd}[0mend\n".as_bytes());
+    shaping.show(b"\x1b[0mend\r\n", false);
+    assert_eq!(shaping.leave().0, "\u{fffd}[0mend\n".as_bytes());
     assert!(shaping.enter(false, true));
-    shaping.show(&b"y".repeat(OUTPUT_LIMIT + 1));
-    let shown = shaping.leave();
+    shaping.show(&b"y".repeat(OUTPUT_LIMIT + 1), false);
+    let (shown, _) = shaping.leave();
     assert_eq!(shown.len(), OUTPUT_LIMIT + TRUNCATED.len());
     assert!(shown.ends_with(TRUNCATED.as_bytes()));
+}
+
+#[test]
+fn a_cut_capture_is_noted_after_the_chain_not_in_its_input() {
+    let shaping = Shaping::default();
+    assert!(shaping.enter(true, true));
+    shaping.replay_out(stream(&b"x".repeat(CAPTURE_LIMIT + 1)));
+    shaping.replay_err(stream(b"FAILED\n"));
+    let (captured, cut) = shaping.leave();
+    assert!(cut);
+    assert_eq!(captured.len(), CAPTURE_LIMIT + b"FAILED\n".len());
+    assert!(captured.ends_with(b"xFAILED\n"));
+    // A filter that keeps nothing still shows the notice.
+    assert!(shaping.enter(false, true));
+    shaping.show(b"", cut);
+    assert_eq!(shaping.leave().0, TRUNCATED.as_bytes());
 }

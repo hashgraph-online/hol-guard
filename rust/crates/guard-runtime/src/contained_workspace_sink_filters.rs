@@ -40,9 +40,10 @@ const FILTER_FAILED: &str = "contained_output_filter_failed";
 
 /// Write `captured` as `output` keeps it, as display text, and the chain's
 /// own status for a `pipe`. A matcher's diagnostics go to standard error first.
+/// A `cut` capture is noted after the result.
 pub(super) fn emit(
     output: &ContainedOutput,
-    captured: &[u8],
+    (captured, cut): (&[u8], bool),
     shaping: &Shaping,
 ) -> Outcome<Option<i32>> {
     if output.kind == "pipe" {
@@ -50,11 +51,11 @@ pub(super) fn emit(
         if !diagnostics.is_empty() {
             shaping.err(&diagnostics);
         }
-        shaping.show(&text);
+        shaping.show(&text, cut);
         return Ok(Some(status));
     }
     let count = usize::try_from(output.count).unwrap_or(usize::MAX);
-    shaping.show(&keep(&lines(captured), output.kind, count).concat());
+    shaping.show(&keep(&lines(captured), output.kind, count).concat(), cut);
     Ok(None)
 }
 

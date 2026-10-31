@@ -9,25 +9,28 @@
 //! A terminal gets at most `OUTPUT_LIMIT` bytes of a stream, as display text.
 //! A filter chain reads the raw bytes instead, up to `CAPTURE_LIMIT`, so
 //! `tail` finds the real end and `grep` sees what the command wrote; only
-//! the chain's result is limited and made display text.
+//! the chain's result is limited and made display text. A stream cut at
+//! `CAPTURE_LIMIT` is noted after the chain's result, never inside the
+//! chain's input, so no filter can drop the notice.
 
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
-/// The redirections of the wrapper being run, when one is.
 /// The most of a stream written to the terminal.
 const OUTPUT_LIMIT: usize = 1024 * 1024;
 /// The most of a stream held for a filter chain to read.
 const CAPTURE_LIMIT: usize = 64 * 1024 * 1024;
 const TRUNCATED: &str = "\n[HOL Guard truncated restricted pytest output]\n";
 
+/// The redirections of the wrapper being run, when one is.
 #[derive(Default)]
 pub(super) struct Shaping(Mutex<Option<Frame>>);
 
 struct Frame {
     merge: bool,
     captured: Option<Vec<u8>>,
+    cut: bool,
 }
 
 impl Shaping {
@@ -42,15 +45,17 @@ impl Shaping {
         *frame = Some(Frame {
             merge,
             captured: capture.then(Vec::new),
+            cut: false,
         });
         true
     }
 
-    /// Stop shaping: the output held since `enter`.
-    pub(super) fn leave(&self) -> Vec<u8> {
+    /// Stop shaping: the output held since `enter`, and whether a stream
+    /// was cut at `CAPTURE_LIMIT` while held.
+    pub(super) fn leave(&self) -> (Vec<u8>, bool) {
         self.frame()
             .take()
-            .and_then(|frame| frame.captured)
+            .and_then(|frame| Some((frame.captured?, frame.cut)))
             .unwrap_or_default()
     }
 
@@ -59,35 +64,41 @@ impl Shaping {
         self.frame().as_ref().is_some_and(|frame| frame.merge)
     }
 
-    /// Replay a run's standard output from `file`: held raw for a filter
-    /// chain, otherwise written as display text. The first `OUTPUT_LIMIT`
+    /// Replay a run's standard output from `file`. The first `OUTPUT_LIMIT`
     /// raw bytes, for the denial check.
     pub(super) fn replay_out(&self, file: File) -> Vec<u8> {
-        if !self.captures() {
+        self.replay(file, self.captures(), |bytes| self.out(bytes))
+    }
+
+    /// Replay a run's standard error from `file`. The first `OUTPUT_LIMIT`
+    /// raw bytes, for the denial check.
+    pub(super) fn replay_err(&self, file: File) -> Vec<u8> {
+        self.replay(file, self.captures() && self.merges(), |bytes| {
+            self.err(bytes)
+        })
+    }
+
+    /// Write a stream held for a filter chain raw, up to `CAPTURE_LIMIT`,
+    /// and any other as display text.
+    fn replay(&self, file: File, held: bool, sink: impl Fn(&[u8])) -> Vec<u8> {
+        if !held {
             let (raw, truncated) = read(file, OUTPUT_LIMIT);
-            self.out(&shown(&raw, truncated));
+            sink(&shown(&raw, truncated));
             return raw;
         }
         let (mut raw, truncated) = read(file, CAPTURE_LIMIT);
-        self.out(&raw);
-        if truncated {
-            self.out(TRUNCATED.as_bytes());
+        sink(&raw);
+        if let Some(frame) = self.frame().as_mut() {
+            frame.cut |= truncated;
         }
         raw.truncate(OUTPUT_LIMIT);
         raw
     }
 
-    /// Replay a run's standard error from `file` as display text. The raw
-    /// bytes written, for the denial check.
-    pub(super) fn replay_err(&self, file: File) -> Vec<u8> {
-        let (raw, truncated) = read(file, OUTPUT_LIMIT);
-        self.err(&shown(&raw, truncated));
-        raw
-    }
-
-    /// Write a filter chain's result to standard output as display text.
-    pub(super) fn show(&self, bytes: &[u8]) {
-        let truncated = bytes.len() > OUTPUT_LIMIT;
+    /// Write a filter chain's result to standard output as display text,
+    /// with the truncation notice when it, or the input `cut`, was cut.
+    pub(super) fn show(&self, bytes: &[u8], cut: bool) {
+        let truncated = cut || bytes.len() > OUTPUT_LIMIT;
         self.out(&shown(&bytes[..bytes.len().min(OUTPUT_LIMIT)], truncated));
     }
 

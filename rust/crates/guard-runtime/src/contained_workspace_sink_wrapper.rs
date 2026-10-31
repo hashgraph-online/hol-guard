@@ -167,9 +167,9 @@ fn bounded(
         return Err(Failure::unauthorized());
     }
     let result = run();
-    let captured = signals.output.leave();
+    let (captured, cut) = signals.output.leave();
     let chain = match output {
-        Some(output) if capture => filters::emit(output, &captured, &signals.output)?,
+        Some(output) if capture => filters::emit(output, (&captured, cut), &signals.output)?,
         _ => None,
     };
     let exit_code = result?;
