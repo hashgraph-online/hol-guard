@@ -47,7 +47,7 @@ def test_daemon_answers_a_compile_rejection_with_its_code(
     assert status == 400, response
     assert response["error"] == "canonical_compile_unsupported_rule_action"
     assert store.get_sync_payload("policy_bundle") is None
-    assert store.list_policy_decisions() == []
+    assert store.get_sync_payload("policy_bundle_ack") is None
 
 
 def test_daemon_refuses_a_candidate_the_resident_cannot_shadow(
@@ -67,7 +67,7 @@ def test_daemon_refuses_a_candidate_the_resident_cannot_shadow(
     assert status == 400, response
     assert response["error"] == "native_shadow_unavailable"
     assert store.get_sync_payload("policy_bundle") is None
-    assert store.list_policy_decisions() == []
+    assert store.get_sync_payload("policy_bundle_ack") is None
 
 
 def test_daemon_refuses_a_shadow_mismatch_on_a_rollout_device(
@@ -88,7 +88,7 @@ def test_daemon_refuses_a_shadow_mismatch_on_a_rollout_device(
     assert status == 400, response
     assert response["error"] == "canonical_shadow_mismatch"
     assert store.get_sync_payload("policy_bundle") is None
-    assert store.list_policy_decisions() == []
+    assert store.get_sync_payload("policy_bundle_ack") is None
 
 
 def test_daemon_still_activates_a_candidate_that_agrees_with_the_shadow(
@@ -102,4 +102,6 @@ def test_daemon_still_activates_a_candidate_that_agrees_with_the_shadow(
     status, response = _sync(store, bundle=bundle, delivery=delivery)
 
     assert status == 200, response
-    assert store.list_policy_decisions() != []
+    acknowledgement = store.get_sync_payload("policy_bundle_ack")
+    assert isinstance(acknowledgement, dict)
+    assert all(acknowledgement[key] == value for key, value in delivery.items())
