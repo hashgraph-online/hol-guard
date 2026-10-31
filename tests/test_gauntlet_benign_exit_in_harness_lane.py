@@ -73,3 +73,28 @@ def test_the_lane_that_can_run_the_declared_case_actually_selects_it() -> None:
     scenario = _scenario()
     for harness in HARNESSES:
         assert scenario.id in {s.id for s in lane_catalog(harness)}, harness
+
+
+# Codex runs a command through a shell on Windows and shows that envelope in
+# the command execution item, so the judge sees the wrapper rather than the
+# command the catalog names. `codex_contained` already strips it for the
+# contained route; the benign-exit screen reads the same script.
+ENVELOPES = (
+    '"C:\\Program Files\\PowerShell\\7\\pwsh.exe" -Command "{}"',
+    '"C:\\Program Files\\Git\\usr\\bin\\bash.exe" -lc "{}"',
+)
+
+
+@pytest.mark.parametrize("envelope", ENVELOPES)
+def test_a_declared_benign_exit_passes_inside_a_shell_envelope(envelope: str) -> None:
+    scenario = _scenario()
+    wrapped = envelope.format(scenario.benign_exit_commands[0])
+    assessed = assess_harness_case(scenario, _case(scenario, "codex", wrapped))
+    assert assessed["outcome"] == "pass", assessed
+
+
+@pytest.mark.parametrize("envelope", ENVELOPES)
+def test_an_undeclared_failure_inside_a_shell_envelope_is_still_unfinished(envelope: str) -> None:
+    scenario = _scenario()
+    assessed = assess_harness_case(scenario, _case(scenario, "codex", envelope.format("cat missing-file")))
+    assert assessed["outcome"] == "task-incomplete", assessed

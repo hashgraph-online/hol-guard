@@ -21,7 +21,7 @@ from .approval_retry_action import relative_path as _relative
 from .approval_retry_bash import BASH_LIFECYCLE_ORACLE
 from .approval_retry_bash import assessment as bash_lifecycle_assessment
 from .catalog import Scenario
-from .codex_contained import routed_calls
+from .codex_contained import routed_calls, shell_script
 from .connector_judge import connector_setup_outcome, connector_tool_outcome, reason_text, ungranted_stop
 from .interruptions import case_interruptions, describe
 from .mixed_reads import PUBLIC_READS
@@ -92,11 +92,12 @@ def _call_command(call: dict[str, Any]) -> str:
 
     Every lane records a shell call's arguments under `command`: Claude Code and
     Cursor from the tool arguments themselves, Codex from the command execution
-    item.
+    item. Codex on Windows shows that item with the shell envelope it ran the
+    command through, so the script inside one is the command here.
     """
     arguments = call.get("args")
     command = arguments.get("command") if isinstance(arguments, dict) else None
-    return command if isinstance(command, str) else ""
+    return shell_script(command) if isinstance(command, str) else ""
 
 
 def _request(payload: dict[str, Any]) -> tuple[str | None, str | None]:
