@@ -25283,6 +25283,38 @@
       "expect": "allow"
     },
     {
+      "id": "control-flow-for-loop-jq-filter-pipe",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "for n in 1 2; do gh pr view \"$n\" --repo example-owner/example-repo --json statusCheckRollup --jq '[.statusCheckRollup[] | select(.conclusion==\"FAILURE\" or .status==\"QUEUED\") | {name:.name, conclusion:.conclusion}] | unique | .[0:12]'; done"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "control-flow-for-loop-jq-filter-pipe-escaped-quotes",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "for sha in aaaa bbbb; do echo \"SHA ${sha}\"; gh run list --repo example-owner/example-repo --commit \"${sha}\" --limit 20 --json name,databaseId --jq \"[.[] | select(.conclusion==\\\"action_required\\\") | {name, databaseId}]\"; done"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "control-flow-branch-subshell-alternative",
       "fix_area": "shell",
       "harnesses": [

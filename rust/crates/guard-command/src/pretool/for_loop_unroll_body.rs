@@ -550,6 +550,12 @@ fn word_boundary(character: Option<char>) -> bool {
     character.is_none_or(|character| character.is_whitespace() || character == '|')
 }
 
+/// Cutting a body item into the stages the shell reads.
+#[path = "for_loop_unroll_pipeline.rs"]
+mod pipeline;
+
+use pipeline::pipeline_stages;
+
 /// Whether a backslash makes the character at `at` a literal. The shell reads
 /// `\ ` as a space stuck to the word beside it, so `cat \ $f` is one glued
 /// word rather than two, and the reference does not stand on its own after
@@ -655,7 +661,9 @@ fn stages_are_plain(item: &str) -> bool {
     // a pipeline that starts or ends on `|`, or a run of three or more `|`
     // the shell reads as a syntax error -- and keeps the construct on the
     // unmodeled path.
-    let stages: Vec<&str> = item.split('|').collect();
+    let Some(stages) = pipeline_stages(item) else {
+        return false;
+    };
     for (index, stage) in stages.iter().copied().enumerate() {
         if stage.is_empty() {
             if index > 0
