@@ -37,6 +37,28 @@ fn moves_the_shell(executable: Option<&str>) -> bool {
     matches!(executable, Some("cd") | Some("pushd"))
 }
 
+/// The builtin a segment really runs, with every `builtin` keyword spent.
+///
+/// The parser leaves `builtin` where it stands, so `builtin cd app` arrives
+/// with `builtin` as the executable and `cd` as its first argument. The shell
+/// still moves, and reading only the executable would leave the walk tracking
+/// a directory the shell has left: a later `..` would then be credited to a
+/// descent the walk never saw, and a later `cd -` would return to a `prev`
+/// the shell no longer holds. `command cd` is not this shape -- `command`
+/// runs an external program, which cannot move its parent.
+fn spends_builtin_keyword<'a>(name: &'a str, arguments: &'a [String]) -> (&'a str, &'a [String]) {
+    let mut name = name;
+    let mut arguments = arguments;
+    while name == "builtin" {
+        let Some((first, rest)) = arguments.split_first() else {
+            return (name, arguments);
+        };
+        name = first.as_str();
+        arguments = rest;
+    }
+    (name, arguments)
+}
+
 /// Whether this run names `OLDPWD` anywhere once the shell's quoting is gone.
 ///
 /// The shell removes quoting before it reads an assignment, so the source
@@ -120,6 +142,7 @@ pub(super) fn locations(model: &CanonicalCommandV1, workspace: &Path) -> Option<
             connector
         };
         let name = segment.executable.as_deref()?;
+        let (name, arguments) = spends_builtin_keyword(name, segment.arguments.as_slice());
         let mut executing = Vec::new();
         let mut next = Vec::new();
         for shell in states {
@@ -141,7 +164,7 @@ pub(super) fn locations(model: &CanonicalCommandV1, workspace: &Path) -> Option<
             } = shell;
             executing.push(cwd.clone());
             if moves_the_shell(Some(name)) {
-                let [target] = segment.arguments.as_slice() else {
+                let [target] = arguments else {
                     return None;
                 };
                 // `cd -` is the directory this shell moved out of last, which

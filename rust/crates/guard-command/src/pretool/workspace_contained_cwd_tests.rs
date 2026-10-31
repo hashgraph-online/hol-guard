@@ -251,3 +251,58 @@ fn a_failed_descent_branch_carries_a_climb_and_nothing_else() {
         assert!(shaped(command, &ws), "{command}");
     }
 }
+
+/// `builtin cd` is still the shell moving itself. The parser leaves the
+/// keyword in place, so the walk has to spend it: a shape that read only the
+/// executable would keep tracking the directory the shell has already left,
+/// and credit the step after it to a descent that never happened.
+#[test]
+fn the_builtin_keyword_does_not_hide_a_move() {
+    let ws = workspace("cwd-builtin", true);
+    std::fs::create_dir_all(ws.join("build")).unwrap();
+    std::fs::create_dir_all(ws.join("build/sub")).unwrap();
+    for command in [
+        // The descent is real, so the parent step after it is spent on it.
+        "builtin cd build && ls ..",
+        "builtin cd build/sub && cat ../../package.json",
+        // A move away and back, with the keyword on either end.
+        "builtin cd build && ls && cd - && ls",
+    ] {
+        assert!(shaped(command, &ws), "{command}");
+    }
+    for command in [
+        // No descent at all: the keyword must not buy one.
+        "builtin cd . && ls ..",
+        // One descent, two steps.
+        "builtin cd build && ls ../..",
+        // The keyword hid the move out, so the step after it leaves.
+        "cd build && builtin cd .. && ls ..",
+        // A descent the file system does not confirm proves no depth.
+        "builtin cd absent && ls ..",
+        // `popd` unwinds a stack the walk never tracked, keyword or not.
+        "builtin cd build && builtin popd && ls ..",
+    ] {
+        assert!(!shaped(command, &ws), "{command}");
+    }
+}
+
+/// `cd -` returns to `OLDPWD`, which a `builtin cd` moved just as a bare one
+/// would. A walk that missed that move would hand `-` a `prev` the shell no
+/// longer holds and read the result as contained.
+#[test]
+fn a_return_after_a_builtin_move_follows_the_move_that_happened() {
+    let ws = workspace("cwd-builtin-return", true);
+    std::fs::create_dir_all(ws.join("build")).unwrap();
+    for command in [
+        // The walk followed both moves, so it can follow the return.
+        "cd build && builtin cd .. && cd - && ls",
+    ] {
+        assert!(shaped(command, &ws), "{command}");
+    }
+    for command in [
+        // `OLDPWD` named by the run is a place the walk never joined.
+        "builtin cd build && ls && OLDPWD=/etc cd -",
+    ] {
+        assert!(!shaped(command, &ws), "{command}");
+    }
+}
