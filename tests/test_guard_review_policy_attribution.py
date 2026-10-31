@@ -10,6 +10,7 @@ import pytest
 from codex_plugin_scanner.guard import review_policy_attribution as attribution_module
 from codex_plugin_scanner.guard.review_claim_hashing import compute_local_review_request_claim_hash
 from codex_plugin_scanner.guard.review_contracts import build_local_review_request_claim
+from codex_plugin_scanner.guard.review_policy_attribution import ATTRIBUTION_EPOCH_STATE_KEY
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import _oauth_metadata
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_exact_cloud_review_support import (
@@ -46,6 +47,13 @@ class _Lookups:
         return self.result
 
 
+def _start_attribution(store: GuardStore, *, since: datetime | None = None) -> None:
+    started = since or datetime.now(timezone.utc) - timedelta(minutes=1)
+    store.insert_sync_payload_if_absent(
+        ATTRIBUTION_EPOCH_STATE_KEY, {"since": started.isoformat()}, started.isoformat()
+    )
+
+
 def _setup(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -54,6 +62,7 @@ def _setup(
     lookup: dict[str, object] | Exception,
 ) -> tuple[GuardStore, dict[str, object], _Lookups]:
     store = connected_exact_review_store(tmp_path)
+    _start_attribution(store)
     add_review_request(store, review_request("req-attribution"))
     row = store.get_raw_approval_request_snapshot("req-attribution")
     assert isinstance(row, dict)
@@ -148,40 +157,46 @@ def test_bundle_published_after_the_request_is_not_credited(tmp_path: Path, monk
     assert lookups.calls == []
 
 
-def test_request_cloud_already_received_keeps_its_original_claim(
+def test_request_created_before_attribution_started_is_never_attributed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    store, row, lookups = _setup(tmp_path, monkeypatch, bundle=None, lookup=_decision())
+    # Such a request may already have reached Cloud with a claim that had no rule fields.
+    store = connected_exact_review_store(tmp_path)
+    add_review_request(store, review_request("req-before-upgrade"))
+    row = store.get_raw_approval_request_snapshot("req-before-upgrade")
+    assert isinstance(row, dict)
+    lookups = _Lookups(_decision())
     issued = _created(row) - timedelta(minutes=5)
     monkeypatch.setattr(attribution_module, "validated_synced_policy_bundle", lambda _store: _bundle(issued_at=issued))
-    with store._connect() as connection:
-        updated = connection.execute(
-            "update guard_review_outbox_events set attempt_count = 1 where local_request_id = ?",
-            ("req-attribution",),
-        ).rowcount
-    assert updated > 0
+    monkeypatch.setattr(store, "resolve_policy_decision_lookup", lookups)
+    oauth = _oauth_metadata(store)
 
-    claim = build_local_review_request_claim(request_row=row, oauth=_oauth_metadata(store), store=store)
+    first = build_local_review_request_claim(request_row=row, oauth=oauth, store=store)
+    second = build_local_review_request_claim(request_row=row, oauth=oauth, store=store)
 
-    assert "policyRuleId" not in claim
+    assert "policyRuleId" not in first
+    assert second["claimHash"] == first["claimHash"]
     assert lookups.calls == []
 
 
-def test_failed_lookup_records_nothing_so_the_next_claim_can_answer(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_failed_lookup_records_no_rule_so_the_claim_never_changes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     store, row, lookups = _setup(tmp_path, monkeypatch, bundle=None, lookup=RuntimeError("resident unavailable"))
     issued = _created(row) - timedelta(minutes=5)
     monkeypatch.setattr(attribution_module, "validated_synced_policy_bundle", lambda _store: _bundle(issued_at=issued))
     oauth = _oauth_metadata(store)
 
-    first = build_local_review_request_claim(request_row=row, oauth=oauth, store=store)
+    with caplog.at_level("WARNING", logger=attribution_module.__name__):
+        first = build_local_review_request_claim(request_row=row, oauth=oauth, store=store)
+    # The first claim may already have reached Cloud, so a later answer must not change it.
     lookups.result = _decision()
     second = build_local_review_request_claim(request_row=row, oauth=oauth, store=store)
 
     assert "policyRuleId" not in first
-    assert second["policyRuleId"] == _RULE_ID
-    assert datetime.now(timezone.utc) >= _created(row)
+    assert second["claimHash"] == first["claimHash"]
+    assert len(lookups.calls) == 1
+    assert "RuntimeError" in caplog.text
 
 
 def test_claim_names_the_rule_from_a_signed_bundle_through_the_native_lookup(tmp_path: Path) -> None:
@@ -194,6 +209,7 @@ def test_claim_names_the_rule_from_a_signed_bundle_through_the_native_lookup(tmp
     from tests.policy_store_support import replace_remote_policies, resolve_policy
 
     store = connected_exact_review_store(tmp_path)
+    _start_attribution(store)
     rules: list[dict[str, object]] = [
         {
             "ruleId": "mcp-review",
