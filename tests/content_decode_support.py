@@ -1,9 +1,8 @@
-"""Mechanical transport adapter for contained HTTP content decoding.
+"""Test client for the contained HTTP content decoder.
 
-A managed fetch reads the raw body without letting any HTTP stack decompress
-it (``native_archive_acquisition.fetch_managed_content_raw``). This module
-hands that body and its ``Content-Encoding`` values to
-``hol-guard-runtime content-decode --stdin``. The Rust worker owns every
+Nothing in Guard calls ``hol-guard-runtime content-decode --stdin`` yet, so
+this transport lives with the tests that drive the worker end to end. It
+hands a raw body and its ``Content-Encoding`` values to the worker. The Rust worker owns every
 decision: it refuses unsupported or over-deep codings before a decoder
 exists, and decodes the rest only after its containment is applied and
 proven. Python never decodes, never parses codings, and never returns the
@@ -27,14 +26,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from .codex_hook_launch_runtime import run_isolated_hook_process
-from .native_archive_acquisition import MANAGED_CONTENT_MAX_RAW_BYTES, fetch_managed_content_raw
-from .native_runtime import native_runtime_status
-from .runtime.restricted_archive_contract import RestrictedArchiveFailure
+from codex_plugin_scanner.guard.codex_hook_launch_runtime import run_isolated_hook_process
+from codex_plugin_scanner.guard.native_runtime import native_runtime_status
 
 ContentDecodeStatus = Literal["decoded", "rejected", "incomplete"]
 
 _REQUEST_SCHEMA = "guard-content-decode.v1"
+# The contained decoder's raw input ceiling.
+MANAGED_CONTENT_MAX_RAW_BYTES = 3 * 1024 * 1024
 _RESULT_SCHEMA = "guard-content-decode-result.v1"
 _NATIVE_FEATURE = "content-decode-v1"
 _MAX_CODE_CHARS = 128
@@ -49,19 +48,6 @@ _COUNTER_KEYS = frozenset({"decoder_calls", "input_bytes", "output_bytes", "laye
 _HEX_64_RE = re.compile(r"[0-9a-f]{64}")
 _STATUSES: dict[str, ContentDecodeStatus] = {"decoded": "decoded", "rejected": "rejected", "incomplete": "incomplete"}
 _RESULT_ENVELOPE_BYTES = 8 * 1024
-# Fetch outcomes that are a verdict on the response, not a transport fault.
-_FETCH_REFUSALS = frozenset(
-    {
-        "content_coding_unsupported",
-        "content_coding_too_deep",
-        "external_archive_download_size_limit",
-        "external_archive_destination_rejected",
-        "external_archive_redirect_rejected",
-        "external_archive_redirect_limit",
-        "external_archive_dns_rebinding",
-    }
-)
-
 # Runtime ceilings: input 3 MiB, output 32 MiB, ratio 1000, 4 layers,
 # 1 GiB memory, 30 s. Defaults stay well inside them.
 _DEFAULT_TIMEOUT_SECONDS = 5.0
@@ -89,7 +75,6 @@ class ManagedContentResult:
     message: str
     body: bytes | None = None
     counters: ContentDecodeCounters | None = None
-    final_url: str | None = None
 
 
 def _incomplete(code: str, message: str) -> ManagedContentResult:
@@ -259,52 +244,8 @@ def decode_content_native(
     return ManagedContentResult("decoded", code, message, body=body, counters=decode_counters)
 
 
-def fetch_managed_content(
-    source_url: str,
-    *,
-    state_dir: Path,
-    timeout_seconds: float = _DEFAULT_TIMEOUT_SECONDS,
-    max_raw_bytes: int = MANAGED_CONTENT_MAX_RAW_BYTES,
-    max_output_bytes: int = _DEFAULT_MAX_OUTPUT_BYTES,
-    max_redirects: int = 4,
-) -> ManagedContentResult:
-    """Fetch one public HTTPS document and decode it in containment.
-
-    For Guard's own managed fetches only, never arbitrary application HTTP.
-    The fetch carries no credentials and the decoder never sees a destination.
-    """
-
-    started = time.monotonic()
-    raw = fetch_managed_content_raw(
-        source_url, max_bytes=max_raw_bytes, max_redirects=max_redirects, timeout_seconds=timeout_seconds
-    )
-    if isinstance(raw, RestrictedArchiveFailure):
-        status: ContentDecodeStatus = "rejected" if raw.code in _FETCH_REFUSALS else "incomplete"
-        return ManagedContentResult(status, raw.code, raw.message)
-    remaining = timeout_seconds - (time.monotonic() - started)
-    if remaining <= 0:
-        return _incomplete("content_decode_timeout", "Content decoding exceeded Guard's time limit.")
-    decoded = decode_content_native(
-        raw.body,
-        raw.content_encoding,
-        state_dir=state_dir,
-        timeout_seconds=remaining,
-        max_input_bytes=max_raw_bytes,
-        max_output_bytes=max_output_bytes,
-    )
-    return ManagedContentResult(
-        decoded.status,
-        decoded.code,
-        decoded.message,
-        body=decoded.body,
-        counters=decoded.counters,
-        final_url=raw.final_url,
-    )
-
-
 __all__ = [
     "ContentDecodeCounters",
     "ManagedContentResult",
     "decode_content_native",
-    "fetch_managed_content",
 ]
