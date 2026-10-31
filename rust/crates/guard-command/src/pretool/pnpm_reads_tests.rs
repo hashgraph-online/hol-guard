@@ -169,6 +169,10 @@ fn a_settings_line_that_moves_the_fetch_or_the_hook_module_is_not_inert() {
         "<<: *shared",
         "catalog: &shared {registry: https://registry.example.test}",
         "packages: [{registry: https://registry.example.test}]",
+        "!!str registry: https://registry.example.test",
+        "&anchored registry: https://registry.example.test",
+        "*anchored : https://registry.example.test",
+        "\"\\u0072egistry\": https://registry.example.test",
     ] {
         assert!(!inert_setting_line(line), "{line}");
     }
@@ -194,6 +198,14 @@ fn pnpms_own_settings_files_are_read_beside_npms() {
     std::fs::write(
         &manifest,
         "packages:\n  - 'packages/*'\nregistry: https://registry.example.test\n",
+    )
+    .expect("workspace manifest");
+    assert!(!settings_inert(context(&home, &nested_text)));
+    // A carriage return of its own ends a YAML line, so the registry below one
+    // is a key this reading has to see.
+    std::fs::write(
+        &manifest,
+        "packages:\r  - 'packages/*'\rregistry: https://registry.example.test\r",
     )
     .expect("workspace manifest");
     assert!(!settings_inert(context(&home, &nested_text)));

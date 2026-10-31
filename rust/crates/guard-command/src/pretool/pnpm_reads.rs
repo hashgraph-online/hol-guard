@@ -235,7 +235,11 @@ fn yaml_settings_inert(path: &Path) -> bool {
     if !metadata.is_file() || metadata.len() > MAX_SETTINGS_BYTES {
         return false;
     }
-    fs::read_to_string(path).is_ok_and(|text| text.lines().all(inert_setting_line))
+    // YAML ends a line on a carriage return of its own as well as on a line
+    // feed, and `str::lines` keeps a lone `\r` inside the line it returns, so
+    // a settings file written with old Mac endings would hand this reading one
+    // line holding every key. Splitting on both characters reads each key.
+    fs::read_to_string(path).is_ok_and(|text| text.split(['\n', '\r']).all(inert_setting_line))
 }
 
 /// Settings that move where pnpm fetches from, how it trusts that transport,
@@ -276,27 +280,43 @@ const UNSAFE_SETTINGS: [&str; 24] = [
 /// names no key carries a value of a key already read, and a key written with
 /// an expansion in it is a key this check cannot decode.
 ///
-/// Three spellings put a key somewhere this line-by-line reading cannot see
+/// Several spellings put a key somewhere this line-by-line reading cannot see
 /// it, so they end the reading rather than passing. An explicit key writes
 /// the name after `?` and the value on a later line, leaving neither line
 /// shaped like the `name: value` this screens. A flow mapping carries its own
 /// keys inside braces on a line whose own key is something else, so
 /// `catalog: {registry: ...}` would be read as `catalog` alone. A merge key
 /// copies another mapping's keys in under a name of `<<`, which screens as no
-/// name at all. pnpm loads these files with js-yaml's default schema, which
-/// resolves all three, so a settings file that spells one is no longer a file
-/// this check can call inert.
+/// name at all.
+///
+/// A tag, an anchor or an alias in front of the key moves the name the parser
+/// reads away from the text on the line: `!!str registry`, `&a registry` and
+/// an `*a` standing for a `registry` anchored earlier all name `registry` to
+/// js-yaml while the comparison below would reduce them to something else. A
+/// double-quoted key carries escapes, so `"\u0072egistry"` names `registry`
+/// too. Each of those ends the reading as well.
+///
+/// pnpm loads these files with js-yaml's default schema, which resolves all
+/// of them, so a settings file that spells one is no longer a file this check
+/// can call inert.
 fn inert_setting_line(line: &str) -> bool {
     let line = line.trim();
     let line = line.strip_prefix('-').unwrap_or(line).trim_start();
     if line.is_empty() || line.starts_with('#') {
         return true;
     }
-    if line.starts_with('?') || line.starts_with("<<") || line.contains('{') {
+    if line.starts_with('?')
+        || line.starts_with("<<")
+        || line.contains('{')
+        || line.starts_with(['!', '&', '*'])
+    {
         return false;
     }
     let key = match line.chars().next() {
         Some(quote @ ('"' | '\'')) => match line[quote.len_utf8()..].split_once(quote) {
+            // A backslash inside a double-quoted key is an escape js-yaml
+            // resolves into a character this reading never sees.
+            Some((quoted, _)) if quote == '"' && quoted.contains('\\') => return false,
             Some((quoted, rest)) if rest.trim_start().starts_with(':') => quoted,
             _ => return true,
         },
