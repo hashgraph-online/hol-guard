@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -10,7 +10,6 @@ import pytest
 from codex_plugin_scanner.guard import review_policy_attribution as attribution_module
 from codex_plugin_scanner.guard.review_claim_hashing import compute_local_review_request_claim_hash
 from codex_plugin_scanner.guard.review_contracts import build_local_review_request_claim
-from codex_plugin_scanner.guard.review_policy_attribution import ATTRIBUTION_EPOCH_STATE_KEY
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import _oauth_metadata
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_exact_cloud_review_support import (
@@ -47,13 +46,6 @@ class _Lookups:
         return self.result
 
 
-def _start_attribution(store: GuardStore, *, since: datetime | None = None) -> None:
-    started = since or datetime.now(timezone.utc) - timedelta(minutes=1)
-    store.insert_sync_payload_if_absent(
-        ATTRIBUTION_EPOCH_STATE_KEY, {"since": started.isoformat()}, started.isoformat()
-    )
-
-
 def _setup(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -62,7 +54,6 @@ def _setup(
     lookup: dict[str, object] | Exception,
 ) -> tuple[GuardStore, dict[str, object], _Lookups]:
     store = connected_exact_review_store(tmp_path)
-    _start_attribution(store)
     add_review_request(store, review_request("req-attribution"))
     row = store.get_raw_approval_request_snapshot("req-attribution")
     assert isinstance(row, dict)
@@ -157,18 +148,24 @@ def test_bundle_published_after_the_request_is_not_credited(tmp_path: Path, monk
     assert lookups.calls == []
 
 
-def test_request_created_before_attribution_started_is_never_attributed(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    "sent",
+    [
+        # An acknowledged event is deleted from the outbox.
+        "delete from guard_review_outbox_events where local_request_id = ?",
+        "update guard_review_outbox_events set attempt_count = 1 where local_request_id = ?",
+        "update guard_review_outbox_events set acknowledged_at = '2026-01-01T00:00:00Z' where local_request_id = ?",
+    ],
+    ids=["acknowledged-and-pruned", "upload-attempted", "acknowledged"],
+)
+def test_request_that_may_have_reached_cloud_keeps_a_claim_without_a_rule(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, sent: str
 ) -> None:
-    # Such a request may already have reached Cloud with a claim that had no rule fields.
-    store = connected_exact_review_store(tmp_path)
-    add_review_request(store, review_request("req-before-upgrade"))
-    row = store.get_raw_approval_request_snapshot("req-before-upgrade")
-    assert isinstance(row, dict)
-    lookups = _Lookups(_decision())
+    store, row, lookups = _setup(tmp_path, monkeypatch, bundle=None, lookup=_decision())
     issued = _created(row) - timedelta(minutes=5)
     monkeypatch.setattr(attribution_module, "validated_synced_policy_bundle", lambda _store: _bundle(issued_at=issued))
-    monkeypatch.setattr(store, "resolve_policy_decision_lookup", lookups)
+    with store._connect() as connection:
+        assert connection.execute(sent, ("req-attribution",)).rowcount > 0
     oauth = _oauth_metadata(store)
 
     first = build_local_review_request_claim(request_row=row, oauth=oauth, store=store)
@@ -209,7 +206,6 @@ def test_claim_names_the_rule_from_a_signed_bundle_through_the_native_lookup(tmp
     from tests.policy_store_support import replace_remote_policies, resolve_policy
 
     store = connected_exact_review_store(tmp_path)
-    _start_attribution(store)
     rules: list[dict[str, object]] = [
         {
             "ruleId": "mcp-review",

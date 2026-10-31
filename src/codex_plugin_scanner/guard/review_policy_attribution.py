@@ -10,23 +10,25 @@ even when the bundle or local decisions change afterwards.
 
 Cloud verifies its signed decision against the claim it received, so a claim
 must never gain these fields after it was sent. Every first answer is
-recorded, including "no rule" after a failed lookup, and requests created
-before this home first recorded an answer are never attributed: they may
-already have reached Cloud without the fields.
+recorded, including "no rule" after a failed lookup, and a request is only
+attributed while its first outbox event is still waiting for its first
+upload. Acknowledged events are deleted, so anything else may already have
+reached Cloud without the fields.
 """
 
 from __future__ import annotations
 
 import logging
 import re
+import sqlite3
 from collections.abc import Callable, Mapping
+from contextlib import AbstractContextManager
 from datetime import datetime
 from typing import Protocol, cast
 
 from .synced_policy import SyncPayloadReader, validated_synced_policy_bundle
 
 ATTRIBUTION_STATE_PREFIX = "review_policy_attribution:"
-ATTRIBUTION_EPOCH_STATE_KEY = "review_policy_attribution_epoch"
 _LOGGER = logging.getLogger(__name__)
 _REMOTE_POLICY_SOURCE = "policy-bundle"
 _REVIEW_ACTIONS = frozenset({"review", "require-reapproval"})
@@ -70,18 +72,25 @@ def _timestamp(value: object) -> datetime | None:
     return parsed if parsed.tzinfo is not None else None
 
 
-def _attribution_epoch(get_payload: Callable[[str], object], insert_payload: Callable[..., object]) -> datetime | None:
-    """When this home first attributed a request; older requests are never attributed."""
+def _first_claim_not_yet_sent(store: object, request_id: str) -> bool:
+    """True only while the request's first outbox event awaits its first upload."""
 
-    _ = insert_payload(
-        ATTRIBUTION_EPOCH_STATE_KEY,
-        {"since": datetime.now().astimezone().isoformat()},
-        datetime.now().astimezone().isoformat(),
+    connect = getattr(store, "_connect", None)
+    if not callable(connect):
+        return False
+    connect = cast(Callable[[], AbstractContextManager[sqlite3.Connection]], connect)
+    with connect() as connection:
+        rows: list[tuple[object, object, object]] = connection.execute(
+            """
+            select request_sequence, attempt_count, acknowledged_at
+            from guard_review_outbox_events
+            where local_request_id = ?
+            """,
+            (request_id,),
+        ).fetchall()
+    return any(sequence == 1 for sequence, _, _ in rows) and all(
+        attempts == 0 and acknowledged is None for _, attempts, acknowledged in rows
     )
-    recorded = get_payload(ATTRIBUTION_EPOCH_STATE_KEY)
-    if not isinstance(recorded, dict):
-        return None
-    return _timestamp(cast(dict[str, object], recorded).get("since"))
 
 
 def _bundle_rule_ids(bundle: Mapping[str, object]) -> set[str]:
@@ -144,9 +153,7 @@ def review_policy_attribution(store: object, request_row: Mapping[str, object]) 
     if not isinstance(recorded, dict):
         attribution: dict[str, str] = {}
         try:
-            epoch = _attribution_epoch(get_payload, insert_payload)
-            created = _timestamp(request_row.get("created_at"))
-            if epoch is not None and created is not None and created >= epoch:
+            if _first_claim_not_yet_sent(store, request_id):
                 attribution = _resolve(cast(_AttributionStore, store), request_row)
         except Exception as error:
             # A claim built now may reach Cloud, so the failure is recorded as
