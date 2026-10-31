@@ -154,15 +154,16 @@ CONTAINED_TEST_HELPERS_SOURCE = (
       GUARD_CONTAINED_SINK_COMMAND.length > 0 && GUARD_CONTAINED_REQUEST_ROOT !== "";
     // The runtime's bridge marks a resident's workspace sandbox that its own
     // sink runs as Guard's does; that sink then takes the call, with no
-    // Python start. It asks the resident again before anything runs.
+    // Python start. It asks the resident again before anything runs. On Linux
+    // it also runs the read-only profiles Guard's own sink leaves to review.
     const nativeSink = !boundBash && !windowsSink && process.platform !== "win32" &&
       Reflect.get(response, "native_contained_sink") === true &&
       typeof GUARD_NATIVE_HOOK_RUNTIME === "string" && GUARD_NATIVE_HOOK_RUNTIME.startsWith("/");
     if (
       response.decision !== "deny" || response.policy_action !== "sandbox-required" ||
       !profileMatches || response.observe_mode === true ||
-      (process.platform !== "darwin" && !(process.platform === "linux" && profile === "workspace-contained-v1") &&
-        !windowsSink) ||
+      (process.platform !== "darwin" &&
+        !(process.platform === "linux" && (profile === "workspace-contained-v1" || nativeSink)) && !windowsSink) ||
       (!windowsSink && !nativeSink &&
         (GUARD_CLI_WRAPPER_ACCEPTS_JSON_ARGS || !GUARD_CLI_WRAPPER_COMMAND.startsWith("/"))) ||
       snapshot.payload.tool_name !== "bash" || !key || containedTestRequests.has(key) ||

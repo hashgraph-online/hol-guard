@@ -267,8 +267,12 @@ const raw = readFileSync(join(containedTestRequests.get('marked'), 'request.json
 // An unmarked answer keeps Guard's sink, which this wrapper cannot start.
 const unmarked = prepareContainedTestInput(required, snapshot('unmarked'));
 const other = prepareContainedTestInput({ ...required, native_contained_sink: 'yes' }, snapshot('other'));
+// A marked read-only run takes the runtime's sink on Linux too.
+const readonly = prepareContainedTestInput({ decision: 'deny', policy_action: 'sandbox-required',
+  reason_code: 'native_pytest_readonly_containment_required', required_execution_profile: 'pytest-readonly-v2',
+  native_contained_sink: true }, snapshot('readonly'));
 handlers.session_stop();
-console.log(JSON.stringify({ marked, raw, unmarked, other }));
+console.log(JSON.stringify({ marked, raw, unmarked, other, readonly }));
 """,
         encoding="utf-8",
     )
@@ -277,6 +281,7 @@ console.log(JSON.stringify({ marked, raw, unmarked, other }));
     result = json.loads(completed.stdout)
     assert result["unmarked"] is None
     assert result["other"] is None
+    assert shlex.split(result["readonly"]["command"])[:2] == ["/opt/hol guard/runtime", "contained-workspace-sink"]
     argv = shlex.split(result["marked"]["command"])
     assert argv[:4] == ["/opt/hol guard/runtime", "contained-workspace-sink", "--harness", "omp"]
     # The runtime's sink takes exactly its six named values, home included.
