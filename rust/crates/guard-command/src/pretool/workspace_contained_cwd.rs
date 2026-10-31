@@ -135,6 +135,19 @@ pub(super) fn locations(model: &CanonicalCommandV1, workspace: &Path) -> Option<
                 if !returning && target.starts_with(['-', '~', '+']) {
                     return None;
                 }
+                // `cd -` is `$OLDPWD`, not wherever the walk last saw the
+                // shell. The two agree only while nothing else writes that
+                // variable, and nothing here reads the assignments that
+                // would: a run that names it at all is one the walk cannot
+                // follow back.
+                if returning
+                    && model
+                        .normalized_text
+                        .to_ascii_lowercase()
+                        .contains("oldpwd")
+                {
+                    return None;
+                }
                 // bash's `lastpipe` and zsh's default both run the last
                 // element of a pipeline in the shell that read it, so a `cd`
                 // inside one may move the shell the rest of the command runs
@@ -186,7 +199,16 @@ pub(super) fn locations(model: &CanonicalCommandV1, workspace: &Path) -> Option<
                 // the climb is the step out, not the work. Carry it rather
                 // than giving up on the whole walk; the check above stops it
                 // as soon as anything would run from there.
-                if !inside && !descent_failed {
+                //
+                // Only a climb is carried that way. A branch whose descent
+                // failed is still a shell, and a move that names somewhere
+                // else is that shell leaving for it, not stepping back out of
+                // a descent that never happened.
+                let climbs = returning
+                    || Path::new(target.as_str()).components().all(|component| {
+                        matches!(component, Component::ParentDir | Component::CurDir)
+                    });
+                if !inside && !(descent_failed && climbs) {
                     return None;
                 }
                 // A failed cd leaves the old cwd. &&/|| choose the corresponding

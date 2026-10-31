@@ -203,3 +203,46 @@ fn a_return_to_the_previous_directory_follows_the_move_the_walk_saw() {
         assert!(!shaped(command, &ws), "{command}");
     }
 }
+
+/// `cd -` reads `$OLDPWD`, which the shell is free to set to anywhere. The
+/// walk follows moves, not assignments, so the two part company as soon as a
+/// run writes that variable and the return can no longer be taken for the
+/// descent's own step back.
+#[test]
+fn a_return_to_a_rewritten_previous_directory_is_refused() {
+    let ws = workspace("cwd-oldpwd", true);
+    std::fs::create_dir_all(ws.join("app")).unwrap();
+    for command in [
+        "cd app && export OLDPWD=/etc && cd - && cat passwd",
+        "cd app && OLDPWD=/etc && cd - && ls",
+        "cd app && ls && OLDPWD=/etc cd -",
+        "cd app && ls && cd - && cat $OLDPWD/passwd",
+        "cd app && oldpwd=/etc && cd - && ls",
+    ] {
+        assert!(!shaped(command, &ws), "{command}");
+    }
+}
+
+/// The failed-descent branch is carried only so a climb back out of a
+/// descent that never happened does not sink the whole walk. A move that
+/// names somewhere else is that shell leaving for it, which is the step out
+/// the sandbox exists to refuse.
+#[test]
+fn a_failed_descent_branch_carries_a_climb_and_nothing_else() {
+    let ws = workspace("cwd-failed-descent", true);
+    std::fs::create_dir_all(ws.join("app")).unwrap();
+    for command in [
+        "cd app || cd /etc",
+        "cd app || cd /etc && ls",
+        "cd app; cd /etc",
+        "cd app || cd ~",
+        "cd app && ls || cd /tmp",
+    ] {
+        assert!(!shaped(command, &ws), "{command}");
+    }
+    // The climb itself is still carried: the branch that would land above the
+    // root is the one where the first move failed, and nothing runs there.
+    for command in ["cd app && ls; cd ..", "cd app && ls || cd .."] {
+        assert!(shaped(command, &ws), "{command}");
+    }
+}

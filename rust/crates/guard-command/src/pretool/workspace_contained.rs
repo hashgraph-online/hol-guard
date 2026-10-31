@@ -261,9 +261,17 @@ pub(crate) fn command_shape(
         // runs nothing afterwards. Hand the operand to the reach check as
         // already accounted for, so everything else about the segment, a
         // redirect target above all, is still read from that shell.
-        let walked_move = moves
+        //
+        // Only the bare spelling earns that, because only the bare spelling is
+        // what the walk followed: `./cd` is a program in the workspace that
+        // happens to carry the builtin's name, and the walk never moved for it.
+        // And Git's metadata stays refused wherever it stands, since the reach
+        // check denies it to every program but `git` and an accounted operand
+        // would carry it straight past that refusal.
+        let walked_move = matches!(executable, "cd" | "pushd")
             && walked_inside
-            && matches!(segment.arguments.as_slice(), [target] if cd::walked(target));
+            && matches!(segment.arguments.as_slice(),
+                [target] if cd::walked(target) && !names_git_metadata(target));
         let accounted = script
             .as_ref()
             .map(|(operand, _)| operand.as_str())
@@ -384,6 +392,15 @@ pub(crate) fn split_at_init(
             .or_else(|| tail.strip_prefix('\n'))?
     };
     Some((prefix, rest.trim().to_owned()))
+}
+
+/// Whether `target` names Git's metadata directory, which belongs to `git`
+/// alone wherever it stands. The reach check refuses it to every other
+/// program, so a move that names it is never already accounted for.
+fn names_git_metadata(target: &str) -> bool {
+    Path::new(target)
+        .components()
+        .any(|component| component.as_os_str() == ".git")
 }
 
 fn extensions_contain(

@@ -244,3 +244,39 @@ fn a_move_the_walk_cannot_read_as_the_shell_does_is_refused() {
     // directory the sandbox bounds.
     assert!(shaped("cd deep && ls && cd ..", &ws));
 }
+
+/// Only the shell's own `cd` moves the shell. A program in the workspace that
+/// carries the builtin's name is an ordinary executable, and the walk never
+/// moved for it, so its operand is read as the path it is.
+#[test]
+fn a_program_named_after_the_builtin_earns_no_move_exemption() {
+    let ws = workspace("cd-lookalike", true);
+    std::fs::create_dir_all(ws.join("app")).unwrap();
+    for command in [
+        "cd app && ./cd /etc/passwd",
+        "cd app && ./cd /etc",
+        "cd app && bin/cd /etc/passwd",
+        "cd app && ./pushd /etc/passwd",
+    ] {
+        assert!(!shaped(command, &ws), "{command}");
+    }
+}
+
+/// Git's metadata belongs to `git`. The reach check refuses that directory to
+/// every other program, and a move into it must not carry the name past that
+/// refusal for whatever runs next.
+#[test]
+fn a_move_into_git_metadata_is_refused() {
+    let ws = workspace("cd-git-metadata", true);
+    std::fs::create_dir_all(ws.join(".git")).unwrap();
+    std::fs::create_dir_all(ws.join("app/.git")).unwrap();
+    for command in [
+        "cd .git && cat config",
+        "cd .git && ls",
+        "cd app/.git && cat config",
+        "cd app && cd ../.git && cat config",
+        "pushd .git && cat config",
+    ] {
+        assert!(!shaped(command, &ws), "{command}");
+    }
+}
