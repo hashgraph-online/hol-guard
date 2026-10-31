@@ -28,7 +28,7 @@
 //! daemon's can still change.
 
 use std::path::Path;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use guard_command::hook_evidence_writer::RuntimeHookEvidenceWriter;
 use guard_contracts::{GuardHookEdgeResultV2, GuardHookEnvelopeV2};
@@ -64,7 +64,7 @@ pub(crate) fn encode(
     started: Instant,
 ) -> Result<Vec<u8>, String> {
     let mut edge = crate::edge_structured::attached(envelope, edge, started);
-    if resident && envelope.record_receipt {
+    if resident && envelope.record_receipt && !budget_spent(envelope, started) {
         let activity = edge_activity(envelope, &edge);
         edge.receipt_recorded = true;
         edge.activity_recorded = activity.is_some();
@@ -97,6 +97,18 @@ pub(crate) fn encode(
         edge.activity_recorded = false;
     }
     crate::encode_response(&edge)
+}
+
+/// Whether the daemon's budget for this answer ran out while the edge worked.
+///
+/// A daemon that stops waiting records the hook as unavailable on its own, so
+/// an edge that records evidence after that point would leave two records for
+/// one hook. Past the budget the edge records nothing and leaves it all to a
+/// daemon that may still read the answer.
+fn budget_spent(envelope: &GuardHookEnvelopeV2, started: Instant) -> bool {
+    envelope
+        .deadline_budget_ms
+        .is_some_and(|budget| started.elapsed() >= Duration::from_millis(budget))
 }
 
 /// The command activity an edge answer queues behind its receipt.
@@ -349,6 +361,9 @@ fn submit_pre_tool_activity(writer: &RuntimeHookEvidenceWriter, record: &Value) 
     activity.submit(writer, harness, payload, receipt_id)
 }
 
+#[cfg(test)]
+#[path = "edge_receipt_deadline_tests.rs"]
+mod deadline_tests;
 #[cfg(test)]
 #[path = "edge_receipt_tests.rs"]
 mod tests;

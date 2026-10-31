@@ -15,7 +15,7 @@ use crate::hook_evidence_writer_op::{
 const VECTORS: &str = include_str!("../testdata/guard_store/command_activity_vectors.json");
 
 /// A Guard home holding the recorded command-activity schema and seed.
-fn store_home(tag: &str) -> std::path::PathBuf {
+pub(super) fn store_home(tag: &str) -> std::path::PathBuf {
     let vectors: Value = serde_json::from_str(VECTORS).unwrap();
     let scenario = vectors["scenarios"]
         .as_array()
@@ -29,7 +29,7 @@ fn store_home(tag: &str) -> std::path::PathBuf {
     home
 }
 
-fn writer(home: &Path, action: Value) -> Value {
+pub(super) fn writer(home: &Path, action: Value) -> Value {
     let Value::Object(mut wire) = json!({
         "schema": HOOK_EVIDENCE_WRITER_REQUEST_SCHEMA,
         "request_id": "edge-receipt",
@@ -47,7 +47,7 @@ fn writer(home: &Path, action: Value) -> Value {
 }
 
 /// Start the home's writer the way the daemon does: with a submission.
-fn start_writer(home: &Path) {
+pub(super) fn start_writer(home: &Path) {
     let started = writer(
         home,
         json!({
@@ -61,13 +61,13 @@ fn start_writer(home: &Path) {
     assert_eq!(started["payload"]["queued"], json!(true));
 }
 
-fn receipts_accepted(home: &Path) -> Value {
+pub(super) fn receipts_accepted(home: &Path) -> Value {
     writer(home, json!({"action": "stats"}))["payload"]["receipt_accepted"].clone()
 }
 
 /// The writer counts a receipt in `accepted` as well, so the activities are
 /// what is left once its receipts are taken out.
-fn activities_accepted(home: &Path) -> Value {
+pub(super) fn activities_accepted(home: &Path) -> Value {
     let stats = writer(home, json!({"action": "stats"}));
     let payload = &stats["payload"];
     json!(payload["accepted"].as_u64().unwrap() - payload["receipt_accepted"].as_u64().unwrap())
@@ -75,7 +75,7 @@ fn activities_accepted(home: &Path) -> Value {
 
 /// An allowed `PreToolUse` answer and the envelope it answers, which now
 /// names `home` and asks for the receipt when `record` is set.
-fn answered(home: &Path, record: bool) -> (GuardHookEnvelopeV2, GuardHookEdgeResultV2) {
+pub(super) fn answered(home: &Path, record: bool) -> (GuardHookEnvelopeV2, GuardHookEdgeResultV2) {
     let mut envelope = crate::edge::tests::envelope(
         "PreToolUse",
         json!({"tool_name": "Bash", "tool_input": {"command": "pwd"}}),
@@ -88,7 +88,11 @@ fn answered(home: &Path, record: bool) -> (GuardHookEnvelopeV2, GuardHookEdgeRes
     (envelope, edge)
 }
 
-fn encoded(envelope: &GuardHookEnvelopeV2, resident: bool, edge: GuardHookEdgeResultV2) -> Value {
+pub(super) fn encoded(
+    envelope: &GuardHookEnvelopeV2,
+    resident: bool,
+    edge: GuardHookEdgeResultV2,
+) -> Value {
     serde_json::from_slice(&encode(envelope, resident, edge, Instant::now()).unwrap()).unwrap()
 }
 
