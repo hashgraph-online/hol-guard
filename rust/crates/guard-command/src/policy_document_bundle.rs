@@ -76,6 +76,9 @@ pub(super) fn compile(input: &Value, deadline: Instant) -> Result<Value, Error> 
     let Some(Value::Array(rules)) = spec.get("rules") else {
         return Err(refused("invalid_policy_rules"));
     };
+    // An Evaluate policy rolls out its rules to watch them, not to enforce
+    // them, so the device keeps its own decisions until the policy is enforced.
+    let evaluating = spec["defaults"]["mode"] == "observe";
     let local: Vec<Value> = rules
         .iter()
         .filter_map(Value::as_object)
@@ -85,8 +88,9 @@ pub(super) fn compile(input: &Value, deadline: Instant) -> Result<Value, Error> 
     spec.insert("rules".to_owned(), Value::Array(local));
     let mut document = payload.clone();
     document.insert("spec".to_owned(), Value::Object(spec));
-    compiler::compile(
+    let rows = compiler::compile(
         &mapping::parse("GuardPolicyDocument", &Value::Object(document))?.mapping,
         deadline,
-    )
+    )?;
+    Ok(if evaluating { Value::Array(Vec::new()) } else { rows })
 }
