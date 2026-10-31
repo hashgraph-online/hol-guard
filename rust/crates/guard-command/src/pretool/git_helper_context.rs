@@ -131,9 +131,11 @@ fn segment_runs_helpers(original: &crate::CommandSegmentV1, context: PathContext
                         // configuration.
                         "shortlog" | "check-ignore" | "count-objects" | "check-attr"
                         | "sparse-checkout" => true,
-                        // A bisect log replays through the pager, and a note
-                        // prints through it too; both honor core.pager.
-                        "bisect" | "notes" => true,
+                        // A bisect log replays through the pager, a note
+                        // prints through it too, and a replacement listing
+                        // reads the repository's configuration to print the
+                        // refs; all three honor core.pager.
+                        "bisect" | "notes" | "replace" => true,
                         // Finding the untracked paths refreshes the index,
                         // which starts a configured core.fsmonitor.
                         "clean" => true,

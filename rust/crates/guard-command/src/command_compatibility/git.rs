@@ -262,9 +262,10 @@ pub(super) fn inspection_arguments<'a>(
         // print: a listing and a `show` of one entry.
         Some("stash") => crate::pretool::git_stash_reads::read_form(&remaining[1..]),
         Some("submodule") => crate::pretool::git_submodule_reads::read_form(&remaining[1..]),
-        // A bisect session and a commit's notes each print in one grammar and
-        // write in every other, so each is admitted only in that grammar.
-        Some(record @ ("bisect" | "notes")) => {
+        // A bisect session, a commit's notes and the replacement refs each
+        // print in one grammar and write in every other, so each is admitted
+        // only in that grammar.
+        Some(record @ ("bisect" | "notes" | "replace")) => {
             crate::pretool::git_side_record_reads::read_form(record, &remaining[1..])
         }
         // `sparse-checkout` prints the patterns the tree is narrowed to in one

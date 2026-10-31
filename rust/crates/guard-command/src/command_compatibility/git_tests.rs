@@ -377,6 +377,13 @@ fn the_records_beside_the_history_carry_their_own_rules() {
 /// `git replace` with no object prints the replacements the repository has,
 /// and that read is recognised before any rule is attributed, so naming
 /// replace does not take its silence away.
+///
+/// The routed spellings are here because they are recognised on a different
+/// path: a bare listing is admitted by the bounded inspection, while one
+/// behind `-C` is admitted only if the subcommand is also on the read path
+/// the pretool proofs use. A listing recognised on one path and not the other
+/// would put the routed form back on the uncertainty floor this rule exists
+/// to remove.
 #[test]
 fn printing_the_replacement_refs_stays_silent() {
     for command in [
@@ -384,8 +391,23 @@ fn printing_the_replacement_refs_stays_silent() {
         "git replace -l",
         "git replace --list refs/replace/*",
         "git replace --format=long -l",
+        "git -C sub replace --list",
+        "git -C sub replace",
     ] {
         assert!(observations(command).rule_matches.is_empty(), "{command}");
+    }
+    // The spellings that write a replacement ref keep their rule wherever they
+    // are routed from.
+    for command in ["git replace HEAD HEAD~1", "git -C sub replace -d HEAD"] {
+        assert_eq!(
+            observations(command)
+                .rule_matches
+                .iter()
+                .map(|item| item.rule_id)
+                .collect::<Vec<_>>(),
+            vec!["command.git.replace"],
+            "{command}"
+        );
     }
 }
 
