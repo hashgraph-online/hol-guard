@@ -23,17 +23,15 @@ use nix::sys::signal::{kill, killpg, SigSet, Signal};
 use nix::unistd::Pid;
 
 use super::denial::{denial_note, loopback_denied};
+use super::output::Shaping;
 use super::{envelope, Failure, Outcome, LAUNCH_COMMAND, SANDBOX_UNAVAILABLE};
 
-const OUTPUT_LIMIT: usize = 1024 * 1024;
-const TRUNCATED: &str = "\n[HOL Guard truncated restricted pytest output]\n";
-const CPU_SECONDS: u64 = 1200;
-const ADDRESS_SPACE_BYTES: u64 = 4 * 1024 * 1024 * 1024;
-const FILE_SIZE_BYTES: u64 = 256 * 1024 * 1024;
-const OPEN_FILES: u64 = 256;
 const CEILING_BUDGET: Duration = Duration::from_secs(5);
 /// The launcher's `CEILING` for a host step, which runs without limits.
 pub(super) const HOST_STEP: &str = "host";
+/// The word in front of a Node run's argv: the launcher bounds its writable
+/// memory instead of its whole address space (`limits`).
+pub(super) const NODE_MEMORY: &str = "node-memory";
 /// Lowers the process ceiling the launcher passes as `$1`, then runs the
 /// rest: Apple targets expose `RLIMIT_NPROC` only through the shell.
 #[cfg(target_vendor = "apple")]
@@ -55,6 +53,8 @@ struct Running {
 /// running command.
 pub(super) struct Signals {
     running: Arc<Mutex<Running>>,
+    /// The redirections of the wrapper being run.
+    pub(super) output: Shaping,
 }
 
 impl Signals {
@@ -76,7 +76,10 @@ impl Signals {
                     forward(&shared, signal);
                 });
         }
-        Self { running }
+        Self {
+            running,
+            output: Shaping::default(),
+        }
     }
 
     /// Remove `scratch` should a signal end the sink between commands.
@@ -103,6 +106,7 @@ impl Signals {
     pub(super) fn idle() -> Self {
         Self {
             running: Arc::new(Mutex::new(Running::default())),
+            output: Shaping::default(),
         }
     }
 
@@ -157,13 +161,12 @@ pub(super) fn run_backend(
     timeout_seconds: u64,
     notes: Notes<'_>,
 ) -> Outcome<i32> {
-    let deadline = std::time::Instant::now() + CEILING_BUDGET;
-    let ceiling = envelope(crate::restricted_process_ceiling::evaluate(deadline))?
-        .as_u64()
-        .ok_or_else(|| super::unavailable("invalid_reply"))?;
+    let ceiling = ceiling()?;
     let launcher = std::env::current_exe().map_err(|error| not_started(&error))?;
     let stdout = capture_file(scratch, "stdout")?;
     let stderr = capture_file(scratch, "stderr")?;
+    // A merged run writes both streams to one file, in the order written.
+    let merge = signals.output.merges();
     let mut command = Command::new(launcher);
     command
         .arg(LAUNCH_COMMAND)
@@ -174,11 +177,11 @@ pub(super) fn run_backend(
         .current_dir(workspace)
         .stdin(Stdio::null())
         .stdout(clone(&stdout)?)
-        .stderr(clone(&stderr)?);
+        .stderr(clone(if merge { &stdout } else { &stderr })?);
     let (status, timed_out) = run_tracked(&mut command, signals, timeout_seconds, true)
         .map_err(|error| not_started(&error))?;
-    let stdout_text = replay(stdout, &mut std::io::stdout());
-    let stderr_text = replay(stderr, &mut std::io::stderr());
+    let stdout_text = signals.output.replay_out(stdout);
+    let stderr_text = signals.output.replay_err(stderr);
     if timed_out {
         return Err(Failure::with_exit(
             "pytest_restricted_timeout",
@@ -201,11 +204,32 @@ pub(super) fn run_backend(
         Notes::Silent => None,
     };
     if let Some(note) = note {
-        let mut stderr = std::io::stderr().lock();
-        let _ = writeln!(stderr, "\n[HOL Guard] {note}");
-        let _ = stderr.flush();
+        signals
+            .output
+            .err(format!("\n[HOL Guard] {note}\n").as_bytes());
     }
     Ok(code)
+}
+
+/// The process ceiling the launcher lowers a sandboxed command to.
+fn ceiling() -> Outcome<u64> {
+    let deadline = std::time::Instant::now() + CEILING_BUDGET;
+    envelope(crate::restricted_process_ceiling::evaluate(deadline))?
+        .as_u64()
+        .ok_or_else(|| super::unavailable("invalid_reply"))
+}
+
+/// The argv that starts `backend` through the launcher, under the
+/// sandbox's resource limits, for a caller that captures its output.
+pub(super) fn launcher_argv(backend: &[String]) -> Outcome<Vec<String>> {
+    let launcher = std::env::current_exe().map_err(|error| not_started(&error))?;
+    let launcher = launcher
+        .into_os_string()
+        .into_string()
+        .map_err(|_| super::unavailable("launcher_path"))?;
+    let mut argv = vec![launcher, LAUNCH_COMMAND.to_owned(), ceiling()?.to_string()];
+    argv.extend(backend.iter().cloned());
+    Ok(argv)
 }
 
 /// Start `command`, which the launcher makes a session of its own, and wait
@@ -257,7 +281,7 @@ fn not_started(error: &std::io::Error) -> Failure {
 
 /// A new owner-only file in `scratch`, unlinked once open so only the
 /// descriptors hold it.
-fn capture_file(scratch: &Path, name: &str) -> Outcome<File> {
+pub(super) fn capture_file(scratch: &Path, name: &str) -> Outcome<File> {
     let path = scratch.join(name);
     let file = std::fs::OpenOptions::new()
         .read(true)
@@ -273,41 +297,6 @@ fn capture_file(scratch: &Path, name: &str) -> Outcome<File> {
 
 fn clone(file: &File) -> Outcome<File> {
     file.try_clone().map_err(|error| not_started(&error))
-}
-
-/// Write up to `OUTPUT_LIMIT` bytes of `file` to `out` as display text;
-/// the raw bytes read, for the denial check.
-fn replay(mut file: File, out: &mut impl Write) -> Vec<u8> {
-    let mut raw = Vec::new();
-    if file.seek(SeekFrom::Start(0)).is_ok() {
-        let limit = u64::try_from(OUTPUT_LIMIT).unwrap_or(u64::MAX);
-        let _ = (&mut file).take(limit + 1).read_to_end(&mut raw);
-    }
-    let truncated = raw.len() > OUTPUT_LIMIT;
-    raw.truncate(OUTPUT_LIMIT);
-    let mut text = display_text(&raw);
-    if truncated {
-        text.push_str(TRUNCATED);
-    }
-    let _ = out.write_all(text.as_bytes());
-    let _ = out.flush();
-    raw
-}
-
-/// Output as text a terminal shows safely: CRLF folded, and control
-/// characters other than newline and tab replaced.
-fn display_text(raw: &[u8]) -> String {
-    String::from_utf8_lossy(raw)
-        .replace("\r\n", "\n")
-        .chars()
-        .map(|character| {
-            if character == '\n' || character == '\t' || u32::from(character) >= 32 {
-                character
-            } else {
-                '\u{fffd}'
-            }
-        })
-        .collect()
 }
 
 /// The shell's view of `status`: the code, or 128 plus the signal.
@@ -387,7 +376,7 @@ fn run_captured_in(
     })
 }
 
-fn read_all(mut file: File) -> Vec<u8> {
+pub(super) fn read_all(mut file: File) -> Vec<u8> {
     let mut raw = Vec::new();
     if file.seek(SeekFrom::Start(0)).is_ok() {
         let _ = file.read_to_end(&mut raw);
@@ -395,9 +384,10 @@ fn read_all(mut file: File) -> Vec<u8> {
     raw
 }
 
-/// `contained-workspace-launch CEILING ARGV...`: start a session, apply the
-/// sandbox's resource limits, and exec `ARGV`. With `host` for `CEILING`,
-/// a host step: the session only. Returns only on failure.
+/// `contained-workspace-launch CEILING [node-memory] ARGV...`: start a
+/// session, apply the sandbox's resource limits, and exec `ARGV`. With
+/// `host` for `CEILING`, a host step: the session only. Returns only on
+/// failure.
 pub(crate) fn launch(args: &[String]) -> i32 {
     let Some((ceiling, argv)) = args.split_first() else {
         return launch_failed("missing command");
@@ -408,12 +398,18 @@ pub(crate) fn launch(args: &[String]) -> i32 {
         let error = Command::new(program).args(arguments).exec();
         return launch_failed(&error.to_string());
     }
+    let (node, argv) = match argv.split_first() {
+        Some((word, rest)) if word == NODE_MEMORY => (true, rest),
+        _ => (false, argv),
+    };
     let (Ok(ceiling), Some(_)) = (ceiling.parse::<u64>(), argv.first()) else {
         return launch_failed("invalid launch arguments");
     };
     let _ = nix::unistd::setsid();
     release_forwarded_signals();
-    limit_resources(ceiling);
+    if !limits::apply(ceiling, node) {
+        return launch_failed("Linux Node memory limits are unavailable");
+    }
     #[cfg(target_vendor = "apple")]
     let error = Command::new("/bin/sh")
         .arg("-c")
@@ -451,42 +447,8 @@ fn launch_failed(detail: &str) -> i32 {
     126
 }
 
-fn limit_resources(ceiling: u64) {
-    use nix::sys::resource::Resource;
-    lower(Resource::RLIMIT_CPU, CPU_SECONDS);
-    lower(Resource::RLIMIT_AS, ADDRESS_SPACE_BYTES);
-    lower(Resource::RLIMIT_FSIZE, FILE_SIZE_BYTES);
-    lower(Resource::RLIMIT_NOFILE, OPEN_FILES);
-    #[cfg(not(target_vendor = "apple"))]
-    lower(Resource::RLIMIT_NPROC, ceiling);
-    #[cfg(target_vendor = "apple")]
-    let _ = ceiling;
-}
-
-/// Lower `resource` to `requested` without raising either limit; a limit
-/// the platform refuses is left as it is.
-fn lower(resource: nix::sys::resource::Resource, requested: u64) {
-    let Ok((soft, hard)) = nix::sys::resource::getrlimit(resource) else {
-        return;
-    };
-    let (soft, hard) = lowered(soft, hard, requested);
-    let _ = nix::sys::resource::setrlimit(resource, soft, hard);
-}
-
-fn lowered(soft: u64, hard: u64, requested: u64) -> (u64, u64) {
-    let infinite = libc::RLIM_INFINITY;
-    let hard = if hard == infinite {
-        requested
-    } else {
-        requested.min(hard)
-    };
-    let soft = if soft == infinite {
-        hard
-    } else {
-        requested.min(soft).min(hard)
-    };
-    (soft, hard)
-}
+#[path = "contained_workspace_sink_limits.rs"]
+mod limits;
 
 #[cfg(test)]
 #[path = "contained_workspace_sink_process_tests.rs"]

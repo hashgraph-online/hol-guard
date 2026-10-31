@@ -5550,6 +5550,54 @@
       "expect": "allow"
     },
     {
+      "id": "queue-cloud-sdk-path-kubectl-get-pods",
+      "fix_area": "queue",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "${HOME}/google-cloud-sdk/bin/kubectl get pods -l app=frontend -o wide"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-cloud-sdk-path-kubectl-get-secrets",
+      "fix_area": "queue",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "${HOME}/google-cloud-sdk/bin/kubectl get secrets -o yaml"
+      },
+      "cwd": "org",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-cloud-sdk-path-kubectl-exec-node-env",
+      "fix_area": "queue",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "${HOME}/google-cloud-sdk/bin/kubectl exec deploy/x -- node -e \"console.log(process.env.POSTGRES_URL)\""
+      },
+      "cwd": "org",
+      "expect": "not_allow"
+    },
+    {
       "id": "queue-export-kubeconfig-get-pods",
       "fix_area": "queue",
       "harnesses": [

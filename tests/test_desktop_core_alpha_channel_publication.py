@@ -379,8 +379,8 @@ def test_alpha_wait_passes_the_channel_through(tmp_path: Path, monkeypatch: pyte
         monkeypatch.setenv(key, value)
     seen: list[tuple[object, ...]] = []
 
-    def ready(*args: object) -> bool:
-        seen.append(args)
+    def ready(*args: object, **kwargs: object) -> bool:
+        seen.append((*args, kwargs))
         return True
 
     monkeypatch.setattr(wait_module, "publication_ready", ready)
@@ -388,7 +388,7 @@ def test_alpha_wait_passes_the_channel_through(tmp_path: Path, monkeypatch: pyte
         wait_module, "registry_ready", lambda *args, **kwargs: bool(seen.append((*args, kwargs)) or True)
     )
     wait_module.wait(ALPHA, tmp_path / "wheel", timeout=1, channel="alpha")
-    assert seen[0] == (REPOSITORY, "123", SOURCE, "alpha")
+    assert seen[0] == (REPOSITORY, "123", SOURCE, "alpha", {"wheel": tmp_path / "wheel"})
     assert seen[1][3] == "alpha"
     assert seen[1][-1] == {"repo": REPOSITORY}
 
@@ -402,7 +402,7 @@ def test_alpha_wait_retries_transient_registry_errors(tmp_path: Path, monkeypatc
         monkeypatch.setenv(key, value)
     attempts: list[int] = []
 
-    def ready(*args: object) -> bool:
+    def ready(*args: object, **kwargs: object) -> bool:
         attempts.append(1)
         if len(attempts) == 1:
             raise urllib.error.URLError("temporary")
