@@ -455,13 +455,13 @@ fn an_outbox_returns_its_lease_and_the_snapshot_it_signs_for() {
 
 #[test]
 fn an_outbox_that_does_not_carry_its_own_lease_and_snapshot_is_refused() {
-    let snapshot = snapshot_bytes();
-    let lease = health_lease(health_claims(), &der_encode(&LOW, &LOW));
     let other_snapshot = canonical(&with(
         snapshot(),
         "/identifiers/workspaceId",
         json!("workspace-b"),
     ));
+    let snapshot = snapshot_bytes();
+    let lease = health_lease(health_claims(), &der_encode(&LOW, &LOW));
     let rebound = health_lease(
         with(
             health_claims(),
