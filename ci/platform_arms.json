@@ -1107,6 +1107,14 @@
    "body": "7414d586df8b"
   },
   {
+   "verdict": "windows-unsupported",
+   "note": "The `cwd` argument is written as a `cd` only for the runtime's own sink, which is Unix-only (contained_workspace_sink). Off Unix no call takes that sink and the contained route defers with `ContainedRouteFailed` (`mod request`), so the call is decided as sent, exactly as before.",
+   "file": "rust/crates/guard-runtime/src/hook_direct_contained_projection.rs",
+   "item": "pub(super) fn directory_input( _original: &Map<String, Value>, _workspace: &str, _home_dir: &str, ) -> Option<Map<String, Value>>",
+   "cfg": "not(unix)",
+   "body": "70d0bf8ff484"
+  },
+  {
    "verdict": "other-platform",
    "note": "Windows expands `USERPROFILE` in its own arm; elsewhere `None` leaves the home unknown, every home-relative rule stays unmatched, and a connector-setup review defers to the daemon.",
    "file": "rust/crates/guard-runtime/src/hook_direct_review_request.rs",

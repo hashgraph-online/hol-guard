@@ -11,6 +11,7 @@
 //! published in the direct-lane binding.
 
 use super::HookDirectDefer;
+use projection::{directory_input, projected_input};
 #[cfg(unix)]
 use serde_json::json;
 use serde_json::{Map, Value};
@@ -139,53 +140,27 @@ fn route_on(
     let Some(original) = shell_input(payload) else {
         return Ok(None);
     };
-    let projected = projected_input(original, target.workspace, target.home_dir);
+    let (workspace, home_dir) = (target.workspace, target.home_dir);
+    let projected = projected_input(original, workspace, home_dir);
     let original = projected.as_ref().unwrap_or(original);
-    let native = (host.native)(response, original, target.workspace, target.home_dir);
+    let decided = directory_input(original, workspace, home_dir);
+    let native = (host.native)(
+        response,
+        decided.as_ref().unwrap_or(original),
+        workspace,
+        home_dir,
+    );
     request::write_and_route(temp, payload, original, target, native.as_deref())
-}
-
-/// The call the denial was answered for, when a trailing group or a
-/// virtualenv activation moved it. `source .venv/bin/activate && pytest -q`
-/// exports settings and runs nothing else, so the pre-tool pass hands the
-/// verdict to `pytest` and answers for `.venv/bin/pytest -q`; and
-/// `(.venv/bin/pytest -q)` runs exactly the list inside its parentheses, so
-/// the pass answers for that list. The sink plans the command it is given,
-/// and it models neither a shell builtin nor a group, so handing it the
-/// unprojected text leaves it unable to build a plan for a call Guard already
-/// judged. This cannot widen authority: the sink reruns native authority on
-/// the snapshot and needs a matching denial of its own, and the projected
-/// text is the user's own command with the wrapping it already resolved
-/// removed. Any other command has no projection and keeps its own bytes.
-fn projected_input(
-    original: &Map<String, Value>,
-    workspace: &str,
-    home_dir: &str,
-) -> Option<Map<String, Value>> {
-    let command = original.get("command")?.as_str()?;
-    // The pre-tool pass answered with the settled workspace, not the spelling
-    // the harness sent. Reading the payload's own `cwd` here would resolve the
-    // activation script against `~/project` or a symlinked path the verdict
-    // never used, and the route would carry text Guard did not answer for.
-    let projected = guard_command::pretool::generic::contained_target(
-        command,
-        guard_command::pretool::PathContext {
-            home_dir: Some(home_dir),
-            cwd: Some(workspace),
-            ..Default::default()
-        },
-    )?;
-    let mut input = original.clone();
-    input.insert("command".to_owned(), Value::String(projected));
-    Some(input)
 }
 
 /// The runtime's own sink command for a call whose request snapshot keeps
 /// the text the harness sent, as the Codex bridge writes it. A verdict
 /// answered for a projection of that text (a virtualenv activation, a
 /// trailing group or a home-spelled launcher) decides on the projected
-/// call, as the direct route does; the native sink projects the text again
-/// before it plans it, as Guard's own sink does.
+/// call, as the direct route does, and a call with its own `cwd` argument
+/// decides on that directory's `cd` form; the native sink settles the
+/// directory and projects the text again before it plans it, as Guard's own
+/// sink does.
 #[cfg(unix)]
 pub(crate) fn unprojected_sink_command(
     response: &Value,
@@ -194,9 +169,14 @@ pub(crate) fn unprojected_sink_command(
     home_dir: &str,
     native: NativeSink,
 ) -> Option<Vec<String>> {
-    let projected = projected_input(original, workspace, home_dir);
-    let decided = projected.as_ref().unwrap_or(original);
-    let executable = native(response, decided, workspace, home_dir)?;
+    let decided = directory_input(original, workspace, home_dir)
+        .or_else(|| projected_input(original, workspace, home_dir));
+    let executable = native(
+        response,
+        decided.as_ref().unwrap_or(original),
+        workspace,
+        home_dir,
+    )?;
     Some(vec![
         executable,
         crate::contained_workspace_sink::SINK_COMMAND.to_owned(),
@@ -452,6 +432,9 @@ fn routed_response(original: &Map<String, Value>, command: &[String]) -> Value {
         },
     })
 }
+
+#[path = "hook_direct_contained_projection.rs"]
+mod projection;
 
 #[cfg(unix)]
 #[path = "hook_direct_contained_request.rs"]

@@ -22,6 +22,8 @@ use serde_json::{json, Map, Value};
 
 #[path = "contained_workspace_sink_denial.rs"]
 mod denial;
+#[path = "contained_workspace_sink_directory.rs"]
+mod directory;
 #[path = "contained_esbuild_image.rs"]
 mod esbuild_image;
 #[path = "contained_workspace_sink_filters.rs"]
@@ -63,6 +65,7 @@ use plan_check::{plan_paths, sibling_root, validated_plan};
 use runner::{bootstrap_init, Launch, PrivateRoot};
 use snapshot::read_request;
 
+pub(crate) use directory::directory_change;
 pub(crate) use plan_check::entered_sibling;
 pub(crate) use process::launch;
 pub(crate) use readonly::readonly_shape;
