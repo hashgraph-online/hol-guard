@@ -277,7 +277,10 @@ fn a_wildcard_include_is_proven_by_what_it_selects_below_the_root() {
         ("-rn x --include *.md docs".to_owned(), true),
         ("-rn x --include=*.md docs".to_owned(), true),
         ("-rn x --include *.md --include *.mdx docs".to_owned(), true),
-        ("-rn x --include README* docs".to_owned(), true),
+        // BSD grep matches an include against the whole path as well as
+        // the name, so a wildcard that is not the first character can
+        // select a file below a directory the literal part matched.
+        ("-rn x --include README* docs".to_owned(), false),
         ("-rn x --include *.md docs src".to_owned(), true),
         // A literal name never reached this proof and still passes the
         // name screen on its own.
@@ -371,6 +374,18 @@ fn an_include_narrows_the_recursive_walk_below_the_root() {
             false,
         ),
         ("-rn KEY --include * docs".to_owned(), false),
+        // macOS `grep` matches `deploy*` against `deploy/secrets/id_rsa`
+        // too, which the name this walk renders never matches.
+        ("-rn KEY --include deploy* deploy".to_owned(), false),
+        // `[[:punct:]]` is one character class to `grep` and an ordinary
+        // set of bytes to this matcher, so the search opens `docs/.env`
+        // while the model reads the glob as a five-byte name nothing here
+        // carries.
+        ("-rn KEY --include [[:punct:]]env docs".to_owned(), false),
+        // `?` consumes one byte here and one character in `grep`, so a name
+        // whose first character is multi-byte is modeled as unselected while
+        // the search opens it. Every `?` inclusion is left unmodeled.
+        ("-rn KEY --include ?.env docs".to_owned(), false),
         // Without an include the walk reads whatever it reaches.
         ("-rn KEY docs".to_owned(), false),
         // `-R` follows the links this walk steps over, so it cannot stand

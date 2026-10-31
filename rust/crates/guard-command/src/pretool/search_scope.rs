@@ -138,7 +138,7 @@ pub(super) fn rg_glob_scope_proven(
 }
 
 /// Shell `grep` with `--include` globs the name screen cannot clear, such as
-/// `*.md` or `README*`: true when below each directory root no sensitive file
+/// `*.md` or `*.rs`: true when below each directory root no sensitive file
 /// matches one of them.
 ///
 /// An include narrows what `grep` opens and can never widen it: `grep` reads
@@ -195,10 +195,32 @@ pub(super) fn grep_include_walk_proven(
 /// what it models. A separator makes the glob match against a base this walk
 /// does not model, and the implementations differ on what it is.
 fn include_filter(globs: &[&str]) -> Option<SearchFilter> {
-    if globs.iter().any(|glob| glob.contains(['/', '\\'])) {
+    if globs
+        .iter()
+        .any(|glob| glob.contains(['/', '\\']) || !matches_only_a_name(glob))
+    {
         return None;
     }
     SearchFilter::from_rg_inclusions(globs)
+}
+
+/// Whether a `--include` glob selects the same files under both `grep`
+/// implementations this walk has to answer for.
+///
+/// GNU grep matches the glob against an entry's name. BSD grep, which is the
+/// `grep` macOS ships, matches the name and the whole path it reached the
+/// file by, through an `fnmatch` without `FNM_PATHNAME`: a wildcard crosses a
+/// separator there, so `--include 'deploy*'` over a `deploy` directory
+/// selects `deploy/secrets/id_rsa`, which no name match selects. Modeling
+/// that path would mean rendering the operand as the command spelled it,
+/// which this walk does not do.
+///
+/// Two shapes answer alike under both. A literal name matches no path that
+/// holds a separator, and `*` followed by a literal matches a path only when
+/// its last component matches too, because the literal carries no separator
+/// of its own. Every other wildcard placement is left unmodeled.
+fn matches_only_a_name(glob: &str) -> bool {
+    !glob.strip_prefix('*').unwrap_or(glob).contains('*')
 }
 
 fn directory_include_proven(root: &Path, filter: &SearchFilter, home_dir: Option<&str>) -> bool {
