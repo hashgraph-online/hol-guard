@@ -129,7 +129,8 @@
   "src/codex_plugin_scanner/guard/runtime/local_cli_runner.py",
   "src/codex_plugin_scanner/guard/runtime/command_reviewed_literal_matcher.py",
   "src/codex_plugin_scanner/guard/runtime/command_activity_lifecycle.py",
-  "src/codex_plugin_scanner/guard/runtime/command_activity_display.py"
+  "src/codex_plugin_scanner/guard/runtime/command_activity_display.py",
+  "src/codex_plugin_scanner/guard/store_command_shadow.py"
  ],
  "retired_tests": [
   {

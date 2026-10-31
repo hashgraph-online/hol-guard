@@ -102,8 +102,6 @@ def signed_response(*, expired: bool, now: datetime | None = None) -> dict[str, 
     from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
-    from codex_plugin_scanner.guard.runtime.supply_chain_bundle_runtime import canonical_supply_chain_bundle_payload
-
     current = now or datetime.now(timezone.utc)
     generated = current - timedelta(days=3 if expired else 0, hours=1)
     expires = current - timedelta(days=1) if expired else current + timedelta(days=1)
@@ -134,7 +132,8 @@ def signed_response(*, expired: bool, now: datetime | None = None) -> dict[str, 
         .public_bytes(serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo)
         .decode()
     )
-    canonical = canonical_supply_chain_bundle_payload(bundle)
+    # The bytes the signing side signs: sorted keys, compact separators, UTF-8.
+    canonical = json.dumps(bundle, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     signature = key.sign(
         canonical,
         padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),

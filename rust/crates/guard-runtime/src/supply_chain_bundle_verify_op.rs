@@ -9,6 +9,7 @@
 use guard_command::supply_chain_bundle::{
     load_supply_chain_bundle_response, load_supply_chain_verification_keys,
     verify_supply_chain_bundle_response, RingRsaPssVerify, SupplyChainBundleError,
+    SupplyChainBundleResponse,
 };
 use guard_contracts::{
     SupplyChainBundleVerifyRequestV1, SupplyChainBundleVerifyResultV1, MAX_NATIVE_REQUEST_BYTES,
@@ -52,7 +53,7 @@ pub(crate) fn evaluate_supply_chain_bundle_verify_request(
         .map_err(|_| "native_supply_chain_bundle_verify_too_large".to_owned())?;
 
     let payload = match verify(request) {
-        Ok(()) => json!({ "outcome": "verified" }),
+        Ok(response) => json!({ "outcome": "verified", "summary": summary(&response) }),
         Err(error) => refused(&error),
     };
 
@@ -66,7 +67,25 @@ pub(crate) fn evaluate_supply_chain_bundle_verify_request(
     })
 }
 
-fn verify(request: &SupplyChainBundleVerifyRequestV1) -> Result<(), SupplyChainBundleError> {
+/// What the caller records about a verified bundle, read off the bundle this
+/// operation parsed, so the caller never parses the wire form a second time.
+/// Counts are taken after parsing, which merges identical package records.
+fn summary(response: &SupplyChainBundleResponse) -> Value {
+    let bundle = &response.bundle;
+    json!({
+        "bundle_version": bundle.bundle_version,
+        "key_id": bundle.key_id,
+        "policy_hash": bundle.policy_hash,
+        "tier": bundle.tier,
+        "feed_snapshot_hash": bundle.feed_snapshot_hash,
+        "advisory_count": bundle.advisories.len(),
+        "package_count": bundle.packages.len(),
+    })
+}
+
+fn verify(
+    request: &SupplyChainBundleVerifyRequestV1,
+) -> Result<SupplyChainBundleResponse, SupplyChainBundleError> {
     let response = load_supply_chain_bundle_response(&request.response)?;
     // An absent keyring is the bootstrap case: a caller that has saved nothing
     // accepts the keyring the response advertises. A keyring that is present
@@ -91,7 +110,8 @@ fn verify(request: &SupplyChainBundleVerifyRequestV1) -> Result<(), SupplyChainB
         request.cached_bundle_version.as_deref(),
         request.now,
         &RingRsaPssVerify,
-    )
+    )?;
+    Ok(response)
 }
 
 #[cfg(test)]

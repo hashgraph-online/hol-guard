@@ -27,7 +27,7 @@ from typing import ClassVar
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard import native_prompt
+from codex_plugin_scanner.guard import native_prompt, store_policy
 from codex_plugin_scanner.guard import synced_policy as synced_policy_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
@@ -17470,6 +17470,9 @@ def test_fresh_mdm_activation_bootstraps_first_signed_policy_sync(
     )
     monkeypatch.setattr(mdm_lifecycle, "load_managed_policy", lambda: managed_state)
     monkeypatch.setattr(mdm_policy, "load_managed_policy", lambda: managed_state)
+    # The resident reads machine MDM policy natively and cannot see the policy
+    # patched in above, so the store ships the bundle identities it derives.
+    monkeypatch.setattr(store_policy, "_RESIDENT_DERIVES_BUNDLE_IDENTITIES", False)
     monkeypatch.setattr(
         mdm_lifecycle,
         "apply_managed_install",

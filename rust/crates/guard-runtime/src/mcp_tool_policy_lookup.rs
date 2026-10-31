@@ -9,8 +9,8 @@
 //! one-shot approval or writes the store.
 
 use guard_contracts::{
-    McpPolicyLookupInputV1, McpToolPolicySubjectV1, PolicyDecisionLookupRequestV1,
-    POLICY_DECISION_LOOKUP_REQUEST_SCHEMA,
+    canonical_utc_timestamp, McpPolicyLookupInputV1, McpToolPolicySubjectV1,
+    PolicyDecisionLookupRequestV1, POLICY_DECISION_LOOKUP_REQUEST_SCHEMA,
 };
 use serde_json::{json, Map, Value};
 
@@ -18,6 +18,7 @@ use crate::context_digest::python_strip;
 use crate::local_store_read::require_store_path;
 use crate::mcp_tool_policy_flow::Stop;
 use crate::memory_pattern::{self, MemoryRequest};
+use crate::policy_bundle_store_identities::{lookup_bundle_identities, Identity};
 use crate::policy_decision_lookup_op::{evaluate_non_consuming, open_lookup_connection};
 
 pub(crate) const ERR_LOOKUP: &str = "native_mcp_tool_policy_decide_lookup_failed";
@@ -105,6 +106,7 @@ struct Prober<'a> {
     subject: &'a McpToolPolicySubjectV1,
     exact_match_context: Option<String>,
     connection: Option<rusqlite::Connection>,
+    bundle_identities: Option<Vec<Identity>>,
 }
 
 impl Prober<'_> {
@@ -138,7 +140,7 @@ impl Prober<'_> {
             integrity_key_id: input.integrity_key_id.clone(),
             local_once_integrity_key_b64: input.local_once_integrity_key_b64.clone(),
             local_once_integrity_key_id: input.local_once_integrity_key_id.clone(),
-            policy_bundle_decision_identities: input.policy_bundle_decision_identities.clone(),
+            policy_bundle_decision_identities: self.bundle_identities.clone(),
             // A portable probe still matches Cloud exceptions on the checkout.
             exception_workspace: self.subject.workspace.clone(),
             cloud_exception_bundle: Default::default(),
@@ -207,11 +209,13 @@ fn policy_lookup_candidates(
         require_store_path(&input.store_path, &input.guard_home).map_err(|_| ERR_LOOKUP)?;
         Some(open_lookup_connection(&input.store_path).map_err(|_| ERR_LOOKUP)?)
     };
+    let bundle_identities = bundle_identities(input, connection.as_ref())?;
     let prober = Prober {
         input,
         subject,
         exact_match_context,
         connection,
+        bundle_identities,
     };
     let mut lookups = Vec::with_capacity(ids.len());
     for id in ids {
@@ -225,6 +229,19 @@ fn policy_lookup_candidates(
         observed["reuse_diagnostic"] = json!({"reason": null});
     }
     Ok(observed)
+}
+
+/// The bundle identities every probe reads `policy-bundle` rows under: the
+/// ones Python shipped, or else derived once from the store all probes read.
+fn bundle_identities(
+    input: &McpPolicyLookupInputV1,
+    connection: Option<&rusqlite::Connection>,
+) -> Result<Option<Vec<Identity>>, Stop> {
+    let (None, Some(connection)) = (&input.policy_bundle_decision_identities, connection) else {
+        return Ok(input.policy_bundle_decision_identities.clone());
+    };
+    let now = canonical_utc_timestamp(&input.now).ok_or(Stop::Fail(ERR_LOOKUP))?;
+    lookup_bundle_identities(connection, &now).map_err(|()| Stop::Fail(ERR_LOOKUP))
 }
 
 #[cfg(test)]

@@ -18,10 +18,11 @@ use guard_contracts::{
 };
 use guard_policy_bundle::keys::{keys_to_value, load_keys};
 use guard_policy_bundle::python::py_strip;
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use serde_json::{json, Map, Value};
 
 use crate::claim_reuse_binding::{cloud_workspace_id, local_device, sync_state_payload};
+use crate::local_store_read::table_exists;
 use crate::managed_policy_load::{
     load_managed_policy, ManagedPolicySource, ManagedPolicyStatus, REGISTRY_UNREADABLE,
 };
@@ -61,7 +62,7 @@ pub(crate) type Identity = Vec<Value>;
 
 /// The identities the cached bundle authorizes at `now`, with the validated
 /// bundle they came from so a lookup lifts Cloud rules only against that same
-/// bundle's exceptions (`_cached_policy_bundle_authority`, `store_policy.py`).
+/// bundle's exceptions.
 pub(crate) type BundleAuthority = (Vec<Identity>, Option<Map<String, Value>>);
 
 /// The cached bundle's authority at `now`, or `None` when the resident cannot
@@ -91,6 +92,33 @@ pub(crate) fn cached_bundle_authority(
         }
     }
     Some((identities, Some(validated)))
+}
+
+/// The identities a lookup Python sent without them reads `policy-bundle` rows
+/// under, derived from the store that lookup reads. `Ok(None)` when the bundle
+/// authorizes nothing or no such row exists, so a store without bundle rules
+/// never pays for the bundle's signature checks; `Err` when the resident cannot derive them the way the
+/// Python store would, which the lookup reports instead of dropping the rows.
+pub(crate) fn lookup_bundle_identities(
+    connection: &Connection,
+    now: &str,
+) -> Result<Option<Vec<Identity>>, ()> {
+    if !table_exists(connection, "policy_decisions").map_err(|_| ())? {
+        return Ok(None);
+    }
+    let bundle_row = connection
+        .query_row(
+            "select 1 from policy_decisions where source = 'policy-bundle' limit 1",
+            [],
+            |_| Ok(()),
+        )
+        .optional()
+        .map_err(|_| ())?;
+    if bundle_row.is_none() {
+        return Ok(None);
+    }
+    let (identities, _bundle) = cached_bundle_authority(connection, now).ok_or(())?;
+    Ok((!identities.is_empty()).then_some(identities))
 }
 
 /// `cached_policy_bundle_validation`: the payload rules are read from, or
@@ -308,11 +336,16 @@ fn host_name() -> Option<String> {
     nix::unistd::gethostname().ok()?.into_string().ok()
 }
 
-/// Off Unix, `platform.node()` is the DNS host name, which `COMPUTERNAME`
-/// (the upper-cased, 15-character NetBIOS name) does not match. The resident
-/// cannot read it yet, so the device name is unknown and the bundle's
-/// identities are left to the store.
-#[cfg(not(unix))]
+/// On Windows `platform.node()` is the DNS host name, which `COMPUTERNAME`
+/// (the upper-cased, 15-character NetBIOS name) does not match.
+#[cfg(windows)]
+fn host_name() -> Option<String> {
+    guard_runtime_windows_process::dns_host_name()?
+        .into_string()
+        .ok()
+}
+
+#[cfg(not(any(unix, windows)))]
 fn host_name() -> Option<String> {
     None
 }

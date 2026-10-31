@@ -54,8 +54,10 @@ pub struct SupplyChainBundleVerifyResultV1 {
     pub status: String,
     /// `ok`.
     pub code: String,
-    /// `{outcome: "verified"}` or `{outcome: "refused", kind, message}`, where
-    /// `kind` names the refusal class the caller re-raises.
+    /// `{outcome: "verified", summary}` or `{outcome: "refused", kind,
+    /// message}`, where `summary` holds the verified bundle's version, key,
+    /// policy hash, tier, feed snapshot hash and record counts, and `kind`
+    /// names the refusal class the caller re-raises.
     #[serde(default)]
     pub payload: Value,
 }

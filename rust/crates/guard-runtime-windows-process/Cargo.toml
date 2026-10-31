@@ -26,6 +26,7 @@ winapi = { workspace = true, features = [
     "shlobj",
     "stringapiset",
     "synchapi",
+    "sysinfoapi",
     "tlhelp32",
     "winbase",
     "winerror",

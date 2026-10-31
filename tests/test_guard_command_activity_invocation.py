@@ -9,11 +9,12 @@ from pathlib import Path
 from codex_plugin_scanner.guard.runtime.command_activity_api_contract import CommandActivityListQuery
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_command_activity_api_support import evidence
+from tests.native_store_shims import record_command_activity
 
 
 def test_legacy_activity_rows_report_missing_command(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-    store.record_command_activity(evidence("activity:01", minute=1))
+    record_command_activity(store, evidence("activity:01", minute=1))
     page = store.list_command_activity_page(CommandActivityListQuery())
     assert page["items"][0]["invocation_preview"] is None
 
@@ -21,7 +22,8 @@ def test_legacy_activity_rows_report_missing_command(tmp_path: Path) -> None:
 def test_compaction_deletes_invocation_preview(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
     old = date(2026, 1, 1)
-    store.record_command_activity(
+    record_command_activity(
+        store,
         evidence("activity:old", minute=1, occurred_on=old),
         invocation_preview="git status",
     )

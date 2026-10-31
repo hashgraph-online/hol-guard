@@ -245,3 +245,80 @@ fn an_expandable_pattern_is_not_proven_stdin_text() {
         );
     }
 }
+
+/// A wildcard `--include` narrows what `grep` opens, so the files it selects
+/// below the searched directory decide the reading. Before this, every glob
+/// the name screen could not clear ended the proof, and `--include '*.md'`
+/// kept a review for a search that cannot open anything but Markdown.
+#[test]
+fn a_wildcard_include_is_proven_by_what_it_selects_below_the_root() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/grep-include-scope")
+        .join(std::process::id().to_string());
+    let home = root.join("home");
+    let repo = home.join("work/app");
+    std::fs::create_dir_all(repo.join("docs")).unwrap();
+    std::fs::create_dir_all(repo.join("src")).unwrap();
+    std::fs::create_dir_all(home.join(".ssh")).unwrap();
+    std::fs::write(repo.join("docs/notes.md"), "# notes\n").unwrap();
+    std::fs::write(repo.join("docs/README.md"), "# readme\n").unwrap();
+    std::fs::write(repo.join("src/index.ts"), "export const x = 1;\n").unwrap();
+    let (home, repo) = (
+        crate::runtime_read_paths::canonicalize_text(&home).unwrap(),
+        crate::runtime_read_paths::canonicalize_text(&repo).unwrap(),
+    );
+    let context = crate::pretool::PathContext {
+        home_dir: home.to_str(),
+        cwd: repo.to_str(),
+        ..Default::default()
+    };
+    let h = home.display();
+    for (command, allowed) in [
+        ("-rn x --include *.md docs".to_owned(), true),
+        ("-rn x --include=*.md docs".to_owned(), true),
+        ("-rn x --include *.md --include *.mdx docs".to_owned(), true),
+        ("-rn x --include README* docs".to_owned(), true),
+        ("-rn x --include *.md docs src".to_owned(), true),
+        // A literal name never reached this proof and still passes the
+        // name screen on its own.
+        ("-rn x --include README.md docs".to_owned(), true),
+        // `grep` matches a glob holding a separator against the whole name
+        // it reached the file by, which this walk does not render.
+        ("-rn x --include docs/*.md .".to_owned(), false),
+        // An include and an exclude together are still unread: their
+        // precedence differs across implementations.
+        (
+            "-rn x --include *.md --exclude notes.md docs".to_owned(),
+            false,
+        ),
+        // The root decides as it always did.
+        (format!("-rn x --include *.md {h}/.ssh"), false),
+    ] {
+        let arguments: Vec<String> = command.split(' ').map(str::to_owned).collect();
+        assert_eq!(
+            super::safe_grep_arguments(&arguments, context),
+            allowed,
+            "{command}"
+        );
+    }
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+/// A `grep` with no operand opens nothing an include could select: it reads
+/// the pipe it was handed. Proving a glob against the working directory there
+/// let a file the search never opens decide a filter's reading.
+#[test]
+fn an_include_without_an_operand_is_read_against_the_pipe() {
+    for command in [
+        "--include=*.md review",
+        "--include *.md review",
+        "-n --include=*.md review",
+    ] {
+        let arguments: Vec<String> = command.split(' ').map(str::to_owned).collect();
+        assert!(super::safe_stdin_arguments(&arguments), "{command}");
+        assert!(
+            super::safe_grep_arguments(&arguments, crate::pretool::PathContext::default()),
+            "{command}"
+        );
+    }
+}
