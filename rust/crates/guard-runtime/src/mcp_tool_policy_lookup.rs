@@ -18,7 +18,7 @@ use crate::context_digest::python_strip;
 use crate::local_store_read::require_store_path;
 use crate::mcp_tool_policy_flow::Stop;
 use crate::memory_pattern::{self, MemoryRequest};
-use crate::policy_bundle_store_identities::{lookup_bundle_identities, Identity};
+use crate::policy_bundle_store_identities::{lookup_bundle_authority, Identity};
 use crate::policy_decision_lookup_op::{evaluate_non_consuming, open_lookup_connection};
 
 pub(crate) const ERR_LOOKUP: &str = "native_mcp_tool_policy_decide_lookup_failed";
@@ -107,6 +107,8 @@ struct Prober<'a> {
     exact_match_context: Option<String>,
     connection: Option<rusqlite::Connection>,
     bundle_identities: Option<Vec<Identity>>,
+    /// Shared by every probe, so the signed bundle is validated once per call.
+    exception_bundle: guard_contracts::CloudExceptionBundle,
 }
 
 impl Prober<'_> {
@@ -143,7 +145,7 @@ impl Prober<'_> {
             policy_bundle_decision_identities: self.bundle_identities.clone(),
             // A portable probe still matches Cloud exceptions on the checkout.
             exception_workspace: self.subject.workspace.clone(),
-            cloud_exception_bundle: Default::default(),
+            cloud_exception_bundle: self.exception_bundle.clone(),
             probe_groups: None,
             portable_workspace: None,
             evidence_binding: None,
@@ -216,6 +218,7 @@ fn policy_lookup_candidates(
         exact_match_context,
         connection,
         bundle_identities,
+        exception_bundle: guard_contracts::CloudExceptionBundle::default(),
     };
     let mut lookups = Vec::with_capacity(ids.len());
     for id in ids {
@@ -241,7 +244,12 @@ fn bundle_identities(
         return Ok(input.policy_bundle_decision_identities.clone());
     };
     let now = canonical_utc_timestamp(&input.now).ok_or(Stop::Fail(ERR_LOOKUP))?;
-    lookup_bundle_identities(connection, &now).map_err(|()| Stop::Fail(ERR_LOOKUP))
+    let Some((identities, _bundle)) =
+        lookup_bundle_authority(connection, &now).map_err(|()| Stop::Fail(ERR_LOOKUP))?
+    else {
+        return Ok(None);
+    };
+    Ok((!identities.is_empty()).then_some(identities))
 }
 
 #[cfg(test)]
