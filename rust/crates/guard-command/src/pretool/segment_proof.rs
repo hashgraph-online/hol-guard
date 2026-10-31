@@ -302,6 +302,7 @@ pub(super) fn exact_safe_segment_with_context(
     }
     if super::version_probes::safe_version_probe(basename, &segment.arguments)
         || super::help_probes::safe_help_probe(basename, &segment.arguments, context)
+        || super::manager_usage::safe_manager_segment(basename, model, segment)
     {
         return true;
     }
