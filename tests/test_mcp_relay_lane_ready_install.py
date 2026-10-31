@@ -227,9 +227,7 @@ def _until(condition: Callable[[], T | None | bool], what: str) -> T:
 def installed(tmp_path: Path) -> Iterator[_Install]:
     install = _Install(tmp_path, _runtime())
     try:
-        result = install.guard(
-            "install", "codex", "--workspace", str(install.workspace), "--json", extra={"HOL_GUARD_MCP_RELAY": "native"}
-        )
+        result = install.guard("install", "codex", "--workspace", str(install.workspace), "--json")
         assert result.returncode == 0, result.stderr[-2000:]
         result = install.guard("daemon", "ensure", "--workspace", str(install.workspace))
         assert result.returncode == 0, result.stderr[-2000:]
