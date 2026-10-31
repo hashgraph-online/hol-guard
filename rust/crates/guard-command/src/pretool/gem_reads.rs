@@ -63,7 +63,14 @@ const QUERY_FLAGS: &[&str] = &[
 
 const DETAIL_FLAGS: &[&str] = &["--details", "--no-details", "-d"];
 
-const WHICH_FLAGS: &[&str] = &["--all", "--no-all", "-a", "--gems-first", "--no-gems-first", "-g"];
+const WHICH_FLAGS: &[&str] = &[
+    "--all",
+    "--no-all",
+    "-a",
+    "--gems-first",
+    "--no-gems-first",
+    "-g",
+];
 
 const CONTENTS_FLAGS: &[&str] = &[
     "--all",
