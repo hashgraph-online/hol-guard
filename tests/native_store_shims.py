@@ -9,9 +9,11 @@ made before sending, so recorded vectors and store tests keep their coverage.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta
 from typing import Any, cast
+from uuid import uuid4
 
 from codex_plugin_scanner.guard.models import GuardAction
 from codex_plugin_scanner.guard.runtime.command_activity_contract import (
@@ -25,7 +27,11 @@ from codex_plugin_scanner.guard.runtime.command_shadow_evaluation import (
     CommandShadowComparison,
     CommandShadowObservation,
 )
+from codex_plugin_scanner.guard.runtime.composio_contract import composio_tool_role
+from codex_plugin_scanner.guard.runtime.composio_discovery import ComposioActionSchema
+from codex_plugin_scanner.guard.runtime.composio_workflows import ComposioWorkflowProposal
 from codex_plugin_scanner.guard.runtime.effect_decision import FinalDisposition
+from codex_plugin_scanner.guard.runtime.observed_mcp_tools import ObservedMcpTool, observed_mcp_tool
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_command_activity import _validate_command_activity_write
 from codex_plugin_scanner.guard.store_command_activity_display_schema import INVOCATION_PREVIEW_MAX_CHARS
@@ -38,6 +44,8 @@ from codex_plugin_scanner.guard.store_command_activity_wire import (
     shadow_wire,
 )
 from codex_plugin_scanner.guard.store_local_cli_retention import utc_now_iso
+from codex_plugin_scanner.guard.store_local_mcp import _notify_legacy_mcp_denial
+from codex_plugin_scanner.guard.store_sessions import _guard_attachment_row, _guard_item_row
 
 
 def record_command_activity(
@@ -140,6 +148,126 @@ def list_command_shadow_observations(
     return tuple(_observation_from_wire(row) for row in rows)
 
 
+def list_guard_operation_items(store: GuardStore, operation_id: str) -> list[dict[str, object]]:
+    rows = store._native_store_call("list_guard_operation_items", {"operation_id": operation_id})
+    return [_guard_item_row(row) for row in rows]
+
+
+def attach_guard_client(
+    store: GuardStore,
+    *,
+    client_id: str,
+    surface: str,
+    session_id: str | None,
+    metadata: dict[str, object],
+    lease_seconds: int,
+    now: str,
+) -> dict[str, object]:
+    row = store._native_store_call(
+        "attach_guard_client",
+        {
+            "client_id": client_id,
+            "surface": surface,
+            "session_id": session_id,
+            "metadata_json": json.dumps(metadata),
+            "lease_id": uuid4().hex,
+            "lease_seconds": lease_seconds,
+            "now": _aware_instant(now),
+        },
+    )
+    return _guard_attachment_row(row)
+
+
+def renew_guard_client_attachment(
+    store: GuardStore,
+    *,
+    client_id: str,
+    lease_id: str,
+    lease_seconds: int,
+    now: str,
+) -> dict[str, object] | None:
+    row = store._native_store_call(
+        "renew_guard_client_attachment",
+        {"client_id": client_id, "lease_id": lease_id, "lease_seconds": lease_seconds, "now": _aware_instant(now)},
+    )
+    return None if row is None else _guard_attachment_row(row)
+
+
+def get_guard_client_attachment(store: GuardStore, client_id: str) -> dict[str, object] | None:
+    row = store._native_store_call("get_guard_client_attachment", {"client_id": client_id})
+    return None if row is None else _guard_attachment_row(row)
+
+
+def record_composio_discovery(
+    store: GuardStore,
+    source: ObservedMcpTool,
+    actions: tuple[ComposioActionSchema, ...],
+    *,
+    seen_at: str,
+    proposals: tuple[ComposioWorkflowProposal, ...] = (),
+) -> str:
+    if observed_mcp_tool(source.harness, source.qualified_name) != source or (
+        composio_tool_role(source.qualified_name) != "discovery"
+    ):
+        raise ValueError("invalid provider discovery source")
+    server = source.server_identity
+    cli_id = store.ensure_local_mcp_observation(
+        source.identity,
+        seen_at=seen_at,
+        server_identity_hash=server.identity_hash,
+        server_command=server.command,
+        server_args_hash=server.args_hash,
+        source_label=f"{source.harness.title()} · observed provider metadata",
+    )
+    args: dict[str, object] = {
+        "cli_id": cli_id,
+        "identity_hash": server.identity_hash,
+        "server_command": server.command,
+        "source_tool": source.qualified_name,
+        "seen_at": seen_at,
+        "actions": [
+            {
+                "toolkit": action.toolkit,
+                "tool_slug": action.tool_slug,
+                "description": action.description,
+                "input_schema": action.input_schema,
+                "full_schema": bool(action.full_schema),
+            }
+            for action in actions
+        ],
+        "proposals": [
+            {
+                "primary": list(proposal.primary),
+                "supporting": list(proposal.supporting),
+                "guidance_present": proposal.guidance_present,
+            }
+            for proposal in proposals
+        ],
+    }
+    result = store._native_store_call("record_composio_discovery", args)
+    if isinstance(result, dict) and result.get("need_barrier") is True:
+        # The batch moves the provider authority, so the resident asks for the
+        # native policy barrier and wrote nothing; run it again inside one.
+        with _notify_legacy_mcp_denial(store.guard_home):
+            store._native_store_call("record_composio_discovery", {**args, "barrier_closed": True})
+    return cli_id
+
+
+def reconcile_receipt_events(store: GuardStore) -> None:
+    store._native_store_call("reconcile_receipt_events", {})
+
+
+def refresh_review_event_outbox_binding(store: GuardStore) -> int:
+    return int(store._native_store_call("refresh_review_event_outbox_binding", {}))
+
+
+def _aware_instant(now: str) -> str:
+    """Validate an ISO instant; a naive one means host-local time, as `datetime.timestamp()` reads it."""
+
+    parsed = datetime.fromisoformat(now)
+    return now if parsed.tzinfo is not None else parsed.astimezone().isoformat()
+
+
 def _observation_from_wire(row: Mapping[str, Any]) -> CommandShadowObservation:
     return CommandShadowObservation(
         activity_id=str(row["activity_id"]),
@@ -176,14 +304,21 @@ def _validated_invocation_preview(value: str | None) -> str | None:
 
 
 __all__ = (
+    "attach_guard_client",
     "command_activity_rollups_are_reconciled",
     "count_command_shadow_observations",
     "get_command_activity_by_request_correlation",
+    "get_guard_client_attachment",
     "is_exact_command_activity_pre_replay",
     "list_command_shadow_observations",
+    "list_guard_operation_items",
     "local_cli_replay_allowed",
     "rebuild_command_activity_rollups",
+    "reconcile_receipt_events",
     "record_command_activity",
     "record_command_activity_observation_conflict",
+    "record_composio_discovery",
+    "refresh_review_event_outbox_binding",
+    "renew_guard_client_attachment",
     "transition_command_activity",
 )
