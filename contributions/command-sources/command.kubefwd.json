@@ -1,0 +1,376 @@
+{
+  "schema": "guard.command-extension-source.v1",
+  "extension": {
+    "extension_id": "command.kubefwd",
+    "version": "1.0.0",
+    "name": "kubefwd service-forward protection",
+    "description": "Reviews classic kubefwd service-forwarding commands that can change local /etc/hosts, bind loopback addresses and connect to a Kubernetes cluster. Idle-mode, API and MCP operations are outside this rule's scope.",
+    "action_classes": [
+      "Kubernetes local host mapping and service forwarding"
+    ],
+    "risk_classes": [
+      "execution",
+      "network_egress"
+    ],
+    "safer_alternatives": [
+      "Review the active kubeconfig context, selected namespace and services, and elevated local host-file changes before forwarding; prefer a test cluster."
+    ],
+    "reference_urls": [
+      "https://github.com/txn2/kubefwd/blob/master/README.md",
+      "https://kubefwd.com/getting-started/"
+    ],
+    "required": false,
+    "source": "built-in",
+    "aliases": [],
+    "dependencies": [],
+    "conflicts": [],
+    "ecosystem_ids": [
+      "kubefwd"
+    ],
+    "executables": [
+      "kubefwd"
+    ],
+    "project_markers": [],
+    "permissions": [
+      {
+        "permission_id": "command.kubefwd.permission.service-forward",
+        "implementation_version": "1.0.0",
+        "label": "kubefwd service forwarding",
+        "description": "kubefwd svc forwards cluster services, binds local loopback addresses and updates /etc/hosts; approval should verify cluster context, namespace and privilege scope before running.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "Kubernetes local host mapping and service forwarding"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Review the active kubeconfig context, selected namespace and services, and elevated local host-file changes before forwarding; prefer a test cluster."
+        ],
+        "example_command": "kubefwd svc -n staging --tui",
+        "family": null,
+        "fixed_reason": null,
+        "replacement_permission_id": null
+      }
+    ],
+    "rules": [
+      {
+        "rule_id": "command.kubefwd.service-forward",
+        "rule_version": "1.0.0",
+        "permission_id": "command.kubefwd.permission.service-forward",
+        "title": "kubefwd service forwarding",
+        "description": "kubefwd svc forwards cluster services, binds local loopback addresses and updates /etc/hosts; approval should verify cluster context, namespace and privilege scope before running.",
+        "severity": "high",
+        "risk_classes": [
+          "execution",
+          "network_egress"
+        ],
+        "action_classes": [
+          "Kubernetes local host mapping and service forwarding"
+        ],
+        "safer_alternatives": [
+          "Review the active kubeconfig context, selected namespace and services, and elevated local host-file changes before forwarding; prefer a test cluster."
+        ],
+        "default_mode": "review",
+        "matcher": {
+          "op": "any.v1",
+          "config": {},
+          "matchers": [
+            {
+              "op": "leading-subcommand.v1",
+              "config": {
+                "executables": [
+                  "kubefwd"
+                ],
+                "subcommands": [
+                  "svc"
+                ],
+                "forbidden_flags_before_delimiter": [
+                  "--help",
+                  "-h",
+                  "--version"
+                ],
+                "options_with_values": [
+                  "-n",
+                  "--namespace",
+                  "-l",
+                  "--selector",
+                  "-x",
+                  "--context",
+                  "-c",
+                  "--kubeconfig",
+                  "-f",
+                  "--field-selector",
+                  "-d",
+                  "--domain",
+                  "-m",
+                  "--mapping",
+                  "-r",
+                  "--reserve",
+                  "-t",
+                  "--timeout",
+                  "-z",
+                  "--fwd-conf",
+                  "--hosts-path",
+                  "--resync-interval",
+                  "--retry-interval",
+                  "--theme"
+                ],
+                "required_flags_anywhere": []
+              }
+            },
+            {
+              "op": "leading-subcommand.v1",
+              "config": {
+                "executables": [
+                  "kubefwd"
+                ],
+                "subcommands": [
+                  "services"
+                ],
+                "forbidden_flags_before_delimiter": [
+                  "--help",
+                  "-h",
+                  "--version"
+                ],
+                "options_with_values": [
+                  "-n",
+                  "--namespace",
+                  "-l",
+                  "--selector",
+                  "-x",
+                  "--context",
+                  "-c",
+                  "--kubeconfig",
+                  "-f",
+                  "--field-selector",
+                  "-d",
+                  "--domain",
+                  "-m",
+                  "--mapping",
+                  "-r",
+                  "--reserve",
+                  "-t",
+                  "--timeout",
+                  "-z",
+                  "--fwd-conf",
+                  "--hosts-path",
+                  "--resync-interval",
+                  "--retry-interval",
+                  "--theme"
+                ],
+                "required_flags_anywhere": []
+              }
+            },
+            {
+              "op": "leading-subcommand.v1",
+              "config": {
+                "executables": [
+                  "kubefwd"
+                ],
+                "subcommands": [
+                  "svcs"
+                ],
+                "forbidden_flags_before_delimiter": [
+                  "--help",
+                  "-h",
+                  "--version"
+                ],
+                "options_with_values": [
+                  "-n",
+                  "--namespace",
+                  "-l",
+                  "--selector",
+                  "-x",
+                  "--context",
+                  "-c",
+                  "--kubeconfig",
+                  "-f",
+                  "--field-selector",
+                  "-d",
+                  "--domain",
+                  "-m",
+                  "--mapping",
+                  "-r",
+                  "--reserve",
+                  "-t",
+                  "--timeout",
+                  "-z",
+                  "--fwd-conf",
+                  "--hosts-path",
+                  "--resync-interval",
+                  "--retry-interval",
+                  "--theme"
+                ],
+                "required_flags_anywhere": []
+              }
+            },
+            {
+              "op": "zero-operand-flags.v1",
+              "config": {
+                "executables": [
+                  "kubefwd"
+                ],
+                "required_flags": [
+                  "-n"
+                ],
+                "options_with_values": [
+                  "-n",
+                  "--namespace",
+                  "-l",
+                  "--selector",
+                  "-x",
+                  "--context",
+                  "-c",
+                  "--kubeconfig",
+                  "-f",
+                  "--field-selector",
+                  "-d",
+                  "--domain",
+                  "-m",
+                  "--mapping",
+                  "-r",
+                  "--reserve",
+                  "-t",
+                  "--timeout",
+                  "-z",
+                  "--fwd-conf",
+                  "--hosts-path",
+                  "--resync-interval",
+                  "--retry-interval",
+                  "--theme"
+                ]
+              }
+            },
+            {
+              "op": "zero-operand-flags.v1",
+              "config": {
+                "executables": [
+                  "kubefwd"
+                ],
+                "required_flags": [
+                  "--namespace"
+                ],
+                "options_with_values": [
+                  "-n",
+                  "--namespace",
+                  "-l",
+                  "--selector",
+                  "-x",
+                  "--context",
+                  "-c",
+                  "--kubeconfig",
+                  "-f",
+                  "--field-selector",
+                  "-d",
+                  "--domain",
+                  "-m",
+                  "--mapping",
+                  "-r",
+                  "--reserve",
+                  "-t",
+                  "--timeout",
+                  "-z",
+                  "--fwd-conf",
+                  "--hosts-path",
+                  "--resync-interval",
+                  "--retry-interval",
+                  "--theme"
+                ]
+              }
+            },
+            {
+              "op": "zero-operand-flags.v1",
+              "config": {
+                "executables": [
+                  "kubefwd"
+                ],
+                "required_flags": [
+                  "-A"
+                ],
+                "options_with_values": [
+                  "-n",
+                  "--namespace",
+                  "-l",
+                  "--selector",
+                  "-x",
+                  "--context",
+                  "-c",
+                  "--kubeconfig",
+                  "-f",
+                  "--field-selector",
+                  "-d",
+                  "--domain",
+                  "-m",
+                  "--mapping",
+                  "-r",
+                  "--reserve",
+                  "-t",
+                  "--timeout",
+                  "-z",
+                  "--fwd-conf",
+                  "--hosts-path",
+                  "--resync-interval",
+                  "--retry-interval",
+                  "--theme"
+                ]
+              }
+            },
+            {
+              "op": "zero-operand-flags.v1",
+              "config": {
+                "executables": [
+                  "kubefwd"
+                ],
+                "required_flags": [
+                  "--all-namespaces"
+                ],
+                "options_with_values": [
+                  "-n",
+                  "--namespace",
+                  "-l",
+                  "--selector",
+                  "-x",
+                  "--context",
+                  "-c",
+                  "--kubeconfig",
+                  "-f",
+                  "--field-selector",
+                  "-d",
+                  "--domain",
+                  "-m",
+                  "--mapping",
+                  "-r",
+                  "--reserve",
+                  "-t",
+                  "--timeout",
+                  "-z",
+                  "--fwd-conf",
+                  "--hosts-path",
+                  "--resync-interval",
+                  "--retry-interval",
+                  "--theme"
+                ]
+              }
+            }
+          ]
+        },
+        "safe_variants": [],
+        "family": null,
+        "native_capability": null
+      }
+    ],
+    "homepage": "https://kubefwd.com",
+    "license": "Apache-2.0",
+    "publisher": null,
+    "icon": {
+      "kind": "none"
+    }
+  }
+}
