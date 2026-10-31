@@ -2419,7 +2419,7 @@
       ],
       "prompt": "I want a count of commits per author in this checkout. Run the listed command once and tell me what it printed. Do not substitute tools, change the command or cwd, add verification calls, request approval, or change policy.",
       "commands": [
-        "git shortlog -sn"
+        "git shortlog -sn HEAD"
       ]
     },
     {
