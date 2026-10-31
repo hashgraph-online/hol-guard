@@ -51,6 +51,31 @@ fn directory_flags(manager: &str) -> &'static [&'static str] {
     }
 }
 
+/// Flags that name the workspace root without spelling a directory, read the
+/// way native authority reads them (`package_directory_flags.rs`). Only the
+/// two exact spellings, because a boolean flag carries no attached value.
+fn workspace_root_flags(manager: &str) -> &'static [&'static str] {
+    match manager {
+        "pnpm" => &["-w", "--workspace-root"],
+        _ => &[],
+    }
+}
+
+/// The directory `pnpm -w` runs in: the nearest directory at or above `base`
+/// holding `pnpm-workspace.yaml`, as pnpm finds its own root. The caller
+/// holds the result to the workspace, as it holds a spelled directory.
+fn workspace_root(base: &Path) -> Option<PathBuf> {
+    let mut directory = std::fs::canonicalize(base).ok()?;
+    loop {
+        if directory.join("pnpm-workspace.yaml").is_file() {
+            return Some(directory);
+        }
+        if !directory.pop() {
+            return None;
+        }
+    }
+}
+
 /// Flags whose value is a program, not a file: the interpreter reads that
 /// text, so `;` or `|` inside its quotes is code, not an operator.
 fn inline_program_flags(name: &str) -> &'static [&'static str] {
@@ -483,7 +508,8 @@ fn filter_chain(tokens: &[Token]) -> Result<Vec<Vec<String>>, &'static str> {
 fn package_directory(tokens: &[Token], base: &Path) -> Option<(Vec<Token>, PathBuf, PathBuf)> {
     let manager = tokens.first().map(word)?;
     let flags = directory_flags(manager);
-    if flags.is_empty() {
+    let root_flags = workspace_root_flags(manager);
+    if flags.is_empty() && root_flags.is_empty() {
         return None;
     }
     let end = tokens
@@ -500,7 +526,7 @@ fn package_directory(tokens: &[Token], base: &Path) -> Option<(Vec<Token>, PathB
     };
     if options
         .iter()
-        .filter(|value| names_directory_flag(value, flags))
+        .filter(|value| names_directory_flag(value, flags) || root_flags.contains(*value))
         .count()
         != 1
     {
@@ -508,7 +534,10 @@ fn package_directory(tokens: &[Token], base: &Path) -> Option<(Vec<Token>, PathB
     }
     let index = usize::from(words.first() == Some(&"run"));
     let flag = words.get(index).copied().unwrap_or_default();
-    let (value, consumed) = if flags.contains(&flag) && index + 1 < words.len() {
+    let root = root_flags.contains(&flag);
+    let (value, consumed) = if root {
+        ("", 1)
+    } else if flags.contains(&flag) && index + 1 < words.len() {
         (words[index + 1], 2)
     } else {
         match flag.split_once('=') {
@@ -518,21 +547,25 @@ fn package_directory(tokens: &[Token], base: &Path) -> Option<(Vec<Token>, PathB
     };
     let mut rest: Vec<&str> = words[..index].to_vec();
     rest.extend_from_slice(&words[index + consumed..]);
-    if value.starts_with(['-', '~'])
-        || value.contains("//")
-        || !plain_word(value)
-        || rest.is_empty()
+    if rest.is_empty()
+        || (!root && (value.starts_with(['-', '~']) || value.contains("//") || !plain_word(value)))
     {
         return None;
     }
     // A flag naming a directory that is not there keeps the unwrapped path:
     // native authority reads that text unprojected too, and the package
-    // manager is the one that reports the missing directory.
-    let resolved = std::fs::canonicalize(base)
-        .ok()
-        .and_then(|root| std::fs::canonicalize(lexical(&root.join(value))).ok())
-        .filter(|directory| directory.is_dir())?;
-    let joined = lexical(&base.join(value));
+    // manager is the one that reports the missing directory. The workspace
+    // root is already a real directory or there was none to find.
+    let (resolved, joined) = if root {
+        let found = workspace_root(base)?;
+        (found.clone(), found)
+    } else {
+        let resolved = std::fs::canonicalize(base)
+            .ok()
+            .and_then(|root| std::fs::canonicalize(lexical(&root.join(value))).ok())
+            .filter(|directory| directory.is_dir())?;
+        (resolved, lexical(&base.join(value)))
+    };
     let mut rewritten = vec![tokens[0].clone()];
     rewritten.extend(rest.iter().map(|value| ((*value).to_owned(), false)));
     rewritten.extend_from_slice(&tokens[end..]);
