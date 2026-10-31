@@ -27,6 +27,28 @@ const LOG_VERB: &str = "log";
 /// Options whose value `gh` reads as a branch or ref name.
 const GH_REF_OPTIONS: &[&str] = &["-B", "-H", "-b", "--base", "--branch", "--head", "--ref"];
 
+/// The same options for `gh pr create` and the other create and edit verbs,
+/// where `-b` is `--body` and its value is prose the command posts rather
+/// than a ref name.
+const GH_REF_OPTIONS_BODY_VERBS: &[&str] = &["-B", "-H", "--base", "--branch", "--head", "--ref"];
+
+/// Git's own options, before the verb, that carry no value. Anything else
+/// in front of the verb either takes a value or sends git to another
+/// directory, so the walk gives up rather than guess which.
+const GIT_GLOBAL_FLAGS: &[&str] = &[
+    "--bare",
+    "--glob-pathspecs",
+    "--icase-pathspecs",
+    "--literal-pathspecs",
+    "--no-optional-locks",
+    "--no-pager",
+    "--no-replace-objects",
+    "--noglob-pathspecs",
+    "--paginate",
+    "-P",
+    "-p",
+];
+
 /// Options whose value `git log` reads as something other than a ref: search
 /// patterns, formats and counts. Their values are stepped over rather than
 /// taken, so an unlisted one only costs a mask.
@@ -86,6 +108,7 @@ const OPERAND_VERB_VALUE_OPTIONS: &[&str] = &[
     "--upload-pack",
     "-F",
     "-X",
+    "-x",
     "-j",
     "-m",
     "-o",
@@ -138,7 +161,7 @@ pub(in crate::pretool) fn ref_names(
         };
         match crate::pretool::executable_basename(executable) {
             "git" => git_refs(&segment.arguments, &mut names),
-            "gh" => option_refs(&segment.arguments, GH_REF_OPTIONS, &mut names),
+            "gh" => gh_refs(&segment.arguments, &mut names),
             _ => {}
         }
     }
@@ -150,18 +173,38 @@ pub(in crate::pretool) fn ref_names(
 }
 
 /// Whether `name` can be read as a ref alone: it spells no path, holds no
-/// `rev:path` separator, and nothing of that name sits next to the session.
+/// `rev:path` separator, carries nothing a ref name may not hold, and
+/// nothing of that name sits next to the session.
+///
+/// Git refuses whitespace and the glob characters in a ref name, so a token
+/// carrying one is something else: `git log *secret*` is a pathspec the
+/// shell may expand onto a file, and the value of an option the walk failed
+/// to recognise can be a whole shell command. Neither is masked.
 fn names_no_path(name: &str, cwd: &str) -> bool {
     !name.is_empty()
         && !name.contains(':')
         && !name.contains('\0')
         && !name.starts_with(['/', '~', '.', '-'])
+        && !name
+            .chars()
+            .any(|character| character.is_whitespace() || GLOB_OR_CONTROL.contains(&character))
         && std::fs::symlink_metadata(Path::new(cwd).join(name)).is_err()
 }
 
+/// Characters git's own ref-name check refuses, apart from the ones read
+/// above: a token holding one names something other than a ref.
+const GLOB_OR_CONTROL: &[char] = &['*', '?', '[', ']', '\\'];
+
 /// The ref names a `git` segment's arguments spell.
 fn git_refs(arguments: &[String], names: &mut Vec<RefWord>) {
-    let Some(verb) = arguments.first().filter(|first| !first.starts_with('-')) else {
+    let mut start = 0;
+    while arguments
+        .get(start)
+        .is_some_and(|word| GIT_GLOBAL_FLAGS.contains(&word.as_str()))
+    {
+        start += 1;
+    }
+    let Some(verb) = arguments.get(start).filter(|word| !word.starts_with('-')) else {
         return;
     };
     let verb = verb.as_str();
@@ -178,11 +221,20 @@ fn git_refs(arguments: &[String], names: &mut Vec<RefWord>) {
         _ => &[],
     };
     let operands = operands || verb == LOG_VERB;
-    let mut index = 1;
+    let mut index = start + 1;
     while index < arguments.len() {
         let token = arguments[index].as_str();
-        // `git log -- src` and `git branch -- name` start the path operands.
+        // `git log -- src` and `git checkout -- file` start the path
+        // operands. The ref-operand verbs have no path to name, so there
+        // `--` only ends the options and `git branch -- feat/x` still
+        // creates a branch.
         if token == "--" {
+            if !REF_POSITIONAL_VERBS.contains(&verb) {
+                return;
+            }
+            for operand in &arguments[index + 1..] {
+                names.push(RefWord::operand(operand));
+            }
             return;
         }
         if let Some((option, value)) = token.split_once('=') {
@@ -208,6 +260,23 @@ fn git_refs(arguments: &[String], names: &mut Vec<RefWord>) {
         }
         index += 1;
     }
+}
+
+/// The ref names a `gh` segment's arguments spell. The verb decides which
+/// options are read: `gh run list -b feat/x` lists a branch's runs, while
+/// `gh pr create -b 'password=...'` posts that text as the body.
+fn gh_refs(arguments: &[String], names: &mut Vec<RefWord>) {
+    let posts_a_body = arguments
+        .iter()
+        .filter(|word| !word.starts_with('-'))
+        .nth(1)
+        .is_some_and(|verb| verb == "create" || verb == "edit");
+    let options = if posts_a_body {
+        GH_REF_OPTIONS_BODY_VERBS
+    } else {
+        GH_REF_OPTIONS
+    };
+    option_refs(arguments, options, names);
 }
 
 /// The values of `options` in `arguments`, in both the separated and the

@@ -54,6 +54,11 @@ fn a_credential_word_in_a_ref_name_is_not_a_read() {
         "gh pr list --head fix/secrets-redaction",
         "gh pr create --base main --head feat/api-key-rotation",
         "gh run list --branch=feat/password-reset",
+        // Git's own options come before the verb, and `--` only ends the
+        // options for a verb that has no path to name.
+        "git --no-pager checkout -b fix/secret-scan-gate",
+        "git -p log --oneline origin/add-secret-blast-radius -5",
+        "git branch -- feat/secret-rotation",
     ] {
         assert!(
             !sensitive(command, cwd),
@@ -76,6 +81,17 @@ fn a_token_that_can_reach_a_file_keeps_its_screen() {
         "git checkout fix/secret-scan-gate -- secrets.md",
         "gh api repos/acme/project/contents/secrets.json",
         "cat secrets.md",
+        // `-x` runs its value, and a ref name holds no whitespace, so the
+        // shell command it carries keeps every word it spells.
+        "git rebase -x 'cat secrets.md' main",
+        // A pathspec the shell may expand onto a file is not a ref name.
+        "git log *secret*",
+        // `-b` is the body text for the create and edit verbs.
+        "gh pr create -b 'password=example-value'",
+        "gh issue create -t audit -b 'password=example-value'",
+        // A global option that carries a value can send git elsewhere, so
+        // no name is read against this directory at all.
+        "git -C project checkout -b fix/secret-scan-gate",
     ] {
         assert!(
             sensitive(command, cwd),

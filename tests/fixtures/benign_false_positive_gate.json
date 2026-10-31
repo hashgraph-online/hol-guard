@@ -36548,6 +36548,70 @@
       }
     },
     {
+      "id": "ref-name-branch-create-force-credential-word",
+      "cwd": "worktree",
+      "expect": "allow",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git checkout -B fix/secret-scan-gate"
+      }
+    },
+    {
+      "id": "ref-name-push-refspec-credential-word",
+      "cwd": "worktree",
+      "expect": "allow",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git push origin fix/secret-scan-gate"
+      }
+    },
+    {
+      "id": "ref-name-git-global-option-before-verb",
+      "cwd": "worktree",
+      "expect": "allow",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git --no-pager checkout -b fix/secret-scan-gate"
+      }
+    },
+    {
+      "id": "ref-name-branch-after-option-terminator",
+      "cwd": "worktree",
+      "expect": "allow",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git branch -- feat/secret-rotation"
+      }
+    },
+    {
       "id": "npm-outdated",
       "fix_area": "package",
       "harnesses": [
