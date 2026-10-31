@@ -20,6 +20,23 @@ pub(crate) fn body_items<'a>(
     name: &str,
     terminators: &[&'static str],
 ) -> Option<CommandList<'a>> {
+    body_items_at(text, name, terminators, 0)
+}
+
+/// How deep a subshell group may nest inside a command list. A group holds a
+/// command list of its own, so the list grammar reads it by reading that list;
+/// the bound keeps that reading finite.
+const MAX_GROUP_DEPTH: usize = 2;
+
+/// [`body_items`], carrying how many subshell groups already enclose this
+/// list. A `)` closes the list when `)` is one of its terminators, which is
+/// how the group's own list ends.
+fn body_items_at<'a>(
+    text: &'a str,
+    name: &str,
+    terminators: &[&'static str],
+    depth: usize,
+) -> Option<CommandList<'a>> {
     let chars: Vec<(usize, char)> = text.char_indices().collect();
     let mut items: Vec<(String, &'static str)> = Vec::new();
     let mut item = String::new();
@@ -119,7 +136,57 @@ pub(crate) fn body_items<'a>(
                 at_word_start = true;
                 i += 1;
             }
-            '`' | '(' | ')' | '{' | '}' => return None,
+            '`' | '{' | '}' => return None,
+            // A `(` in command position opens a subshell, whose body is a
+            // command list read the same way this one is. The group runs what
+            // it holds in a shell of its own, so the written-out text keeps
+            // the parentheses and the proofs below read the same work the
+            // construct ran. Anywhere else a `(` belongs to a shape outside
+            // this grammar (an array literal, a function body), which keeps
+            // its review.
+            // `((` opens an arithmetic command, not a subshell holding a
+            // subshell, and arithmetic assigns without an `=` sign. It is not
+            // a command list, so it keeps its review.
+            '(' if command_position && depth < MAX_GROUP_DEPTH && !rest.starts_with("((") => {
+                let (inner, _, after) = body_items_at(&text[byte + 1..], name, &[")"], depth + 1)?;
+                if inner.is_empty()
+                    || !inner
+                        .iter()
+                        .all(|(list_item, _)| stages_are_plain(list_item))
+                {
+                    return None;
+                }
+                item.push('(');
+                for (index, (inner_item, separator)) in inner.iter().enumerate() {
+                    item.push_str(inner_item);
+                    if index + 1 < inner.len() {
+                        item.push_str(separator);
+                    }
+                }
+                item.push(')');
+                at_word_start = false;
+                command_position = false;
+                redirect_target = false;
+                let consumed = text.len() - after.len();
+                i = chars.partition_point(|(index, _)| *index < consumed);
+            }
+            ')' if terminators.contains(&")") => {
+                let trimmed = item.trim().to_owned();
+                if ends_in_an_open_escape(&trimmed) {
+                    return None;
+                }
+                if trimmed.is_empty() {
+                    // `(ls; )` closes after a finished item; `(ls &&)` and
+                    // `()` leave an empty slot that runs nothing.
+                    if items.last().is_none_or(|last| last.1 != "; ") {
+                        return None;
+                    }
+                } else {
+                    items.push((trimmed, "; "));
+                }
+                return Some((items, ")", &text[byte + 1..]));
+            }
+            '(' | ')' => return None,
             '#' if at_word_start => return None,
             '\\' => {
                 let next = chars.get(i + 1)?.1;
@@ -556,6 +623,16 @@ pub(crate) fn unquote_whole_references(item: &str) -> String {
 }
 
 pub(crate) fn substitute(item: &str, word: &str) -> Option<String> {
+    if !stages_are_plain(item) {
+        return None;
+    }
+    Some(item.replace(MARKER, word))
+}
+
+/// Whether every pipeline stage of a body item starts with a plain command
+/// word. A subshell group's own items were read as a command list and checked
+/// here when the group was parsed.
+fn stages_are_plain(item: &str) -> bool {
     // Every pipeline stage must start with a plain word: no marker, no
     // assignment, no shell keyword. A leading redirection such as
     // `2>/dev/null $f` would hide the real command word from this check, so a
@@ -568,7 +645,28 @@ pub(crate) fn substitute(item: &str, word: &str) -> Option<String> {
     // the `[` test it asks, of less: inside `[[ ]]` the shell splits no word
     // and expands no glob. An unclosed `[[` is some other shape and keeps the
     // construct on the unmodeled path with every other keyword.
-    for (index, stage) in item.split('|').enumerate() {
+    //
+    // `||` writes two `|` characters in a row, so splitting on the single
+    // character leaves an empty run between them where the shell has a list
+    // separator rather than a pipeline stage. That gap carries no command
+    // word of its own, and the two commands it separates are each checked as
+    // the stage before and after it, so a single empty run between two
+    // non-empty runs is stepped over. Anything else is some other shape --
+    // a pipeline that starts or ends on `|`, or a run of three or more `|`
+    // the shell reads as a syntax error -- and keeps the construct on the
+    // unmodeled path.
+    let stages: Vec<&str> = item.split('|').collect();
+    for (index, stage) in stages.iter().copied().enumerate() {
+        if stage.is_empty() {
+            if index > 0
+                && index + 1 < stages.len()
+                && !stages[index - 1].is_empty()
+                && !stages[index + 1].is_empty()
+            {
+                continue;
+            }
+            return false;
+        }
         // A `!` in front of a pipeline inverts the exit status it reports and
         // runs nothing of its own, so the command word this check reads is
         // the word written after it. The shell accepts that `!` only where
@@ -578,7 +676,9 @@ pub(crate) fn substitute(item: &str, word: &str) -> Option<String> {
         } else {
             stage
         };
-        let first = stage.split_whitespace().next()?;
+        let Some(first) = stage.split_whitespace().next() else {
+            return false;
+        };
         let bare = first.trim_start_matches(|c: char| c.is_ascii_digit());
         let bracket_test = first == "[[" && stage.trim_end().ends_with("]]");
         if first.contains(MARKER)
@@ -587,10 +687,10 @@ pub(crate) fn substitute(item: &str, word: &str) -> Option<String> {
             || (first != "[" && !bracket_test && first.contains(['*', '?', '[']))
             || (CONTROL_WORDS.contains(&first) && !bracket_test)
         {
-            return None;
+            return false;
         }
     }
-    Some(item.replace(MARKER, word))
+    true
 }
 
 /// The pipeline without the `!` that inverts its exit status, where one is
