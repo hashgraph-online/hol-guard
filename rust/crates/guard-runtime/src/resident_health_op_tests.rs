@@ -175,3 +175,79 @@ fn advertises_the_operation_so_a_caller_can_tell_an_older_resident_apart() {
     assert!(crate::resident_op_features::RESIDENT_OP_FEATURES
         .contains(&guard_contracts::RESIDENT_HEALTH_FEATURE));
 }
+
+/// The only text a health reply is allowed to carry: the build it came from,
+/// the schema it answers in, its one status word, and the caller's own echoed
+/// identifier and digest. Every other value in the reply is a figure.
+const IDENTITY_FIELDS: [&str; 7] = [
+    "build_sha",
+    "request_id",
+    "request_sha256",
+    "runtime_version",
+    "schema",
+    "status",
+    "target",
+];
+
+fn every_value_is_a_figure(value: &Value, path: &str) {
+    match value {
+        Value::Object(fields) => {
+            for (key, field) in fields {
+                let child = if path.is_empty() {
+                    key.clone()
+                } else {
+                    format!("{path}.{key}")
+                };
+                every_value_is_a_figure(field, &child);
+            }
+        }
+        Value::Number(_) => {}
+        Value::String(_) => assert!(
+            !path.contains('.') && IDENTITY_FIELDS.contains(&path),
+            "`{path}` carries text; a reply may only spell its own identity"
+        ),
+        other => panic!("`{path}` is {other}; a reply carries objects and figures"),
+    }
+}
+
+#[test]
+fn every_value_outside_the_replys_own_identity_is_a_figure() {
+    // The counters carry no text from the work the resident did, by
+    // construction. This holds them to it: a counter added later that named
+    // the slowest operation, the path it read or the caller that sent it
+    // would be text, and text is only allowed where the reply says what it
+    // itself is. A nested field of an allowed name fails too, so a `status`
+    // string added inside the counters is caught as well.
+    let encoded = evaluate_resident_health(&request("req-figures")).unwrap();
+
+    every_value_is_a_figure(&serde_json::from_slice::<Value>(&encoded).unwrap(), "");
+}
+
+#[test]
+fn a_request_that_carried_a_credential_leaves_none_of_it_in_the_reply() {
+    // Assembled from pieces so no file in this repository holds a whole token
+    // of a shape a credential scanner recognises.
+    let secret = format!("{}{}{}", "AKIA", "QYLPT3K7", "R4FXM2WD");
+    let payload = format!("AWS_ACCESS_KEY_ID={secret}");
+
+    // Charge every counter from a request carrying that credential. What the
+    // resident keeps of a payload it read is a length and a duration; a
+    // diagnostic reading the reply afterwards must not be able to recover the
+    // bytes from any of it.
+    crate::resident_health_counters::record_served(std::time::Instant::now(), payload.len());
+    crate::resident_health_counters::record_auth_failure();
+    crate::resident_health_counters::record_frame_error();
+    crate::resident_health_counters::record_deadline_exceeded();
+    crate::resident_health_counters::record_digest_mismatch();
+    crate::resident_health_counters::record_panic();
+    record_overload();
+
+    let reply = String::from_utf8(evaluate_resident_health(&request("req-credential")).unwrap())
+        .expect("the reply is JSON text");
+
+    assert!(!reply.contains(&secret), "the reply repeats the credential");
+    assert!(
+        !reply.contains("AWS_ACCESS_KEY_ID"),
+        "the reply names the field the credential was read from"
+    );
+}
