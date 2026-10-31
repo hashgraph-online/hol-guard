@@ -233,13 +233,32 @@ fn verb_safe(positionals: &[&str], output: Option<&str>) -> bool {
         // revisions recorded for it. Neither names a revision to move to, so
         // neither is a way to start, stop or undo a rollout -- `restart`,
         // `undo`, `pause` and `resume` are, and they stay out.
-        "rollout" => matches!(rest, ["status" | "history", resource] if !resource.is_empty()),
+        //
+        // Both read exactly one rollout, written either as `deploy/web` or as
+        // the two words `deploy web`. A bare resource type selects every
+        // deployment in the namespace instead of one, which is a different
+        // read from the one the command appears to name, so it stays out
+        // alongside a command that names two.
+        "rollout" => {
+            matches!(rest, ["status" | "history", target @ ..] if names_one_rollout(target))
+        }
         // `kubectl wait` blocks until the objects named on the command line
         // reach the condition `--for` describes, or until its timeout, and
         // prints which ones did. Waiting is not a way to bring the condition
         // about, and unlike `logs --follow` it ends. `-f` reads a local
         // manifest and stays out with every other unlisted option.
         "wait" => !rest.is_empty(),
+        _ => false,
+    }
+}
+
+/// Whether `target` names exactly one rollout, as `deploy/web` or `deploy web`.
+fn names_one_rollout(target: &[&str]) -> bool {
+    match target {
+        [slashed] => slashed
+            .split_once('/')
+            .is_some_and(|(resource, name)| !resource.is_empty() && !name.is_empty()),
+        [resource, name] => !resource.is_empty() && !resource.contains('/') && !name.is_empty(),
         _ => false,
     }
 }
