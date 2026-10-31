@@ -304,6 +304,31 @@ mod tests {
         }
     }
 
+    /// npm's own admission also reads its configuration, which this unit
+    /// context names no directory for, so the shape test above cannot tell a
+    /// refused verb from a refused configuration. The verb list answers for
+    /// itself here: every word npm resolves to a package or a script stays
+    /// out of it, whatever the configuration proof later decides.
+    #[test]
+    fn npm_verbs_that_run_a_program_stay_out_of_the_usage_list() {
+        for verb in ["create", "x", "exec", "run", "run-script", "init"] {
+            assert!(!super::usage_only_verb("npm", verb), "npm {verb}");
+        }
+        // The aliases that only print usage are still in it.
+        for verb in [
+            "add",
+            "remove",
+            "un",
+            "in",
+            "up",
+            "info",
+            "ln",
+            "clean-install",
+        ] {
+            assert!(super::usage_only_verb("npm", verb), "npm {verb}");
+        }
+    }
+
     #[test]
     fn workspace_selected_launchers_and_pagers_are_refused() {
         for (tool, arguments) in [
