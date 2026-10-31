@@ -45,8 +45,10 @@ use std::path::Path;
 
 // A Go build compiles the sources the module cache already holds and writes
 // its objects to a private build cache. Only the verbs that stay there are
-// local: `get`, `install`, `mod` and `work` reach a registry, and `tool` and
-// `clean` are neither a build nor a read.
+// local: `get`, `install`, `mod` and `work` reach a registry, and `clean`
+// deletes rather than builds. `tool` runs whatever program the toolchain
+// carries under that name, so it is not on this list; the one subcommand that
+// only reads a profile the workspace already holds is read below.
 const GO_LOCAL_VERBS: &[&str] = &[
     "build", "test", "vet", "fmt", "list", "doc", "env", "version", "run", "generate",
 ];
@@ -60,8 +62,12 @@ const GO_LOCAL_VERBS: &[&str] = &[
 // of the workspace and reads what it produced -- a coverage run of the test
 // suite, a snapshot suite, an expansion, a read of which dependencies the
 // crate uses -- so the work reaches no further than `test` and `build`
-// already do. A name that is not on this list keeps its review, because
-// cargo would run whatever program carries it.
+// already do. `mutants` edits the crate's own sources between those runs and
+// puts them back, which stays inside the directory the sandbox already lets a
+// build write. A name that is not on this list keeps its review, because
+// cargo would run whatever program carries it: `audit` and `deny` fetch an
+// advisory database, which is the registry reach the first group is held back
+// for.
 const CARGO_LOCAL_VERBS: &[&str] = &[
     "build",
     "b",
@@ -86,6 +92,7 @@ const CARGO_LOCAL_VERBS: &[&str] = &[
     "expand",
     "machete",
     "udeps",
+    "mutants",
 ];
 // Cargo's own options stand in front of the verb. These say only how cargo
 // reports what it does, and how strictly it treats the lockfile and the
@@ -139,12 +146,76 @@ pub(super) fn local_go_work(arguments: &[&str], directory: &Path, workspace: &Pa
     let Some((verb, rest)) = arguments.split_first() else {
         return false;
     };
-    GO_LOCAL_VERBS.contains(&verb.to_ascii_lowercase().as_str())
+    let verb = verb.to_ascii_lowercase();
+    (GO_LOCAL_VERBS.contains(&verb.as_str()) || (verb == "tool" && local_go_tool(rest)))
         && !rest
             .iter()
             .any(|argument| names_a_go_fetch(argument) || argument.contains('@'))
         && super::cd::first_from(directory, workspace, |probe| probe.join("go.mod").is_file())
             .is_some()
+}
+
+/// The `go tool` subcommands that read what a run inside the workspace has
+/// already produced.
+///
+/// `go tool` is a launcher: the name behind it selects a program the
+/// toolchain carries, and most of them do more than read. `pprof` serves a
+/// web interface and fetches a profile over the network, `test2json` runs the
+/// test binary it is given, and `compile`, `link` and `objdump` are build
+/// steps that take their own paths. `cover` is the exception: it reads a
+/// coverage profile the admitted `go test -coverprofile` run just wrote and
+/// renders it, which reaches no further than that run did.
+fn local_go_tool(arguments: &[&str]) -> bool {
+    let Some((name, rest)) = arguments.split_first() else {
+        return false;
+    };
+    name.eq_ignore_ascii_case("cover") && cover_renders_a_profile(rest)
+}
+
+/// Whether `go tool cover`'s arguments only render a profile to a file.
+///
+/// Each flag here takes a value, in either of go's spellings (`-func=x` and
+/// `-func x`), and nothing else is accepted, so a word this does not know
+/// keeps the review the launcher has. `-html` with no `-o` starts a local
+/// web server and opens a browser on it, which is not the file render this
+/// admits, so it is refused as well.
+fn cover_renders_a_profile(arguments: &[&str]) -> bool {
+    let mut renders = false;
+    let mut html = false;
+    let mut output = false;
+    let mut index = 0;
+    while let Some(word) = arguments.get(index) {
+        let (flag, attached) = match word.split_once('=') {
+            Some((flag, value)) => (flag, Some(value)),
+            None => (*word, None),
+        };
+        let value = match attached {
+            Some(value) => {
+                index += 1;
+                value
+            }
+            None => {
+                let Some(value) = arguments.get(index + 1) else {
+                    return false;
+                };
+                index += 2;
+                *value
+            }
+        };
+        if value.is_empty() || value.starts_with('-') {
+            return false;
+        }
+        match flag {
+            "-func" => renders = true,
+            "-html" => {
+                renders = true;
+                html = true;
+            }
+            "-o" => output = true,
+            _ => return false,
+        }
+    }
+    renders && (!html || output)
 }
 
 /// Whether `cargo` runs a local verb against a package reachable from

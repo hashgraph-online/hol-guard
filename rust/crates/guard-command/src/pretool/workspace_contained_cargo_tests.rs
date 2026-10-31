@@ -74,6 +74,8 @@ fn the_named_workspace_subcommands_run_inside_the_sandbox_too() {
         "cargo expand --lib",
         "cargo machete",
         "cargo udeps --workspace",
+        "cargo mutants",
+        "cargo mutants --in-place",
     ] {
         for harness in ["codex", "claude-code", "omp"] {
             let (reason, minimum) = outcome(harness, command, &ws);

@@ -210,3 +210,49 @@ fn the_chdir_flag_moves_the_run_the_way_a_cd_does() {
         }
     }
 }
+
+/// `go tool cover` reads the profile the admitted `go test -coverprofile` run
+/// just wrote, so the step after a coverage run is contained with it. The
+/// rest of the launcher's names, and a render that would open a browser
+/// instead of writing a file, keep their review.
+#[test]
+fn the_cover_tool_renders_the_profile_the_test_run_wrote() {
+    let ws = module("go-cover");
+    for command in [
+        "go test ./... -coverprofile=coverage.out",
+        "go tool cover -func=coverage.out",
+        "go tool cover -func coverage.out",
+        "go tool cover -html=coverage.out -o coverage.html",
+        "go tool cover -html coverage.out -o coverage.html",
+    ] {
+        for harness in ["codex", "claude-code", "omp"] {
+            let (reason, minimum) = outcome(harness, command, &ws);
+            assert_eq!(reason == CONTAINED, host(), "{reason} {harness}: {command}");
+            if !host() {
+                assert_eq!(
+                    minimum, "review",
+                    "{reason}: no sandbox must require review"
+                );
+            }
+        }
+    }
+    for command in [
+        // Without `-o` this serves the report and opens a browser on it.
+        "go tool cover -html=coverage.out",
+        // A flag the render does not take, and a flag with no value.
+        "go tool cover -func=coverage.out -mode=set",
+        "go tool cover -func",
+        "go tool cover -o coverage.html",
+        "go tool cover",
+        // The rest of the launcher's names run their own programs.
+        "go tool pprof -http=:8080 cpu.prof",
+        "go tool test2json ./app.test",
+        "go tool compile ./main.go",
+        "go tool nm ./app",
+    ] {
+        for harness in ["codex", "claude-code", "omp"] {
+            let (reason, _) = outcome(harness, command, &ws);
+            assert_ne!(reason, CONTAINED, "{harness}: {command}");
+        }
+    }
+}
