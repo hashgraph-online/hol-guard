@@ -304,7 +304,8 @@ fn a_return_after_a_builtin_move_follows_the_move_that_happened() {
 /// walk that spends only the bare `builtin` keyword would read the move out
 /// of a descent as no move at all. An option-carrying prefix (`command -p cd`)
 /// carries the word on only where the option still runs it, so
-/// `command -v cd build` buys no descent.
+/// `command -v cd build` buys no descent, and `time -- cd build` none
+/// either.
 #[test]
 fn a_wrapped_move_is_still_a_move() {
     let ws = workspace("cwd-wrapped", true);
@@ -338,6 +339,9 @@ fn a_wrapped_move_is_still_a_move() {
         "command -v cd build && ls ..",
         "command -V cd build && ls ..",
         "builtin -p cd build && ls ..",
+        // `time` has no `--` terminator: bash looks for a program named `--`
+        // and finds none, so the descent never happens.
+        "time -- cd build && ls ..",
     ] {
         assert!(!shaped(command, &ws), "{command}");
     }

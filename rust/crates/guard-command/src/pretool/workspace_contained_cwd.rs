@@ -51,7 +51,9 @@ fn moves_the_shell(executable: Option<&str>) -> bool {
 /// peels before it reaches this walk. An option carries the word on only
 /// where it still runs it: `command -p cd app` and `time -p cd app` move,
 /// while `command -v cd app` and `command -V cd app` only print how `cd`
-/// would resolve and leave the shell where it stood.
+/// would resolve and leave the shell where it stood. `time` carries no `--`
+/// terminator either: bash reads `time -- cd app` as a program named `--`
+/// and cannot find it.
 ///
 /// `None` where a wrapper has no word left to run, which is no move the walk
 /// can read and so no walk at all.
@@ -63,11 +65,16 @@ fn spends_wrapper_keywords<'a>(
     let mut arguments = arguments;
     while matches!(name, "builtin" | "command" | "time") {
         // The keyword's own options come before the word it runs, and `--`
-        // ends them: `builtin -- cd ..` moves.
+        // ends them: `builtin -- cd ..` moves. `time` has no such terminator,
+        // and bash reads `time -- cd ..` as a program named `--` it cannot
+        // find, so the shell stays where it was.
         let mut rest = arguments;
         loop {
             let (first, tail) = rest.split_first()?;
             if first == "--" {
+                if name == "time" {
+                    return None;
+                }
                 rest = tail;
                 break;
             }
