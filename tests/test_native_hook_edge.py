@@ -635,26 +635,32 @@ def test_the_envelope_asks_for_an_edge_option_only_from_a_resident_that_supports
 
 
 @pytest.mark.parametrize(
-    ("features", "record_receipt", "asked"),
+    ("feature", "option"),
     [
-        (("edge-receipt-record-v1", "edge-activity-record-v1"), True, True),
-        (("edge-receipt-record-v1", "edge-activity-record-v1"), False, False),
-        (("edge-receipt-record-v1",), True, False),
-        (("edge-activity-record-v1",), True, False),
+        ("edge-activity-record-v1", "record_activity"),
+        ("edge-pre-tool-activity-record-v1", "record_pre_tool_activity"),
     ],
+)
+@pytest.mark.parametrize(
+    ("receipt_feature", "activity_feature", "record_receipt", "asked"),
+    [(True, True, True, True), (True, True, False, False), (True, False, True, False), (False, True, True, False)],
 )
 def test_the_envelope_asks_the_edge_for_the_activity_only_with_its_receipt(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    features: tuple[str, ...],
+    feature: str,
+    option: str,
+    receipt_feature: bool,
+    activity_feature: bool,
     record_receipt: bool,
     asked: bool,
 ) -> None:
+    features = [name for name, on in (("edge-receipt-record-v1", receipt_feature), (feature, activity_feature)) if on]
     captured = _advertise(tmp_path, monkeypatch, *features)
     sent = _sent_envelope(tmp_path, captured, record_receipt=record_receipt)
     # The activity rides behind the receipt the resident queues, so a daemon
     # that records the receipt itself also records the activity.
-    assert sent.get("record_activity") is (asked or None)
+    assert sent.get(option) is (asked or None)
 
 
 @pytest.mark.parametrize(
