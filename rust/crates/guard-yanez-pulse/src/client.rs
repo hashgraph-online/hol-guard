@@ -249,6 +249,7 @@ impl PulseTransport for HttpPulseTransport {
         consent_not_after_rfc3339: &str,
         idempotency_key: &str,
     ) -> Result<CreatedAuthorization, PulseError> {
+        crate::terms::check_terms_size(terms)?;
         let body = json!({
             "terms": terms,
             "decision_window_seconds": DECISION_WINDOW_SECONDS,
@@ -425,5 +426,17 @@ mod tests {
         assert!(!valid_agent_key("sk_live_123456789"));
         assert!(!valid_agent_key("yak_has space"));
         assert!(HttpPulseTransport::new("nope").is_err());
+    }
+
+    #[test]
+    fn oversized_terms_are_refused_before_sending() {
+        let transport = HttpPulseTransport::new("yak_0123456789abcdef").unwrap();
+        let terms = json!({"details": "x".repeat(crate::terms::MAX_TERMS_BYTES)});
+        assert_eq!(
+            transport
+                .create_authorization(&terms, "2026-09-27T00:01:00Z", "key-a")
+                .err(),
+            Some(PulseError::InvalidRequest("terms_size"))
+        );
     }
 }

@@ -251,13 +251,19 @@ pub fn build_terms_with_summary(
             "nonce": binding.request_nonce,
         },
     });
-    let size = serde_json::to_vec(&terms)
+    check_terms_size(&terms)?;
+    Ok(terms)
+}
+
+/// Refuses terms over Pulse's 4 KiB cap before they are sent.
+pub(crate) fn check_terms_size(terms: &Value) -> Result<(), PulseError> {
+    let size = serde_json::to_vec(terms)
         .map_err(|_| PulseError::InvalidRequest("terms"))?
         .len();
     if size > MAX_TERMS_BYTES {
         return Err(PulseError::InvalidRequest("terms_size"));
     }
-    Ok(terms)
+    Ok(())
 }
 
 #[cfg(test)]
