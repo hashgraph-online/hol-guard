@@ -1115,6 +1115,38 @@
    "body": "e88822ef3716"
   },
   {
+   "file": "rust/crates/guard-runtime/src/harness_coverage_artifacts.rs",
+   "item": "pub(super) fn open_without_following(path: &Path) -> io::Result<File>",
+   "verdict": "windows-permissive",
+   "note": "Windows has no `O_NOFOLLOW`, so the open follows a reparse point at the last component, as the Python registry did. Every caller lstats the path first and refuses a symlink, then compares the opened file's size and times with that lstat, so a link swapped in after the lstat is caught by the stamp check rather than the open. The tests in `harness_coverage_tests.rs` that are not `cfg(unix)`-gated run this arm on Windows.",
+   "cfg": "not(unix)",
+   "body": "51989753051d"
+  },
+  {
+   "file": "rust/crates/guard-runtime/src/harness_coverage_artifacts.rs",
+   "item": "pub(super) fn stamp(metadata: &Metadata) -> Stamp",
+   "verdict": "windows-permissive",
+   "note": "Windows `Metadata` exposes no device or inode number on stable Rust, so the stamp is the size with the modified and created times. A file replaced by one of the same size carrying the same times between two reads is not noticed; the Unix arm also compares device, inode and change time. The tests in `harness_coverage_tests.rs` that are not `cfg(unix)`-gated run this arm on Windows.",
+   "cfg": "not(unix)",
+   "body": "14f0d404cabe"
+  },
+  {
+   "file": "rust/crates/guard-runtime/src/harness_coverage_registry.rs",
+   "item": "fn registry_acl_is_private(_metadata: &Metadata, _owner_uid: u32) -> bool",
+   "verdict": "windows-permissive",
+   "note": "The registry's owner and mode are only checked on Unix, matching the Python registry, which skipped the check when `os.name == \"nt\"`. On Windows the registry lives under the machine state root the administrator-only install creates, and every change is made under the machine-state lock by an administrator. Reading a Windows DACL is not ported. The tests in `harness_coverage_tests.rs` that are not `cfg(unix)`-gated run this arm on Windows.",
+   "cfg": "not(unix)",
+   "body": "ce37d9a6c3da"
+  },
+  {
+   "file": "rust/crates/guard-runtime/src/harness_coverage_registry.rs",
+   "item": "fn sync_directory(_directory: &Path) -> io::Result<()>",
+   "verdict": "posix-primitive",
+   "note": "Fsyncing a directory to make a new name durable is a POSIX primitive with no Windows counterpart; the registry file itself is flushed before it is renamed into place, and NTFS orders the rename with the file's own data. The tests in `harness_coverage_tests.rs` that are not `cfg(unix)`-gated run this arm on Windows.",
+   "cfg": "not(unix)",
+   "body": "e88822ef3716"
+  },
+  {
    "file": "rust/crates/guard-runtime/src/hook_approval_context/support.rs",
    "item": "pub(super) fn named_user_home(_text: &str) -> Option<String>",
    "verdict": "posix-primitive",

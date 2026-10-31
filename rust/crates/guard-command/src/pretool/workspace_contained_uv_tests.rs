@@ -339,3 +339,47 @@ fn the_project_is_read_from_the_directory_the_run_enters() {
         }
     }
 }
+
+#[test]
+fn the_lock_assertion_reads_the_lockfile_the_project_already_holds() {
+    let ws = project("uv-lock-check");
+    for command in [
+        "uv lock --check",
+        "uv lock --locked",
+        "uv lock --check --offline",
+        "uv --project api lock --check",
+    ] {
+        std::fs::create_dir_all(ws.join("api/.venv/bin")).unwrap();
+        std::fs::write(ws.join("api/pyproject.toml"), PROJECT).unwrap();
+        for harness in ["codex", "claude-code", "omp"] {
+            let (reason, minimum) = outcome(harness, command, &ws);
+            assert_eq!(reason == CONTAINED, host(), "{reason} {harness}: {command}");
+            if !host() {
+                assert_eq!(
+                    minimum, "review",
+                    "{reason}: no sandbox must require review"
+                );
+            }
+        }
+    }
+    for command in [
+        // Each of these resolves afresh, and writes the lockfile or the
+        // environment once it has.
+        "uv lock",
+        "uv lock --upgrade",
+        "uv lock --dry-run",
+        "uv sync --frozen",
+        // The assertion has to be the lock's own, not a word uv reads for
+        // something else.
+        "uv lock --check-url https://example.test/simple",
+        "uv add --check requests",
+        // `--env-file` takes the next word as the file's name, so the lock
+        // carries no assertion and uv resolves and rewrites it.
+        "uv lock --env-file --check",
+    ] {
+        for harness in ["codex", "claude-code", "omp"] {
+            let (reason, _) = outcome(harness, command, &ws);
+            assert_ne!(reason, CONTAINED, "{harness}: {command}");
+        }
+    }
+}

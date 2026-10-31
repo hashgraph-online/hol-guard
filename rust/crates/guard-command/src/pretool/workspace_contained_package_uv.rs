@@ -21,6 +21,9 @@ use std::path::{Path, PathBuf};
 // read it are local: `add`, `tool`, `sync` and the rest reach a registry, and
 // `pip` is local for the queries [`super::super::python`] admits.
 const UV_LOCAL_VERBS: &[&str] = &["run", "tree", "export", "version", "pip"];
+// `uv lock` writes the lockfile, so it is not a local verb; the one spelling
+// that only reports on it is read below.
+const UV_LOCK_ASSERTIONS: &[&str] = &["--check", "--locked"];
 // uv options a local verb may carry: each changes what the verb reads, never
 // what it has to fetch. The list is an allowlist because uv's installing
 // options are many and grow: an option this module does not know keeps the
@@ -28,6 +31,7 @@ const UV_LOCAL_VERBS: &[&str] = &["run", "tree", "export", "version", "pip"];
 const UV_VERB_FLAGS: &[&str] = &[
     "--frozen",
     "--locked",
+    "--check",
     "--no-sync",
     "--no-dev",
     "--no-hashes",
@@ -78,6 +82,9 @@ struct UvCommand {
     project: PathBuf,
     discovered: bool,
     operand: Option<usize>,
+    /// Whether a lock assertion flag stood on its own rather than being read
+    /// as another option's value.
+    asserts: bool,
 }
 
 /// Read `arguments` as far as the verb's first operand. `--directory` moves
@@ -89,6 +96,7 @@ fn uv_command(arguments: &[&str], directory: &Path, workspace: &Path) -> Option<
     let mut named: Option<&str> = None;
     let mut verb: Option<usize> = None;
     let mut operand = None;
+    let mut asserts = false;
     let mut index = 0;
     while let Some(argument) = arguments.get(index) {
         let separator = *argument == "--";
@@ -113,6 +121,7 @@ fn uv_command(arguments: &[&str], directory: &Path, workspace: &Path) -> Option<
             let known = UV_GLOBAL_FLAGS.contains(&name)
                 || (verb.is_some() && UV_VERB_FLAGS.contains(&name));
             if known {
+                asserts = asserts || UV_LOCK_ASSERTIONS.contains(&name);
                 index += 1;
                 continue;
             }
@@ -146,6 +155,7 @@ fn uv_command(arguments: &[&str], directory: &Path, workspace: &Path) -> Option<
         project,
         discovered: named.is_none(),
         operand,
+        asserts,
     })
 }
 
@@ -165,7 +175,18 @@ pub(super) fn local_uv_work(arguments: &[&str], directory: &Path, workspace: &Pa
         return false;
     };
     let verb = arguments[uv.verb].to_ascii_lowercase();
-    if !UV_LOCAL_VERBS.contains(&verb.as_str()) {
+    // `uv lock` resolves the project's dependencies and rewrites `uv.lock`.
+    // `--check`, which uv spelled `--locked` first, asks the opposite: it
+    // asserts the lockfile already satisfies `pyproject.toml` and exits
+    // non-zero when it does not, writing nothing either way. That is the read
+    // of the project `uv tree` already makes. `--dry-run` is absent because
+    // it resolves the dependencies afresh to report what would change, which
+    // is the fetch the sandbox has no network for.
+    // The flag has to stand on its own: `uv lock --env-file --check` reads
+    // `--check` as the file's name, so uv still resolves and rewrites the
+    // lockfile.
+    let asserts_the_lock = verb == "lock" && uv.asserts;
+    if !UV_LOCAL_VERBS.contains(&verb.as_str()) && !asserts_the_lock {
         return false;
     }
     if verb == "pip" {

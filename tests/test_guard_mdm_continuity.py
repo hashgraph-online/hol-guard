@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
 from pathlib import Path
@@ -357,3 +358,136 @@ def test_continuity_provision_cli_is_prompt_free(
 
     assert cli.main(["mdm", "continuity-provision", "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["operation"] == "continuity-provision"
+
+
+def test_continuity_fails_closed_without_the_native_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    paths = _prepare(tmp_path, monkeypatch)
+    continuity.provision_machine_continuity()
+
+    def unavailable(_request: dict[str, object]) -> dict[str, object]:
+        raise OSError("installation_identity_native_unavailable")
+
+    monkeypatch.setattr(continuity, "_native_answer", unavailable)
+
+    result = continuity.verify_installation_continuity(paths, system_name="Darwin")
+
+    assert (result.state, result.identity_reason_code, result.lease_reason_code) == (
+        "unknown",
+        "installation_identity_probe_failed",
+        "lease_continuity_probe_failed",
+    )
+    assert result.record is None
+    with pytest.raises(OSError, match="installation_identity_native_unavailable"):
+        continuity.provision_machine_continuity()
+
+
+def test_continuity_sends_each_probe_outcome_to_the_native_runtime(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = _prepare(tmp_path, monkeypatch)
+    continuity.provision_machine_continuity()
+    state_bytes = (paths.state_root / "installation-continuity.json").read_bytes()
+
+    def denied(_paths: MachinePaths, **_kwargs: object) -> object:
+        raise PermissionError("denied")
+
+    def boot_failed(**_kwargs: object) -> object:
+        raise OSError("lease_continuity_boot_probe_failed")
+
+    monkeypatch.setattr(continuity, "verified_machine_device_key_ids", denied)
+    monkeypatch.setattr(continuity, "observe_boot", boot_failed)
+    requests: list[dict[str, object]] = []
+
+    def answer(request: dict[str, object]) -> dict[str, object]:
+        requests.append(request)
+        if request["op"] == "parse":
+            return {"ok": True}
+        return {
+            "ok": True,
+            "state": "tampered",
+            "identity_reason_code": "installation_identity_acl_invalid",
+            "lease_reason_code": "lease_continuity_invalid",
+            "record": None,
+            "observed": False,
+        }
+
+    monkeypatch.setattr(continuity, "_native_answer", answer)
+
+    result = continuity.verify_installation_continuity(paths, system_name="Darwin")
+
+    assert [request["op"] for request in requests] == ["parse", "verify"]
+    assert requests[0]["content"] == requests[1]["content"]
+    assert base64.b64decode(str(requests[1]["content"])) == state_bytes
+    assert requests[1]["key"] == {"kind": "permission", "error": "denied"}
+    assert requests[1]["boot"] == {"kind": "os", "error": "lease_continuity_boot_probe_failed"}
+    assert result.state == "tampered"
+    assert result.identity_reason_code == "installation_identity_acl_invalid"
+    assert result.record is None and result.observation is None
+
+
+def test_an_unreadable_record_never_runs_the_key_or_boot_probes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = _prepare(tmp_path, monkeypatch)
+    continuity.provision_machine_continuity()
+    probes: list[str] = []
+
+    def key_probe(_paths: MachinePaths, **_kwargs: object) -> object:
+        probes.append("key")
+        raise AssertionError("key probe ran")
+
+    def boot_probe(**_kwargs: object) -> object:
+        probes.append("boot")
+        raise AssertionError("boot probe ran")
+
+    def rejected(request: dict[str, object]) -> dict[str, object]:
+        assert request["op"] == "parse"
+        return {"ok": False, "error": "installation_identity_invalid"}
+
+    monkeypatch.setattr(continuity, "verified_machine_device_key_ids", key_probe)
+    monkeypatch.setattr(continuity, "observe_boot", boot_probe)
+    monkeypatch.setattr(continuity, "_native_answer", rejected)
+
+    result = continuity.verify_installation_continuity(paths, system_name="Darwin")
+
+    assert (result.state, result.identity_reason_code, result.lease_reason_code) == (
+        "tampered",
+        "installation_identity_invalid",
+        "lease_continuity_invalid",
+    )
+    assert probes == []
+
+
+@pytest.mark.parametrize(
+    "verdict",
+    [
+        {"ok": True},
+        {"ok": True, "state": 1, "identity_reason_code": "x", "lease_reason_code": "y", "observed": False},
+        {
+            "ok": True,
+            "state": "healthy",
+            "identity_reason_code": "x",
+            "lease_reason_code": "y",
+            "record": "z",
+            "observed": False,
+        },
+    ],
+)
+def test_a_malformed_native_verdict_is_a_failed_probe(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, verdict: dict[str, object]
+) -> None:
+    paths = _prepare(tmp_path, monkeypatch)
+    continuity.provision_machine_continuity()
+
+    def answer(request: dict[str, object]) -> dict[str, object]:
+        return {"ok": True} if request["op"] == "parse" else verdict
+
+    monkeypatch.setattr(continuity, "_native_answer", answer)
+
+    result = continuity.verify_installation_continuity(paths, system_name="Darwin")
+
+    assert (result.state, result.identity_reason_code, result.lease_reason_code) == (
+        "unknown",
+        "installation_identity_probe_failed",
+        "lease_continuity_probe_failed",
+    )
