@@ -3694,7 +3694,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "gh api 'search/issues?q=repo:owner/repo+created:>=2026-10-29'"
+        "command": "gh api 'search/issues?q=repo:example-org/example-repo+created:>=2026-10-29'"
       },
       "cwd": "worktree",
       "expect": "allow"
@@ -3710,7 +3710,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "gh api 'search/issues?q=repo:owner/repo+created:<2026-10-29'"
+        "command": "gh api 'search/issues?q=repo:example-org/example-repo+created:<2026-10-29'"
       },
       "cwd": "worktree",
       "expect": "allow"
@@ -3726,7 +3726,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "gh api 'search/issues?q=repo:owner/repo+comments:>10'"
+        "command": "gh api 'search/issues?q=repo:example-org/example-repo+comments:>10'"
       },
       "cwd": "worktree",
       "expect": "allow"

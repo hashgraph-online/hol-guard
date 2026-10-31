@@ -94,10 +94,10 @@ fn github_read_capabilities_have_a_benign_floor_but_mutations_do_not() {
             // GitHub's search syntax writes its date and count bounds with
             // comparison operators. They sit in the query string of a read, so
             // the endpoint the capability is attributed from is unchanged.
-            ("gh api 'search/issues?q=repo:owner/repo+created:>=2026-10-29'", true),
-            ("gh api 'search/issues?q=repo:owner/repo+created:<2026-10-29'", true),
-            ("gh api 'search/issues?q=repo:owner/repo+comments:>10'", true),
-            ("gh api -X GET 'search/issues?q=repo:owner/repo+created:>2026-10-29'", true),
+            ("gh api 'search/issues?q=repo:example-org/example-repo+created:>=2026-10-29'", true),
+            ("gh api 'search/issues?q=repo:example-org/example-repo+created:<2026-10-29'", true),
+            ("gh api 'search/issues?q=repo:example-org/example-repo+comments:>10'", true),
+            ("gh api -X GET 'search/issues?q=repo:example-org/example-repo+created:>2026-10-29'", true),
             // An operator in the path, in a write, or behind an encoded `?`
             // that never opens a query string keeps the endpoint unproven.
             ("gh api 'repos/owner/re>po'", false),
