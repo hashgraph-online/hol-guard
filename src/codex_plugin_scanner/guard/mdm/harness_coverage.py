@@ -127,6 +127,24 @@ def register_user_harnesses(
         _apply_change("register", paths, home=str(resolved_home), installs=installs)
 
 
+def register_requested_user_harnesses(paths: MachinePaths, home: Path) -> None:
+    """Register the user at ``home`` from the coverage request activation left there."""
+
+    if not _administrator_context():
+        raise PermissionError("harness_coverage_administrator_context_required")
+    resolved_home = home.resolve(strict=True)
+    if not resolved_home.is_dir():
+        raise ValueError("harness_coverage_home_invalid")
+    with protected_machine_state_lock(paths, "harness-coverage"):
+        _apply_change("register-request", paths, home=str(resolved_home))
+
+
+def write_user_coverage_request(paths: MachinePaths, home: Path, installs: list[dict[str, object]]) -> None:
+    """Leave the installs activation recorded for the administrator to register."""
+
+    _apply_change("write-request", paths, home=str(home), installs=installs)
+
+
 def unregister_user_harnesses(paths: MachinePaths, home: Path) -> None:
     if not _administrator_context():
         raise PermissionError("harness_coverage_administrator_context_required")
@@ -170,7 +188,9 @@ def verify_harness_coverage(paths: MachinePaths, policy: ManagedPolicyState) -> 
 
 __all__ = [
     "HarnessCoverageVerification",
+    "register_requested_user_harnesses",
     "register_user_harnesses",
     "unregister_user_harnesses",
     "verify_harness_coverage",
+    "write_user_coverage_request",
 ]
