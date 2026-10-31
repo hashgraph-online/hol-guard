@@ -26596,6 +26596,57 @@
       "expect": "allow"
     },
     {
+      "id": "git-shortlog-author-counts-commit-limit",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git shortlog -sn -20"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-shortlog-commit-limit-with-revision",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git shortlog -20 HEAD"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-shortlog-non-integer-limit-still-reviews",
+      "fix_area": "git",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "zcode",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git shortlog -20x"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "git-sparse-checkout-list",
       "fix_area": "git",
       "harnesses": [
