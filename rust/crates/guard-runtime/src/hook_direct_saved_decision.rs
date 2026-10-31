@@ -281,9 +281,7 @@ fn saved_response(
         return Err(HookDirectDefer::SavedDecision);
     };
     let now = super::lifecycle::utc_now_isoformat().ok_or(HookDirectDefer::SavedDecision)?;
-    let (bundle_identities, bundle) = store.bundle_authority(&now)?;
-    let cloud_exception_bundle = guard_contracts::CloudExceptionBundle::default();
-    crate::cloud_exception_lift::prime_exception_bundle(&cloud_exception_bundle, bundle);
+    let (bundle_identities, _) = store.bundle_authority(&now)?;
     let composition = portable::composition(context.workspace)?;
     let key_b64 = Zeroizing::new(Base64UrlUnpadded::encode_string(&key.key));
     let store_path = Path::new(context.guard_home).join(STORE_FILE_NAME);
@@ -315,7 +313,7 @@ fn saved_response(
         // The lookup lifts Cloud-excepted bundle rules itself; the local and
         // portable probes both match exceptions on the checkout path.
         exception_workspace: Some(context.workspace.to_owned()),
-        cloud_exception_bundle,
+        cloud_exception_bundle: Default::default(),
         probe_groups: None,
         portable_workspace: None,
         evidence_binding: None,

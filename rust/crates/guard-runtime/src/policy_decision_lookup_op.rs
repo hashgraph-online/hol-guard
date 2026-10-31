@@ -36,9 +36,7 @@ use guard_policy_snapshot::policy_integrity::{
 
 use super::context_digest_json::write_canonical_json_with_limit;
 use crate::claim_reuse::approval_authority_revision;
-use crate::cloud_exception_lift::{
-    cloud_exception_covers, prime_exception_bundle, stored_exception_bundle, LiftTarget,
-};
+use crate::cloud_exception_lift::{cloud_exception_covers, stored_exception_bundle, LiftTarget};
 use crate::guard_store_json::dumps_sorted;
 use crate::policy_bundle_store_identities::lookup_bundle_authority;
 
@@ -1340,8 +1338,9 @@ pub(crate) fn evaluate_policy_decision_lookup_request(
 }
 
 /// Python ships no bundle identities: the resident derives them from the store
-/// the lookup reads, and hands the bundle it validated on the way to the
-/// request's exception cache. A request that carries them, one that never
+/// the lookup reads. The exception cache is left to fill on the connection
+/// that reads the rows, so an exception never lifts a row stored after the
+/// bundle it came from. A request that carries them, one that never
 /// reads policy rows (a local-once peek, a grant probe with nothing to lift),
 /// or one `evaluate` refuses before opening the store, is left as sent.
 fn with_bundle_identities(
@@ -1362,12 +1361,11 @@ fn with_bundle_identities(
         return Ok(Cow::Borrowed(request));
     };
     let conn = open_lookup_connection(&request.store_path)?;
-    let Some((identities, bundle)) = lookup_bundle_authority(&conn, &now)
+    let Some((identities, _bundle)) = lookup_bundle_authority(&conn, &now)
         .map_err(|()| "native_policy_decision_lookup_bundle_unavailable".to_owned())?
     else {
         return Ok(Cow::Borrowed(request));
     };
-    prime_exception_bundle(&request.cloud_exception_bundle, bundle);
     if identities.is_empty() {
         return Ok(Cow::Borrowed(request));
     }

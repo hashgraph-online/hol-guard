@@ -14,7 +14,6 @@ use guard_contracts::{
 };
 use serde_json::{json, Map, Value};
 
-use crate::cloud_exception_lift::prime_exception_bundle;
 use crate::context_digest::python_strip;
 use crate::local_store_read::require_store_path;
 use crate::mcp_tool_policy_flow::Stop;
@@ -212,15 +211,14 @@ fn policy_lookup_candidates(
         require_store_path(&input.store_path, &input.guard_home).map_err(|_| ERR_LOOKUP)?;
         Some(open_lookup_connection(&input.store_path).map_err(|_| ERR_LOOKUP)?)
     };
-    let exception_bundle = guard_contracts::CloudExceptionBundle::default();
-    let bundle_identities = bundle_identities(input, connection.as_ref(), &exception_bundle)?;
+    let bundle_identities = bundle_identities(input, connection.as_ref())?;
     let prober = Prober {
         input,
         subject,
         exact_match_context,
         connection,
         bundle_identities,
-        exception_bundle,
+        exception_bundle: guard_contracts::CloudExceptionBundle::default(),
     };
     let mut lookups = Vec::with_capacity(ids.len());
     for id in ids {
@@ -237,23 +235,20 @@ fn policy_lookup_candidates(
 }
 
 /// The bundle identities every probe reads `policy-bundle` rows under: the
-/// ones Python shipped, or else derived once from the store all probes read,
-/// handing the validated bundle to the probes' shared exception cache.
+/// ones Python shipped, or else derived once from the store all probes read.
 fn bundle_identities(
     input: &McpPolicyLookupInputV1,
     connection: Option<&rusqlite::Connection>,
-    exception_bundle: &guard_contracts::CloudExceptionBundle,
 ) -> Result<Option<Vec<Identity>>, Stop> {
     let (None, Some(connection)) = (&input.policy_bundle_decision_identities, connection) else {
         return Ok(input.policy_bundle_decision_identities.clone());
     };
     let now = canonical_utc_timestamp(&input.now).ok_or(Stop::Fail(ERR_LOOKUP))?;
-    let Some((identities, bundle)) =
+    let Some((identities, _bundle)) =
         lookup_bundle_authority(connection, &now).map_err(|()| Stop::Fail(ERR_LOOKUP))?
     else {
         return Ok(None);
     };
-    prime_exception_bundle(exception_bundle, bundle);
     Ok((!identities.is_empty()).then_some(identities))
 }
 
