@@ -31,7 +31,12 @@ const REFUSED_LONG_OPTIONS: &[&str] = &["--ext-diff", "--output", "--textconv"];
 /// `--text` is left in: the comparison verbs spell it in full for their own
 /// "treat the file as text", and Git resolves an exact spelling to the
 /// option that owns it rather than reading it as a prefix of another.
-fn names_helper_or_output(word: &str) -> bool {
+///
+/// [`crate::contained_git::names_helper_or_output`] asks the same question
+/// of the containment route. It is kept separate because it answers per verb
+/// from that route's own table, and the verbs admitted here -- `status`,
+/// `ls-files`, `remote`, `rev-parse` -- are not in it.
+fn names_refused_option(word: &str) -> bool {
     let name = word.split('=').next().unwrap_or(word);
     if name == "-o" {
         return true;
@@ -315,7 +320,7 @@ pub(super) fn safe_git_arguments(
     }
     !active_options
         .iter()
-        .any(|argument| names_helper_or_output(argument))
+        .any(|argument| names_refused_option(argument))
         && !has_argument(active_options, &[], &["--exec-path="])
 }
 
@@ -357,13 +362,13 @@ pub(super) fn inspection_writes_nothing(
     !has_argument(leading, &[], &["--exec-path"])
         && !inspected[1..option_end]
             .iter()
-            .any(|argument| names_helper_or_output(argument))
+            .any(|argument| names_refused_option(argument))
         && !has_argument(&inspected[1..option_end], &[], &["--exec-path="])
 }
 
 #[cfg(test)]
 mod tests {
-    use super::names_helper_or_output;
+    use super::names_refused_option;
 
     /// Git takes any unambiguous prefix of a long option, so a read that
     /// disables both helpers in full can turn one back on in an abbreviation
@@ -381,7 +386,7 @@ mod tests {
             "--output=/tmp/changed.patch",
             "-o",
         ] {
-            assert!(names_helper_or_output(word), "{word}");
+            assert!(names_refused_option(word), "{word}");
         }
     }
 
@@ -400,7 +405,7 @@ mod tests {
             "-O",
             "HEAD",
         ] {
-            assert!(!names_helper_or_output(word), "{word}");
+            assert!(!names_refused_option(word), "{word}");
         }
     }
 }
