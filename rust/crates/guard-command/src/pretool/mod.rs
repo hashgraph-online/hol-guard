@@ -197,6 +197,7 @@ mod symlink_writes;
 mod tool_inventory_reads;
 mod tree_reads;
 pub(crate) mod version_probes;
+pub(crate) mod wget_reads;
 #[cfg(test)]
 #[path = "workspace_contained_runner_tests.rs"]
 mod workspace_contained_runner_tests;
@@ -209,7 +210,6 @@ mod workspace_contained_tests;
 mod worktree_add;
 mod worktree_maintenance;
 mod worktree_writes;
-pub(crate) mod wget_reads;
 mod wrangler_reads;
 
 pub mod generic;
