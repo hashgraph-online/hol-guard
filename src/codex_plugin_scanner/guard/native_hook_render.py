@@ -31,6 +31,9 @@ _MAX_REQUEST_BYTES = 256 * 1024
 # the resident gives both kinds the larger budget (``hook_render_max_bytes``).
 _CLI_HOOK_EMIT_MAX_REQUEST_BYTES = 4 * 1024 * 1024
 _CURSOR_ROUTE_MAX_REQUEST_BYTES = 4 * 1024 * 1024
+# The bridge kinds carry the whole daemon reply they render, which may be as
+# large as a native response, so they ask for the same larger budget.
+_DAEMON_REPLY_MAX_REQUEST_BYTES = 4 * 1024 * 1024
 
 
 def _render_payload(
@@ -95,6 +98,8 @@ def native_render_cli(
         payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_CLI_HOOK_EMIT_MAX_REQUEST_BYTES)
     elif kind == "cursor_shell_route":
         payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_CURSOR_ROUTE_MAX_REQUEST_BYTES)
+    elif kind in {"hermes_bridge", "muse_bridge"}:
+        payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_DAEMON_REPLY_MAX_REQUEST_BYTES)
     else:
         payload = _render_payload(wire, guard_home, deadline, max_request_bytes=_MAX_REQUEST_BYTES)
     outcome = payload.get("outcome") if payload is not None else None
