@@ -170,7 +170,7 @@ fn usage_only_verb(basename: &str, verb: &str) -> bool {
 /// next door require, files included: npm runs an `onload-script` and honours
 /// a redirected `userconfig` while it is still working out what to print, so
 /// an environment that merely leaves the names alone is not enough.
-fn configuration_inert(basename: &str, context: super::PathContext<'_>) -> bool {
+pub(super) fn configuration_inert(basename: &str, context: super::PathContext<'_>) -> bool {
     match basename {
         "npm" => {
             context.npm_config_inert

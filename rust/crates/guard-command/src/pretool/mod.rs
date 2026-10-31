@@ -135,6 +135,7 @@ mod list_wrapper;
 mod listing_reads;
 mod listing_temporary;
 mod lookup_reads;
+mod manager_usage;
 mod metadata_reads;
 mod npm_environment;
 mod npm_reads;

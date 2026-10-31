@@ -453,6 +453,7 @@
       "src/pretool/lockfile_install.rs",
       "src/pretool/lockfile_install_scan.rs",
       "src/pretool/lookup_reads.rs",
+      "src/pretool/manager_usage.rs",
       "src/pretool/loopback_ports.rs",
       "src/pretool/metadata_reads.rs",
       "src/pretool/mod.rs",
