@@ -173,7 +173,10 @@ def test_rejected_retry_refresh_is_recovered_only_with_canonical_server_identity
     assert store.get_sync_payload("guard_exact_cloud_review_capability") is None
     outbox = result["outbox"]
     assert isinstance(outbox, dict)
-    assert outbox["depth"] == (0 if canonical_identity_confirmed else 1)
+    assert outbox["depth"] == 0
+    # Cloud stored the mismatch as a permanent quarantine: the event is kept
+    # locally for diagnostics instead of being re-sent.
+    assert outbox["quarantined_depth"] == (0 if canonical_identity_confirmed else 1)
 
 
 @pytest.mark.parametrize("status", ["accepted", "duplicate", "stale"])

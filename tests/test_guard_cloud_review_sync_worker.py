@@ -444,3 +444,48 @@ class TestIndependentWorker:
 
     def test_stop_worker_none_noop(self, tmp_path: Path) -> None:
         assert stop_cloud_sync_sync_worker(None) is None
+
+
+class TestStalledQueueBackoff:
+    def test_stalled_wait_honors_server_hint_grows_and_is_capped(self) -> None:
+        wait = cloud_review_sync_worker._stalled_wait
+        assert wait(1, None) == cloud_review_sync_worker.STALLED_BACKOFF_BASE_SECONDS
+        assert wait(2, None) == 2 * wait(1, None)
+        assert wait(1, 60_000) == 60.0
+        assert wait(40, None) == cloud_review_sync_worker.STALLED_BACKOFF_MAX_SECONDS
+        assert wait(1, 86_400_000) == cloud_review_sync_worker.STALLED_BACKOFF_MAX_SECONDS
+
+    def test_stalled_run_waits_instead_of_sending_the_next_due_batch(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        store = Store(tmp_path)
+        uploads: list[int] = []
+        waits: list[float] = []
+
+        class Stop:
+            def is_set(self) -> bool:
+                # Bounded so a worker that ignores the stall cannot spin forever.
+                return len(waits) >= 2 or len(uploads) >= 5
+
+        class Wake:
+            def generation(self) -> int:
+                return 0
+
+            def wait(self, generation: int, timeout: float) -> int:
+                del generation
+                waits.append(timeout)
+                return 0
+
+        monkeypatch.setattr(cloud_review_sync_module, "_resolve_cloud_review_sync_auth_context", lambda _store: {})
+        monkeypatch.setattr(
+            cloud_review_sync_module,
+            "sync_cloud_review_events_once",
+            lambda _store, _auth: (
+                uploads.append(1)
+                or {"synced": 0, "stalled": True, "retry_after_ms": 20_000, "outbox": {"ready_depth": 31}}
+            ),
+        )
+        cloud_review_sync_worker._cloud_sync_sync_loop(store, Stop(), Wake(), poll_interval=1, error_backoff=1)
+
+        assert len(uploads) == 2
+        assert waits == [20.0, 20.0]

@@ -23,6 +23,8 @@ _LOGGER = logging.getLogger(__name__)
 DEFAULT_SAFETY_POLL_SECONDS = 30.0
 DEFAULT_ERROR_BACKOFF_SECONDS = 30.0
 DEFAULT_ERROR_BACKOFF_BASE_SECONDS = 1.0
+STALLED_BACKOFF_BASE_SECONDS = 5.0
+STALLED_BACKOFF_MAX_SECONDS = 180.0
 
 
 @dataclass
@@ -113,6 +115,17 @@ def _bounded_error_wait(initial: float, maximum: float, streak: int) -> float:
     return exponential * random.uniform(0.5, 1.0)
 
 
+def _stalled_wait(streak: int, retry_after_ms: object) -> float:
+    """Queue-wide wait after Cloud answered a whole batch without progress.
+
+    Honors the server's retry hint, grows exponentially with each consecutive
+    stalled run, and never exceeds a few minutes.
+    """
+    exponential = STALLED_BACKOFF_BASE_SECONDS * (2 ** min(max(streak - 1, 0), 10))
+    hint = retry_after_ms / 1000.0 if type(retry_after_ms) is int and retry_after_ms > 0 else 0.0
+    return min(STALLED_BACKOFF_MAX_SECONDS, max(exponential, hint))
+
+
 def _seconds_until(timestamp: object) -> float | None:
     if not isinstance(timestamp, str):
         return None
@@ -141,6 +154,7 @@ def _cloud_sync_sync_loop(
     from .runner import GuardSyncAuthorizationExpiredError, GuardSyncNotConfiguredError
 
     error_streak = 0
+    stalled_streak = 0
     prepared_binding: dict[str, str] | None = None
     queue_refresh_pending = False
     while not stop_event.is_set():
@@ -173,6 +187,14 @@ def _cloud_sync_sync_loop(
             with suppress(OSError, PermissionError, RuntimeError, ValueError):
                 if user_health_report_due(store.guard_home):
                     run_user_health_cadence(store.guard_home)
+            if result.get("stalled") is True:
+                stalled_streak += 1
+                # The retry bookkeeping of this run bumped the wake generation.
+                # Re-read it so that self-inflicted wake does not cancel the
+                # queue-wide backoff and resend the next due batch at once.
+                wake_signal.wait(wake_signal.generation(), _stalled_wait(stalled_streak, result.get("retry_after_ms")))
+                continue
+            stalled_streak = 0
             synced = result.get("synced", 0)
             if isinstance(synced, int) and synced > 0:
                 continue

@@ -11,6 +11,24 @@ _REPLAY_MARKER = "guard_cloud_review_retry_identity_replay"
 # Cloud stores these quarantines against the event id and never revalidates
 # them, so every retry of the same event returns the same result.
 _TERMINAL_QUARANTINE_CODES = frozenset({"review_event_runtime_grant_missing"})
+# Cloud keeps the same stored quarantine for these codes once it has recorded
+# them, so re-sending the unchanged event cannot succeed. Only a result whose
+# status is "quarantined" is treated as that stored decision.
+_STORED_QUARANTINE_CODES = frozenset(
+    {
+        "review_event_payload_hash_mismatch",
+        "review_event_snapshot_claim_mismatch",
+        "review_event_request_correlation_mismatch",
+    }
+)
+# A newer snapshot event can heal these, but only while the local request is
+# still pending and can be requeued.
+_SNAPSHOT_REPAIR_CODES = frozenset({"review_event_snapshot_required", "missing_request_snapshot"})
+_RETRY_EXHAUSTED_REASON = "review_event_retry_exhausted"
+_REJECTION_COUNTS_KEY = "guard_cloud_review_rejection_counts"
+_MAX_TRACKED_REJECTIONS = 4096
+# Server rejections tolerated for one event before it is dead-lettered locally.
+MAX_REJECTED_DELIVERY_ATTEMPTS = 12
 
 
 def retry_result_message(items: list[dict[str, object]]) -> str:
@@ -133,7 +151,11 @@ def quarantine_terminal_binding_failures(
         code = result.get("code")
         if (
             isinstance(code, str)
-            and code in _TERMINAL_QUARANTINE_CODES
+            and (
+                code in _TERMINAL_QUARANTINE_CODES
+                or (code in _STORED_QUARANTINE_CODES and result.get("status") == "quarantined")
+                or (code in _SNAPSHOT_REPAIR_CODES and _snapshot_cannot_be_requeued(store, events.get(sequence)))
+            )
             and store.quarantine_review_event(
                 sequence,
                 reason=code,
@@ -145,3 +167,65 @@ def quarantine_terminal_binding_failures(
             continue
         retained.append((sequence, result))
     return [sequence for sequence, _ in retained], [result for _, result in retained]
+
+
+def _snapshot_cannot_be_requeued(store: GuardStore, event: dict[str, object] | None) -> bool:
+    """True when the request behind a snapshot rejection is no longer pending.
+
+    Requeueing only repairs pending requests, so a resolved, expired, or
+    missing request can never produce the snapshot Cloud is asking for.
+    """
+    request_id = event.get("localRequestId") if isinstance(event, dict) else None
+    if not isinstance(request_id, str) or not request_id:
+        return False
+    request = store.get_approval_request(request_id, derive_scope=False)
+    return request is None or request.get("status") != "pending"
+
+
+def dead_letter_exhausted_review_events(
+    store: GuardStore,
+    *,
+    sequences: list[int],
+    acknowledged: list[int],
+    binding: dict[str, str],
+) -> tuple[list[int], int]:
+    """Quarantine events Cloud has rejected too many times; keep local evidence.
+
+    ``sequences`` are events Cloud rejected in this batch and ``acknowledged``
+    are events it accepted. Transport failures are not counted, so an offline
+    device never dead-letters healthy events. Returns the sequences that stay
+    retryable and the number dead-lettered.
+    """
+    key = f"{_REJECTION_COUNTS_KEY}:{store.guard_source}"
+    stored = store.get_sync_payload(key)
+    counts: dict[str, int] = {}
+    if isinstance(stored, dict):
+        counts = {
+            name: value
+            for name, value in stored.items()
+            if isinstance(name, str) and name.isdecimal() and type(value) is int and value > 0
+        }
+    original = dict(counts)
+    for sequence in acknowledged:
+        counts.pop(str(sequence), None)
+    retained: list[int] = []
+    dead_lettered = 0
+    for sequence in sequences:
+        attempts = counts.get(str(sequence), 0) + 1
+        if attempts >= MAX_REJECTED_DELIVERY_ATTEMPTS and store.quarantine_review_event(
+            sequence,
+            reason=_RETRY_EXHAUSTED_REASON,
+            error=f"Cloud rejected this event {attempts} times; retained for diagnostics.",
+            **binding,
+        ):
+            counts.pop(str(sequence), None)
+            dead_lettered += 1
+            continue
+        counts[str(sequence)] = attempts
+        retained.append(sequence)
+    if len(counts) > _MAX_TRACKED_REJECTIONS:
+        newest = sorted(counts, key=int)[-_MAX_TRACKED_REJECTIONS:]
+        counts = {name: counts[name] for name in newest}
+    if counts != original:
+        store.set_sync_payload(key, counts, datetime.now(timezone.utc).isoformat())
+    return retained, dead_lettered
