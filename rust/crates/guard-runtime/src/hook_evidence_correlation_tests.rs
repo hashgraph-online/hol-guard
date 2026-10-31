@@ -351,3 +351,23 @@ fn writers_racing_to_create_the_key_all_read_one_key() {
     assert!(leftovers.is_empty());
     let _ = fs::remove_dir_all(&home);
 }
+
+#[test]
+fn a_writer_that_loses_the_race_reads_the_winners_key() {
+    // The racing test cannot force two writers past the read before either
+    // links, so the losing branch is driven directly: a writer that found no
+    // key links its own after another writer's key is already there.
+    let home = guard_home();
+    let winner = load_or_create_correlation_key(&home).expect("winner");
+    let key_path = prepare_key_path(&home).expect("key path");
+    let loser = create_key(&key_path).expect("loser");
+    assert_eq!(loser.key_id, winner.key_id);
+    assert_eq!(loser.material(), winner.material());
+    let leftovers: Vec<_> = fs::read_dir(&home)
+        .expect("listing")
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_name() != CORRELATION_KEY_FILE)
+        .collect();
+    assert!(leftovers.is_empty());
+    let _ = fs::remove_dir_all(&home);
+}
