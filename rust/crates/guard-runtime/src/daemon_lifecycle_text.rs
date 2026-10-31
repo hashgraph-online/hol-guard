@@ -126,7 +126,7 @@ fn read_token(chars: &mut std::str::Chars<'_>) -> Option<Option<String>> {
 }
 
 /// Index where the tail begins after `ntpath.splitroot` (Python 3.12).
-fn nt_root_end(chars: &[char]) -> usize {
+pub(crate) fn nt_root_end(chars: &[char]) -> usize {
     let find = |from: usize| {
         chars
             .get(from..)
