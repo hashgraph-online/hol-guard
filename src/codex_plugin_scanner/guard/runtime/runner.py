@@ -388,11 +388,11 @@ def _build_policy_bundle_decisions(
     *,
     device_id: str,
     device_name: str,
-    canonical_enforcement: bool = False,
 ) -> list[PolicyDecision]:
+    # Cloud sends a v2 bundle only when v1 cannot carry the policy, so every
+    # device enforces its compiled rules. The rollout flag only decides whether
+    # a v2 bundle that disagrees with the legacy shadow is refused.
     if policy_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT:
-        if not canonical_enforcement:
-            return []
         return _build_canonical_policy_bundle_decisions(
             policy_bundle,
             device_id=device_id,
@@ -769,11 +769,7 @@ def sync_receipts(
                     blocking_mismatch_reasons = tuple(
                         reason for reason in mismatch_reasons if reason != "legacy_unavailable"
                     )
-                    candidate_policy_decisions = (
-                        canonical_decisions
-                        if canonical_enforcement and not blocking_mismatch_reasons
-                        else legacy_decisions
-                    )
+                    candidate_policy_decisions = canonical_decisions
                     if mismatch_reasons:
                         store.add_event(
                             "policy_bundle/shadow_mismatch",
@@ -940,7 +936,6 @@ def sync_receipts(
                     effective_policy_bundle,
                     device_id=device_id,
                     device_name=device_name,
-                    canonical_enforcement=canonical_enforcement,
                 )
             )
             policy_bundle_ack = effective_policy_bundle_acknowledgement(
@@ -1856,6 +1851,9 @@ def _local_guard_runtime_session(
         "local-daemon",
         FLEET_POSTURE_CAPABILITY,
         POLICY_BUNDLE_V2_CLOUD_EXCEPTIONS_CAPABILITY,
+        # Exact command rules reach the hook through canonical decisions,
+        # which every device activates from a verified v2 bundle.
+        POLICY_EXACT_COMMAND_RULES_CAPABILITY,
     ]
     session: dict[str, object] = {
         "harness": "hol-guard",
@@ -1876,9 +1874,6 @@ def _local_guard_runtime_session(
         workspace_id=workspace_id,
     ):
         session["canonical_policy_enforcement"] = True
-        # Exact command rules reach the hook only through canonical decisions,
-        # so only a device that activates them can claim to enforce them.
-        capabilities.append(POLICY_EXACT_COMMAND_RULES_CAPABILITY)
     return session
 
 

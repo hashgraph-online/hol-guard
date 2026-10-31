@@ -606,7 +606,7 @@ def test_v2_acknowledgement_rejects_sequence_conflicts_and_terminal_reapply() ->
     ) == (None, "acknowledgement_transition_rejected")
 
 
-def test_runtime_canonical_enforcement_compiles_signed_v2_payload() -> None:
+def test_runtime_compiles_signed_v2_payload_without_canonical_rollout() -> None:
     policy_bundle = {
         "contractVersion": POLICY_BUNDLE_V2_CONTRACT,
         "payload": {
@@ -642,19 +642,14 @@ def test_runtime_canonical_enforcement_compiles_signed_v2_payload() -> None:
         },
     }
 
-    legacy = guard_runner._build_policy_bundle_decisions(
-        policy_bundle,
-        device_id="device-1",
-        device_name="Mac",
-    )
+    # Cloud sends v2 only when v1 cannot carry the policy, so a device outside
+    # the canonical rollout still enforces it.
     canonical = guard_runner._build_policy_bundle_decisions(
         policy_bundle,
         device_id="device-1",
         device_name="Mac",
-        canonical_enforcement=True,
     )
 
-    assert legacy == []
     assert [decision.to_dict() for decision in canonical] == [
         {
             "harness": "codex",
@@ -718,7 +713,6 @@ def test_runtime_canonical_enforcement_keeps_only_this_devices_rules() -> None:
         _device_scoped_bundle(),
         device_id="device-1",
         device_name="Mac",
-        canonical_enforcement=True,
     )
 
     assert [decision.owner for decision in decisions] == [
@@ -738,7 +732,6 @@ def test_runtime_canonical_enforcement_compiles_a_rule_no_device_claims() -> Non
         _device_scoped_bundle(),
         device_id="device-9",
         device_name="Spare",
-        canonical_enforcement=True,
     )
 
     assert [decision.owner for decision in decisions] == ["rule.every-device"]

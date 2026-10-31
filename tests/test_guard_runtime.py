@@ -19100,6 +19100,25 @@ def test_sync_receipts_keeps_legacy_bundle_active_on_canonical_shadow_mismatch(
     }
 
 
+def test_sync_receipts_applies_v2_bundle_outside_the_canonical_rollout(
+    tmp_path,
+    monkeypatch,
+):
+    # Cloud sends v2 only when v1 cannot carry the policy, so a device outside
+    # the canonical rollout must enforce it instead of keeping the older v1
+    # decisions. The shadow comparison is still recorded.
+    store, _legacy = _prepare_shadow_candidate_sync(tmp_path, monkeypatch, canonical=False)
+
+    guard_runner_module.sync_receipts(store)
+
+    applied = store.get_sync_payload("policy_bundle")
+    assert isinstance(applied, dict)
+    assert applied["contractVersion"] == "guard-policy-bundle.v2"
+    assert [decision["action"] for decision in store.list_policy_decisions()] == ["allow"]
+    mismatch_events = store.list_events(event_name="policy_bundle/shadow_mismatch")
+    assert mismatch_events[-1]["payload"]["reasonCodes"] == ["action"]
+
+
 def test_sync_receipts_rejects_candidate_when_native_shadow_comparison_is_unavailable(
     tmp_path,
     monkeypatch,
