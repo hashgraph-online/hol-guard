@@ -396,7 +396,7 @@ impl PulseTransport for FakePulse {
         let jti = claims
             .get("jti")
             .and_then(Value::as_str)
-            .unwrap_or_default();
+            .ok_or(PulseError::ReceiptInvalid("claims"))?;
         if !self.consumed.borrow_mut().insert(jti.to_owned()) {
             return Err(PulseError::Replayed);
         }
