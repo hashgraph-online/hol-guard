@@ -1,6 +1,26 @@
 use super::safe_http_segment;
 
+/// A context whose home holds no configuration for either program, which is
+/// what an ordinary machine looks like.
 fn proven(command: &str) -> bool {
+    let home = tempfile::tempdir().expect("temp home");
+    proven_in(command, home.path().to_str().expect("utf-8 home"))
+}
+
+/// The same reading against a home a test has written files into.
+fn proven_in(command: &str, home: &str) -> bool {
+    proven_with(
+        command,
+        crate::pretool::PathContext {
+            home_dir: Some(home),
+            shell_home_matches: true,
+            http_config_absent: true,
+            ..Default::default()
+        },
+    )
+}
+
+fn proven_with(command: &str, context: crate::pretool::PathContext<'_>) -> bool {
     let model = crate::parse_command(&crate::CommandModelRequestV1 {
         command: command.to_owned(),
         dialect: "posix".to_owned(),
@@ -11,8 +31,104 @@ fn proven(command: &str) -> bool {
     model.confidence == "exact"
         && model.segments.first().is_some_and(|segment| {
             matches!(segment.executable.as_deref(), Some("http" | "xh"))
-                && safe_http_segment(&model, segment, crate::pretool::PathContext::default())
+                && safe_http_segment(
+                    segment.executable.as_deref().expect("executable"),
+                    &model,
+                    segment,
+                    context,
+                )
         })
+}
+
+/// Write `text` as the configuration at `relative` below `home`.
+fn write_configuration(
+    home: &std::path::Path,
+    relative: &[&str],
+    text: &str,
+) -> std::path::PathBuf {
+    let path = relative
+        .iter()
+        .fold(home.to_path_buf(), |path, part| path.join(part));
+    std::fs::create_dir_all(path.parent().expect("configuration directory"))
+        .expect("configuration directory");
+    std::fs::write(&path, text).expect("configuration");
+    path
+}
+
+#[test]
+fn a_configuration_that_prepends_an_option_keeps_the_review() {
+    for (program, relative) in [
+        ("http", &[".config", "httpie"][..]),
+        ("http", &[".httpie"][..]),
+        ("xh", &[".config", "xh"][..]),
+        ("xh", &["Library", "Application Support", "xh"][..]),
+    ] {
+        let home = tempfile::tempdir().expect("temp home");
+        let relative: Vec<&str> = relative
+            .iter()
+            .copied()
+            .chain(std::iter::once("config.json"))
+            .collect();
+        let command = format!("{program} :3000/health");
+        let home_text = home.path().to_str().expect("utf-8 home");
+        assert!(proven_in(&command, home_text), "{command}");
+
+        let path = write_configuration(home.path(), &relative, "{\"default_options\": []}");
+        assert!(proven_in(&command, home_text), "{command} empty");
+        for text in [
+            "{\"default_options\": [\"--follow\"]}",
+            "{\"default_options\": [\"--download\"]}",
+            "{\"default_options\": [\"--session=work\"]}",
+            "{\"default_options\": \"--follow\"}",
+            "{\"default_options\": null}",
+            "[]",
+            "not json",
+            "",
+        ] {
+            std::fs::write(&path, text).expect("configuration");
+            assert!(!proven_in(&command, home_text), "{command} {text}");
+        }
+        // A file carrying only HTTPie's own bookkeeping prepends nothing.
+        std::fs::write(&path, "{\"__meta__\": {\"httpie\": \"3.2.2\"}}").expect("configuration");
+        assert!(proven_in(&command, home_text), "{command} meta");
+    }
+}
+
+#[test]
+fn a_home_the_proof_cannot_place_keeps_the_review() {
+    let home = tempfile::tempdir().expect("temp home");
+    let home_text = home.path().to_str().expect("utf-8 home");
+    assert!(proven_in("http :3000/health", home_text));
+    for context in [
+        crate::pretool::PathContext {
+            home_dir: Some(home_text),
+            shell_home_matches: true,
+            // An inherited HTTPIE_CONFIG_DIR reads the file from somewhere
+            // this proof never looked.
+            http_config_absent: false,
+            ..Default::default()
+        },
+        crate::pretool::PathContext {
+            home_dir: Some(home_text),
+            shell_home_matches: false,
+            http_config_absent: true,
+            ..Default::default()
+        },
+        crate::pretool::PathContext {
+            home_dir: Some("relative/home"),
+            shell_home_matches: true,
+            http_config_absent: true,
+            ..Default::default()
+        },
+        crate::pretool::PathContext {
+            home_dir: None,
+            shell_home_matches: true,
+            http_config_absent: true,
+            ..Default::default()
+        },
+    ] {
+        assert!(!proven_with("http :3000/health", context));
+    }
 }
 
 #[test]

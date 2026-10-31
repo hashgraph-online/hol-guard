@@ -34,12 +34,27 @@
 //! destination is read without it: the body stays on the host, and the ports
 //! this reading reaches are already held to dev servers.
 //!
+//! The program's own configuration carries no default option. Both read a
+//! `config.json` before they look at the line, and whatever
+//! `default_options` holds is prepended to every request: a `--follow`
+//! written there sends a proven `http :3000/health` wherever a redirect
+//! points, a `--download` writes a file the line never names, and a
+//! `--session` reads and rewrites stored headers. None of that is visible in
+//! the arguments, so the file is read as well, under the home the shell
+//! itself expands and with the variables that move it screened out.
+//!
 //! The `https` and `xhs` aliases are absent. They differ from the names here
 //! only in the scheme they assume for a URL written without one, which is a
 //! guess this module would have to make for itself rather than take from
 //! curl's reading of the same spelling.
 
 use super::curl_reads::{expands, loopback_read_url, readable_url, safe_header};
+use std::io::ErrorKind;
+use std::path::{Path, PathBuf};
+
+/// The longest `config.json` this proof reads. A larger file is not one of
+/// these programs' configurations, and is left to review rather than scanned.
+const MAX_CONFIG_BYTES: u64 = 64 * 1024;
 
 /// Flags that change only what is printed or how a failing status is reported.
 const PLAIN_FLAGS: [&str; 7] = [
@@ -66,13 +81,81 @@ const SHORT_VALUES: &str = "p";
 const VALUE_OPTIONS: [&str; 4] = ["--pretty", "--print", "--style", "--timeout"];
 
 pub(super) fn safe_http_segment(
+    executable: &str,
     model: &crate::CanonicalCommandV1,
     segment: &crate::CommandSegmentV1,
     context: super::PathContext<'_>,
 ) -> bool {
     model.dialect == "posix"
         && segment.pipeline_index == 0
+        && configuration_inert(executable, context)
         && read_request(&segment.arguments, context)
+}
+
+/// Whether the configuration these programs read adds nothing to the line.
+///
+/// The file is read from the home the shell expands, so the proof holds only
+/// where that home is the one the stamp names, and only where no inherited
+/// variable has moved the directory it is read from. A file that is missing
+/// adds nothing; one that cannot be read, is not a regular file, is larger
+/// than a configuration or is not the object these programs write is left to
+/// review rather than guessed at.
+pub(super) fn configuration_inert(executable: &str, context: super::PathContext<'_>) -> bool {
+    let Some(home) = context.home_dir.map(Path::new) else {
+        return false;
+    };
+    if !home.is_absolute() || !context.shell_home_matches || !context.http_config_absent {
+        return false;
+    }
+    configuration_files(executable, home)
+        .is_some_and(|files| files.iter().all(|file| carries_no_default_options(file)))
+}
+
+/// Where each program keeps its `config.json`.
+///
+/// HTTPie reads `~/.config/httpie` and still honours the `~/.httpie` its
+/// older releases wrote, and `xh` reads the platform's own configuration
+/// directory, which is `~/Library/Application Support` on macOS. Every
+/// spelling a release may use is read, because the proof has to hold
+/// whichever one the installed program picks.
+fn configuration_files(executable: &str, home: &Path) -> Option<Vec<PathBuf>> {
+    let configuration = home.join(".config");
+    match executable {
+        "http" => Some(vec![
+            configuration.join("httpie").join("config.json"),
+            home.join(".httpie").join("config.json"),
+        ]),
+        "xh" => Some(vec![
+            configuration.join("xh").join("config.json"),
+            home.join("Library")
+                .join("Application Support")
+                .join("xh")
+                .join("config.json"),
+        ]),
+        _ => None,
+    }
+}
+
+/// A configuration that prepends no option to the command.
+fn carries_no_default_options(path: &Path) -> bool {
+    let metadata = match std::fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) => return error.kind() == ErrorKind::NotFound,
+    };
+    if !metadata.is_file() || metadata.len() > MAX_CONFIG_BYTES {
+        return false;
+    }
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return false;
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return false;
+    };
+    match value.get("default_options") {
+        None => value.is_object(),
+        Some(serde_json::Value::Array(options)) => options.is_empty(),
+        Some(_) => false,
+    }
 }
 
 fn read_request(arguments: &[String], context: super::PathContext<'_>) -> bool {

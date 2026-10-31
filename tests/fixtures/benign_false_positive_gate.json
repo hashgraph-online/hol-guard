@@ -43219,6 +43219,34 @@
       "expect": "not_allow"
     },
     {
+      "id": "neg-http-moved-configuration-directory",
+      "fix_area": "negative",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "http :3000/health"
+      },
+      "cwd": "org",
+      "environment": {
+        "HTTPIE_CONFIG_DIR": "httpie"
+      },
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-xh-moved-configuration-directory",
+      "fix_area": "negative",
+      "harnesses": ["codex", "zcode", "claude-code", "omp"],
+      "tool": "shell",
+      "tool_input": {
+        "command": "xh http://127.0.0.1:8080/health"
+      },
+      "cwd": "org",
+      "environment": {
+        "XH_CONFIG_DIR": "xh"
+      },
+      "expect": "not_allow"
+    },
+    {
       "id": "queue-http-loopback-shorthand",
       "fix_area": "queue",
       "harnesses": ["codex", "zcode", "claude-code", "omp"],

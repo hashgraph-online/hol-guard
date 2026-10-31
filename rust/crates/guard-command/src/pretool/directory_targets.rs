@@ -481,6 +481,23 @@ impl<'a> super::PathContext<'a> {
             }
             None => std::env::var_os(RIPGREP_CONFIG_NAME).is_none_or(|value| value.is_empty()),
         };
+        // HTTPie and xh read a `config.json` whose `default_options` are
+        // prepended to every request, and each takes a variable that moves
+        // the directory it is read from. A stamped environment carries names
+        // without values, so any name counts.
+        let http_config_absent = match execution_environment {
+            Some(environment) => {
+                environment.has_valid_shape()
+                    && !environment.environment_names.iter().any(|name| {
+                        HTTP_CONFIG_NAMES
+                            .iter()
+                            .any(|known| name.eq_ignore_ascii_case(known))
+                    })
+            }
+            None => HTTP_CONFIG_NAMES
+                .iter()
+                .all(|name| std::env::var_os(name).is_none_or(|value| value.is_empty())),
+        };
         // The shell expands `~` from its own HOME: the stamped one, or the
         // runtime's when no environment was stamped.
         let shell_home = match execution_environment {
@@ -508,6 +525,7 @@ impl<'a> super::PathContext<'a> {
             pip_config_inert,
             shell_home_matches,
             ripgrep_config_absent,
+            http_config_absent,
             // A session knows its environment, not the command, so the
             // proof that no step creates a filesystem entry is set where a
             // command model is in hand.
@@ -518,6 +536,9 @@ impl<'a> super::PathContext<'a> {
 }
 
 const RIPGREP_CONFIG_NAME: &str = "RIPGREP_CONFIG_PATH";
+
+/// The variables HTTPie and `xh` read their configuration directory from.
+const HTTP_CONFIG_NAMES: [&str; 2] = ["HTTPIE_CONFIG_DIR", "XH_CONFIG_DIR"];
 
 fn rustup_selector(name: &str) -> bool {
     name.eq_ignore_ascii_case("RUSTUP_TOOLCHAIN") || name.eq_ignore_ascii_case("RUSTUP_HOME")

@@ -544,6 +544,7 @@ mod tests {
             home_dir: home.to_str(),
             cwd: repo.to_str(),
             ripgrep_config_absent: true,
+            http_config_absent: false,
             ..Default::default()
         };
         let r = repo.display();
@@ -622,6 +623,7 @@ mod tests {
                 home_dir: declared.to_str(),
                 cwd: cwd.to_str(),
                 ripgrep_config_absent: true,
+                http_config_absent: false,
                 shell_home_matches,
                 ..Default::default()
             };
@@ -666,6 +668,7 @@ mod tests {
             home_dir: root.to_str(),
             cwd: cwd.to_str(),
             ripgrep_config_absent: true,
+            http_config_absent: false,
             shell_home_matches: true,
             ..Default::default()
         };

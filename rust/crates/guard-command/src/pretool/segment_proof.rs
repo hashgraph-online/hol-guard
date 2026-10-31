@@ -42,6 +42,7 @@ pub(crate) fn benign_command_segments(
         pip_config_inert: context.pip_config_inert,
         shell_home_matches: context.shell_home_matches,
         ripgrep_config_absent: context.ripgrep_config_absent,
+        http_config_absent: context.http_config_absent,
         psql_environment: context.psql_environment,
         creates_nothing: super::search::command_creates_nothing(model),
         cwd: cwd.as_deref().or(context.cwd),
@@ -429,7 +430,7 @@ pub(super) fn exact_safe_segment_with_context(
         }
         "gh" => safe_gh_arguments(&segment.arguments, &segment.text),
         "curl" => super::curl_reads::safe_curl_segment(model, segment, context),
-        "http" | "xh" => super::http_reads::safe_http_segment(model, segment, context),
+        "http" | "xh" => super::http_reads::safe_http_segment(basename, model, segment, context),
         "wget" => super::wget_reads::safe_wget_segment(model, segment, context),
         "kubectl" => super::kubectl_reads::safe_kubectl_segment(model, segment, context),
         "export" => {
