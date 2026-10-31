@@ -73,6 +73,46 @@ fn an_absolute_cd_into_the_workspace_is_peeled_on_every_host() {
     }
 }
 
+/// A quoted `cd` target reaches the plan without its quotes, so both sinks
+/// answer it as they answer the same directory spelled plainly: an absolute
+/// target peels, and a relative one inside the workspace is left whole to
+/// the sandbox.
+#[cfg(unix)]
+#[test]
+fn a_quoted_cd_target_is_planned_as_its_plain_spelling() {
+    let root = workspace("plan-quoted-cd", true);
+    std::fs::create_dir_all(root.join("my dir")).expect("my dir");
+    let workspace_path = root.to_str().expect("workspace path");
+    let directory = root.join("my dir");
+    for quote in ['\'', '"'] {
+        let absolute = format!("cd {quote}{}{quote} && pytest -q", directory.display());
+        let peeled = wrapper_plan(
+            &absolute,
+            workspace_path,
+            Some(workspace_path),
+            Some(HOME),
+            false,
+        )
+        .plan
+        .expect("a quoted absolute cd peels");
+        assert_eq!(peeled.core, "pytest -q");
+        assert_eq!(
+            std::fs::canonicalize(&peeled.directory).expect("directory"),
+            std::fs::canonicalize(&directory).expect("my dir")
+        );
+        let relative = format!("cd {quote}my dir{quote} && pytest -q");
+        let sandboxed = wrapper_plan(
+            &relative,
+            workspace_path,
+            Some(workspace_path),
+            Some(HOME),
+            false,
+        );
+        assert_eq!(sandboxed.plan, None, "{relative}");
+        assert_eq!(sandboxed.refusal, Some(CONTAINED_WRAPPER_PLAN_UNSUPPORTED));
+    }
+}
+
 /// A pipeline the parse cannot model is still a wrapped shape.
 ///
 /// `xargs` runs a program this model does not read, so the whole command

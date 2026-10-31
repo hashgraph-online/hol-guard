@@ -255,12 +255,12 @@ fn native_shape(
             || package_directory(command, workspace, home))
 }
 
-/// Whether a leading `cd` leaves the call as both sinks run it: a plain
-/// target, then `&&`, naming a directory strictly inside the workspace, the
-/// workspace root, or a sibling repository's root. A directory strictly
-/// inside runs whole, `cd` included, from the workspace root. At a root the
-/// sinks peel the `cd` and ask about the rest again from there. One below a
-/// sibling's root runs from that root (`entered_sibling`).
+/// Whether a leading `cd` leaves the call as both sinks run it: one target
+/// word (`leading_word`), then `&&`, naming a directory strictly inside the
+/// workspace, the workspace root, or a sibling repository's root. A directory
+/// strictly inside runs whole, `cd` included, from the workspace root. At a
+/// root the sinks peel the `cd` and ask about the rest again from there. One
+/// below a sibling's root runs from that root (`entered_sibling`).
 #[cfg(any(target_os = "macos", target_os = "linux", all(unix, test)))]
 fn leading_directory_change(command: &str, workspace: &str, home: &str) -> bool {
     let Some(rest) = command.trim_start_matches([' ', '\t']).strip_prefix("cd") else {
@@ -269,19 +269,38 @@ fn leading_directory_change(command: &str, workspace: &str, home: &str) -> bool 
     let Some(target) = rest
         .strip_prefix([' ', '\t'])
         .map(|rest| rest.trim_start_matches([' ', '\t']))
-        .and_then(|rest| rest.split_once([' ', '\t']))
-        .filter(|(target, after)| {
-            plain(target)
-                && after
-                    .trim_start_matches([' ', '\t'])
-                    .strip_prefix("&&")
-                    .is_some_and(|core| core.starts_with([' ', '\t']) && !core.trim().is_empty())
+        .and_then(leading_word)
+        .filter(|(_, after)| {
+            after
+                .trim_start_matches([' ', '\t'])
+                .strip_prefix("&&")
+                .is_some_and(|core| core.starts_with([' ', '\t']) && !core.trim().is_empty())
         })
         .map(|(target, _)| target)
     else {
         return false;
     };
     strictly_inside(workspace, target) || projection::project_root(workspace, home, target)
+}
+
+/// The first word of `text` as the shell reads it, and the text after it,
+/// which must start with a blank: a plain word, or one in single or double
+/// quotes holding plain characters joined by single spaces. Both quotes leave
+/// such text literal, and both sinks peel the `cd` from the command model,
+/// which reads the target with its quotes removed.
+#[cfg(any(target_os = "macos", target_os = "linux", all(unix, test)))]
+fn leading_word(text: &str) -> Option<(&str, &str)> {
+    let (word, after) = match text.chars().next()? {
+        quote @ ('\'' | '"') => {
+            let (inner, after) = text[1..].split_once(quote)?;
+            (inner.split(' ').all(plain).then_some(inner)?, after)
+        }
+        _ => {
+            let end = text.find([' ', '\t'])?;
+            (plain(&text[..end]).then_some(&text[..end])?, &text[end..])
+        }
+    };
+    after.starts_with([' ', '\t']).then_some((word, after))
 }
 
 /// Whether a package manager's directory flags (`bun --cwd web run build`,

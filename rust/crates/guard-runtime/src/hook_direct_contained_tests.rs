@@ -261,6 +261,7 @@ fn only_plain_workspace_runs_take_the_native_sink() {
     let root = scratch("shape");
     let workspace = root.join("work space");
     fs::create_dir_all(workspace.join("sub")).unwrap();
+    fs::create_dir_all(workspace.join("my dir")).unwrap();
     fs::write(workspace.join("file"), "").unwrap();
     let workspace = workspace.to_str().unwrap();
     let denial = workspace_denial();
@@ -280,6 +281,12 @@ fn only_plain_workspace_runs_take_the_native_sink() {
     assert!(shape("cd . && pytest"));
     assert!(shape("cd sub/.. && pytest -q 2>&1 | tail -20"));
     assert!(shape("\tcd  sub/.  &&  pytest -q"));
+    // Quotes around plain text leave it literal, and both sinks peel the
+    // target from the command model without them.
+    assert!(shape("cd 'sub' && pytest"));
+    assert!(shape("cd \"sub\" && pytest -q 2>&1 | tail -5"));
+    assert!(shape("cd 'my dir' && pytest"));
+    assert!(shape("cd \"my dir/..\" && pytest"));
     // Output filters, stderr folding and status reads run whole in the
     // sandbox, with the shell's own meaning.
     assert!(shape("pytest | tee log"));
@@ -340,7 +347,14 @@ fn only_plain_workspace_runs_take_the_native_sink() {
         "cd sub&& pytest",
         "cd sub &&",
         "cd sub",
-        "cd 'sub' && pytest",
+        // Quoted text must be plain, closed, and followed by a blank.
+        "cd 'sub'&& pytest",
+        "cd 'sub && pytest",
+        "cd 'su'b && pytest",
+        "cd 'my dir'x && pytest",
+        "cd '' && pytest",
+        "cd \"$HOME\" && pytest",
+        "cd '~' && pytest",
         "cd $HOME && pytest",
         "cd missing && pytest",
         "cd file && pytest",
