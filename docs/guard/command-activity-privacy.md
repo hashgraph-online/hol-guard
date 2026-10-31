@@ -88,7 +88,8 @@ a new correlation domain and cannot reinterpret old rows.
 
 ## Cloud Boundary
 
-Cloud egress requires explicit `aggregate_only` opt-in. Its type contains exactly:
+Command activity has no Cloud egress today: no transport sends it, and Guard keeps no Cloud aggregate type. A
+future aggregate must be built in the resident, require explicit opt-in, and contain exactly:
 
 - UTC calendar day
 - One bounded dimension
@@ -110,5 +111,5 @@ Activity persistence and aggregation failures never change Guard's enforcement r
 bounded dropped-event or error counters and expose degraded evidence health without including user input.
 
 Tests must continue to cover the exhaustive phase/status/proof matrix, transitions, receipt requirements,
-safe-variant projection, schema drift, HMAC separation and rotation, forbidden-field canaries, cloud allowlists,
-rare-cell suppression, and enforcement independence from analytics failures.
+safe-variant projection, schema drift, HMAC separation and rotation, forbidden-field canaries, and enforcement
+independence from analytics failures. A Cloud aggregate must add cloud-allowlist and rare-cell suppression tests.

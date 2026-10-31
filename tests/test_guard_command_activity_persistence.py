@@ -27,10 +27,10 @@ from codex_plugin_scanner.guard.runtime.command_activity_contract import (
     CorrelationKind,
     ReceiptLinkStatus,
 )
-from codex_plugin_scanner.guard.runtime.command_activity_privacy import FORBIDDEN_ACTIVITY_FIELD_NAMES
 from codex_plugin_scanner.guard.runtime.effect_contract import EffectKind
 from codex_plugin_scanner.guard.runtime.extension_evidence import EvidenceSeverity, ExtensionRuleIdentity
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.command_activity_privacy_support import FORBIDDEN_ACTIVITY_FIELD_NAMES
 
 
 def _correlation(kind: CorrelationKind, digest: str) -> CorrelationHandle:
