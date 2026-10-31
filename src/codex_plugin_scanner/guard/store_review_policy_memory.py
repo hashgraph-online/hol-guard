@@ -22,6 +22,7 @@ class _PolicyMemoryStore(Protocol):
         *,
         approval_gate_grant: ApprovalGateGrant | None,
         remote_write_authorized: bool,
+        signed_bundle: bool = False,
     ) -> tuple[str, list[tuple[object, ...]]]: ...
 
     def _replace_remote_policy_rows_locked(
