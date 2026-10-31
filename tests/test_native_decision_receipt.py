@@ -23,7 +23,6 @@ from codex_plugin_scanner.guard.runtime.actions import (
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_native_decision_receipts import native_decision_receipt_schema_statement
 from tests.native_pretool_edge_fixtures import canonical_receipt_bytes
-from tests.native_store_shims import get_native_decision_receipt
 
 
 def _receipt(**overrides: object) -> dict[str, object]:
@@ -302,8 +301,8 @@ def test_prompt_receipt_persists_without_rewriting_tool_receipt_schema(tmp_path:
     assert _receipt_row_count(store) == 2
     tool_id, prompt_id = tool["decision_id"], prompt["decision_id"]
     assert isinstance(tool_id, str) and isinstance(prompt_id, str)
-    assert get_native_decision_receipt(store, tool_id) == tool
-    assert get_native_decision_receipt(store, prompt_id) == prompt
+    assert store.get_native_decision_receipt(tool_id) == tool
+    assert store.get_native_decision_receipt(prompt_id) == prompt
     with store._connect() as connection:
         legacy = connection.execute(
             "select sql from sqlite_schema where type = 'table' and name = 'native_hook_decision_receipts'"
@@ -314,8 +313,8 @@ def test_prompt_receipt_persists_without_rewriting_tool_receipt_schema(tmp_path:
             "update native_prompt_decision_receipts set prompt_risk_classes_json = ? where decision_id = ?",
             ('["guard_bypass_intent"]', prompt["decision_id"]),
         )
-    assert get_native_decision_receipt(store, prompt_id) is None
-    assert get_native_decision_receipt(store, tool_id) == tool
+    assert store.get_native_decision_receipt(prompt_id) is None
+    assert store.get_native_decision_receipt(tool_id) == tool
 
 
 def test_existing_tool_receipt_schema_gains_prompt_storage_additively(tmp_path: Path) -> None:
@@ -338,8 +337,8 @@ def test_existing_tool_receipt_schema_gains_prompt_storage_additively(tmp_path: 
     assert store.record_native_decision_receipt(prompt)
     existing_id, prompt_id = existing["decision_id"], prompt["decision_id"]
     assert isinstance(existing_id, str) and isinstance(prompt_id, str)
-    assert get_native_decision_receipt(store, existing_id) == existing
-    assert get_native_decision_receipt(store, prompt_id) == prompt
+    assert store.get_native_decision_receipt(existing_id) == existing
+    assert store.get_native_decision_receipt(prompt_id) == prompt
     with store._connect() as connection:
         legacy = connection.execute(
             "select sql from sqlite_schema where type = 'table' and name = 'native_hook_decision_receipts'"

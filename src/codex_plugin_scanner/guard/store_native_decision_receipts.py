@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from collections.abc import Mapping
+from contextlib import AbstractContextManager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Any, Final, Protocol
 
 from .native_decision_receipt import validate_native_decision_receipt
 
@@ -20,6 +22,10 @@ _COMMAND_BINDING_COLUMN: Final = (
     "command_extensions_json text check (command_extensions_json is null "
     f"or length(command_extensions_json) between 2 and {_MAX_COMMAND_BINDING_CHARACTERS})"
 )
+
+
+class _ConnectionOwner(Protocol):
+    def _connect(self) -> AbstractContextManager[sqlite3.Connection]: ...
 
 
 def native_decision_receipt_schema_statement(*, prompt: bool = False) -> str:
@@ -126,6 +132,24 @@ class StoreNativeDecisionReceiptsMixin:
             {"receipt": _receipt_wire(receipt), "now": datetime.now(timezone.utc).isoformat()},
         )
         return True
+
+    def get_native_decision_receipt(self: _ConnectionOwner, decision_id: str) -> dict[str, object] | None:
+        """Read one complete receipt and reject changed identity or binding data."""
+        if re.fullmatch(r"[0-9a-f]{64}", decision_id) is None:
+            return None
+        with self._connect() as connection:
+            row = connection.execute(
+                "select * from native_hook_decision_receipts where decision_id = ?",
+                (decision_id,),
+            ).fetchone()
+            if row is None:
+                row = connection.execute(
+                    "select * from native_prompt_decision_receipts where decision_id = ?",
+                    (decision_id,),
+                ).fetchone()
+        if row is None:
+            return None
+        return validate_stored_native_decision_receipt(dict(row), guard_home=getattr(self, "guard_home", None))
 
 
 def _receipt_wire(receipt: Mapping[str, object]) -> str:

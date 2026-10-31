@@ -10,7 +10,6 @@ made before sending, so recorded vectors and store tests keep their coverage.
 from __future__ import annotations
 
 import json
-import re
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta
 from typing import Any, cast
@@ -46,7 +45,6 @@ from codex_plugin_scanner.guard.store_command_activity_wire import (
 )
 from codex_plugin_scanner.guard.store_local_cli_retention import utc_now_iso
 from codex_plugin_scanner.guard.store_local_mcp import _notify_legacy_mcp_denial
-from codex_plugin_scanner.guard.store_native_decision_receipts import validate_stored_native_decision_receipt
 from codex_plugin_scanner.guard.store_sessions import _guard_attachment_row, _guard_item_row
 
 
@@ -255,25 +253,6 @@ def record_composio_discovery(
     return cli_id
 
 
-def get_native_decision_receipt(store: GuardStore, decision_id: str) -> dict[str, object] | None:
-    """Read one complete receipt and reject changed identity or binding data."""
-    if re.fullmatch(r"[0-9a-f]{64}", decision_id) is None:
-        return None
-    with store._connect() as connection:
-        row = connection.execute(
-            "select * from native_hook_decision_receipts where decision_id = ?",
-            (decision_id,),
-        ).fetchone()
-        if row is None:
-            row = connection.execute(
-                "select * from native_prompt_decision_receipts where decision_id = ?",
-                (decision_id,),
-            ).fetchone()
-    if row is None:
-        return None
-    return validate_stored_native_decision_receipt(dict(row), guard_home=store.guard_home)
-
-
 def reconcile_receipt_events(store: GuardStore) -> None:
     store._native_store_call("reconcile_receipt_events", {})
 
@@ -330,7 +309,6 @@ __all__ = (
     "count_command_shadow_observations",
     "get_command_activity_by_request_correlation",
     "get_guard_client_attachment",
-    "get_native_decision_receipt",
     "is_exact_command_activity_pre_replay",
     "list_command_shadow_observations",
     "list_guard_operation_items",

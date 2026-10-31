@@ -10,7 +10,6 @@ from types import MappingProxyType
 import pytest
 
 from codex_plugin_scanner.guard.store import GuardStore
-from tests.native_store_shims import get_native_decision_receipt
 from tests.test_native_command_observations import _observations, _receipt
 
 
@@ -23,12 +22,12 @@ def test_legacy_schema_upgrade_preserves_receipts_without_inventing_binding(tmp_
         connection.execute("delete from schema_migrations where version = 28")
 
     reopened = GuardStore(tmp_path, daemon_managed_schema=True)
-    assert get_native_decision_receipt(reopened, legacy["decision_id"]) == legacy
+    assert reopened.get_native_decision_receipt(legacy["decision_id"]) == legacy
     current = _receipt(_observations())
     assert reopened.record_native_decision_receipt(current)
     reopened = GuardStore(tmp_path, daemon_managed_schema=True)
-    assert get_native_decision_receipt(reopened, current["decision_id"]) == current
-    assert get_native_decision_receipt(reopened, legacy["decision_id"]) == legacy
+    assert reopened.get_native_decision_receipt(current["decision_id"]) == current
+    assert reopened.get_native_decision_receipt(legacy["decision_id"]) == legacy
     with reopened._connect() as connection:
         assert connection.execute("select count(*) from schema_migrations where version = 28").fetchone()[0] == 1
         assert (
@@ -66,7 +65,7 @@ def test_changed_stored_binding_cannot_validate_against_the_original_receipt(
             "update native_hook_decision_receipts set command_extensions_json = ? where decision_id = ?",
             (json.dumps(changed), receipt["decision_id"]),
         )
-    assert get_native_decision_receipt(store, receipt["decision_id"]) is None
+    assert store.get_native_decision_receipt(receipt["decision_id"]) is None
 
 
 def test_invalid_or_oversized_binding_is_not_accepted_as_persisted_evidence(tmp_path: Path) -> None:
@@ -78,10 +77,10 @@ def test_invalid_or_oversized_binding_is_not_accepted_as_persisted_evidence(tmp_
             "update native_hook_decision_receipts set command_extensions_json = ?",
             ("{!",),
         )
-    assert get_native_decision_receipt(store, receipt["decision_id"]) is None
+    assert store.get_native_decision_receipt(receipt["decision_id"]) is None
     with store._connect() as connection, pytest.raises(sqlite3.IntegrityError):
         connection.execute("update native_hook_decision_receipts set command_extensions_json = ?", ("x" * 2049,))
-    assert get_native_decision_receipt(store, "missing") is None
+    assert store.get_native_decision_receipt("missing") is None
 
 
 def test_a_receipt_carried_by_any_mapping_still_records(tmp_path: Path) -> None:
@@ -90,4 +89,4 @@ def test_a_receipt_carried_by_any_mapping_still_records(tmp_path: Path) -> None:
     receipt = _receipt(_observations())
     binding = MappingProxyType(dict(receipt["command_extensions"]))
     assert store.record_native_decision_receipt(MappingProxyType({**receipt, "command_extensions": binding}))
-    assert get_native_decision_receipt(store, receipt["decision_id"]) == receipt
+    assert store.get_native_decision_receipt(receipt["decision_id"]) == receipt
