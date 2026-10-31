@@ -10,7 +10,7 @@
     "conflicts": [],
     "delegated_protection": null,
     "dependencies": [],
-    "description": "Reviews Unwreck CLI invocations that restore or delete project and snapshot state, persist snapshots, change agent hook configuration, or launch child processes. Read-only inspection commands and the installed hook callback are outside this extension's matchers.",
+    "description": "Reviews Unwreck CLI 0.1.0 invocations that restore or delete project and snapshot state, persist snapshots, change agent hook configuration, or launch child processes. Read-only inspection commands and the installed hook callback are outside this extension's matchers.",
     "ecosystem_ids": [
       "unwreck"
     ],
@@ -118,8 +118,9 @@
       "url": "https://github.com/ayushdoesdev/unwreck"
     },
     "reference_urls": [
-      "https://github.com/ayushdoesdev/unwreck",
-      "https://github.com/ayushdoesdev/unwreck/blob/main/README.md"
+      "https://github.com/ayushdoesdev/unwreck/tree/20a1910c33208ecfe8723e0e78ad96f734dcf219",
+      "https://github.com/ayushdoesdev/unwreck/blob/20a1910c33208ecfe8723e0e78ad96f734dcf219/code/crates/unwreck/src/main.rs",
+      "https://github.com/ayushdoesdev/unwreck/blob/20a1910c33208ecfe8723e0e78ad96f734dcf219/README.md"
     ],
     "required": false,
     "risk_classes": [
@@ -132,7 +133,7 @@
           "Unwreck state and snapshot mutation command"
         ],
         "default_mode": "review",
-        "description": "Identifies Unwreck operations that restore or modify project files, persist or delete local snapshots, or open the interactive restore interface. Help and explicit dry-run commands narrow this rule.",
+        "description": "Identifies Unwreck 0.1.0 operations that restore or modify project files, persist or delete local snapshots, or open the interactive restore interface. Help and explicit dry-run commands narrow this rule.",
         "family": null,
         "matcher": {
           "op": "any.v1",
@@ -324,7 +325,7 @@
           "Unwreck agent hook configuration command"
         ],
         "default_mode": "review",
-        "description": "Identifies `unwreck hooks --write` and `unwreck hooks --remove`, which modify Claude Code, Codex, or Gemini CLI hook configuration. The dry-run option only previews the diff.",
+        "description": "Identifies `unwreck hooks --write` and `unwreck hooks --remove`, which modify Claude Code, Codex, or Gemini CLI configuration. The dry-run option only previews the diff.",
         "family": null,
         "matcher": {
           "op": "any.v1",
