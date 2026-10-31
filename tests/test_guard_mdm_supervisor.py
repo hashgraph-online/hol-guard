@@ -377,3 +377,51 @@ def test_unsupported_platform_never_reports_supervisor_health(tmp_path: Path) ->
 
     assert not result.healthy
     assert result.reason_code == "supervisor_platform_unsupported"
+
+
+@pytest.mark.parametrize("system_name", ["Darwin", "Windows"])
+def test_supervisor_health_is_unknown_without_the_native_runtime(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, system_name: str
+) -> None:
+    paths = default_machine_paths(system_name=system_name)
+
+    def unavailable(_request: dict[str, object]) -> dict[str, object]:
+        raise OSError("supervisor_verdict_native_unavailable")
+
+    monkeypatch.setattr(supervisor, "_native_verdict", unavailable)
+    monkeypatch.setattr(supervisor, "_run_macos_launchctl", Mock(return_value=_completed()))
+    monkeypatch.setattr(supervisor, "_run_schtasks", Mock(return_value=_completed()))
+
+    result = supervisor.verify_machine_supervisor(
+        paths,
+        system_name=system_name,
+        macos_plist_path=_macos_plist(tmp_path),
+    )
+
+    assert (result.state, result.reason_code) == ("unknown", "supervisor_probe_failed")
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        {"ok": True, "state": "healthy", "reason_code": "supervisor_running"},
+        {"ok": True, "state": "running", "reason_code": "supervisor_fine"},
+        {"ok": True, "next": "unknown-probe"},
+        {"ok": True, "next": "disabled"},
+    ],
+)
+def test_a_malformed_native_verdict_is_a_failed_probe(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, answer: dict[str, object]
+) -> None:
+    run = Mock(return_value=_completed(stdout='disabled services = { "other" => true }'))
+    monkeypatch.setattr(supervisor, "_native_verdict", lambda _request: dict(answer))
+    monkeypatch.setattr(supervisor, "_run_macos_launchctl", run)
+
+    result = supervisor.verify_machine_supervisor(
+        default_machine_paths(system_name="Darwin"),
+        system_name="Darwin",
+        macos_plist_path=_macos_plist(tmp_path),
+    )
+
+    assert (result.state, result.reason_code) == ("unknown", "supervisor_probe_failed")
+    assert run.call_count <= 1

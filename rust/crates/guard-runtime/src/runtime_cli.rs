@@ -88,6 +88,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = health_snapshot_binding::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if supervisor_verdict::is_command(command) && flag == "--stdin" => {
+            let response = supervisor_verdict::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if guard_config_load::is_command(command) && flag == "--stdin" => {
             let response = guard_config_load::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
