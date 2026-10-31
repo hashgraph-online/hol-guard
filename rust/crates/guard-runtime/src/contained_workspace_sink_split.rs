@@ -124,7 +124,6 @@ pub(super) fn run_on_host(
     run_host(
         script,
         label,
-        &GIT_LOCATION,
         &outside_search_path(&search_path, &roots),
         workspace,
         signals,
@@ -161,12 +160,11 @@ pub(super) fn settled(
 }
 
 /// Run `script` with `/bin/sh` on the host, in `cwd`, in its own session:
-/// without the `removed` variables, with `search_path` as `PATH`, and with
+/// without the variables that name another Git repository, with `search_path` as `PATH`, and with
 /// the sink's own output. Its exit code.
 fn run_host(
     script: &str,
     label: &str,
-    removed: &[&str],
     search_path: &OsStr,
     cwd: &Path,
     signals: &process::Signals,
@@ -181,7 +179,6 @@ fn run_host(
         command,
         script,
         label,
-        removed,
         search_path,
         cwd,
         signals,
@@ -194,7 +191,6 @@ fn run_launched(
     mut launcher: Command,
     script: &str,
     label: &str,
-    removed: &[&str],
     search_path: &OsStr,
     cwd: &Path,
     signals: &process::Signals,
@@ -205,7 +201,7 @@ fn run_launched(
         .env("PATH", search_path)
         .current_dir(cwd)
         .stdin(Stdio::null());
-    for name in removed {
+    for name in GIT_LOCATION {
         launcher.env_remove(name);
     }
     let (status, timed_out) = process::run_tracked(&mut launcher, signals, timeout_seconds, false)

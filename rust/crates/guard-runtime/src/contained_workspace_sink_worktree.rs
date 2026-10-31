@@ -71,24 +71,31 @@ pub(super) fn run(
     if exit_code != 0 {
         return Ok(exit_code);
     }
+    // The checkout exists from here on, so the chain cannot run again whole:
+    // every failure names the rest to retry on its own.
     let rest = wrapper::with_text(payload, &parts.entered);
-    let answer = ask(&rest).ok_or_else(Failure::unauthorized)?;
-    if split::proven(&answer) {
-        return split::run_on_host(
-            &parts.entered,
-            "The rest of the command",
-            workspace,
-            &excluded,
-            signals,
-        );
-    }
-    wrapper::contained(&rest, workspace, authority, &answer, signals).map_err(|failure| Failure {
-        message: format!(
-            "{} The worktree was created first; run `{}` as a command of its own to retry the rest.",
-            failure.message, parts.entered
-        ),
-        ..failure
-    })
+    ask(&rest)
+        .ok_or_else(Failure::unauthorized)
+        .and_then(|answer| {
+            if split::proven(&answer) {
+                split::run_on_host(
+                    &parts.entered,
+                    "The rest of the command",
+                    workspace,
+                    &excluded,
+                    signals,
+                )
+            } else {
+                wrapper::contained(&rest, workspace, authority, &answer, signals)
+            }
+        })
+        .map_err(|failure| Failure {
+            message: format!(
+                "{} The worktree was created first; run `{}` as a command of its own to retry the rest.",
+                failure.message, parts.entered
+            ),
+            ..failure
+        })
 }
 
 /// Whether `receipt` is still the worktree chain's own sandbox requirement,
