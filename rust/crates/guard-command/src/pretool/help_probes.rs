@@ -139,12 +139,22 @@ fn usage_only_verb(basename: &str, verb: &str) -> bool {
 
 /// Whether this manager's startup reads a configuration the session could
 /// have pointed elsewhere. npm and pip both load their configuration before
-/// they print usage, so the probe asks for the same inert environment the
-/// read proofs next door require.
+/// they print usage, so the probe asks for the whole proof the read listings
+/// next door require, files included: npm runs an `onload-script` and honours
+/// a redirected `userconfig` while it is still working out what to print, so
+/// an environment that merely leaves the names alone is not enough.
 fn configuration_inert(basename: &str, context: super::PathContext<'_>) -> bool {
     match basename {
-        "npm" => context.npm_config_inert,
-        "pip" | "pip3" => context.pip_config_inert,
+        "npm" => {
+            context.npm_config_inert
+                && context.shell_home_matches
+                && super::npm_reads::configuration_inert(context)
+        }
+        "pip" | "pip3" => {
+            context.pip_config_inert
+                && context.shell_home_matches
+                && super::pip_reads::configuration_inert(context)
+        }
         _ => true,
     }
 }
@@ -181,6 +191,43 @@ mod tests {
         }
     }
 
+    /// npm and pip read files this context names no directory for, so the
+    /// shape tests below carry the managers whose usage text needs no proof
+    /// beyond their own words. The two whose startup reads a configuration
+    /// are admitted by the benign gate instead, where a fixture home holds
+    /// the files the proof reads.
+    #[test]
+    fn a_configuration_the_session_can_write_refuses_the_probe() {
+        let root = std::env::temp_dir().join(format!("guard-help-npmrc-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let home = root.join("home");
+        let project = root.join("project");
+        std::fs::create_dir_all(&home).unwrap();
+        std::fs::create_dir_all(&project).unwrap();
+        // npm requires this file while it is still working out what to print.
+        std::fs::write(project.join(".npmrc"), "onload-script=./onload.js\n").unwrap();
+        let home = home.to_string_lossy().into_owned();
+        let project = project.to_string_lossy().into_owned();
+        let written = super::super::PathContext {
+            npm_config_inert: true,
+            pip_config_inert: true,
+            shell_home_matches: true,
+            home_dir: Some(&home),
+            cwd: Some(&project),
+            ..Default::default()
+        };
+
+        assert!(!safe_help_probe(
+            "npm",
+            &args(&["install", "--help"]),
+            written
+        ));
+        // The refusal is the file, not the shape: a manager that reads no
+        // configuration prints its usage from the same directory.
+        assert!(safe_help_probe("jq", &args(&["--help"]), written));
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
     #[test]
     fn install_family_usage_text_is_admitted() {
         for (tool, arguments) in [
@@ -189,10 +236,6 @@ mod tests {
             ("uv", vec!["pip", "install", "--help"]),
             ("uv", vec!["sync", "--help"]),
             ("uv", vec!["--help"]),
-            ("npm", vec!["install", "--help"]),
-            ("npm", vec!["i", "-h"]),
-            ("pip", vec!["install", "--help"]),
-            ("pip3", vec!["install", "-h"]),
             ("deno", vec!["install", "--help"]),
             ("ruff", vec!["check", "--help"]),
             ("jq", vec!["--help"]),
