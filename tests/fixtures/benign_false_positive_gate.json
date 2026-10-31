@@ -19210,6 +19210,51 @@
       "expect": "allow"
     },
     {
+      "id": "brew-search-name",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "brew search node"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "brew-search-desc",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "brew search --desc json"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "brew-search-cask",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "brew search --cask docker"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
       "id": "brew-leaves",
       "fix_area": "package",
       "harnesses": [
@@ -19253,6 +19298,51 @@
       },
       "cwd": "org_app",
       "expect": "allow"
+    },
+    {
+      "id": "neg-brew-search-pull-request",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "brew search --pull-request widget-cli"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-brew-search-debian",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "brew search --debian widget-cli"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-brew-search-tap-qualified",
+      "fix_area": "package",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "brew search acme/tools/widget"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
     },
     {
       "id": "neg-brew-install",
@@ -25518,6 +25608,54 @@
       "expect": "allow"
     },
     {
+      "id": "toolchain-go-mod-graph",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "go mod graph"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "toolchain-go-mod-verify",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "go mod verify"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "toolchain-go-mod-why",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "go mod why ./..."
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "toolchain-go-tool-cover-func",
       "fix_area": "shell",
       "harnesses": [
@@ -25548,6 +25686,54 @@
       },
       "cwd": "worktree",
       "expect": "allow"
+    },
+    {
+      "id": "neg-toolchain-go-mod-edit-writes",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "go mod edit -json"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-toolchain-go-mod-vendor",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "go mod vendor"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-toolchain-go-mod-why-version",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "go mod why -m golang.org/x/text@latest"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
     },
     {
       "id": "neg-toolchain-go-tool-cover-served-html",
@@ -43531,6 +43717,193 @@
       "tool": "shell",
       "tool_input": {
         "command": "http --download http://127.0.0.1:3000/archive"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "fd-exec-cat-source-extension",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "fd -t f -e ts -x cat"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "fd-exec-batch-wc-regular-files",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "fd -t f -X wc -l"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "fd-exec-head-named-root",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "fd -t f -e rs . src -x head -n 20"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-fd-exec-credential-name",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "fd -H -I -t f -e txt id_rsa -x cat"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-fd-exec-without-type-test",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "fd -e ts -x cat"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-fd-exec-remove",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "fd -t f -e ts -x rm"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-fd-exec-follow-symlinks",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "fd -L -t f -e ts -x cat"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-fd-exec-path-separator",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "fd -t f -e ts --path-separator / . src -x cat"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-fd-exec-parent-root",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "fd -t f -e rs . ../ -x cat"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-fd-exec-home-root",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "fd -t f -e ts . ${HOME} -x cat"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-fd-exec-glob-root",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "fd -t f -e ts . * -x cat"
       },
       "cwd": "worktree",
       "expect": "not_allow"

@@ -45,10 +45,10 @@ use std::path::Path;
 
 // A Go build compiles the sources the module cache already holds and writes
 // its objects to a private build cache. Only the verbs that stay there are
-// local: `get`, `install`, `mod` and `work` reach a registry, and `clean`
-// deletes rather than builds. `tool` runs whatever program the toolchain
-// carries under that name, so it is not on this list; the one subcommand that
-// only reads a profile the workspace already holds is read below.
+// local: `get`, `install` and `work` reach a registry, and `clean` deletes
+// rather than builds. `tool` and `mod` are launchers for a whole second set
+// of work, so neither is on this list; the few subcommands of each that only
+// report on what the workspace already holds are read below.
 const GO_LOCAL_VERBS: &[&str] = &[
     "build", "test", "vet", "fmt", "list", "doc", "env", "version", "run", "generate",
 ];
@@ -160,12 +160,50 @@ pub(super) fn local_go_work(arguments: &[&str], directory: &Path, workspace: &Pa
         return false;
     };
     let verb = verb.to_ascii_lowercase();
-    (GO_LOCAL_VERBS.contains(&verb.as_str()) || (verb == "tool" && local_go_tool(rest)))
+    (GO_LOCAL_VERBS.contains(&verb.as_str())
+        || (verb == "tool" && local_go_tool(rest))
+        || (verb == "mod" && local_go_mod(rest)))
         && !rest
             .iter()
             .any(|argument| names_a_go_fetch(argument) || argument.contains('@'))
         && super::cd::first_from(directory, workspace, |probe| probe.join("go.mod").is_file())
             .is_some()
+}
+
+/// The `go mod` subcommands that only report on the module already resolved.
+///
+/// Most of what `go mod` carries either reaches a registry or rewrites the
+/// module files: `download` and `tidy` fetch, `init` and `edit` write
+/// `go.mod`, and `vendor` copies a tree of dependencies into the workspace.
+/// Three of them only report. `graph` prints the requirement graph, `verify`
+/// rehashes the modules the cache already holds against `go.sum`, and `why`
+/// names the import that pulls a package in. Each reads the build list that
+/// the admitted `go build` and `go list` runs already read and writes
+/// nothing, so a contained run of one reaches no further than those do --
+/// including when the cache is short of a dependency, where all of them alike
+/// fail against a sandbox that has no network.
+///
+/// Only the flags those three carry themselves are accepted, in the spelling
+/// that keeps the value attached, because a word this does not know is one go
+/// reads for something else.
+fn local_go_mod(arguments: &[&str]) -> bool {
+    let Some((subcommand, rest)) = arguments.split_first() else {
+        return false;
+    };
+    let flags: &[&str] = match subcommand.to_ascii_lowercase().as_str() {
+        // `-go` picks the version the graph is pruned for, `-x` echoes the
+        // work as it goes.
+        "graph" => &["-go", "-x"],
+        "verify" => &[],
+        // `-m` reads the operands as modules rather than packages, and
+        // `-vendor` answers from the vendor directory instead of the cache.
+        "why" => &["-m", "-vendor"],
+        _ => return false,
+    };
+    rest.iter().all(|word| {
+        !word.starts_with('-')
+            || flags.contains(&word.split_once('=').map_or(*word, |(flag, _)| flag))
+    })
 }
 
 /// The `go tool` subcommands that read what a run inside the workspace has

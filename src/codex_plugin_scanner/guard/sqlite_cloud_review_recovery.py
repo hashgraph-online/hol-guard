@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import cast
 
 from .review_event_wake import review_event_wake_signal
+from .review_policy_attribution import ATTRIBUTION_STATE_PREFIX
 from .sqlite_deadline_connection import connect_sqlite_with_deadline
 from .store_native_workspace_review import (
     NATIVE_WORKSPACE_REVIEW_RECEIPT_STATE_PREFIX,
@@ -85,6 +86,7 @@ def salvage_cloud_review_state(*, source: Path, destination: Path) -> bool:
             if not any(row[0] == "oauth_local_credentials" for row in states):
                 return False
             states.extend(_validated_native_receipt_states(src))
+            states.extend(_policy_attribution_states(src))
             device = src.execute(
                 "select installation_id from guard_devices where device_key = 'local-device'"
             ).fetchone()
@@ -97,6 +99,26 @@ def salvage_cloud_review_state(*, source: Path, destination: Path) -> bool:
         return True
     except sqlite3.Error:
         return False
+
+
+def _policy_attribution_states(src: sqlite3.Connection) -> list[tuple[object, object, object]]:
+    """Keep each request's recorded policy rule so its claim hash survives recovery."""
+
+    rows = src.execute(
+        "select state_key, payload_json, updated_at from sync_state where state_key like ?",
+        (ATTRIBUTION_STATE_PREFIX + "%",),
+    ).fetchall()
+    recovered: list[tuple[object, object, object]] = []
+    for state_key, payload_json, updated_at in rows:
+        if not isinstance(state_key, str) or not state_key.startswith(ATTRIBUTION_STATE_PREFIX):
+            continue
+        try:
+            payload = json.loads(payload_json)
+        except (TypeError, ValueError):
+            continue
+        if isinstance(payload, dict):
+            recovered.append((state_key, payload_json, updated_at))
+    return recovered
 
 
 def _validated_native_receipt_states(src: sqlite3.Connection) -> list[tuple[object, object, object]]:
