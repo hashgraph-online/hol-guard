@@ -11,6 +11,7 @@ import pytest
 from codex_plugin_scanner.guard import sqlite_cloud_review_recovery as recovery
 from codex_plugin_scanner.guard import store_connection_schema
 from codex_plugin_scanner.guard.review_event_wake import review_event_wake_signal
+from codex_plugin_scanner.guard.review_policy_attribution import ATTRIBUTION_STATE_PREFIX
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
     apply_exact_cloud_review,
     disable_exact_cloud_review,
@@ -269,3 +270,16 @@ def test_independent_cli_recovery_failure_does_not_discard_complete_review_state
     assert not store._recover_fatal_sqlite_store(ValueError("not a storage failure"))
     assert store._last_sqlite_recovery == "skipped"
     assert store._last_sqlite_recovery_details is None
+
+
+def test_recovery_keeps_each_requests_recorded_policy_rule(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = _prepare(tmp_path)
+    now = datetime.now(timezone.utc).isoformat()
+    recorded = {"policyBundleVersion": "policy-1730000000000", "policyRuleId": "review-env-reads"}
+    store.insert_sync_payload_if_absent(ATTRIBUTION_STATE_PREFIX + "recover-pending", recorded, now)
+    store.insert_sync_payload_if_absent(ATTRIBUTION_STATE_PREFIX + "no-cloud-rule", {}, now)
+    _recover(store, monkeypatch)
+    restarted = GuardStore(store.guard_home)
+    # A lost attribution would change the claim Cloud already holds for the request.
+    assert restarted.get_sync_payload(ATTRIBUTION_STATE_PREFIX + "recover-pending") == recorded
+    assert restarted.get_sync_payload(ATTRIBUTION_STATE_PREFIX + "no-cloud-rule") == {}

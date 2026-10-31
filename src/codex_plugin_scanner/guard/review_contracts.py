@@ -38,6 +38,7 @@ from .review_oauth_binding import (
     GuardReviewOAuthMetadata,
     guard_review_oauth_metadata,  # noqa: F401 - compatibility re-export
 )
+from .review_policy_attribution import review_policy_attribution
 from .review_signature_verification import (
     _anchored_review_verification_keys,  # noqa: F401 - compatibility re-export
     _verify_signed_payload,
@@ -244,6 +245,7 @@ def build_local_review_request_claim(
         "riskCategory": _risk_category(request_row),
         "runtimeId": oauth.runtime_id,
         "workspaceId": oauth.workspace_id,
+        **review_policy_attribution(store, request_row),
     }
     claim["claimHash"] = compute_local_review_request_claim_hash(claim)
     return attach_exact_review_capability(claim, oauth, store)
