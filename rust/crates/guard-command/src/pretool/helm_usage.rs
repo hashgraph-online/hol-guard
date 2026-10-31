@@ -9,7 +9,12 @@
 //! The command has to be one Helm itself carries. An unknown first word is a
 //! plugin Helm resolves out of its own plugin directory and runs, and the
 //! plugin decides for itself what a help flag means, so `helm diff --help`
-//! keeps its review. Only plain words may stand in front of the flag, which
+//! stays out of this reading and keeps whatever route an unmodelled command
+//! takes: the workspace sandbox where the host offers one, review where it
+//! does not. That is why the gate carries no negative case for a plugin
+//! page; the unit test below is what pins the exclusion, because a contained
+//! run is not a review and the gate cannot tell the two apart.
+//! Only plain words may stand in front of the flag, which
 //! leaves every option that selects a cluster, a namespace or a values file
 //! reviewed: `helm install --kubeconfig /tmp/agent.yaml --help` is a
 //! kubeconfig the command named, and the usage text is no reason to read it.

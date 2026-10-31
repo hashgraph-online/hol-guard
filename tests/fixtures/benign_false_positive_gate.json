@@ -34309,7 +34309,6 @@
       "expect": "allow"
     },
     {
-      "id": "neg-helm-plugin-usage-text",
       "fix_area": "negative",
       "harnesses": [
         "codex",
